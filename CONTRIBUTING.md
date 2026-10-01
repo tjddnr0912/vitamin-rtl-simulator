@@ -244,14 +244,16 @@ from the `--help` text.
 
 ## CI
 
-`.github/workflows/ci.yml` is the only workflow. It defines four jobs that
-expand to five runs, triggered on pushes to `main` and on every pull request.
+`.github/workflows/ci.yml` is the only workflow. It defines six jobs that
+expand to eight runs, triggered on pushes to `main` and on every pull request.
 
 | Job | Runner | Steps |
 |---|---|---|
 | `build-native` | ubuntu-latest and macos-latest | fmt, clippy, build, test — the four canonical commands |
 | `build-no-oracle` | ubuntu-latest | the product-shape build, clippy and lib tests, then a smoke script that simulates a small design, greps its output, and asserts `--backend vm` is rejected rather than silently ignored |
 | `build-rhel` | ubuntu-latest in a `redhat/ubi9` container | `dnf install -y gcc tar gzip` for a C linker and the nextest install, then build and test |
+| `corpus` | ubuntu-latest and macos-latest | the workload corpus ([docs/study/03-workload-corpus.md](docs/study/03-workload-corpus.md) §8): a release build, `corpus-runner fetch --run` (clones cached on the pinning files), an assertion that `git status --porcelain` is empty so nothing fetched is committable, then `corpus-runner run --reps 1` against the pinned digests. Blocking |
+| `corpus-rhel` | ubuntu-latest in a `redhat/ubi9` container | the same steps, after `dnf install -y gcc tar gzip git python3`: git before checkout so the tree is a repository the assertion can ask, python3 for `bench/biriscv/prepare.sh` |
 | `build-stable` | ubuntu-latest, `continue-on-error: true` | clippy, test and doctests on the latest stable (`RUSTUP_TOOLCHAIN: stable`) — the MSRV ceiling. Non-blocking: red means a new Rust release breaks or newly lints the workspace |
 
 There is no Windows runner and no release or publish workflow.

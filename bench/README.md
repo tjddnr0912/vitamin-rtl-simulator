@@ -54,7 +54,7 @@ pinned SHA, the exact file list in order, the exact command lines, the expected
 output, and the reconstruction steps for anything not committed. `bench/keccak` also
 carries a `README.md`, because that RTL is written here rather than fetched.
 
-`ibex` is the only SystemVerilog row and the only one vita refuses. iverilog 13 cannot
+`ibex` is the only SystemVerilog row. iverilog 13 cannot
 parse it, so its oracle is verilator, admitted because its digest does not move when
 every uninitialised bit is randomised (`bench/ibex/RUN.md`).
 
@@ -130,9 +130,9 @@ After the table `run` prints a phase split (one extra `--obs-dir` probe run per
 workload, not the timed rounds), then a coverage line. With `--compare` it also prints
 one `vita … iverilog … = N.NNx faster|SLOWER` line per workload.
 
-At HEAD the corpus reports `coverage: 10/11`: nine rows grade `ok`, `verilog-axi`
+At HEAD the corpus reports `coverage: 11/11`: ten rows grade `ok` and `verilog-axi`
 grades `ruled-split`, which is neither a pass nor a failure and reads that way on every
-run with its reason on the line, and `ibex` grades `known-gap`.
+run with its reason on the line.
 
 ## Gating without a simulator installed
 
@@ -140,5 +140,6 @@ The pinned digests are recorded in the manifest, so `run` grades a machine that 
 `vita` but no iverilog. `--compare` is what needs iverilog, and a missing or failing
 iverilog is reported and is not itself a corpus failure. The manifest's hygiene tests
 — permissive licence, full 40-character SHA, unique names, a findable digest, an
-oracle per row, a reason on every pinned refusal, more than one shape — run in the
-normal test suite.
+oracle per row, a reason on every pinned refusal, more than one shape, every uncommitted
+path gitignored — run in the normal test suite. CI also fetches and runs the corpus itself
+on all three platforms ([docs/study/03-workload-corpus.md](../docs/study/03-workload-corpus.md) §8).

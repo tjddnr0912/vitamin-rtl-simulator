@@ -52,7 +52,7 @@ diagnostic code carries three interchangeable spellings — the mnemonic
 | Net kinds `trireg` / `supply0` / `supply1` / `tri0` / `tri1` / `triand` / `trior` | loud refusal | §2.9 |
 | Constructs with no grammar arm (DPI-C, `specify`, strengths, switch primitives, …) | loud refusal | §2.10 |
 | Refusals by language area | loud refusal | §2.11 |
-| Ten value-level divergences from Icarus Verilog and Verilator | known divergence | §3.1 |
+| Value-level divergences from Icarus Verilog and Verilator | known divergence | §3.1 |
 | Splits where the reference tools disagree with each other | known divergence | §3.2 |
 | Platforms, exit codes, threads, and every resource cap | — | §4 |
 
@@ -171,6 +171,11 @@ run.
 `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031` with the message `value is unhandled for
 priority or unique case statement`, pinned to Icarus Verilog's wording. `unique0` and
 `priority0` parse as the plain statement with that report suppressed, per §12.4.2.
+
+The report is printed when the arm executes, not deferred to the end of the time step
+(IEEE 1800 §12.4.2.1), so a zero-delay glitch reports too — typically at time 0, before the
+inputs settle — where Icarus Verilog and Verilator print nothing (ROADMAP §3.b
+`unique-glitch-t0`).
 
 The multi-match uniqueness check is a documented cut. The lowered decision cascade is
 first-match-wins, so an overlap between arms is unobservable in the result, and reporting
@@ -776,6 +781,7 @@ matches the reference tools or refuses loudly.
 | A string-KEYED associative array indexed by an INTEGRAL (`int m[string]; m[24'h610062] = 9;`) | keeps the NUL byte, so the key differs from `"ab"` and the array has two entries | Verilator: one entry (Icarus Verilog cannot declare the type) | Index with a `string'(…)` cast, which converts per §6.16 |
 | A process-header level list naming a constant beside a live term, whose body holds `wait (c)`, a `fork … join_none`, an imported package task or a recursive task (`always @(K or clk) begin wait (1); … end`) | the constant is dropped, so the process does not run at time 0 | both tools run it once at time 0 | List a variable the design sets at time 0 (`initial go = 1;`) instead of the constant, or move the waiting construct into its own process. Any other body that cannot suspend runs at time 0 as both tools do |
 | A select of a constant whose index reaches a changing net only through a concatenation, a system function or a hierarchical name (`@(K[{a,b}])`, `@(posedge K[$unsigned(i)] or posedge clk)`, `@(K[u.x])`) | the term never wakes, no diagnostic | both tools wake when the selected bit changes | Index with the net itself (`K[i]`, which is refused loudly), or wait on a net assigned from the select (`assign k = K[i];`, then `@(k)`) |
+| `inside` with a wildcard (`x` / `z` / `?`) bit in a constant element: `4'b1100 inside {4'b1?00}` | `x`, so `if (v inside {4'b1?00})` takes the else branch; no diagnostic | Verilator: `1` (IEEE 1800 §11.4.13 compares an integral element with `==?`); Icarus Verilog does not accept `inside` | Write the comparison as `v ==? 4'b1?00` |
 | An instance array's element ORDER (`ch w[1:0]();`) | elaborates the declared range left to right, so `w[1]` runs first | Icarus Verilog and Verilator both run `w[0]` first for `[1:0]`, and disagree with each other on `[0:1]` | Do not depend on element order for same-time-step side effects |
 
 One construct answers differently depending on a detail that should not matter: a

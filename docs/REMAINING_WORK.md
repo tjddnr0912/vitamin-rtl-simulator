@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8888 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8889 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -18,7 +18,7 @@ canonical table is the fact table in [README.md](../README.md).
   ROADMAP §2's synthetic-probe rows are frozen; a review's pre-existing findings outside a slice's
   fix path go to [PROBE_CATALOG.md](PROBE_CATALOG.md), which is neither queued nor counted.
 - Default backend `native`; product build `--no-default-features` (one executor); workload corpus
-  11/11. `ibex`, the only SystemVerilog row, runs to verilator's digest at both sizes
+  11/11, fetched and run by CI on all three platforms since §4.5.579. `ibex`, the only SystemVerilog row, runs to verilator's digest at both sizes
   (`+N=2000` `32e0e78741376133`, `+N=20000` `13b2ddfcd551ba2f`) since §4.5.574 typed its last
   refusal — a keyed `'{…}` as a `?:` arm on a packed-struct port — by its target (§3.a ⑤ⓚ). Its
   page closed in eleven slices (parse errors §4.5.564, then §4.5.565–570, the parser's
@@ -31,6 +31,10 @@ canonical table is the fact table in [README.md](../README.md).
   re-entry condition (ROADMAP §5.a).
 - The teeth for anything on the G2 rail that REPORTS is an asymmetric mutation — change something
   upstream that must not move the numbers — because a same-input golden lies identically twice.
+- An external report reproduced three items at HEAD: a silent-wrong in `inside` (a wildcard element
+  compared with `==`, ROADMAP §2 🆕 S), `case … inside` refused at parse (§3.b `case-inside`;
+  verilator is a 2-state oracle for it) and a time-0 `unique` warning both reference tools omit
+  (§3.b `unique-glitch-t0`). Incoming reports pre-empt the queue, so they are §5.2 rows 1–3.
 - `corpus-runner run` prints the elaborate/simulate split per row. Every workload is ≥99%
   simulation, so the corpus cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
@@ -38,7 +42,10 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
+| 1 | §2 🆕 S | `inside` compares a constant wildcard element with `==` instead of `==?` (silent-wrong) |
+| 2 | §3.b `case-inside` | accept `case (e) inside`, reusing row 1's comparison |
+| 3 | §3.b `unique-glitch-t0` | defer the `unique` / `priority` violation report to the Observed region |
+| 4 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
 honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
@@ -49,18 +56,18 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 |---|---:|---|---|
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 3 | 0 / 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and three t0-event residues (§4.5.533 closed the x-valued ones) |
-| §2 start-order table (frozen) | 21 rows | 1 / 20 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
+| §2 start-order table (frozen) | 22 rows | 2 / 20 | LOUD 4 · BLOCKED 4 · OPEN 6 (🆕 H and 🆕 S startable, 🆕 S re-entered from an external report; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
 | §2 recorded defects by mechanism (frozen) | 196 bullets | 108 / 88 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 20 · scoping / imports / block-locals 32 · delays / events 19 · real 11 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 4 · oracle splits 45 |
 | §3 numbered items | 24 rows | 19 / 5 | ⑤ ibex ladder (9, ⑤ⓚ closed in §4.5.574; ⓕ is the unpacked-array typedef residue), ③ file-I/O hoisting (4), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 123 rows | 104 / 19 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 17 · system tasks & file I/O 9 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
-| workload corpus (study/03) | 2 items | 1 / 1 | the new-design census · the corpus in CI (deferred, owner ruling) |
+| §3 small residues | 124 rows | 105 / 19 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 17 · system tasks & file I/O 9 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 8 (unique-glitch-t0) · VCD / real conversion 3 |
+| workload corpus (study/03) | 1 item | 1 / 0 | the new-design census (the corpus runs in CI since §4.5.579) |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
 | §5 performance / hardening residues | 15 rows | 7 / 8 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 440 | 264 / 176 | |
+| total | 441 | 266 / 175 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.

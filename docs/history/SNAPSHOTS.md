@@ -33,6 +33,7 @@ continues unchanged.
 | 2026-09-30 | 39fcd62 | §4.5.576 | 0 / 0 / 0 | +2 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (aes: exit 1 → 0 on the same digest; every row pins exit 0) |
 | 2026-10-01 | 61409e9 | §4.5.577 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI only: the test jobs run under nextest) |
 | 2026-10-01 | cb12baa | §4.5.578 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI only: a non-blocking latest-stable job; lint-only source rewrites) |
+| 2026-10-01 | 2df2cec | §4.5.579 | 0 / 1 / +1 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI now fetches and runs the corpus on 3 OS; §2 🆕 S recorded from an external report) |
 
 ## Section counts
 
@@ -227,6 +228,7 @@ a section restructure, a residue split).
 | 2026-09-30 | 39fcd62 | §4.5.576 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 442 / 265 / 177 |
 | 2026-10-01 | 61409e9 | §4.5.577 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 16 / 8 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 441 / 265 / 176 |
 | 2026-10-01 | cb12baa | §4.5.578 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 440 / 264 / 176 |
+| 2026-10-01 | 2df2cec | §4.5.579 | 8889 | 34 | 22 / 2 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 441 / 266 / 175 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -286,3 +288,8 @@ a section restructure, a residue split).
 - 2026-10-01 (§4.5.578): 5.b −1 (`MSRV-CEIL` closed, startable −1). Tests unchanged; CI gains
   `build-stable`, and 46 stable-only clippy lints (35 on 1.94.1, 11 more on 1.98.0) are fixed
   without a behaviour change.
+- 2026-10-01 (§4.5.579): `study/03` −1 (the corpus in CI closed: 1 / 1 / 0). Before it, the same
+  session triaged an external report: 2T +1 (🆕 S, startable — the report is its re-entry
+  trigger), 3b +1 (`unique-glitch-t0`, startable); §0 row 13 and §3.b `case-inside` re-measured
+  (verilator is a 2-state oracle) with no count change. The tests rose by 1
+  (`every_uncommitted_manifest_path_is_gitignored`). The catalog gained no row.

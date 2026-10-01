@@ -627,7 +627,7 @@ silent truncation.
 | Bit select | `x[i]` | Supported |
 | Part select | `x[m:l]` | Supported |
 | Indexed part select | `x[b+:w]` / `x[b-:w]` | Supported — the width must be a constant ≥ 1 |
-| `inside` | `a inside { … }` | Supported — desugared to an OR of equality and range tests, so it works in constraints and in ordinary conditions alike |
+| `inside` | `a inside { … }` | Supported — desugared to an OR of comparisons and range tests, so it works in constraints and in ordinary conditions alike. A wildcard (`x` / `z` / `?`) bit in a constant element is compared with `==`, not IEEE's `==?` — a known divergence ([006 §3.1](006_limitations.md)) |
 | `dist` | `v dist { … }` | Supported inside a constraint only; see §12 |
 | Implication | `a -> b` | Supported — desugared to `!a \|\| b` |
 | `min:typ:max` | `a:b:c` | Partial — accepted inside `#( … )` only, and the typ value is always taken |
@@ -754,7 +754,8 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | Blocking assign `=`, non-blocking assign `<=` | Supported | |
 | `if` / `else` | Supported | |
 | `case` / `casez` / `casex` … `endcase`, with `default` | Supported | |
-| `case ( … ) inside`, `x inside { … }` | Supported | Desugared to an OR of equality and range tests. |
+| `x inside { … }` | Supported | Desugared to an OR of comparisons and range tests; see the `inside` operator row for the wildcard-element divergence. |
+| `case ( … ) inside` | Refused | `E2002` at parse (IEEE 1800 §12.5.4 is not implemented). Use `casez`, or an `if` chain over `==?` and range tests. |
 | `for` | Supported | Exactly one init and one step; a comma list is a parse error. |
 | `while`, `repeat`, `forever` | Supported | |
 | `do … while ( … );` | Supported | A parse-time desugar. |

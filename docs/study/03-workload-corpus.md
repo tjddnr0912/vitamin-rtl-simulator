@@ -434,7 +434,8 @@ scratch probe cannot be committed by accident.
 `ruled-split`. A slice that makes a row refused again fails the run (the runner grades a moved
 refusal `DRIFTED`, a runs-row that stops running a regression).
 Since the real-design direction the corpus is also the loop's pre-push gate:
-`corpus-runner run` runs before every push until the corpus is in CI (§8).
+`corpus-runner run` runs before every push, and CI runs it on every push to `main` and every
+pull request, on all three platforms (§8).
 
 ### 6.1 The ruled split
 
@@ -547,10 +548,38 @@ a single design.
 
 ## 8. What CI runs
 
-CI does **not** run `corpus-runner run`: the corpus RTL is not in the repository and CI does
-not clone it. What CI runs is the manifest hygiene suite — `crates/corpus-runner/tests/manifest.rs`,
-nine tests — plus 17 unit tests inside `run.rs` covering the grading table, the reverse
-digest scan and the median.
+CI runs the corpus. Two jobs in `.github/workflows/ci.yml` do it on every push to `main` and
+every pull request, in parallel with the test jobs: `corpus`, a matrix over ubuntu-latest and
+macos-latest, and `corpus-rhel`, in the same `redhat/ubi9` container as `build-rhel`. Three
+platforms, so the byte-identity claim is held on real designs and not only on the test suite:
+each row's pin is one string on every OS. Both jobs are blocking — no `continue-on-error`.
+Each runs:
+
+```bash
+cargo build --release -p cli --locked                # `run` requires target/release/vita
+cargo run -p corpus-runner --locked -- fetch --run
+git status --porcelain --untracked-files=all         # must print nothing
+cargo run -p corpus-runner --locked -- run --reps 1
+```
+
+- **The fetch** performs §5's plan: the pinned clones, then `bench/biriscv/prepare.sh`. The
+  clones under `bench/*/src` (about 115 MB) are cached with `actions/cache`, keyed on the
+  runner OS and a hash of `corpus.rs` (the pins), `fetch.rs` (the clone commands) and
+  `bench/*/prepare.sh`, so a moved SHA misses the cache; `prepare.sh` re-runs on a cache hit.
+  The UBI container installs `git` before checkout — without it `actions/checkout` downloads a
+  tarball with no `.git` — and `python3` for `prepare.sh`.
+- **The clean-tree step** makes §5 mechanical: third-party RTL is never redistributed, so after
+  the fetch `git status --porcelain` must be empty — every path the clones and the prepare
+  scripts write is gitignored. A non-empty status fails the job and prints the paths.
+- **`run`** grades every row against its pin (§4.3). Any non-zero exit fails the job: 1 for a
+  failing row, 2 for nothing present, 3 for misuse or a missing binary. `ok`, `ruled-split`,
+  `known-gap` and `PROMOTED` pass. There is no `--compare`: CI has no Icarus Verilog, and the
+  pinned digest already is the oracle's answer (contract rule 3). Without `--compare` no oracle
+  job is built, so `ORACLE-DRIFT` cannot arise in CI.
+
+The test jobs run the manifest hygiene suite — `crates/corpus-runner/tests/manifest.rs`, ten
+tests — plus 19 unit tests inside `run.rs` covering the grading table, the reverse digest scan
+and the median.
 
 | Test | Enforces |
 |---|---|
@@ -563,11 +592,15 @@ digest scan and the median.
 | `a_verilator_oracle_row_records_its_x_invariance_check` | contract rule 2's Verilator exception |
 | `coverage_is_reported_over_the_whole_corpus` | the coverage line's denominator |
 | `the_corpus_covers_more_than_one_shape` | shape diversity |
+| `every_uncommitted_manifest_path_is_gitignored` | §5: a manifest path is committed or gitignored, never committable. Asks git; skips without a work tree |
 
-Running the corpus itself is a manual gate on a development machine, the same treatment the
-Icarus Verilog differential suite gets; the development loop runs it before every push.
-Cloning the pinned RTL in CI is deferred (owner ruling). A full `run --compare` takes about two minutes;
-workload sizes are tuned to 3–15 seconds under Icarus Verilog.
+`run --compare`, which times Icarus Verilog beside vita, stays a development-machine step, the
+same treatment the Icarus Verilog differential suite gets. Workload sizes are tuned to 3–15
+seconds under Icarus Verilog. CI passes `--reps 1`: two rounds whose digests are both
+compared, so a non-deterministic row still fails, and the timed samples it drops are not
+gated in CI. At the default `--reps 3` — four rounds plus one phase probe per row — the step
+took 391 s on a local Apple-silicon machine from a fresh fetch; `ibex` is the longest row, at
+a 30.4 s median.
 
 ---
 
@@ -597,7 +630,9 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 
 - `--compare` invokes Icarus Verilog only; Verilator is a half oracle (§6.2) and is not
   automated.
-- The corpus is not wired into CI (§8).
+- CI runs the corpus without `--compare` (§8): it gates vita against the pins on three
+  platforms but never re-checks that Icarus Verilog still reproduces them, so `ORACLE-DRIFT`
+  is a development-machine signal only.
 - There is no front-end-bound row, so `ELAB-PHASE-BLIND` stands (§7.1).
 
 ---
