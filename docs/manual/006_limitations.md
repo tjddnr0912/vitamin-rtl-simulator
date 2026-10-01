@@ -79,7 +79,7 @@ RTL during reset.
 
 | Situation | Code | Severity | Effect |
 |---|---|---|---|
-| Known index past the end | `E-RUN-RANGE` / `VITA-E4002` | Error, exit 1 | read `X`, write dropped |
+| Known index past the end | `E-RUN-RANGE` / `VITA-E4002` | Warning (exit 0; `-Werror=E-RUN-RANGE` makes it an error) | read `X`, write dropped |
 | Unknown (`x`/`z`) index | `W-RUN-RANGE-UNKNOWN` / `VITA-W4029` | Warning | read `X`, write dropped |
 
 Both diagnostics name the array and the source line that touched it, so one table read

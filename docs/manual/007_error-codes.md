@@ -533,7 +533,7 @@ as well.
 | Number | Mnemonic | Default | Meaning |
 |---|---|---|---|
 | `VITA-E4001` | `E-RUN-ASSERT-FAIL` | Error | Reserved. An `assert` with no action block failing as an implicit `$error`. |
-| `VITA-E4002` | `E-RUN-RANGE` | Error | A runtime array index or bit/part-select is a known value outside the declared range. Per IEEE the read yields `x` and the write is dropped — the run does not crash — but the corruption is surfaced. Validate or clamp the index, or size the array correctly. |
+| `VITA-E4002` | `E-RUN-RANGE` | Error (emitted as a Warning) | A runtime array word index is a known value outside the declared range. Per IEEE 1364-2005 §5.2.1 the read yields `x` and the write is dropped; the run continues and exits 0, and the access is surfaced as a warning. `-Werror=E-RUN-RANGE` makes it an error again (exit 1). Validate or clamp the index, or size the array correctly. |
 | `VITA-E4003` | `E-RUN-USER-ERROR` | Error | A runtime `$error`. Prints and continues. |
 | `VITA-F4004` | `F-RUN-FATAL` | Fatal | A runtime `$fatal`, which implies `$finish`. Also an engine capability limit reached mid-run: a `$fgets` or `$fscanf` inside a framed subroutine body, or a `$finish` or `$stop` actually reached inside a function or task body, where ending the run is preferred over choosing what the calling expression receives. See [Limitations](006_limitations.md). |
 | `VITA-I4005` | `I-RUN-USER-INFO` | Info | A runtime `$info`. |

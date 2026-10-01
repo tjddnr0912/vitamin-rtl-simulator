@@ -31,8 +31,9 @@
 //! - ~~**`warn_run_range`**~~ — DISCHARGED by S1d-4c-2c. The count lives on
 //!   `NetArena::pending_range` and the run loop reports it through the engine's
 //!   own emitter. It was mis-sized while it sat here: the note said "values
-//!   match without it; stderr does not", but the diagnostic is `Severity::Error`
-//!   and therefore the run's EXIT CLASS.
+//!   match without it; stderr does not", but the diagnostic was then
+//!   `Severity::Error` and therefore the run's EXIT CLASS (a warning since
+//!   §4.5.576).
 //! - **Wired-AND/OR resolution** (`wired_and_nets`/`wired_or_nets`, CORE at S0)
 //!   is a multi-driver SETTLE rule, not a write-funnel rule — S1d owns it.
 //! - ~~Effects that never pass through this funnel at all~~ **now REFUSED at the

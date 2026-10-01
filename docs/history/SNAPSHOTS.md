@@ -30,6 +30,7 @@ continues unchanged.
 | 2026-09-30 | 61a0e91 | §4.5.573 | 1 / 0 / −1 | +11 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 1 → 1 (page byte-identical; ⑤ⓚ's parser-binding prerequisite closed) |
 | 2026-09-30 | ca75def | §4.5.574 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | ibex: elaboration 1 → runs (`DIGEST=13b2ddfcd551ba2f`, verilator's pin; `32e0e78741376133` at `+N=2000`) |
 | 2026-09-30 | c852bca | §4.5.575 | 0 / 0 / 0 | +3 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (darkriscv with `__RMW_CYCLE__`: parse 1 → runs, iverilog's digests, core and SoC) |
+| 2026-09-30 | 39fcd62 | §4.5.576 | 0 / 0 / 0 | +2 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (aes: exit 1 → 0 on the same digest; every row pins exit 0) |
 
 ## Section counts
 
@@ -221,6 +222,7 @@ a section restructure, a residue split).
 | 2026-09-30 | 61a0e91 | §4.5.573 | 8879 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 25 / 20 / 5 | 125 / 106 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 446 / 269 / 177 |
 | 2026-09-30 | ca75def | §4.5.574 | 8881 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 125 / 106 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 444 / 267 / 177 |
 | 2026-09-30 | c852bca | §4.5.575 | 8886 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 266 / 177 |
+| 2026-09-30 | 39fcd62 | §4.5.576 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 442 / 265 / 177 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -272,3 +274,6 @@ a section restructure, a residue split).
 - 2026-09-30 (§4.5.575): 3b −1 (`display-null-arg` closed, startable −1). The tests rose by 5
   (`display_null_arg.rs`). No §2 count moved; `study/03` unchanged (2 / 1 / 1). The catalog gained
   three rows (§4.5.575 review), which this table does not count.
+- 2026-09-30 (§4.5.576): 3b −1 (`oob-read-exit` closed, startable −1). The tests rose by 2
+  (`oob_read_exit.rs`). No §2 count moved; `study/03` unchanged (2 / 1 / 1). The catalog gained
+  two rows (§4.5.576 review), which this table does not count.

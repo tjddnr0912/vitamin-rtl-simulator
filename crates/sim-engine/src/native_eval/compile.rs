@@ -667,9 +667,10 @@ pub(crate) fn lower(
             // Measured before the guard existed: `r = c ? 8'hAA : mem[9];` with a
             // 4-element `mem` printed the right value and an `E4002` the
             // interpreter, the tier-3 backend and iverilog all agree never
-            // happens — and since `E4002` is a `Severity::Error` the CLI counts
-            // into the exit code, `--backend vm` (the DEFAULT) exited 1 where
-            // every other backend exited 0. A diagnostic APPEARING is a
+            // happens — and since `E4002` was then a `Severity::Error` the CLI
+            // counts into the exit code, `--backend vm` (the DEFAULT) exited 1
+            // where every other backend exited 0 (a warning since §4.5.576, so
+            // today the stream alone differs). A diagnostic APPEARING is a
             // divergence exactly as much as one going missing.
             //
             // The check asks the compiled OPS rather than the expression shape,

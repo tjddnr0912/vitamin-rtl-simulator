@@ -36,8 +36,10 @@ fn run(src: &str) -> (String, Option<i32>) {
         .current_dir(&d)
         .output()
         .expect("run vita");
+    // stdout then stderr: an E4002 is a warning at exit 0 since §4.5.576, so
+    // "must not go loud" checks the report itself.
     (
-        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr),
         out.status.code(),
     )
 }
@@ -76,6 +78,10 @@ fn a_hierarchical_index_is_not_read_as_an_unsigned_one_bit_net() {
             "index `{idx}`: expected the oracle's `R aa`\n{out}"
         );
         assert_eq!(code, Some(0), "index `{idx}`: must not go loud\n{out}");
+        assert!(
+            !out.contains("VITA-E4002"),
+            "index `{idx}`: must not go loud\n{out}"
+        );
     }
 }
 
@@ -101,6 +107,7 @@ fn a_hierarchical_index_write_lands_where_the_oracle_puts_it() {
     let (out, code) = run(&src);
     assert!(out.contains("W aa 11"), "expected `W aa 11`\n{out}");
     assert_eq!(code, Some(0), "must not go loud\n{out}");
+    assert!(!out.contains("VITA-E4002"), "must not go loud\n{out}");
 }
 
 /// The memo test. Three designs that differ ONLY in unrelated trailing/leading

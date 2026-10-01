@@ -210,13 +210,13 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=200"],
         digest: "DIGEST=cfaa46dd896b2275ade662d344f5e251",
-        // Correct digest, and STILL exit 1: vita reports the out-of-range array read
-        // in `aes_key_mem.v` as an error, where IEEE 1364-2005 §5.2.1 defines the
-        // behaviour (read x, write ignored) and both oracles stay silent. Pinning the
-        // code keeps that visible instead of grading the workload as a crash.
-        expect: Expect::Runs { exit: 1 },
+        // `aes_key_mem.v:182` reads one word past `key_mem`: IEEE 1364-2005 §5.2.1
+        // defines it (read x, write ignored) and both oracles stay silent. vita
+        // reports it as the warning E4002 (§4.5.576; it was an error, exit 1, on
+        // the same correct digest).
+        expect: Expect::Runs { exit: 0 },
         oracle: "iverilog 13.0 (verilator 5.050 agrees)",
-        note: "exits 1 on an IEEE-defined out-of-range read; digest still correct",
+        note: "an IEEE-defined out-of-range read is reported as a warning",
     },
     Workload {
         name: "picorv32",

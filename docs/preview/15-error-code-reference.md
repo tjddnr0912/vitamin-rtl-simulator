@@ -93,6 +93,7 @@ Codes emitted at a severity other than their declared default:
 |---|---|---|---|
 | `VITA-F3005` | Fatal | Error | the elaboration `$fatal` arm routes through the shared error path |
 | `VITA-E9001` | Error | Fatal | the two runtime `.velab` sidecar guards raise it as Fatal |
+| `VITA-E4002` | Error | Warning | `warn_run_index`, by owner ruling (§4.5.576): the access is IEEE-defined (read x, write dropped); `-Werror=E-RUN-RANGE` restores Error |
 
 A code's severity is chosen by its emitter, not by the code. `default_severity()` is read in
 exactly two places: this file's bijection gate, and the `explain` fallback headline.
@@ -942,14 +943,18 @@ synthesised clocked checker or by the severity factory as a `$error`, which repo
 (`assert(...) else $warning(...)`). Suppressible and promotable if it fires.
 
 ### VITA-E4002 · `E-RUN-RANGE` (Error)
-**A runtime array index or bit/part select is out of range with a known index.** IEEE
-1800-2017 §11.5.1 makes an out-of-range select read `x` and drops an out-of-range write rather
-than trapping, so the value semantics are preserved and the access is reported instead of
-being silently corrupting. `sim-ir` is span-free, so `file:line:col` is restored from the
+**A runtime array word index is out of range with a known index.** IEEE 1364-2005 §5.2.1
+(IEEE 1800-2017 §7.4.6) makes an out-of-range word read `x` and drops an out-of-range write
+rather than trapping, so the value semantics are preserved and the access is reported instead
+of being silently corrupting.
+
+**Emitted as a Warning** (exit 0) since §4.5.576, by owner ruling: the access is defined, both
+oracles pass it silently, and the corpus row `aes` printed the correct digest and exited 1. The
+declared default and the number stay (a number is permanent; the mnemonic is fixed by meaning). `sim-ir` is span-free, so `file:line:col` is restored from the
 location side-table and the simulation time is attached.
 ```
 logic [7:0] mem [0:15];  int idx = 20;  $display("%0h", mem[idx]);
-->  m.sv:3:19: error[VITA-E4002] E-RUN-RANGE: array word index of `m.mem` (out of range;
+->  m.sv:3:19: warning[VITA-E4002] E-RUN-RANGE: array word index of `m.mem` (out of range;
     read X / write ignored) [in m] [at time 1]
 ```
 Reports are capped at eight per run, with a budget separate from the unknown-index cap so one
@@ -958,7 +963,7 @@ cannot starve the other; report eight becomes
 
 **Fix:** validate or clamp the index before the select, or size the array to match. The value
 semantics are standard (read `x`, write dropped) and the run continues. Suppress with
-`-Wno-E-RUN-RANGE`, promote with `-Werror=` to stop CI. An index that is *unknown* rather than
+`-Wno-E-RUN-RANGE`; promote with `-Werror=E-RUN-RANGE` to make it an error (exit 1) and stop CI. An index that is *unknown* rather than
 out of range is `VITA-W4029`.
 
 ### VITA-E4003 · `E-RUN-USER-ERROR` (Error)

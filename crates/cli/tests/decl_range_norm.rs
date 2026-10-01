@@ -27,18 +27,17 @@ fn run(src: &str) -> String {
         .current_dir(&d)
         .output()
         .expect("run vita");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "stderr:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
+    // E4002 is a warning since §4.5.576, so exit 0 no longer says "no report".
+    assert!(!err.contains("VITA-E4002"), "stderr:\n{err}");
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
 /// `run` for a design whose out-of-range ARRAY-WORD accesses are DIAGNOSED —
-/// those drops are loud (`E4002`, exit 1), which is itself worth pinning: the
-/// pre-fix binary exits 0 with no diagnostic at all on the anchor design.
+/// those drops are loud (`E4002`, a warning at exit 0 since §4.5.576), which is
+/// itself worth pinning: the pre-fix binary exits 0 with no diagnostic at all on
+/// the anchor design.
 ///
 /// ⚠️ Scope: only the array-word rows are loud. A packed BIT-offset drop is
 /// silent by design (an out-of-range bit select is not a range error), so rows
@@ -55,9 +54,9 @@ fn run_loud(src: &str) -> String {
         .output()
         .expect("run vita");
     let err = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1), "expected a loud drop:\n{err}");
+    assert_eq!(out.status.code(), Some(0), "expected a warned drop:\n{err}");
     assert!(
-        err.contains("VITA-E4002"),
+        err.contains("warning[VITA-E4002]"),
         "the drop must be diagnosed:\n{err}"
     );
     String::from_utf8_lossy(&out.stdout).into_owned()
@@ -453,9 +452,9 @@ fn the_unsigned_seal_keeps_its_frozen_decision_under_a_negative_base() {
        end\n\
      endmodule\n";
     let out = run(src);
-    // `run` already asserts exit 0 — which is half the point: U1..U3 went to
-    // `x` plus an E4002 and exit 1, so a regression here is loud, and U5 is the
-    // one that went SILENT.
+    // `run` already asserts exit 0 and no E4002 — which is half the point:
+    // U1..U3 went to `x` plus an E4002, so a regression here is loud, and U5 is
+    // the one that went SILENT.
     for (tag, want) in [
         ("U1", "37"),
         ("U2", "37"),

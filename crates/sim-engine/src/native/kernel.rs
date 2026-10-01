@@ -1326,7 +1326,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// last drain, through the ENGINE's emitter.
     ///
     /// Calling `SimState::warn_run_range` rather than re-emitting is what keeps
-    /// the message text, the `Severity::Error` that sets the exit class, the
+    /// the message text, the severity (a warning since §4.5.576), the
     /// 8-per-run cap and its "further suppressed" note identical without any of
     /// them being restated. The arena can only COUNT (see `pending_range`).
     ///

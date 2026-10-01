@@ -2,9 +2,9 @@
 # secworks/aes @ 80dc4718e1dcbbdb4b0dd1bdb393d8f7b98981dc (BSD-2-Clause) -- see RUN.md
 # N=200 -> iverilog median 6.18 s / vita median 3.53 s. DIGEST=cfaa46dd896b2275ade662d344f5e251
 #
-# NOTE: vita EXITS 1 here while printing the CORRECT digest (9x VITA-E4002 on a
-# real out-of-range read in aes_key_mem.v; iverilog/verilator accept it silently).
-# Gate on the DIGEST line, NOT on the exit code.
+# NOTE: vita reports 9x VITA-E4002 here as WARNINGS (a real out-of-range read in
+# aes_key_mem.v; iverilog/verilator accept it silently) and exits 0. Until
+# section 4.5.576 it was an error and vita exited 1 on the same correct digest.
 #
 # NOTE: this file is #!/bin/sh on purpose -- zsh does not word-split $F.
 D=$(cd "$(dirname "$0")" && pwd)

@@ -47,6 +47,19 @@ fn run(src: &str) -> (String, bool) {
     )
 }
 
+/// `run`'s stderr: the diagnostic channel.
+fn run_err(src: &str) -> String {
+    let d = workdir();
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
 // ───────────────────────────── V9: 64-bit MSB-set literal fold ──────────────
 #[test]
 fn v9_msb64_scalar_localparam_folds() {
@@ -68,14 +81,17 @@ fn v9_msb64_as_array_index_stays_loud() {
     // SOUNDNESS: the fold reinterprets the bit pattern, so a width-64 MSB-set literal
     // becomes i64::MIN. Used as an ARRAY INDEX that is a genuine magnitude misuse —
     // it must NOT silently write element 0; the out-of-range access stays LOUD (E4002,
-    // rc≠0). Guards the fold against converting a loud reject into a silent-wrong.
+    // a warning at exit 0 since §4.5.576). Guards the fold against converting a loud
+    // reject into a silent-wrong.
     let src = "module m;\n\
         logic [7:0] a [0:3];\n\
         initial begin a[64'h8000000000000000] = 8'hAA; $display(\"a0=%0h\", a[0]); end endmodule";
     let (out, code) = run(src);
+    let err = run_err(src);
+    assert!(code, "a warning, not an error, got:\n{out}\n{err}");
     assert!(
-        !code,
-        "MSB-set index misuse must be loud (rc≠0), got:\n{out}"
+        err.contains("warning[VITA-E4002]"),
+        "MSB-set index misuse must be loud, got:\n{err}"
     );
     assert!(
         !out.contains("a0=aa"),

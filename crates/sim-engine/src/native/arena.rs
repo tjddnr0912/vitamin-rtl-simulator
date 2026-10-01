@@ -151,12 +151,12 @@ pub struct NetArena {
     /// now rides all five.)
     ///
     /// ⚠️ This is a real correctness surface, not bookkeeping. `warn_run_range`
-    /// emits a `Severity::Error` diagnostic, which the CLI's own sink counts into
-    /// the process exit code — NOT via `had_error`, which only the `$error` family
-    /// sets. Without it a design whose write pointer walks past a memory
-    /// runs `--backend native` to a PASS verdict and the default backend to a
+    /// emits the design's only report of the access (E4002, a warning since
+    /// §4.5.576; it was then a `Severity::Error` the CLI's sink counted into the
+    /// exit code). Without it a design whose write pointer walks past a memory
+    /// ran `--backend native` to a PASS verdict and the default backend to a
     /// FAIL — measured on an ordinary FIFO, by both adversarial reviews of
-    /// S1d-4c-2c independently.
+    /// S1d-4c-2c independently; today native would drop the warning.
     ///
     /// The 8-per-run cap and its "further suppressed" note are NOT duplicated
     /// here: draining calls the engine's own function, so the cap counter is the
@@ -390,14 +390,14 @@ impl NetArena {
     /// Count one out-of-range element access, for the run loop to report.
     ///
     /// A FUNCTION rather than the `Cell` bump inline, because it is the whole
-    /// diagnostic: `warn_run_range` emits a `Severity::Error` diagnostic, which
-    /// the CLI's own sink counts into the process exit code — NOT via
-    /// `had_error`, which only the `$error` family sets (`run_tests.rs` records
-    /// that a gate was vacuous for exactly that confusion). Any second reader
+    /// diagnostic: `warn_run_range` emits E4002 (a warning since §4.5.576; it
+    /// was a `Severity::Error` the CLI's sink counted into the exit code, never
+    /// via `had_error`, which only the `$error` family sets — `run_tests.rs`
+    /// records that a gate was vacuous for exactly that confusion). Any second reader
     /// that resolves its
     /// own element index has to land here — `wprog`'s runtime element load is
-    /// that second reader, and a forgotten increment there would turn a design
-    /// whose index walks past a memory from FAIL into PASS while every value
+    /// that second reader, and a forgotten increment there would drop the only
+    /// report of a design whose index walks past a memory while every value
     /// stayed identical. The WRITE funnel is the third caller, routed here in the
     /// same slice: it used to bump the cell inline, which is how the refactor
     /// managed to leave its own motivating example un-routed.

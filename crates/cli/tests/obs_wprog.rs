@@ -372,7 +372,32 @@ endmodule
     let sized = format!("{HEAD}  always @(posedge clk) y <= mem[3'd7];{TAIL}");
     let (o1, c1, obs1) = run(&plain, &[]);
     let (o2, c2, obs2) = run(&sized, &[]);
-    assert_eq!((c1, c2), (1, 1), "E4002 is an error on both spellings");
+    // E4002 is a warning since §4.5.576, so both spellings exit 0 and the
+    // report is counted instead (`run` keeps stdout only).
+    assert_eq!((c1, c2), (0, 0), "the same exit on both spellings");
+    let e4002 = |src: &str| {
+        let d = std::env::temp_dir().join(format!(
+            "vita_obs_wprog_e_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("t.sv"), src).unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+            .arg(d.join("t.sv").to_str().unwrap())
+            .current_dir(&d)
+            .output()
+            .expect("run vita");
+        String::from_utf8_lossy(&out.stderr)
+            .matches("warning[VITA-E4002]")
+            .count()
+    };
+    assert_eq!(
+        (e4002(&plain), e4002(&sized)),
+        (2, 2),
+        "the same reports on both spellings"
+    );
     assert_eq!(
         o1, o2,
         "the value and the diagnostics must not depend on the spelling"

@@ -354,7 +354,8 @@ fn an_unguarded_out_of_range_read_still_reports() {
         out.contains("E4002"),
         "the read HAPPENS here, so it must still be reported:\n{out}"
     );
-    assert_ne!(code, Some(0), "{out}");
+    // A warning since §4.5.576.
+    assert_eq!(code, Some(0), "{out}");
 }
 
 /// A skipped operand is skipped in a FRAME body too — the `&self` frame executor

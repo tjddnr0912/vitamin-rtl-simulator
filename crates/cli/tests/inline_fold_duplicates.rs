@@ -278,7 +278,12 @@ fn a_body_reading_a_module_net_is_a_recorded_residue() {
          and the assertions below should become the oracle's answer (iverilog: R=x, exit 0)"
     );
     let (out, code) = run(&src);
-    assert_ne!(code, Some(0), "today: reports once per reference:\n{out}");
+    // E4002 is a warning since §4.5.576, so the report — not the exit — is loud.
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("warning[VITA-E4002]"),
+        "today: reports once per reference:\n{out}"
+    );
 }
 
 // ── what the adversarial review found, pinned ─────────────────────────────

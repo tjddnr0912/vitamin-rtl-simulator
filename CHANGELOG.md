@@ -9,6 +9,16 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — a known out-of-range array index is a warning, not an error
+
+- `i = 9; o = mem[i];` on `reg [7:0] mem [0:3]` still reads `x` (a write is still dropped), as
+  IEEE 1364-2005 §5.2.1 defines and Icarus Verilog prints, and still reports
+  `E-RUN-RANGE` (`VITA-E4002`), but as a warning: the run exits 0. It was an error, so a correct
+  design exited 1 — the corpus row `aes` printed the right digest and exited 1. The code, its
+  message, the eight-report cap and its separate budget from the unknown-index `VITA-W4029` are
+  unchanged. `-Werror=E-RUN-RANGE` restores the old exit status; `-Wno-E-RUN-RANGE` now
+  suppresses it.
+
 ### Added — a null argument in `$display` and its family
 
 - `$display("dpram: RMW cycle enabled.",);`, `$display("A",,"B");` — an empty argument of

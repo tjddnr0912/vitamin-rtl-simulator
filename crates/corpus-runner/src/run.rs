@@ -478,7 +478,7 @@ pub fn job_for(root: &Path, w: &'static Workload, tool: Tool, vita: &Path) -> Op
 
 /// The exit code a successful run of this (tool, workload) must produce.
 ///
-/// Per-workload, not universally 0: `aes` prints the right digest and still exits 1.
+/// Per-workload, not universally 0 (every row is 0 today; `aes` was 1 until §4.5.576).
 /// iverilog is always expected to exit 0. And a workload pinned as REFUSED is
 /// expected to exit **0** if it ever starts running — that is the promotion, and it
 /// has to be observable rather than checked against the code the refusal itself

@@ -262,7 +262,8 @@ fn an_out_of_range_scrutinee_reports_once_at_the_read() {
          case (mem[9]) 8'd0: $display(\"z\"); default: $display(\"d\"); endcase\n    \
          $finish;\n  end\nendmodule\n",
     );
-    assert_ne!(code, Some(0), "an out-of-range read is E4002:\n{out}");
+    // E4002 is a warning since §4.5.576: exit 0, the report counted below.
+    assert_eq!(code, Some(0), "an out-of-range read is a warning:\n{out}");
     assert_eq!(
         out.matches("E-RUN-RANGE").count(),
         1,

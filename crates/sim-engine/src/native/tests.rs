@@ -2585,10 +2585,10 @@ fn s2_incremental_and_full_selfwidth_drivers_agree() {
 /// **including the deferred out-of-range report count**.
 ///
 /// The value is the easy half. The hard half is that this branch owns a
-/// DIAGNOSTIC: `read_net`'s out-of-range arm counts an E4002 (`Severity::Error`
-/// → exit 1), and a specialized load that returned the right all-X while
-/// forgetting to count would turn a design whose index walks past a memory from
-/// FAIL into PASS with every printed byte identical. So the comparison is
+/// DIAGNOSTIC: `read_net`'s out-of-range arm counts an E4002, and a specialized
+/// load that returned the right all-X while forgetting to count would drop the
+/// only report of a design whose index walks past a memory, with every printed
+/// byte identical (an exit 1 → 0 flip until §4.5.576 made E4002 a warning). So the comparison is
 /// `(val, unk, reports)`, not `(val, unk)` — which is why both sides drain the
 /// counter around each evaluation.
 ///

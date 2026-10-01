@@ -222,7 +222,7 @@ degraded, a diagnostic says so.
 
 | Area | Behaviour |
 |---|---|
-| Out-of-range index or select, known index | read is all-`x`, write is dropped, and `E-RUN-RANGE` (`VITA-E4002`) is reported, rate-limited to 8 reports per kind |
+| Out-of-range index or select, known index | read is all-`x`, write is dropped, and `E-RUN-RANGE` (`VITA-E4002`) is reported as a warning, rate-limited to 8 reports per kind |
 | Out-of-range with an `x`/`z` index | read is all-`x`, write is a no-op, reported as `W-RUN-RANGE-UNKNOWN` on its own report budget |
 | Null handle dereference | read yields `x`, write is a no-op, with `W-RUN-DYN-DEGRADE` once per net. IEEE makes this an error |
 | `$stop` | ends the batch run under its own finish reason. There is no interactive mode and no breakpoint |

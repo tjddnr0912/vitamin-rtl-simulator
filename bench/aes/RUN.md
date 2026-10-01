@@ -1,8 +1,8 @@
 # bench/aes — secworks AES core
 
 The corpus row `aes`: secworks' AES encrypt/decrypt datapath driven through N chained
-key-schedule + encrypt + decrypt rounds, reduced to one `DIGEST=` line. This is the
-row where vita prints the correct answer and still exits 1. The cross-corpus timing
+key-schedule + encrypt + decrypt rounds, reduced to one `DIGEST=` line. Its one
+out-of-range memory read is reported as a warning (it exited 1 until §4.5.576). The cross-corpus timing
 table is [docs/study/03-workload-corpus.md](../../docs/study/03-workload-corpus.md);
 `cargo run -p corpus-runner -- run --filter aes --compare` reproduces it.
 
@@ -83,19 +83,20 @@ iverilog : DIGEST=cfaa46dd896b2275ade662d344f5e251
            .../bench/aes/tb.v:134: $finish called at 286060000 (1ps)
 vita     : DIGEST=cfaa46dd896b2275ade662d344f5e251
            simulation ended (Finish) at time 286060000
-           errors=9 warnings=10 notes=0
+           errors=0 warnings=19 notes=0
 verilator: DIGEST=cfaa46dd896b2275ade662d344f5e251
 ```
 
 All three agree on the end-of-simulation time as well: 286060000 in 1 ps units,
 286.06 µs.
 
-## vita exits 1 while printing the correct answer
+## vita warns about an out-of-range read
 
-This is the one thing a harness must special-case here. Gate on the `DIGEST=` line,
-not on the exit code. The corpus manifest pins the exit code (`Runs { exit: 1 }`)
-rather than grading the workload as a crash, so the day the severity changes the
-corpus notices.
+vita exits 0 here (`Runs { exit: 0 }` in the corpus manifest). Until §4.5.576 it exited
+1 while printing the correct digest: `VITA-E4002` was an error. By owner ruling it is now
+a warning with the same value (read x, write ignored), which is what IEEE 1364-2005
+§5.2.1 defines; `-Werror=E-RUN-RANGE` restores the old exit 1 for a harness that wants
+it.
 
 vita emits, first of each class:
 
@@ -103,15 +104,13 @@ vita emits, first of each class:
 warning[VITA-W1018] W-PP-TIMESCALE-MIXED: some modules have a `timescale and these do not: aes_core, aes_decipher_block, aes_encipher_block, aes_inv_sbox, aes_key_mem, aes_sbox — IEEE 1800 §3.14.2.2 requires all or none, and other tools refuse to elaborate the mixed form (they take the 1ns/1ns base here)
 warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index of `tb.dut.dec_block.inv_sbox_inst.inv_sbox` is unknown (x/z); read X / write ignored [at time 0]
 warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index of `tb.dut.sbox_inst.sbox` is unknown (x/z); read X / write ignored [at time 0]
-src/src/rtl/aes_key_mem.v:182:7: error[VITA-E4002] E-RUN-RANGE: array word index of `tb.dut.keymem.key_mem` (out of range; read X / write ignored) [in tb.dut.keymem.key_mem_read] [at time 2175000]
+src/src/rtl/aes_key_mem.v:182:7: warning[VITA-E4002] E-RUN-RANGE: array word index of `tb.dut.keymem.key_mem` (out of range; read X / write ignored) [in tb.dut.keymem.key_mem_read] [at time 2175000]
 ```
 
-Nine errors (eight sites plus a suppression line) and ten warnings. The full stderr is
-byte-stable across runs, including the interleaving of the errors and their timestamps.
-
-Beware that piping vita's output — `./run.sh vita | tail` — makes `$?` the pipe tail's
-status and hides the 1. `./run.sh vita >/dev/null 2>&1; echo $?` prints `1`; the
-iverilog arm prints `0`.
+Nineteen warnings: nine `VITA-E4002` (eight reports plus a suppression line) and ten
+others. The full stderr is byte-stable across runs, including the interleaving of the
+reports and their timestamps. `./run.sh vita >/dev/null 2>&1; echo $?` prints `0`, as
+the iverilog arm does.
 
 The out-of-range read is real RTL behaviour rather than a vita indexing defect.
 `aes_key_mem.v:77` declares `reg [127:0] key_mem [0:14]` and `aes_key_mem.v:182` reads
@@ -119,13 +118,14 @@ it as `tmp_round_key = key_mem[round]`, where `round` comes from a 4-bit counter
 (`aes_decipher_block.v:201`, `reg [3:0] round_ctr_reg`) decremented at
 `aes_decipher_block.v:440` by `round_ctr_reg - 1'b1`. Decrementing past 0 wraps
 `4'h0 → 4'hF`, driving index 15 at a memory declared `0:14`. iverilog returns `128'hx`
-silently and verilator ignores it; vita calls it an error. The X never reaches the
+silently and verilator ignores it; vita warns. The X never reaches the
 result — the decipher datapath is idle on that cycle — which is why all three digests
 agree.
 
 IEEE 1800 §7.4.6 says an out-of-range *read* returns x and does not require an error.
-Whether `VITA-E4002` deserves error severity on a read as opposed to a write is an
-open product question, and this design is the standing example.
+Whether `VITA-E4002` deserved error severity was an open product question with this
+design as the standing example; §4.5.576 settled it (owner ruling: a warning, read and
+write alike).
 
 The `VITA-W1018` timescale warning is legitimate too: `tb.v` carries
 `` `timescale 1ns/1ps `` and none of the six upstream RTL files do.
@@ -167,8 +167,8 @@ byte-identical across repeated runs, vita's diagnostic stream included.
 
 - A clean ~2.6 kLOC pure-Verilog-2005 differential workload where vita is byte-correct
   against two independent oracles at five workload sizes.
-- The standing correct-or-loud example: vita returns a nonzero exit status on a design
-  every other simulator accepts silently, while producing the right answer.
+- The standing out-of-range-read example: vita warns (`VITA-E4002`) on a design every
+  other simulator accepts silently, while producing the right answer.
 - A different stress profile from the CPU rows: two 256-entry sbox case statements plus
   wide always blocks make it event-heavy per cycle rather than cycle-heavy. iverilog
   needs seconds for only ~28,600 clock cycles.

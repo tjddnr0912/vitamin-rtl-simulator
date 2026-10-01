@@ -1076,10 +1076,10 @@ endmodule
         // OUT-OF-RANGE array access — the silent-wrong this slice's own review
         // found, and the only cover for it. The write pointer walks past the
         // memory in ordinary clocked RTL, with no literal OOB anywhere in the
-        // source. `warn_run_range` is `Severity::Error`, so the VM run is
-        // `ExitClass::HadErrors` and exit 1; before the arena reported it, the
-        // native run was a clean PASS with byte-identical stdout. stdout cannot
-        // see this — `agree`'s `exit_class` compare is what does.
+        // source. `warn_run_range` reports it (E4002, a warning since
+        // §4.5.576; exit 1 before); before the arena reported it, the native run
+        // was a clean PASS with byte-identical stdout. stdout cannot see this —
+        // `agree`'s diagnostic-stream compare is what does.
         (
             "oob_array_access_reports_and_sets_exit_class",
             r#"
@@ -5393,7 +5393,7 @@ endmodule
     assert!(
         events
             .iter()
-            .any(|e| e.starts_with("diag|Error|VITA-E4002")),
+            .any(|e| e.starts_with("diag|Warning|VITA-E4002")),
         "the OOB NBA must report E4002 — nothing else in this design drains \
          `pending_range`: {events:?}"
     );
@@ -5435,7 +5435,7 @@ endmodule
     assert!(
         events
             .iter()
-            .any(|e| e.starts_with("diag|Error|VITA-E4002")),
+            .any(|e| e.starts_with("diag|Warning|VITA-E4002")),
         "the condition's OOB read must report — no statement follows it: {events:?}"
     );
 }
@@ -6180,7 +6180,7 @@ endmodule
 "#;
     const WANT: &[&str] = &[
         "diag|Warning|VITA-W4029|array word index is unknown (x/z); read X / write ignored",
-        "diag|Error|VITA-E4002|array word index (out of range; read X / write ignored)",
+        "diag|Warning|VITA-E4002|array word index (out of range; read X / write ignored)",
         "out|A xxxxxxxxxxxxxxxx\n",
     ];
     both_backends_stream(src, WANT, "concat part order");
@@ -6210,7 +6210,7 @@ module top;
 endmodule
 "#;
     const WANT: &[&str] = &[
-        "diag|Error|VITA-E4002|array word index (out of range; read X / write ignored)",
+        "diag|Warning|VITA-E4002|array word index (out of range; read X / write ignored)",
         "out|B xxxxxxxxxxxxxxxx\n",
     ];
     both_backends_stream(src, WANT, "replicate single evaluation");
