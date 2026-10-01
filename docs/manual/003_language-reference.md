@@ -619,7 +619,7 @@ silent truncation.
 | Logical | `&&` `\|\|` `!` | Supported |
 | Relational | `<` `<=` `>` `>=` | Supported |
 | Equality | `==` `!=` `===` `!==` | Supported |
-| Wildcard equality | `==?` `!=?` | Supported — lowered as a constant-right-side mask and compare (IEEE 1800 §11.4.6) |
+| Wildcard equality | `==?` `!=?` | Supported — lowered as a constant-right-side mask and compare (IEEE 1800 §11.4.6). The pattern extends to the wider operand by §11.4.5: by sign when both operands are signed (an `x` / `z` sign bit extends as a don't-care), otherwise with zeros; an unsized pattern whose leftmost digit is `x` / `z` (`'bx1`) pads with don't-cares (§5.7.1). Loud: a non-constant pattern, a compound constant pattern, and a left operand whose width or sign is unknown at elaboration (an absolute hierarchical path, a `string`). A constant expression reads the left operand at its own width ([006 §3.1](006_limitations.md)) |
 | Shift | `<<` `>>` `<<<` `>>>` | Supported |
 | Conditional | `?:` | Supported |
 | Concatenation | `{a, b, c}` | Supported |
@@ -627,7 +627,7 @@ silent truncation.
 | Bit select | `x[i]` | Supported |
 | Part select | `x[m:l]` | Supported |
 | Indexed part select | `x[b+:w]` / `x[b-:w]` | Supported — the width must be a constant ≥ 1 |
-| `inside` | `a inside { … }` | Supported — desugared to an OR of comparisons and range tests, so it works in constraints and in ordinary conditions alike. A wildcard (`x` / `z` / `?`) bit in a constant element is compared with `==`, not IEEE's `==?` — a known divergence ([006 §3.1](006_limitations.md)) |
+| `inside` | `a inside { … }` | Supported — desugared to an OR of element and range tests, so it works in constraints and in ordinary conditions alike. An integral element is compared with `==?` (IEEE 1800 §11.4.13): its `x` / `z` / `?` bits are don't-cares, the left operand's are not. An element that builds an `x` / `z` literal into a larger expression (`{2'b1?, 2'b00}`) is Loud. Two cases still compare with `==` ([006 §3.1](006_limitations.md)): an element whose `x` / `z` bits exist only at run time, and any element in a constant expression |
 | `dist` | `v dist { … }` | Supported inside a constraint only; see §12 |
 | Implication | `a -> b` | Supported — desugared to `!a \|\| b` |
 | `min:typ:max` | `a:b:c` | Partial — accepted inside `#( … )` only, and the typ value is always taken |
@@ -754,7 +754,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | Blocking assign `=`, non-blocking assign `<=` | Supported | |
 | `if` / `else` | Supported | |
 | `case` / `casez` / `casex` … `endcase`, with `default` | Supported | |
-| `x inside { … }` | Supported | Desugared to an OR of comparisons and range tests; see the `inside` operator row for the wildcard-element divergence. |
+| `x inside { … }` | Supported | Desugared to an OR of comparisons and range tests; see the `inside` operator row for how an element with `x` / `z` bits compares. |
 | `case ( … ) inside` | Refused | `E2002` at parse (IEEE 1800 §12.5.4 is not implemented). Use `casez`, or an `if` chain over `==?` and range tests. |
 | `for` | Supported | Exactly one init and one step; a comma list is a parse error. |
 | `while`, `repeat`, `forever` | Supported | |

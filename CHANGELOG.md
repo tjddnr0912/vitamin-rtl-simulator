@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — `inside` compares an element with `x` / `z` bits by `==?`
+
+- `v inside {4'b1?00}` with `v = 4'b1100` is now `1`, so `if (v inside {4'b1?00})` takes the then
+  branch. IEEE 1800-2017 §11.4.13 compares an integral element with `==?`: the element's `x` / `z`
+  / `?` bits are don't-cares, the left operand's are not. It was `x` at exit 0 with no diagnostic.
+  This holds in procedural code, continuous assigns, functions, tasks, class methods and assertions;
+  an element without `x` / `z` bits compares exactly as before.
+- `==?` / `!=?` extend the pattern by §11.4.5: by sign when both operands are signed, with an `x` /
+  `z` sign bit extending as a don't-care and the left operand's own operators evaluated signed; an
+  unsized pattern whose leftmost digit is `x` / `z` (`'bx1`) pads with don't-cares (§5.7.1). Each
+  of these zero-extended before.
+- Refused (`VITA-E3009`) instead of a silent wrong value: an `inside` element that builds an `x` /
+  `z` literal into a larger expression (`{2'b1?, 2'b00}`, `~4'b0?11`).
+- Unchanged, and documented in manual 006 §3.1: an element whose `x` / `z` bits exist only at run
+  time is still compared with `==`, and a constant expression (a parameter, a generate condition, a
+  range bound) keeps its earlier `inside` / `==?` behaviour.
+
 ### Changed — a known out-of-range array index is a warning, not an error
 
 - `i = 9; o = mem[i];` on `reg [7:0] mem [0:3]` still reads `x` (a write is still dropped), as
