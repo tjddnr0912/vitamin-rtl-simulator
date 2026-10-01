@@ -119,14 +119,20 @@ reaches the cap is hung, not slow.
 
 | | `cargo nextest run --workspace --locked` | `cargo test --workspace --locked` |
 |---|---|---|
-| Role | the local full gate | the CI-canonical suite |
-| Invoked by CI | no | yes, on all three jobs that build the workspace |
+| Role | the full gate, locally and in CI | still works; no longer what CI runs |
+| Invoked by CI | yes, with `--no-fail-fast`, on all three jobs that build the workspace, and as `-p sim-engine --no-default-features --lib` on `build-no-oracle` | only as `cargo test --doc --workspace --locked`, because nextest does not run doctests |
 | Reads `.config/nextest.toml` | yes | no |
 | Per-test timeout | 60 s × 4 = 4 minutes | none |
 | Wall clock at HEAD | 35.8 s (run phase) | roughly 724 s |
 
-Switching between them costs a full rebuild each way, so one session uses one runner. The
-per-test cap therefore protects local runs, which is where mutation batteries execute.
+Switching between them costs a full rebuild each way, so one session uses one runner. CI
+reads the same `.config/nextest.toml`, so the per-test cap protects CI runs as well as local
+ones, where mutation batteries execute.
+
+In CI each test process also runs under `scripts/test-tmpdir.sh`, exported as
+`CARGO_TARGET_<HOST>_RUNNER`, which gives it a fresh private `TMPDIR` and removes it
+afterwards. Test temp names are `vita_<tag>_<pid>_<counter>` and the counter restarts at 0
+in every nextest process, so without it a reused PID could land on a stale directory.
 
 ---
 
@@ -136,10 +142,13 @@ The four canonical commands, which every change must pass locally and which CI r
 
 ```bash
 cargo build  --workspace --locked
-cargo test   --workspace --locked
+cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
+
+CI runs the test command with `--no-fail-fast` and follows it with
+`cargo test --doc --workspace --locked`, because nextest does not run doctests.
 
 `--locked` is mandatory: cross-OS byte identity is only meaningful against one resolved
 dependency graph.
@@ -152,9 +161,12 @@ four runs. The toolchain action is pinned to `dtolnay/rust-toolchain@1.85.0` in 
 
 | Job | Runner(s) | Steps |
 |---|---|---|
-| `build-native` | matrix `ubuntu-latest`, `macos-latest`, `fail-fast: false` | `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo build --workspace --locked`; `cargo test --workspace --locked` |
-| `build-no-oracle` | `ubuntu-latest` | `cargo build -p cli -p sim-engine --locked --no-default-features`; `cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings`; `cargo test -p sim-engine --locked --no-default-features --lib`; a shell smoke test |
-| `build-rhel` | `ubuntu-latest` with the `redhat/ubi9` container, `dnf install -y gcc` for a C linker | `cargo build --workspace --locked`; `cargo test --workspace --locked` |
+| `build-native` | matrix `ubuntu-latest`, `macos-latest`, `fail-fast: false` | `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo build --workspace --locked`; `cargo nextest run --workspace --locked --no-fail-fast`; `cargo test --doc --workspace --locked` |
+| `build-no-oracle` | `ubuntu-latest` | `cargo build -p cli -p sim-engine --locked --no-default-features`; `cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings`; `cargo nextest run -p sim-engine --locked --no-default-features --lib`; a shell smoke test |
+| `build-rhel` | `ubuntu-latest` with the `redhat/ubi9` container, `dnf install -y gcc tar gzip` for a C linker and the nextest install | `cargo build --workspace --locked`; `cargo nextest run --workspace --locked --no-fail-fast`; `cargo test --doc --workspace --locked` |
+
+Every job installs `cargo-nextest@0.9.100` with `taiki-e/install-action@v2`, and every
+nextest step runs under `scripts/test-tmpdir.sh` (§2.4).
 
 The platform matrix is Linux and macOS: `ubuntu-latest`, `macos-latest`, and RHEL 9 / UBI in
 a container. Windows appears nowhere in `.github/workflows/`.

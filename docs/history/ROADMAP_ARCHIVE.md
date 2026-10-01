@@ -573,6 +573,18 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.577 CI runs its test jobs under cargo-nextest, each test process in a private TMPDIR (2026-10-01, branch claude/peaceful-feynman-1mdvuf) ✅
+
+**ROADMAP rows**: §5.b `CI-NEXTEST` closed (deleted); the Summary (§5.b 16 / 8 / 8, total 441 / 265 / 176) and REMAINING_WORK §C (its total row, stale at 443 / 266 since §4.5.576, corrected with it).
+
+**Before (PRE 3752233).** ci.yml ran `cargo test` in four places — `build & test` on ubuntu and macos, RHEL9/UBI, and the product shape's `-p sim-engine --no-default-features --lib` — while the local gate (ENGINEERING_RULES, `.config/nextest.toml`) is `cargo nextest run`. The row measured 724 s for `cargo test --workspace` against 30 s under nextest, and CI did not read `.config/nextest.toml`, so the 4-minute hung-test cap that exists because two runaway `vita` processes once took 33 GB each never applied there.
+
+**Prerequisite, measured and closed.** 685 test files name their temp directories `vita_<tag>_<pid>_<per-process counter>`. nextest gives every test its own process, so the counter restarts at 0 in each (measured: `vita_drn_2728_0`, `vita_drn_2729_0`, `vita_drn_2729_1`), and a reused PID lands on a directory a dead process left behind. Rather than edit 685 files, `scripts/test-tmpdir.sh` is the target runner (`CARGO_TARGET_<HOST>_RUNNER`, set in the test steps only): each test process runs with a fresh `mktemp -d` TMPDIR that is removed when it exits. Measured with TMPDIR pointed at an empty directory: without the runner two test files leave 14 `vita_*` directories behind; with it, 0, over the whole workspace too.
+
+**Change.** The four steps run `cargo nextest run … --no-fail-fast` (nextest 0.9.100 from `taiki-e/install-action`, the version LOOPROMPT pins; 0.9.143 requires rustc 1.91), and the two full-workspace jobs add `cargo test --doc --workspace`, because nextest does not run doctests (the workspace has 0 today; the step keeps a future one from being skipped silently). RHEL9 installs `tar gzip` for the installer. `.config/nextest.toml`'s note that CI does not read it is updated. No test, source or `format_version` change.
+
+**Gate.** Local, with the runner: `cargo nextest run --workspace --locked --no-fail-fast` 8888 / 8888 (15 skipped) — the same count as without it; `-p sim-engine --no-default-features --lib` 177 / 177; `cargo test --doc --workspace` 17 crates, 0 doctests; the step's `export` line run verbatim under `bash -euo pipefail`. CI on the PR is the cross-platform gate (macos and the RHEL9 container are not reproducible here).
+
 #### 4.5.576 a known out-of-range array word index is the warning E4002 — the corpus row `aes` prints the right digest at exit 0, and every corpus row pins exit 0 (2026-09-30, branch claude/peaceful-feynman-1mdvuf) ✅
 
 **ROADMAP rows**: §3.b `oob-read-exit` closed (deleted); §5.2 row 1 deleted and the queue renumbered (the new-design census is row 1); the Summary (§3.b 123 / 104 / 19, diagnostics quality 7, study/03 next 1, total 442 / 265 / 177) and the §3 preamble; REMAINING_WORK §A/§B/§C; study/03 §2 table, the `aes` paragraph and §9; bench/aes/RUN.md and run.sh; the corpus manifest's `aes` row (`Expect::Runs { exit: 0 }`) and `expected_exit`'s note; doc-15 (the E4002 entry and the "emitted at a severity other than their declared default" table); manual 003 / 006 / 007 and preview/01.
