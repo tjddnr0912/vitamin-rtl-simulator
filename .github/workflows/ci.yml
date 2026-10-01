@@ -122,6 +122,90 @@ jobs:
       - name: doctests
         run: cargo test --doc --workspace --locked
 
+  # The workload corpus (docs/study/03-workload-corpus.md §8): clone the pinned
+  # upstream RTL and grade every row against its pinned oracle digest, on all
+  # three platforms, so the byte-identity claim is held on real designs. Blocking.
+  # No `--compare`: CI has no iverilog, and the pinned digest is the oracle's.
+  corpus:
+    name: corpus (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: corpus-${{ matrix.os }}
+      # The clones only, keyed on what pins them: a moved SHA misses the cache.
+      # prepare.sh output lives outside src/ and is regenerated on every fetch.
+      - uses: actions/cache@v6
+        with:
+          path: bench/*/src
+          key: corpus-src-${{ runner.os }}-${{ hashFiles('crates/corpus-runner/src/corpus.rs', 'crates/corpus-runner/src/fetch.rs', 'bench/*/prepare.sh') }}
+      # `run` requires target/release/vita.
+      - name: build (release)
+        run: cargo build --release -p cli --locked
+      - name: fetch
+        run: cargo run -p corpus-runner --locked -- fetch --run
+      # Third-party RTL is never redistributed: every path the clones and the
+      # prepare scripts write must be gitignored, so the tree is the checkout.
+      - name: nothing fetched is committable
+        run: |
+          set -eu
+          dirty=$(git status --porcelain --untracked-files=all)
+          if [ -n "$dirty" ]; then
+            echo "FAIL: fetch left paths git would commit:"
+            echo "$dirty"
+            exit 1
+          fi
+      # `--reps 1` runs two rounds and compares both digests, so a non-deterministic
+      # row still fails; the timed samples it drops are not gated in CI.
+      - name: run
+        run: cargo run -p corpus-runner --locked -- run --reps 1
+
+  corpus-rhel:
+    name: corpus (RHEL9/UBI)
+    runs-on: ubuntu-latest
+    container: redhat/ubi9
+    steps:
+      # git before checkout: without it actions/checkout downloads a tarball with
+      # no .git, and the clean-tree step has no repository to ask. python3 runs
+      # bench/biriscv/prepare.sh. safe.directory: the workspace belongs to the
+      # runner user, not to the container's root.
+      - name: install C linker, git, python3
+        run: |
+          dnf install -y gcc tar gzip git python3
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: corpus-rhel9
+      - uses: actions/cache@v6
+        with:
+          path: bench/*/src
+          key: corpus-src-${{ runner.os }}-ubi9-${{ hashFiles('crates/corpus-runner/src/corpus.rs', 'crates/corpus-runner/src/fetch.rs', 'bench/*/prepare.sh') }}
+      - name: build (release)
+        run: cargo build --release -p cli --locked
+      - name: fetch
+        run: cargo run -p corpus-runner --locked -- fetch --run
+      - name: nothing fetched is committable
+        run: |
+          set -eu
+          dirty=$(git status --porcelain --untracked-files=all)
+          if [ -n "$dirty" ]; then
+            echo "FAIL: fetch left paths git would commit:"
+            echo "$dirty"
+            exit 1
+          fi
+      # `--reps 1` runs two rounds and compares both digests, so a non-deterministic
+      # row still fails; the timed samples it drops are not gated in CI.
+      - name: run
+        run: cargo run -p corpus-runner --locked -- run --reps 1
+
   # MSRV-CEIL — 1.85 is a floor, not a ceiling (CONTRIBUTING.md, preview/03 §4),
   # so one job stands on the ceiling: the latest stable. It is NON-BLOCKING: a red
   # here means a new Rust release breaks or newly lints the workspace — a signal

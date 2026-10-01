@@ -1,7 +1,7 @@
 //! Manifest hygiene.
 //!
-//! The workloads themselves are not in the repository and are absent in CI, so none
-//! of this runs a simulator. What it does check is everything about the manifest that
+//! The workloads themselves are not in the repository and are absent from the test
+//! jobs (CI's corpus jobs fetch and run them), so none of this runs a simulator. What it does check is everything about the manifest that
 //! can rot without anyone noticing: a licence that is not actually permissive, a
 //! branch name where a commit SHA should be, two rows fighting over one artifact
 //! name, or a pinned digest that could never match the line a testbench prints.
@@ -152,5 +152,87 @@ fn the_corpus_covers_more_than_one_shape() {
         shapes.len() >= 3,
         "only {} shape(s): {shapes:?}",
         shapes.len()
+    );
+}
+
+/// Third-party RTL is never redistributed: every manifest path that is not committed —
+/// the clone under `src/`, and what a `prepare.sh` regenerates (`biriscv`'s `prog.hex`)
+/// — must be gitignored, so `fetch --run` cannot leave a committable file behind. CI's
+/// corpus jobs assert the same thing after a real fetch (`git status --porcelain` must
+/// be empty); this is the check one step earlier, without the network.
+///
+/// It asks git rather than re-implementing `.gitignore` matching, so it needs git and a
+/// work tree, and skips with a notice without them (a tarball checkout).
+#[test]
+fn every_uncommitted_manifest_path_is_gitignored() {
+    use std::path::{Component, Path, PathBuf};
+    use std::process::Command;
+
+    let root = corpus_runner::resolve_bench_root().expect("repository root");
+    let git = |args: &[&str]| Command::new("git").arg("-C").arg(&root).args(args).output();
+    match git(&["rev-parse", "--is-inside-work-tree"]) {
+        Ok(o) if o.status.success() => {}
+        _ => {
+            eprintln!("SKIP every_uncommitted_manifest_path_is_gitignored: no git work tree");
+            return;
+        }
+    }
+
+    // `bench/<dir>/<file>`, with `..` resolved: darkriscv's working directory is inside
+    // its clone and names the committed testbench as `../../tb2.v`.
+    let normalise = |p: PathBuf| -> String {
+        let mut out = PathBuf::new();
+        for c in p.components() {
+            match c {
+                Component::ParentDir => assert!(out.pop(), "{} escapes the root", p.display()),
+                Component::CurDir => {}
+                c => out.push(c),
+            }
+        }
+        out.to_string_lossy().replace('\\', "/")
+    };
+    let mut paths: Vec<String> = Vec::new();
+    for w in CORPUS {
+        if let Origin::Upstream { .. } = w.origin {
+            // The clone root itself, whether or not a listed file sits in it.
+            paths.push(format!("bench/{}/src/", w.root));
+        }
+        for f in w.files.iter().chain(w.data) {
+            paths.push(normalise(Path::new("bench").join(w.dir).join(f)));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+
+    // `ok` lists the exit codes that still mean an answer: `check-ignore` exits 1 when
+    // nothing is ignored, which the assertion below reports by name. Anything else is
+    // git failing, and an empty answer from a failed git must not read as a verdict.
+    let paths_from = |cmd: &str, ok: &[i32]| -> Vec<String> {
+        let mut args = vec![cmd, "--"];
+        args.extend(paths.iter().map(String::as_str));
+        let o = git(&args).unwrap_or_else(|e| panic!("git {cmd}: {e}"));
+        assert!(
+            o.status.code().is_some_and(|c| ok.contains(&c)),
+            "git {cmd} failed ({}): {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr)
+        );
+        String::from_utf8(o.stdout)
+            .expect("git prints utf-8 paths")
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let tracked = paths_from("ls-files", &[0]);
+    let ignored = paths_from("check-ignore", &[0, 1]);
+
+    let committable: Vec<&String> = paths
+        .iter()
+        .filter(|p| !tracked.contains(p) && !ignored.contains(p))
+        .collect();
+    assert!(
+        committable.is_empty(),
+        "neither committed nor gitignored, so `fetch --run` would leave them committable: \
+         {committable:?}"
     );
 }
