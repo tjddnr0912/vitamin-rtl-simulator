@@ -266,8 +266,8 @@ session forces a rebuild, so pick one and stay on it.
 
 | Command | Role | Result at HEAD |
 |---|---|---|
-| `cargo test --workspace --locked` | The suite CI runs | — |
-| `cargo nextest run --workspace --locked` | The local full gate; reads `.config/nextest.toml`, which caps any single test at 60 s with four attempts | 7352 tests run, 7352 passed, 15 skipped, exit 0, 35.8 s |
+| `cargo nextest run --workspace --locked` | The full gate, locally and in CI (CI adds `--no-fail-fast`); reads `.config/nextest.toml`, which caps any single test at 60 s with four attempts | 7352 tests run, 7352 passed, 15 skipped, exit 0, 35.8 s |
+| `cargo test --workspace --locked` | Still runs the same suite, without the cap, but is not what CI runs; CI runs only `cargo test --doc --workspace --locked`, because nextest does not run doctests | — |
 
 The lint and format gates, which CI also enforces:
 

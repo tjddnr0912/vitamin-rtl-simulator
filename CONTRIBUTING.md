@@ -61,7 +61,7 @@ These four must pass before a push.
 
 ```sh
 cargo build  --workspace --locked
-cargo test   --workspace --locked
+cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -69,13 +69,15 @@ cargo fmt --all -- --check
 Clippy has to be `--workspace --all-targets`. A crate-scoped `-p <crate>` run
 skips `crates/cli/tests/*.rs`, which CI lints.
 
-Locally, `cargo nextest run --workspace --locked` runs the same suite: 7352
-tests, all passing, 15 skipped, in about 36 s. The 15 are the `#[ignore]`d
+CI runs the same nextest command with `--no-fail-fast`, then
+`cargo test --doc --workspace --locked`, because nextest does not run doctests.
+The suite: 7352 tests, all passing, 15 skipped, in about 36 s. The 15 are the `#[ignore]`d
 performance probes in `crates/sim-engine/tests/perf_baseline.rs` and
 `crates/cli/tests/perf_call_regime.rs` — data, not gates.
 
-The two runners are not interchangeable. `cargo test` is what CI runs and is
-much slower; only nextest reads `.config/nextest.toml`, which caps a single test
+The two runners are not interchangeable. `cargo test --workspace --locked` still
+works, but it is not what CI runs and is much slower; only nextest reads
+`.config/nextest.toml` (in CI as well as locally), which caps a single test
 at 60 s with four retries — a hard four-minute ceiling, far above the slowest
 real test at about 18 s. Without that cap, "the suite is still running" and "the
 machine is dying" look the same. Switching between the two runners inside one
@@ -89,7 +91,7 @@ has nowhere to fall back to and is therefore loud.
 ```sh
 cargo build  -p cli -p sim-engine --locked --no-default-features
 cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings
-cargo test   -p sim-engine        --locked --no-default-features --lib
+cargo nextest run -p sim-engine  --locked --no-default-features --lib
 ```
 
 `-p cli -p sim-engine` rather than `--workspace`, because the workspace's
@@ -229,7 +231,7 @@ expand to four runs, triggered on pushes to `main` and on every pull request.
 |---|---|---|
 | `build-native` | ubuntu-latest and macos-latest | fmt, clippy, build, test — the four canonical commands |
 | `build-no-oracle` | ubuntu-latest | the product-shape build, clippy and lib tests, then a smoke script that simulates a small design, greps its output, and asserts `--backend vm` is rejected rather than silently ignored |
-| `build-rhel` | ubuntu-latest in a `redhat/ubi9` container | `dnf install -y gcc` for a C linker, then build and test |
+| `build-rhel` | ubuntu-latest in a `redhat/ubi9` container | `dnf install -y gcc tar gzip` for a C linker and the nextest install, then build and test |
 
 There is no Windows runner and no release or publish workflow.
 

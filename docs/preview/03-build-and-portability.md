@@ -142,7 +142,7 @@ the same semantics. `interp` is permanently excluded from performance work. See
 ```sh
 cargo build  -p cli -p sim-engine --locked --no-default-features
 cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings
-cargo test   -p sim-engine        --locked --no-default-features --lib
+cargo nextest run -p sim-engine  --locked --no-default-features --lib
 ```
 
 Three rules make that axis mean something. Each failure mode looks the same from outside —
@@ -354,7 +354,7 @@ toolchain target list, absent from CI, and absent from the install script.
 | Platform | Rust install | Notes |
 |---|---|---|
 | Ubuntu LTS (22.04 / 24.04) | rustup | the reference platform, exercised on every push by the `ubuntu-latest` runner |
-| RHEL 8/9 and derivatives | rustup | glibc 2.28 (RHEL 8) and 2.34 (RHEL 9). CI proves the RHEL 9 axis in a `redhat/ubi9` container, which needs `dnf install -y gcc` for a linker |
+| RHEL 8/9 and derivatives | rustup | glibc 2.28 (RHEL 8) and 2.34 (RHEL 9). CI proves the RHEL 9 axis in a `redhat/ubi9` container, which needs `dnf install -y gcc tar gzip` for a linker and the nextest install |
 | macOS, Apple Silicon and Intel | rustup | both `aarch64-apple-darwin` and `x86_64-apple-darwin` are toolchain targets. A universal binary is not produced |
 
 Common setup:
@@ -382,7 +382,13 @@ on every pull request, with concurrency grouped per workflow and ref and
 | `build-rhel` | `ubuntu-latest` in a `redhat/ubi9` container | the same build and test on the glibc and RHEL axis |
 
 Shared actions: `actions/checkout@v6`, `dtolnay/rust-toolchain@1.85.0`,
-`Swatinem/rust-cache@v2` keyed per job.
+`Swatinem/rust-cache@v2` keyed per job, and `taiki-e/install-action@v2`, which installs
+`cargo-nextest@0.9.100`.
+
+Every nextest step exports `CARGO_TARGET_<HOST>_RUNNER=$PWD/scripts/test-tmpdir.sh`, which
+runs each test process with a fresh private `TMPDIR` and removes it afterwards. Test temp
+names are `vita_<tag>_<pid>_<counter>` and the counter restarts at 0 in every nextest
+process, so without it a reused PID could land on a stale directory.
 
 `build-native` steps, in order:
 
@@ -390,11 +396,13 @@ Shared actions: `actions/checkout@v6`, `dtolnay/rust-toolchain@1.85.0`,
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --workspace --locked
-cargo test --workspace --locked
+cargo nextest run --workspace --locked --no-fail-fast
+cargo test --doc --workspace --locked     # nextest does not run doctests
 ```
 
-`build-rhel` steps: `dnf install -y gcc`, then `cargo build --workspace --locked` and
-`cargo test --workspace --locked`.
+`build-rhel` steps: `dnf install -y gcc tar gzip`, then `cargo build --workspace --locked`,
+`cargo nextest run --workspace --locked --no-fail-fast` and
+`cargo test --doc --workspace --locked`.
 
 `build-no-oracle` steps: the three product-shape commands of §3.2, then a smoke script that
 proves both halves of the shape at once — a design runs, and an executor that is not
@@ -423,22 +431,22 @@ Gate summary:
 | Lint, product shape | `build-no-oracle` | `cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings` |
 | Workspace build | `build-native` ×2, `build-rhel` | `cargo build --workspace --locked` |
 | Product-shape build | `build-no-oracle` | `cargo build -p cli -p sim-engine --locked --no-default-features` |
-| Full test suite | `build-native` ×2, `build-rhel` | `cargo test --workspace --locked` |
-| Product-shape lib tests | `build-no-oracle` | `cargo test -p sim-engine --locked --no-default-features --lib` |
+| Full test suite | `build-native` ×2, `build-rhel` | `cargo nextest run --workspace --locked --no-fail-fast` |
+| Doctests | `build-native` ×2, `build-rhel` | `cargo test --doc --workspace --locked` |
+| Product-shape lib tests | `build-no-oracle` | `cargo nextest run -p sim-engine --locked --no-default-features --lib` |
 | End-to-end smoke and loud refusal | `build-no-oracle` | the script above |
 | Lockfile pinning | every build, test and clippy step | `--locked` |
 
 Clippy has to be `--workspace --all-targets`. A crate-scoped `-p <crate>` run skips
 `crates/cli/tests/*.rs`, which CI lints.
 
-Not in CI at HEAD: any Windows runner, any release or publish workflow, `cargo audit`, and
-`cargo nextest`.
+Not in CI at HEAD: any Windows runner, any release or publish workflow, and `cargo audit`.
 
 ### 9.1 The local gate
 
 | | `cargo nextest run --workspace --locked` | `cargo test --workspace --locked` |
 |---|---|---|
-| Role | the local full gate | what CI runs |
+| Role | the full gate, locally and in CI (CI adds `--no-fail-fast`) | still works; CI runs only its doctest half, `cargo test --doc --workspace --locked` |
 | Reads `.config/nextest.toml` | yes | no |
 | Per-test timeout | `slow-timeout = { period = "60s", terminate-after = 4 }`, a hard four-minute ceiling | none |
 | Result at HEAD | 7352 tests, 7352 passed, 15 skipped, exit 0, about 36 s | the same suite, far slower |
@@ -449,7 +457,8 @@ The timeout is the reason `.config/nextest.toml` exists. Without a per-test cap,
 is still running" and "the machine is dying" are indistinguishable, and a non-terminating
 loop in a mutated design can take the machine down. The cap sits far above every real test:
 the whole workspace is about half a minute of wall clock and the slowest single test is
-about 18 s, so a test that reaches four minutes is hung rather than slow.
+about 18 s, so a test that reaches four minutes is hung rather than slow. CI runs nextest,
+so the cap applies there as well as locally.
 
 The two runners are not interchangeable, and switching between them inside one session
 forces a full rebuild. Pick one and stay on it.
