@@ -869,8 +869,8 @@ fn compound_x_z_element_is_loud() {
 /// silently and `$size` x, sv2v → iverilog 2 / x; a generate-`case` item of the same kind
 /// — PRE and e5147442 took `default` silently, sv2v → iverilog takes the item, verilator
 /// refuses an x/? label there; an unsized x pattern against an absolute hierarchical left
-/// operand, whose width — and so the pattern's padding — is not known at lowering. The
-/// needles are the refusal's class, not its full text.
+/// operand, whose width is not known at lowering. The needles are the refusal's class,
+/// not its full text.
 #[test]
 fn shapes_without_a_constant_value_are_loud() {
     let cases = [
@@ -907,7 +907,7 @@ fn shapes_without_a_constant_value_are_loud() {
         (
             "module late; logic [35:0] u36 = 36'hF_0000_0001; endmodule\nmodule t;\n  late uL();\n  initial begin #1 $display(\"H %b\", t.uL.u36 inside {'bx1}); $finish; end\nendmodule\n",
             "[VITA-E3009]",
-            "unsized pattern whose leftmost digit is x/z",
+            "left operand of unsizable width",
         ),
     ];
     for (src, code, needle) in cases {
@@ -1064,52 +1064,38 @@ endmodule
     );
 }
 
-/// Round 2 (R2-3). A left operand with no width at lowering (an absolute hierarchical
-/// path) takes `(lhs | W) ==/!= (P | W)`, which the engine sizes and signs once the path
-/// resolves. iverilog 13.0's own `==?` (sv2v → iverilog for the `inside` spelling) prints
-/// every line; verilator 5.052 differs only on the x sign bit / x left operand (2-state)
-/// and on `s4 inside {8'b1111_1?00}` (its own sign defect, iverilog 0). PRE (00c3d76d)
-/// refused the `==?` line and printed `x`/`0` for the `inside` ones; e5147442 refused
-/// all of them ("left operand of unsizable width").
+/// Round 3 (R2-3 reverted). A left operand with no width at lowering — an absolute
+/// hierarchical path, a `string` variable — is refused for `==?` and for an `inside`
+/// element with x/z bits: at lowering it is not even known to be integral. Round 2's
+/// `(lhs | W) == (P | W)` form, which needed no width, answered `t.uL.v36 ==? 'x` 0
+/// (iverilog 1), `t.uL.r ==? 4'b1?00` 0 for a `real` and `s ==? 8'b0110_000x` 1 for a
+/// `string` (iverilog refuses both). PRE (00c3d76d) refused the `==?` shapes and printed
+/// `x`/`0` for the `inside` ones; e5147442 refused them all, as now. The prerequisite is
+/// the resolved width and kind of a hierarchical operand at lowering (REPORT residue).
 #[test]
-fn absolute_hierarchical_left_operand() {
-    let r = run(
-        r#"`timescale 1ns/1ns
-module late;
-  logic [7:0] u8 = 8'b0101_0100; logic signed [7:0] s8 = -8'sd4; logic signed [3:0] s4 = -4'sd4;
-  logic [7:0] ux = 8'b0x01_x100;
-endmodule
-module t;
-  logic [7:0] u8n;
-  late uL();
-  wire a1 = t.uL.u8 inside {4'b?100};
-  wire a2 = t.u8n inside {4'b?100};
-  initial begin
-    u8n = 8'b0000_0100; #1;
-    $display("cont %b %b", a1, a2);
-    $display("hier %b %b %b", t.uL.u8 inside {4'b?100}, t.u8n inside {4'b?100}, t.uL.u8 inside {8'b0101_0100});
-    $display("signed %b %b %b %b", t.uL.s8 inside {4'sb?100}, t.uL.s8 inside {4'sb1?00}, t.uL.s4 inside {8'sb1111_1?00}, t.uL.s4 inside {8'b1111_1?00});
-    $display("xz %b %b %b", t.uL.ux inside {8'b0?01_?100}, t.uL.ux inside {8'b0101_?100}, t.uL.ux inside {8'b0111_?100});
-    $display("weq %b %b", t.uL.u8 ==? 4'b?100, t.uL.s8 !=? 4'sb1?00);
-    $finish;
-  end
-endmodule
-"#,
-        &[],
-    );
-    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
-    assert_eq!(
-        r.lines(),
-        [
-            "cont 0 1",
-            "hier 0 1 1",
-            "signed 1 1 1 0",
-            "xz 1 x 0",
-            "weq 0 0",
-        ],
-        "stdout:\n{}",
-        r.out
-    );
+fn left_operand_without_a_width_is_loud() {
+    let hier = "module late; logic [7:0] u8 = 8'b0101_0100; logic [35:0] v36 = 36'd0; \
+                real r = 12.0; endmodule\n";
+    for (decls, expr) in [
+        ("late uL();", "t.uL.u8 inside {4'b?100}"),
+        ("late uL();", "t.uL.u8 ==? 4'b?100"),
+        ("late uL();", "t.uL.v36 ==? 'x"),
+        ("late uL();", "t.uL.r ==? 4'b1?00"),
+        ("string s = \"a\";", "s ==? 8'b0110_000x"),
+    ] {
+        let src = format!(
+            "`timescale 1ns/1ns\n{hier}module t;\n  {decls}\n  initial begin #1 \
+             $display(\"r %b\", {expr}); $finish; end\nendmodule\n"
+        );
+        let r = run(&src, &[]);
+        assert_eq!(r.code, 1, "`{expr}` must be refused:\n{}{}", r.out, r.err);
+        assert!(
+            r.err.contains("[VITA-E3009]") && r.err.contains("left operand of unsizable width"),
+            "`{expr}` wrong refusal:\n{}",
+            r.err
+        );
+        assert!(r.lines().is_empty(), "`{expr}` printed a value:\n{}", r.out);
+    }
 }
 
 /// Round 2 (R2-4). A `let` that names an unsized x literal pads it to the expression's
@@ -1176,6 +1162,102 @@ endmodule
     assert_eq!(
         r.lines(),
         ["sc 00000010 00000001 00000010",],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 3 (R3-1). When BOTH operands are signed the comparison is signed at ANY widths
+/// (§11.8.1), and §11.8.2 pushes that sign into the left operand's own operators: `>>>`
+/// shifts in ones, `/` and `%` divide signed, a narrower signed sub-operand sign-extends.
+/// Run-time (`R`, `more`) and constant (`C`) twins in one design; `C8`/the 8th `R` is `!=?`,
+/// `C9`/the 9th `R` an UNSIGNED pattern (unsigned comparison, unchanged IR). sv2v 0.0.13 →
+/// iverilog 13.0 and verilator 5.052 print every line. cf5076ef typed the mask and the
+/// cleaned pattern signed only when the left operand was narrower, so the run-time
+/// region stayed unsigned: `R 0 0 0 0 0 0 0 1 1`, `more 0 0 1 0`, against `C` already right.
+/// PRE (00c3d76d) refused the constants; its run-time `(s4 + s8) ==? 4'sb1?00` was 1.
+#[test]
+fn signed_comparison_signs_the_left_operand_operators() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  logic signed [3:0] sa, s4; logic signed [7:0] s8, s8n, s8b; logic signed [4:0] s5; logic signed [67:0] s68;
+  logic signed [63:0] s64; logic [3:0] u4;
+  localparam signed [3:0] SA = -4'sd2, CS4 = 4'sb1000;
+  localparam signed [7:0] S8 = 8'sd0, S8N = -8'sd4, CS8B = 8'sb1111_1000;
+  localparam signed [63:0] S64 = -64'sd2;
+  localparam C1 = (SA >>> 1) inside {4'sb111?};
+  localparam C2 = (S64 >>> 1) inside {64'shFFFF_FFFF_FFFF_FFF?};
+  localparam C3 = (SA + S8) inside {8'sb1111_111?};
+  localparam C4 = (S8N / 8'sd2) inside {8'sb1111_111?};
+  localparam C5 = (S8N % 8'sd3) inside {8'sb1111_111?};
+  localparam C6 = (CS4 + S8) ==? 4'sb1?00;
+  localparam C7 = (CS8B >>> 1) ==? 8'sb1111_1?00;
+  localparam C8 = (SA >>> 1) !=? 4'sb111?;
+  localparam C9 = (SA >>> 1) inside {4'b011?};
+  initial begin
+    sa = -2; s4 = 4'sb1000; s8 = 0; s8n = -4; s8b = 8'sb1111_1000; s5 = -2; s68 = 0; s64 = -2; u4 = 4'b1110;
+    #1;
+    $display("R %b %b %b %b %b %b %b %b %b", (sa >>> 1) inside {4'sb111?}, (s64 >>> 1) inside {64'shFFFF_FFFF_FFFF_FFF?},
+             (sa + s8) inside {8'sb1111_111?}, (s8n / 8'sd2) inside {8'sb1111_111?}, (s8n % 8'sd3) inside {8'sb1111_111?},
+             (s4 + s8) ==? 4'sb1?00, (s8b >>> 1) ==? 8'sb1111_1?00, (sa >>> 1) !=? 4'sb111?, (sa >>> 1) inside {4'b011?});
+    $display("C %b %b %b %b %b %b %b %b %b", C1, C2, C3, C4, C5, C6, C7, C8, C9);
+    $display("more %b %b %b %b", (s5 >>> 1) inside {4'sb111?}, (s4 + s68) ==? 4'sb1?00, (u4 >>> 1) inside {4'sb011?}, (s4 + s8) inside {4'sb1?00});
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["R 1 1 1 1 1 1 1 0 1", "C 1 1 1 1 1 1 1 0 1", "more 1 1 1 1",],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 3 (R3-3). A generate-`case` label whose wildcard comparison has the VALUE x is a
+/// defined non-match (§12.5 compares a label with `===`), so the next label or `default`
+/// is taken; only a label the 4-state fold cannot evaluate at all (an x/z pattern built
+/// into a larger expression) is refused (`shapes_without_a_constant_value_are_loud`).
+/// sv2v 0.0.13 → iverilog 13.0 prints these four lines (verilator refuses an x/? label in a
+/// generate `case`). cf5076ef refused the three x-valued labels (E3010); PRE (00c3d76d)
+/// printed `XB one`, `XI one`, `XD default`, `FOLD default` (the folding label wrong).
+#[test]
+fn x_valued_generate_case_label_is_a_non_match() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  localparam bit S = 1'b1;
+  case (S)
+    (4'bx100 ==? 4'b1?00): begin : gx initial $display("XB x-label"); end
+    1'b1: begin : g1 initial $display("XB one"); end
+    default: begin : gd initial $display("XB default"); end
+  endcase
+  case (S)
+    (4'bx100 inside {4'b1?00}): begin : hx initial $display("XI x-label"); end
+    1'b1: begin : h1 initial $display("XI one"); end
+    default: begin : hd initial $display("XI default"); end
+  endcase
+  case (S)
+    (4'bx100 ==? 4'b1?00): begin : kx initial $display("XD x-label"); end
+    default: begin : kd initial $display("XD default"); end
+  endcase
+  case (S)
+    (4'b1100 inside {4'b1?00}): begin : fx initial $display("FOLD item"); end
+    default: begin : fd initial $display("FOLD default"); end
+  endcase
+  initial #1 $finish;
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["XB one", "XI one", "XD default", "FOLD item",],
         "stdout:\n{}",
         r.out
     );

@@ -238,19 +238,23 @@ impl Elaborator<'_> {
     /// extension bits [pattern width, w) follow [`pattern_ext_fill`], the one rule the
     /// constant domains read too.
     ///
-    /// A signed LEFT operand narrower than the pattern is sign-extended by giving the
-    /// mask AND the cleaned pattern the signed type: the `Eq` and its `BitAnd` are
-    /// one §11.8.2 region, signed only when every operand is, and the engine extends
-    /// the left operand by the region's sign. Every other comparison is unsigned with
-    /// unsigned constants, as it always was. Measured against iverilog 13.0's own
+    /// When BOTH operands are signed, the mask AND the cleaned pattern take the signed
+    /// type, at any widths: the `Eq` and its `BitAnd` are one §11.8.2 region, signed
+    /// only when every operand is, and the engine both extends the left operand and
+    /// evaluates its own operators (`>>>`, `/`, `%`, a narrower signed sub-operand) by
+    /// the region's sign — typing them only when the left operand was narrower made
+    /// `(s4 + s8) ==? 4'sb1?00` 0 where every oracle prints 1 (review round 3). Every
+    /// other comparison is unsigned with unsigned constants, as it always was. Measured against iverilog 13.0's own
     /// `==?` and sv2v 0.0.13 → iverilog on every cell, verilator 5.052 on the 2-state
     /// ones (it reads an x/z sign bit as 0, so it is not an oracle for that extension).
     ///
-    /// A left operand with NO width yet (an absolute hierarchical reference, which is
-    /// a placeholder until every instance exists) takes [`Self::wildcard_cmp_or_form`]
-    /// instead, which needs neither its width nor its sign. A signed pattern of
-    /// another width against a left operand whose width is known but whose sign is not
-    /// is loud: the AND form's extension depends on it.
+    /// A left operand with no width at lowering (an absolute hierarchical reference, a
+    /// `string`, a string system function, an unrecorded generate path) is loud: the
+    /// mask could not cover it, and it is not even known to be integral there (review
+    /// round 3 measured an OR form that needed no width answering for a `real`, a
+    /// `string` and a fill pattern where iverilog refuses or answers 1). A signed
+    /// pattern against a left operand whose signedness is not known is loud too: the
+    /// comparison's sign decides how the left operand's own operators evaluate.
     pub(crate) fn wildcard_cmp_ids(
         &mut self,
         lhs_id: u32,
@@ -260,21 +264,29 @@ impl Elaborator<'_> {
     ) -> u32 {
         let unsized_xz = self.unsized_xz_lits.contains(&pat_id);
         let Some(aw) = self.ir_bits_of(lhs_id) else {
-            return self.wildcard_cmp_or_form(lhs_id, cv, unsized_xz, ne);
+            self.error(
+                MsgCode::ElabUnsupported,
+                "wildcard equality (==?/!=?, or an `inside` element with x/z bits) \
+                 on a left operand of unsizable width is unsupported (the pattern \
+                 mask must cover it)",
+            );
+            return self.placeholder_expr();
         };
         let pw = cv.width.max(1);
         let w = aw.max(pw);
-        // Only an extension can make the left operand's sign matter, and only a
-        // signed pattern can make the comparison signed (§11.8.1).
-        let both_signed = if aw != pw && cv.signed {
+        // §11.8.1: the comparison is signed iff BOTH operands are, at any widths — and
+        // its sign is pushed into the left operand's own operators (§11.8.2: `>>>`,
+        // `/`, `%`, a narrower signed sub-operand), not only into an extension. So a
+        // signed pattern asks the left operand's sign whatever the two widths are.
+        let both_signed = if cv.signed {
             match self.canonical_self_width(lhs_id) {
                 Some(s) => s.signed,
                 None => {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "wildcard equality (==?/!=?, or an `inside` element with x/z \
-                         bits) with a signed pattern of another width needs the left \
-                         operand's signedness, which is not known at this point",
+                         bits) with a signed pattern needs the left operand's \
+                         signedness, which is not known at this point",
                     );
                     return self.placeholder_expr();
                 }
@@ -328,12 +340,12 @@ impl Elaborator<'_> {
             mask[nwords - 1] &= m;
             clean[nwords - 1] &= m;
         }
-        // Both constants signed: the compare is ONE §11.8.2 region, signed only if
-        // every operand is, so a signed mask alone would leave `Eq` unsigned and
-        // zero-extend the left operand before the `BitAnd` saw it.
-        let sext_lhs = both_signed && aw < w;
-        let m_id = self.push_known_const(w, sext_lhs, mask);
-        let c_id = self.push_known_const(w, sext_lhs, clean);
+        // Both constants signed exactly when the comparison is: the `BitAnd` and the
+        // `Eq` are ONE §11.8.2 region, signed only if every operand is, and the engine
+        // evaluates the left operand's operators — and extends it — by that sign. An
+        // unsigned pattern or left operand keeps unsigned constants, as it always did.
+        let m_id = self.push_known_const(w, both_signed, mask);
+        let c_id = self.push_known_const(w, both_signed, clean);
         let anded = self.push_expr(ir::Expr::Binary {
             op: ir::BinOp::BitAnd,
             lhs: lhs_id,
@@ -343,76 +355,6 @@ impl Elaborator<'_> {
             op: if ne { ir::BinOp::Ne } else { ir::BinOp::Eq },
             lhs: anded,
             rhs: c_id,
-        })
-    }
-
-    /// The wildcard compare for a left operand whose width is not known at lowering:
-    /// `(lhs | W) ==/!= (P | W)`, `W` = the pattern's wildcard bits and `P | W` = the
-    /// pattern with them set, both at the PATTERN's width and with the PATTERN's
-    /// sign. The engine sizes and signs this as one §11.8.2 region when the operand
-    /// is finally known, so nothing about it is guessed here:
-    ///
-    /// - a wildcard bit: `x | 1` = `1` = `1`, whatever the left bit holds;
-    /// - a compared bit: `l | 0` = `l` against the pattern bit, which is `==`'s 4-state
-    ///   rule (a definite mismatch decides 0, an x/z left bit gives x);
-    /// - a wider left operand: `W` and `P | W` extend by the region's sign — zero when
-    ///   either side is unsigned (the left operand's high bits are compared against
-    ///   0), the pattern's own MSB when both are signed (a don't-care MSB has `W`'s
-    ///   MSB set, so its extension stays don't-care);
-    /// - a narrower left operand extends by the same region sign (§11.4.5).
-    ///
-    /// Hand-spelled on PRE (00c3d76d) with absolute paths, 25 cells — unsigned and
-    /// signed, narrower and wider on both sides, x/z left bits under a wildcard and
-    /// under a compared bit, `!=`: every one printed iverilog 13.0's own `==?` text.
-    ///
-    /// The one shape it cannot carry is an unsized literal whose leftmost digit is x/z:
-    /// §5.7.1 pads it to the width of the expression, which `W` zero-extended past its
-    /// 32 bits would compare. Without the left width there is no way to know whether
-    /// that happens, so it is loud.
-    fn wildcard_cmp_or_form(
-        &mut self,
-        lhs_id: u32,
-        cv: &ir::ConstVal,
-        unsized_xz: bool,
-        ne: bool,
-    ) -> u32 {
-        if unsized_xz {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "wildcard equality (==?/!=?, or an `inside` element with x/z bits) with an \
-                 unsized pattern whose leftmost digit is x/z, on a left operand whose width \
-                 is not known at this point (a hierarchical reference), is unsupported: \
-                 the pattern pads to the expression's width, which is not known yet",
-            );
-            return self.placeholder_expr();
-        }
-        let pw = cv.width.max(1);
-        let nwords = (pw as usize).div_ceil(64);
-        let mut wild = vec![0u64; nwords];
-        let mut set = vec![0u64; nwords];
-        for wi in 0..nwords {
-            let cvv = cv.bits.val.get(wi).copied().unwrap_or(0);
-            let cvu = cv.bits.unk.get(wi).copied().unwrap_or(0);
-            wild[wi] = cvu;
-            set[wi] = cvv | cvu;
-        }
-        let top = pw % 64;
-        if top != 0 {
-            let m = (1u64 << top) - 1;
-            wild[nwords - 1] &= m;
-            set[nwords - 1] &= m;
-        }
-        let w_id = self.push_known_const(pw, cv.signed, wild);
-        let p_id = self.push_known_const(pw, cv.signed, set);
-        let ored = self.push_expr(ir::Expr::Binary {
-            op: ir::BinOp::BitOr,
-            lhs: lhs_id,
-            rhs: w_id,
-        });
-        self.push_expr(ir::Expr::Binary {
-            op: if ne { ir::BinOp::Ne } else { ir::BinOp::Eq },
-            lhs: ored,
-            rhs: p_id,
         })
     }
 
