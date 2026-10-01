@@ -150,8 +150,7 @@ impl Parser<'_, '_> {
                 self.expect(TokenKind::Semi, "';' after UDP initial statement");
                 let v = lit
                     .chars()
-                    .filter(|c| !c.is_whitespace())
-                    .next_back()
+                    .rfind(|c| !c.is_whitespace())
                     .map(|c| c.to_ascii_lowercase());
                 match v {
                     Some(c @ ('0' | '1' | 'x')) => initial_val = Some(c),

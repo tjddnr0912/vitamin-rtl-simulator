@@ -327,8 +327,9 @@ impl Elaborator<'_> {
                     }
                     _ => None,
                 };
-                if d.range.is_none() && d.packed.is_empty() && str_container_kind.is_some() {
-                    let kind = str_container_kind.expect("guarded by is_some above");
+                if let Some(kind) =
+                    str_container_kind.filter(|_| d.range.is_none() && d.packed.is_empty())
+                {
                     let Ok(queue_bound) = self.queue_dim_bound(&decl.unpacked[0]) else {
                         continue;
                     };

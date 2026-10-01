@@ -125,7 +125,7 @@ fn pure_expr(ir: &SimIr, memo: &mut Vec<Option<bool>>, eid: u32) -> bool {
     }
     let p = match &ir.exprs[eid as usize] {
         Expr::Const { .. } => true,
-        Expr::Signal { word, .. } => word.map_or(true, |w| pure_expr(ir, memo, w)),
+        Expr::Signal { word, .. } => word.is_none_or(|w| pure_expr(ir, memo, w)),
         Expr::ArrayItem { .. } | Expr::SysFunc { .. } | Expr::Call { .. } => false,
         Expr::Unary { operand, .. } => pure_expr(ir, memo, *operand),
         Expr::Binary { lhs, rhs, .. } => pure_expr(ir, memo, *lhs) && pure_expr(ir, memo, *rhs),

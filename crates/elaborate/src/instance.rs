@@ -361,10 +361,7 @@ impl Elaborator<'_> {
         // leak into the parent's scope. A ROOT has no instantiation site and
         // falls back to its own declaration — the only source location that
         // exists for it, and better than being the one class with no anchor.
-        let saved_span = std::mem::replace(
-            &mut self.cur_span,
-            Some(inst_span.unwrap_or(module.name.span)),
-        );
+        let saved_span = self.cur_span.replace(inst_span.unwrap_or(module.name.span));
         // A module body is never "inside a generate", however it was reached. Without this
         // a child instantiated inside a generate elaborated its WHOLE body with the flag
         // stuck on, so its own module-scope block-locals were tagged as generate-owned and

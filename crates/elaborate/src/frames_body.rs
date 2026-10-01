@@ -311,7 +311,7 @@ impl Elaborator<'_> {
     fn enter_frame_scope_root(&mut self, name: &str) -> Option<String> {
         let fp = self.frame_path(name);
         let root = fp.strip_prefix('.').unwrap_or(&fp).to_string();
-        std::mem::replace(&mut self.block_scope_root, Some(root))
+        self.block_scope_root.replace(root)
     }
 
     /// Lower a frame function's body into the GLOBAL `func_blocks` arena: build a

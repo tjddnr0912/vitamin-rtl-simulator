@@ -1950,6 +1950,8 @@ pub struct GenerateConstruct {
     pub items: Vec<GenItem>,
     pub span: Span,
 }
+// Boxing the large variant would change the AST shape and its schema hash.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum GenItem {
     For {

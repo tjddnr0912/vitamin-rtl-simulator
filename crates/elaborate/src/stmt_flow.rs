@@ -641,7 +641,7 @@ impl Elaborator<'_> {
     /// Re-lower a case operand in the common width with the COLLECTIVE sign as the
     /// region's extension (`inline_ctx_ext`), the inline-body route of §4.5.491.
     pub(crate) fn lower_case_operand_ctx(&mut self, e: &ast::Expr, common: u32, ext: bool) -> u32 {
-        let saved = std::mem::replace(&mut self.inline_ctx_ext, Some(ext));
+        let saved = self.inline_ctx_ext.replace(ext);
         let id = self.lower_expr_ctx(e, common);
         self.inline_ctx_ext = saved;
         id

@@ -13,7 +13,7 @@ use sim_ir::BitPacked;
 
 #[inline]
 pub(crate) fn nwords(width: u32) -> usize {
-    ((width as usize) + 63) / 64
+    (width as usize).div_ceil(64)
 }
 
 /// Mask of valid bits in the most-significant word (handles `width % 64 == 0`).

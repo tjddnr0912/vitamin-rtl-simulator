@@ -917,7 +917,7 @@ impl Elaborator<'_> {
             return self.placeholder_expr();
         };
         let w = aw.max(cv.width).max(1);
-        let nwords = ((w as usize) + 63) / 64;
+        let nwords = (w as usize).div_ceil(64);
         let mut mask = vec![0u64; nwords];
         let mut clean = vec![0u64; nwords];
         for wi in 0..nwords {
