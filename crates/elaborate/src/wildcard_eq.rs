@@ -3,6 +3,10 @@
 //! [`Elaborator::inside_value_cmp`] is the element rule a `case … inside` item
 //! (§12.5.4) is to reuse: it works on operands that are ALREADY LOWERED, so a
 //! caller decides nothing by lowering an operand twice.
+//!
+//! This is the RUN-TIME half of §2 🆕 S. The constant domains still compare an `inside`
+//! element with `==` (as before the slice); their `==?` waits on generate-case labels
+//! being compared in the 4-state domain at full width (ROADMAP queue).
 
 use super::*;
 
@@ -159,74 +163,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// §11.4.6 `==?`/`!=?` and §11.4.13's `inside` element against an x/z LITERAL
-    /// pattern, in the i64 domain: the left operand is evaluated at the comparison's
-    /// common width `w = max(L(lhs), L(pattern))` with the pair's sign (§11.6.1 Table
-    /// 11-21, §11.8.1 — so a carry, a shift or a `~` runs at `w`, which reading it at
-    /// its own width did not: `(4'd15 + 4'd1) ==? 5'b1?000` was 0, both oracles 1),
-    /// the pattern is extended by [`crate::wildcard_eq::pattern_ext_fill`] — the rule
-    /// the run-time builder uses — and [`crate::const_wide::wildcard_match`] decides.
-    ///
-    /// `None` hands the node on, never a guessed answer: a fill pattern, a pattern
-    /// with no x/z bit (that is `==`, answered by the generic arm), a width past 64 or
-    /// an unknown one, and a left operand this walk cannot evaluate (an x/z literal
-    /// inside it) all go to the wide domain (`selfdet_bits_i64`), which answers or
-    /// declines — loud at the consumer.
-    pub(crate) fn const_wildcard_i64(
-        &self,
-        op: ast::BinOp,
-        lhs: &ast::Expr,
-        rhs: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
-        depth: u32,
-    ) -> Option<i64> {
-        if !matches!(
-            op,
-            ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq
-        ) {
-            return None;
-        }
-        let mut pat = rhs;
-        while let ast::ExprKind::Paren { inner } = &pat.kind {
-            pat = inner;
-        }
-        let ast::ExprKind::IntLit { kind, raw } = &pat.kind else {
-            return None;
-        };
-        if literal::is_fill_literal(raw, *kind) {
-            return None;
-        }
-        let cv = parse_int_literal(raw, *kind)?;
-        if !cv.bits.unk.iter().any(|&u| u != 0) {
-            return None;
-        }
-        let pw = cv.width.max(1);
-        let w = self.const_self_width(lhs, envw)?.max(pw);
-        if w > 64 {
-            return None;
-        }
-        let sg = self.const_signed_env(lhs, envw) && cv.signed;
-        let a = self.eval_const_env_at(lhs, env, envw, depth, w, sg)?;
-        let lbits = ir::BitPacked {
-            val: vec![a as u64],
-            unk: vec![0],
-        };
-        let fill = if pw < w {
-            let bit = |v: &[u64]| v.first().is_some_and(|x| (x >> (pw - 1)) & 1 == 1);
-            crate::wildcard_eq::pattern_ext_fill(
-                bit(&cv.bits.unk),
-                bit(&cv.bits.val),
-                sg,
-                matches!(kind, ast::IntLitKind::UnsizedBased),
-            )
-        } else {
-            Some(false)
-        };
-        let m = crate::const_wide::wildcard_match(&lbits, &cv.bits, pw, w, fill)?;
-        Some(i64::from(m != matches!(op, ast::BinOp::WildNe)))
-    }
-
     /// The `(lhs & mask) ==/!= cleaned` compare for the constant pattern `cv` (the
     /// `Const` node `pat_id`) against the already-lowered `lhs_id`.
     ///
@@ -235,8 +171,7 @@ impl Elaborator<'_> {
     /// wildcard bits cleared. An operand narrower than `w` is extended first, by
     /// §11.4.5's rule for equality (which §11.4.6 applies to `==?`): sign extension
     /// when BOTH operands are signed, zero extension otherwise. The pattern's
-    /// extension bits [pattern width, w) follow [`pattern_ext_fill`], the one rule the
-    /// constant domains read too.
+    /// extension bits [pattern width, w) follow [`pattern_ext_fill`].
     ///
     /// When BOTH operands are signed, the mask AND the cleaned pattern take the signed
     /// type, at any widths: the `Eq` and its `BitAnd` are one §11.8.2 region, signed
@@ -374,10 +309,11 @@ impl Elaborator<'_> {
     }
 }
 
-/// THE extension rule of a wildcard pattern narrower than its comparison — read by
-/// the run-time builder ([`Elaborator::wildcard_cmp_ids`]) and by both constant
-/// domains (`const_fn_width`'s i64 walk and `const_wide::fold_region`), so a
-/// constant and a run-time spelling of one comparison cannot extend differently.
+/// THE extension rule of a wildcard pattern narrower than its comparison, read by the
+/// run-time builder ([`Elaborator::wildcard_cmp_ids`]). The constant domains do not
+/// take `==?` for an `inside` element yet (they compare it with `==`, as before this
+/// slice); a constant `==?` routine must read this rule too, so a constant and a
+/// run-time spelling of one comparison cannot extend differently.
 ///
 /// `Some(b)`: each extension bit is compared against `b`; `None`: each is a
 /// don't-care.
@@ -401,26 +337,6 @@ pub(crate) fn pattern_ext_fill(
     } else {
         Some(false)
     }
-}
-
-/// Does `e` hold a wildcard comparison (`==?`, `!=?`, an `inside` element) with an
-/// x/z literal on either side? The constant positions that swallow a declined fold —
-/// a range bound, an array dimension, a generate-`case` item — ask it to refuse
-/// loudly instead: such a node declines only when its value is x (an x/z left bit
-/// under a compared pattern bit) or its x/z pattern is not one literal, and a
-/// silent default there is a different design.
-pub(crate) fn holds_xz_wildcard(e: &ast::Expr) -> bool {
-    crate::param_query::ast_any(e, &|x| {
-        matches!(
-            &x.kind,
-            ast::ExprKind::Binary {
-                op: ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq,
-                lhs,
-                rhs,
-            } if crate::param_query::ast_holds_unknown_literal(lhs)
-                || crate::param_query::ast_holds_unknown_literal(rhs)
-        )
-    })
 }
 
 /// Bit `i` of a little-endian word vector (`false` past its end).

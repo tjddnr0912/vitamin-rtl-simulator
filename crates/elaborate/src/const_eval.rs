@@ -1028,22 +1028,6 @@ impl Elaborator<'_> {
                  constant range bound (the function is undefined, or its body is outside \
                  the constant-function subset)",
             );
-            return;
-        }
-        // A wildcard comparison carrying x/z bits that did not fold — its value is x
-        // (an x/z left bit under a compared pattern bit), or its x/z pattern is not one
-        // literal (`{2'b1?, 2'b00}`), which the constant domains refuse as the run time
-        // does. Left to the catch-all below, the bound silently became one bit (`[(…
-        // inside {{2'b1?, 2'b00}}):0]`: `$bits` 1, both oracles 2). Scoped to those
-        // nodes: a plain `==` / relational with an x operand keeps its old route.
-        if crate::wildcard_eq::holds_xz_wildcard(e) {
-            self.error_at(
-                MsgCode::ElabUnsupported,
-                e.span,
-                "a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits \
-                 that has no constant value — its result is x, or its x/z pattern is not a \
-                 single literal — is not allowed in a constant range bound",
-            );
         }
     }
 

@@ -743,9 +743,9 @@ impl Elaborator<'_> {
         }
         // A wildcard equality with a string-literal operand: its pattern's x / z bits are
         // don't-cares, not a failure, so the pattern literal is never blamed; any other
-        // operand that fails is, and when none does the comparison itself is the cause —
-        // the wide domain folds `==?` only against a single literal pattern, and only to
-        // a known bit.
+        // operand that fails is, and when none does the operator is the cause — the wide
+        // domain has no wildcard equality, and the constant one reads its left side as
+        // an i64.
         if let (
             Reading::Condition,
             ast::ExprKind::Binary {
@@ -765,9 +765,8 @@ impl Elaborator<'_> {
                         .filter(|c| !self.wide_folds_reading(c, rd))
                         .find_map(|c| self.unfoldable_reason_in(c, rd))
                         .unwrap_or_else(|| {
-                            "a wildcard equality (`==?`, `!=?`) beside a string literal has no \
-                             constant value: its x/z pattern is not a single literal, or its \
-                             result is x"
+                            "a wildcard equality (`==?`, `!=?`) has no constant-fold arm for a \
+                             string-literal operand"
                                 .to_string()
                         }),
                 );
