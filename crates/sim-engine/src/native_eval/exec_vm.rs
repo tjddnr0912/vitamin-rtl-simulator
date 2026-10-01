@@ -246,16 +246,14 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
                         ((r as u64) & m, 0)
                     }
                 } else {
-                    let b = bv & m;
-                    if b == 0 {
-                        (0, m)
-                    } else {
-                        let a = av & m;
-                        let r = match kind {
-                            DivKind::Div => a / b,
-                            DivKind::Mod => a % b,
-                        };
-                        (r & m, 0)
+                    let (a, b) = (av & m, bv & m);
+                    let r = match kind {
+                        DivKind::Div => a.checked_div(b),
+                        DivKind::Mod => a.checked_rem(b),
+                    };
+                    match r {
+                        Some(r) => (r & m, 0),
+                        None => (0, m), // divide by zero → all-X
                     }
                 };
                 stack.push(res);
@@ -526,16 +524,14 @@ pub(crate) fn run(prog: &NativeProg, nets: &dyn NetReader, scratch: &mut NativeS
                 let res = if (au & m) != 0 || (bu & m) != 0 {
                     (0, m)
                 } else {
-                    let b = bv & m;
-                    if b == 0 {
-                        (0, m)
-                    } else {
-                        let a = av & m;
-                        let r = match kind {
-                            DivKind::Div => a / b,
-                            DivKind::Mod => a % b,
-                        };
-                        (r & m, 0)
+                    let (a, b) = (av & m, bv & m);
+                    let r = match kind {
+                        DivKind::Div => a.checked_div(b),
+                        DivKind::Mod => a.checked_rem(b),
+                    };
+                    match r {
+                        Some(r) => (r & m, 0),
+                        None => (0, m), // divide by zero → all-X
                     }
                 };
                 wstack.push(res);

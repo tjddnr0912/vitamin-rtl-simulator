@@ -921,7 +921,7 @@ fn s1d4a_class_new_site_is_read_not_stubbed() {
     let nk = NativeKernel::new(&ir, arena, &mut sched_n, &sites, 10_000);
     let sched = Scheduler::new(&mut st, 10_000, 10_000, None, Default::default());
     let mut class_new = 0usize;
-    for (&sid, _) in sites.iter() {
+    for &sid in sites.keys() {
         assert_eq!(
             sched.k_class_new_site(sid),
             nk.k_class_new_site(sid),

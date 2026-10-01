@@ -44,10 +44,9 @@ impl Elaborator<'_> {
             {
                 let (f, c, op) = if let Some(f) = rand_field_ident(lhs) {
                     (f, self.const_eval_in_scope(rhs)?, *op)
-                } else if let Some(f) = rand_field_ident(rhs) {
-                    (f, self.const_eval_in_scope(lhs)?, flip_cmp(*op))
                 } else {
-                    return None;
+                    let f = rand_field_ident(rhs)?;
+                    (f, self.const_eval_in_scope(lhs)?, flip_cmp(*op))
                 };
                 let (lo, hi) = match op {
                     BinOp::Lt => (i64::MIN, c.saturating_sub(1)),

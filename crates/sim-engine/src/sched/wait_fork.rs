@@ -320,15 +320,9 @@ pub(crate) fn transition_delay(
         // bit differs from the new bit.
         let changed = match old {
             None => true,
-            Some(o) => {
-                // Compare only within the old value's width; bits beyond it (the
-                // first-drive case for wider news) count as changed.
-                if i < o.width {
-                    o.get_vu(i) != (nv, nu)
-                } else {
-                    true
-                }
-            }
+            // Compare only within the old value's width; bits beyond it (the
+            // first-drive case for wider news) count as changed.
+            Some(o) => i >= o.width || o.get_vu(i) != (nv, nu),
         };
         if !changed {
             continue;

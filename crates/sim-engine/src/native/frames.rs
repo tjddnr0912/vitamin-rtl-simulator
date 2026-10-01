@@ -420,15 +420,15 @@ fn driven_body_is_runnable(
         };
         for &sid in &blk.stmts {
             match &ir.stmts[sid as usize] {
-                sim_ir::Stmt::SysTask { which, .. } => {
-                    if crate::native::kernel::systask_refusal(*which).is_some() {
-                        return Err("a system task the tier-3 kernel refuses, inside a task frame");
-                    }
+                sim_ir::Stmt::SysTask { which, .. }
+                    if crate::native::kernel::systask_refusal(*which).is_some() =>
+                {
+                    return Err("a system task the tier-3 kernel refuses, inside a task frame");
                 }
-                sim_ir::Stmt::NonblockingAssign { lhs, .. } => {
-                    if lhs.chunks.iter().any(|c| c.net >= lo && c.net < hi) {
-                        return Err("a nonblocking assign to a frame-local net: S3b");
-                    }
+                sim_ir::Stmt::NonblockingAssign { lhs, .. }
+                    if lhs.chunks.iter().any(|c| c.net >= lo && c.net < hi) =>
+                {
+                    return Err("a nonblocking assign to a frame-local net: S3b");
                 }
                 _ => {}
             }

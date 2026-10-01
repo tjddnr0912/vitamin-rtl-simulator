@@ -299,10 +299,8 @@ impl Parser<'_, '_> {
         }
         let pfx = self.parse_param_prefix();
         let mut first: Option<ModuleItem> = None;
-        loop {
-            let Some(pi) = self.finish_param_assignment(&pfx, true) else {
-                break; // parse error already recorded by finish_param_assignment
-            };
+        // A `None` is a parse error already recorded by finish_param_assignment.
+        while let Some(pi) = self.finish_param_assignment(&pfx, true) {
             let mi = self.param_item_to_module_item(pi);
             match first {
                 None => first = Some(mi),

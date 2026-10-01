@@ -284,4 +284,5 @@ a section restructure, a residue split).
 - 2026-10-01 (§4.5.577): 5.b −1 (`CI-NEXTEST` closed, blocked −1: its prerequisite, the
   temp-name collision, closed with it). Tests unchanged; CI only.
 - 2026-10-01 (§4.5.578): 5.b −1 (`MSRV-CEIL` closed, startable −1). Tests unchanged; CI gains
-  `build-stable`, and 35 stable-only clippy lints are fixed without a behaviour change.
+  `build-stable`, and 46 stable-only clippy lints (35 on 1.94.1, 11 more on 1.98.0) are fixed
+  without a behaviour change.
