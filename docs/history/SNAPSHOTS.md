@@ -35,6 +35,7 @@ continues unchanged.
 | 2026-10-01 | cb12baa | §4.5.578 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI only: a non-blocking latest-stable job; lint-only source rewrites) |
 | 2026-10-01 | 2df2cec | §4.5.579 | 0 / 1 / +1 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI now fetches and runs the corpus on 3 OS; §2 🆕 S recorded from an external report) |
 | 2026-10-01 | 3711e0e | §4.5.580 | 0 / 1 / +1 | +6 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (an external report's `inside` wildcard fixed at run time; §2 🆕 S keeps its constant and run-time-x/z halves, §2 🆕 T recorded from the fix path) |
+| 2026-10-02 | e937aed | §4.5.581 (reverted) | 0 / +3 / +3 | +2 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (§2 🆕 T and 🆕 S (a)'s constant half built and reverted after three review rounds; §2 🆕 U, 🆕 V and 🆕 W recorded as their prerequisites) |
 
 ## Section counts
 
@@ -231,6 +232,7 @@ a section restructure, a residue split).
 | 2026-10-01 | cb12baa | §4.5.578 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 440 / 264 / 176 |
 | 2026-10-01 | 2df2cec | §4.5.579 | 8889 | 34 | 22 / 2 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 441 / 266 / 175 |
 | 2026-10-01 | 3711e0e | §4.5.580 | 8915 | 34 | 23 / 2 / 21 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 126 / 107 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 444 / 268 / 176 |
+| 2026-10-02 | e937aed | §4.5.581 | 8927 | 34 | 26 / 4 / 22 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 126 / 107 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 447 / 270 / 177 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -300,3 +302,8 @@ a section restructure, a residue split).
   a run-time `==?`), so 2T is 23 / 2 / 21. Before it, docs-only 7b804c6 registered the report's
   fourth item and a gap found re-measuring it: 3b +2 (`unique-overlap-note`, `unique-if-chain`, both
   startable). The tests rose by 26 (`inside_wildcard.rs`). The catalog gained six rows.
+- 2026-10-02 (§4.5.581): reverted after three review rounds. 2T +3 (🆕 U, 🆕 V, 🆕 W: the review's
+  prerequisites, each startable and queued as §5.2 rows 4–6); 🆕 T moves OPEN → BLOCKED on 🆕 U and
+  🆕 V (startable −1, blocked +1), so 2T is 26 / 4 / 22. `study/03` unchanged (1 / 1 / 0). The tests
+  rose by 12 held cells (`generate_case_and_wildcard_prerequisites.rs`). The catalog gained two
+  rows.
