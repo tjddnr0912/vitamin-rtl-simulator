@@ -48,6 +48,12 @@ fn is_range_loud(out: &str, code: Option<i32>) -> bool {
     code == Some(0) && out.contains("warning[VITA-E4002]")
 }
 
+/// The run finished at exit 0 with no out-of-range report — the exit code alone
+/// cannot say so, since E4002 is a warning.
+fn is_range_quiet(out: &str, code: Option<i32>) -> bool {
+    code == Some(0) && !out.contains("VITA-E4002")
+}
+
 /// How many out-of-range reports (E4002) the run emitted. The duplication guards
 /// below are about the DIAGNOSTIC channel — asserting the exit code instead cannot
 /// tell one report from two, which is exactly the difference those guards exist
@@ -146,7 +152,10 @@ fn an_array_word_index_write_lands_where_both_oracles_put_it() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(0), "no row here is out of range\n{out}");
+    assert!(
+        is_range_quiet(&out, code),
+        "no row here is out of range\n{out}"
+    );
     assert!(out.contains("A 22 0 0 0 0 0"), "ma[-3] must hold 22\n{out}");
     assert!(out.contains("Z 0 0 33 0 0 11"), "mz[2]/mz[5]\n{out}");
 }
@@ -171,7 +180,10 @@ fn a_signed_narrow_index_is_sign_extended_not_zero_extended() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(0), "`s8 >>> 1` is -3, which is in range\n{out}");
+    assert!(
+        is_range_quiet(&out, code),
+        "`s8 >>> 1` is -3, which is in range\n{out}"
+    );
     assert!(
         out.contains("R 0 0 0 0 0 0 77 0"),
         "expected ua[-3] = 77\n{out}"
@@ -191,7 +203,10 @@ fn a_signed_narrow_index_is_sign_extended_not_zero_extended() {
      endmodule\n";
     let (out2, code2) = run(up);
     assert!(out2.contains("U 75"), "both oracles read mp[5]\n{out2}");
-    assert_eq!(code2, Some(0), "in range, so not loud\n{out2}");
+    assert!(
+        is_range_quiet(&out2, code2),
+        "in range, so not loud\n{out2}"
+    );
 }
 
 /// A CONSTANT index keeps its true value and stays LOUD when that value is out
@@ -255,7 +270,7 @@ fn a_constant_index_out_of_range_stays_loud() {
         out2.contains("K 170 11 11 11 11 11"),
         "runtime lands\n{out2}"
     );
-    assert_eq!(code2, Some(0), "and is not diagnosed\n{out2}");
+    assert!(is_range_quiet(&out2, code2), "and is not diagnosed\n{out2}");
 }
 
 /// Truncating a wider-than-32 index must not turn an UNKNOWN index into a known
@@ -433,9 +448,8 @@ fn a_subroutine_local_or_formal_array_is_indexed_like_a_module_one() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(
-        code,
-        Some(0),
+    assert!(
+        is_range_quiet(&out, code),
         "every row is in range after truncation\n{out}"
     );
     for want in ["G 52", "F 52", "T 62"] {
@@ -533,7 +547,7 @@ fn a_frame_array_elements_bit_axis_is_not_a_word_axis() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(0), "{out}");
+    assert!(is_range_quiet(&out, code), "{out}");
     // iverilog drops both; the two spellings must at least agree with each other.
     assert!(
         out.contains("G 0 L 0"),
@@ -568,7 +582,7 @@ fn every_spelling_of_one_bit_select_answers_alike() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(0), "{out}");
+    assert!(is_range_quiet(&out, code), "{out}");
     assert!(
         out.contains("VEC 32 ARR 32 PKD 32 FRM 32"),
         "all four spellings write bit 5\n{out}"
@@ -606,7 +620,7 @@ fn a_deeply_nested_index_still_gets_its_seal() {
     // many `- 0` the user wrote.
     for pads in [0usize, 63, 64, 200] {
         let (out, code) = run(&mk(pads));
-        assert_eq!(code, Some(0), "pads={pads}\n{out}");
+        assert!(is_range_quiet(&out, code), "pads={pads}\n{out}");
         assert!(
             out.contains("W 00010000000000000000000000000000"),
             "pads={pads}: the seal was dropped\n{out}"
@@ -635,7 +649,7 @@ fn a_deeply_nested_index_still_gets_its_seal() {
     };
     for pads in [63usize, 64, 200] {
         let (out, code) = run(&hier(pads));
-        assert_eq!(code, Some(0), "hier pads={pads}\n{out}");
+        assert!(is_range_quiet(&out, code), "hier pads={pads}\n{out}");
         assert!(
             out.contains("W 00010000000000000000000000000000"),
             "hier pads={pads}: the seal was dropped on the provisional path\n{out}"
@@ -801,7 +815,7 @@ fn a_hierarchical_index_containing_a_hierarchical_select_keeps_its_seal() {
        end\n\
      endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(0), "{out}");
+    assert!(is_range_quiet(&out, code), "{out}");
     // `~253` is 2 at the index's own eight bits. The hierarchical spelling must
     // answer what the local one does — that equality IS the assertion, so a
     // regression that broke both would still fail the literal checks below.
@@ -844,7 +858,7 @@ fn a_dag_shaped_index_does_not_exhaust_the_walks() {
          endmodule\n"
     );
     let (out, code) = run(&src);
-    assert_eq!(code, Some(0), "{out}");
+    assert!(is_range_quiet(&out, code), "{out}");
     assert!(
         out.contains("W 00010000000000000000000000000000"),
         "the seal must survive a DAG-shaped index\n{out}"
@@ -884,7 +898,7 @@ fn a_seal_built_dag_does_not_exhaust_the_repeatability_walk() {
          endmodule\n"
     );
     let (out, code) = run(&src);
-    assert_eq!(code, Some(0), "-3 is in range\n{out}");
+    assert!(is_range_quiet(&out, code), "-3 is in range\n{out}");
     assert!(out.contains("C -3"), "the index itself is -3\n{out}");
     assert!(out.contains("A 42"), "so the read is mg[-3]\n{out}");
 }

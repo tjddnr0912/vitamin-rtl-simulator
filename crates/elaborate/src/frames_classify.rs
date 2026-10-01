@@ -309,7 +309,8 @@ fn expr_is_repeatable(e: &ast::Expr) -> bool {
         }
         // ⚠️ `a[i]` is deliberately NOT repeatable. An out-of-range read REPORTS, and
         // vita files that report once per evaluation — so a duplicated element read
-        // turns one `E4002` into N and an exit 0 into an exit 1. Measured.
+        // turns one `E4002` into N (and, while E4002 was an error, an exit 0 into
+        // an exit 1). Measured.
         K::BitSelect { .. } => false,
         // Everything else fails closed: `$random` and `$urandom` draw, a user call runs
         // a body that can print, `new`/`randomize`/`with`-clause carry state.

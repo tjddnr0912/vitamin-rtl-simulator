@@ -323,7 +323,7 @@ fn array_assign_slice_with_oob_row_index_is_noop() {
 /// access, and `aes_key_mem.v:182` exited 1 on a design both oracles pass), so the
 /// exit code no longer tells the halves apart; the code does.
 #[test]
-fn unknown_index_warns_while_known_out_of_range_errors() {
+fn unknown_and_known_out_of_range_indexes_carry_different_codes() {
     // idx is X for the whole run: legal X propagation, warning, exit 0.
     let (out, err, code) = run("module t;\n\
            reg [7:0] mem [0:3]; reg [1:0] idx; reg [7:0] o;\n\

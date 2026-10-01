@@ -27,12 +27,10 @@ fn run(src: &str) -> String {
         .current_dir(&d)
         .output()
         .expect("run vita");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "stderr:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "stderr:\n{err}");
+    // E4002 is a warning since §4.5.576, so exit 0 no longer says "no report".
+    assert!(!err.contains("VITA-E4002"), "stderr:\n{err}");
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
@@ -454,9 +452,9 @@ fn the_unsigned_seal_keeps_its_frozen_decision_under_a_negative_base() {
        end\n\
      endmodule\n";
     let out = run(src);
-    // `run` already asserts exit 0 — which is half the point: U1..U3 went to
-    // `x` plus an E4002 and exit 1, so a regression here is loud, and U5 is the
-    // one that went SILENT.
+    // `run` already asserts exit 0 and no E4002 — which is half the point:
+    // U1..U3 went to `x` plus an E4002, so a regression here is loud, and U5 is
+    // the one that went SILENT.
     for (tag, want) in [
         ("U1", "37"),
         ("U2", "37"),

@@ -1076,10 +1076,10 @@ endmodule
         // OUT-OF-RANGE array access — the silent-wrong this slice's own review
         // found, and the only cover for it. The write pointer walks past the
         // memory in ordinary clocked RTL, with no literal OOB anywhere in the
-        // source. `warn_run_range` is `Severity::Error`, so the VM run is
-        // `ExitClass::HadErrors` and exit 1; before the arena reported it, the
-        // native run was a clean PASS with byte-identical stdout. stdout cannot
-        // see this — `agree`'s `exit_class` compare is what does.
+        // source. `warn_run_range` reports it (E4002, a warning since
+        // §4.5.576; exit 1 before); before the arena reported it, the native run
+        // was a clean PASS with byte-identical stdout. stdout cannot see this —
+        // `agree`'s diagnostic-stream compare is what does.
         (
             "oob_array_access_reports_and_sets_exit_class",
             r#"
