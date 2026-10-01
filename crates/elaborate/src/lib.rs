@@ -95,7 +95,6 @@ mod frames_classify_fork;
 mod frames_classify_write;
 mod frames_reserve;
 mod frames_static_init;
-mod gen_case;
 mod gen_enum;
 mod gen_scope_name;
 mod generate;
@@ -1075,16 +1074,6 @@ struct Elaborator<'s> {
     // a bound or a generate condition must stay LOUD rather than silently truncate to
     // its low 64 bits, so only the expression reader consults this.
     wide_param_bits: BTreeMap<String, ir::ConstVal>,
-    /// Per generate-case construct — keyed by the scope prefix it is elaborated under
-    /// (instance path and generate-block segments, so one entry per instance and per
-    /// loop iteration) and its span — whether the bit-domain region of
-    /// `gen_case_choose` was available on its FIRST elaboration (the Nets phase).
-    /// Later phases use the region only if it was: a label that refers forward to a
-    /// later generate-scope localparam folds only once the Nets walk has bound it, and
-    /// a region that appeared in a later phase changed the decision of the OTHER
-    /// labels, so the Nets phase built one arm's nets and the Logic phase another
-    /// arm's processes (review round 1, F2).
-    gen_case_region: BTreeMap<(String, u32, u32), bool>,
     // R19-X1: the scope prefix in force when `func_table`/`task_table` were collected —
     // i.e. the scope in which every function/task in them is DECLARED. Saved/restored
     // with those tables. Read only by `default_binding_matches_decl_scope`: a filled

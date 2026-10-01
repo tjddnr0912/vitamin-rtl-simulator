@@ -442,19 +442,36 @@ impl Elaborator<'_> {
                     }
                     return;
                 };
-                // The first item whose label matches (§12.5 case equality, 4-state, at
-                // full width — `gen_case.rs`), else `default`. The bit-domain region is
-                // used only if it was available the first time this construct was
-                // elaborated in this scope (`gen_case_region`), so every phase picks
-                // the same arm.
-                let region_key = (self.cur_prefix.clone(), span.lo, span.hi);
-                let first = self.gen_case_region.get(&region_key).copied();
-                let (chosen, region_ok) =
-                    self.gen_case_choose(scrutinee, scrut, items, first.unwrap_or(true));
-                if first.is_none() {
-                    self.gen_case_region.insert(region_key, region_ok);
+                // first Match whose label const-equals scrut wins; else Default.
+                let mut chosen: Option<&[ast::GenItem]> = None;
+                let mut default: Option<&[ast::GenItem]> = None;
+                'scan: for ci in items {
+                    match ci {
+                        ast::GenCaseItem::Match { labels, body, .. } => {
+                            for lab in labels {
+                                // A string label (a literal or a string parameter) is
+                                // its bytes (§5.9), which the i64 fold has no arm for:
+                                // `case (P) "ab": …` over `P = 16'h6162` took the
+                                // default in vita and the `"ab"` arm in both oracles.
+                                // It compares like a numeric label: as an i64, which
+                                // is right where the scrutinee's own value is (the
+                                // sized §12.5 compare is ROADMAP §2 "Constant domain").
+                                let lv = self.const_eval_in_scope(lab).or_else(|| {
+                                    self.const_str_in_scope(lab)
+                                        .and_then(|t| crate::const_wide::str_raw_i64(&t))
+                                });
+                                if lv == Some(scrut) {
+                                    chosen = Some(body);
+                                    break 'scan;
+                                }
+                            }
+                        }
+                        ast::GenCaseItem::Default { body, .. } => {
+                            default = Some(body);
+                        }
+                    }
                 }
-                if let Some(body) = chosen {
+                if let Some(body) = chosen.or(default) {
                     // The arm's block: its own label (kept as a `Block` by
                     // `gen_case_body`) or `genblk<N>` (§27.6) — an un-blocked arm is an
                     // implicit block too (both oracles `top.genblk3`).

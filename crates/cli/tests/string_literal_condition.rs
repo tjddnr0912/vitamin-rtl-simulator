@@ -426,24 +426,14 @@ fn a_nonstandard_escape_in_a_condition_stays_refused() {
     );
 }
 
-/// A wildcard compare of a string literal is its §5.9 bits against the pattern: `"a"` is
-/// `8'h61`, which `8'b0110_000x` matches and `8'b0110_001x` does not. All three oracles
-/// (iverilog 13.0, verilator 5.052, sv2v 0.0.13 → iverilog) print `G0 1`, `G1 0`, `G2 1`.
-/// Loud until §2 🆕 S round 2 (E3010 "a wildcard equality (`==?`, `!=?`) has no
-/// constant-fold arm for a string-literal operand"), when the wide constant domain took
-/// the `==?` / `inside` wildcard arm the run time already had.
+/// `==?` has no arm in the wide domain, and the constant domain's wildcard compare reads
+/// its left side as an i64, which has no literal: all three oracles print `G0 1`.
 #[test]
-fn a_wildcard_compare_of_a_string_literal_folds() {
-    prints(
-        &conds(
-            "",
-            &[
-                r#""a" ==? 8'b0110_000x"#,
-                r#""a" ==? 8'b0110_001x"#,
-                r#""a" inside {8'b0110_000x}"#,
-            ],
-        ),
-        &["G0 1", "G1 0", "G2 1"],
+fn a_wildcard_compare_of_a_string_literal_stays_refused() {
+    is_loud(
+        &conds("", &[r#""a" ==? 8'b0110_000x"#]),
+        "generate-if condition is not a constant: a wildcard equality (`==?`, `!=?`) has \
+         no constant-fold arm for a string-literal operand",
     );
 }
 

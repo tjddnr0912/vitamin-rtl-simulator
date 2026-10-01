@@ -208,7 +208,9 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
     let w = w as usize;
     let eq = match op {
         ast::BinOp::CaseEq | ast::BinOp::CaseNe => (0..w).all(|i| bp_get(lb, i) == bp_get(rb, i)),
-        ast::BinOp::Eq | ast::BinOp::Ne => {
+        // An `inside` element is `==` in the constant domains (§2 🆕 S keeps the
+        // constant half at `==`; its `==?` needs the 4-state generate-case compare first).
+        ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::InsideEq => {
             let differs = (0..w).any(|i| {
                 let ((a, au), (b, bu)) = (bp_get(lb, i), bp_get(rb, i));
                 !au && !bu && a != b
@@ -221,46 +223,11 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
         _ => return None,
     };
     Some(bp_bit(
-        matches!(op, ast::BinOp::CaseEq | ast::BinOp::Eq) == eq,
+        matches!(
+            op,
+            ast::BinOp::CaseEq | ast::BinOp::Eq | ast::BinOp::InsideEq
+        ) == eq,
     ))
-}
-
-/// §11.4.6 wildcard match: the left bits `l` (at least `w` of them) against the
-/// pattern `p` of `pw` bits, whose x/z bits are don't-cares, extended to `w` by
-/// `fill` ([`crate::wildcard_eq::pattern_ext_fill`]: `Some(b)` compares each extension
-/// bit against `b`, `None` makes it a don't-care). `Some(false)` when a KNOWN left bit
-/// differs from a compared pattern bit, `None` (x) when none does and a compared left
-/// bit is x/z, `Some(true)` otherwise. Shared by both constant domains (this one and
-/// `const_fn_width`'s i64 walk), so they cannot answer the same comparison twice.
-pub(crate) fn wildcard_match(
-    l: &ir::BitPacked,
-    p: &ir::BitPacked,
-    pw: u32,
-    w: u32,
-    fill: Option<bool>,
-) -> Option<bool> {
-    let mut unknown = false;
-    for i in 0..w as usize {
-        let pv = if i < pw as usize {
-            let (v, u) = bp_get(p, i);
-            if u {
-                continue;
-            }
-            v
-        } else {
-            match fill {
-                Some(b) => b,
-                None => continue,
-            }
-        };
-        let (lv, lu) = bp_get(l, i);
-        if lu {
-            unknown = true;
-        } else if lv != pv {
-            return Some(false);
-        }
-    }
-    (!unknown).then_some(true)
 }
 
 /// Fold an expression at its OWN (self-determined) width in the WIDE bit domain.
@@ -491,37 +458,11 @@ fn bp_operands_at(
 /// `fold_shift_count` already applies to a shift amount, and the i64 lane's
 /// `const_self_width` gives the same answer). Both oracles: `('1 && 1'b1)` is 1,
 /// `(2 ** '1)` is 2, `('1 ? 1'b1 : 1'b0)` is 1.
-///
-/// Also the first half of a comparison REGION's operand (see [`fold_in_region`]): it
-/// gives the operand's own width and sign, from which the region's are decided.
-pub(crate) fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
+fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
     if fill_literal_ast(e).is_some() {
         fold_bits_at(e, 1, name)
     } else {
         fold_bits_at0(e, name)
-    }
-}
-
-/// One operand of a comparison REGION of width `w` and sign `sg` (§11.8.3: "neither
-/// fully self-determined nor fully context-determined"), given its own fold `v` from
-/// [`fold_selfdet_operand`]. A side narrower than the region is refolded at `w` with the
-/// region's sign pushed into it, so a context-determined operator inside computes at
-/// that width and a fill takes it; a side already at `w` keeps its bits unless it is
-/// SIGNED in an unsigned region, where §11.8.2 converts it first and an operator inside
-/// must run unsigned. The relational and equality arm of [`fold_region`] sizes its two
-/// operands with it; the generate-case arm choice (`gen_case.rs`) sizes a case
-/// expression and its items with it (§12.5).
-pub(crate) fn fold_in_region(
-    e: &ast::Expr,
-    v: WideBits,
-    w: u32,
-    sg: bool,
-    name: WideNameFn,
-) -> Option<WideBits> {
-    if v.1 < w || (v.2 && !sg) {
-        fold_region(e, w, Some(sg), name)
-    } else {
-        Some(v)
     }
 }
 
@@ -908,8 +849,6 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                     | ast::BinOp::Ne
                     | ast::BinOp::CaseEq
                     | ast::BinOp::CaseNe
-                    | ast::BinOp::WildEq
-                    | ast::BinOp::WildNe
                     | ast::BinOp::InsideEq
             ) =>
         {
@@ -933,54 +872,14 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             let r0 = fold_selfdet_operand(rhs, name)?;
             let w = l0.1.max(r0.1);
             let sg = l0.2 && r0.2;
-            // §11.4.6 `==?`/`!=?` and §11.4.13's `inside` element: a pattern with an
-            // x/z bit compares with those bits as don't-cares, in this region.
-            if matches!(
-                op,
-                ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq
-            ) && bp_any_unknown(&r0.0, r0.1)
-            {
-                // Only a LITERAL pattern, as the run-time lowering: an x/z bit built
-                // into a larger expression is refused there (`inside`) or not folded
-                // (`==?`), and a constant must not answer what the run time refuses.
-                let mut pat = rhs.as_ref();
-                while let ast::ExprKind::Paren { inner } = &pat.kind {
-                    pat = inner;
-                }
-                let ast::ExprKind::IntLit { kind, .. } = &pat.kind else {
-                    return None;
-                };
-                let l = widen_to(fold_in_region(lhs, l0, w, sg, name)?, w, sg)?;
-                // A fill is refolded at `w` here; any other literal keeps its width.
-                let (pb, pw, _) = fold_in_region(rhs, r0, w, sg, name)?;
-                let pw = pw.min(w);
-                let fill = if pw < w {
-                    let (msb_val, msb_xz) = bp_get(&pb, pw as usize - 1);
-                    crate::wildcard_eq::pattern_ext_fill(
-                        msb_xz,
-                        msb_val,
-                        sg,
-                        matches!(kind, ast::IntLitKind::UnsizedBased),
-                    )
+            let at = |x: &ast::Expr, v: WideBits| -> Option<WideBits> {
+                if v.1 < w || (v.2 && !sg) {
+                    fold_region(x, w, Some(sg), name)
                 } else {
-                    Some(false)
-                };
-                let ne = matches!(op, ast::BinOp::WildNe);
-                return Some(match wildcard_match(&l.0, &pb, pw, w, fill) {
-                    Some(m) => bp_bit(m != ne),
-                    None => bp_xbit(),
-                });
-            }
-            // With no don't-care bit, `==?` and an `inside` element ARE `==`.
-            let op = &match op {
-                ast::BinOp::WildEq | ast::BinOp::InsideEq => ast::BinOp::Eq,
-                ast::BinOp::WildNe => ast::BinOp::Ne,
-                o => *o,
+                    Some(v)
+                }
             };
-            let (l, r) = (
-                fold_in_region(lhs, l0, w, sg, name)?,
-                fold_in_region(rhs, r0, w, sg, name)?,
-            );
+            let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
             if let Some(v) = wide_eq_with_unknowns(*op, &l, &r) {
                 return Some(v);
             }
@@ -992,7 +891,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                 ast::BinOp::Le => ord != Greater,
                 ast::BinOp::Gt => ord == Greater,
                 ast::BinOp::Ge => ord != Less,
-                ast::BinOp::Eq | ast::BinOp::CaseEq => ord == Equal,
+                ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::InsideEq => ord == Equal,
                 _ => ord != Equal,
             }))
         }
@@ -1255,8 +1154,6 @@ pub(crate) fn wide_top_is_self_determined(e: &ast::Expr) -> bool {
                 | ast::BinOp::Ne
                 | ast::BinOp::CaseEq
                 | ast::BinOp::CaseNe
-                | ast::BinOp::WildEq
-                | ast::BinOp::WildNe
                 | ast::BinOp::InsideEq
                 | ast::BinOp::LogAnd
                 | ast::BinOp::LogOr
@@ -1480,39 +1377,12 @@ impl Elaborator<'_> {
                     || self.params.contains_key(k)
                     || self.symbols.contains_key(k)
             }) {
-                // A wide entry beside a narrow binding at the same key is a stale one
-                // ([`Self::wide_entry_is_stale`]): decline, so the caller falls back to
-                // the i64 lane, which reads the narrow binding, or stays loud.
-                if self.wide_entry_is_stale(&key) {
-                    return None;
-                }
                 if let Some(cv) = self.wide_param_bits.get(&key) {
                     return Some((cv.bits.clone(), cv.width, cv.signed));
                 }
             }
         }
         self.narrow_param_bits(path)
-    }
-
-    /// Does `key` hold a `wide_param_bits` entry AND a narrow value binding (`params`,
-    /// `str_param_raw` or `real_param_val`)? No single binding writes both: a wide
-    /// declaration installs its value and returns before `bind_param_value` (`params.rs`,
-    /// `generate.rs`, `instance.rs`), and the import loops write one map per name. What
-    /// leaves both is a later NARROW rebinding of a key a wide value was bound at, which
-    /// does not clear the wide entry — a genvar under a same-named wide constant (the
-    /// genvar setup suspends only `real_param_val`), a local enum label or an explicit
-    /// import under a wildcard-imported wide constant. The narrow binding is the current
-    /// one in each of those, so a resolver that asks the wide map FIRST must skip the
-    /// entry: [`Self::wide_name_bits`] declines and `bare_ident_route` takes the
-    /// narrow route. Measured (review round 1, F1): `localparam [64:0] i =
-    /// 65'h1_0000_0000_0000_0009; for (genvar i …) case (i) 0: … 1: …` took `default`
-    /// for both iterations where every oracle takes `0` / `1`. Clearing the entry at
-    /// the binders is the producer fix, recorded as its own row.
-    pub(crate) fn wide_entry_is_stale(&self, key: &str) -> bool {
-        self.wide_param_bits.contains_key(key)
-            && (self.params.contains_key(key)
-                || self.str_param_raw.contains_key(key)
-                || self.real_param_val.contains_key(key))
     }
 
     /// Fold a parameter INITIALIZER in the wide bit domain at its DECLARED width.

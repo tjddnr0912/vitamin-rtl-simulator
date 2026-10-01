@@ -607,17 +607,15 @@ fn a_real_override_of_an_untyped_real_default_stays_real() {
     );
 }
 
-/// A string label compares like a numeric label: its bytes (§5.9) against the folded
-/// scrutinee. A 64-bit string whose top bit is set does not read back as a negative
-/// integer (both oracles compare unsigned at 64 bits: `int P = -1` misses it).
+/// A string label compares like a numeric label: its bytes as an i64 against the folded
+/// scrutinee. A 64-bit string whose top bit is set declines rather than read back as a
+/// negative i64 (both oracles compare unsigned at 64 bits: `int P = -1` misses it).
 ///
-/// The compare is §12.5 case equality in the bit domain (ROADMAP §2 🆕 T,
-/// `elaborate/src/gen_case.rs`), so a signed `-1` hits `16'hffff` and `"\\377\\377"`,
-/// as both oracles do; before 🆕 T it compared two i64 values and missed both (these two
-/// rows were pinned `T def` as KNOWN-WRONG). A pairwise self-width compare alone was built
-/// and reverted earlier: it wrapped a context-determined scrutinee (`case (P + 4'd1)` over
-/// a 4-bit `P = 15`) at 4 bits, where the case sizes every expression to the widest; the
-/// last cell below is that shape, and 🆕 T decides a label only where the two sizings agree.
+/// NOT this change, pinned as measured (ROADMAP §2 "Constant domain"): the compare is two
+/// i64 values, not §12.5 case equality, so a signed `-1` misses `16'hffff` and
+/// `"\\377\\377"` where both oracles hit. A pairwise self-width compare was built and
+/// reverted: it wrapped a context-determined scrutinee (`case (P + 4'd1)` over a 4-bit
+/// `P = 15`) at 4 bits, where the case sizes every expression to the widest.
 #[test]
 fn a_generate_case_string_label_compares_as_an_i64() {
     for (decl, lab, want) in [
@@ -629,9 +627,9 @@ fn a_generate_case_string_label_compares_as_an_i64() {
         ),
         ("logic signed [15:0] P = -1", "-1", "T hit"),
         ("logic [3:0] P = 15", "16", "T def"),
-        // Both oracles `T hit` (PRE `T def`).
-        ("logic signed [15:0] P = -1", "16'hffff", "T hit"),
-        ("logic signed [15:0] P = -1", "\"\\377\\377\"", "T hit"),
+        // KNOWN-WRONG (both oracles `T hit`):
+        ("logic signed [15:0] P = -1", "16'hffff", "T def"),
+        ("logic signed [15:0] P = -1", "\"\\377\\377\"", "T def"),
     ] {
         check(
             &format!(

@@ -864,9 +864,7 @@ fn compound_x_z_element_is_loud() {
 /// Refusals kept or added, each a shape with no constant value. A constant x/z element in
 /// a constraint (verilator 5.052 cannot solve it either: `randomize()` returns 0); a
 /// constant-function body comparing against an x/z pattern (PRE and e5147442 the same
-/// refusal; both oracles 1); an array dimension whose wildcard makes its value x — PRE
-/// and e5147442 gave `$size` x, sv2v → iverilog x, iverilog's own `==?` twin 1; an
-/// unsized x pattern against an absolute
+/// refusal; both oracles 1); an unsized x pattern against an absolute
 /// hierarchical left operand, whose width is not known at lowering. The needles are the
 /// refusal's class, not its full text. A generate-`case` item of the range bound's kind is
 /// NOT refused: ROADMAP §2 🆕 T keeps PRE's answer for a label no constant domain folds
@@ -884,11 +882,6 @@ fn shapes_without_a_constant_value_are_loud() {
             "module t;\n  function automatic logic cf(input logic [3:0] a); return a inside {4'b1?00}; endfunction\n  localparam logic L = cf(4'b1100);\n  initial begin $display(\"L %b\", L); $finish; end\nendmodule\n",
             "[VITA-E3009]",
             "parameter `L` value is not a constant",
-        ),
-        (
-            "module t;\n  logic ad [(4'bx100 inside {4'b1?00}) : 0];\n  initial begin $display(\"A %0d\", $size(ad)); $finish; end\nendmodule\n",
-            "[VITA-E3009]",
-            "is not allowed in a constant range bound",
         ),
         (
             "module late; logic [35:0] u36 = 36'hF_0000_0001; endmodule\nmodule t;\n  late uL();\n  initial begin #1 $display(\"H %b\", t.uL.u36 inside {'bx1}); $finish; end\nendmodule\n",
@@ -911,7 +904,13 @@ fn shapes_without_a_constant_value_are_loud() {
     // one-bit catch-all; sv2v → iverilog 13.0 and verilator 5.052 print `B 2` and
     // iverilog's own `==?` prints `Q 2` (review round 1: the refusal is keyed on an
     // x-valued bound, not on the node).
+    // RESIDUE: an array dimension whose wildcard makes its value x keeps PRE's `$size`
+    // x (sv2v → iverilog x, iverilog's own `==?` twin 1).
     for (src, want) in [
+        (
+            "module t;\n  logic ad [(4'bx100 inside {4'b1?00}) : 0];\n  initial begin $display(\"A %0d\", $size(ad)); $finish; end\nendmodule\n",
+            "A x",
+        ),
         (
             "module t;\n  logic [(4'b1100 inside {{2'b1?, 2'b00}}) : 0] wb;\n  initial begin $display(\"B %0d\", $bits(wb)); $finish; end\nendmodule\n",
             "B 1",
@@ -934,35 +933,51 @@ fn shapes_without_a_constant_value_are_loud() {
     assert_eq!(r.lines(), ["default"], "{}", r.out);
 }
 
-/// The range-bound refusal is keyed on the bound's VALUE (review round 1, differential
-/// F1): a wildcard x that the enclosing operator masks leaves a defined bound, and an
-/// x-valued bound is refused. iverilog 13.0, sv2v → iverilog and verilator 5.052:
-/// `Sxf bits 1`, `Sxg bits 1` (PRE the same; the node-keyed refusal had made both
-/// loud). `logic [(4'bx100 ==? 4'b1?00) : 0]`: iverilog's own `==?` reads 1 bit and sv2v
-/// → iverilog `x` (PRE 1 bit) — an x bound, refused.
+/// A range bound holding an x/z wildcard keeps PRE's route (no refusal): where the x
+/// is masked the bound is defined, and iverilog 13.0, sv2v → iverilog and verilator
+/// 5.052 print `Sxf bits 1`, `Sxg bits 1`, as vita does. RESIDUE: an x-VALUED bound
+/// `[(4'bx100 ==? 4'b1?00) : 0]` takes PRE's one-bit catch-all — iverilog's own `==?`
+/// reads 1 bit, sv2v → iverilog `x` (an oracle split; the LRM makes an x bound illegal).
+/// The refusal keyed on it needed the wide `==?` arm (held as a prerequisite).
 #[test]
-fn a_bound_refusal_is_keyed_on_an_x_value() {
+fn a_bound_holding_an_x_wildcard_keeps_the_pre_width() {
     let r = run(
         "`timescale 1ns/1ns\nmodule t;\n  logic [((4'bx100 ==? 4'b1?00) & 1'b0) : 0] f;\n  \
-         logic [((4'bx100 ==? 4'b1?00) ? 0 : 0) : 0] g;\n  \
-         initial $display(\"Sxf bits %0d\", $bits(f));\n  initial $display(\"Sxg bits %0d\", $bits(g));\n\
-         endmodule\n",
-        &[],
-    );
-    assert_eq!(r.code, 0, "{}", r.err);
-    assert_eq!(r.lines(), ["Sxf bits 1", "Sxg bits 1"], "{}", r.out);
-    let r = run(
-        "`timescale 1ns/1ns\nmodule t;\n  logic [(4'bx100 ==? 4'b1?00) : 0] v;\n  \
+         logic [((4'bx100 ==? 4'b1?00) ? 0 : 0) : 0] g;\n  logic [(4'bx100 ==? 4'b1?00) : 0] v;\n  \
+         initial $display(\"Sxf bits %0d\", $bits(f));\n  initial $display(\"Sxg bits %0d\", $bits(g));\n  \
          initial $display(\"X bits %0d\", $bits(v));\nendmodule\n",
         &[],
     );
-    assert_eq!(r.code, 1, "{}", r.out);
-    assert!(
-        r.err.contains("[VITA-E3009]") && r.err.contains("makes this bound's value x"),
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["Sxf bits 1", "Sxg bits 1", "X bits 1"],
         "{}",
-        r.err
+        r.out
     );
-    assert!(r.lines().is_empty(), "{}", r.out);
+}
+
+/// A left operand DECLARED wider than 64 bits whose value fits keeps PRE's own-width
+/// masked compare: the common-width routine cannot hold the comparison past 64 bits
+/// and falls back to it (review round 2 — without the fallback the localparams and the
+/// generate-`if` went loud and the generate-`case` label took `default`). iverilog
+/// 13.0 and sv2v → iverilog print `L=1 LN=0`, `gif then`, `gcase item`; so did PRE.
+#[test]
+fn a_wide_declaration_with_a_fitting_value_keeps_the_pre_compare() {
+    let r = run(
+        "`timescale 1ns/1ns\nmodule t;\n  localparam logic [67:0] P68 = 68'hC;\n  \
+         localparam L = (P68 ==? 4'b1?00);\n  localparam LN = (P68 !=? 4'b1?00);\n  \
+         if (P68 ==? 4'b1?00) begin : g initial $display(\"gif then\"); end\n  \
+         else begin : h initial $display(\"gif else\"); end\n  \
+         case (1) (P68 ==? 4'b1?00): begin : c initial $display(\"gcase item\"); end\n  \
+         default: begin : d initial $display(\"gcase default\"); end endcase\n  \
+         initial #1 $display(\"L=%b LN=%b\", L, LN);\nendmodule\n",
+        &[],
+    );
+    assert_eq!(r.code, 0, "{}", r.err);
+    let mut got = r.lines();
+    got.sort_unstable();
+    assert_eq!(got, ["L=1 LN=0", "gcase item", "gif then"], "{}", r.out);
 }
 
 /// A LITERAL signed left operand signs the constant comparison region (the i64 lane's
@@ -985,8 +1000,9 @@ fn a_literal_signed_left_operand_signs_the_constant_region() {
 /// A wide wildcard fold must not read a genvar through the stale wide entry of a
 /// same-named wide constant (review round 1, the S-side twin of soundness F1): the
 /// first build printed `Q=0 K=9` for both iterations where all three oracles print
-/// `i=0 Q=0 K=0` and `i=1 Q=1 K=1`. The bit domain now declines that name, so the
-/// declaration is as loud as on PRE (E3009) rather than wrong.
+/// `i=0 Q=0 K=0` and `i=1 Q=1 K=1`. The wide domain has no `==?` arm (held as a
+/// prerequisite with one current binding per key), so the declaration is as loud as on
+/// PRE (E3009) rather than wrong.
 #[test]
 fn a_wide_wildcard_fold_does_not_read_a_stale_wide_entry() {
     let r = run(
@@ -1062,12 +1078,16 @@ endmodule
 
 /// Round 2 (R2-1). The `==?` OPERATOR in a constant context reads the same routine:
 /// `Q1`–`Q3` at the common width, `Q4`/`Q5` a signed pattern against a signed byte (sign
-/// extension, an x sign bit a don't-care), `Q6` two wildcard compares under `||`, `Q7`
-/// `!=?`; `I1` the signed `inside` twin and `I2` a two-element set. iverilog 13.0's own
-/// `==?` prints the Q line; sv2v → iverilog prints all of it (verilator 5.052 reads the x
-/// sign bit of `Q4` / `I1` as 0). On PRE (00c3d76d) and e5147442 the `==?` cells were
-/// silently wrong — lens probes: `(4'd15+4'd1) ==? 5'b1?000` 0, `S ==? 4'sb?100` 0,
-/// `S2 ==? 4'sb1?00` 1 — and `Q6`, `I1`, `I2` were E3009.
+/// extension, an x sign bit a don't-care), `Q7` `!=?`; `I1` the signed `inside` twin.
+/// iverilog 13.0's own `==?` prints the Q line; sv2v → iverilog prints all of it
+/// (verilator 5.052 reads the x sign bit of `Q4` / `I1` as 0). On PRE (00c3d76d) and
+/// e5147442 the `==?` cells were silently wrong — lens probes: `(4'd15+4'd1) ==? 5'b1?000`
+/// 0, `S ==? 4'sb?100` 0, `S2 ==? 4'sb1?00` 1 — and `I1` was E3009.
+///
+/// REFUSED, as on PRE: two wildcard compares under `||` (`Q6`) and a two-element set
+/// (`I2`) reach the WIDE constant domain through the logical operator, and it has no
+/// `==?` arm (a prerequisite-held row: the wide half of §2 🆕 S). iverilog 13.0's `==?`
+/// prints `Q6 1`; sv2v → iverilog prints `I2 1`.
 #[test]
 fn constant_wildcard_eq_operator_and_sets() {
     let r = run(
@@ -1081,15 +1101,13 @@ module t;
   localparam Q3 = (4'd15 + 4'd1) ==? 5'b0?000;
   localparam Q4 = S ==? 4'sb?100;
   localparam Q5 = S2 ==? 4'sb1?00;
-  localparam Q6 = (PV ==? 4'b0?00) || (PV ==? 4'b1?00);
   localparam Q7 = (4'd15 + 4'd1) !=? 8'b0001_?000;
   localparam I1 = S inside {4'sb?100};
-  localparam I2 = PV inside {4'b0?00, 4'b1?00};
   logic [((4'd15 + 4'd1) ==? 5'b1?000) : 0] rbq;
   if ((4'd15 + 4'd1) ==? 5'b1?000) begin : gq initial #1 $display("gen-q then"); end
   else begin : gqe initial #1 $display("gen-q else"); end
   initial begin
-    #2 $display("Q %b %b %b %b %b %b %b I %b %b bits %0d", Q1, Q2, Q3, Q4, Q5, Q6, Q7, I1, I2, $bits(rbq));
+    #2 $display("Q %b %b %b %b %b %b I %b bits %0d", Q1, Q2, Q3, Q4, Q5, Q7, I1, $bits(rbq));
     $finish;
   end
 endmodule
@@ -1099,10 +1117,28 @@ endmodule
     assert_eq!(r.code, 0, "stderr:\n{}", r.err);
     assert_eq!(
         r.lines(),
-        ["gen-q then", "Q 1 1 0 1 0 1 0 I 1 1 bits 2",],
+        ["gen-q then", "Q 1 1 0 1 0 0 I 1 bits 2",],
         "stdout:\n{}",
         r.out
     );
+    for e in [
+        "(PV ==? 4'b0?00) || (PV ==? 4'b1?00)",
+        "PV inside {4'b0?00, 4'b1?00}",
+    ] {
+        let r = run(
+            &format!(
+                "`timescale 1ns/1ns\nmodule t;\n  localparam logic [3:0] PV = 4'b1100;\n  \
+                 localparam L = {e};\n  initial #1 $display(\"L %b\", L);\nendmodule\n"
+            ),
+            &[],
+        );
+        assert_eq!(r.code, 1, "{e}: {}", r.out);
+        assert!(
+            r.err.contains("[VITA-E3009]") && r.err.contains("has no constant-fold arm"),
+            "{e}: {}",
+            r.err
+        );
+    }
 }
 
 /// Round 2 (R2-2, R2-6). A definite known-bit mismatch is the `==?` answer (0) — a
@@ -1111,6 +1147,10 @@ endmodule
 /// value. PRE (00c3d76d) printed `gen else`, `L 0 0 0 bits 1 1 1 size x` (the three bounds
 /// one bit and the array size x, silently); e5147442 refused `L1`, `L2` and the generate
 /// `if` (E3009 / E3010) — a correct → loud the round-1 wide-domain decline caused.
+///
+/// RESIDUE: `rb2`, a two-element set, reaches the wide domain through `||`, which reads
+/// an `inside` element as `==` (x here); the bound keeps PRE's one-bit catch-all where
+/// both oracles size 2 (the wide half of §2 🆕 S, prerequisite-held).
 #[test]
 fn constant_definite_mismatch_and_bounds() {
     let r = run(
@@ -1137,7 +1177,7 @@ endmodule
     assert_eq!(r.code, 0, "stderr:\n{}", r.err);
     assert_eq!(
         r.lines(),
-        ["gen else", "L 0 0 0 bits 2 2 2 size 2",],
+        ["gen else", "L 0 0 0 bits 2 2 1 size 2",],
         "stdout:\n{}",
         r.out
     );

@@ -106,12 +106,8 @@ impl Elaborator<'_> {
             if let Some(raw) = self.str_param_raw.get(&key) {
                 return BareIdentRoute::Str(raw.clone());
             }
-            // A stale wide entry beside the narrow binding that replaced it is skipped
-            // (`wide_entry_is_stale`): the narrow route below reads the current one.
-            if !self.wide_entry_is_stale(&key) {
-                if let Some(cv) = self.wide_param_bits.get(&key) {
-                    return BareIdentRoute::Wide(cv.clone());
-                }
+            if let Some(cv) = self.wide_param_bits.get(&key) {
+                return BareIdentRoute::Wide(cv.clone());
             }
             if let Some(&v) = self.real_param_val.get(&key) {
                 return BareIdentRoute::Real(v);

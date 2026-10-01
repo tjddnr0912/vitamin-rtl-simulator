@@ -182,8 +182,7 @@ impl Elaborator<'_> {
         // `==?` / `!=?` / an `inside` element against an x/z PATTERN is not a
         // whole-node fold here any more: it needs the comparison's common width,
         // which `eval_const_env_at` (the caller) computes — see
-        // `Elaborator::const_wildcard_i64` — and the wide domain answers the rest
-        // (`const_wide::fold_region`). The masked compare that lived here read the
+        // `Elaborator::const_wildcard_i64`. The masked compare that lived here read the
         // left operand at its OWN width (`(4'd15 + 4'd1) ==? 5'b1?000` was 0, both
         // oracles 1) and zero-extended a signed pattern.
         None
