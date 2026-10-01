@@ -8,7 +8,11 @@
 # removing it afterwards keeps the run from filling the disk.
 #
 # Wired as the target runner (CARGO_TARGET_<TRIPLE>_RUNNER) by ci.yml.
-d=$(mktemp -d "${TMPDIR:-/tmp}/vita-test.XXXXXX") || exit 1
+# macOS's TMPDIR ends in `/`: strip it, or the path holds a `//`, which a
+# `-f` filelist reads as the start of a line comment.
+base=${TMPDIR:-/tmp}
+while [ "${base%/}" != "$base" ]; do base=${base%/}; done
+d=$(mktemp -d "${base:-/tmp}/vita-test.XXXXXX") || exit 1
 TMPDIR=$d "$@"
 rc=$?
 rm -rf "$d"
