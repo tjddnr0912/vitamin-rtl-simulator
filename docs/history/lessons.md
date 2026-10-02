@@ -13,6 +13,43 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ---
 
+## 2026-10-02
+
+### A contextual keyword declines on any use of the word as a name, counted over the tokens (§4.5.582)
+
+IEEE 1364 does not reserve `inside`, and vita lexes it as an identifier: PRE accepts `reg [3:0]
+inside;` and reads `case (x) inside[2:1]:` as a plain case over a part-select of it. The slice's
+parser took the word after `case (…)` as the keyword, so in a design that declares the name three
+plain labels became case-inside items and printed `A m1=0 B m2=0 C m3=0` at exit 0 where PRE,
+iverilog -g2005 and all three tools under `` `begin_keywords "1364-2005" `` print `1 1 1`. The
+census had measured the shape (m9) and filed it "SV-illegal, no oracle", because both readings
+happened to print `m=0` on its values. Round 2 asked the lowering's own resolvers whether a bare
+`inside` binds (`bare_ident_route`, `let`, class members, `lookup_net_scoped`, `has_func`,
+`has_task`): the lenses built 27 binder shapes and all were caught, but two were not binders in
+vita's scope model at all — the upward task/function name search, which vita does not implement
+(PRE E3010; the check said "free" and printed `up m=0` where iverilog -g2005 prints 1), and a `for
+(int inside …)` / `foreach (arr[inside])` variable (`forvar m=0`, PRE 1). Round 3 counted
+identifier tokens spelled `inside` over the whole post-preprocess token vector, minus the two
+keyword sites, and declined every case-inside in such a design: macros, token pastes, macro
+arguments, `-D`, includes, other files, `-f`, a library compose and a `.vu` all refuse, while
+strings, comments, unused macro bodies and attributes do not count. The price is an SV-legal
+escaped `\inside` beside a case-inside, refused as PRE was loud on it. The rule it bought: when a
+contextual keyword's reading depends on whether the word binds as a name and the scope model cannot
+see every binder, decide from a count that depends on neither the parse nor the scope model.
+
+### Two blocking rounds on one axis: the scope-aware check reverted for a decline (§4.5.582)
+
+Round 1 blocked on the missing check (F1) and round 2 blocked on the check that answered it, on the
+same axis: each fix was locally right and the binder set it leaned on was incomplete. Under
+ENGINEERING_RULES §3.6 the axis was reverted rather than given a third scope, and the consumer
+declines what it cannot vouch for; the scope-aware disambiguation became its own row (§3.b
+`inside-name-use`) with a fix shape that needs no scope model — re-parse a unit with case-inside
+disabled when it has name uses, which restores PRE byte-for-byte inside that unit. Round 3 was CLEAN
+on both lenses, and its re-score moved only the 7 accepted cells that use the name, every one silent
+→ loud or loud → loud. One non-blocking finding still needed a fix after the round: the marker made a
+source whose only item was a `$unit` function named `inside` a non-empty unit, so `vcmp --work`
+accepted a file PRE rejected as having no design unit; the record now enters only a unit that exists.
+
 ## 2026-09-30
 
 ### A binding decided per map, and three widenings of a replacement that met name-keyed readers (§4.5.573)

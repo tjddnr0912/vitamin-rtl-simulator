@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8927 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8981 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -36,18 +36,24 @@ canonical table is the fact table in [README.md](../README.md).
   unsized pattern by §11.4.5. Two halves of ROADMAP §2 🆕 S remain: a constant expression keeps
   the old `==` comparison (its i64 half behind §2 🆕 W, its wide half behind §2 🆕 T and 🆕 U; 🆕 T
   was found in the fix path: a generate-case label the i64 fold cannot read is skipped), and an
-  element whose x/z bits exist only at run time needs a run-time `==?`. The last slice, §4.5.581, built 🆕 T and 🆕 S (a)'s
-  constant half and reverted both after three review rounds; the reviews found three
+  element whose x/z bits exist only at run time needs a run-time `==?`. §4.5.581 built 🆕 T and
+  🆕 S (a)'s constant half and reverted both after three review rounds; the reviews found three
   prerequisites in shared code, now §2 🆕 U (one current binding per key), 🆕 V (a generate-case
   arm decided once per construct instance, not per phase) and 🆕 W (the sign of a constant typed
   by an overridden type parameter), and the attempt's cells are held in
-  `generate_case_and_wildcard_prerequisites.rs`. The other three items are queued: `case …
-  inside` refused at parse (§3.b `case-inside`; verilator is a 2-state oracle), a time-0 `unique`
-  warning both reference tools
-  omit (§3.b `unique-glitch-t0`, with `unique-if-chain`: an `else if` chain with no final `else`
-  never reports the no-match) and an unannounced `unique` / `unique0` overlap (§3.b
-  `unique-overlap-note`; the check stays a §8 non-goal). Incoming reports pre-empt the queue, so
-  they are §5.2 rows 1–3, 🆕 U, 🆕 V and 🆕 W rows 4–6, and 🆕 T then 🆕 S (a) row 7.
+  `generate_case_and_wildcard_prerequisites.rs`. The last slice, §4.5.582, made the report's
+  `case … inside` run where the reference tools' sizing rules agree (sv2v per pair, §12.5
+  collectively, verilator collectively with each item extended by its own sign) and refuses every
+  other shape with one E3009 naming the reason — and every `case … inside` in a design that uses
+  `inside` as a name, which IEEE 1364 allows (a scope-aware check failed review twice). Its residue
+  is §3.b `case-inside-residue` and `inside-name-use`, §0 row 13 (the sizing split), and §2 🆕 X
+  and 🆕 Y, found in its grounding (a class method's `case` evaluates a call scrutinee per label;
+  a string-returning scrutinee compares packed). The other two items are queued: a time-0 `unique`
+  warning both reference tools omit (§3.b `unique-glitch-t0`, with `unique-if-chain`: an
+  `else if` chain with no final `else` never reports the no-match) and an unannounced `unique` /
+  `unique0` overlap (§3.b `unique-overlap-note`; the check stays a §8 non-goal). Incoming reports
+  pre-empt the queue, so they are §5.2 rows 1–2, 🆕 U, 🆕 V and 🆕 W rows 3–5, and 🆕 T then
+  🆕 S (a) row 6.
 - `corpus-runner run` prints the elaborate/simulate split per row. Every workload is ≥99%
   simulation, so the corpus cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
@@ -55,28 +61,28 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §3.b `case-inside` | accept `case (e) inside`, reusing `inside`'s comparison (§4.5.580) |
-| 2 | §3.b `unique-glitch-t0` + `unique-if-chain` | defer the `unique` / `priority` violation report to the Observed region; report the no-match at the end of an `else if` chain |
-| 3 | §3.b `unique-overlap-note` | say once per run that `unique` / `unique0` overlaps are not checked (the check stays a §8 non-goal) |
-| 4 | §2 🆕 U | keep one current binding per key at the binders (a genvar, a local enum label or an import that rebinds a key clears or suspends the other map's entry) |
-| 5 | §2 🆕 V | decide a generate-case arm once per construct instance and reuse it in every phase, or resolve forward labels the same way in every phase |
-| 6 | §2 🆕 W | a constant typed by an overridden type parameter keeps the override's sign (measure §4.5.479's and §4.5.483's lanes first) |
-| 7 | §2 🆕 T, then §2 🆕 S (a) | §4.5.581's designs: a generate-case label compared in the bit domain two ways, decided only where they agree; then the constant `inside` / `==?` i64 half with every decline falling back to PRE's compare, then its wide half |
-| 8 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
+| 1 | §3.b `unique-glitch-t0` + `unique-if-chain` | defer the `unique` / `priority` violation report to the Observed region; report the no-match at the end of an `else if` chain |
+| 2 | §3.b `unique-overlap-note` | say once per run that `unique` / `unique0` overlaps are not checked (the check stays a §8 non-goal) |
+| 3 | §2 🆕 U | keep one current binding per key at the binders (a genvar, a local enum label or an import that rebinds a key clears or suspends the other map's entry) |
+| 4 | §2 🆕 V | decide a generate-case arm once per construct instance and reuse it in every phase, or resolve forward labels the same way in every phase |
+| 5 | §2 🆕 W | a constant typed by an overridden type parameter keeps the override's sign (measure §4.5.479's and §4.5.483's lanes first) |
+| 6 | §2 🆕 T, then §2 🆕 S (a) | §4.5.581's designs: a generate-case label compared in the bit domain two ways, decided only where they agree; then the constant `inside` / `==?` i64 half with every decline falling back to PRE's compare, then its wide half |
+| 7 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
-honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
+honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder. The
+row number is the start order; ① / ② name a row's defect class (ROADMAP §5.2).
 
 ## C. Open items by section (counted from ROADMAP at HEAD)
 
 | section | open | startable / blocked | breakdown |
 |---|---:|---|---|
-| §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
+| §0 promotion queue (T2 residues) | 14 rows | 8 / 6 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, the `case inside` sizing split (row 13, an oracle split since §4.5.582) |
 | §2-N verilog-axi census | 2 rows + 3 | 0 / 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and three t0-event residues (§4.5.533 closed the x-valued ones) |
-| §2 start-order table (frozen) | 26 rows | 4 / 22 | LOUD 4 · BLOCKED 6 (🆕 S since §4.5.580 closed its run-time half; 🆕 T since §4.5.581, on 🆕 U and 🆕 V) · OPEN 8 (🆕 H, 🆕 U, 🆕 V and 🆕 W startable, 🆕 U–W found in §4.5.581's review; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
+| §2 start-order table (frozen) | 28 rows | 6 / 22 | LOUD 4 · BLOCKED 6 (🆕 S since §4.5.580 closed its run-time half; 🆕 T since §4.5.581, on 🆕 U and 🆕 V) · OPEN 10 (🆕 H, 🆕 U, 🆕 V, 🆕 W, 🆕 X and 🆕 Y startable, 🆕 U–W found in §4.5.581's review, 🆕 X and 🆕 Y in §4.5.582's grounding; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
 | §2 recorded defects by mechanism (frozen) | 196 bullets | 108 / 88 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 20 · scoping / imports / block-locals 32 · delays / events 19 · real 11 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 4 · oracle splits 45 |
 | §3 numbered items | 24 rows | 19 / 5 | ⑤ ibex ladder (9, ⑤ⓚ closed in §4.5.574; ⓕ is the unpacked-array typedef residue), ③ file-I/O hoisting (4), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 126 rows | 107 / 19 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 17 · system tasks & file I/O 9 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 10 (unique-glitch-t0, unique-if-chain, unique-overlap-note) · VCD / real conversion 3 |
+| §3 small residues | 127 rows | 107 / 20 | subroutine / frame 29 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 16 (case-inside-residue and inside-name-use: §4.5.582's loud edges) · system tasks & file I/O 11 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 10 (unique-glitch-t0, unique-if-chain, unique-overlap-note) · VCD / real conversion 3 |
 | workload corpus (study/03) | 1 item | 1 / 0 | the new-design census (the corpus runs in CI since §4.5.579) |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
@@ -84,7 +90,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 447 | 270 / 177 | |
+| total | 450 | 271 / 179 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
@@ -140,21 +146,26 @@ synthetic-origin §3 rows, and they wake with the rows they block.
   fabricated-width bullet, and the three per-bit `coerce_two_state` sites under "Performance");
   §4.5.530 carried the declared-width cases only, because `TwoState` over a fabricated width lost the
   32 bits the per-bit `Concat` asserted (`$bits(int'(q.sum()))` 32 → E3009).
-- One current binding per key (§2 🆕 U, startable, §5.2 row 4): a genvar, a local enum label or an
+- One current binding per key (§2 🆕 U, startable, §5.2 row 3): a genvar, a local enum label or an
   import that rebinds a key in one of `params`, `wide_param_bits`, `str_param_raw` and
   `real_param_val` leaves the other map's entry, and the lanes read different ones (A1D prints the
   65-bit constant for the genvar; q1g's i64 lane reads a wildcard import's 3 for the explicit
   import's 2^64 + 9). Blocks §2 🆕 T and the wide half of 🆕 S (a): §4.5.581's bit-domain label
   lane and wide `==?` arm read the stale entry, and a reader-side skip failed the opposite case.
-- A generate-case arm decided once per construct instance (§2 🆕 V, startable, §5.2 row 5): the
+- A generate-case arm decided once per construct instance (§2 🆕 V, startable, §5.2 row 4): the
   four elaboration walks re-decide the construct, and a label referring forward binds differently
   by phase (d1p takes one arm's nets and another's process today). Blocks §2 🆕 T: §4.5.581's
   per-phase bit-domain decision mixed arms on d1w, r1 and r1b, and caching the region's
   availability did not stop it.
-- The sign of a constant typed by an overridden type parameter (§2 🆕 W, startable, §5.2 row 6):
+- The sign of a constant typed by an overridden type parameter (§2 🆕 W, startable, §5.2 row 5):
   `PV < 0` is 0 and `localparam T TP = '1` is 15 under a signed override, where all three oracles
   say 1 and -1. Blocks 🆕 S (a)'s i64 half, which folded `PV ==? 4'sb1?00` to 0 where HEAD is loud;
   that half also needs every decline of its routine to fall back to PRE's own-width compare.
+- A case temp for class-method bodies (§2 🆕 X) and a string-kind capture of a string-returning
+  case expression (§2 🆕 Y), both startable — block `case … inside` accepting either shape, which
+  §4.5.582 refuses because the plain `case` over it is wrong today (§3.b `case-inside-residue`).
+  A per-unit parse of a design that uses `inside` as a name (§3.b `inside-name-use`, startable:
+  re-parse such a unit with case-inside disabled) blocks every `case … inside` in such a design.
 - A block-scoped CONSTANT binding — blocks §2 🆕 Q; a bare-name hoist makes 6 cells correct and 5
   new silent-wrongs.
 - A field-key normalisation map — blocks §2 row 3b; the map is keyed by NetId and a class field is

@@ -36,6 +36,7 @@ continues unchanged.
 | 2026-10-01 | 2df2cec | §4.5.579 | 0 / 1 / +1 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI now fetches and runs the corpus on 3 OS; §2 🆕 S recorded from an external report) |
 | 2026-10-01 | 3711e0e | §4.5.580 | 0 / 1 / +1 | +6 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (an external report's `inside` wildcard fixed at run time; §2 🆕 S keeps its constant and run-time-x/z halves, §2 🆕 T recorded from the fix path) |
 | 2026-10-02 | e937aed | §4.5.581 (reverted) | 0 / +3 / +3 | +2 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (§2 🆕 T and 🆕 S (a)'s constant half built and reverted after three review rounds; §2 🆕 U, 🆕 V and 🆕 W recorded as their prerequisites) |
+| 2026-10-02 | 69572b4 | §4.5.582 | 0 / +2 / +2 | +5 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (an external report's `case … inside` runs where the three sizing rules agree; no corpus design reaches it — ibex's 34 case-inside lines sit in the riscv-dv generator outside its file list; §2 🆕 X and 🆕 Y recorded from the grounding) |
 
 ## Section counts
 
@@ -233,6 +234,7 @@ a section restructure, a residue split).
 | 2026-10-01 | 2df2cec | §4.5.579 | 8889 | 34 | 22 / 2 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 441 / 266 / 175 |
 | 2026-10-01 | 3711e0e | §4.5.580 | 8915 | 34 | 23 / 2 / 21 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 126 / 107 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 444 / 268 / 176 |
 | 2026-10-02 | e937aed | §4.5.581 | 8927 | 34 | 26 / 4 / 22 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 126 / 107 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 447 / 270 / 177 |
+| 2026-10-02 | 69572b4 | §4.5.582 | 8981 | 34 | 28 / 6 / 22 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 127 / 107 / 20 | 12 / 0 / 12 | 14 / 8 / 6 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 450 / 271 / 179 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -307,3 +309,13 @@ a section restructure, a residue split).
   🆕 V (startable −1, blocked +1), so 2T is 26 / 4 / 22. `study/03` unchanged (1 / 1 / 0). The tests
   rose by 12 held cells (`generate_case_and_wildcard_prerequisites.rs`). The catalog gained two
   rows.
+- 2026-10-02 (§4.5.582): 2T +2 (🆕 X, 🆕 Y: found in the grounding, each startable, not queued),
+  so 2T is 28 / 6 / 22. 3b +1: `case-inside` closed (startable −1), `case-inside-residue` (blocked:
+  no oracle or a pre-existing row) and `inside-name-use` (startable) added, so 3b is 127 / 107 / 20.
+  §0 row 13 becomes the `case inside` sizing oracle split (startable −1, blocked +1): 14 / 8 / 6.
+  `study/03` unchanged (1 / 1 / 0). The Summary's §3.b per-group composition was recounted from the
+  group headers (the three cont-array / packed-default rows stay under nets / timing, as the Summary
+  attributes them): before this slice parser accept 15, system tasks 11 and subroutine / frame 29,
+  where the Summary carried 17, 9 and 28 (its groups summed to 125 against 126 rows). The tests rose
+  by 54, 8927 → 8981 (three new test files with 52 tests, two unit tests in `hdl_ast::case_inside`). The catalog gained five rows; §4.5.580's
+  M02 row was confirmed (Q6).
