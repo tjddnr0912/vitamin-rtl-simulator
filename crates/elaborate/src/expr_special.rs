@@ -911,6 +911,16 @@ impl Elaborator<'_> {
             ast::CaseKind::Case => ir::BinOp::CaseEq,
             ast::CaseKind::Casez => ir::BinOp::CasezEq,
             ast::CaseKind::Casex => ir::BinOp::CasexEq,
+            // `lower_case` hands an `Inside` case to `lower_case_inside` before any
+            // compare is built, and that passes `Case` for its string lane. Loud, not
+            // a panic, if a future caller gets here.
+            ast::CaseKind::Inside => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "internal: a `case … inside` reached the plain case compare",
+                );
+                return self.placeholder_expr();
+            }
         };
         self.push_expr(ir::Expr::Binary {
             op,

@@ -117,6 +117,7 @@ impl<'s> Elaborator<'s> {
             packed_dims: BTreeMap::new(),
             dyn_md_elem: BTreeSet::new(),
             dollar_subst: None,
+            inside_name_use: None,
             array_iter: None,
             array_iter_elem: None,
             array_iter_index_base: 0,
@@ -642,6 +643,12 @@ impl<'s> Elaborator<'s> {
     /// hierarchy into ONE SimIr. The v1 single-module path is now the special
     /// case `top instantiating nothing` (one Instance, parent None).
     pub(crate) fn run(&mut self, unit: &ast::SourceUnit) {
+        // Before anything lowers: the parser's design-wide record of `inside` used as a
+        // name (one per parsed unit; a library compose merges several units).
+        self.inside_name_use = unit.items.iter().find_map(|it| match it {
+            ast::TopItem::InsideNameUse(at) => Some(*at),
+            _ => None,
+        });
         // §3 ⑤ⓖ: before anything lowers (package bodies and class methods lower below).
         self.md_return_fns = md_return::md_return_fn_names(unit);
         self.design_inout_port = struct_arm::design_has_inout_port(unit);

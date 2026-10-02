@@ -21,6 +21,8 @@
 use serde::{Deserialize, Serialize};
 use vita_artifact_derive::SchemaHash;
 
+pub mod case_inside;
+
 /// System-task name the parser synthesizes for a `unique`/`priority` violation
 /// report (IEEE 1800-2017 §12.4.2/§12.5.3). NOT user-writable in spirit — it
 /// lives here only because the name is the one channel a synthesized
@@ -161,6 +163,14 @@ pub enum TopItem {
     Bind(BindDecl),
     /// Recovery placeholder for an unparseable top-level construct.
     Error(Span),
+    /// Not an item: the parser's record that this unit uses the word `inside` as a NAME
+    /// (an identifier token spelled `inside`, escaped or not, other than the `inside`
+    /// operator and the `case … inside` keyword), at its first such use. `case (e)
+    /// inside` is refused in any design that carries one (IEEE 1364 does not reserve
+    /// `inside`, so its items could also be plain labels reading that name). Pushed
+    /// last, at most once per parsed unit. APPENDED LAST so postcard's positional
+    /// discriminants of every existing `TopItem` are unchanged.
+    InsideNameUse(Span),
 }
 
 /// `bind <target_module> <checker_inst>;` (round-9). `target` is the module
@@ -995,6 +1005,8 @@ pub enum Stmt {
         value: Option<Expr>,
         span: Span,
     },
+    /// `case`/`casez`/`casex (e) …` and `case (e) inside …` (`kind`); the labels of an
+    /// `Inside` case have the shape [`case_inside`] defines.
     Case {
         kind: CaseKind,
         scrutinee: Expr,
@@ -1427,6 +1439,12 @@ pub enum CaseKind {
     Case,
     Casez,
     Casex,
+    /// `case (e) inside` (IEEE 1800-2017 §12.5.4): each item is compared with the
+    /// set-membership `inside` operator (§11.4.13). Every label is
+    /// `InsideEq(P, v)` or `LogAnd(Ge(P, lo), Le(P, hi))` with `P` an inert bare
+    /// `Dollar` that is never lowered ([`case_inside`]). APPENDED LAST so postcard's
+    /// positional discriminants of `Case`/`Casez`/`Casex` are unchanged.
+    Inside,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum CaseItem {

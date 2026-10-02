@@ -594,7 +594,8 @@ pub(crate) fn run_vcmp_gated(
                 hdl_ast::TopItem::Class(c) => Some(("class".to_string(), c.name.name.clone())),
                 hdl_ast::TopItem::Import(_)
                 | hdl_ast::TopItem::Bind(_)
-                | hdl_ast::TopItem::Error(_) => None,
+                | hdl_ast::TopItem::Error(_)
+                | hdl_ast::TopItem::InsideNameUse(_) => None,
             })
             .collect();
         let cu = worklib::Cu {

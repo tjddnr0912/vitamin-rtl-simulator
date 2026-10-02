@@ -9,6 +9,28 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — `case (e) inside` (IEEE 1800-2017 §12.5.4)
+
+- `case (v) inside 4'b1?00: …; [4'd1:4'd3]: …; default: …; endcase` runs. Each item is compared
+  with the `inside` operator: a constant item's `x` / `z` / `?` bits are don't-cares, a range is
+  `lo <= v && v <= hi`, the first item answering `1'b1` takes its arm and an `x` answer is no
+  match. The case expression is evaluated once, before the items, in module code, functions,
+  tasks and class methods; `unique` / `unique0` / `priority` behave as for `case`, including the
+  `VITA-W4031` no-match report. It was three cascading parse errors.
+- Refused (`VITA-E3009`, one message per statement naming the reason) instead of three parse
+  errors, where the reference tools' sizing rules disagree or no tool runs the shape: mixed
+  signedness under a signed case expression, a narrow signed item under an unsigned one, an
+  operator narrower than the widest operand, a fill literal, a `$` bound, `real`, a class handle
+  or `null`, a `string` range, a value item whose `x` / `z` bits exist only at run time, a call in
+  an item, a call returning a signed type or a string as the case expression, and a call as the
+  case expression inside a class method. Manual 006 §2.12 lists them with the reason for each.
+- A design that declares a name `inside` (legal IEEE 1364) keeps its plain `case` labels:
+  `inside:` and `inside, 4'd9:` after `case (x)`, and every `casez` / `casex` label, parse as
+  before. In a design that uses `inside` as a name anywhere (any file, escaped `\inside`
+  included), every `case … inside` is refused (`VITA-E3009`, naming the first such use),
+  because `case (x) inside[2:1]:` or `inside(3):` could also be a plain label reading it;
+  rename the name.
+
 ### Fixed — `inside` compares an element with `x` / `z` bits by `==?`
 
 - `v inside {4'b1?00}` with `v = 4'b1100` is now `1`, so `if (v inside {4'b1?00})` takes the then

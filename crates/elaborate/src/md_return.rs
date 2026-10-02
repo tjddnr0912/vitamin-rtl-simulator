@@ -31,7 +31,10 @@ pub(crate) fn md_return_fn_names(unit: &ast::SourceUnit) -> BTreeSet<String> {
                 module_items(&m.body, &mut out)
             }
             ast::TopItem::Class(c) => class_items(c, &mut out),
-            ast::TopItem::Import(_) | ast::TopItem::Bind(_) | ast::TopItem::Error(_) => {}
+            ast::TopItem::Import(_)
+            | ast::TopItem::Bind(_)
+            | ast::TopItem::Error(_)
+            | ast::TopItem::InsideNameUse(_) => {}
         }
     }
     out

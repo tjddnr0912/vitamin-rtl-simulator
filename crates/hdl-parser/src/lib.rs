@@ -610,6 +610,10 @@ pub struct Parser<'t, 's> {
     /// Latched once `node_count` passes `MAX_AST_NODES`; the expr comma-loops stop
     /// pushing so the AST cannot exceed the budget, and the diagnostic fires once.
     node_budget_blown: bool,
+    /// Token indices taken as the contextual keyword `inside` (the `inside` operator and
+    /// `case … inside`); every other identifier token spelled `inside` is a NAME use
+    /// (`api.rs`, `TopItem::InsideNameUse`).
+    inside_kw_at: Vec<usize>,
     /// SV user-defined type names (`typedef … name;`) → resolved underlying type.
     /// Accumulates across the source unit; lets `name var;` parse as a typed decl.
     typedefs: std::collections::HashMap<String, TypeInfo>,
@@ -895,6 +899,7 @@ impl<'t, 's> Parser<'t, 's> {
             stmt_depth: 0,
             node_count: 0,
             node_budget_blown: false,
+            inside_kw_at: Vec::new(),
             typedefs: std::collections::HashMap::new(),
             struct_layouts: std::collections::HashMap::new(),
             sym_struct_layouts: std::collections::HashMap::new(),

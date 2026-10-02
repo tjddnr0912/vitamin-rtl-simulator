@@ -513,7 +513,7 @@ impl Elaborator<'_> {
     /// A `Const` is returned unchanged: re-reading a constant has no effect to
     /// duplicate and no cost to remove, and hoisting it would churn the arena of
     /// every `case` in every design for nothing.
-    fn hoist_case_scrutinee(
+    pub(crate) fn hoist_case_scrutinee(
         &mut self,
         b: &mut ProcessBuilder,
         scrut_id: u32,
@@ -599,33 +599,7 @@ impl Elaborator<'_> {
     /// context walk cannot route (an opaque leaf, a real-domain operand, a string),
     /// and so is a fill (the fill pass above owns those).
     pub(crate) fn case_operand_takes_ctx(&self, e: &ast::Expr, id: u32, common: u32) -> bool {
-        let mut n = e;
-        while let ast::ExprKind::Paren { inner } = &n.kind {
-            n = inner;
-        }
-        let operator = match &n.kind {
-            ast::ExprKind::Binary { op, .. } => !matches!(
-                op,
-                ast::BinOp::Eq
-                    | ast::BinOp::Ne
-                    | ast::BinOp::CaseEq
-                    | ast::BinOp::CaseNe
-                    | ast::BinOp::WildEq
-                    | ast::BinOp::WildNe
-                    | ast::BinOp::InsideEq
-                    | ast::BinOp::Lt
-                    | ast::BinOp::Le
-                    | ast::BinOp::Gt
-                    | ast::BinOp::Ge
-                    | ast::BinOp::LogAnd
-                    | ast::BinOp::LogOr
-            ),
-            ast::ExprKind::Unary { op, .. } => {
-                matches!(op, ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot)
-            }
-            ast::ExprKind::Ternary { .. } => true,
-            _ => false,
-        };
+        let operator = case_ctx_operator(e);
         if !operator || expr_contains_fill(e) || self.rhs_has_real_domain(e) {
             return false;
         }
@@ -656,6 +630,12 @@ impl Elaborator<'_> {
         items: &[ast::CaseItem],
         case_span: ast::Span,
     ) {
+        // `case (e) inside` (§12.5.4) compares each item with the `inside` operator,
+        // not with this function's §12.5 collective sizing, so it leaves BEFORE the
+        // case expression is lowered and before any of the passes below.
+        if matches!(kind, ast::CaseKind::Inside) {
+            return self.lower_case_inside(b, scrutinee, items, case_span);
+        }
         // casez/casex wildcard semantics are realized per-label by masking the
         // label's unknown (`?`/`z`/`x`) bits out of the compare (see
         // `case_cmp`). Plain `case` is an exact 4-state `===`.

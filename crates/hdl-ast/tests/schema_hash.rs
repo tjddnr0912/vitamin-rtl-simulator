@@ -12,6 +12,15 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-10-02 §3.b case-inside `CaseKind::Inside` — `case (e) inside`
+/// (IEEE 1800-2017 §12.5.4), whose labels are the `inside` operator's element shapes
+/// over an inert `$` placeholder (`hdl_ast::case_inside`). It used to be three parse
+/// errors. APPENDED LAST, so postcard's positional discriminants of `Case`, `Casez`
+/// and `Casex` are unchanged and every existing case decodes as before. With it,
+/// `TopItem::InsideNameUse(Span)` — the parser's per-unit record that the word `inside`
+/// is used as a NAME, which makes elaborate refuse every `case … inside` in the design;
+/// also APPENDED LAST. All `.vu` artifacts are stale; no sim-ir change,
+/// `format_version` unchanged (34).
 /// Re-pinned 2026-10-01 §2 🆕 S `BinOp::InsideEq` — one value element of an
 /// `inside` set (IEEE 1800-2017 §11.4.13), which the parser's `inside` desugar emits
 /// where it used to emit `Eq`. Elaborate compares a constant element carrying x/z
@@ -297,8 +306,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    241, 204, 81, 34, 19, 74, 101, 204, 114, 51, 34, 176, 15, 142, 220, 229, 28, 132, 29, 49, 233,
-    97, 0, 169, 101, 166, 173, 198, 208, 212, 77, 156,
+    79, 112, 196, 117, 141, 137, 147, 239, 2, 162, 107, 188, 90, 150, 63, 162, 148, 58, 133, 232,
+    140, 169, 181, 94, 119, 220, 124, 250, 150, 196, 194, 54,
 ];
 
 #[test]

@@ -52,6 +52,7 @@ mod block_local;
 mod block_local_class;
 mod block_local_feed;
 mod ca_delay_rt;
+mod case_inside;
 mod class_lower;
 mod classes;
 mod cond_names;
@@ -170,6 +171,7 @@ pub(crate) use ast_query::*;
 pub(crate) use block_local::*;
 pub(crate) use block_local_class::AdmitReason;
 pub(crate) use block_local_feed::ScopedGather;
+pub(crate) use case_inside::case_ctx_operator;
 pub(crate) use classes::*;
 pub(crate) use const_array::*;
 pub(crate) use const_eval::*;
@@ -672,6 +674,9 @@ struct Elaborator<'s> {
     // nested selects (`q[$ - r[$]]`) bind each `$` to ITS OWN queue. `None`
     // outside a queue index ⇒ a bare `$` is loud-rejected.
     dollar_subst: Option<u32>,
+    /// The first use of `inside` as a NAME in any parsed unit (`TopItem::InsideNameUse`),
+    /// read once by `run`; every `case … inside` is refused when it is set.
+    inside_name_use: Option<ast::Span>,
     // ⓑ-breadth (v17): the active array-method `with`-clause iterator name
     // (`item` by default, or the named `find(x)` variable). When set, a matching
     // single-segment Ident lowers to `Expr::ArrayItem{index:false}` and `iter.index`

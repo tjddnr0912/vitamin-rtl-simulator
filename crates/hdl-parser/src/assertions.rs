@@ -445,6 +445,9 @@ impl Parser<'_, '_> {
     /// round-29 measured both directions. The name is the only channel the AST
     /// offers (a marker field would change the frozen AST shape), and it maps
     /// straight to `SeverityKind::UniqueViolation` in elaborate.
+    ///
+    /// `unique case (e) inside …` passes through unchanged: the `inside` branch is
+    /// inside `parse_case`, so it gets the same synthesized default.
     pub(crate) fn parse_unique_priority(&mut self) -> Stmt {
         let qspan = self.cur_span();
         // §12.4.2: the `0` variants keep the multi-match intent but SUPPRESS

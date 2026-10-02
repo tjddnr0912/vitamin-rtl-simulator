@@ -192,6 +192,7 @@ impl Parser<'_, '_> {
                 if 17 < min_bp {
                     break;
                 }
+                self.inside_kw_at.push(self.pos);
                 self.bump(); // `inside`
                 lhs = self.parse_inside(lhs);
                 continue;

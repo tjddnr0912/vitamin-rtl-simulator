@@ -52,6 +52,7 @@ diagnostic code carries three interchangeable spellings — the mnemonic
 | Net kinds `trireg` / `supply0` / `supply1` / `tri0` / `tri1` / `triand` / `trior` | loud refusal | §2.9 |
 | Constructs with no grammar arm (DPI-C, `specify`, strengths, switch primitives, …) | loud refusal | §2.10 |
 | Refusals by language area | loud refusal | §2.11 |
+| `case … inside` where the reference tools' sizing rules disagree | loud refusal | §2.12 |
 | Value-level divergences from Icarus Verilog and Verilator | known divergence | §3.1 |
 | Splits where the reference tools disagree with each other | known divergence | §3.2 |
 | Platforms, exit codes, threads, and every resource cap | — | §4 |
@@ -757,6 +758,40 @@ to expect them.
 | Declaration names | one name declared twice in a module, interface or package body by two DIFFERENT binders — a `function` or `task` against a net, variable, `parameter`, `localparam`, port, `genvar`, instance, named block, `fork` label, generate-block label, `typedef`, `class` or enum label, and every other combination the two reference tools both reject (IEEE 1800 §3.13). A non-ANSI port beside its own `wire` or `logic` declaration is one declaration in two items and runs; a labelled generate block's contents are their own scope (§27.3); a `$unit` name shadowed by a local declaration is legal (§26.4); a duplicate local in a block or a static task body |
 | Statements and events | a level event control on a select with a variable index, of an automatic local or a dynamic-storage element, or on a non-LSB bit or part select beside an edge term; a level term wider than one bit beside an edge term wakes only when its bit 0 changes (silent); a select of a constant whose index is a changing net (`@(K[i])`, in every lane); a non-LSB edge bit-select; a complex event term; an `iff` guard on a multi-term event control; a multi-term in-body edge wait; reading or assigning a named event; a `disable` that is not a lexically enclosing named block; timing controls inside a `final` block; `assign` / `deassign` / `force` / `release` on a select; a runtime `repeat(n)` in an intra-assignment control; a constant shadowing a net as an lvalue; a process-header level list whose every term is a constant and whose body can suspend or holds a construct the time-0 lane does not admit (`always @(K) #2 …`; the same conditions as the beside-a-live-term row) — a list that meets the conditions runs once at time 0; a duplicate declaration |
 | Instances | an instance array without exactly one `[msb:lsb]` range, or with a non-constant range; a child with a non-empty NON-ANSI header (a PORTLESS child is supported, `.*` included); a non-identifier port connection; a width mismatch; recursive module instantiation; no top module, or an unknown `--top` |
+
+### 2.12 `case … inside` shapes that stay loud
+
+`case (e) inside` (IEEE 1800 §12.5.4) compares each item "using the set membership inside
+operator", which sizes every comparison per pair (§11.4.13), while §12.5 sizes a normal
+`case` collectively. The reference tools split exactly there: sv2v (an `if` chain) sizes
+per pair, Verilator 5.052 takes the width and the case expression's sign collectively but
+extends each item by its own sign, and Icarus Verilog 13 rejects the construct. vitamin
+runs a statement only where all three rules give one answer, and refuses the rest with one
+`E-ELAB-UNSUPPORTED` / `VITA-E3009` that names the reason:
+
+| Refused shape | Why |
+|---|---|
+| A signed case expression with an unsigned item; an unsigned case expression with a signed item narrower than the widest operand that is not a constant with a 0 sign bit (`32'shFFFFFFFF` against 64 bits) | the rules split (`case (s4) inside -1: …; 8'h00: …` is `1` in sv2v and `0` in Verilator) |
+| An operator narrower than the widest operand (`case (a + b) inside … 16'h0100`) | the rules split on the width it is evaluated at |
+| A fill literal (`'0`, `'1`, `'x`, `'z`) | Verilator sizes it collectively and sv2v contradicts itself on it |
+| A `$` range bound | sv2v cannot parse it and Verilator reads it unsigned |
+| A `real` operand; a `string` range, or a `string`-typed item under a packed case expression | no reference tool runs it |
+| A value item whose `x` / `z` bits exist only at run time — a 4-state variable, a 4-state operator, a queue element, a call | it would be compared with `==` where §11.4.13 needs `==?` (the same residue §3.1 lists for the `inside` operator) |
+| A call in an item | no tool orders the evaluation of items: sv2v duplicates the calls, Verilator evaluates every item twice |
+| A call returning a signed type, or a string-returning call, as the case expression | a plain `case` over the same call gives a wrong value today; the fix is queued |
+| A call as the case expression inside a class method | a class-method body has no slot to evaluate it once into; a plain `case` there re-evaluates it per item today |
+| A class handle or `null` operand | not an integral comparison |
+| Every `case (x) inside …` in a design that uses `inside` as a name anywhere — a variable, parameter, function, loop variable, an escaped `\inside`, in any file | IEEE 1364 does not reserve `inside`, so `inside[2:1]:` or `inside(3):` is also a plain label that reads it, and iverilog `-g2005` runs it that way. The message names the first use; rename it. `inside:` and `inside, …:` after `case (x)`, and every `casez` / `casex` label, stay plain labels |
+
+Write the statement as a plain `case` / `casez` where the items are single values, or
+compare at one width yourself (cast every operand to the case's width and signedness).
+An `if (e inside {…})` chain is not a neutral rewrite: it is the per-pair side of the
+split. `casez` / `casex` have no `inside` form: after them the word is a label name, as
+in IEEE 1364, so `casez (e) inside 4'd1:` without such a declaration stays the
+`E-PARSE-UNEXPECTED-TOKEN` / `VITA-E2002` it always was. One spelling is loud where it
+used to run: `case (x) inside == 4'd5:` over a declared `inside` (an operator that cannot
+begin an item, right after the word) is a parse error, as are `inside.v` (an instance named
+`inside`) and `inside'(…)` (a type named `inside`) as case labels.
 
 ---
 

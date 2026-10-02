@@ -94,6 +94,21 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::LParen, "'(' after case");
         let scrutinee = self.expr(0);
         self.expect(TokenKind::RParen, "')'");
+        // `case (e) inside` (§12.5.4) — only for `case`, and only when the word is not
+        // itself a whole label: IEEE 1364 does not reserve `inside`, so `inside:` and
+        // `inside, 4'd9:` are labels that read a variable of that name. Any other
+        // spelling that starts with the word is taken as `inside`; elaborate refuses
+        // every `case … inside` in a design that also uses `inside` as a name
+        // (`TopItem::InsideNameUse`). An escaped `\inside` is never the keyword.
+        if matches!(kind, CaseKind::Case)
+            && self.at_ident_kw("inside")
+            && !matches!(
+                self.peek_at(1),
+                Some(TokenKind::Colon) | Some(TokenKind::Comma)
+            )
+        {
+            return self.parse_case_inside(start, scrutinee);
+        }
         let mut items = Vec::new();
         while !self.at_eof() && !self.at_kw(Kw::Endcase) {
             let before = self.pos;
@@ -132,6 +147,72 @@ impl Parser<'_, '_> {
             labels,
             body,
             span: start.to(self.prev_span()),
+        }
+    }
+
+    /// The rest of `case (e) inside …` (IEEE 1800-2017 §12.5.4, A.6.7), entered at the
+    /// `inside` word. Every `open_value_range` becomes one label in the shape
+    /// `hdl_ast::case_inside` defines.
+    fn parse_case_inside(&mut self, start: Span, scrutinee: Expr) -> Stmt {
+        self.inside_kw_at.push(self.pos);
+        self.bump(); // `inside`
+        let mut items = Vec::new();
+        while !self.at_eof() && !self.at_kw(Kw::Endcase) {
+            let before = self.pos;
+            items.push(self.parse_case_inside_item());
+            if self.pos == before {
+                self.bump(); // never spin on a stuck case item
+            }
+        }
+        self.expect(TokenKind::Word(WordKind::Keyword(Kw::Endcase)), "'endcase'");
+        Stmt::Case {
+            kind: CaseKind::Inside,
+            scrutinee,
+            items,
+            span: start.to(self.prev_span()),
+        }
+    }
+
+    /// `default [:] stmt` | `open_value_range {, open_value_range} : stmt`.
+    fn parse_case_inside_item(&mut self) -> CaseItem {
+        let start = self.cur_span();
+        if self.eat_kw(Kw::Default) {
+            self.eat(TokenKind::Colon); // ':' OPTIONAL after default
+            let body = Box::new(self.parse_statement());
+            return CaseItem::Default {
+                body,
+                span: start.to(self.prev_span()),
+            };
+        }
+        let mut labels = vec![self.parse_open_value_range()];
+        while !self.node_budget_blown && self.eat(TokenKind::Comma) {
+            labels.push(self.parse_open_value_range());
+        }
+        self.expect(TokenKind::Colon, "':' in case item");
+        let body = Box::new(self.parse_statement());
+        CaseItem::Match {
+            labels,
+            body,
+            span: start.to(self.prev_span()),
+        }
+    }
+
+    /// `value_range ::= expression | [ expression : expression ]`, as one label. The
+    /// range brackets follow `parse_inside`'s token rule.
+    fn parse_open_value_range(&mut self) -> Expr {
+        let p_span = self.cur_span();
+        if self.peek() == Some(TokenKind::LBracket) {
+            self.bump(); // [
+            let lo = self.expr(0);
+            self.expect(TokenKind::Colon, "':' in an `inside` range");
+            let hi = self.expr(0);
+            self.expect(TokenKind::RBracket, "']' to close an `inside` range");
+            let mut label = hdl_ast::case_inside::inside_range_label(p_span, lo, hi);
+            label.span = p_span.to(self.prev_span()); // through the `]`
+            label
+        } else {
+            let v = self.expr(0);
+            hdl_ast::case_inside::inside_value_label(p_span, v)
         }
     }
 
