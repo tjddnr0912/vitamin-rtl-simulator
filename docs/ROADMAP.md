@@ -11,20 +11,20 @@ Recount from the lines below in every docs step; the iteration report shows this
 
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
-| §2 | silent-wrong start-order rows | 29 | 7 | 22 | named prerequisite 8 · oracle split 4 · loud, zero demand 3 · held 3 · performance 2 · do-not-start 2 | frozen; 🆕 Z, U–W, T, S queued | 1, 5, 6, 7, 8 |
-| §2 | recorded defects by mechanism | 194 | 104 | 90 | oracle split / no oracle 49 · named prerequisite 18 · record only 8 · WALL 5 · held 5 · performance 4 · filed to §3 1 | frozen | |
+| §2 | silent-wrong start-order rows | 29 | 6 | 23 | named prerequisite 8 · oracle split 5 · loud, zero demand 3 · held 3 · performance 2 · do-not-start 2 | frozen; U–W, T, S queued | 4, 5, 6, 7 |
+| §2 | recorded defects by mechanism | 200 | 104 | 96 | oracle split / no oracle 55 · named prerequisite 18 · record only 8 · WALL 5 · held 5 · performance 4 · filed to §3 1 | frozen | |
 | §2-N | verilog-axi census | 5 | 0 | 5 | oracle split 2 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | loud by design 2 · named prerequisite 2 · deferred to §5 1 | ② | |
-| §3.b | loud → correct-support, small | 127 | 110 | 17 | named prerequisite 7 · held 4 · record only 2 · oracle split 2 · do-not-start 2 | ② | 2, 3, 4 |
+| §3.b | loud → correct-support, small | 127 | 111 | 16 | named prerequisite 6 · held 4 · record only 2 · oracle split 2 · do-not-start 2 | ② | 1, 2, 3 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design or oracle split 12 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
 | §6 | G2 observability (OBS) | 6 stages + 10 | 15 | 1 | call tree: two lowering paths 1 | ④ | |
-| study/03 | workload corpus | 1 | 1 | 0 | — | real-design | 9 |
-| §5.b | performance / hardening | 15 | 7 | 8 | named prerequisite 5 · held or trigger-gated 3 | below the ladder | |
+| study/03 | workload corpus | 1 | 1 | 0 | — | real-design | 8 |
+| §5.b | performance / hardening | 16 | 7 | 9 | named prerequisite 5 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated 4 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 449 | 271 | 178 | | | |
+| total | | 456 | 271 | 185 | | | |
 
 ## 0. correct-support promotion queue
 
@@ -126,18 +126,15 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
   - ⓤ x/z write to a 2-state member of a 4-state struct keeps x/z (`StructFieldLayout.5`) · ⓦ package function over a non-i64 constant; `apply_import_const_funcs` · ⓧ late CU import applies · ⓨ generate bound reported once
   - ⓩ negative axis (zero demand): `A[0:-2]` (`const_bound_u32`), >64-bit negative-LSB base, `[m:l]` of a negative-LSB net (`packed.rs`) · (aa) untyped `C + D` i64 split; `$clog2(C+D)`; `byte` bound operand
 - 🆕 S — (a) a constant `inside` / `==?` compares at the left width (`const_str.rs` `const_compare_special`, `const_wide.rs` `fold_region`); (b) a run-time x/z element compares with `==` (`wildcard_eq.rs` `inside_value_cmp`); BLOCKED ((a) 🆕 W, T, U · (b) a run-time `==?` primitive)
-  - retry (§5.2 row 8): 🆕 W, then the i64 half (`eb9d3b69`, branch `fix/gencase-label-domain`) with every `const_wildcard_i64` decline falling back to PRE's compare; re-run round-3 cells, MC4, the 174-cell matrix, §4.5.580's harness; the wide half (cells LP, st1) after 🆕 T, U
+  - retry (§5.2 row 7): 🆕 W, then the i64 half (`eb9d3b69`, branch `fix/gencase-label-domain`) with every `const_wildcard_i64` decline falling back to PRE's compare; re-run round-3 cells, MC4, the 174-cell matrix, §4.5.580's harness; the wide half (cells LP, st1) after 🆕 T, U
 - 🆕 T — a generate-case label the i64 fold cannot read is skipped; a read one compares untyped (T1, L06, S06, X13 take `default`; N09 inconsistent); `generate.rs` `GenItem::Case`; BLOCKED (🆕 U, 🆕 V)
   - design (§4.5.581, `fix/gencase-label-domain`, `d4dc9c26`): decide once per instance; compare PAIR and WHOLE (§12.5) in the bit domain, decide where they agree, else i64, else no match, never refuse; residue: a label no bit fold reads (`case (6'sh30) W6'(P8)`); held `generate_case_and_wildcard_prerequisites.rs`
-- 🆕 U — a key holds two bindings in different maps and lanes read different ones (A1D genvar prints 2^64+9, B2D, q1g); writers `bind_param_value`, `package.rs` import arms; readers `wide_name_bits`, `lookup_scoped`; 3 oracles; OPEN (§5.2 row 5)
-- 🆕 V — a generate-case arm is re-decided per `GenPhase` walk (`instance.rs`), so a forward label mixes arms (d1p `k 8 bits=4`, oracles `k 200 bits=8`); decide once (key: scope prefix + span; U1 kills a span-only key) and resolve labels alike per phase; 2 oracles; OPEN (§5.2 row 6)
-- 🆕 W — a constant typed by an overridden type parameter reads unsigned (PT5c `PV < 0` → 0, dF3 `TP = '1` → 15); measure §4.5.479 / §4.5.483's pins first; 3 oracles; OPEN (§5.2 row 7)
+- 🆕 U — a key holds two bindings in different maps and lanes read different ones (A1D genvar prints 2^64+9, B2D, q1g); writers `bind_param_value`, `package.rs` import arms; readers `wide_name_bits`, `lookup_scoped`; 3 oracles; OPEN (§5.2 row 4)
+- 🆕 V — a generate-case arm is re-decided per `GenPhase` walk (`instance.rs`), so a forward label mixes arms (d1p `k 8 bits=4`, oracles `k 200 bits=8`); decide once (key: scope prefix + span; U1 kills a span-only key) and resolve labels alike per phase; 2 oracles; OPEN (§5.2 row 5)
+- 🆕 W — a constant typed by an overridden type parameter reads unsigned (PT5c `PV < 0` → 0, dF3 `TP = '1` → 15); measure §4.5.479 / §4.5.483's pins first; 3 oracles; OPEN (§5.2 row 6)
 - 🆕 X — a class method's `case` re-evaluates a call scrutinee per label (f2); `class_lower.rs` / `frames_reserve.rs` reserve no case temp; reserve them, then let `lower_case_inside` take it (pin `case_inside_refused.rs` `l14_…`); 2 oracles; OPEN
 - 🆕 Y — a string-returning call scrutinee compares packed (s2 `m=0`, verilator 3); `ir_expr_is_string` (`strings.rs`), `hoist_case_scrutinee`; a string-kind capture (pin `case_inside_refused.rs` `l09_…`); verilator + hand-IEEE; OPEN
-- 🆕 Z — an `always_comb` / `always_latch` time-0 pass runs before the values driving it settle, so a `unique` / `priority` arm reports W4031 at t0 on x where both oracles are silent: (a) an `initial` written after the comb in the same module (written first, vita is silent too); (b) an instantiated module fed through ports, even with the testbench written first; t0 seeding runs Initial, Comb and Latch processes in source order (`sched/scan_arm.rs:1448`, `native/run.rs:1125`); first: fit the rule on cells, spell it on PRE, measure the ibex page (the corpus design with `always_comb` / `always_latch`), then give `always_comb` a kind apart from `SensKind::Comb`, which a self-timed `always` shares and which must still start at t0 (`elaborate/src/events.rs:364`; a format bump or a side table); 2 oracles; OPEN (§5.2 row 1)
-  - measured on PRE: `always @*` is `SensKind::Level` (`events.rs:418`) and does not run at t0 (silent until its first input change, as iverilog; verilator runs it at t0); `always_latch` is already `SensKind::Latch`
-  - splits, never chased: a constant `always_comb` read by an `initial` at t0 (iverilog `xx`, verilator and vita `11`); iverilog's own order (a comb's t0 pass after the first `#0` batch, several combs in reverse source order)
-  - source: the external report (§3.b `unique-glitch-t0`, re-diagnosed by §4.5.583: no oracle defers the report, so §12.4.2.1's deferral is not built); blocks §3.b `unique-if-chain`
+- 🆕 AA — a consumer `always_comb` / `always_latch` written before the block feeding it, in a chain no time-0 process write reaches (declaration initializers, a constant block, a settled CA), reads x in its time-0 pass and reports W4031 / E4003 at t0 where both oracles are silent (q_chaind_A_B, q_chain3_A_Bc_Bb, s583_a08, x13b, tg2, tg5, t3j; PRE the same); the passes run one per batch in source order (§4.5.584: `sched/run_loop.rs`, `native/run.rs`); closing it needs an order among the time-0 passes, and the oracles are silent by different ones (iverilog reverse source order, which reports the same consumer-first read at the source's next change and reports forward chains at t0; verilator dependency order); every order measured moves split cells (§4.5.584 grounding: reverse 3 to iverilog, dependency order 4 to verilator); SPLIT
 - 31 — `$signed(a)*$signed(b)` in a CA evaluates 3× (values right); PERF
 - 32 — `$finish` in a function: iverilog stops, verilator runs on (`frame_eval.rs::run_frame_call_with`); SPLIT
 - 34 — rows 23, 24 (clocking): 1 oracle, zero corpus demand; DO-NOT-START
@@ -301,6 +298,7 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
 - A runtime-delay call runs silently on `vm` (native loud, W4030); OPEN
 - A CA in another time unit reads `$time` at the wrong scale (`cont_assign_time_read.rs`); per-assign multiplier = bump; 2 oracles; OPEN
 - A CA hop lands after the whole batch; yield settle + nonblocking UDP (§4.5.539); BLOCKED (wake-group order has no oracle)
+  - t0: Level / Edge processes the t0 settle wakes, read in batch 2 through a CA or port, read x where both oracles read the value (x7, x7b, x7c, x7d, lb1–lb3, b1_ca_hop_noinit; the `always_comb` twin b2 keeps `v=x`); §4.5.584's patch B (each such process alone in a batch, a settle after each) closed them but merged that process's own wakes into the parked first batch with no settle between — a two-oracle descent (b1: iverilog = verilator `R t=0 v=1 u=1`, B `v=x`) — and was dropped
 - An in-body edge wait sees an earlier edge of its batch (`WaitCause::Edge`); §4.5.537's rule, then `@(cb)`; 2 oracles; OPEN
 
 ### Diagnostics / artifacts
@@ -348,7 +346,7 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
 - `#(.P(pk::PA + 0))` over `[0:35]` — split (`pkg_const_layout_override.rs`)
 - `%s` of an unstored `string'(e)` — split (vita = verilator)
 - string-cast spellings with ≤1 oracle — stay loud
-- `always @*` reading only a constant — split
+- `always @*` at t0 (no pass until an input changes, = iverilog and §9.2.2.2; verilator runs it) and reading only a constant — split
 - unlabelled `begin` in a generate region — split (vita = iverilog)
 - unlabelled generate net beside a same-named function — split (vita = iverilog)
 - repeated non-ANSI header port — split
@@ -371,6 +369,12 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
 - `$realtobits` of an integral — split (`integral_to_f64`)
 - package-body enum label named like a constant — split
 - negative signed part-select bound — split; vita mixes both readings
+- `always_comb` / `always_latch` t0 passes of several blocks — split (vita forward source order, one per batch with a settle after each; iverilog reverse source order; verilator dependency order): from a quiet source a forward chain reports at t0 in iverilog only (tg1, tg3, tg4, tg6, tg8, tg10, tg13, tg14), a consumer-first chain in vita only (§2 🆕 AA)
+- a constant or declaration-fed `always_comb` read at t0 before its pass (an `initial`'s first slice, a reader another t0 write woke, a t0-posedge flop: q_const_comb_first, s583_v01, s583_v03, x3, r1, r2, f2, f2b) — split (vita = iverilog `xx`; verilator the value; after one `#0` vita reads the value, iverilog `xx`)
+- `always_comb` run count at t0 when an input changes at t0 — split (vita = iverilog twice: the woken pass, then the implicit one; verilator once; d1b iverilog once)
+- GATED-CLOCK edge dedup at t0 (`reset_edge_seen_marks` now runs at t0 in every comb design): an edge from a settle-woken comb pass is deduped, one from an implicit pass re-fires (g1) — split (vita = iverilog on the woken pass's edge, neither on the implicit pass's)
+- an implicit t0 pass's wakes against a promoted `#0` resume (c3, c4: iverilog `s=x g=x`, verilator `s=1 g=1`, vita `s=1 g=x`; fj1, a fork arm's `#0`) — split; vita matches neither (a legal §4.7 order)
+- comb t0 pass slots in a port chain (t3g: vita = verilator, iverilog reports at t0), a first-batch-woken checker reading an implicit-only comb (t3k: vita = iverilog's two W4031) and a named event a comb's t0 pass triggers (n1: vita = iverilog `E1 t=0 y=01`, verilator nothing) — split
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -538,9 +542,9 @@ The workload corpus has no refused row; the next work is the new-design census (
 - cli-lib — `cargo test -p cli --no-default-features --lib` fails E0004 (a dev-dependency revives sim-engine's `oracle`); `default-features = false` on it; CI cannot see it; OPEN
 - carrier-namespace — `T$w`-style carrier names are not reserved at declarations (`names_a_type_param_carrier` runs at override names only); refuse at every declaration site; 2 oracles; OPEN
 - EXT2-DOC — stale CLI, language, system-task and explain docs; OPEN
-- unique-if-chain — a `unique if … else if` chain with no final `else` never reports the no-match (verilator `'unique if' statement violated`); `hdl-parser/src/assertions.rs` `parse_unique_priority` arms only a first `if` with no `else`; design (§4.5.583, reverted): arm the last `if` of the series and report at the first `if`'s span, deciding the series from the WRITTEN `if` token after `else` (a positive set, never the node kind: an immediate `assert` / `assume` desugars to `Stmt::If` too, `assertions.rs:298`, and arming through `else assert (b) else if (c)` reports where verilator and PRE are silent); keep the first-`if` rule only in bodies the constant interpreter can reach (non-void functions outside a class: `unique-const-fn`); lands after §2 🆕 Z, whose false t0 report a chain in an instantiated module's `always_comb` would inherit; verilator; BLOCKED (§2 🆕 Z; §5.2 row 2)
-- unique-overlap-note — unchecked `unique` / `unique0` overlaps go unannounced; one note per run; OPEN (§5.2 row 3)
-- unique-const-fn — a constant function that reaches a synthesized no-match arm (a lone `unique if` with no `else`, a `unique case` with no `default`) is E3009 `… has no constant-fold arm` where both oracles fold silently (iverilog on `case`; it rejects `unique if`); `elaborate/src/const_fn.rs` `exec_const_stmt` has no arm for `$__vita_unique_violation`; first: census how every `eval_const_call` consumer treats a decline (a fold that replaces a run-time call would drop that call's report), then a no-op arm; 2 oracles; OPEN (§5.2 row 4)
+- unique-if-chain — a `unique if … else if` chain with no final `else` never reports the no-match (verilator `'unique if' statement violated`); `hdl-parser/src/assertions.rs` `parse_unique_priority` arms only a first `if` with no `else`; design (§4.5.583, reverted): arm the last `if` of the series and report at the first `if`'s span, deciding the series from the WRITTEN `if` token after `else` (a positive set, never the node kind: an immediate `assert` / `assume` desugars to `Stmt::If` too, `assertions.rs:298`, and arming through `else assert (b) else if (c)` reports where verilator and PRE are silent); keep the first-`if` rule only in bodies the constant interpreter can reach (non-void functions outside a class: `unique-const-fn`); verilator; OPEN (§5.2 row 1)
+- unique-overlap-note — unchecked `unique` / `unique0` overlaps go unannounced; one note per run; OPEN (§5.2 row 2)
+- unique-const-fn — a constant function that reaches a synthesized no-match arm (a lone `unique if` with no `else`, a `unique case` with no `default`) is E3009 `… has no constant-fold arm` where both oracles fold silently (iverilog on `case`; it rejects `unique if`); `elaborate/src/const_fn.rs` `exec_const_stmt` has no arm for `$__vita_unique_violation`; first: census how every `eval_const_call` consumer treats a decline (a fold that replaces a run-time call would drop that call's report), then a no-op arm; 2 oracles; OPEN (§5.2 row 3)
 - unique-if-text — W4031 says `… priority or unique case statement` on `if` forms too (verilator `'unique if' statement violated`); `parse_unique_priority` `warn_stmt`; pins `round29_report.rs`, `procedural_adv.rs`, `runtime_diag_location.rs`; verilator; OPEN
 
 **Strings / heap**
@@ -619,6 +623,7 @@ Below the correctness ladder; a row resumes only when its re-entry condition fir
 - NETSLOT-PREV — `NetSlot.prev` is written but never read; OPEN
 - ELAB-PHASE-BLIND — the corpus cannot see front-end cost; add a front-end-bound row; OPEN
 - LOW-ROI — FMT-CACHE b, GEN-3X-STR a, QUEUE-MID-ON; HELD
+- T0-SERIAL — the engine scheduler follows each serial t0 comb pass (§4.5.584) with a propagate that scans every waiter: comb5000_settle interp +9.7% (vm shares the scheduler, unmeasured; native +0.8%, ibex +0.7%); `sched/run_loop.rs`, `sched/propagate.rs`; HELD (native, the default, is flat; ER §10.2 keeps the reference interpreter out of performance work)
 
 ### 5.c Current state
 
@@ -630,24 +635,23 @@ Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
 One iteration takes ONE row (single root; an oracle, a corpus row's pinned oracle counting; outside walls and oracle splits), plus at most one review-free hygiene item. A row that needs a format bump takes it.
 Same-root rows are one slice, and their order is a measurement (a value lane lands before a guard over an unlimited fold is deleted).
 
-Real-design first: every row has a corpus witness except rows 1–8, which an external report or its fix path reproduced. A slice that moves a corpus page re-pins that row's refusal in the same commit (`DRIFTED` otherwise) and reports the page before and after.
+Real-design first: every row has a corpus witness except rows 1–7, which an external report or its fix path reproduced. A slice that moves a corpus page re-pins that row's refusal in the same commit (`DRIFTED` otherwise) and reports the page before and after.
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The `rank` column is a row's defect class — ① a silent-wrong, ② loud→supported (§1) — not its place in the queue: the row number is the start order.
-Rows 1–4, the external report's remaining items and what its fix path found (§4.5.583), go before the ① rows 5–8 because the owner's order of 2026-10-02 keeps the report's items first; row 1 is ① and goes first because row 2 would inherit its false t0 report. Rows 5–8 are §4.5.581's prerequisites: none has a corpus witness and each redesigns shared code.
+Rows 1–3, the external report's remaining items and what its fix path found (§4.5.583), go before the ① rows 4–7 because the owner's order of 2026-10-02 keeps the report's items first. Rows 4–7 are §4.5.581's prerequisites: none has a corpus witness and each redesigns shared code.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 🆕 Z — an `always_comb` / `always_latch` time-0 pass runs before the values driving it settle, so a `unique` / `priority` arm prints W4031 at t0 on x where both oracles are silent (a comb written before its driving `initial`; an instantiated module fed through ports, testbench written first too); seeding `sched/scan_arm.rs:1448`, `native/run.rs:1125`; first: fit the rule on cells, spell it on PRE, measure the ibex page, then a kind for `always_comb` apart from the `SensKind::Comb` a self-timed `always` shares (a format bump or a side table) | external report (re-diagnosed by §4.5.583) | ① |
-| 2 | 2 | §3.b `unique-if-chain`, after row 1 — a `unique if … else if` chain never reports the no-match; §4.5.583's design: arm the last `if`, deciding the series from the written `if` token after `else` (never the node kind), report at the first `if`; keep the first-`if` rule in non-void functions outside a class | external report | ② |
-| 3 | 3 | §3.b `unique-overlap-note` — an unchecked `unique` / `unique0` overlap goes unannounced; first: one note per run at the first such site (`parse_unique_priority`); the check stays a §8 non-goal | external report | ② |
-| 4 | 4 | §3.b `unique-const-fn` — a constant function that reaches a synthesized no-match arm is E3009 where both oracles fold silently; first: census how every `eval_const_call` consumer treats a decline (a fold that replaces a run-time call would drop that call's report), then a no-op arm in `exec_const_stmt` | the external report's fix path (§4.5.583) | ② |
-| 5 | 5 | §2 🆕 U — a key holds two bindings and lanes read different ones (A1D, B2D, q1g wrong; A1S, B2E, X1 held); writers `bind_param_value`, `package.rs` import arms; readers `wide_name_bits`, `lookup_scoped`; first: census every writer of `params`, `wide_param_bits`, `str_param_raw`, `real_param_val`, then one current binding per key at the binders (a genvar suspends the wide entry), never a reader-side guess | §4.5.581's review | ① |
-| 6 | 6 | §2 🆕 V — a generate-case arm is re-decided per `GenPhase` walk (`generate.rs` `GenItem::Case`, `instance.rs`), so a forward label mixes arms (d1p, C1); first: decide the arm once per construct instance (key: scope prefix + span) and resolve forward labels alike in every phase (caching alone leaves d1p wrong) | §4.5.581's review | ① |
-| 7 | 7 | §2 🆕 W — a constant typed by an overridden type parameter loses the override's sign (PT5c `PV < 0` → 0, dF3 `TP = '1` → 15; oracles 1, -1); first: measure §4.5.479's and §4.5.483's pins on HEAD, then the two declaration lanes | §4.5.581's review | ① |
-| 8 | 8 | §2 🆕 T, then 🆕 S (a) — §4.5.581's designs (branch `fix/gencase-label-domain`): labels compared two ways in the bit domain, decided where they agree (`d4dc9c26`); then the i64 half with every decline falling back to PRE's compare (`eb9d3b69`), then the wide half; held cells `generate_case_and_wildcard_prerequisites.rs` | §4.5.580's fix path | ① |
-| 9 | 9 | new-design census: OpenTitan IPs (Apache-2.0), VeeR EL2 / EH1 (Apache-2.0), alexforencich verilog-axis / -pcie / -uart / -i2c (MIT) — licence and oracle first, then one corpus row each (Solderpad stays out: owner ruling); each admitted page becomes queue rows | corpus | — |
-| 10 | hygiene | split production files over the 1,000-line policy not on its exception list (largest: `native/kernel.rs`, `elaborate/params.rs`, `elaborate/packed.rs`); list them with `wc -l` at HEAD; precedent: a lane in a sibling module (`pkg_body_scope.rs`, `inline_bind.rs`); never inside a correctness bundle | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 1 | 1 | §3.b `unique-if-chain` — a `unique if … else if` chain never reports the no-match; §4.5.583's design: arm the last `if`, deciding the series from the written `if` token after `else` (never the node kind), report at the first `if`; keep the first-`if` rule in non-void functions outside a class | external report | ② |
+| 2 | 2 | §3.b `unique-overlap-note` — an unchecked `unique` / `unique0` overlap goes unannounced; first: one note per run at the first such site (`parse_unique_priority`); the check stays a §8 non-goal | external report | ② |
+| 3 | 3 | §3.b `unique-const-fn` — a constant function that reaches a synthesized no-match arm is E3009 where both oracles fold silently; first: census how every `eval_const_call` consumer treats a decline (a fold that replaces a run-time call would drop that call's report), then a no-op arm in `exec_const_stmt` | the external report's fix path (§4.5.583) | ② |
+| 4 | 4 | §2 🆕 U — a key holds two bindings and lanes read different ones (A1D, B2D, q1g wrong; A1S, B2E, X1 held); writers `bind_param_value`, `package.rs` import arms; readers `wide_name_bits`, `lookup_scoped`; first: census every writer of `params`, `wide_param_bits`, `str_param_raw`, `real_param_val`, then one current binding per key at the binders (a genvar suspends the wide entry), never a reader-side guess | §4.5.581's review | ① |
+| 5 | 5 | §2 🆕 V — a generate-case arm is re-decided per `GenPhase` walk (`generate.rs` `GenItem::Case`, `instance.rs`), so a forward label mixes arms (d1p, C1); first: decide the arm once per construct instance (key: scope prefix + span) and resolve forward labels alike in every phase (caching alone leaves d1p wrong) | §4.5.581's review | ① |
+| 6 | 6 | §2 🆕 W — a constant typed by an overridden type parameter loses the override's sign (PT5c `PV < 0` → 0, dF3 `TP = '1` → 15; oracles 1, -1); first: measure §4.5.479's and §4.5.483's pins on HEAD, then the two declaration lanes | §4.5.581's review | ① |
+| 7 | 7 | §2 🆕 T, then 🆕 S (a) — §4.5.581's designs (branch `fix/gencase-label-domain`): labels compared two ways in the bit domain, decided where they agree (`d4dc9c26`); then the i64 half with every decline falling back to PRE's compare (`eb9d3b69`), then the wide half; held cells `generate_case_and_wildcard_prerequisites.rs` | §4.5.580's fix path | ① |
+| 8 | 8 | new-design census: OpenTitan IPs (Apache-2.0), VeeR EL2 / EH1 (Apache-2.0), alexforencich verilog-axis / -pcie / -uart / -i2c (MIT) — licence and oracle first, then one corpus row each (Solderpad stays out: owner ruling); each admitted page becomes queue rows | corpus | — |
+| 9 | hygiene | split production files over the 1,000-line policy not on its exception list (largest: `native/kernel.rs`, `elaborate/params.rs`, `elaborate/packed.rs`); list them with `wc -l` at HEAD; precedent: a lane in a sibling module (`pkg_body_scope.rs`, `inline_bind.rs`); never inside a correctness bundle | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
