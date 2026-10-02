@@ -11,9 +11,11 @@ discipline. Each entry is one imperative plus the failure mode it prevents.
 This document is canonical for method. Where another document in this tree describes how work is
 done and disagrees with a rule here, this file wins. A rule learned while implementing is merged
 into the matching section as one line; the measurement that produced it goes to
-[history/lessons.md](history/lessons.md).
+[history/lessons.md](history/lessons.md). The file does not grow: a slice that adds a rule makes
+room by merging or compressing rows, so `wc -c` after the slice is at most `wc -c` before it.
 
-Read this before implementing. The queues of open work are in [ROADMAP.md](ROADMAP.md) (§2
+Read §1 and §2.1–§2.2 before implementing, then the sections your role needs (§3.2); no agent reads
+or is handed the whole file. The queues of open work are in [ROADMAP.md](ROADMAP.md) (§2
 silent-wrong residue, §3 loud-to-supported, §6 observability) with a snapshot in
 [REMAINING_WORK.md](REMAINING_WORK.md); the specifications the review checklist is drawn from are in
 [preview/](preview/); the user-facing surface a change must keep true is in [manual/](manual/).
@@ -264,6 +266,7 @@ The briefing decides what a round costs, so it carries all of this.
 | Keep attribution per slice when several slices share one review: disjoint files, one PRE and one POST binary, a census per slice with its own cell prefix, and questions grouped per slice | A finding that cannot be reverted without touching the other slices |
 | Do not rebuild the binary while a reviewer is measuring; make changes in a copy and re-review afterwards | The reviewer having to annotate which binary each measurement used |
 | Require an explicit non-vacuity proof: byte-identity means something only when the fast arm actually fires, with the firing count and observed argument values recorded | "Nothing happened, so they were the same" being indistinguishable from a working optimisation |
+| Excerpt this file per role instead of handing it whole: every role gets §1 and §2.1–§2.2; the implementer §4 plus the §2 and §5 subsections the change touches; the differential lens §3.1–§3.3, §3.5, §6 and §7.3; the soundness lens §3.1, §3.2, §3.4, §3.5, §4 and the touched §5 subsections; adoption and regression verdicts §3.5, §3.6 and §6.3; a gate or corpus run none (CONTRIBUTING › The gate). Extract with `sed -n '/^### 3\.3 /,/^###* [0-9]/p'` | Every agent carrying the whole rulebook in its context on every call, most of it outside its role |
 
 ### 3.3 The differential lens
 
@@ -301,7 +304,8 @@ prose. Commission it explicitly.
 
 ### 3.6 Stopping, reverting and prerequisites
 
-The round budget is three. A fourth is a scope signal, not a fourth patch.
+The round budget is three. A fourth is a scope signal, not a fourth patch. Two consecutive
+blocking rounds on one axis end the attempt on that axis before the budget does.
 
 | Rule | Prevents |
 |---|---|
@@ -311,7 +315,7 @@ The round budget is three. A fourth is a scope signal, not a fourth patch.
 | Read a root that returns through a different door each round as the stop signal: revert whole and write the prerequisite into the queue row | Each narrowing breaking a different case |
 | Revert a producer axis that yields a new blocker every round and make the consumer decline on what it cannot vouch for; the producer's patch gets its own row with its measured cells | A fourth attempt on the producer axis |
 | Fix the other code path first when a precondition lives there; a workaround predicate that is wrong twice is an ordering problem, not a predicate problem | Consecutive rounds of regressions from workarounds |
-| Ship the separable half and revert the rest with the prerequisite written down when blockers on one axis exceed three and most are products of your own fixes | Two slices in a row, each fix locally correct, the axis wrong both times |
+| Ship the separable half and revert the rest with the prerequisite written down when a second consecutive round blocks on the same axis, whatever round that is; a third round is for another axis or the delta of the revert | Two slices in a row, each fix locally correct, the axis wrong both times; and a third round spent on an axis the second already condemned (§4.5.571, §4.5.572: one axis blocked in all three rounds) |
 | Decide fix-or-revert from the root, never from the effort spent: ask whether the root is pre-existing and independent, whether the fix needs machinery the frozen IR cannot hold, and how wide the blast radius is | A separable half going out with the revert because nobody looked |
 | Count the rounds and read where the blockers are: when they sit outside what you built, in what you routed to, you are discovering a prerequisite | A fourth fix on shared code with a different blast radius |
 | Do not propagate a closure out of a slice until the slice is committed, and re-measure rather than restoring old text when re-opening one | A row marked resolved coming back with the revert, its old text overstating the residue |
@@ -1279,6 +1283,7 @@ frozen. Byte identity comes before performance.
 | Write an option as an enumeration, not a boolean, when the question is which input to pass rather than on or off | A third policy being added without the callers reconsidering |
 | Distinguish "the default is the right shape" from "the wrong shape is unrepresentable", and claim the second only when the type makes the wrong state impossible | A paragraph arguing that rules must be types while the wrong form still compiles |
 | Price a name-keyed rewrite by asking where the key is constructed; the absence of a funnel is the estimate | "Small and additive" turning out to be a prerequisite |
+| Admit a change to implementation with a lane table: list every shared function it edits or routes into (a fold, resolver, walker, classifier or gate with more than one caller) and every consumer lane each one reaches, and mark each lane measured (census cells on PRE and the oracles), opted out (the new behaviour is a parameter that lane does not pass, so its output is byte-identical) or unmeasured. Build only when no lane is unmeasured; otherwise narrow the change to opt-in for the measured lanes, or file the shared change as its own prerequisite row and do not build it in the slice. The table goes into the briefing | A slice that routes into shared code meeting its blockers in lanes it never measured and spending the whole round budget before reverting (§4.5.562 `fold_init`, §4.5.571 and §4.5.572 the shared scope-leak check and parser binding, §4.5.581 `wide_name_bits`) |
 
 ### 10.3 Comments, documents and queues
 
