@@ -364,8 +364,8 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// through the VM path or route its own walk through this method.
     ///
     /// ⚠️ No reset: the t0 state is derived from `kind` alone, so a kernel built
-    /// at t > 0 would re-arm every `Level` and dis-arm every `Comb`/`Latch` that
-    /// had already run. Every construction site today builds a fresh arena
+    /// at t > 0 would re-arm every `Level` / `Comb` / `Latch` whose waiter had
+    /// been consumed. Every construction site today builds a fresh arena
     /// alongside, so the lifetime is per-run; nothing structurally enforces it.
     pub(crate) wake: crate::native::wake::WakeTable,
     /// The REGION QUEUES and the time wheel (S1d-4c-2c). The engine's
@@ -379,6 +379,10 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// the resume is filed.
     pub(crate) active: Vec<NativeReady>,
     pub(crate) inactive: Vec<NativeReady>,
+    /// The implicit time-0 passes of every `always_comb` / `always_latch` — the
+    /// engine's `Scheduler::t0_implicit`, filled by `arm_t0` and taken by the
+    /// first Inactive promotion at time 0 (`native::run::run`).
+    pub(crate) t0_implicit: Vec<NativeReady>,
     /// Fork arms spawned at `now` by the running body, in arm order, and a
     /// parent resumed by its join — the engine's `Scheduler::spawned`, kept on
     /// this kernel in its own ready type. The run loop splices them in right
@@ -597,6 +601,24 @@ pub(crate) fn push_sorted_native(q: &mut Vec<NativeReady>, r: NativeReady) {
     q.insert(pos, r);
 }
 
+/// The engine's `rejoin_sorted` (which carries the argument) over the native ready type;
+/// `parked` is a taken `active`, which only `push_sorted_native` fills (or a vector it
+/// built), so it is sorted by `(seq, tie)` as the fast path requires.
+pub(crate) fn rejoin_sorted_native(q: &mut Vec<NativeReady>, mut parked: Vec<NativeReady>) {
+    match (parked.last(), q.first()) {
+        (Some(p), Some(f)) if (p.seq, p.tie) < (f.seq, f.tie) => {
+            parked.append(q);
+            *q = parked;
+        }
+        (Some(_), None) => *q = parked,
+        _ => {
+            for r in parked {
+                push_sorted_native(q, r);
+            }
+        }
+    }
+}
+
 #[allow(dead_code)] // ditto — `new`/`ctx` have exactly one caller, the gate.
 impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// A4: the ORDERING key of an activity. `tie == template` for a base
@@ -673,6 +695,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wake,
             active: Vec::new(),
             inactive: Vec::new(),
+            t0_implicit: Vec::new(),
             spawned: Vec::new(),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
@@ -2316,9 +2339,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         //   fires, so without this they wake once and never again.
         //
         // The asymmetry is the whole content of this method, and it is the same
-        // asymmetry `WakeTable::new` encodes at t0 (`level_armed = kind ==
-        // Level`, because `arm_processes` QUEUES Comb/Latch rather than arming
-        // them).
+        // asymmetry `WakeTable::new` encodes at t0 (`level_armed` for `Level |
+        // Comb | Latch` with a read set: `arm_processes` arms all three at
+        // seeding, §4.5.584). An implicit time-0 pass consumes that arm when it
+        // starts (`WakeTable::take_t0_trigger`), so its return re-arms here like
+        // any other.
         //
         // `Initial` shares the do-nothing arm to mirror the engine's spelling,
         // and it is protected a second way: an `initial` process never carries a

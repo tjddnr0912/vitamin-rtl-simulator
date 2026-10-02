@@ -111,7 +111,7 @@ fn v2_3_level_sensitivity() {
     assert_all_paths_return(p);
 }
 
-// v2-4 (M-C): bare `always #5 clk = ~clk;` clock generator → NON-FATAL, Comb,
+// v2-4 (M-C): bare `always #5 clk = ~clk;` clock generator → NON-FATAL, Initial,
 // forever-wrapped (no Return-reachable continuation; back-edge cycle).
 #[test]
 fn v2_4_clock_generator_self_timed() {
@@ -133,7 +133,13 @@ fn v2_4_clock_generator_self_timed() {
         "a self-timed clock generator is legal, must not warn"
     );
     let p = &ir.processes[0];
-    assert_eq!(p.sensitivity.kind, ir::SensKind::Comb);
+    // `Initial`, not `Comb` (§4.5.584): it starts in the first time-0 batch and
+    // never re-arms, while `Comb` is `always_comb`, whose implicit time-0 pass
+    // waits until that batch has drained. Was `Comb` until then (the engine
+    // treated `Comb` with empty edges as `Initial`); measured on iverilog 13.0 and
+    // verilator 5.052, `always begin clk = 0; #5 clk = 1; #5; end` read by an
+    // `always @(t)` that `initial t = 1;` wakes prints `b2 t=0 clk=0` on both.
+    assert_eq!(p.sensitivity.kind, ir::SensKind::Initial);
     assert_cfg_valid(p); // forever is exempt from assert_all_paths_return
                          // there is a Delay terminator and a back-edge Goto (the forever cycle).
     assert!(p
@@ -156,7 +162,10 @@ fn v2_5_bare_always_no_timing_warns_not_fatal() {
     let out = elaborate(&unit, &sink);
     assert!(out.is_some(), "bare always is now non-fatal");
     assert_eq!(sink.n_warnings(), 1);
-    assert_cfg_valid(&out.unwrap().processes[0]);
+    let ir = out.unwrap();
+    // Runs once in the first time-0 batch, never re-armed: `Initial` (§4.5.584).
+    assert_eq!(ir.processes[0].sensitivity.kind, ir::SensKind::Initial);
+    assert_cfg_valid(&ir.processes[0]);
 }
 
 // v2-6: if/else → Branch + shared merge; every path Returns.

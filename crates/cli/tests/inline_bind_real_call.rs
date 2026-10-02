@@ -211,10 +211,12 @@ endmodule
 
 /// format_version 34: `RealToInt` and `TwoState` are frozen-IR nodes, so they must
 /// survive `vcmp → velab → vrun`. iverilog 13 passes every guard and prints
-/// `OK 002d 0000 0007`; PRE fails the first guard (F-RUN-FATAL).
+/// `OK 002d 0000 0007`; PRE fails the first guard (F-RUN-FATAL). The version pin
+/// below is the CURRENT one (35 since §4.5.584, which moved no SimIr shape — it
+/// changed what `SensKind::Comb` means), re-pinned with every bump like `obs.rs`'s.
 #[test]
 fn staged_vcmp_velab_vrun_carries_both_conversions() {
-    assert_eq!(vita_artifact::CURRENT_FORMAT_VERSION, 34);
+    assert_eq!(vita_artifact::CURRENT_FORMAT_VERSION, 35);
     assert_eq!(run_ok(STAGED), "OK 002d 0000 0007");
     let dir = dir_for("staged");
     let s = |p: &std::path::Path| p.to_str().unwrap().to_string();

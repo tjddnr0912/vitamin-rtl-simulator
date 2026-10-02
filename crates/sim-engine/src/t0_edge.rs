@@ -69,8 +69,11 @@
 //! what both oracles print (`always @(w) x = 5;` runs before an `always @(s)`
 //! woken by `initial s = 1;`, which reads `x=5`; `initial begin @(negedge w);
 //! … end` armed at time 0 waits). A process the settle and the batch both wake
-//! runs once, with the value the batch left; an `always_comb` reading a settled
-//! net runs once at time 0 (verilator once, iverilog twice).
+//! runs once, with the value the batch left. An `always_comb` reading a settled
+//! net is armed at seeding (§4.5.584), so the delivery wakes it too — but it runs
+//! alone after the first batch rather than at the front of the held batch — and
+//! its implicit pass follows at the first promotion: twice at time 0 (iverilog
+//! twice, verilator once).
 //!
 //! Left where it was, as one oracle split (ROADMAP §2): whether the settle of
 //! a variable-reading driver is an edge AT ALL. On `z → 0` iverilog fires

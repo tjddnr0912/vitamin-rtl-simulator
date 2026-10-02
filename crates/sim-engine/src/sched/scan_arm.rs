@@ -686,6 +686,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             waiters: Vec::new(),
             n_expr_waiters: 0,
             n_level_waiters: 0,
+            n_stale_static: 0,
             cur_aid: 0,
             net_to_edge: vec![Vec::new(); nnets],
             activities: Vec::new(),
@@ -723,6 +724,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             vm_offs_pool: Vec::new(),
             bucket_pool: Vec::new(),
             cur_gen: 0,
+            t0_implicit: Vec::new(),
         }
     }
 
@@ -1165,6 +1167,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 wait_fork: None,
                 busy: false,
                 gen: 0,
+                static_level_live: false,
+                static_gen: 0,
             })
             .collect();
     }
@@ -1444,9 +1448,25 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 block: entry,
             };
             match self.st.ir.processes[tmpl].sensitivity.kind {
-                // initial + combinational/latch blocks run at t0.
-                SensKind::Initial | SensKind::Comb | SensKind::Latch => {
+                // `initial` (and a self-timed / inert `always`) runs in the first
+                // time-0 batch.
+                SensKind::Initial => {
                     push_sorted(&mut self.cur.active, ready);
+                }
+                // `always_comb` / `always_latch`: IEEE 1800 §9.2.2.2 runs it once
+                // at time zero "after all initial and always procedures have been
+                // started" (wording from secondary sources). So it is ARMED now,
+                // as a level block is — a write in the first batch, or the
+                // time-0 settle, wakes it like any later change — and its
+                // implicit pass waits in `t0_implicit` for the first Inactive
+                // promotion, where `run` gives each pass a batch of its own and a
+                // settle after it, ahead of the `#0` resumes. Run in the first
+                // batch instead, it read every net an `initial` or a continuous
+                // assign had not yet written (a W4031 / E4003 at time 0 both
+                // oracles do not print, an x→0→1 glitch at `@(negedge y)`).
+                SensKind::Comb | SensKind::Latch => {
+                    self.arm_sensitivity(aid, 0);
+                    push_sorted(&mut self.t0_implicit, ready);
                 }
                 // edge / level blocks wait for the first event (no t0 run).
                 SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid, 0),
@@ -1470,11 +1490,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// expectation. `arm = None` is what makes a waiter STATIC sensitivity.
     #[cfg(test)]
     pub(crate) fn has_static_level_waiter(&self, pi: u32) -> bool {
-        self.waiters.iter().any(|w| {
-            w.ready.proc == pi
-                && !w.in_body
-                && matches!(w.cause, crate::sched::WaitCause::Level { .. })
-        })
+        self.static_level_waiter_count(pi) > 0
     }
 
     /// How many EDGE registrations does `pi` hold? The other half of the arm
@@ -1548,12 +1564,32 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     #[cfg(test)]
     pub(crate) fn consume_static_level_waiter_for_test(&mut self, pi: u32) {
         let before = self.waiters.len();
+        let gen = self.activities[pi as usize].static_gen;
         self.waiters.retain(|w| {
             !(w.ready.proc == pi
                 && !w.in_body
+                && w.gen == gen
                 && matches!(w.cause, crate::sched::WaitCause::Level { .. }))
         });
         self.n_level_waiters -= before - self.waiters.len();
+        self.activities[pi as usize].static_level_live = false;
+    }
+
+    /// How many LIVE static-level waiters does `pi` hold? At most one
+    /// (`Activity::static_level_live`); the count is what shows a second one,
+    /// which `has_static_level_waiter` cannot.
+    #[cfg(test)]
+    pub(crate) fn static_level_waiter_count(&self, pi: u32) -> usize {
+        let gen = self.activities[pi as usize].static_gen;
+        self.waiters
+            .iter()
+            .filter(|w| {
+                w.ready.proc == pi
+                    && !w.in_body
+                    && w.gen == gen
+                    && matches!(w.cause, crate::sched::WaitCause::Level { .. })
+            })
+            .count()
     }
 
     /// `arm_seq` = the change sequence this arming is AFTER: 0 at time 0 (the
@@ -1584,15 +1620,43 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // re-fire on ANY change of a read net. Empty edges (e.g. a bare
             // self-timed `always` that re-arms via in-body #/@) register nothing.
             SensKind::Level | SensKind::Comb | SensKind::Latch => {
-                let nets: Vec<u32> = p.sensitivity.edges.iter().map(|e| e.net).collect();
-                if !nets.is_empty() {
-                    self.waiters.push(Waiter {
-                        cause: WaitCause::Level { nets },
-                        ready,
-                        in_body: false, // static sensitivity: re-fire on any change after the arm
-                        arm_seq,
-                    });
-                    self.n_level_waiters += 1; // WAITER-POOL p2
+                if p.sensitivity.edges.is_empty() {
+                    return;
+                }
+                // At most ONE live static waiter per activity (`Activity::
+                // static_level_live`). In a run every activation start consumes
+                // the waiter — a fire, or `take_t0_trigger` for an implicit
+                // time-0 pass — so a re-arm finds none live; arming is kept
+                // idempotent anyway (a second arm refreshes `arm_seq`), as native's
+                // one `level_armed` bool is, and the s584 unit differential pins
+                // the two: a pushed second waiter would wake the block twice per
+                // change on interp/vm and once on native. The scan runs only while
+                // the flag is set.
+                let gen = self.activities[pi as usize].static_gen;
+                let live = if self.activities[pi as usize].static_level_live {
+                    self.waiters.iter().position(|w| {
+                        w.ready.proc == pi
+                            && !w.in_body
+                            && w.gen == gen
+                            && matches!(w.cause, WaitCause::Level { .. })
+                    })
+                } else {
+                    None
+                };
+                match live {
+                    Some(i) => self.waiters[i].arm_seq = arm_seq,
+                    None => {
+                        let nets: Vec<u32> = p.sensitivity.edges.iter().map(|e| e.net).collect();
+                        self.waiters.push(Waiter {
+                            cause: WaitCause::Level { nets },
+                            ready,
+                            in_body: false, // static sensitivity: re-fire on any change after the arm
+                            arm_seq,
+                            gen,
+                        });
+                        self.n_level_waiters += 1; // WAITER-POOL p2
+                        self.activities[pi as usize].static_level_live = true;
+                    }
                 }
             }
             _ => {}

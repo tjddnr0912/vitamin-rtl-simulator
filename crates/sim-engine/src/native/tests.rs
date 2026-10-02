@@ -1807,11 +1807,11 @@ fn s1d3_wake_decision_matches_engine() {
             sched.reset_edge_seen_marks();
             wake.reset_edge_seen();
             saw_dedup += 1;
-            // `arm_processes` QUEUES Comb/Latch into Active at t0 rather than
-            // ARMING them; they arm when that first run completes. Bodies never
-            // run here, so model that completion — but only AFTER pass 0, so the
-            // sweep observes BOTH states. Re-arming immediately made the t0
-            // distinction unobservable (measured: the wrong arm state passed).
+            // `arm_processes` ARMS Comb/Latch at t0 (§4.5.584) and holds their
+            // implicit pass for the first promotion. Bodies never run here; this
+            // re-arms every Comb/Latch AFTER pass 0, so the sweep observes both a
+            // consumed-then-re-armed waiter and a refreshed live one (arming is
+            // idempotent: the engine keeps ONE, native one bool).
             if pass == 0 {
                 for p in 0..ir.processes.len() as u32 {
                     if matches!(

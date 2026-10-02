@@ -22,21 +22,111 @@ impl Scheduler<'_, '_> {
     /// next settle woke sorted in ahead of them. With no batch to wait for, the
     /// wakes are the batch. `Some` = hold. A design whose settle moved nothing
     /// is untouched.
-    fn take_t0_wakes(&mut self) -> Option<Vec<Ready>> {
+    ///
+    /// The `always_comb` / `always_latch` processes it wakes (armed at seeding,
+    /// §4.5.584) are returned apart, as `.1`: `run` gives each a batch of its
+    /// own with a settle after it, after the first batch and before the batch
+    /// the held wakes lead — so a process the first batch woke reads, through a
+    /// continuous assign or a port, what the block computed. Both oracles print
+    /// `b2 t=0 v=01` for `assign w = 2'd1; always_comb y = w; assign v = y;`
+    /// read by an `always @(t)` that `initial t = 1;` wakes; with the block at
+    /// the front of the held batch its write reached `v` one settle late (`xx`).
+    /// With no first batch they run before the rest of the wakes, which are then
+    /// held rather than queued so they wait for those passes.
+    fn take_t0_wakes(&mut self) -> (Option<Vec<Ready>>, Vec<Ready>) {
         if self.st.dirty.is_empty() {
-            return None;
+            return (None, Vec::new());
         }
         let batch = std::mem::take(&mut self.cur.active);
         self.propagate_changes();
         let woken = std::mem::replace(&mut self.cur.active, batch);
-        if woken.is_empty() {
+        let (combs, woken): (Vec<Ready>, Vec<Ready>) =
+            woken.into_iter().partition(|r| self.is_t0_comb(r.proc));
+        let held = if woken.is_empty() {
             None
-        } else if self.cur.active.is_empty() {
+        } else if self.cur.active.is_empty() && combs.is_empty() {
             self.cur.active = woken;
             None
         } else {
             Some(woken)
+        };
+        (held, combs)
+    }
+
+    /// Is activity `aid` an `always_comb` / `always_latch` (a base activity of
+    /// kind `Comb` / `Latch`)? The processes whose time-0 passes `run` gives a
+    /// batch each. Every wake `take_t0_wakes` sees is a static waiter, so a base
+    /// activity; the `is_child` test keeps a fork arm out regardless.
+    fn is_t0_comb(&self, aid: u32) -> bool {
+        let a = &self.activities[aid as usize];
+        !a.is_child
+            && matches!(
+                self.st.ir.processes[a.template as usize].sensitivity.kind,
+                SensKind::Comb | SensKind::Latch
+            )
+    }
+
+    /// Deliver the implicit time-0 pass of `always_comb` / `always_latch` `aid`
+    /// (IEEE 1800 §9.2.2.2) as a TRIGGER — what it does is the `T0Trigger` returned:
+    /// - `Run` when the block is idle at its top: its static level waiter live, which
+    ///   starting the pass consumes as a wake does (re-armed when the body returns;
+    ///   retired in O(1) by bumping `Activity::static_gen`), or no read set at all.
+    /// - `RunSuperseding` when it is not busy and its waiter is already consumed:
+    ///   woken and not yet run. By census its start then waits in `cur.active` — a
+    ///   static wake is pushed only there; the held settle wakes carry no
+    ///   `always_comb`, the settle-woken ones have all run before any trigger, and a
+    ///   body's `#0` resume is a busy activity's — so the pass runs now and `run`
+    ///   removes that pending start (`drop_superseded_starts`) before the queue next
+    ///   runs: one activation, in the trigger's slot. Dropping the trigger instead
+    ///   left the woken run behind every later trigger, so a block two hops down a
+    ///   chain read its input stale (W4031 / E4003 at time 0, review r2 R2-1..3).
+    /// - `Drop` when it is busy: running, suspended inside its body (a timing
+    ///   control, directly or in a task) or stopped at `$finish`. Delivered
+    ///   regardless, the pass re-entered a body that had run `$finish` (both oracles:
+    ///   once) and overlapped a suspended activation of the same process (review r1
+    ///   F1, F1b).
+    ///
+    /// The tier-3 twin is `WakeTable::take_t0_trigger`.
+    fn take_t0_trigger(&mut self, aid: u32) -> T0Trigger {
+        let a = &self.activities[aid as usize];
+        if a.busy {
+            return T0Trigger::Drop;
         }
+        if self.st.ir.processes[a.template as usize]
+            .sensitivity
+            .edges
+            .is_empty()
+        {
+            return T0Trigger::Run;
+        }
+        if !a.static_level_live {
+            return T0Trigger::RunSuperseding;
+        }
+        let a = &mut self.activities[aid as usize];
+        a.static_level_live = false;
+        a.static_gen = a.static_gen.wrapping_add(1);
+        self.n_stale_static += 1;
+        T0Trigger::Run
+    }
+
+    /// Remove from `cur.active` the pending start of every block whose implicit pass
+    /// ran in its place (`T0Trigger::RunSuperseding`): the first entry of that
+    /// activity at its entry block — the oldest, as the queue is sorted by
+    /// `(seq, tie)`; a later wake of the same block, after its pass re-armed it, is
+    /// newer and stays. One pass over the queue for the whole set.
+    fn drop_superseded_starts(&mut self, superseded: &mut Vec<u32>) {
+        let mut owed: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+        for aid in superseded.drain(..) {
+            let entry = self.st.ir.processes[self.activities[aid as usize].template as usize].entry;
+            owed.entry(aid).or_insert((entry, 0)).1 += 1;
+        }
+        self.cur.active.retain(|r| match owed.get_mut(&r.proc) {
+            Some((entry, n)) if *n > 0 && *entry == r.block => {
+                *n -= 1;
+                false
+            }
+            _ => true,
+        });
     }
 
     pub fn run(&mut self) -> FinishReason {
@@ -44,8 +134,36 @@ impl Scheduler<'_, '_> {
         // a clocking edge at t=0 then samples the init values. No-op without
         // clocking blocks ⇒ byte-identical.
         self.st.snapshot_preponed();
-        let mut t0_woken = self.take_t0_wakes();
-        let mut t0_first_batch_done = false;
+        let (mut t0_woken, t0_settle_combs) = self.take_t0_wakes();
+        // With no first batch there is nothing for the held wakes or the comb
+        // passes to wait for (`take_t0_wakes` left the first batch empty).
+        let mut t0_first_batch_done = self.cur.active.is_empty();
+        // T0 COMB PASSES (IEEE 1800 §9.2.2.2, §4.5.584). Each pass an
+        // `always_comb` / `always_latch` owes at time 0 runs as a batch of ONE,
+        // followed by the loop-top settle, while the batch it interrupts waits in
+        // `t0_parked` and rejoins by `(seq, tie)` after it: so what one block
+        // writes reaches the next block — and the processes behind them — through
+        // continuous assigns and ports, which settle only between batches. Two
+        // kinds of pass, in this order: the blocks the time-0 settle woke
+        // (`t0_settle_combs`, due once the first batch has run, ahead of the
+        // batch the held wakes lead), and the implicit pass of every block
+        // (`t0_implicit`, due at the first Inactive promotion, ahead of the
+        // promoted `#0` resumes). In one batch the passes read one another's
+        // outputs before a settle, and a reader woken in that batch read them one
+        // settle late — both oracles print the value. A settle-woken pass is an
+        // ordinary wake; an implicit pass is a TRIGGER (`take_t0_trigger`): a
+        // block the settle or the first batch woke and that returned is idle at
+        // its top again and runs twice at time 0, as iverilog runs it (verilator
+        // once); one woken and not yet run runs once, the pass taking its pending
+        // wake's place; one running, suspended inside its body or stopped at
+        // `$finish` gets no second activation.
+        let mut t0_combs_owed = t0_settle_combs;
+        let mut t0_serial: std::collections::VecDeque<Ready> = std::collections::VecDeque::new();
+        let mut t0_triggers: std::collections::VecDeque<Ready> = std::collections::VecDeque::new();
+        // Blocks whose implicit pass ran in place of their pending wake, whose
+        // pending start `drop_superseded_starts` removes before the queue runs.
+        let mut t0_superseded: Vec<u32> = Vec::new();
+        let mut t0_parked: Option<Vec<Ready>> = None;
         loop {
             if self.st.finished {
                 return self.finish_kind();
@@ -79,14 +197,45 @@ impl Scheduler<'_, '_> {
                 if self.check_call_fatal() {
                     return FinishReason::Error;
                 }
-                if !self.cur.active.is_empty() || (t0_first_batch_done && t0_woken.is_some()) {
-                    // Take the batch so wakes triggered DURING it land in a fresh
-                    // `cur.active`; iterate borrowed (`Ready: Copy`) so the Vec can
-                    // be handed back below — consuming it dropped one allocation
-                    // per delta.
-                    // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
-                    // wakes lead the first batch taken after the first one.
-                    let mut batch = match (t0_first_batch_done, t0_woken.take()) {
+                // T0 COMB PASSES: the batch a pass parked rejoins, then the next
+                // pass due takes a batch of its own.
+                if let Some(parked) = t0_parked.take() {
+                    rejoin_sorted(&mut self.cur.active, parked);
+                }
+                if t0_first_batch_done && !t0_combs_owed.is_empty() {
+                    t0_serial.extend(t0_combs_owed.drain(..));
+                }
+                // Take the batch so wakes triggered DURING it land in a fresh
+                // `cur.active`; iterate borrowed (`Ready: Copy`) so the Vec can
+                // be handed back below — consuming it dropped one allocation
+                // per delta.
+                // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
+                // wakes lead the first batch taken after the first one.
+                let pass = match t0_serial.pop_front() {
+                    Some(pass) => Some(pass),
+                    None => {
+                        let mut due = None;
+                        while let Some(p) = t0_triggers.pop_front() {
+                            match self.take_t0_trigger(p.proc) {
+                                T0Trigger::Run => {}
+                                T0Trigger::RunSuperseding => t0_superseded.push(p.proc),
+                                T0Trigger::Drop => continue,
+                            }
+                            due = Some(p);
+                            break;
+                        }
+                        due
+                    }
+                };
+                if pass.is_none() && !t0_superseded.is_empty() {
+                    self.drop_superseded_starts(&mut t0_superseded);
+                }
+                let batch = if let Some(pass) = pass {
+                    t0_parked = Some(std::mem::take(&mut self.cur.active));
+                    Some(vec![pass])
+                } else if !self.cur.active.is_empty() || (t0_first_batch_done && t0_woken.is_some())
+                {
+                    Some(match (t0_first_batch_done, t0_woken.take()) {
                         (true, Some(mut held)) => {
                             held.append(&mut self.cur.active);
                             held
@@ -95,7 +244,11 @@ impl Scheduler<'_, '_> {
                             t0_woken = held;
                             std::mem::take(&mut self.cur.active)
                         }
-                    };
+                    })
+                } else {
+                    None
+                };
+                if let Some(mut batch) = batch {
                     t0_first_batch_done = true;
                     self.refresh_wake_seq(); // wake-group refresh point (2): batch take
                                              // Index-based: a body's `spawned` arms are spliced in after it.
@@ -141,6 +294,13 @@ impl Scheduler<'_, '_> {
                             // NBA on the other term of `@(posedge a or posedge
                             // b)`) ran the body again from the top (review r1
                             // F1: `n=2` where iverilog ends the thread, `n=1`).
+                            // A level waiter was consumed when this activation
+                            // started and is re-armed only on `Done`, and an
+                            // `always_comb`'s implicit time-0 pass is dropped for
+                            // a busy body (`take_t0_trigger`):
+                            // both oracles print `C t=0 a=1` once for `initial a
+                            // = 1;` before `always_comb begin …; if (a) $finish;
+                            // end` (§4.5.584 review r1 F1).
                             Step::Finish => {
                                 self.finish_pending = true;
                                 if let Some(a) = self.activities.get_mut(r.proc as usize) {
@@ -222,7 +382,11 @@ impl Scheduler<'_, '_> {
                 // `assign #0 a = u`) waits for the next promotion, as the LRM's
                 // next Inactive round. The tier-3 loop is the twin.
                 let ca_due = self.next_delayed_ca() == Some(self.st.now);
-                if !self.cur.inactive.is_empty() || ca_due {
+                if !self.cur.inactive.is_empty() || ca_due || !self.t0_implicit.is_empty() {
+                    // T0 COMB PASSES, second kind: the implicit passes lead the
+                    // first promotion at time 0, one batch each (above), and what
+                    // this promotes waits behind them in `t0_parked`.
+                    t0_triggers.extend(self.t0_implicit.drain(..));
                     // GATED-CLOCK: a #0 batch is a NEW event cluster — an edge it
                     // produces (e.g. an independent `negedge rst` scheduled via #0)
                     // must be able to re-fire a process already woken this timestep.

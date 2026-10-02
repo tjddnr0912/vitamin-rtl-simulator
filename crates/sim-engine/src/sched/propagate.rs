@@ -161,6 +161,21 @@ impl Scheduler<'_, '_> {
         // p2: same zero-skip guard — no `Level` waiter ⇒ `level_fire` is unused.
         let mut level_fire = std::mem::take(&mut self.scratch_level_fire); // WAITER-POOL
         level_fire.clear();
+        // A static waiter `take_t0_trigger` retired (its `gen` behind its
+        // activity's) neither fires nor stays: dropped silently below. Asked only
+        // while one exists (`n_stale_static`, time 0 only).
+        let stale: Vec<bool> = if self.n_stale_static > 0 {
+            self.waiters
+                .iter()
+                .map(|w| {
+                    !w.in_body
+                        && matches!(w.cause, WaitCause::Level { .. })
+                        && w.gen != self.activities[w.ready.proc as usize].static_gen
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         if self.n_level_waiters > 0 {
             level_fire.extend(self.waiters.iter().map(|w| match &w.cause {
                 // The changed-set scan is needed only for a waiter armed at
@@ -186,7 +201,18 @@ impl Scheduler<'_, '_> {
         // Expr/Edge does not re-push, so the decrement is net-correct.
         let mut removed_expr = 0usize;
         let mut removed_level = 0usize;
+        let mut removed_stale = 0usize;
+        // Activities whose static level waiter this sweep consumes: their
+        // `static_level_live` clears after the retain (it cannot borrow
+        // `activities`). Allocates only when a static waiter fires.
+        let mut unarmed: Vec<u32> = Vec::new();
         self.waiters.retain(|w| {
+            if !stale.is_empty() && stale[wi] {
+                removed_level += 1;
+                removed_stale += 1;
+                wi += 1;
+                return false;
+            }
             let keep = match &w.cause {
                 // Level + inferred-comb: fire per the pre-computed after-the-arm test.
                 WaitCause::Level { .. } => !level_fire[wi],
@@ -205,15 +231,24 @@ impl Scheduler<'_, '_> {
                 woken.push(w.ready); // re-armed on resume (Level/Expr) or consumed (Edge)
                 match &w.cause {
                     WaitCause::Expr { .. } => removed_expr += 1,
-                    WaitCause::Level { .. } => removed_level += 1,
+                    WaitCause::Level { .. } => {
+                        removed_level += 1;
+                        if !w.in_body {
+                            unarmed.push(w.ready.proc);
+                        }
+                    }
                     _ => {}
                 }
             }
             wi += 1;
             keep
         });
+        for pi in unarmed {
+            self.activities[pi as usize].static_level_live = false;
+        }
         self.n_expr_waiters -= removed_expr;
         self.n_level_waiters -= removed_level;
+        self.n_stale_static -= removed_stale;
         for mut r in woken {
             r.seq = gseq;
             push_sorted(&mut self.cur.active, r);
@@ -582,6 +617,7 @@ impl Scheduler<'_, '_> {
             ready,
             in_body: true,
             arm_seq,
+            gen: 0,
         });
     }
 
@@ -652,7 +688,11 @@ impl Scheduler<'_, '_> {
     /// - `SensKind::Level` waiters ARE consumed on fire (`waiters.retain` returns
     ///   `false`), so Level MUST re-arm or it would never wake again — and the
     ///   `infinite_delta_guard_trips` test depends on this re-registration.
-    /// - `Initial` is one-shot (dead after its single run).
+    ///   `Comb`/`Latch` are armed at seeding as well; an `always_comb`'s implicit
+    ///   time-0 pass consumes that waiter when it starts (`take_t0_trigger`), so
+    ///   its return re-arms like any other.
+    /// - `Initial` is one-shot (dead after its single run; a self-timed `always`,
+    ///   also `Initial`, never returns).
     pub(crate) fn rearm(&mut self, proc: u32) {
         // Fork children NEVER re-arm: a child's reaching its join is a one-shot
         // completion, routed by the run_process loop-top intercept to
@@ -939,6 +979,8 @@ impl Scheduler<'_, '_> {
                 wait_fork: None,
                 busy: false,
                 gen: 0,
+                static_level_live: false,
+                static_gen: 0,
             };
             // Recycle a completed child slot when available (P3-1): a freed slot's
             // old activity has reported (it cannot be queued/waiting anywhere).

@@ -2091,6 +2091,94 @@ fn s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry() {
     assert_eq!(compared, 15, "re-arm coverage moved — re-pin deliberately");
 }
 
+/// §4.5.584 — **a re-arm with no fire in between leaves ONE live waiter on both
+/// sides.** An `always_comb` / `always_latch` is armed at seeding. Native keeps one
+/// bool (`level_armed`), so arming it twice leaves it armed once; the engine used
+/// to PUSH a second waiter on a second arm (measured 1 → 2 → 3), which woke the
+/// block twice per later change on interp/vm and once on native. In a run the
+/// implicit time-0 pass consumes the seeding arm when it starts (`take_t0_trigger`)
+/// and the sequence below does not occur; this pins that arming stays idempotent
+/// on both sides regardless. `has_static_level_waiter` cannot see the
+/// multiplicity, so the count is asked.
+#[test]
+fn s584_a_rearm_with_no_fire_keeps_one_live_static_waiter_on_both_sides() {
+    let designs: [(&str, &str); 2] = [
+        (
+            "always_comb",
+            "module t;\n\
+               reg [7:0] a; reg [7:0] o;\n\
+               always_comb o = a ^ 8'h5a;\n\
+               initial begin a = 8'd3; end\n\
+             endmodule\n",
+        ),
+        (
+            "always_latch",
+            "module t;\n\
+               reg en; reg [7:0] din; reg [7:0] dout;\n\
+               always_latch if (en) dout = din;\n\
+               initial begin en = 0; din = 8'h5a; end\n\
+             endmodule\n",
+        ),
+    ];
+    let mut checked = 0usize;
+    for (name, src) in designs {
+        let (ir, opts) = build_with_opts(src);
+        let arena = NetArena::build(&ir, &opts).expect("arena builds");
+        let sink = NullSink;
+        let mut st_e = fresh_state(&ir, &sink);
+        let mut st_n = fresh_state(&ir, &sink);
+        let empty: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, opts.fork_modes.clone());
+        sched_e.arm_processes();
+        let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
+        let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
+        for (pi, p) in ir.processes.iter().enumerate() {
+            if !matches!(
+                p.sensitivity.kind,
+                sim_ir::SensKind::Comb | sim_ir::SensKind::Latch
+            ) {
+                continue;
+            }
+            let pi = pi as u32;
+            // Armed at seeding on both sides, exactly once.
+            assert_eq!(
+                sched_e.static_level_waiter_count(pi),
+                1,
+                "{name}: seeding arm"
+            );
+            assert!(
+                nk.wake.level_armed_for_test(pi),
+                "{name}: native seeding arm"
+            );
+            // The implicit pass returns twice over with nothing fired in between.
+            for round in 0..2 {
+                sched_e.rearm(pi);
+                nk.k_rearm(pi);
+                assert_eq!(
+                    sched_e.static_level_waiter_count(pi),
+                    1,
+                    "{name}/round{round}: a re-arm with the seeding waiter live pushed a second"
+                );
+                assert_eq!(
+                    sched_e.has_static_level_waiter(pi),
+                    nk.wake.level_armed_for_test(pi),
+                    "{name}/round{round}: arm state diverged"
+                );
+            }
+            // A fire consumes it; the next re-arm pushes exactly one again.
+            sched_e.consume_static_level_waiter_for_test(pi);
+            nk.wake.set_level_armed_for_test(pi, false);
+            assert_eq!(sched_e.static_level_waiter_count(pi), 0, "{name}: consumed");
+            sched_e.rearm(pi);
+            nk.k_rearm(pi);
+            assert_eq!(sched_e.static_level_waiter_count(pi), 1, "{name}: re-armed");
+            assert!(nk.wake.level_armed_for_test(pi), "{name}: native re-armed");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 2, "one Comb and one Latch process must be checked");
+}
+
 /// Is `Initial` ever a process with a NON-EMPTY sensitivity read set? If it were,
 /// folding it into `k_rearm`'s re-arm arm would be a real defect; if it never is,
 /// that fold is an EQUIVALENT mutation and saying so is more useful than a test

@@ -164,6 +164,21 @@ pub(crate) struct Activity {
     /// report from a later activation that recycled the same `aid`. Top-level
     /// processes never recycle, so their generation stays 0.
     pub gen: u32,
+    /// Does this activity hold a LIVE static level waiter — one `arm_sensitivity`
+    /// pushed and nothing has consumed since? It is the "idle at its top" an
+    /// `always_comb`'s implicit time-0 pass asks for (`take_t0_trigger`, §4.5.584).
+    /// At most one waiter may exist, as native's `WakeTable::level_armed` is one
+    /// bool per process. Set where `arm_sensitivity` pushes; cleared where the
+    /// waiter is consumed (`propagate_changes`' retain, `take_t0_trigger`, the
+    /// test-only consume). While it is set, a re-arm refreshes that waiter's
+    /// `arm_seq` instead of pushing.
+    pub static_level_live: bool,
+    /// Generation of this activity's static level waiter. `take_t0_trigger`
+    /// retires the live waiter in O(1) by bumping it: a static waiter whose `gen`
+    /// differs is stale — it never fires, and `propagate_changes` drops it
+    /// (`Scheduler::n_stale_static`). Removing it in place scanned every waiter
+    /// per trigger, quadratic in the number of `always_comb` blocks at time 0.
+    pub static_gen: u32,
 }
 
 /// A process blocked on `wait fork;` (IEEE §9.6.1) — parked until all of its
@@ -247,9 +262,9 @@ struct Waiter {
     ready: Ready,
     /// `true` for an IN-BODY `@(sig)`/`@(*)`/`@(posedge x)`/`wait(e)` registered by
     /// `suspend_on`; `false` for a STATIC always/comb sensitivity registered by
-    /// `arm_sensitivity`. (The static waiter is what `consume_static_level_waiter`
-    /// looks for; nothing in the run reads it.)
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// `arm_sensitivity`. Read where a static waiter is consumed, to clear its
+    /// activity's `static_level_live`, and by `arm_sensitivity` to find the one
+    /// live static waiter it refreshes.
     in_body: bool,
     /// CHANGE SEQUENCE at ARM time (`SimState::change_seq`): a LEVEL waiter
     /// fires only on a change stamped AFTER it, so a write that landed before
@@ -278,6 +293,25 @@ struct Waiter {
     /// Same-time resumes now run in scheduling order (`Ready::seq`); the edge
     /// half of the after-the-arm rule is not applied here.
     arm_seq: u64,
+    /// A static waiter's `Activity::static_gen` when it was pushed (an in-body
+    /// waiter's is 0 and never read): it is live only while the two agree.
+    gen: u32,
+}
+
+/// What an `always_comb` / `always_latch`'s implicit time-0 pass does when its turn
+/// comes (`Scheduler::take_t0_trigger`, `native::wake::WakeTable::take_t0_trigger`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum T0Trigger {
+    /// Run the pass now: the block is idle at its top (its waiter, now consumed, was
+    /// armed, or it has no read set).
+    Run,
+    /// Run the pass now IN PLACE OF the block's pending wake: woken and not yet run,
+    /// its start waits in the Active queue and is removed from there before the
+    /// queue next runs, so the block runs once, in the trigger's slot.
+    RunSuperseding,
+    /// Drop it: the block is running, suspended inside its body, or stopped at
+    /// `$finish`.
+    Drop,
 }
 
 /// One INERTIAL-delay continuous-assign write: `(cont-assign index,
@@ -297,6 +331,12 @@ pub(crate) struct Scheduler<'a, 'ir> {
     pub st: &'a mut SimState<'ir>,
     /// Current time's Active/Inactive buckets.
     cur: SlotQueues,
+    /// The implicit time-0 passes of every `always_comb` / `always_latch` (IEEE
+    /// 1800 §9.2.2.2), queued at seeding with the seed `seq`, tie order. Taken by
+    /// the first Inactive promotion at time 0, where each runs as a batch of its
+    /// own, followed by a settle, before the promoted `#0` resumes (`run`). Empty
+    /// from then on.
+    t0_implicit: Vec<Ready>,
     /// NBA region (applied as a batch when Active+Inactive empty).
     pub(crate) nba: Vec<NbaUpdate>,
     /// The `Lvalue` `apply_nba` lends to a single-chunk update so it can call the
@@ -353,6 +393,10 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// nothing for those scans. Byte-identical: the skipped buffer was unused.
     n_expr_waiters: usize,
     n_level_waiters: usize,
+    /// Static level waiters retired by `take_t0_trigger` (a bumped
+    /// `Activity::static_gen`) and not yet dropped by `propagate_changes`, which
+    /// checks staleness only while this is non-zero.
+    n_stale_static: usize,
 
     /// Activity id currently executing a body (set by `run_body`, the single
     /// dispatch choke) — `disable fork` kills THIS activity's descendants.

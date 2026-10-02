@@ -3,7 +3,8 @@
 //! `primitive … table … endtable endprimitive` with an `output` first port, N
 //! `input`s, and a single-colon truth table over symbols `0 1 x ? b` (inputs) and
 //! `0 1 x` (output). DESUGARED in the parser into a synthetic ordinary module: an
-//! `always @(*)` whose if/else-if cascade matches each input column 4-state-EXACT
+//! `initial` and an `always @(inputs)` (§4.5.584; it was an `always_comb`, and before
+//! that an `always @(*)`) sharing one if/else-if cascade that matches each input column 4-state-EXACT
 //! (`===`, NOT casez — casez would wildcard the scrutinee's x/z and silently
 //! mis-match), resolves conflicting rows order-INDEPENDENTLY by priority 0 > 1 > x,
 //! and yields x for any unmatched combination. Pure parser desugar (IR-0): no new

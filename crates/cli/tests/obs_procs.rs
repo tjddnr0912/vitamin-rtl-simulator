@@ -157,7 +157,7 @@ fn obs_procs_counts_are_hand_checkable() {
     // 5 processes: the two decl initializers are ONE synthesized flush, plus
     // `always #5`, `always_ff`, `always_comb`, `initial`. 1 continuous assign.
     assert!(
-        m.contains("\"counts\": {\"processes\": 5, \"assigns\": 1, \"total_evals\": 57}"),
+        m.contains("\"counts\": {\"processes\": 5, \"assigns\": 1, \"total_evals\": 58}"),
         "domain sizes / total wrong:\n{m}"
     );
     // COUNT-ONLY runs carry NO `time_s`: a 0.0 would read as "this body is
@@ -204,12 +204,17 @@ fn obs_procs_counts_are_hand_checkable() {
         },
         "continuous assign: {rows:?}"
     );
-    // `always_comb e = d ^ 8'hA5` (line 9): once at t=0 — the settle's change
-    // of `d` (`z → 1`) is delivered before the first batch, and the block arms
-    // its sensitivity only after that first run (verilator runs it once at
-    // time 0 too, iverilog twice — ROADMAP §2 Oracle splits; before §4.5.535
-    // the count was 2 on a constant driver and 1 here) — plus once per `d`
-    // change (10) ⇒ 11.
+    // `always_comb e = d ^ 8'hA5` (line 9): TWICE at t=0 — it is armed at
+    // seeding, so the settle's change of `d` (`z → 1`) wakes it and it runs, alone,
+    // after the first batch; then its implicit time-0 pass runs at the first
+    // promotion (§4.5.584) — plus once per `d` change (10) ⇒ 12. The time-0 count is
+    // an oracle split, now at iverilog's side, on this block with this driver
+    // (`t0_phantom_settle.rs`'s design, `$display("C %0t d=%0d e=%0d", …)` added):
+    //   iverilog 13.0:  C 0 d=1 e=164 / C 0 d=1 e=164
+    //   verilator 5.052: C 0 d=1 e=164
+    // Before §4.5.584 the count was 11 (verilator's once: the block ran in the first
+    // batch and armed only after it); before §4.5.535, 11 here and 12 on a constant
+    // driver.
     assert_eq!(
         rows[2],
         Row {
@@ -217,7 +222,7 @@ fn obs_procs_counts_are_hand_checkable() {
             kind: "always_comb".into(),
             scope: "tb".into(),
             line: 9,
-            evals: 11,
+            evals: 12,
         },
         "always_comb: {rows:?}"
     );
@@ -259,8 +264,9 @@ fn obs_procs_counts_are_hand_checkable() {
         },
         "decl-init flush: {rows:?}"
     );
-    // 21 + 12 + 11 + 10 + 2 + 1 == the published total.
-    assert_eq!(rows.iter().map(|r| r.evals).sum::<u64>(), 57);
+    // 21 + 12 + 12 + 10 + 2 + 1 == the published total. (The `assign` row sorts
+    // ahead of the `always_comb` row at 12 by the `(domain, index)` tie-break.)
+    assert_eq!(rows.iter().map(|r| r.evals).sum::<u64>(), 58);
 }
 
 /// R-F1: the COUNTS are deterministic, so two runs of the same input produce a
@@ -324,6 +330,104 @@ fn obs_procs_is_backend_invariant() {
         rows(&read(&i.join("run.json"))),
         "interp differs from native"
     );
+}
+
+/// A combinational UDP instance is two process rows, an `initial` and an `always`, at
+/// the primitive's own file/line/col and the instance's scope — never an `always_comb`
+/// row (§4.5.584: the table runs once in the first time-0 batch and on every input
+/// change; the manual's §14.5 and the CHANGELOG describe this shape). Before §4.5.584
+/// the instance was one `always_comb` row. Same rows on every backend.
+#[test]
+fn obs_procs_lists_a_combinational_udp_as_an_initial_and_an_always_row() {
+    // 1 primitive inv(o, a);
+    // 2   output o; input a;
+    // 3   table 0:1; 1:0; endtable
+    // 4 endprimitive
+    // 5 module tb;
+    // 6   logic k = 1'b0;
+    // 7   wire o;
+    // 8   inv u(o, k);
+    // 9   initial begin #1 $display("o=%b", o); $finish; end
+    // 10 endmodule
+    let src = "primitive inv(o, a);\n\
+               \x20 output o; input a;\n\
+               \x20 table 0:1; 1:0; endtable\n\
+               endprimitive\n\
+               module tb;\n\
+               \x20 logic k = 1'b0;\n\
+               \x20 wire o;\n\
+               \x20 inv u(o, k);\n\
+               \x20 initial begin #1 $display(\"o=%b\", o); $finish; end\n\
+               endmodule\n";
+    // `(kind, file, line, col, evals)` of every process row in scope `tb.u`, plus
+    // every process kind in the manifest.
+    type UdpRow = (String, String, u64, u64, u64);
+    let udp_rows = |m: &str| -> (Vec<UdpRow>, Vec<String>) {
+        let procs: Vec<&str> = m
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("{\"domain\": \"process\""))
+            .collect();
+        let kinds = procs.iter().map(|l| str_field(l, "kind")).collect();
+        let udp = procs
+            .iter()
+            .filter(|l| str_field(l, "scope") == "tb.u")
+            .map(|l| {
+                (
+                    str_field(l, "kind"),
+                    str_field(l, "file"),
+                    num_field(l, "line"),
+                    num_field(l, "col"),
+                    num_field(l, "evals"),
+                )
+            })
+            .collect();
+        (udp, kinds)
+    };
+    let mut per_backend = Vec::new();
+    for be in ["native", "interp", "vm"] {
+        let (stdout, code, obs) = run(src, &["--obs-procs", "--backend", be]);
+        assert_eq!(code, 0, "{be}: {stdout}");
+        assert!(stdout.contains("o=1"), "{be}: design did not run: {stdout}");
+        let m = read(&obs.join("run.json"));
+        let (udp, kinds) = udp_rows(&m);
+        assert!(
+            !kinds.iter().any(|k| k == "always_comb"),
+            "{be}: an always_comb row:\n{m}"
+        );
+        assert_eq!(udp.len(), 2, "{be}: UDP instance rows:\n{m}");
+        let (ki, fi, li, ci, ei) = &udp[0];
+        let (ka, fa, la, ca, ea) = &udp[1];
+        assert_eq!(
+            (ki.as_str(), ka.as_str()),
+            ("initial", "always"),
+            "{be}:\n{m}"
+        );
+        assert!(fi.ends_with("t.sv"), "{be}: file {fi}");
+        assert_eq!(
+            (fi, li, ci),
+            (fa, la, ca),
+            "{be}: rows at different sites:\n{m}"
+        );
+        assert_eq!(
+            (*li, *ci),
+            (1, 1),
+            "{be}: not the primitive's line/col:\n{m}"
+        );
+        // The `initial` evaluates the table once at time 0; the `always @(a)` never
+        // runs here: its input `k` is set only by a declaration initializer, which is
+        // no event (and the run ends before `k` changes).
+        assert_eq!((*ei, *ea), (1, 0), "{be}: evals:\n{m}");
+        // The file field is the path as given, a fresh directory per run: compared
+        // across backends without it.
+        let shape: Vec<(String, u64, u64, u64)> = udp
+            .into_iter()
+            .map(|(k, _, l, c, e)| (k, l, c, e))
+            .collect();
+        per_backend.push(shape);
+    }
+    assert_eq!(per_backend[0], per_backend[1], "interp differs from native");
+    assert_eq!(per_backend[0], per_backend[2], "vm differs from native");
 }
 
 /// `--obs-procs-time` adds `time_s` and flips `timed`. The VALUE is wall clock

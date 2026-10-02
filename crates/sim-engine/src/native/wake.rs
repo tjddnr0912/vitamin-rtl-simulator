@@ -149,22 +149,29 @@ impl WakeTable {
         WakeTable {
             net_to_edge,
             net_to_level,
-            // …but their t0 ARM STATE differs, and that half is what makes the
-            // registration correct rather than merely present: `arm_processes`
-            // ARMS a `Level` block (it waits for the first event) while it QUEUES
-            // a `Comb`/`Latch` block into Active to run at t0. So a Comb waiter
-            // does not exist until that first run completes and re-arms.
+            // …and their t0 ARM STATE agrees too: `arm_processes` ARMS a `Level`
+            // block (it waits for the first event) and, since §4.5.584, a
+            // `Comb`/`Latch` block as well — its implicit time-0 pass waits for
+            // the first promotion (`NativeKernel::t0_implicit`), and a change
+            // before it, the time-0 settle's included, must wake it as it wakes a
+            // level block. Before, a Comb/Latch block was queued into the first
+            // batch and had no waiter until that run re-armed it.
             //
             // ⚠️ `&& !edges.is_empty()` — the engine's `arm_sensitivity` pushes a
-            // waiter only `if !nets.is_empty()`, so a `Level` process with an
-            // EMPTY read set has no waiter there and must have none here. The
+            // waiter only for a non-empty read set, so a process with an EMPTY
+            // read set has no waiter there and must have none here. The
             // condition was latent until `always @*` became `Level`: every prior
             // `Level` came from an explicit `@(a or b)`, which always names nets.
             // Caught by `s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry`.
             level_armed: ir
                 .processes
                 .iter()
-                .map(|p| p.sensitivity.kind == SensKind::Level && !p.sensitivity.edges.is_empty())
+                .map(|p| {
+                    matches!(
+                        p.sensitivity.kind,
+                        SensKind::Level | SensKind::Comb | SensKind::Latch
+                    ) && !p.sensitivity.edges.is_empty()
+                })
                 .collect(),
             level_arm_seq: vec![0; ir.processes.len()],
             has_level_nets,
@@ -276,20 +283,44 @@ impl WakeTable {
     /// accident, not a design, and 4c-2's `busy` / quiescence work reads this
     /// state directly.
     ///
-    /// ⚠️ One difference REMAINS and is deliberate: `arm_sensitivity` PUSHES a
-    /// waiter, so calling it twice without an intervening fire leaves two
-    /// (measured 1 → 2 → 3) where this leaves one `true`. Faithful for every
-    /// reachable sequence — a waiter is consumed when it fires and re-armed once
-    /// on the completion that follows — but a model of the DECISION, not of the
-    /// engine's multiplicity. `n_level_waiters` is likewise absent here; it is a
-    /// fast-path counter guarding whether the engine runs its level pass at all,
-    /// and this table always runs its own.
+    /// Calling it twice without an intervening fire leaves one `true`, and so
+    /// does the engine: `arm_sensitivity` keeps at most one live static waiter
+    /// per activity and refreshes its `arm_seq` on a second arm
+    /// (`Activity::static_level_live`); it used to push a second (measured
+    /// 1 → 2 → 3). In a run every activation start consumes the arm (a fire, or
+    /// `take_t0_trigger`), so the sequence is the unit differential's, not a
+    /// run's.
+    /// `n_level_waiters` is absent here; it is a fast-path counter guarding
+    /// whether the engine runs its level pass at all, and this table always runs
+    /// its own.
     pub fn rearm_level(&mut self, proc: u32, arm_seq: u64) {
         if !self.has_level_nets[proc as usize] {
             return;
         }
         self.level_armed[proc as usize] = true;
         self.level_arm_seq[proc as usize] = arm_seq;
+    }
+
+    /// Deliver the implicit time-0 pass of `always_comb` / `always_latch` `proc` as a
+    /// trigger — the engine's `Scheduler::take_t0_trigger`, which carries the
+    /// argument: `Drop` when `busy`; `Run` with no read set or a live static arm,
+    /// which starting the pass consumes; otherwise `RunSuperseding` (woken, its start
+    /// pending in `active`). A base activity's id is its process id here (`arm_t0`
+    /// queues base activities only).
+    pub(crate) fn take_t0_trigger(&mut self, proc: u32) -> crate::sched::T0Trigger {
+        use crate::sched::T0Trigger;
+        let p = proc as usize;
+        if self.busy[p] {
+            return T0Trigger::Drop;
+        }
+        if !self.has_level_nets[p] {
+            return T0Trigger::Run;
+        }
+        if !self.level_armed[p] {
+            return T0Trigger::RunSuperseding;
+        }
+        self.level_armed[p] = false;
+        T0Trigger::Run
     }
 
     /// The kernel-side twin of `Scheduler::edge_registration_count`.

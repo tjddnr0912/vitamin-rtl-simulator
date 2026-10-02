@@ -719,7 +719,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `always` with `@( … )` | Supported | |
 | `always` with no `@` but in-body `#` or `@` | Supported | The clock-generator shape; starts at time 0. |
 | `always` with neither | Partial | Unschedulable; lowered as an inert process with a warning. |
-| `always_ff` / `always_comb` / `always_latch` | Supported | |
+| `always_ff` / `always_comb` / `always_latch` | Supported | `always_comb` and `always_latch` run once at time 0 (IEEE 1800 §9.2.2.2) after every `initial` and `always` has run its first slice and the continuous assigns have settled, before `#0` continuations and nonblocking updates; they are armed from the start, so a time-0 change of what they read runs them too ([006 §3.1, §3.2](006_limitations.md) list the time-0 order cases). |
 | `final` | Supported | Runs once after the main loop ends, whatever the finish reason. A timing control inside it is Loud (IEEE 1800 §9.2.3 makes a `final` block zero-time). |
 
 ### 8.1 Sensitivity and event control
@@ -1094,7 +1094,7 @@ instantiates like any other design unit.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Combinational UDP | Supported | One `always @(*)` with an if/else-if cascade. |
+| Combinational UDP | Supported | An `initial` and an `always @(inputs)` sharing one if/else-if cascade: the table is evaluated once in the first time-0 batch, as a gate's output is, and again on every input change. Not an `always_comb`, whose time-0 pass waits (§8). |
 | Sequential UDP | Supported | `output reg`, two-colon rows, edge columns, `-` hold and `initial q = 1'bN;`. The IEEE 1364 §29 state table is evaluated literally: level rows first, then edge rows, no match yields `x`, and `-` holds. |
 | Input level symbols | Supported | `0 1 x X ? b B` |
 | Edge symbols | Supported | `r R` = `(01)`, `f F` = `(10)`, `p P` = `{(01),(0x),(x1)}`, `n N` = `{(10),(1x),(x0)}`, `*` = any change, and explicit `(vw)` pairs. |

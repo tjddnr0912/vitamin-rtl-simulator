@@ -198,8 +198,10 @@ impl Elaborator<'_> {
         // `always_comb` × `always_comb` pair only — measured, verilator MULTIDRIVEN for
         // that pair and silent for `always_comb` × `initial`, and the oracles agree on
         // the value there). The identity is the SOURCE kind (`proc_idents`, lockstep
-        // with `processes`), not `SensKind::Comb`, which a bare self-timed `always` has
-        // too. A caller nested in a frame task body is not an `always_comb`.
+        // with `processes`). It was chosen over `SensKind::Comb` when a bare self-timed
+        // `always` shared that kind; since §4.5.584 that `always` is `Initial` and the two
+        // name the same processes. A caller nested in a frame task body is not an
+        // `always_comb`.
         if d.func_block.is_none() {
             let is_comb = self
                 .proc_idents

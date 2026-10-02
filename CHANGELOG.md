@@ -9,6 +9,46 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an `always_comb` / `always_latch` time-0 pass waits for its inputs
+
+- IEEE 1800-2017 §9.2.2.2 runs an `always_comb` once at time zero "after all initial and always
+  procedures have been started", and §9.2.2.3 gives `always_latch` the same rule. vitamin ran
+  that pass in the first time-0 batch, beside the `initial` bodies, so it read whatever an
+  `initial`, a continuous assign or a port connection had not written yet. Now the block is armed
+  from the start, so a time-0 change of what it reads wakes it as any later change would. A block
+  woken by the time-0 settle of continuous assigns and port connections runs after the first
+  batch, one block at a time with the continuous assigns settled after each. The implicit pass
+  itself runs once the time-0 Active region has drained, again one block at a time with a settle
+  after each, before anything waiting on `#0` resumes and before nonblocking updates. A block
+  woken but not yet run runs once, in its pass's place; a block that is running, suspended inside
+  its body or stopped at `$finish` gets no extra pass.
+- Gone where both reference tools are silent: `VITA-W4031` from a `unique` / `priority` arm, and
+  the `VITA-E4003` an immediate `assert` raises, at time 0 on an input that was still `x` — in a
+  block written before the `initial` that drives it, in a block fed through a continuous assign,
+  and in a module instantiated with its inputs fed through ports, the testbench written first
+  included. A design whose `assert` never really fails no longer exits 1, and a watcher no
+  longer sees an `x` → `0` → `1` glitch at time 0 (a spurious `@(negedge y)`, an extra `@(y)`
+  wake): the waveform shows `y` go from `x` to its value once.
+- A block whose input changes at time 0 now runs twice at time 0 — once for the change, once for
+  its implicit pass — as Icarus Verilog runs it (Verilator runs it once). A `$display` in it
+  prints twice, a real `unique` miss there reports twice, and `run.json`'s `evals`
+  (`--obs-procs`) counts both.
+- A combinational UDP is no longer lowered to an `always_comb`: its table is evaluated once in
+  the first time-0 batch and again on every input change, and every UDP design measured prints
+  what it printed before. Under `--obs-procs`, `run.json` lists each combinational-UDP instance as two rows,
+  `initial` and `always`, where it listed one `always_comb` row, as a sequential UDP already
+  was.
+- One shape still reports at time 0 where both tools are silent: a block written before the
+  block that feeds it, when nothing but declaration initializers, constants or continuous
+  assigns drive the chain (manual 006 §3.1). Where the reference tools disagree — a block with
+  no time-0 input change read before its pass, the run count, the order of several blocks'
+  passes — manual 006 §3.2 says which side vitamin takes.
+- The artifact `format_version` is now 35. The artifact tagged a self-timed or inert `always`
+  (no event control) like an `always_comb`, and a `.vu` carried a combinational UDP as an
+  `always_comb`; this build would run both differently. A `.vu` or `.velab` written by an older
+  build is refused at the header gate with `VITA-E9001` (exit 2) instead of being read; re-run
+  `vcmp` / `velab`, or just `vita`. No simulation-IR shape changed.
+
 ### Added — `case (e) inside` (IEEE 1800-2017 §12.5.4)
 
 - `case (v) inside 4'b1?00: …; [4'd1:4'd3]: …; default: …; endcase` runs. Each item is compared
@@ -576,7 +616,8 @@ changed for a user of the simulator.
   | 1'b1;` printed `got 0`); a process the batch's write reaches through a continuous assign
   (`always @(u)` on `wire u = ~s;` after `initial s = 0;`) also runs after the settle-woken one;
   an `always_comb` reading a settled net runs once at time 0 (it ran twice on a constant driver;
-  Verilator runs it once, Icarus Verilog twice).
+  Verilator runs it once, Icarus Verilog twice). Since the `always_comb` time-0 fix above it runs
+  twice, as Icarus Verilog does.
 
 ### Fixed — a constant-driven net no longer posedges at time 0
 
@@ -749,7 +790,8 @@ The inline-function fixes below needed two new entries in the frozen simulation 
 assignment conversion and an x/z→0 conversion, each naming its operand once — so the artifact
 `format_version` moved from 33 to 34. A `.velab` or `.vu` written by an older build is refused at
 the header gate with `VITA-E9001` instead of being read; rebuild the artifact (`vcmp` / `velab`, or
-just re-run `vita`). `run.json`'s `format_version` field reads 34.
+just re-run `vita`). `run.json`'s `format_version` field read 34 until the `always_comb` time-0
+fix above moved it to 35.
 
 ### Fixed — inline function calls: real actuals and right-hand sides, 2-state locals, class-field widths, one-draw narrowing
 

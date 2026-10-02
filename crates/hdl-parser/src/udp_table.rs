@@ -130,16 +130,50 @@ impl Parser<'_, '_> {
                 span,
             };
         }
-        // ⚠️ `always_comb`, NOT `always @*`, and the difference is time zero.
-        // A UDP is a PRIMITIVE (IEEE 1364 §29): like a gate, it has an output
-        // from the start, so its desugar needs the implicit time-zero execution
-        // §9.2.2.2 gives `always_comb` and explicitly does NOT give `always @*`.
-        // With `Star` this table produced `x` until an input first changed —
-        // caught by `udp_comb::udp_qmark_matches_z` the moment `always @*` was
-        // corrected to stop self-starting.
-        let always = ProceduralBlock {
-            kind: ProcKind::AlwaysComb,
+        // A UDP is a PRIMITIVE (IEEE 1364 §29): like a gate, it has an output from the
+        // start. So the table is evaluated ONCE in the first time-0 batch, as an
+        // `initial`, and again on every input change, as `always @(in1 or …)` — the
+        // sequential desugar's shape (`udp.rs`). Not `always @*`: that has no time-0
+        // run, and a table whose inputs never change produced `x` (caught by
+        // `udp_comb::udp_qmark_matches_z`). Not `always_comb` either, since
+        // §4.5.584: its implicit time-0 pass waits for the first `#0` promotion, so a
+        // table fed only by a declaration initializer (directly, through an assign,
+        // through a port) read `x` in every reader before it — `logic k = 1'b0; inv
+        // u(o, k);` read by an `always @(t)` that `initial t = 1;` wakes: iverilog
+        // 13.0 and verilator 5.052 print `o=1`, that `always_comb` printed `o=x`.
+        // The `initial` runs where the `always_comb` used to (first batch, its
+        // process slot). The level block is armed at seeding, so the time-0 settle
+        // of an input also wakes it, once, at the front of the batch after the
+        // first; it reads the inputs as they are then — unchanged unless the first
+        // batch wrote one, when it computes (and its change is the event of) what
+        // that write's own wake would compute. Measured, not proven per delta: every
+        // UDP cell and UDP test prints the value the `always_comb` desugar printed
+        // before §4.5.584, including `initial k = 1;` writing an input the settle
+        // had woken (review r2 R2-N2).
+        let init = ProceduralBlock {
+            kind: ProcKind::Initial,
             sensitivity: None,
+            body: Box::new(inner.clone()),
+            span,
+        };
+        let sens: Vec<EventExpr> = ordered_inputs
+            .iter()
+            .map(|inp| EventExpr {
+                edge: Edge::NoEdge,
+                expr: Expr {
+                    span,
+                    kind: ExprKind::Ident(HierPath {
+                        segments: vec![inp.clone()],
+                        span,
+                    }),
+                },
+                iff: None,
+                span,
+            })
+            .collect();
+        let always = ProceduralBlock {
+            kind: ProcKind::Always,
+            sensitivity: Some(Sensitivity::List(sens)),
             body: Box::new(Stmt::Block {
                 label: None,
                 decls: Vec::new(),
@@ -186,7 +220,7 @@ impl Parser<'_, '_> {
             name,
             params: Vec::new(),
             ports: PortList::Ansi(ports),
-            body: vec![ModuleItem::Proc(always)],
+            body: vec![ModuleItem::Proc(init), ModuleItem::Proc(always)],
             span,
             // Overwritten by the driver from `resolve_module_nettype`; the parser cannot
             // see the stripped directive, so it writes the IEEE default (`wire`).

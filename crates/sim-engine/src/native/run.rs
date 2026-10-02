@@ -41,7 +41,7 @@ use sim_ir::SimIr;
 
 use crate::exec::{Kernel, Step};
 use crate::native::body::{body_is_walkable, run_body};
-use crate::native::kernel::{push_sorted_native, NativeKernel, NativeReady};
+use crate::native::kernel::{push_sorted_native, rejoin_sorted_native, NativeKernel, NativeReady};
 use crate::sched::FinishReason;
 
 /// Run one process body — the ONE place tier-3 chooses between its two executors.
@@ -355,8 +355,22 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     // preponed values include the declaration initializers, as they do there.
     // No-op without clocking blocks ⇒ byte-identical.
     snapshot_preponed(k);
-    let mut t0_woken = take_t0_wakes(k);
-    let mut t0_first_batch_done = false;
+    let (mut t0_woken, t0_settle_combs) = take_t0_wakes(k, ir);
+    // T0 COMB PASSES — the engine's `Scheduler::run` carries the argument: each
+    // pass an `always_comb` / `always_latch` owes at time 0 (the settle-woken
+    // ones after the first batch, then every implicit one at the first
+    // promotion) is a batch of one followed by the loop-top settle, while the
+    // batch it interrupts waits in `t0_parked`.
+    let mut t0_first_batch_done = k.active.is_empty();
+    let mut t0_combs_owed = t0_settle_combs;
+    let mut t0_serial: std::collections::VecDeque<NativeReady> = std::collections::VecDeque::new();
+    // The implicit passes, each a trigger (`WakeTable::take_t0_trigger`).
+    // Blocks whose implicit pass ran in place of their pending wake
+    // (`drop_superseded_starts`).
+    let mut t0_superseded: Vec<u32> = Vec::new();
+    let mut t0_triggers: std::collections::VecDeque<NativeReady> =
+        std::collections::VecDeque::new();
+    let mut t0_parked: Option<Vec<NativeReady>> = None;
     let max_deltas = k.k_delta_budget();
     let time_limit = k.k_time_limit();
     loop {
@@ -386,14 +400,36 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 Some(true) => propagate(k),
                 Some(false) => {}
             }
-            if !k.active.is_empty() || (t0_first_batch_done && t0_woken.is_some()) {
-                // Take the batch so wakes triggered DURING it land in a fresh
-                // `active` — the engine's shape, and it is semantic rather than
-                // an allocation trick: a process woken by the batch belongs to
-                // the NEXT delta, not to the middle of this one.
-                // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
-                // wakes lead the first batch taken after the first one.
-                let mut batch = match (t0_first_batch_done, t0_woken.take()) {
+            let t0_live = t0_parked.is_some()
+                || !t0_combs_owed.is_empty()
+                || !t0_serial.is_empty()
+                || !t0_triggers.is_empty()
+                || !t0_superseded.is_empty();
+            let pass = if t0_live {
+                t0_next_pass(
+                    k,
+                    ir,
+                    &mut t0_parked,
+                    &mut t0_combs_owed,
+                    &mut t0_serial,
+                    &mut t0_triggers,
+                    &mut t0_superseded,
+                    t0_first_batch_done,
+                )
+            } else {
+                None
+            };
+            // Take the batch so wakes triggered DURING it land in a fresh
+            // `active` — the engine's shape, and it is semantic rather than
+            // an allocation trick: a process woken by the batch belongs to
+            // the NEXT delta, not to the middle of this one.
+            // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
+            // wakes lead the first batch taken after the first one.
+            let batch = if let Some(pass) = pass {
+                t0_parked = Some(std::mem::take(&mut k.active));
+                Some(vec![pass])
+            } else if !k.active.is_empty() || (t0_first_batch_done && t0_woken.is_some()) {
+                Some(match (t0_first_batch_done, t0_woken.take()) {
                     (true, Some(mut held)) => {
                         held.append(&mut k.active);
                         held
@@ -402,7 +438,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                         t0_woken = held;
                         std::mem::take(&mut k.active)
                     }
-                };
+                })
+            } else {
+                None
+            };
+            if let Some(mut batch) = batch {
                 t0_first_batch_done = true;
                 // Wake-group refresh point (2): every batch take.
                 k.sched.refresh_wake_seq();
@@ -451,7 +491,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                         // stable point below. `st.finished` stays false so the
                         // batch-top poll does not cut the drain short.
                         // The body is never re-entered (parked like a suspended
-                        // one; the engine's arm does the same — review r1 F1).
+                        // one; the engine's arm does the same — review r1 F1), by
+                        // an implicit time-0 pass either (`take_t0_trigger`).
                         Step::Finish => {
                             k.sched.finish_pending = true;
                             if r.proc == tmpl {
@@ -523,7 +564,10 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             // generation filter is the shared `take_due_delayed_ca`, only the
             // write is per-store.
             let ca_due = k.sched.next_delayed_ca() == Some(k.sched.st.now);
-            if !k.inactive.is_empty() || ca_due {
+            if !k.inactive.is_empty() || ca_due || !k.t0_implicit.is_empty() {
+                // T0 COMB PASSES, second kind: the implicit passes lead the first
+                // promotion at time 0; what this promotes is parked behind them.
+                t0_triggers.extend(k.t0_implicit.drain(..));
                 k.wake.reset_edge_seen();
                 if ca_due {
                     let due = k.sched.take_due_delayed_ca(k.sched.st.now);
@@ -1120,26 +1164,29 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
         if k.sched.st.final_procs.contains(&pi) {
             continue;
         }
+        let ready = NativeReady {
+            seq,
+            // A base activity's tie IS its process id (the seeding sets `tie ==
+            // template == index`), so this is the value the collapsed field
+            // carried before A4 restored it.
+            tie: pi,
+            proc: pi,
+            block: ir.processes[pi as usize].entry,
+        };
         match ir.processes[pi as usize].sensitivity.kind {
-            // initial + combinational/latch blocks RUN at t0…
-            sim_ir::SensKind::Initial | sim_ir::SensKind::Comb | sim_ir::SensKind::Latch => {
-                push_sorted_native(
-                    &mut k.active,
-                    NativeReady {
-                        seq,
-                        // A base activity's tie IS its process id (the seeding
-                        // sets `tie == template == index`), so this is the value
-                        // the collapsed field carried before A4 restored it.
-                        tie: pi,
-                        proc: pi,
-                        block: ir.processes[pi as usize].entry,
-                    },
-                );
+            // `initial` (and a self-timed / inert `always`) RUNS in the first
+            // time-0 batch…
+            sim_ir::SensKind::Initial => push_sorted_native(&mut k.active, ready),
+            // …an `always_comb` / `always_latch` is armed and its implicit pass
+            // waits for the first promotion (the engine's `arm_processes_after_seed`
+            // carries the argument)…
+            sim_ir::SensKind::Comb | sim_ir::SensKind::Latch => {
+                push_sorted_native(&mut k.t0_implicit, ready)
             }
             // …edge/level blocks WAIT for the first event. `WakeTable::new`
-            // already encodes both halves of that asymmetry (`level_armed =
-            // kind == Level`), which is why there is no arming call here: the
-            // registration is static and was built with the table.
+            // already arms `Level` and `Comb`/`Latch` (`level_armed`), which is
+            // why there is no arming call here: the registration is static and
+            // was built with the table.
             sim_ir::SensKind::Edge | sim_ir::SensKind::Level => {}
         }
     }
@@ -1196,22 +1243,103 @@ fn tick_due_now(k: &NativeKernel) -> bool {
 /// one — after the batch's writes and what the following settle made of them
 /// have propagated — the `initial` bodies, then the settle's wakes, then the
 /// batch-write wakes, which is what both oracles print. With no batch to wait
-/// for, the wakes are the batch.
-fn take_t0_wakes(k: &mut NativeKernel) -> Option<Vec<NativeReady>> {
+/// for, the wakes are the batch. The `always_comb` / `always_latch` wakes come
+/// back apart (`.1`), each to run alone with a settle after it — the engine's
+/// twin carries the argument.
+fn take_t0_wakes(k: &mut NativeKernel, ir: &SimIr) -> (Option<Vec<NativeReady>>, Vec<NativeReady>) {
     if k.arena.ch.dirty.is_empty() {
-        return None;
+        return (None, Vec::new());
     }
     let batch = std::mem::take(&mut k.active);
     propagate(k);
     let woken = std::mem::replace(&mut k.active, batch);
-    if woken.is_empty() {
+    let (combs, woken): (Vec<NativeReady>, Vec<NativeReady>) =
+        woken.into_iter().partition(|r| is_t0_comb(k, ir, r.proc));
+    let held = if woken.is_empty() {
         None
-    } else if k.active.is_empty() {
+    } else if k.active.is_empty() && combs.is_empty() {
         k.active = woken;
         None
     } else {
         Some(woken)
+    };
+    (held, combs)
+}
+
+/// T0 COMB PASSES, the engine's loop-top lines (`Scheduler::run` carries the argument):
+/// the batch a pass parked rejoins `active`, the settle-woken passes become due once the
+/// first batch has run, and the next pass due — a settle-woken one, else the next
+/// implicit-pass trigger `WakeTable::take_t0_trigger` delivers — is returned to run as a
+/// batch of its own; with none left, the pending starts superseded by a trigger leave
+/// `active`. Out of line on purpose, and called only while that time-0 state is live:
+/// inlined in `run()` it measured ibex +9% wall time against PRE, out of line +1%.
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+fn t0_next_pass(
+    k: &mut NativeKernel,
+    ir: &SimIr,
+    t0_parked: &mut Option<Vec<NativeReady>>,
+    t0_combs_owed: &mut Vec<NativeReady>,
+    t0_serial: &mut std::collections::VecDeque<NativeReady>,
+    t0_triggers: &mut std::collections::VecDeque<NativeReady>,
+    t0_superseded: &mut Vec<u32>,
+    t0_first_batch_done: bool,
+) -> Option<NativeReady> {
+    if let Some(parked) = t0_parked.take() {
+        rejoin_sorted_native(&mut k.active, parked);
     }
+    if t0_first_batch_done && !t0_combs_owed.is_empty() {
+        t0_serial.extend(t0_combs_owed.drain(..));
+    }
+    let pass = match t0_serial.pop_front() {
+        Some(pass) => Some(pass),
+        None => {
+            let mut due = None;
+            while let Some(p) = t0_triggers.pop_front() {
+                match k.wake.take_t0_trigger(p.proc) {
+                    crate::sched::T0Trigger::Run => {}
+                    crate::sched::T0Trigger::RunSuperseding => t0_superseded.push(p.proc),
+                    crate::sched::T0Trigger::Drop => continue,
+                }
+                due = Some(p);
+                break;
+            }
+            due
+        }
+    };
+    if pass.is_none() && !t0_superseded.is_empty() {
+        drop_superseded_starts(k, ir, t0_superseded);
+    }
+    pass
+}
+
+/// The engine's `Scheduler::drop_superseded_starts` (which carries the argument):
+/// remove from `active` the oldest pending start of each block whose implicit pass
+/// ran in its place.
+fn drop_superseded_starts(k: &mut NativeKernel, ir: &SimIr, superseded: &mut Vec<u32>) {
+    let mut owed: std::collections::BTreeMap<u32, (u32, u32)> = std::collections::BTreeMap::new();
+    for proc in superseded.drain(..) {
+        let entry = ir.processes[k.act_template(proc) as usize].entry;
+        owed.entry(proc).or_insert((entry, 0)).1 += 1;
+    }
+    k.active.retain(|r| match owed.get_mut(&r.proc) {
+        Some((entry, n)) if *n > 0 && *entry == r.block => {
+            *n -= 1;
+            false
+        }
+        _ => true,
+    });
+}
+
+/// The engine's `Scheduler::is_t0_comb`: a BASE activity (`act == template`,
+/// as `busy` decides it) of kind `Comb` / `Latch`.
+fn is_t0_comb(k: &NativeKernel, ir: &SimIr, act: u32) -> bool {
+    let tmpl = k.act_template(act);
+    act == tmpl
+        && matches!(
+            ir.processes[tmpl as usize].sensitivity.kind,
+            sim_ir::SensKind::Comb | sim_ir::SensKind::Latch
+        )
 }
 
 fn propagate(k: &mut NativeKernel) {

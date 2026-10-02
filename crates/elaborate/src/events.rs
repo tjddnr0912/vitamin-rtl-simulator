@@ -343,8 +343,16 @@ impl Elaborator<'_> {
     // ── sensitivity mapping ────────────────────────────────────────
     /// `ProcKind` + AST `Sensitivity` → `ir::Sensitivity`. Classification:
     /// any explicit edge ⇒ `Edge`; all bare ⇒ `Level`; `always_ff` forces
-    /// `Edge`; `@(*)`/`always_comb` ⇒ `Comb` (read-set inference deferred —
-    /// empty edges, no error); `always_latch` ⇒ `Latch`; `initial` ⇒ `Initial`.
+    /// `Edge`; `@(*)` ⇒ `Level` and `always_comb` ⇒ `Comb` (read-set inference
+    /// deferred — empty edges, no error); `always_latch` ⇒ `Latch`; `initial`
+    /// and an `always` with no header (self-timed or inert) ⇒ `Initial`.
+    ///
+    /// So `Comb` / `Latch` mean exactly `always_comb` / `always_latch`: the
+    /// processes IEEE 1800 §9.2.2.2 gives an implicit time-zero pass, which the
+    /// scheduler holds until the time-zero Active region has drained
+    /// (`Scheduler::arm_processes_after_seed`). A combinational UDP is not one of
+    /// them: `hdl-parser`'s `udp_table.rs` lowers it to an `initial` plus an
+    /// `always @(inputs)`.
     pub(crate) fn lower_sensitivity(
         &mut self,
         kind: ast::ProcKind,
@@ -374,20 +382,33 @@ impl Elaborator<'_> {
                     if stmt_has_timing(body) {
                         // Legal self-timed `always` (clock generator). The body's
                         // own #/@ drives time; the process re-runs (forever-wrapped
-                        // in lower_proc_block). No header edges → Comb-shaped arm.
+                        // in lower_proc_block, keyed on `ProcKind`, not on this
+                        // kind). It starts in the first time-0 batch like an
+                        // `initial` and never re-arms (its body never returns), so
+                        // it is `Initial`, not `Comb`: `Comb` is the `always_comb`
+                        // kind, whose time-0 pass waits for the first batch
+                        // (§4.5.584). Every scheduling consumer treated `Comb`
+                        // with empty edges and `Initial` alike (seeded in batch 1,
+                        // no waiter, no re-arm, empty read sets); the one reader
+                        // that tells them apart, levelize's `fusion_candidates`
+                        // (`kind == Comb`), feeds only the `#[ignore]`d
+                        // `perf_baseline` data. Measured: no self-timed `always`
+                        // cell and no corpus row moved.
                         ir::Sensitivity {
-                            kind: ir::SensKind::Comb,
+                            kind: ir::SensKind::Initial,
                             edges: Vec::new(),
                         }
                     } else {
                         // Truly unschedulable: warn (non-fatal) but still emit a
                         // valid (inert) process rather than killing the whole IR.
+                        // Its body runs once in the first time-0 batch and is
+                        // never re-armed (no edges): `Initial`, as above.
                         self.warn(
                             "always with neither @(...) nor in-body timing is \
                              unschedulable; lowered as an inert process",
                         );
                         ir::Sensitivity {
-                            kind: ir::SensKind::Comb,
+                            kind: ir::SensKind::Initial,
                             edges: Vec::new(),
                         }
                     }
@@ -412,9 +433,10 @@ impl Elaborator<'_> {
                 // definite, and it is every one of the 29 x-cycles by which
                 // verilog-axi's digest differed from the oracle's (ROADMAP §2-N).
                 //
-                // ⚠️ The `None` arm above stays `Comb` on purpose: a self-timed
+                // ⚠️ The `None` arm above is `Initial` on purpose: a self-timed
                 // `always` with in-body `#`/`@` is a clock generator and MUST
-                // start at time zero, or nothing in the design ever moves.
+                // start in the first time-0 batch, or nothing in the design ever
+                // moves.
                 Some(ast::Sensitivity::Star) => ir::Sensitivity {
                     kind: ir::SensKind::Level,
                     edges: Vec::new(),
@@ -444,6 +466,11 @@ impl Elaborator<'_> {
                 if force_edge {
                     self.warn("always_ff requires an explicit @(edge ...) list");
                 }
+                // The `Comb` half is dead, by caller census (§4.5.584): the
+                // `always_ff` caller forces an edge, the `always @(…)` caller
+                // passes a list, and the clocking substitution passes a clocking
+                // block's parsed event. Were it reached, `Comb` would give the
+                // process `always_comb`'s implicit time-zero pass.
                 return ir::Sensitivity {
                     kind: if force_edge {
                         ir::SensKind::Edge

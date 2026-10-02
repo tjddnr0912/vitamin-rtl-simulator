@@ -170,6 +170,30 @@ pub(crate) fn push_sorted(q: &mut Vec<Ready>, r: Ready) {
     q.insert(pos, r);
 }
 
+/// `push_sorted` every entry of `parked` into `q`, in linear time when every entry of
+/// `parked` sorts before every entry of `q` — the batch a time-0 comb pass parked
+/// rejoining what that pass woke (`Scheduler::run`): those wakes carry the wake group
+/// numbered at the pass's own batch take, later than any `seq` in the parked batch.
+/// One push per entry made a chain of N passes quadratic (measured: 5000 chained
+/// `always_comb` +35% wall time). The fast path is `push_sorted`'s result only for a
+/// `parked` that is itself sorted by `(seq, tie)`, and it is: it is a taken
+/// `cur.active`, and every filler of `cur.active` / `cur.inactive` is `push_sorted`
+/// or moves a vector `push_sorted` built. Any other shape takes the per-entry path.
+pub(crate) fn rejoin_sorted(q: &mut Vec<Ready>, mut parked: Vec<Ready>) {
+    match (parked.last(), q.first()) {
+        (Some(p), Some(f)) if (p.seq, p.tie) < (f.seq, f.tie) => {
+            parked.append(q);
+            *q = parked;
+        }
+        (Some(_), None) => *q = parked,
+        _ => {
+            for r in parked {
+                push_sorted(q, r);
+            }
+        }
+    }
+}
+
 /// Child tie = `(parent_tie+1)` in the high 16 bits, child declaration index in
 /// the low 16. `parent` is ALWAYS a top-level process (nested fork is an
 /// elaborate ERROR), so `parent_tie ∈ [0, nproc)` is a small dense int and the

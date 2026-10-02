@@ -43,11 +43,13 @@
 //!   before `initial begin #5 @(posedge r); $display("late"); end` prints `late 5`, both
 //!   oracles nothing — recorded in ROADMAP §2 with its prerequisite (the same-time resume
 //!   order).
-//! - An `always_comb` reading a settled net runs ONCE at time 0 (it arms its sensitivity
-//!   after that run, which follows the delivery): verilator once, iverilog twice, on a
-//!   constant driver and on `r + 1` of an initialised `r` alike (PRE: twice on the
-//!   constant, once on the initialised). `obs_procs.rs` derives its `always_comb` count
-//!   from this.
+//! - An `always_comb` reading a settled net runs TWICE at time 0 since §4.5.584: it is
+//!   armed at seeding, so the delivery wakes it (it runs alone after the first batch),
+//!   and its implicit pass runs at the first promotion. iverilog twice, verilator once,
+//!   on a constant driver and on `r + 1` of an initialised `r` alike (before §4.5.584:
+//!   once on both, verilator's count; before §4.5.535: twice on the constant, once on the
+//!   initialised). Pinned at the test, both oracles quoted; `obs_procs.rs` derives its
+//!   `always_comb` count from this.
 //! - `reg r; wire w = (r === 1'bx); initial r = 0;` — the FIRST-BATCH half: the phantom is
 //!   real until the `initial` runs, and iverilog runs the `initial` before the functor's
 //!   first propagation (§2 start-order table). PRE = POST: `P 0`, `N 0`, `W 0 w=0`.
@@ -370,19 +372,26 @@ fn a_wait_armed_in_the_first_batch_does_not_see_the_settles_edge() {
 }
 
 #[test]
-fn an_always_comb_runs_once_at_time_zero_and_a_heap_size_driver_takes_the_initialised_size() {
+fn an_always_comb_runs_twice_at_time_zero_and_a_heap_size_driver_takes_the_initialised_size() {
     check(&[
+        // The time-0 count is an oracle split (module doc), at iverilog's side since
+        // §4.5.584 — the settle-woken pass after the first batch, then the implicit
+        // pass. Was `C 0 d=1 e=164` once (verilator's count). Raw, this design:
+        //   iverilog 13.0:   C 0 d=1 e=164 / C 0 d=1 e=164
+        //   verilator 5.052: C 0 d=1 e=164
         (
             "module top; logic [7:0] c = 0; wire [7:0] d; logic [7:0] e; assign d = c + 8'd1;\n\
              always_comb begin e = d ^ 8'hA5; $display(\"C %0t d=%0d e=%0d\", $time, d, e); end\n\
              initial #3 $finish;\nendmodule\n",
-            "C 0 d=1 e=164\n",
+            "C 0 d=1 e=164\nC 0 d=1 e=164\n",
         ),
+        // A constant driver, same split. Raw: iverilog 13.0: C 0 d=1 e=164 /
+        // C 0 d=1 e=164;  verilator 5.052: C 0 d=1 e=164.  Was once.
         (
             "module top; wire [7:0] d = 8'd1; logic [7:0] e;\n\
              always_comb begin e = d ^ 8'hA5; $display(\"C %0t d=%0d e=%0d\", $time, d, e); end\n\
              initial #3 $finish;\nendmodule\n",
-            "C 0 d=1 e=164\n",
+            "C 0 d=1 e=164\nC 0 d=1 e=164\n",
         ),
         // A heap initializer leaves no net dirt; the re-settle is keyed on the
         // initializer LIST so `q.size()` still takes the initialised size before any

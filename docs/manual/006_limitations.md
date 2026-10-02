@@ -178,11 +178,15 @@ chain with no final `else` reports nothing (ROADMAP §3.b `unique-if-chain`).
 The report is printed when the arm executes, so a zero-delay glitch reports too, at once,
 as Icarus Verilog (on `case`; it rejects `unique if`) and Verilator report it. Neither
 defers it to the end of the time step as IEEE 1800 §12.4.2.1 describes, and vita follows
-them. One time-0 report is vita's own: an `always_comb` or `always_latch` reads `x` at
-time 0 when it runs before the values driving it settle — before an `initial` written
-after it in the same module, or, in an instantiated module fed through ports, before the
-port connections, even with the testbench written first — and a `unique` or `priority` arm
-there reports at time 0 where both tools are silent (ROADMAP §2 🆕 Z).
+them. An `always_comb` or `always_latch` does not take its time-0 pass beside the
+`initial` blocks: it is armed from the start, so a time-0 change of what it reads wakes it,
+and its implicit pass runs once every `initial` and `always` has run its first slice and
+the continuous assigns and port connections have settled (IEEE 1800 §9.2.2.2). A `unique`
+or `priority` arm in it therefore does not report at time 0 on an input that an `initial`
+(before its first delay), an assign or a port drives at time 0. One shape still does, where
+both tools are silent: a block written before the block that feeds it, when nothing but
+declaration initializers, constants or continuous assigns drive the chain (§3.1); §3.2
+lists the time-0 splits.
 
 The multi-match uniqueness check is a documented cut, and nothing announces it at run time yet
 (Icarus Verilog says `sorry: Case unique/unique0 qualities are ignored.` when it compiles;
@@ -814,6 +818,7 @@ matches the reference tools or refuses loudly.
 | An in-body `@(posedge r)` armed in an Active batch after an edge made earlier in the same batch: `initial #5 r = 1;` declared before `initial begin #5 @(posedge r); $display("late"); end`, or `reg clk; initial clk = 1;` before `initial begin @(posedge clk); … end` | the wait fires (`late 5`, `saw 0`) — the batch's edges are delivered after the whole batch, to every edge wait armed by then | both tools: nothing (the thread arms after the write has propagated; the reverse declaration order is a §4.7 race the tools answer differently) | Arm the wait before the writer runs (declare it first, or `#0` the writer), or wait on the value (`wait (r)`). A LEVEL wait (`@(r)`, `@*`, a static `always @(s)` re-armed after its run) sees only the changes made after it armed. The rule is kept for edge waits for now: an after-the-arm edge rule was reverted when vitamin still resumed same-time processes in declaration order; same-time processes now resume in the order their delays were scheduled, as both tools do, and the edge rule is queued (ROADMAP §2 "Delays / events"). Processes woken by one event resume in declaration order among themselves, where Icarus Verilog resumes them in reverse arm order and Verilator in arm order — a §4.7 race |
 | A parameter override carrying `x` or `z` onto a 4-state parameter: `leaf #(.K(8'b1010_010x))` | `10100100`, unknown plane dropped, no diagnostic | both tools keep the `x` | Do not carry `x`/`z` through an override; drive the value from RTL |
 | A parent `initial` reading a child net at time 0: child has `initial s = 8'hEE;`, parent does `r = u1.s;` in its own `initial` | `xx` | both tools: `ee` | Read the child value after a `#0` or `#1`, or through a port bind or continuous assign — all three read `ee` correctly |
+| An `always_comb` / `always_latch` written before the block that feeds it, in a chain that only declaration initializers, constants or continuous assigns drive at time 0: `logic a = 1'b0, b;` with `always_comb unique case ({a, b}) …` written before `always_comb b = a;` | the consumer's time-0 pass reads `b` as `x`, so `VITA-W4031` (or an `assert`'s `VITA-E4003`) at time 0 | both tools are silent at time 0, each by its own order of the time-0 passes: Icarus Verilog runs them in reverse source order, Verilator in dependency order. Icarus Verilog reports the same consumer-first read when `a` changes later | Write the block that feeds another before it |
 | A range bound taken from a select of a parameter wider than 64 bits: `parameter [135:8] K = …; wire [K[31:24]-1:0] n;` with `K[31:24]` equal to 222 | `$bits(n)` is 1, exit 0, while `$display` of the same select prints 222 | both tools declare 222 bits | Hoist the select into a `localparam` narrower than 64 bits, then use that in the bound |
 | `$random` or `$time` inside a function body reached from a continuous assign: `wire [7:0] m = f(8'd5);` where `f` adds `$random` | re-draws on every settle pass, so `m` changes across passes | both tools freeze the value | Assign it once in an `initial` or `always` block rather than a continuous assign |
 | `%p` of an associative array with a negative integer key | signed-order iteration at 64-bit key width: `K='{'hffffffffffffffff:'h7, 'h2:'h8}` | Verilator sorts the rendered hex and prints the declared `int` width | Use non-negative keys; every workload-corpus design does, and they agree exactly |
@@ -855,6 +860,9 @@ follows one and says which.
 | `gi[0].P` and `$bits(gi[0].x)` on a singleton generate block | refused, with Icarus Verilog and §27.5 | Verilator answers both — and refuses `gi[0]` as a name elsewhere in the same construct |
 | A free-standing unlabelled `begin … end` inside a `generate` region | its declarations belong to the region, so a duplicate `localparam` is refused, with Icarus Verilog | Verilator treats the block as a §27.6 scope and runs it |
 | `always @*` whose body reads only a constant | never triggers, with Icarus Verilog (which also warns) | Verilator executes it once |
+| An `always_comb` / `always_latch` with no input change at time 0 (a constant `always_comb y = 2'd3;`, or one reading only declaration initializers), read at time 0 before its time-0 pass: by an `initial` before its first `#0`, or by a process another time-0 write woke | `x`, matching Icarus Verilog; after one `#0` the value | Verilator: the value. Icarus Verilog still reads `x` after one `#0` |
+| How many times an `always_comb` / `always_latch` runs at time 0 when an input changes at time 0 (a settled continuous assign, an `initial` write) | twice — once for the change, once for its implicit pass — matching Icarus Verilog: a `$display` prints twice, a real `unique` miss reports twice | Verilator: once. Icarus Verilog also runs some shapes once |
+| The order of several `always_comb` / `always_latch` time-0 passes | source order, one block at a time with the continuous assigns settled after each. Written producer first, a chain fed only by declaration initializers or constants is silent at time 0, matching Verilator; written consumer first, it reports (§3.1) | Icarus Verilog: reverse source order, so the producer-first chain reports at time 0; Verilator: dependency order |
 | A constant level term beside a live term when the body can suspend (`always @(K or clk) begin #2 … end`) | no run at time 0 (the constant is dropped), matching Verilator | Icarus Verilog runs the body at time 0 |
 | A constant level term beside an edge term (`always @(K or posedge clk)`) | no run at time 0, matching Icarus Verilog | Verilator runs the process at time 0 |
 | A duplicate FIELD in a `class` body (`class C; int x = 1; int x = 3;`) | accepted, the last declaration wins (`x=3`), with Icarus Verilog | Verilator: `Duplicate declaration of signal` |
