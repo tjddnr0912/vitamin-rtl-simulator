@@ -7,11 +7,12 @@ What stands between HEAD and the two goals. The open items and the queue are in 
 
 ## D. Prerequisites that block work from starting
 
-One line each: prerequisite — what it means; what it blocks. None blocks a row on a corpus design's current page: they block frozen §2 rows and synthetic-origin §3 rows, and wake with them. Oracle splits are recorded, never chased.
+One line each: prerequisite — what it means; what it blocks. None blocks a row on a corpus design's current page: they block frozen §2 rows, synthetic-origin §3 rows and one external-report row (§3.b `unique-if-chain`), and wake with them. Oracle splits are recorded, never chased.
 
-- One current binding per key (§2 🆕 U, §5.2 row 3) — a genvar, local enum label or import that rebinds a key clears or suspends the other map's entry; blocks §2 🆕 T and 🆕 S (a)'s wide half.
-- A generate-case arm decided once per construct instance (§2 🆕 V, §5.2 row 4) — the same arm and label bindings in every elaboration phase; blocks §2 🆕 T.
-- The sign of a constant typed by an overridden type parameter (§2 🆕 W, §5.2 row 5) — blocks 🆕 S (a)'s i64 half, which also needs every decline to fall back to PRE's own-width compare.
+- An `always_comb` / `always_latch` time-0 pass after the values driving it settle (§2 🆕 Z, §5.2 row 1) — today it can run on x before its driving `initial` or its port connections, so a `unique` / `priority` arm reports at t0 where both oracles are silent; blocks §3.b `unique-if-chain`, whose chains in instantiated modules would inherit that report.
+- One current binding per key (§2 🆕 U, §5.2 row 5) — a genvar, local enum label or import that rebinds a key clears or suspends the other map's entry; blocks §2 🆕 T and 🆕 S (a)'s wide half.
+- A generate-case arm decided once per construct instance (§2 🆕 V, §5.2 row 6) — the same arm and label bindings in every elaboration phase; blocks §2 🆕 T.
+- The sign of a constant typed by an overridden type parameter (§2 🆕 W, §5.2 row 7) — blocks 🆕 S (a)'s i64 half, which also needs every decline to fall back to PRE's own-width compare.
 - A case temp for class-method bodies (§2 🆕 X) and a string-kind capture of a string-returning scrutinee (§2 🆕 Y) — block `case … inside` accepting those shapes (§3.b `case-inside-residue`).
 - A per-unit parse of a design that uses `inside` as a name (§3.b `inside-name-use`) — blocks every `case … inside` in such a design.
 - A declaring-scope fold — a scope's return, formal, local and typedef ranges, defaults, constant-function bodies and package routines fold where they are declared, never at the caller's prefix (§4.5.558, §4.5.560–562 reverted on it); blocks §2 row 10, the "Real" call override, the bare >64-bit select, the package-body constant domain and `$bits`, the generate `real` shadow, typedef named dims, §3.b `pkg-string-const-select-dir`, `gen-enum-uncarried`, `string-literal-condition-residue`, `cont-array-typedef-residue`'s named bounds, `md-return-select` (a).

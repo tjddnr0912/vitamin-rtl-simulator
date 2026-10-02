@@ -175,10 +175,14 @@ priority or unique case statement`, pinned to Icarus Verilog's wording. `unique0
 On `if`, the arm is injected only when the first `if` has no `else`, so an `if … else if`
 chain with no final `else` reports nothing (ROADMAP §3.b `unique-if-chain`).
 
-The report is printed when the arm executes, not deferred to the end of the time step
-(IEEE 1800 §12.4.2.1), so a zero-delay glitch reports too — typically at time 0, before the
-inputs settle — where Icarus Verilog and Verilator print nothing (ROADMAP §3.b
-`unique-glitch-t0`).
+The report is printed when the arm executes, so a zero-delay glitch reports too, at once,
+as Icarus Verilog (on `case`; it rejects `unique if`) and Verilator report it. Neither
+defers it to the end of the time step as IEEE 1800 §12.4.2.1 describes, and vita follows
+them. One time-0 report is vita's own: an `always_comb` or `always_latch` reads `x` at
+time 0 when it runs before the values driving it settle — before an `initial` written
+after it in the same module, or, in an instantiated module fed through ports, before the
+port connections, even with the testbench written first — and a `unique` or `priority` arm
+there reports at time 0 where both tools are silent (ROADMAP §2 🆕 Z).
 
 The multi-match uniqueness check is a documented cut, and nothing announces it at run time yet
 (Icarus Verilog says `sorry: Case unique/unique0 qualities are ignored.` when it compiles;
