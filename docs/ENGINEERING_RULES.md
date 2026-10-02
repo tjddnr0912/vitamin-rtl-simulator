@@ -1,41 +1,29 @@
 # Engineering rules
 
-This is the rulebook for changing vita. It states how work is decided, measured, reviewed and gated:
-the accuracy ladder every change is scored against, the two adversarial review lenses, what a census
-is and what makes one valid, how to write a gate that does not under-detect, what counts as
-evidence, what gives a test teeth, how performance is measured, and the artifact and determinism
-discipline. Each entry is one imperative plus the failure mode it prevents.
+The rulebook for changing vita: how work is decided, measured, reviewed and gated; each entry is one imperative plus the failure it prevents.
 
 ## 1. Scope and standing
 
-This document is canonical for method. Where another document in this tree describes how work is
-done and disagrees with a rule here, this file wins. A rule learned while implementing is merged
-into the matching section as one line; the measurement that produced it goes to
-[history/lessons.md](history/lessons.md). The file does not grow: a slice that adds a rule makes
-room by merging or compressing rows, so `wc -c` after the slice is at most `wc -c` before it.
+This file is canonical for method and wins over any document disagreeing on method. Merge a rule learned while implementing into the matching section as one line. The file does not grow: a slice that adds a rule makes room by merging or compressing rows, so `wc -c` after the slice is at most `wc -c` before it.
 
-Read §1 and §2.1–§2.2 before implementing, then the sections your role needs (§3.2); no agent reads
-or is handed the whole file. The queues of open work are in [ROADMAP.md](ROADMAP.md) (§2
-silent-wrong residue, §3 loud-to-supported, §6 observability) with a snapshot in
-[REMAINING_WORK.md](REMAINING_WORK.md); the specifications the review checklist is drawn from are in
-[preview/](preview/); the user-facing surface a change must keep true is in [manual/](manual/).
+Read §1 and §2.1–§2.2 before implementing, then your role's sections (§3.2); no agent reads or is handed the whole file. Open work is in [ROADMAP.md](ROADMAP.md) (§2 silent-wrong residue, §3 loud-to-supported, §6 observability), one line per item; the user-facing surface a change must keep true is in [manual/](manual/).
 
-Vocabulary used throughout:
+Vocabulary:
 
 | Term | Meaning |
 |---|---|
-| **silent-wrong** | A wrong answer with no diagnostic and a success exit. The outcome this repository exists to prevent |
-| **honest-loud** | A refusal or diagnostic that names what the tool cannot do. Always safe, never as good as support |
-| **correct support** | The construct runs and its value matches the oracle |
-| **PRE** | A binary built from the tree before the change, extracted with `git archive <branch>` into a scratch directory and built separately |
-| **POST** | The binary built from the tree with the change applied |
-| **lens** | One adversarial reviewer with a fixed attack method. Two are mandatory: differential and soundness |
-| **census** | An enumeration, from the source, of every site that can reach a question, each cell measured rather than argued |
-| **cell** | One design plus one measured output, in a census or sweep |
-| **control twin** | A second cell identical except for the axis under test, used to attribute a result to that axis |
-| **anchor** | An expected value fixed independently of any implementation, so a change to shared code cannot move it |
-| **hand-IEEE** | An expected value derived by reading the IEEE 1364/1800 text, used where no external tool can arbitrate |
-| **oracle** | An independent tool or standard text that decides a cell. Live oracle: `iverilog` plus `vvp`, invoked by the differential harnesses. Second opinion: `verilator`, obtained by hand on 2-state arithmetic, width and sign |
+| silent-wrong | A wrong answer with no diagnostic and a success exit; the outcome this repository exists to prevent |
+| honest-loud | A refusal or diagnostic naming what the tool cannot do; always safe, never as good as support |
+| correct support | The construct runs and its value matches the oracle |
+| PRE | The binary built from the pre-change tree, extracted with `git archive <branch>` into a scratch directory and built separately |
+| POST | The binary built with the change applied |
+| lens | An adversarial reviewer with a fixed attack method; two are mandatory, differential and soundness |
+| census | An enumeration, from the source, of every site that can reach a question, each cell measured, not argued |
+| cell | One design plus one measured output |
+| control twin | A cell identical but for the axis under test, attributing a result to it |
+| anchor | An expected value fixed independently of any implementation, so shared-code changes cannot move it |
+| hand-IEEE | An expected value read off the IEEE 1364/1800 text where no tool can arbitrate |
+| oracle | An independent tool or standard text that decides a cell. Live: `iverilog` + `vvp`, run by the differential harnesses; second opinion: `verilator`, by hand on 2-state arithmetic, width and sign |
 
 ## 2. The accuracy ladder
 
@@ -43,1212 +31,739 @@ Vocabulary used throughout:
 
 | Rule | Prevents |
 |---|---|
-| Rank every outcome on one ladder: silent-wrong worst, honest-loud always safe, correct support best. Climb it; never descend | A change that reads as an improvement being a descent |
-| Do not implement what cannot be verified: with no oracle and no precondition, stay loud | An unverifiable implementation shipping as a silent-wrong |
-| Treat making a working construct loud as a regression; loud is earned only by what the tool genuinely cannot do | A refusal added for tidiness stopping designs that worked |
-| Treat a panic as loud, not as silent-wrong, and never trade correct support for loud in order to remove one | A net loss on the ladder dressed up as robustness |
-| When soundness and differential conflict, the differential wins | An internally consistent argument overriding a measurement |
+| Rank every outcome on one ladder (silent-wrong worst, honest-loud always safe, correct support best); climb, never descend | A descent sold as a gain |
+| Do not implement what cannot be verified: with no oracle and no precondition, stay loud | Unverifiable silent-wrongs |
+| Making a working construct loud is a regression; loud is earned only by what the tool genuinely cannot do | Refusing working designs |
+| Treat a panic as loud, not silent-wrong, and never trade correct support for loud to remove one | A ladder loss as robustness |
+| When soundness and differential conflict, the differential wins | Argument over measurement |
 
 ### 2.2 Never trade one wrong for another
 
 | Rule | Prevents |
 |---|---|
-| Never trade one silent-wrong for another: convert types at the context boundary, not at the leaf, and stay loud where the context domain cannot be built | A leaf conversion destroying the value before the enclosing operator sees it |
-| Remove a feature whose partial support only trades one silent-wrong for another, and build the consumer-by-value matrix before removing, because removal is an edit | Shipping "the better half" of a broken feature, keeping a silent-wrong and adding a regression |
-| Treat a clamp as a silent value change: read the sign in the domain before the clamp and let a shape the clamp cannot carry fall through to the path that is already right | A clamped negative becoming a legal value that then fires |
-| Move a value to another type's route only when its whole type — domain and width — is stated; a domain alone turns the old type's loud consumers into silent ones at a guessed width | An integral override routed off a real default by its domain: `R/2` right, `%h` and `$bits` at the default's width where PRE was loud (§4.5.558 round 1) |
-| Equalise head-on an asymmetry where one path is narrower than its twin, prerequisite slices first, rather than routing around it | The workaround becoming the next change's constraint |
-| Support only the cleanly verifiable subset where interaction is unpredictable, and keep the rest loud | Forcing support and getting a silent-wrong |
-| Do not widen a loud into a silent: a pre-existing root cause does not license expanding the surface. Defer the root and keep the surface loud | The widening being your own regression |
-| Treat a fix or a routing that interacts with a latent gap as a regression even when the value is right | The value being correct and the run being worse |
-| Prefer a loud guard to partial normalisation for a deep residue | Partial normalisation being a silent-wrong |
-| Enumerate the old rejects exhaustively and run a live-oracle differential before relaxing a blanket reject; the teeth are zero regressions against a full sweep | Shapes the blanket reject hid becoming silent-wrong |
-| Do not close a queue item by refusing | Some consumer eating the decline as a silent default and producing a wrong value |
-| Build both representations and measure them; when both are trades, remove the axis and file honest-loud plus a deferral | Shipping the half that looks better |
-| Recognise that a leaf-patching resolution arrives after the enclosing context is decided; support that requires re-lowering the enclosing node cannot be built that way | The cast, concat and width context being baked around a placeholder and the leaf's bits read later |
-| Ask whether the consumer can produce the right answer from a representation, not whether the name resolves, when choosing a storage table | Registering a value in a table of the wrong type, which resolves the name and makes the value wrong |
-| Read how the neighbouring branch handles a cap before writing a new branch that meets it | A new branch adding a silent clamp where the neighbour raises an error |
-| Ask what a halted body leaves before asking whether the statement may run; where nothing is defined, the feature does not exist yet | Every choice trading loud for silent because the outcome was never specified |
-| Close every leaking sink before changing the value that leaks | Suppression at one sink plus a mid-body bail turning the other sinks' values into a different silent-wrong |
-| Find the code that still runs while a non-clearing latch is true before using that latch as a predicate | Confusing "finishing now" with "already finished" and deleting the output of everything that runs after |
+| Never trade one silent-wrong for another: convert types at the context boundary, not the leaf; stay loud where the context domain cannot be built | Leaf conversions losing the value |
+| Remove a feature whose partial support only trades silent-wrongs, building the consumer-by-value matrix first (removal is an edit) | Half a fix plus a regression |
+| A clamp is a silent value change: read the sign before it; let a shape it cannot carry fall through to the path already right | A clamped negative firing |
+| Route a value onto another type only with its whole type, domain and width, stated | Silent guessed widths |
+| Equalise head-on a path narrower than its twin, prerequisite slices first, never routing around it | Workarounds as constraints |
+| Where interaction is unpredictable, support only the cleanly verifiable subset, the rest loud; for a deep residue prefer a loud guard to partial normalisation | Partial support going silent |
+| Never widen a loud into a silent: a pre-existing root, or the same defect in another syntax, is a queue line, not a licence to expand the surface; defer the root, keep it loud | Your own widening regression |
+| A fix or routing that interacts with a latent gap is a regression even when the value is right | A right value, a worse run |
+| Before relaxing a blanket reject, enumerate its old rejects and run a live-oracle differential: zero regressions over a full sweep | Hidden shapes going silent |
+| Do not close a queue item by refusing | A decline eaten as a default |
+| Build and measure both representations; when both are trades, remove the axis and file honest-loud plus a deferral | Shipping the nicer half |
+| Do not build by leaf patching support that needs the enclosing node re-lowered: the leaf resolves after the context is decided | Context baked on a placeholder |
+| Choose a storage table by whether its consumer can produce the right answer from the representation, not whether the name resolves | Names resolving to wrong values |
+| Read how the neighbouring branch handles a cap before writing a new one that meets it | A silent clamp beside an error |
+| Ask what a halted body leaves before whether the statement may run; if nothing is defined, the feature does not exist yet | Loud traded for silent |
+| Close every leaking sink before changing the value that leaks | Other sinks going silent-wrong |
+| Find what still runs while a non-clearing latch is true before using it as a predicate | Output lost after the latch |
 
 ### 2.3 Accidental correctness and cancellation
 
 | Rule | Prevents |
 |---|---|
-| Check that a static claim you begin consuming is true of the runtime value, and look for the place where two errors were cancelling | Fixing one side breaking the cancellation and turning a correct cell silent-wrong |
-| Ask what a conversion was hiding before removing it; the signal is values that are right for the wrong reason | An accidental immunity that is load-bearing being deleted along with the conversion |
-| Gate on whether the picture is trustworthy, not on a list of shapes, when a fix materialises a boundary: decide trust by comparing two sources, and check whether the old cells were right only by cancellation | A fabricated answer being as dangerous as a missing one |
-| Measure what an accidental loud was blocking before removing it, and promote the accident to a rule when it turns out to have been right | Deleting a coincidence that was doing real work |
-| Treat a pre-existing defect in another syntax as a queue line, never as a licence to widen the same defect into a new syntax | The new path inheriting the defect deliberately |
-| Fix the producer when a reported regression only reads an input that was already wrong, then run the corpus, because the producer feeds more than the consumer in front of you | A path that is right by accident becoming wrong the moment the classifier reads the truth |
-| Feed the input to the existing callers before adding another call to a shared helper; when they are wrong too, the fix belongs inside the helper | Guarding the call sites and fixing only your own regression |
-| Measure the premise of a theorem used to narrow a change, especially a data-structure invariant such as "the stored representation is canonical" | A narrowing resting on a premise nobody measured |
-| Draw a boundary and keep pre-slice behaviour when two readings are wrong in opposite directions; a guess means out of domain | Either reading breaking a different shape |
-| Census the aliases that copy a value's type before correcting the type its source reports: an alias that records no type of its own was right only where the wrong type happened to agree, and each correction of the source turns those contexts wrong | A sign keyword carried onto an untyped parameter made a generate-scope `localparam C = A;` `fffa` for `000a`; walking the alias to its source then copied a guessed override's width, directly and through forwarding — three rounds, reverted (§4.5.559) |
-| Treat an IR construction that places one expression twice as a semantic change, and gate on observability (side effects, draws, diagnostic counts) before duplicating | One operand being evaluated twice and the two draws mixing |
+| Check a static claim you start consuming holds for the runtime value, and look for two errors that were cancelling | Breaking a cancelling pair |
+| Before removing a conversion or an accidental loud, ask what it hid (values right for the wrong reason are the signal) and measure what it blocked; promote a right accident to a rule | Deleting a load-bearing accident |
+| When a fix materialises a boundary, gate on whether the picture is trustworthy (two sources compared), not a shape list, and check if old cells were right only by cancellation | Fabricated answers |
+| When a reported regression only reads an already-wrong input, fix the producer and run the corpus (it feeds more than this consumer); feed a shared helper's input to its existing callers before adding a call, fixing inside it if they are wrong too | Fixing only your call site |
+| Measure the premise of a theorem that narrows a change, especially a data-structure invariant ("the stored representation is canonical"); enumerate the writers when soundness rests on "only once, here, or never" | Narrowing on a false premise |
+| When two readings are wrong in opposite directions, draw a boundary keeping pre-slice behaviour; a guess means out of domain | Either reading breaking a shape |
+| Census aliases copying a value's type before correcting its source's type: an alias with no type of its own was right only where the wrong type agreed | Aliases turning wrong |
+| An IR construction placing one expression twice is a semantic change, gated on observability (side effects, draws, diagnostic counts) | Double evaluation |
 
 ### 2.4 Width, context and provenance
 
 | Rule | Prevents |
 |---|---|
-| Treat a cast as the operand's context, not a later truncation: `N'(e)` evaluates `e` at `max(self(e), N)`, so a walk that cannot carry a width must decline | Folding at the operand's own width and resizing afterwards, which is a different operation |
-| Fix context misuse by fixing the propagated value (`max(self, N)`), never by discarding context | Discarding context also losing the signedness, which always propagates |
-| Hand the context width to the operator, not to the leaf: a context-determined operand evaluates at `max(context, every self-determined operand's width)` | Freezing the context at the leaf and losing bits the moment a sibling is wider |
-| Exclude a non-bit-vector domain on BOTH sides when opening a width context — the TARGET's declared domain and any operand inside the region — and write the operand test as a conservative `_`-free walk whose unresolved arms decline the context | Closing the target side alone, so a real operand in a bit-vector target's rhs still widens the region |
-| Give a routing gate and a soundness guard different predicates: over-reporting is free for a router and a loud regression for a guard | One predicate for both putting a self-determined position into the hazard set and producing new louds |
-| Walk each caller to the end of its chain and say what is there before writing that a decline is free | A decline being free only where the pre-change fold would also have declined |
-| Count the loud-to-value column on its own and give every axis those new cells touch a control twin without the new construct | Opening a fold's accept set inheriting whatever is already wrong underneath |
-| Fix a width-correctness defect at the consumer's fold, not with an admission threshold on the producer: record each constant's declared width and sign beside its value and fold per the standard | A threshold answering the census cell and not the class, so the defect reappears one width up |
-| Ask which rule sizes an initializer before asking which consumer to keep loud; do not decline what a type rule answers | Declining the consumer keeping the loud and freezing a scalar spelling's pre-existing silent behind it |
-| Answer a query about a shape the parser flattens where the shape still exists, with a parse error for an index that cannot be folded rather than a fall-through | Whoever flattens a shape leaving every query on it to a layer that cannot see it |
-| Ask whether the source of a width is still alive after asking where the width came from: a width inferred from an initializer's value does not survive an override, a declared type does. Check every override channel | An overridden parameter binding at the initializer's width |
-| Gate on a width a declaration states, never on a width that may have been inferred from an initializer's value | Reading a width off a default that an override replaces |
-| Enumerate who reads a stored value before making it more precise; when the readers cannot use the precision, the asymmetry being removed was the safer state | A canonical producer against consumers that still guess |
-| Carry the source's signedness on any channel that moves a value across a width boundary, and decline rather than pick a default where the channel cannot know it | Several expressions arriving as one integer and the container's sign being right for only some |
-| Count what a domain cannot carry before widening it, and decline what it cannot represent | A fold silently dropping a width or a byte, turning loud into silent-wrong |
-| Refuse at the binder a shape the machinery cannot represent, rather than leaving it to a rewrite's arithmetic | A key reused across different shapes reading one index as another dimension |
-| Read every guard's own words when widening its caller set: if the sentence names a construct, the predicate must test for that construct, and a shared lowering must recover the lane from something unambiguous | A guard written for one lane becoming a false-loud whose message contradicts the source |
-| Measure the three lifetimes of a name before hoisting a block-local declaration into an enclosing scope: shadow, sibling and leak. Build all three probes before writing the hoist | A hoist without a scope trading loud for silent-wrong |
-| Deliver a feature the AST cannot carry by a desugar that keeps every axis the consumers need, turning the axis the desugar cannot honour into a loud refusal | A desugar silently dropping the axis it cannot express |
-| Ask what the next consumer of a text keys on before a preprocessor stage rewrites it, and keep the form the oracles keep | A normalising joiner changing which bytes a later directive consumes |
-| Route any provenance emitted inside an expansion through the collapse site | An offset being meaningful only in the buffer it indexes |
-| Evaluate a shared constant walk as §11.8.2 evaluates a REGION, in the walk itself: one entry that decides the region's width and sign over the whole tree (pass 1) and refolds with both pushed into every context-determined operand (pass 2); every self-determined position (cast operand, concat part, shift count, exponent, select index, system-function argument) re-enters that entry as a region of its own, and a comparison's operands are a region sized to the larger side. Until the walk has both properties, a routing arm excludes by STRUCTURE — leaf-only positions, sign-homogeneous trees — never by a value-aware mirror of the walk's arms; once it has them, delete the structural rule rather than keep two accept sets | A ctx-0 fold computing a narrower context-determined operator at its own width, a node-local sign extending a signed sub-node of an unsigned region with its own sign (§4.5.542: 57 two-oracle cells on the wide lane, `~S8 + 128'd0` = `0…02`), and a mirror walk that re-derives the shared walk's cases missing one axis per round (§4.5.527: three same-axis BLOCKINGs in three rounds until both value-aware exclusions were deleted for one structural rule) |
-| Key a guard on the premise it states, decided per binding, and re-derive it when the row it cites closes for most shapes: a guard that says "this type is a guess" must fire only where no channel supplied the type. Where the AST cannot tell two readings apart, keep the guard on that combination rather than trade a right cell for a wrong one | A guard outliving its premise and hiding silent-wrongs behind "right or wrong as it was" (§4.5.545: `param_type_guessed` marked every overridden untyped parameter; narrowing it fixed 14 two-oracle cast cells, and un-guessing the one combination the missing `unsigned` keyword makes ambiguous swapped `64'(U >> 1)` from right to wrong) |
-| Prove a pass-skip before shipping it: name the invariant the skipped pass would re-establish (every extension already made with the sign the push-down would use; every node already folded at the region's width) and show the first pass guarantees it; measure the x/z cells so the skipped pass declines nowhere the taken one would not | A shape-only shortcut returning first-pass bits that the second pass would have changed, or a value→loud edge hidden behind the shortcut |
-| Widen a fold's accept set over x/z by the OPERATOR's rule (a known bit that decides it), carry an answer that is x as an x BIT rather than a decline, and measure the loud→value column at every BINDER that reads the fold — one that drops the unknown plane turns the carried x into a silent 0 | A definite operator declining on any unknown (§4.5.543: 119 two-oracle cells, a range bound silently one bit), and an x carried into a binder with no unknown plane (`#(.P(\|4'b000x))` bound 0 in the first cut; the lane declines it) |
-| Decide a value's domain from the DECLARATION, in one predicate every binder asks: only an untyped declaration takes its value's type; a typed one is a context the value converts into. When the representation moves (a string map entry becomes a numeric constant), census the consumers of the OLD representation's properties and scope any consumer fix to the representation that changed | A binder routing a typed parameter by its default's form — a string literal to a width-free map, a real literal to the real domain — so one declaration answered by the value and lost its width; and a global NUL-strip written for the new numeric constants changing `%s` and `.len()` of every string literal (§4.5.555: 520 cells right, then round 2's literal regressions) |
-| Size a case comparison once, over the case expression and every item, then compare each item at that width and sign; a pairwise compare at each side's self width wraps a context-determined operand | `case (P + 4'd1)` over a 4-bit `P = 15` matching the `0` item because the sum wrapped at 4 bits before the widening (§4.5.555 round 3, reverted) |
-| Size an assignment-pattern ITEM through the pattern path, not through the scalar assignment's resize: a stream that is a pattern item is zero-extended into its element, and only a stream that is the whole right-hand side is left-justified | Two spellings of one pattern disagreeing — verilator reads `'{{<<{n}}}` into 8-bit elements as `08` and `assign s = {<<{n}}` as `80` (§4.5.566) |
+| A cast is the operand's context, not a later truncation: `N'(e)` evaluates `e` at `max(self(e), N)`, so a walk that cannot carry a width declines; fix context misuse in the propagated value (`max(self, N)`), never by discarding context; hand the context width to the operator, not the leaf: a context-determined operand evaluates at `max(context, every self-determined operand's width)` | Narrow folds; lost sign; bits lost to a wider sibling |
+| Opening a width context, exclude a non-bit-vector domain on both sides (the target's declared domain, any operand in the region) by a conservative `_`-free walk whose unresolved arms decline | A real operand widening |
+| Give a routing gate and a soundness guard different predicates: over-reporting is free for a router, a loud regression for a guard | New louds from a shared set |
+| Walk each caller to its chain's end and say what is there before calling a decline free | Falsely free declines |
+| Count the loud→value column separately, giving every axis its new cells touch a control twin without the new construct | Inheriting hidden wrongs |
+| Fix a width defect at the consumer's fold, not a producer admission threshold: record each constant's declared width and sign with its value, fold per the standard | The defect one width up |
+| Ask which rule sizes an initializer before choosing a consumer to keep loud; never decline what a type rule answers | A silent frozen behind a loud |
+| Answer a query on a parser-flattened shape where the shape still exists, with a parse error, not a fall-through, for an unfoldable index | Queries in a blind layer |
+| Gate on a declared width, never one inferred from an initializer's value, which does not survive an override; check every override channel | Binding at the default's width |
+| Enumerate a stored value's readers before making it more precise; if they cannot use it, the asymmetry was safer | Guessing consumers |
+| Carry the source's signedness on any channel moving a value across a width boundary, declining, not defaulting, where it cannot know it | A partly right container sign |
+| Count what a domain cannot carry before widening it, declining what it cannot represent; refuse at the binder a shape the machinery cannot represent, not in a rewrite's arithmetic | Dropped widths; misread indices |
+| Widening a guard's caller set, read its words: a guard naming a construct must test for it; a shared lowering must recover the lane unambiguously | False-louds contradicting source |
+| Before hoisting a block-local declaration into an enclosing scope, probe its name's three lifetimes: shadow, sibling, leak | Scope-blind hoists |
+| Deliver a feature the AST cannot carry by a desugar keeping every axis consumers need, refusing loudly an axis it cannot honour | Dropped axes |
+| Before a preprocessor stage rewrites text, ask what its next consumer keys on and keep the form the oracles keep; route provenance emitted inside an expansion through the collapse site | Shifted directive bytes; stray offsets |
+| Evaluate a shared constant walk as §11.8.2 evaluates a region, in one walk entry: pass 1 decides width and sign over the tree, pass 2 pushes both into every context-determined operand; each self-determined position (cast operand, concat part, shift count, exponent, select index, system-function argument) re-enters it as its own region, a comparison's operands one region at the larger side. Until then a routing arm excludes by structure (leaf-only positions, sign-homogeneous trees), never by a value-aware mirror; afterwards delete the structural rule | Narrow folds; leaked signs; partial mirrors |
+| Key a guard on its stated premise, per binding ("type is a guess" fires only where no channel supplied the type); re-derive it when its row closes for most shapes, keeping it where the AST cannot tell readings apart | Guards outliving premises |
+| Prove a pass-skip first: name the invariant the skipped pass would re-establish (extensions at the push-down's sign, nodes folded at the region's width), show pass 1 guarantees it, and measure x/z cells so the skip declines only where the taken pass would | Skipped pass-2 changes |
+| Widen a fold over x/z by the operator's rule (a known bit that decides it), carry an x answer as an x bit, not a decline, and measure loud→value at every binder reading the fold | An x read as 0 |
+| Decide a value's domain from the declaration in one predicate every binder asks (only an untyped declaration takes its value's type); when the representation moves, census the old one's consumers and scope fixes to it | Typing by the default's form |
+| Size a case comparison once over the case expression and every item, comparing each item at that width and sign; size an assignment-pattern item through the pattern path (a stream item zero-extends into its element; only a whole-rhs stream is left-justified) | Self-width wraparound; pattern spellings disagreeing |
 
 ### 2.5 Declines, defaults and folds
 
 | Rule | Prevents |
 |---|---|
-| Make the sub-shapes a new match arm cannot improve call the arm the expression would otherwise have taken; a decline is a change, not a no-op | A new arm owning a shape it cannot answer and the caller's default firing |
-| Keep a fold that predicts runtime behaviour admission-only where possible, so a disagreement with the engine can admit an out-of-range copy (loud) but never a different word | A fold that disagrees with the engine writing the wrong word |
-| List a shared fold's consumers before widening it and ask for each whether its context rule is exact for the new leaf; decline at that consumer for the delta only, documented as a delta-limiter | A widening that fixes many cells on some consumers and silently breaks a few on another |
-| Count how every consumer of a fold consumes a decline before adding a refusal; a refusal is only as loud as its caller, and making the unknown knowable usually beats widening the refusal | A refusal producing a silent default at a success exit |
-| After deriving an equivalence, read the code back and name every input the derivation assumed, then build the design where that input is a default | A provably value-neutral rewrite being a silent-wrong because an input is a fabricated default |
-| Audit the path a widened classifier will newly reach before widening; a missing-answer fallback masks defects rather than fixing them, and every unmasked defect counts as your regression | Defects appearing one after another behind a widening |
-| Ask before starting how many properties a site's consumer expects and whether enabling one contradicts the rest; partial application of interacting properties can be worse than none | Applying one property alone regressing cells that the pair would fix |
-| Close a silent default upward by making the unfoldable shape foldable, rather than turning the default loud, and include cells whose true value equals the default | The subset where the default is accidentally correct going correct-to-loud |
-| Make a structurally invisible omission loud: assert on the success path that the pending set is empty | An unclaimed item being simply absent from the IR, with no diagnostic |
-| Treat folding a constant into an initial value as removing that value from the initialisation order, not as a pure optimisation | The same read answering differently for a literal and a call |
-| Check what the generic path does not evaluate before admitting a node: laziness is a diagnostic question, not a value question | Eager evaluation adding a diagnostic that did not exist and splitting the exit class across backends |
-| Recover a statement boundary with an exhaustive predicate rather than approximating it per operation | Returning between two operations losing the write and the diagnostic it owed |
-| Find out who answers now when a refusal is made unreachable | A stale neighbouring arm beginning to answer at the wrong width |
-| Look for a second, independent sufficient condition when a sound gate kills the feature; weakening trades soundness for coverage and a disjunct does not | Every weakening either re-admitting the counter-example or still refusing the target |
-| Enumerate the writers when a change's soundness rests on "this can only happen once, here, or never" | A premise about the engine's own behaviour that the engine refutes |
-| Freeze one half at the old decision and write the reason when no axis separates two groups; a freeze is an admission that they are different questions | Forcing one rule over both halves and breaking the half it does not fit |
-| Give a store rule a single-mention primitive when its operand may be evaluated only once — a user call, `$random`, anything containing one; gate a multi-mention lowering on repeatability and never apply it to a call | A composition that names its operand several times drawing `$random` or calling the function again, a different wrong answer rather than a right one (§4.5.526: the IR-0 real→int cast names its operand two to five times, so the inline bind declined every real call until `RealToInt` named it once) |
-| Spell a review fix that narrows or extends a tail in single-mention operations — a select, a sign stamp, a primitive — and treat the fill of a sign extension as a second mention | A narrowing fix that re-evaluates its operand, so a draw count or a side effect changes while the value looks fixed (§4.5.526: the narrowing tail was built from `select_low` + stamp + `TwoState`, and the WIDENING of a signed `$random` stayed a recorded residue because its fill names the actual again) |
-| Measure a widening arm's exclusion set in the `localparam` twin: before admitting a tree shape through a shared fold, run the same text as `localparam logic [W-1:0] L = …;` on PRE against both oracles. A wrong twin is the walk's own defect: exclude the shape and record the walk as the prerequisite, never patch the walk inside the routing slice | An arm importing a pre-existing silent-wrong of the shared walk into a lane that was loud or right (§4.5.527: the twins of `~S8 + 128'd0`, `$signed(~8'd1 + 128'd0)` and five sign siblings were wrong on PRE, and each admitted shape turned the override from loud into the same wrong value) |
-| Admit a desugar's items by SHAPE when its value runs through a shared fold and binder: a hand-spelled twin that prints the oracles' value proves the leaves it measured, not every leaf class, so a value-aware exclusion is one class behind each round. Carry literal leaves; let names, operators and casts keep the old refusal until the shared code they reach is fixed | §4.5.569: a `'{…}` value rewritten to `{W'(e0), …}` met a pre-existing defect under a new leaf in each of rounds 1 and 2 — an unsized `'bx` padded to 32 bits, then a name bound by `#(.N('bx))` read as 0 — and the literal-leaf rule passed round 3 |
-| Admit a width the parser already folded by its SOURCE TEXT: a literal a parse-time fold produced keeps the span of the text it replaced, so a bound counts only when the text at its span is its lexeme. A check on the folded expression — a name-free one included — cannot see a name or a `$bits(T)` already folded in the scope that read it | A layout vouched for by its folded value while a name inside it was read in the wrong scope (§4.5.570: a typedef's own bounds were checked for names, then its member types' too, and each round found a width folded where it was read — a `$unit` `[W-1:0]` member type under a module's `W`, then `logic [$bits(v_t)-1:0]` — laid out 9 bits for the oracles' 5; the source-literal rule passed round 3) |
-| Record a placeholder's shape from the declaration only when that declaration's fold is exact by construction — a structural predicate over literal kinds, names bound from exact values and ring operators, with no value test — and verify the record against the resolved object at resolution, loudly on a mismatch. A value-aware repair of the shared fold the record would read is a prerequisite, never part of the recording slice | A record that inherits the shared fold's defect and either refuses right reads at resolution or, once patched value by value, turns a right cell wrong (§4.5.528: a record from `env_fold`'s i64 `-4'd1` refused `u.z` reads both oracles print; the round-2 minus rule then declined `-(-4'd1)` and voided the instance's whole parameter environment — two rounds on one axis, closed by the structural exactness rule) |
-| Deliver a time-0 run in the region the oracles use: model a constant's initial change as a NET change made by the time-0 settle, which the armed header waiter sees at the first propagate of time 0, never as a `#0` prologue or an in-body wait placed in front of the body. Measure the representation on PRE with a hand spelling of the same shape (`wire kw; assign kw = 1'b1;` in place of the constant) before building it | A synthesized prologue queued behind an earlier `initial`'s own `#0`, and an in-body wait blind to a same-step glitch the header waiter sees (§4.5.529 round 1: `#0; forever { S; @(L) }` printed `y=x` and an extra wake where both oracles print `y=7`, and lost the glitch wakes of dR05 / dR11; the pulse net printed iverilog's text on all 18 hand-spelled cells before it was built) |
-| Decide an index's constness from its leaves through the lowering's own name funnel, three-valued: a strict twin (every leaf provably constant) for a caller that ADMITS on `true`, a permissive twin (some leaf provably live) for a stand-down or a refusal, and an unknown answer keeping the caller's previous behaviour. Never decide it through a fold whose name lookup differs from the lowering's | A classifier calling a changing select constant because it asked the head alone or resolved the index through another walk (§4.5.529: round 1 classed `K[i]` constant by the head; round 2's `const_eval_in_scope` resolved a generate-NET-shadowed index through the parameter map alone — `KI at 0` only where both oracles print `0 / 1 / 2 / 3` — and refused `K[$size(arr)-1]`, a constant the fold declines: two blockers on one axis) |
-| Give a single-mention shape only an operand whose width is a DECLARED fact (`ir_bits_of` answers): `TwoState(e)` and the ternary sign extension carry `e`'s own width, so over a fabricated width they lose the width the per-bit `Concat` asserted. Exclude fabricated widths and keep the old shape there; never route them into a width-preserving node | A cast that stops asserting its target width, so every width consumer downstream moves (§4.5.530 round 1: `TwoState` over `q.sum()` and a string turned `$bits(int'(q.sum()))` from 32 into E3009, `int'(qu8.sum())` from `000000fd` into `fffffffd` and `48'(int'(s))` from `0000000061626364` into `0000000000006364`, and the ternary over a fabricated width never cut to `n`: `40'(q48.sum())` `ffff800000000001`) |
-| Hand-spell the composition on PRE before adding an IR primitive: if existing nodes express the shape in one mention, measure that spelling against the oracles and ship it with no format bump. Read the engine arm the spelling relies on and state its semantics where the builder lives | A new frozen node and a `format_version` bump for a shape the IR already had (§4.5.530: `$signed(1'b1 ? $signed(e) : n'sd0)` sign-extends `e` once because the engine's `Ternary` arm evaluates the taken branch at the wider arm's width, signed iff both arms are signed; cell h01 on PRE printed iverilog's text for a call, `$random` with the next draw, and an x MSB extending as x like a plain assignment) |
-| Let a consumer that newly reads a leaf resolve NAMES only where the source leaves one object: decide it from the position (a generate condition at the module's top level) and a per-definition census of every declaration at every depth (declared once, top-level, a written integral type), never from binding maps a generate walk fills by position and per phase | A map-based gate that is phase-dependent — the Nets phase folded a condition on an outer object, the later phases declined without a report, and the branch's nets existed with no driver — and blind to declarations no map holds: an unbound generate `enum` label, a block `import` or `let`, an instance-array element walking into its parent, a genvar under a same-named wide constant (§4.5.568: a blocking finding in each of three review rounds, the loop-variable half reverted) |
-| Do not fix a shared value domain inside a slice that only routes through it: when the domain's other rules (width, NUL bytes, shadowing) are wrong on the same cells, a more correct operation moves a right-by-accident cell to a wrong one | Swapping one silent-wrong for another (§4.5.568 round 1: a byte-exact string `==` and a canonical concatenation turned `$bits` of `("a" == "\0a") ? "no" : "yes"` from 24 to 16 through the string `?:`'s lost width, and a genvar read of `"\141\142"` from else to then — both reverted and catalogued) |
+| Make sub-shapes a new match arm cannot improve call the arm they would otherwise take (a decline is a change, not a no-op); find who answers when a refusal becomes unreachable | Defaults or stale arms answering |
+| Keep a fold predicting runtime behaviour admission-only where possible: disagreeing with the engine admits an out-of-range copy (loud), never a different word | Writing the wrong word |
+| Before widening a shared fold or adding a refusal, ask whether each consumer's context rule is exact for the new leaf and how it consumes a decline (a refusal is only as loud as its caller); decline per consumer for the delta only, as a documented delta-limiter, preferring to make the unknown knowable over widening the refusal | Silent defaults at success |
+| After deriving an equivalence, read the code back, name every assumed input, and build the design where that input is a default | Fabricated-default wrongs |
+| Before widening a classifier, audit the path it will newly reach; a missing-answer fallback masks defects and each unmasked one is your regression | Defects surfacing one by one |
+| Ask first how many properties a site's consumer expects and whether enabling one contradicts the rest; gate interacting properties on one precondition, all or nothing, pre-slice behaviour verbatim without it | Partial application |
+| Close a silent default upward by making the shape foldable, not the default loud, with cells whose true value equals the default | Right cells going loud |
+| Make a structurally invisible omission loud: assert on success that the pending set is empty | Silently absent items |
+| Folding a constant into an initial value removes it from the initialisation order; it is not an optimisation | Literal vs call divergence |
+| Check what the generic path leaves unevaluated before admitting a node: laziness is a diagnostic question, not a value one | New eager diagnostics |
+| Recover a statement boundary with an exhaustive predicate, not a per-operation approximation | Lost writes and diagnostics |
+| When a sound gate kills the feature, seek a second independent sufficient condition (a disjunct), not a weakening; narrow coverage, not semantics, when something cannot be proved | Re-admitted counter-examples |
+| When no axis separates two groups, freeze one half at the old decision and write why (they are different questions) | One rule misfitting a half |
+| Give a store rule a single-mention primitive when its operand may be evaluated only once (a user call, `$random`, anything containing one), gating multi-mention lowering on repeatability, never applied to a call; spell a narrowing or extending review fix in single-mention operations (select, sign stamp, primitive), a sign extension's fill being a second mention | Re-evaluated operands |
+| Measure a widening arm's exclusions on the `localparam logic [W-1:0] L = …;` twin on PRE against both oracles; a wrong twin is the walk's defect: exclude the shape, file the walk as prerequisite, never patch it in the routing slice | Importing a walk's defect |
+| Admit a desugar's items by shape when its value runs through a shared fold and binder: carry literal leaves, keeping the old refusal for names, operators and casts until the shared code is fixed (a hand-spelled twin proves only its leaves) | Exclusions lagging a class |
+| Admit a width the parser already folded by its source text: a bound counts only when the text at its span is its lexeme; the folded expression hides a name or `$bits(T)` folded in the reading scope | Wrong-scope names |
+| Record a placeholder's shape from its declaration only when that fold is exact by construction (structural predicate: literal kinds, names bound from exact values, ring operators, no value test), verifying it loudly at resolution; a value-aware repair of the shared fold is a prerequisite | Inherited fold defects |
+| Deliver a time-0 run in the oracles' region: a constant's initial change is a net change by the time-0 settle that the armed header waiter sees, never a `#0` prologue or in-body wait; measure first on PRE with a hand spelling (`wire kw; assign kw = 1'b1;`) | Late prologues; missed glitches |
+| Decide an index's constness from its leaves through the lowering's name funnel, three-valued: strict (every leaf provably constant) for callers admitting on `true`, permissive (some leaf provably live) for a stand-down or refusal, unknown keeping old behaviour; never via a fold with another lookup | Changing selects as constants |
+| Give a single-mention shape (`TwoState(e)`, the ternary sign extension) only an operand whose width is declared (`ir_bits_of` answers); keep the old shape for fabricated widths, never a width-preserving node | Lost asserted widths |
+| Hand-spell the composition on PRE before adding an IR primitive: if existing nodes express it in one mention, measure it, ship without a format bump, and state the engine arm's semantics at the builder | Needless nodes and bumps |
+| Let a consumer newly reading a leaf resolve names only where the source leaves one object, decided by position (a top-level generate condition) and a per-definition census of declarations at every depth (declared once, top-level, a written integral type), never by maps a generate walk fills per position and phase | Phase-dependent, blind gates |
+| Never fix a shared value domain in a slice that only routes through it: while its other rules (width, NUL bytes, shadowing) are wrong on the same cells, a more correct operation breaks right-by-accident cells | Swapped silent-wrongs |
+| Let the consumer order the domains (only a truth test may ask integer before real), and give every fold lane of one value one decline policy | Integer-folded reals; split lanes |
 
 ### 2.6 Guards, gates and what removing one promises
 
 | Rule | Prevents |
 |---|---|
-| Check that a general floor does not remove a diagnostic that was masking a different, still-broken span | Adding a floor turning loud cells into silent-wrong |
-| Read "fixing one arm makes the inconsistency observable" as a reason to check the siblings, not as a reason to leave them | A sibling defect being protected because fixing the first arm exposed it |
-| Read landing on one oracle where the tool answered neither as a rung up, not as touching a split axis | A genuine improvement being refused by the rule against split axes |
-| Run a three-way census of every masked shape before removing a masking loud guard, and keep a loud with corrected wording for what cannot yet be fixed | The pre-existing silent-wrong beneath becoming yours, with the original wording handing the next reader a wrong root cause |
-| Walk the write path to its end and name what it lands on when a read fix routes a name away from an object; give the write its own refusal at the lvalue funnels, not inside the shared resolver | Fixing the read moving the write from a wrong object to a wrong bit |
-| Fix a stale-read defect at the read, not at the store: change what the reader resolves to, statically, in the one sidecar every backend consults | A store-side forward reordering every settle consumer, digest and record order |
-| Close what a removed loud gate exposes in the same slice | The pre-existing defect becoming yours because you widened its reach |
-| Cut a reject gate from a hazard set measured on a PRE build, never from a proxy; a proposed gate predicate is itself subject to measurement | A proxy predicate false-rejecting byte-correct designs in bulk |
-| Run the real design a loud gate was blocking, not a reduction of it, before removing the gate; removing a loud gate is a promise about everything underneath | Independent pre-existing defects being invisible to a minimal probe |
-| Say so when a handler cannot use an argument, and read the neighbouring branches: if one warns and yours does not, the asymmetry is the defect | A bare return being indistinguishable from "there was nothing to do", the one outcome no user can debug |
-| Record a partially fixed count in the queue with the number, in the same slice; for a side-effecting operand the count is the semantics | A partially fixed silent defect looking exactly like a fixed one |
-| Make a second pass verify rather than overwrite when a computation is done twice: record what the first pass produced and make a mismatch loud | A consumer running between the two passes keeping the first answer while everything after keeps the second |
-| Make executor selection ask a latched fatal first; latching is not skipping execution | Execution continuing past the latch and failing at an unwrap |
-| Read the ladder per build: a change is a promotion only where the fallback is not compiled | The same change being a promotion in one build and a descent in another |
-| Narrow the coverage, not the semantics, when something cannot be proved | Changing runtime semantics in order to admit everything |
-| Judge each declarator of a declaration independently and split only where the verdicts differ | One name's verdict discarding the whole declaration and making every later use undeclared |
-| Gate interacting properties on one precondition, all or nothing, and leave pre-slice behaviour verbatim when the precondition is absent | Partial application being worse than none |
-| Refuse where a snapshot mechanism has one slot and the expression needs more | Two calls in one expression, or a recursive call, reading the same overwritten snapshot |
-| Catch what an executor cannot do in the executor, not in elaborate, when a body is lowered into two copies and the caller may use either | An elaborate gate on one copy false-louding designs that run through the other |
-| State the fallback that leaves existing answers literally unchanged when adding a new claim, and move a pre-existing strictness asymmetry in its own slice | A new catch-all changing an unrelated verdict |
-| Check whether the workaround for a refused construct is itself blocked, and update a message that lists supported positions whenever the capability list changes | The user searching for a workaround that does not exist |
-| Refuse in elaborate what elaborate cannot do; a debug assertion disappears in release, so a panic is not loud | Release silently doing the wrong thing |
-| Ask the direction table for an argument's direction: an output actual is a write destination and an `inout` is both, which is a stand-down | A snapshot redirecting the destination so the write disappears |
-| Give a verdict name a documented contract and check the promise is literally true at every new site | A "writes on every evaluation" verdict given to a conditional write, and a short-circuit path reading a stale value |
-| Poll a latched fatal inside the statement loop so the process stops at the fatal point | A fatal that does not stop, letting a testbench print its own success line afterwards |
-| Do delimiter matching on the token stream, not on raw text | A delimiter inside a comment or a string closing a construct and making the rest executable |
-| Make an unmatched opening delimiter an error | A diagnostic-free fallback making the defect non-local, dependent on the whole compilation unit |
-| Ask the storage question on the write path wherever the read path asks it | A frame-local value writing unconditionally into module storage and silently not changing |
-| Match the value to the oracle and state the risk in a warning: correct-or-loud means "do not let it go unnoticed", not "change the value" | Truncating silently, or refusing legal code |
-| Treat non-conformance plus "the user cannot change the source" as a gap even where a document calls the refusal a deliberate policy; a warning can buy the safety the refusal was buying | A vendor-supplied library that cannot be simulated at all |
-| Route initializers by block; splitting one block's initializers into a main sweep and a trailing group destroys declaration order | Interleaving disappearing and draws coming out in the wrong order |
-| Wire rather than refuse when the key is wrong | A refusal papering over a mis-keyed lookup |
-| Inherit the old storage class's capabilities when reclassifying into a new one, and register in both tables only when the two representations match exactly | Capabilities going false-loud on reclassification |
-| Kill only the events you created: split the dirty list rather than clearing it, because a value can be restored and an event cannot | A previous stage's events disappearing, since re-writing the same value is not a change |
-| Write a truth capture as a negation of a negation, never as one expression named twice | Naming the same expression identifier twice making the engine evaluate it twice |
-| Place a new refusal for a lane defect at that lane's store, keyed on the two widths the defect needs (the stored value's and the target's), never inside a lowering the lane shares with correct lanes | A refusal that also fires in the module and frame positions the shared lowering serves, un-fixing cells the slice had made right, and refuses same-width cells the defect never reaches (§4.5.528: the stream exclusion inside `lower_stream_*` un-fixed module and frame streams in round 2, refused equal-width inline streams in round 3, and reached the static-task lane; the store-side gate on differing widths closed all three) |
-| When a row waits on a prerequisite, keep the refused shape's oracle text beside every pin (a `REFUSED` marker with the measured lines in a comment): closing the prerequisite then makes the admission a deletion plus a text move, and the pins re-measure without a new census | An admission slice that has to re-ground every cell it once measured (§4.5.532: 40 pins converted from their quoted oracle text; re-measured on 49 cells in one batch) |
-| Do not guard with a static scan a property the engine decides per time step: when a defect fires whenever some construct reaches the step (`$finish` ending time 0 before the processes already woken in it run), every channel into that step — a task enable, an event, another process, an alias system task — is a hole. Ship the half the defect cannot reach (where the output under the defect equals the old lane's) and file the engine fix as the prerequisite of the other half | A scan gate that looks complete in one round and leaks in the next (§4.5.529: the `$finish` scan over `initial` bodies, added in round 2, missed a task enable, an event-woken `initial`, an `always` with no event control, an `always_comb`, another admitted lane and `$exit` in round 3; the all-constant list went back to its refusal and the drain became a REMAINING_WORK §D prerequisite) |
-| End a run at the stable point of its time step, never at the statement that asked for it: latch the request, keep draining every region the step still owes (the rest of the batch, `#0`, NBA, deferred, and any tick due at `now`), park the process that made the request so a second edge cannot re-enter it, and consume the latch where time would advance | A `$finish` arm that returned mid-batch dropping the processes both oracles run, then a first fix that re-entered the finishing body on the NBA edge of its other term (`n=2`, iverilog `n=1`) and skipped the `#0` cont-assign delivered on the same-tick advance path (`r=0`, iverilog `r=7`) — §4.5.531, two review blockers on one arm |
+| Check a general floor removes no diagnostic masking another, still-broken span; before removing a masking loud guard, three-way census every masked shape and keep a correctly worded loud for what cannot yet be fixed | Owning masked silent-wrongs |
+| Read "fixing one arm makes the inconsistency observable" as a reason to check the siblings, not to leave them | Protected sibling defects |
+| Read the ladder per build (a promotion only where the fallback is not compiled); landing on one oracle where the tool answered neither is a rung up, not a split-axis touch | Descents elsewhere; refused gains |
+| Ask the storage question on the write path wherever the read path does; when a read fix routes a name away from an object, walk the write to its end, name what it lands on, and refuse it at the lvalue funnels, not in the shared resolver | Writes to wrong objects or bits |
+| Fix a stale read at the read, not the store: change what the reader resolves to, statically, in the sidecar every backend consults | Reordered settles and digests |
+| Before removing a loud gate, run the real design it blocked, not a reduction (removal promises everything underneath), and close what it exposes in the same slice | Defects a probe missed |
+| Cut a reject gate from a hazard set measured on PRE, never a proxy; measure the proposed predicate too | Bulk false rejects |
+| Say so when a handler cannot use an argument; if a neighbouring branch warns and yours does not, that asymmetry is the defect | Undebuggable bare returns |
+| Record a partially fixed count in the queue with its number, same slice; for a side-effecting operand the count is the semantics | Partial fixes looking fixed |
+| When a computation runs twice, the second pass verifies the recorded first result, loudly on mismatch, never overwriting it | Stale first answers |
+| Make executor selection ask a latched fatal first (latching is not skipping execution) and poll it in the statement loop so the process stops at the fatal point | Running past a fatal |
+| Judge each declarator independently, splitting a declaration only where verdicts differ | One verdict killing the rest |
+| Refuse where a snapshot mechanism has one slot and the expression needs more; ask the direction table for an argument's direction (an output actual is a write destination, an `inout` both, so a stand-down) | Overwritten snapshots; lost writes |
+| When a body is lowered into two copies and the caller may use either, catch in the executor what it cannot do, not in elaborate; refuse in elaborate what elaborate cannot do, since a debug assertion vanishes in release | False-louds; silent releases |
+| When adding a claim, state the fallback leaving existing answers literally unchanged; move a pre-existing strictness asymmetry in its own slice | Unrelated verdicts moving |
+| Check whether a refused construct's workaround is itself blocked; update messages listing supported positions when capabilities change | Phantom workarounds |
+| Give a verdict name a documented contract and check it literally holds at every new site | False verdict names |
+| Match delimiters on the token stream, not raw text, and make an unmatched opening delimiter an error | Comments closing constructs |
+| Match the value to the oracle and state the risk in a warning (correct-or-loud means "not unnoticed", not "change the value"); non-conformance plus "the user cannot change the source" is a gap even where a document calls the refusal policy | Silent truncation; refused libraries |
+| Route initializers by block, never splitting one block's initializers into a main sweep and a trailing group | Lost declaration order |
+| Wire rather than refuse when the key is wrong; reclassifying into a new storage class, inherit the old one's capabilities and register in both tables only if the representations match exactly | Masked lookups; false-loud capabilities |
+| Kill only events you created: split the dirty list, never clear it (a value can be restored, an event cannot) | Lost earlier events |
+| Write a truth capture as a negation of a negation, never one expression named twice | Double evaluation |
+| Place a refusal for a lane defect at that lane's store, keyed on the two widths it needs (stored value's, target's), never in a lowering shared with correct lanes | Un-fixing other lanes |
+| When a row waits on a prerequisite, keep the refused shape's oracle text beside every pin (`REFUSED` marker, measured lines in a comment) | Re-grounding cells |
+| Never guard by static scan a property the engine decides per time step (every channel into the step is a hole); ship the half the defect cannot reach (output under the defect equals the old lane's), filing the engine fix as the other half's prerequisite | Leaking scan gates |
+| End a run at its time step's stable point: latch the request, drain every region still owed (rest of batch, `#0`, NBA, deferred, ticks due at `now`), park the requester against re-entry, and consume the latch where time would advance | Dropped or re-entered processes |
+| Key a strict-path guard per axis, not per name, when a carrier covers only some uses; containers whose value flows through one node share one carrier | Carriers moving no cells |
 
 ### 2.7 Diagnostics and observability are product surfaces
 
 | Rule | Prevents |
 |---|---|
-| Treat a machine-readable rail that misdescribes itself as a silent-wrong of its own kind, because its audience cannot check it | A wrong manifest being graded as a documentation nit |
-| Report a diagnostic against the user's own name once, never a synthesized carrier name, and suppress it when the primary carrier is equally unknown | The diagnostic leaking an implementation name and misdiagnosing a construct that is simply not overridable |
-| Treat a wrong observability log as a silent-wrong: derive every observed value from the single engine source, allow-list value exports to formatter-supported kinds, keep unparsed probes loud, and gate with a three-way comparison plus a determinism golden | A wrong log misleading its only audience |
-| Put the reachable cause first in a user-facing refusal message | The message advertising an unconstructible cause and omitting the real one |
-| Publish the same values you decide with: when you add a judging layer, follow its reason string to wherever it is reported, in the same commit | A rail reporting "nothing was refused" while a layer refuses locally |
-| Do not let a desugar's diagnostics share a code with the constructs it desugars, and reserve the name space a lowering uses as a channel | Warning suppression moving a simulator-generated fact and a user-called task together |
-| Report from the place that holds the reader and the sink together, not from where the value is produced | A range diagnostic landing after the line it belongs to inside one stream |
-| Carry the execution context in the same record as a static capability census | A count from one executor reading as though another had run |
-| Put the identifier and the discriminating rule into a new loud message, and inject a resolver through a single trait where a layer has spans but no resolver | Many copies of one sentence carrying the information of one, with no anchor for the agent rail |
-| Count diagnostics per user-written construct, using the oracle's count as the standard, and save and restore the duplicate-suppression flag per construct | Reporting per leaf eating the error cap faster and deleting unrelated later diagnostics |
-| Write the role, not a capability list, in user-facing documentation | A capability list being false the moment a feature opens, with no test to catch it |
-| Capture the pre-expansion argument vector at the point it exists | A wrapper's substitution, a filelist expansion or an environment knob leaving no trace, so the run cannot say what it compiled |
-| Emit observability output in the same process and stream as the run | A dump subcommand that exits being unable to coexist with a run log |
-| Send observability output through the same writer as diagnostics | A separate print not being captured, and its order being wrong |
-| Stamp a derived value with its provenance: flag, environment variable, or automatic | The hardest case to find being the one that came from neither flag nor environment |
-| Do not break a line between a flag and its value; carry a long value past the margin instead | A wrapped flag reading as a bare flag plus a stray source file |
-| Read a defect an observability feature exposes as that feature's first proof, and comment the canonical site of any list-of-flags predicate with the reason it must be updated | A frozen flag list rewriting later flags' values as paths |
-| State only what a diagnostic knows and list the conditions; do not infer | A message sending the reader after something that does not exist |
-| Carry the defer-time span in the defer record and set it in the resolve loop | The only diagnostic in a log having no file, line and column |
-| Grep the wording of a restriction in diagnostic text when a change lifts it, and re-derive each site's reason separately | The tool telling users that working code is illegal, and a blanket replacement making one site false again |
-| Point the caret at the operand the message is about, copying a neighbour that already does | A multi-line condition sending the reader to the wrong token |
-| Apply an escaping rule at every site that prints the value | A control character in a name splitting a warning across two lines |
-| Refuse a per-call profile that cannot see every execution path rather than shipping it, and publish the blind region's map instead | A rail reporting zero where it cannot see, which reads as free |
-| State an attribution convention in the artifact and verify it by construction | A consumer having to infer the convention from prose, and a reintroduced double count being invisible |
-| Run the design and read the output before writing what the output means; when one claim appears in a diagnostic, a docstring and a comment, fixing one fixes a third of it | A message describing behaviour the executor does not have |
-| Record a refusal as a first-class expected state, separate from a run with an exit code, so refused-as-pinned, refused-for-another-reason, promoted, and refused-becomes-silently-wrong are distinct outcomes | The one move the ladder forbids being graded as a promotion |
-| Make a give-up state a value carrying a span and a reason, not an empty answer | Diagnostics with accurate locations that cannot be narrowed |
-| Check that a node's diagnostics moved with it when code rebuilds an operation in its own spelling | A value-only differential being unable to see that the same expression is loud in one form and silent in another |
+| A self-misdescribing machine-readable rail or wrong observability log is silent-wrong (its audience cannot check it): one engine source for every observed value, exports allow-listed to formatter-supported kinds, unparsed probes loud, gated by a three-way comparison plus determinism golden | Misleading the only audience |
+| Report a diagnostic once against the user's own name, never a synthesized carrier's, suppressing it when the primary carrier is equally unknown | Leaked names |
+| State only what a diagnostic knows, listing the conditions without inferring, and put the reachable cause first in a refusal message | Chasing impossible causes |
+| Publish the values you decide with: a new judging layer's reason string reaches every place it is reported, same commit | Hidden local refusals |
+| Give a desugar's diagnostics a code apart from the constructs it desugars, and reserve the name space a lowering uses as a channel | User tasks suppressed with facts |
+| Report from where the reader and the sink meet, not where the value is produced | Late diagnostics |
+| Carry the execution context in the same record as a static capability census | Misattributed counts |
+| Put the identifier and discriminating rule into a new loud message, injecting a resolver through one trait where a layer has spans but none; point the caret at the operand the message is about | Anchorless messages; misplaced carets |
+| Count diagnostics per user-written construct, the oracle's count as standard, saving and restoring the duplicate-suppression flag per construct | Per-leaf cap exhaustion |
+| Write the role, not a capability list, in user-facing documentation | Stale capability lists |
+| Capture the pre-expansion argument vector where it exists, and stamp a derived value with its provenance: flag, environment variable or automatic | Unknown compile inputs |
+| Emit observability output in the run's process and stream, through the diagnostics writer | Uncaptured, misordered output |
+| Never break a line between a flag and its value (carry a long value past the margin), and apply an escaping rule at every site that prints a value | Misread flags; split lines |
+| Read a defect an observability feature exposes as its first proof; comment a list-of-flags predicate's canonical site with why it must be updated | Stale flag lists |
+| Carry the defer-time span in the defer record and set it in the resolve loop | Location-free diagnostics |
+| Run the design and read the output before writing what it means; fix a claim everywhere it appears (diagnostic, docstring, comment); when lifting a restriction, grep its wording and re-derive each site's reason | Working code called illegal |
+| Refuse a per-call profile that cannot see every execution path, publishing the blind region's map instead; state an attribution convention in the artifact and verify it by construction | Unseen cost as zero; double counts |
+| Record a refusal as a first-class expected state apart from an exit-coded run (refused-as-pinned, refused-otherwise, promoted and refused-becomes-silently-wrong distinct), and a give-up state as a value with a span and a reason, not an empty answer | Forbidden moves as promotions |
+| When code rebuilds an operation in its own spelling, check its diagnostics moved with it | Form-dependent loudness |
 
 ## 3. Review method
 
-Every design or implementation change gets an adversarial review of at least two lenses,
-differential and soundness. A design that changed during review is re-reviewed.
+Each design or code change gets adversarial review by two or more lenses, differential and soundness.
 
 ### 3.1 What a review is
 
 | Rule | Prevents |
 |---|---|
-| Verify a suspected silent-wrong by reproducing it against a live differential oracle, not by argument | A defect that is argued about rather than reproduced being neither confirmed nor refuted |
-| Run the inspection with the roles separated: author, moderator, reviewer, recorder | One agent playing every role and validating its own reasoning |
-| Use the specifications under [preview/](preview/) as the review checklist; where a separate checklist exists, add it rather than substituting it | A review with no predefined checklist inspecting whatever the reviewer happens to notice |
-| Review on four axes: architecture and system integration, performance and efficiency, maintainability and readability, robustness and testability | A single-axis review missing the defect classes it never asks about |
+| Verify a suspected silent-wrong on a live differential oracle, not by argument | Argued defects |
+| Separate roles: author, moderator, reviewer, recorder | Self-validation |
+| Give a review a predefined checklist — the brief's questions and the rule sections the change touches, plus a spec under [preview/](preview/) only where one covers the change | A review with no checklist inspecting whatever the reviewer happens to notice |
+| Review 4 axes: architecture/system integration, performance/efficiency, maintainability/readability, robustness/testability | Unasked classes |
 
 ### 3.2 The briefing
 
-The briefing decides what a round costs, so it carries all of this.
-
 | Rule | Prevents |
 |---|---|
-| Build the PRE binary before the briefing and hand the reviewer its path | A reviewer building its own PRE overwriting in-progress work or measuring a different tree |
-| Tell reviewers explicitly not to touch the working tree | A lens restoring files to build PRE and destroying uncommitted work |
-| Take a snapshot commit before briefing and hand PRE out as `git archive <branch>`; that commit, not a scratch directory, is the restore canon | A scratch snapshot disappearing and the tree being unrestorable |
-| Give the reviewer the list of already-killed mutations and documented survivors, and require findings outside it | A round re-deriving the previous round's results |
-| Name the previous round's numbers in the briefing as re-measurement targets | Prior numbers being inherited as facts and never re-checked |
-| Say that reporting clean is a good result and that findings must not be invented | A reviewer under implicit pressure producing noise |
-| Allow the soundness lens a separate `CARGO_TARGET_DIR` for mutant builds | Mutant builds colliding with the session's build state |
-| Aim later rounds only at what changed since the previous one | A full re-review spending the budget on settled ground |
-| Require a build with `--features separate-bins` when the staged binaries are in scope | A stale staged binary replaying pre-fix behaviour, with the finding attributed to current code |
-| Hand the reviewer the measurement table (cell by oracle by PRE and POST by classification) as a file, and open with "attack outside this table" | The reviewer rebuilding the table from scratch |
-| Write the budget into the briefing in tool calls and designs, and require a report of what was found plus what to do next when it is exceeded | A review without a budget always spending the whole of it |
-| Hand out a snapshotted binary and record its hash; when a blocking fix lands mid-round, re-freeze and say which binary the numbers describe | Lenses scoring different builds, so every finding has to be re-measured |
-| Keep attribution per slice when several slices share one review: disjoint files, one PRE and one POST binary, a census per slice with its own cell prefix, and questions grouped per slice | A finding that cannot be reverted without touching the other slices |
-| Do not rebuild the binary while a reviewer is measuring; make changes in a copy and re-review afterwards | The reviewer having to annotate which binary each measurement used |
-| Require an explicit non-vacuity proof: byte-identity means something only when the fast arm actually fires, with the firing count and observed argument values recorded | "Nothing happened, so they were the same" being indistinguishable from a working optimisation |
-| Excerpt this file per role instead of handing it whole: every role gets §1 and §2.1–§2.2; the implementer §4 plus the §2 and §5 subsections the change touches; the differential lens §3.1–§3.3, §3.5, §6 and §7.3; the soundness lens §3.1, §3.2, §3.4, §3.5, §4 and the touched §5 subsections; adoption and regression verdicts §3.5, §3.6 and §6.3; a gate or corpus run none (CONTRIBUTING › The gate). Extract with `sed -n '/^### 3\.3 /,/^###* [0-9]/p'` | Every agent carrying the whole rulebook in its context on every call, most of it outside its role |
+| Build PRE before the briefing from a snapshot commit, hand it out as `git archive <branch>` with its path, and tell reviewers not to touch the working tree; that commit, not a scratch directory, is the restore canon | A reviewer's own PRE build overwriting work; an unrestorable tree |
+| Freeze, hash binary (staged: `--features separate-bins`; soundness mutants: own `CARGO_TARGET_DIR`); mid-measurement edit a copy, re-review after; after a mid-round blocking fix re-freeze, naming the binary measured | Mixed builds |
+| Brief measurement table (cell × oracle × PRE/POST × class) as a file, opening "attack outside this table"; budget in tool calls, designs (on overrun: findings, next steps); clean is good, never invent findings | Waste, noise |
+| Slices sharing a review: disjoint files, one PRE, one POST, a census each with own cell prefix, questions grouped per slice | Unrevertable findings |
+| Prove non-vacuity: byte-identity counts only if the fast arm fires, firing count, observed args recorded | Vacuous identity |
+| Excerpt this file per role: every role §1 and §2.1–§2.2; the implementer §4 plus the touched §2 and §5 subsections; the differential lens §3.1–§3.3, §3.5, §6 and §7.3; the soundness lens §3.1, §3.2, §3.4, §3.5, §4 and the touched §5 subsections; adoption and regression verdicts §3.5, §3.6 and §6.3; a gate or corpus run none (CONTRIBUTING › The gate). Extract with `sed -n '/^### 3\.3 /,/^###* [0-9]/p'` | Bloated contexts |
 
 ### 3.3 The differential lens
 
-The differential lens reproduces behaviour against a live oracle and reports, per divergence, the
-oracle's raw output text and a classification. Its report names the probe resolution used.
-
 | Rule | Prevents |
 |---|---|
-| Compare semantic equivalence, never structural | Structurally different but semantically identical output reading as a divergence, and the reverse |
-| Classify every divergence four ways: real gap, no-oracle, vita-ahead, harness format | Undifferentiated divergences all being treated as defects, or all dismissed |
-| Ground a suppression on the FIRING side of its predicate as well as the silent side: before shipping "X never produces an event", run the sibling that varies the operand kind (a literal against a variable, a constant wire against a reg) on both oracles | A rule fitted to the silent cells alone (§4.5.534: every settle edge cleared, where both oracles fire the edge for `{r, 1'b1}` of a variable `r`) reading as CLEAN until a lens varies the axis |
-| Run the module twin of every interface cell the lens files as pre-existing; when the twin is wrong the same way, the row is a shared-model row, not an interface row | An interface row filed for a defect that lives in the shared model |
+| Compare semantically, never structurally; per divergence report raw oracle output, class (real gap, no-oracle, vita-ahead, harness format), probe resolution | Misread divergences |
+| Before shipping "X never produces an event", ground its firing side too: vary operand kind (literal vs var, constant wire vs reg) on both oracles | Silent-only fits |
+| Run module twin of each interface cell filed pre-existing; if wrong alike, row is shared-model, not interface | Misfiled interface rows |
 
 ### 3.4 The soundness lens
 
-The soundness lens argues from the source and the standard, and its premises are censuses, not
-prose. Commission it explicitly.
-
 | Rule | Prevents |
 |---|---|
-| Commission the soundness lens for: all-sites and variant enumeration, disjointness proof, same-name collision, guard traversal completeness, and an audit of the population path of every map being consumed | A soundness lens without a task list checking whatever it finds interesting |
+| Commission soundness lens explicitly, premises censused from source and standard: all-sites and variant enumeration, disjointness proof, same-name collision, guard traversal completeness, each consumed map's population path | Unfocused lenses |
 
 ### 3.5 Rounds and deltas
 
 | Rule | Prevents |
 |---|---|
-| Make a later round a delta briefing: the changed hunk list and the already-killed mutations, plus a demand for findings outside them | A later round re-measuring the first |
-| Re-review after fixing a blocking finding: the fix is a new mechanism no lens has seen, and the reviewers' existing reproduction is the first thing to mutate | The next round's blockers all sitting inside the previous round's fix |
-| Treat the fix for one round as the finding of the next: a delta round is not optional after a design change, and its brief must name the delta | Each round correcting the previous correction, none found by the author |
-| Read a verify phase that dies wholesale as leaving its findings unverified, not cleared, and rebuild a failing reproduction from the stated mechanism | Sub-verifications dying and the findings being filed as clear |
-| Read a stalled reviewer's partial output before killing it; the point where it stopped marks where something looked wrong | The most valuable finding of a slice sitting in a lens that never filed a report |
-| Re-measure yourself any cell the two lenses report differently; a lens's "both oracles agree" has been a measured split | A split filed as a two-oracle agreement |
-| Measure a lens's proposed stricter or simpler rule against PRE before adopting it; refusing what PRE accepted is a ladder descent | A reviewer's simplification regressing hundreds of cells |
-| Write the quantifier of every property a fix claims (one shape, one rule, every rule); a per-shape fix returns next round through another door, and a generalised floor that erases a loud which was masking another defect is loud→silent-wrong | The same root coming back each round under a different spelling |
+| Brief later rounds as deltas: changed hunks, prior numbers to re-measure, killed mutations, documented survivors; demand findings outside them; after a blocking fix or design change run one naming the delta, mutating existing repro first | Re-derived, inherited results, unreviewed fixes |
+| Read a stalled lens's partial output before killing it (its stop point is suspect), a dead verify phase as unverified (rebuild failing repros from mechanism); re-measure yourself cells lenses disagree on (a lens's "both oracles agree" was a split) and a lens's stricter or simpler rule on PRE before adopting it; refusing what PRE accepted is a ladder descent | Lost, false-cleared, wrongly adopted findings |
+| State each fix claim's quantifier (one shape, one rule, every rule); a per-shape fix returns through another door; a generalised floor erasing a loud masking another defect is loud→silent-wrong | Respelled roots |
 
 ### 3.6 Stopping, reverting and prerequisites
 
-The round budget is three. A fourth is a scope signal, not a fourth patch. Two consecutive
-blocking rounds on one axis end the attempt on that axis before the budget does.
+The round budget is three; a fourth is a scope signal, not a fourth patch. Two consecutive blocking rounds on one axis end that axis's attempt before the budget does.
 
 | Rule | Prevents |
 |---|---|
-| Stop and count when each fix on one axis produces the next blocking finding: revert, ship the separable halves, and file what every attempt uncovered as the prerequisite | A fourth patch on an axis that is wrong |
-| Revert and measure the condition after mis-scoping a guard twice, instead of attempting a third scope | The third attempt being another guess |
-| Revert to pre-existing behaviour and register the measured shapes when the condition cannot be named | An unnamed condition being encoded as a guess |
-| Read a root that returns through a different door each round as the stop signal: revert whole and write the prerequisite into the queue row | Each narrowing breaking a different case |
-| Revert a producer axis that yields a new blocker every round and make the consumer decline on what it cannot vouch for; the producer's patch gets its own row with its measured cells | A fourth attempt on the producer axis |
-| Fix the other code path first when a precondition lives there; a workaround predicate that is wrong twice is an ordering problem, not a predicate problem | Consecutive rounds of regressions from workarounds |
-| Ship the separable half and revert the rest with the prerequisite written down when a second consecutive round blocks on the same axis, whatever round that is; a third round is for another axis or the delta of the revert | Two slices in a row, each fix locally correct, the axis wrong both times; and a third round spent on an axis the second already condemned (§4.5.571, §4.5.572: one axis blocked in all three rounds) |
-| Decide fix-or-revert from the root, never from the effort spent: ask whether the root is pre-existing and independent, whether the fix needs machinery the frozen IR cannot hold, and how wide the blast radius is | A separable half going out with the revert because nobody looked |
-| Count the rounds and read where the blockers are: when they sit outside what you built, in what you routed to, you are discovering a prerequisite | A fourth fix on shared code with a different blast radius |
-| Do not propagate a closure out of a slice until the slice is committed, and re-measure rather than restoring old text when re-opening one | A row marked resolved coming back with the revert, its old text overstating the residue |
-| File the wall as one infrastructure line and point the feature rows at it when three requests stop at the same prerequisite | The next person walking into the same wall through a fourth door |
-| Record the mechanism, not the verdict, when reverting, so the next attempt starts from a measured prerequisite line rather than from the queue line, and treat a defect a change merely exposes as belonging to the code it exposes | The next attempt repeating the reverted one, and a slice absorbing an unrelated root cause |
+| Also stop if each fix on one axis yields the next blocker, a root returns through another door, or blockers sit in what you routed to: revert (whole for a returning root, else ship separable halves; a producer axis's patch gets own row with measured cells, consumer declining what it cannot vouch for), queue uncovered prereq; round three is for another axis or the revert's delta | Wrong-axis patches |
+| After two mis-scoped guards or an unnameable condition, revert to pre-existing behaviour, measure the condition, register measured shapes; fix first the path holding a precondition (a workaround predicate wrong twice is an ordering problem) | Guessed third tries |
+| Decide fix-or-revert from root, not effort (pre-existing and independent? needs machinery frozen IR cannot hold? blast radius?); on revert record mechanism, not verdict; a defect a change merely exposes belongs to exposed code; propagate closures only after commit; on re-opening re-measure, never restore text | Blind reverts, absorbed roots, stale closures |
+| When three requests stop at one prerequisite, file one infrastructure line and point the feature rows at it | The next request walking into the same wall |
+| Once a prerequisite lands, re-derive its reverted slice from the row and current code, never by restoring the old patch and its compensations | Floors for a missing prerequisite surviving |
 
 ## 4. Census method
 
-A census is an enumeration, taken from the source, of every site that can reach a question, with
-each cell measured rather than argued. It is the unit of work here: a slice opens with a census and
-closes with one. Four kinds recur, and they answer different questions — a producer census asks who
-writes a value, a routing census asks where a value goes, an ordering census asks when it arrives,
-and a consumer census asks who reads it and what each reader does with it. One never substitutes for
-another.
+A census enumerates from source every site reaching a question, each cell measured; slices open and close with one. Producer, routing, ordering, consumer censuses ask who writes a value, where it goes, when it arrives, who reads it and how; none substitutes for another.
 
 ### 4.1 Start from a census, not from an implementation
 
 | Rule | Prevents |
 |---|---|
-| Start a queue item with a census from the code — grep every site that builds the construct, decide whether the defect reaches each, confirm with the oracle — never with an implementation | The queue recording a symptom and the class being larger than the row says |
-| Ask whether a function already implements the rule and whether every place that should call it does; the detector is axis-independent | A rule implemented exactly and called from only some of its sites |
-| Re-run the census before starting a slice: an estimate written at the end of the previous slice is a hypothesis | The previous slice having moved the gates the estimate was measured against |
-| Re-measure every open queue row at HEAD against both oracles before ranking, and re-measure class (loud versus silent-wrong) first, because class decides ranking and ages fastest | Ranking rows on shapes that have since changed |
-| Ask what a row's mechanism can reach, not what the reporter ran | A row that names a symptom being scoped to that symptom |
-| Grep the open queue for the function you are about to change before implementing any review finding; where a row says built or reverted, run its designs first | A one-line routing fix reproducing a regression that was already measured and reverted |
-| Grep the queue for the site and read every line that names it before trusting a row's "no prerequisite" field | The older line, which is usually the measured one, going unread |
-| Grep the failure messages of green pins when choosing the next item | A green test's message containing the next slice verbatim and nobody reading it |
-| Measure the whole-value operation first for an element-select silent-wrong: correct there means access routing, wrong means a storage gap | The slice being sized from the symptom |
-| Enumerate the sub-classes a row's fix would serve and ask which of them the existing channel already answers | A row's stated cause pricing machinery most of its sub-classes do not need |
-| Write both what was measured and what could not be measured into any sentence that closes a family | The gap between what was measured and what was closed leaving the document |
-| Instrument the rejection point with the node kind and aggregate it, rather than ablating one gate | An ablation measuring only that gate's axis, so a kind with no arm looks the same either way |
+| Open a queue item with a census, not an implementation: grep each site building the construct over mechanism's whole reach, not reporter's cell; decide if defect reaches each; confirm on oracles | Symptom-sized rows |
+| Before building, or accepting "this capability does not exist", find any function implementing the rule; count sites that should call it but do not | Partly called rules |
+| Re-census before a slice; before ranking re-measure open rows at HEAD on both oracles, class first; before implementing a review finding or trusting "no prerequisite", grep queue for function or site, read each line, run designs of rows marked built or reverted; grep green pins' failure messages when choosing next item | Stale, unread rows |
+| Before building for a row's shape, probe its plain twin (whole-value op for an element-select silent-wrong: right means access routing, wrong a storage gap; widths ≤32, 33–64, >64, naming lane); size fix by its sub-classes minus what an existing channel answers | Mis-sized slices |
+| Write what was and was not measured into any sentence closing a family; before publishing a refutation, check factorial readout holds each output the mechanism can produce, varying only claim's axis | Overclaims |
+| Instrument rejection point by node kind and aggregate; do not ablate one gate | Armless kinds |
 
 ### 4.2 Containers, spellings and passes
 
 | Rule | Prevents |
 |---|---|
-| Give a post-patch or re-spell pass as many sites as the type has containers, and read a sibling spelling that is already correct as the signal that one container was missed | An omission looking like a missing capability |
-| Before keying a coercion or a guard on a slot's KIND, grep every constructor of that slot (`add_net(` twins: a frame function, a class method, a hoist temp) and give each the same arm; a kind fix that reaches one constructor turns the other's slot from silently right into coerced wrong | A class method's `Reg` return slot rounding 2.5 to 3 the moment the frame write learned to convert by kind (§4.5.494) |
-| Enumerate all sites for a shared function or desugar: every scope, caller, parser variant, assign site, reserve path, statement dispatch and declaration-level validation | The most frequently repeated defect class in this repository |
-| Count a type's containers and pin each one when a pass respells or patches expressions held by that type | A per-container omission repeating, with the loud spelling visible and the silent one not |
-| Enumerate the containers of the type a post-hoc patch pass patches, by grepping the type in the frozen IR, not the call sites that build it | A container carrying an unpatched sentinel into the engine |
-| Count the passes of one family and check the hit count, not the symptom | The same omission repeating once per pass, so fixing some of them makes the design run and print the wrong value |
-| Record a route census inside the emitters, with the table an emitter needs to file a row from an identifier alone, never at the callers | A new caller bypassing the seam and a row reading zero beside real call sites |
-| Census the emitters that share a diagnostic's context string through one resolver, and measure at least one of the others against the oracles | A change made for one emitter silently moving the others |
-| Census the consumers that resolve names later than they are collected, and carry the collection scope with the item, when a block gets a scope of its own | Everything that worked only because the block's names were flattened breaking at once |
-| Treat a gate that exists for one consumer as the gate for every consumer of the same shape, and count the copies | Binders that call none of the copies, and a further copy the docstring already claimed |
-| Census a scope rule at every spelling of the scope it names: module, interface, package, compilation unit | A rule about a declaration written in one scope being applied to a spelling where it does not hold |
-| Census a subroutine-body rule at every binder that can INJECT a body into the table the rule reads — package import, scoped `pkg::` call, interface, class — and ask WHEN each injection runs against the one-shot pass that computed the rule | A feed computed once over `module.body` while package routines arrive in the same table one step later and two steps later |
-| A routine's DECLARATION has text outside its body — formal default values, return-type bounds — and a scope rule for the body must reach it: census where the declaration's text is lowered (the caller's actual loop) and who collects callees from it | A package scope pushed around the body while a default `a = x` / `a = h()` was lowered beside the caller's actuals in the caller's scope, and the callee collector never reading a default (§4.5.496) |
-| Enumerate the AST forms new keys can appear in that the old keys could not, such as lvalues, iteration and port connections, when a table's key set widens | A read-only rewrite gaining a write side and an element write becoming a bit write |
-| Bisect a diagnostic page per header or per file before pricing the items | A page that reads as several items being one root plus its uses |
-| Probe a queue row's plain twin at three widths — at most 32, 33 to 64, and above 64 — before building for the row's shape; the answer names the lane | The position named in the row being incidental while the plain twin was already wrong |
-| Census a parameter rule over four channels: module body, instance-elaborated, package, and instance override, filing the override channel as its own row | The override channel folding in the parent, before the target's width exists |
-| List a parse-time constant table's gates and census each with a control twin: overridability, the declared type, every declaration of the name, and the readers you did not write | Each skipped gate hiding a defect, including correct designs turned loud |
-| Run the real design behind the row and take the next page in the same slice when it is the same table | The next page being two lines away and deferred to another slice |
-| Put the multi-line cell in the census for a position query | A single-line use being unable to tell two readings of position apart |
-| Give every census consumer a scalar control twin beside the element spelling | A column reading as wins where the control twin shows a pre-existing silent the element spelling is about to inherit |
-| Widen the other operand on every axis before believing a boundary; a census band is a property of its operands, not of the defect | A band that is an artefact of pairing every cell with the same sibling |
-| Keep the eligibility set identical to the process set | Designs dropped between eligibility and processing with no diagnostic |
+| Give a respelling or patching pass a site and pin per container of the type (grepped in frozen IR, not call sites; a correct sibling spelling flags a missed one), and a guard or coercion keyed on a slot's KIND the same arm in each slot constructor (`add_net(` twins: frame function, class method, hoist temp) | Missed containers, constructors |
+| Before changing a shared function, primitive (conversion, resize, width), desugar or pass family, enumerate each site: scopes, callers, parser variants, assign sites, reserve paths, stmt dispatch, decl validation; check hit counts, not symptoms; that enumeration is the scope decision; a gate for one consumer gates each same-shape consumer (count copies) | Missed sites |
+| Record a route census inside the emitters, never at the callers, with the table an emitter needs to file a row from an identifier alone | A new caller bypassing the seam |
+| Census the emitters that share a diagnostic's context string through one resolver, and measure at least one of the others against the oracles | One emitter's change silently moving the others |
+| If a block gets its own scope, census late-resolving consumers; carry each item's collection scope | Mass breakage |
+| Census a scope rule at every spelling of the scope it names: module, interface, package, compilation unit | A rule applied to a spelling where it does not hold |
+| Census a parameter rule over four channels — module body, instance-elaborated, package, instance override — and file the override channel as its own row | The override folding in the parent before the target's width exists |
+| Census a subroutine-body rule at every binder that can inject a body into the table it reads (package import, `pkg::` call, interface, class), asking when each injection runs against the one-shot pass that computed the rule, and at the declaration's text outside the body (formal defaults, return-type bounds): where that text is lowered and who collects callees from it | Bodies or defaults arriving after or outside the rule's pass |
+| If a table's key set widens, enumerate AST forms only new keys reach: lvalues, iteration, port connections | Unseen write sides |
+| Price a diagnostic page after bisecting per header or file and censusing by construct in `[in scope]`, not `file:line` (instance errors report at instance site) | Mispriced pages |
+| Census each gate of a parse-time constant table with a control twin: overridability, declared type, each decl of the name, readers you did not write | Skipped gates |
+| Run the real design behind a row, also after a rule claimed to open it; write the ladder; take a same-table next page in the same slice | Unseen next pages |
+| Give each census cell a keyword or scalar control twin beside element spelling, and a position query a multi-line cell; if a whole position column is loud, diff each cell's diagnostic with its control's before classifying | Misread cells |
+| Before believing a boundary, widen the other operand on each axis (container dimension for "reads the wrong element"); a change moving a boundary needs a cell each side | Artefact bands |
 
 ### 4.3 Producers, populations and writers
 
 | Rule | Prevents |
 |---|---|
-| Justify removing a defensive check with an exhaustive producer census — constructors, struct literals, field writes, direct plane writes — not with a green suite | A green suite being a coverage statement rather than a proof of the invariant |
-| Census a set's writers before relaxing a guard that never fires positively | The guard firing on its own producer, so relaxing it re-opens a real case |
-| Enumerate the resource — every argument the engine writes back — not the sites you edited, and treat a guard that cites another guard as its model as a census of two | The cited model never having called the funnel either |
-| Search for a data structure that already records a property before building the mechanism a reverted slice named as its prerequisite | Building what an existing map already answers |
-| Open the code that populates a list your check reads | A check over a list that is always empty being dead code shaped like a guard |
-| Read a per-net predicate through the store's element loop, not through `read_net(net, None)`: an unpacked array is ONE net and the word-less read answers element 0 | A filter that decides for a whole array from one element (§4.5.533: `assign a[1] = 4'd5;` with `a[0]` undriven lost the array's time-0 wake) |
-| Audit the population path of any set a check consumes, and check that the population does not zip formals positionally | The candidate set being empty, so the check never runs, and named arguments being invisible |
-| Count everything the site you are moving sets, not only the field that motivated the move; two fields set by one function are usually one fact | Moving half a fact and making the other half's consumers silently wrong |
-| Search the text of an approximation you are replacing; the places that depend on it are the places that say so in a comment | One consumer being left on the approximation |
-| Find the further collectors of a concept by grepping the constructor, not the name | The same declaration falling into different kinds in different collectors |
-| Enumerate a shared map's readers before measuring anything when routing a value out of it, and ask of each whether it reads a value or uses membership as a proxy | A proxy going stale and the regression living in old code |
-| Write the same expression in the neighbouring scope before building the mechanism a wall is attributed to; when the tool contradicts itself, the correct half is the implementation | Building what is already built one scope over |
-| Name the mechanism, not the missing input, when collapsing several rows into one infrastructure item, and re-measure the others the day it lands | Rows that share a provenance but not a domain, so closing one closes only one |
-| Measure the end-to-end outcome of the pair when a re-grounding says closing one item moves the refusal | Fixing either half alone producing a worse report than fixing neither |
-| Check the input set before looking for missing machinery when a feature works in one place and not another | The classifier walking a narrower set than the feature reaches |
-| Put the PRODUCER census of any new per-instance carrier (key, parameter) in the review brief; a second producer (alias, pass-through) re-seeds the default after every consumer is routed, and a routed predicate must be checked against the stored value it guards | Every consumer routed and the default still landing |
-| Lower a whole into its parts only where the whole is the parts' sole writer, and census the writers in the finished IR, channels no statement carries included — a clocking-block output commit, an `inout` connection approximated one way, a placeholder no pass resolved | The whole inheriting every mixed-writer case the parts' spelling already gets wrong: a `wire` array element with two drivers reads the last driver where iverilog reads `x` (§4.5.566) |
-| A per-net record a declaration makes is that declaration's claim: where a second declaration comes to share the net (a block-local coalesce), drop the record where the two are merged | A second same-named block-local filled through the first one's packed shape: `logic [7:0] x` beside a sibling block's `logic [1:0][3:0] x` took `'{default: 1'b1}` as two 4-bit elements, `11` where both oracles print `ff` (§4.5.567 round 1) |
+| Census each producer (constructors, struct literals, field writes, direct plane writes; aliases, pass-throughs re-seed defaults) before weakening a defensive check or never-positive guard, never a green suite, and when briefing a new per-instance carrier (key, param); check routed predicates vs stored value | Unproven invariants |
+| Enumerate the resource (each argument the engine writes back) and everything a moved site sets, not your edits or motivating field; two fields one function sets are usually one fact; a guard citing another as model is a census of two | Half-moved facts, copied omissions |
+| Before accepting a wall or building a reverted slice's prereq or a rejected construct's infra, find the nearest working spelling (one scope over, a sibling consumer carrying the guard) and what it calls; grep for a structure recording the property or partial support; in a routing census or if the tool contradicts itself, find the correct site: it is proof and spec; an additive-looking parser gap may be a storage or evaluation-model gap | Rebuilt machinery |
+| Open population path of any set a check reads (no positional zip of formals); keep eligibility and process sets identical; check input set first if a feature works in one place only | Empty, mismatched sets |
+| Read a per-net predicate via the element loop, not `read_net(net, None)` (element 0 of an unpacked array) | Element-0 verdicts |
+| Search a concept's collectors by constructor, not name, and a source scan by prefix, not one family member | Uncounted siblings |
+| Before moving a value out of a shared map or between record slots, census both sides' readers first: value read or membership proxy? | Stale proxies, wrong-slot reads |
+| Lower a whole into parts only where it is their sole writer, censusing finished-IR writers incl. channels no stmt carries (clocking-block output commit, one-way `inout`, unresolved placeholder); drop a decl's per-net record where a second decl merges onto the net (block-local coalesce) | Mixed writers, stale per-net records |
+| Name the mechanism, not the missing input, when collapsing several rows into one infrastructure item, and re-measure the others the day it lands | Rows sharing a provenance, not a domain |
 
 ### 4.4 Routing, ordering and consumers
 
 | Rule | Prevents |
 |---|---|
-| Count every place that asks whether a value belongs to a store before opening a new one: the read funnel, the write funnel, the specialised evaluator and the reader wrapper | Each fix making a different piece of the output correct, so stopping anywhere looks like success |
-| Count how many code paths a reject row blocks before narrowing it; one row can cover two executors | Threading one executor and leaving the other silently wrong, green in the whole suite |
-| Run an ordering census as well as a routing census for a construct that writes into another instance: routing answers whether the value reaches the right storage and is silent about when | An exhaustive routing census reporting clean over an ordering silent-wrong |
-| Grep every read of a shared carrier type and give each site an explicit non-empty decline naming its reason, then measure the declines | Readers with no slot for a new field binding the wrong type in silence |
-| Census the readers of both slots before moving a value from one slot of a record to another | One consumer reading the slot the other one wants |
-| Count how many times one feature reads the store — value, offset, width and index are each a read — and route every read through the seam | One read left outside the seam making the write land elsewhere |
-| Re-walk the call graph by store-access spelling after wiring a consumer, not by a list of names | A task's own arguments bypassing the formatter and reading the old store |
-| Re-check a "the funnel discards the wrapper" argument per lane: a lane that stores a whole value answers differently from one that stores bits | One lane keeping the flag the funnel was supposed to drop |
-| Ground a loud-to-supported candidate by running the same context set through both the candidate path and its sibling and comparing a capability-parity matrix | A silent-wrong common to both paths being invisible |
-| Widen a read and sweep the write twin in the same iteration; the detector is a scalar or fixed twin that is loud while this path is quiet | Fixing one read leaving several same-class write silent-wrongs |
-| Measure capability parity before unifying or routing storage classes; where neither representation dominates, extend additively | The weaker axis silently regressing |
+| Before opening a new store count each membership question (read/write funnels, specialised evaluator, reader wrapper); route each read of a feature (value, offset, width, index) via the seam, re-walking call graph by store-access spelling, not names | Stray access |
+| Count code paths a reject row blocks before narrowing it | Unthreaded executors |
+| For a construct writing into another instance, census ordering plus routing | Ordering silent-wrongs |
+| Give each read of a shared carrier type an explicit non-empty decline naming its reason; measure declines | Wrong-type binds |
+| Re-check "the funnel discards the wrapper" per lane (whole-value vs bit) | Lane mismatch |
+| Compare a capability-parity matrix before grounding a loud-to-supported candidate (one context set on it and its sibling) or unifying or routing storage classes; where neither dominates, extend additively | Parity regressions, shared silent-wrongs |
+| Widen a read and sweep its write twin in one iteration, found by a scalar or fixed twin loud where this path is quiet | Wrong write twins |
+| Read the names and docs of the tests guarding a path before routing traffic into it; each documented gap becomes the new traffic's defect | Inheriting the path's known defects |
 
 ### 4.5 The axes a census must vary
 
 | Rule | Prevents |
 |---|---|
-| Include the `signed` spelling of every cell in a typedef census | An unsigned-only table certifying the sign axis by omission |
-| Put one instance per census cell, or compare sorted line sets | A two-instance cell printing in display order, so a second instance's pre-existing value reads as new |
-| Add the census axis a narrower type cannot represent when routing a value through it: a sign for an unsigned, a fraction for an integer, "never" for a count | Every literal on the axis being non-negative and the regression shipping |
-| Sweep the container dimension as well as the operand's when the symptom is "reads the wrong element"; the immunity band is a function of container size | Probing one width, finding nothing, and reading that as no defect |
-| Put a narrow constant beside a wide literal under unary minus, remainder and division in the census; those are the operators where a wrapped intermediate cannot be recovered | A large census being green over regressions in the non-commuting family |
-| Vary every field of a record — base, width, direction — because the no-op combination certifies a lane that does not work | A normalisation measured only where it is the identity |
-| Give every census cell a keyword-spelled control twin | New silent-wrongs turning out to be pre-existing on the plain spelling |
-| Measure "the gate rejects that shape" per spelling | One refused spelling not refusing the family |
-| Read one of several grouped operators diverging as the signal that the divergent one has a property the grouping missed | The common rule being blamed instead of the operator's own property |
-| Read a characterisation that concentrates entirely on one value as a signal that the other half survives for a different reason | An accidentally correct half blinding the characterisation to its own axis |
-| Classify every operator on an axis as sign-sensitive or bit-pattern before changing that axis's interpretation, write the table into a comment, and measure whether an uncovered operator was right only by cancellation | Fixing one operator exposing a latent defect in its neighbour |
-| Census by routing and ask whether one of the sites implementing a rule is already correct; the correct site is both the proof and the specification | Assuming everything is wrong and missing the reference implementation already in the tree |
-| Build one cell on each side of a domain boundary in any change that moves that boundary | A large sweep containing no cell that reaches the boundary |
-| Write the factorial table and check that every output the mechanism can produce is in the readout before publishing a refutation; a refuting census varies the claim's axis and holds everything else fixed | A one-column readout of a multi-column mechanism refuting nothing |
-| Vary every field of a reported shape, not only the one the report names | The field held constant being the one that matters |
-| Count the loud→value cells separately; multiply position by the five binders (module, instance, package, generate, override), give every cell a keyword/scalar spelling twin as its control, one instance per cell, and open a §2 row with the plain twin of its shape | A census that cannot say which cells descended the ladder |
-| Refuse from a measured pair MATRIX, not one pair at a time: when a rule judges two declarations, two operands or two kinds together, enumerate every unordered pair of the kinds once under both oracles, give each pair a two-name control, and derive the accept set from the result | Every kind added to a closed pair list arriving with unmeasured columns, so each review round finds the next one (§4.5.525: three rounds, four columns, until the 105-pair matrix replaced the list) |
+| Census what a narrow form hides: each cell's `signed` spelling in a typedef census; the axis a narrower routed type cannot carry (sign, fraction, "never" for a count); a narrow constant beside a wide literal under unary minus, remainder, division | Omitted axes |
+| Put one instance per census cell or compare sorted line sets; if an oracle contradicts itself on a second instance, mark which cells are multi-instance | Misread instances |
+| Vary each field (base, width, direction) and spelling of a record, reported shape, report-named feature or gate-rejected shape, not only the named one | Unvaried fields, spellings |
+| When one of several grouped operators diverges, look for the property the grouping missed; when a characterisation concentrates on one value, ask why the other half survives | Blaming the common rule; an accidental half hiding the axis |
+| Before changing an axis's interpretation, classify every operator on it as sign-sensitive or bit-pattern in a comment table, and measure whether an uncovered operator was right only by cancellation | Fixing one operator exposing its neighbour's defect |
+| Count loud→value cells separately; multiply position by 5 binders (module, instance, package, generate, override); open a §2 row with its shape's plain twin | Hidden descents |
+| Refuse from a measured pair matrix: if a rule judges two decls, operands or kinds, run each unordered kind pair on both oracles with a two-name control; derive accept set | Unmeasured pairs |
 
 ### 4.6 Queue rows and incoming reports are claims
 
 | Rule | Prevents |
 |---|---|
-| Split a broadly written item's scope with a three-oracle census first; an axis where the oracles split is off limits | The slice taking on an unarbitrable axis |
-| Include the cells where the silent default equals the true value when removing that default | The whole table reading as wrong-to-loud, hiding the correct-to-loud subset |
-| Ask whether the oracle orders your axis by kind before keying a shared table on one fact | One ordering key being unable to reproduce several per-kind orders |
-| Enumerate the resumption kinds, not the code sites, and give each its own two-oracle cell | Two kinds sharing a site, so a site census answers "all converted" twice |
-| Measure the twins a row lists as "kept correct" before using them as the regression baseline | Listed twins turning out to be a split and separate silent-wrongs |
-| Run the row's own cited line and ask which context it is in before building the machinery a row prices; a keyword's meaning is context-dependent | A reject gate keyed on a keyword over-rejecting everywhere the standard neutralises it |
-| Treat a grounding's prescribed fix shape as a hypothesis: build it, re-run the census, and count the cells that MOVED before building anything on top of it | A prescription that names the right resolvers but the wrong lane shipping as the fix, moving 2 of 23 cells with a green suite |
-| Diff a census cell's diagnostic text against its control's before classifying, when a whole position column is loud | Cells reading as still loud for a reason unrelated to the feature |
-| Run the real design after a rule a queue line claims will open it, and write the ladder that follows | The claim being a hypothesis about a second error page nobody has seen |
-| Measure a new loud gate on the designs it will refuse, not on the one that motivated it: enumerate the syntactic shapes that reach the arm and run PRE on each | Ordinary style and non-scope regions going loud |
-| Measure the end-to-end outcome before promising that closing a gate unblocks a design | A refusal moving instead of closing |
-| Add the arm to both evaluators when a text is folded by two | The first arm fixing many cells and leaving a whole family at the wrong width |
-| Measure the whole axis against the oracles when a report names one cell | A reporter knowing the cells they hit and not the cells they did not, including their own suggested workarounds |
-| Census the consumers of a diagnostic model field, not just whether the model has a slot | A field nobody fills and nobody renders being a dead contract, not an unimplemented feature |
-| Re-run every item of an incoming report at HEAD | "Still true", "already fixed" and "true but not a defect" being indistinguishable |
-| Survey third-party RTL before ranking priorities | A corpus you wrote yourself finding what you already suspect |
-| Run the oracle first and vita second when building a workload, and forbid simplifying or rewriting the RTL so vita accepts it; a refusal is a result | The workload measuring only what vita can already do |
-| Count how many rows of a manifest already contain a state combination you believe cannot occur | A believed-impossible combination being present and unhandled |
-| Re-measure with the oracle any assumption written as a degenerate special case | A diagnostic pointing at a phenomenon that does not exist |
-| Count a resolver's callers when you meet "this capability does not exist"; a resolver with one consumer has grown to fit that one question | Several binding sites using a literal-only twin while a general resolver sits unused |
-| Before accepting a WALL, look for a sibling consumer of the same route that already carries the guard the wall says is missing | A row held behind a tree-wide pass that one guard closes: the prim cast's wall was the real-domain walk the inline-assignment consumer of the size-cast route already used (§4.5.553) |
-| Grep every place that enumerates a subset before widening it | One layer accepting, another refusing, and the fallback message asserting something false |
-| Check a demand claim with the same suspicion as a correctness claim | A revert's justification resting on usage nobody verified |
-| Enumerate the spellings of a feature a report names and measure each | A passing test being evidence about its own spelling and nothing else |
-| Treat a comment saying "only" the way you treat one saying "cannot": ask what the other cases are and run one | The sentence that is the entire defect reading as a scope note |
-| Run the suite, the corpus and the examples before the review when adding a loud gate on a shape the engine used to accept, and ask what made a refused working design work | The full suite refuting the claim in one test |
-| Measure a planned reject row before building it; over-rejection is a ladder descent | A row planned because two documents say it is needed, over code that never reads the input |
-| Ask at which phase a reject row's reason is true; "this row is dead" expires | The same row being recorded three different ways |
-| Ask what a refusal actually blocks before asking what to build | A refusal that is pure conservatism, where deleting one line buys coverage |
-| Split a feature-named row with a census; the part that genuinely needs machinery is usually already refused under another name | A row bundling unrelated shares |
-| Split a one-word reject row by what designs do, not by which tables exist; a table nobody reads refuses nothing | Unrelated populations sharing a word and a priority |
-| Re-measure every sentence that cites a kind as its reason when you open that kind's row | A comment claiming a scan refuses something a neighbouring change already opened |
-| Read a function that takes an alternative store as a parameter as using that store only on the paths that name the parameter | Opening a row leaving the other arms silently wrong |
-| Re-measure a queue row's FIX SHAPE with the same suspicion as its symptom and oracle count; when the shape changes one shared key, ask first whether the oracle sets that key per kind — a root returning each round through a different door is one key under several rules | A one-key fix built where the standard has several rules |
-| Ask whether a decline is a decline before "adding only where None": when the existing lane returns a WRONG value rather than declining, the new lane must be routed ahead of it, not behind it as a fallback | A fallback that never runs because the wrong answer is already there |
-| Reject a cited cell that both candidate rules answer identically as evidence; measure a cell where they differ, and size the slice as the whole subclass minus what an existing channel already answers | A slice justified by a cell that cannot distinguish the rules |
-| Read the type alias behind any tuple a row cites by POSITION before accepting its root, and build the no-construct control (the same expression with a plain declared name in place of the row's construct) before naming the class after the construct | A row naming a sign bit that was an `ascending` flag, and a genvar row whose class was every outer-scope name read from a nested scope |
-| When PRE agrees with the oracle on a cell whose PRE mechanism is a constant, vary the value the constant coincided with before attributing the movement | A coincidence cell being filed as a regression by one lens and as a working design by the next |
-| Census a refused page by the construct inside the diagnostic's `[in scope]`, not by its `file:line`: an elaboration error inside an instance is reported at the instance's site | A row named and priced after the location — 25 `ibex` errors reported at instance sites read as port connections; all were continuous assigns, and 5 of them another construct (§4.5.566) |
+| Split a broad item's scope by a 3-oracle census first; axes where oracles split are off limits | Unarbitrable axes |
+| Removing a silent default, include cells where it equals true value | Hidden correct-to-loud |
+| Enumerate resumption kinds, not sites, each with a 2-oracle cell | Kinds merged by site |
+| Re-measure claims before use: each incoming report item at HEAD; demand claims like correctness claims; a documented split's discriminator; a row's "kept correct" twins before baselining; an assumption written as a degenerate special case (on the oracle); a combination believed impossible (count manifest rows holding it); a comment saying "only" or "cannot" (run one other case) | Claims taken as facts |
+| Before building the machinery a row prices, run the row's own cited line and ask which context it is in: a keyword's meaning depends on context | A keyword-keyed reject gate over-rejecting where the standard neutralises the keyword |
+| Before accepting a row's root, read the type alias behind any tuple it cites by position, and build the no-construct control (a plain declared name in place of the construct) before naming the class after the construct | A misread tuple field; a class wider than its construct |
+| Treat a fix shape (row's or grounding's) as a hypothesis: before keying a shared table on one fact ask if oracle sets it per kind (a root returning through new doors is one key under several rules); build, re-census, count moved cells first | Wrong-shape fixes |
+| Before building a loud gate or reject row, measure what it refuses: enumerate shapes reaching the arm, run PRE on each; over-rejection is a ladder descent. Gating a shape the engine accepted, run suite, corpus, examples before review; ask what made a refused working design work | Over-rejection |
+| Measure end-to-end before promising closing a gate, or one of a pair, unblocks a design | Moved refusals |
+| Census a diagnostic model field's consumers, not its slot | Dead contracts |
+| Survey third-party RTL before ranking; build workloads oracle-first, never simplifying or rewriting RTL for vita; a refusal is a result | Biased workloads |
+| Grep each enumeration of a subset before widening it | Layers disagreeing |
+| Re-measure a reject reason (at which phase it is true; each sentence citing a kind as reason when opening that kind's row); ask what a refusal blocks before what to build; split a feature-named row by census, a one-word reject row by what designs do, not which tables exist | Stale refusals, bundled rows |
+| Read a function that takes an alternative store as a parameter as using that store only on the paths that name the parameter | Other arms left silently wrong |
+| Before "adding only where None", check that the existing lane really declines; if it returns a wrong value, route the new lane ahead of it, not behind it as a fallback | A fallback that never runs |
+| Measure a cell where candidate rules differ, not one both answer identically; if PRE matches oracle via a constant, vary coinciding value before attributing movement | Blind evidence |
+| Run a row's own design and read the route it took (`run.json` `subroutines[].route`) before reading the function the row names | Fixing a site the shape never reaches |
 
 ### 4.7 Completeness for a change already under way
 
 | Rule | Prevents |
 |---|---|
-| Define a name's shadow set as every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations | A census over declarations alone missing most of the binders |
-| Define a ROUTINE's own-name set the same way — formals, body locals, block-locals, body-local enum labels, its return name — build it once and hand that one function to every consumer (a scope hook's stand-down, a gate's write set, a binder's skip set) | A scope hook that stands down on "what the routine declares" shadowing the one binder its hand-built set forgot (a body enum label), so the routine contradicts its own module twin (§4.5.493) |
-| Find the nearest spelling of the same question that already works, and ask what it calls, before accepting a stated wall | A prerequisite being carried through several slices while the machinery already exists |
-| Walk forward after changing a width to every site that re-derives the value from a width, not only the sites that read the width | A read-back that assigns into the variable you already set being invisible to a census of readers |
-| List every call the original's caller makes before copying a call; the twin reads from its own state and most of the contract is invisible at the call site | Copying the maps without the containment gate and making a nested case silent-wrong |
-| Re-measure a documented split's discriminator; it ages | A row standing for several slices on a discriminator that does not hold today |
-| Include the pre-existing branches of the same gate in a new fence's blast radius | The same leaf staying silent-wrong through the older branch |
-| Grep a predicate's documentation for the condition it named before changing the component that condition is about | A guard becoming a pure false-loud that looks identical to one still needed |
-| Record which census cells are single-instance and which are multi-instance when an oracle contradicts itself on the second instance | A self-contradicting oracle being cited for a multi-instance cell |
-| Grep a property's string after fixing one site and count the rest, updating every comment that cites the equivalence argument in the same edit | Identical sites staying unfixed and a comment surviving its own premise |
-| Control a path-dependent feature by the declaration that decides the path, verify the callee takes that path, and fix every path in one iteration | A matrix that never enters the mechanism it claims to measure, and divergence between paths, which is worse than uniform wrong |
-| Grep for existing partial support before building infrastructure for a construct recorded as rejected, and treat an additive-looking parser gap as a possible storage or evaluation-model gap | New infrastructure built for a one-sub-form gap |
-| Grep for every site that needs a fact you have just learned, and fix the second instance of the class in the same slice | The same silent-wrong being reproduced one layer in |
-| Grep for downstream comments that assume "there is no such thing before this point" after inserting a stage into a pipeline | A later stage's comment becoming false and a whole change set being lost |
-| Measure the claim "the upper layer refuses this first" by running that shape through that layer | Mutation survival being indistinguishable from "no design of that shape in my set" |
-| Build the drain twin in the same slice when a new site starts reading an alternative store, answering the drain question separately for each termination path | The same failure being produced in consecutive slices |
-| Write in one sentence which shape makes a new structure meaningful and count that shape | Zero meaning the design has no basis, not that the test is missing |
-| Count who does not call an existing funnel before building one | Infrastructure built for a one-call-site omission |
-| Enumerate and measure the indirect paths — calls, hierarchical names, methods — that bypass a new loud gate before claiming it is the only net | The gate not being the only net, with the claim untested |
-| Read the sibling funnel in the same file every time; branch parity finds this by reading, not by probing | The twin funnel having the same shape and the same defect |
-| Read every other arm of a match in the same sitting when a fix lands in one, and ask whether the fixed arm's reason applies there | Two arms two lines apart giving different answers |
-| Grep an existing sibling across the workspace after adding a sidecar, mirror every copy site, and assert the map is non-empty at the consumer before reading the output | A sidecar reaching the engine through separate field-by-field copies, one of which is silently empty |
-| Count the render sites of a per-statement fact and give an executor without a seam the ability to write it, with a census cell per site | One seam being mistaken for the funnel |
-| Route every site that folds the same field through one named funnel with the old call as its fallback, then measure the funnel's new lane for the shapes it must not change | The same text folded by the same evaluator at many sites being fixed at one |
-| Census three lifetimes for a name-keyed parser rewrite: declaration, shadow, and export | The declaration lifetime being right on the first build while the other two are silent-wrong or loud |
-| Census the regions that have not yet been asked the same question after fixing one | The same defect shape existing once per region, the largest one last |
-| Count how often a row is the sole blocker; a row with no sole-blocker cases cannot be closed alone | Closing one of a pair gaining nothing |
-| Record marginal and standalone gain separately | A plan of cumulative numbers hiding rows with no standalone gain |
-| Grep every caller of a primitive before changing shared semantics such as conversion, resize or width rules; that enumeration is the scope decision | Review rounds spent walking from the leaf back to the primitive |
-| Count the small consumer-by-value matrix before adding or removing a feature | Fixing one cell being mistaken for knowing the axis |
-| Add an arm to every walker when adding an expression kind | One walker's catch-all swallowing the new kind |
-| Ask a source-scan pattern by prefix; a pattern naming one family member is a whitelist, not a scan | A sibling function a few lines away going uncounted |
-| Make a classifier that walks statement lvalues also audit the side tables that hold write destinations | Walking a node not being the same as seeing its effect |
-| Re-audit every comment that cites "another gate rejects it anyway" when you unify predicates | The justification holding only while there is exactly one gate |
-| Check the other kinds of callable object in the same sitting when applying a rule to one | One half being closed with a comment and the other left open |
-| Drive the whole idiom, file access included, to the end after opening a gate | A minimal reproduction stopping short of the silent-wrong beneath, which the user meets first |
-| Fix both halves of a shallow and deep walker pair in the same slice | Twins having the same defect twice |
-| Reproduce the stated basis before calling a place marked deliberately unverified a misdiagnosis | A reported false positive being a measured, correct constraint |
+| Build a shadow set once from each binder (module: ports, import exports, enum labels, instance names, block-locals; routine: formals, body locals, block-locals, body-local enum labels, return name); hand that one function to each consumer (scope-hook stand-down, gate write set, binder skip set) | Missed binders |
+| Before copying a call, list each call the original's caller makes; after adding a sidecar, mirror each copy site of an existing sibling workspace-wide; assert map non-empty at consumer before reading output | Incomplete copies |
+| After changing a width, walk forward to each site re-deriving the value from a width; include gate's older branches in a new fence's blast radius | Unwalked sites |
+| After a fix or learned fact, grep each site, census each region needing it, fix the second instance in the same slice, update comments citing equivalence argument in the same edit | Defect one layer in |
+| Before replacing an approximation, changing a component, inserting a pipeline stage or unifying predicates, grep docs, comments premised on it (a named condition, "nothing before this point", "another gate rejects it anyway") | Stale premises |
+| Control a path-dependent feature by its path-deciding decl, verify callee takes it, fix each path in one iteration | Divergent paths |
+| Test "the upper layer refuses this first" by running shape through it, and a new loud gate's only-net claim by measuring its bypasses: calls, hierarchical names, methods | Untested coverage |
+| If a new site reads an alternative store, build its drain twin in the same slice, per termination path | Repeat failures |
+| Count before building: shape making a new structure meaningful (state it in one sentence), consumer-by-value matrix before adding or removing a feature, how often a row is sole blocker (a never-sole row cannot close alone); record marginal and standalone gain separately | Baseless work |
+| Count a per-stmt fact's render sites (a census cell each; let an executor without a seam write it); route each site folding one field via a named funnel with old call as fallback, measuring its new lane on shapes it must not change | Partial fixes |
+| Census 3 lifetimes of a name-keyed parser rewrite: decl, shadow, export | Missed lifetimes |
+| Cover a fix's or addition's twins in the same sitting: file's sibling funnel (by reading, not probing), every other match arm (does the reason apply?), each walker for a new expr kind, both evaluators folding a text, both halves of a shallow/deep walker pair, the other callable kinds | Twin defects |
+| Make a classifier walking stmt lvalues audit write destinations' side tables | Unseen writes |
+| After opening a gate, drive the whole idiom, file access included, to the end | Hidden silents |
+| Reproduce stated basis before calling a deliberately unverified place a misdiagnosis | False misdiagnoses |
+| Say why a mechanism worked for its narrow shape before generalising it; the reason is usually a property the wider shapes lack | Losing cells once generalised |
+| Classify the cells a first fix leaves wrong by what they share before calling them pre-existing; a shared property names the rule's missing half | Half a rule filed as residue |
 
 ## 5. Gates, predicates and classifiers
-
-Under-detection in a shared walker is the repeating source of silent-wrongs here, so a gate is
-written to fail closed and is measured on what it refuses as well as on what it admits.
 
 ### 5.1 One rule, one home
 
 | Rule | Prevents |
 |---|---|
-| Put the canonical home of a question beside its twin in `sim-ir`, not at the consumer | A second consumer inventing a second spelling |
-| Put a guard in one documented funnel that every site shares, and name the predicate after the prohibition reason, not after a type enumeration | Per-site guards leaving sibling axes open and a split predicate giving each axis different coverage |
-| Add semantics to shared machinery as an opt-in parameter, never a default, and document the positive precondition — when it is safe to turn on | One consumer's need imposing risk on every other, and the next reader falling into the same trap |
-| Move the value-free rules of a renderer into a crate both the constant-domain twin and the runtime can reach, and make both call them | A twin re-deriving a rule set one finding at a time and converging only asymptotically |
-| Put a context or width rule on the consumer, never inside a shared evaluator: grep who calls the function and whether they agree on context, and where two disagree the rule lives at the call site | One consumer's context being imposed on all of them |
-| Expose a flat entry point by having the canonical implementation finish its normalisation and delegate to it | A second spelling of the judgement drifting |
-| Choose refusal over routing when routing would spell an existing rule a second time, and make correct support a separate slice that gives the funnel an escape hatch | A second spelling of a split rule |
-| Delete the old entry point when the canonical implementation moves | The old method being one edit away from pointing at a different entry, so read and write lanes diverge |
-| Reduce a new shared input to one function rather than one datum, so the contract is a property of one expression | Two reduction loops having to agree |
-| Write a node's children, their order and their evaluation conditions in one place and have every walker consume it | Independent recursions inevitably diverging |
-| Keep one shared list of positions that must not be hoisted and have every hoister consume it | The second hoister not reading the first hoister's list |
-| Give two walkers that must see the same child set one child-list function, and mark unreachable reads unrepairable so both answers agree | A recorded read the transformation cannot reach being silently wrong |
-| Write the naming rule two stages share once and have both use it; a limitation whose reason is another stage's implementation detail is a defect in that stage | The path where the name exists and the path that looks for it diverging |
-| Treat a guard as a funnel, not a site: enumerate every place that builds the operand and pass them all through one function | A guard at one leaf missing the other operand-building sites |
-| Mint an identifier that indexes parallel vectors through one funnel that fills every table, with an assertion per table and an explicit empty slot for the case that owns no row; do not guard at the reader | One producer pushing some of the tables, shifting every later identifier, so a reader returns another entry's data |
-| Treat every writer of the primary map as a writer of the side map when a key space becomes rebindable, and route them all through one funnel so a grep for the raw writer returns only the funnel | "A writer that forgot" being merely absent rather than unrepresentable |
-| Fill a new table with the same producer as its twin, so one provenance rule covers both scopes | A second, independently written producer being a second rule wearing the first one's name |
-| Split a predicate per resolver when a value has two representations; one predicate cannot serve two lookup orders | Subsystems disagreeing about which map wins |
-| Frame two implementations with different strengths as "where do they split", and extract the split predicate once | Two copies of an admission predicate drifting invisibly, whose only symptom is a slow path |
+| Write a question or rule that twins share once and make both call it: a question beside its twin in `sim-ir`, not at the consumer; a renderer's value-free rules in a crate both the constant twin and the runtime reach | Second spellings converging one finding at a time |
+| Write a naming rule two stages share once and have both use it; a limitation whose reason is another stage's implementation detail is that stage's defect | The naming and lookup paths diverging |
+| Fill a new table with the same producer as its twin, so one provenance rule covers both scopes | A second producer posing as the first rule |
+| Guard in one documented funnel every operand-building site, enumerated, passes through, named for the prohibition, not a type list | Per-site guards missing siblings, axes |
+| Add shared-machinery semantics only opt-in, documenting when safe; put context/width rules on consumers (grep callers; on disagreement, at call site) | One consumer's needs forced on all |
+| Expose a flat entry as the canonical implementation's post-normalising delegate; drop the old entry when the canonical moves | Drifting spellings; diverging lanes |
+| Refuse, not route, when routing respells an existing rule; correct support is its own slice adding a funnel escape hatch | Respelling a split rule |
+| Reduce a new shared input to one function, not one datum | Two reduction loops having to agree |
+| Write a node's children, order, evaluation conditions, no-hoist positions once for all walkers/hoisters; mark reads a transform cannot reach unrepairable | Diverging walkers |
+| Route every writer of parallel tables (minted ids; primary-map writers once keys rebind) through one funnel filling all, asserting per table, with explicit empty slot per rowless case, so raw-writer grep finds only it; no reader guard | Shifted ids; forgotten writers |
+| Split a predicate per resolver for a two-representation value; frame two unequal-strength implementations as "where do they split" and extract that predicate once | Drifting copies |
 
 ### 5.2 A predicate that cannot under-detect
 
 | Rule | Prevents |
 |---|---|
-| Answer a property question by walking the expression, never by enumerating spellings; use an exhaustive allow-list and fail closed on unknown variants | A spelling-counting classifier contradicting itself inside one design |
-| Extend a shared classifier, gate or fold ARM only with a full consumer census — or enable the arm per consumer — and make accept-gate walkers conservative or exhaustive | Under-detection in a shared walker, the repeating source of silent-wrongs; and a new arm of the region walk answering, in every lane at once, trees those lanes had refused — class-field defaults folded without their width, a constant function's body folded with the caller's bindings — one more lane per review round until the slice was reverted (§4.5.562) |
-| Spell a gate predicate as an exhaustive match, never as a boolean shorthand; the compiler must catch a new variant | An implicit catch-all letting a new identifier default to the quiet side |
-| Close a syntactic walker's blind spot by opting into an already exhaustive walker with one axis parameterised, not by writing a new walker | A new walker repeating the old one's omissions |
-| Build a scope or safety guard as an allow-list of provably safe forms plus a reject, not as an enumeration of dangers; a recursive allow-list recurses over every value sub-expression | Enumerating dangers repeatedly omitting a category, and one unvisited sub-expression being an escape |
-| Census every BINDER that can introduce a name — own declarations, imports, aliases, injected bodies, an upward routine search, loop variables — before using a name-keyed set as an admission term, and hand the augmented set only to consumers with the SAME polarity; where the scope model cannot see every binder (a contextual keyword read as a keyword only when no name binds it), decline on any use of the name counted over the token vector | An admission set fed one binder's names admitting nothing for a name another binder introduced; an augmented set fed back to a suppression consumer inverting its meaning; a scope check missing a binder two rounds running (§4.5.582) |
-| Choose a walker's polarity from the gate: an accept gate takes a conservative walker, a reject gate takes a positive one | A conservative walker in a reject gate refusing working designs |
-| Read a catch-all answering false in an expression walker as "this node may reference anything", not as "unknown" | A conservative accept gate giving an answer independent of the name asked about |
-| Never skip the classifying recursion in any arm: compile first and discard the result if you must, and count the recursive calls per arm | A shortcut arm skipping admission, so a diagnostic disappears and a draw vanishes |
-| Enumerate the arms of a hazard walk that answer from a rule rather than from their children; those must still descend for the guard | Wrapping the hazard in braces walking past every syntactic guard |
-| Gate every consumer of one walk on one predicate, not each on its own | Consumers of the same walk diverging |
-| Print both accept sets and name the difference before mirroring a predicate across a phase boundary, and ask whether the skip is needed at all | Two accept sets that are neither equal nor nested leaving the shapes between them fail-open |
-| Prefer the funnel that sees the value to the one that sees the syntax | A gate on the AST inheriting every hole in the AST-level predicate |
-| Compare the two phases' resolvers, not their intents, when leaning on an existing gate for a precondition | A check that folds less than you do being unable to cover you |
-| Count the enumeration behind a shared classifier's "sees all of them" comment | An expression position not being seen, leaving a real divergence |
-| Read a classifier's `_ => None` tail as a per-leaf-kind silent-wrong class when `None` stands a whole REGION down: enumerate the kinds it covers, ask which are exact by the standard (a sign stamp, a cast), and measure each on every consumer of the walk | A row naming one leaf kind ("`$signed` is not widened") while the tail covers every cast too, and a second consumer (the size cast) carrying the same class unnoticed (§4.5.495) |
-| Derive "which arguments does this call write" from the ENGINE's write-back handlers, as a write VIEW of the one argument table, never as the complement of the read view; an argument can be both read and written (a seed) | Narrowing a conservative "every argument is a write" to the read table's complement dropping the seed of `$random(seed)`, so a fork local mutated by the seed write was proven never-written and flattened (§4.5.498) |
-| When a fix removes a FALSE loud, run the newly accepted cells through the oracles before shipping and close the class the loud was hiding in the same bundle; a false loud masks nothing on purpose, but it masks something | The six accepted `$sysfunc(u8)` cells exposing the whole `$bits` family's unsigned fold in one shape (§4.5.498 → §4.5.499) |
-| List the children instead of smearing "unknown" over a node, and separate nodes that are evaluated from nodes that are not | A node with no effect in it standing the whole statement down and making a working design loud |
-| Widen an analysis lattice until it can distinguish the answers you need; a narrower lattice is itself a misdiagnosis | One boolean being unable to separate two outcomes, so a large share of reported items are that collapse |
-| Special-case only where you have a distinguishable reason, and check whether a user can write the same spelling | A blanket special case dropping a live path from the join |
-| Use all segments, not the head segment, when the question becomes "can this callee touch that name", and add it as an opt-in parameter rather than copying the walker | A flattened name being reachable by a path the head-segment rule cannot see |
-| Check that an early-return predicate's walk has the same arm set as the lowering it gates | An under-detecting gate making the fix miss one spelling |
-| Mirror the questions an existing arm's conditions answer, not the conditions themselves | A restored predicate answering for the wrong family |
-| Close a gate's blind spots fail-closed with an opaque flag raised when a read has no nameable root, not by enumerating shapes, and confirm the cost is structurally narrow | Hierarchical and package-scoped names escaping an identifier-keyed gate |
-| Check that two enumeration arms share a contract before merging them; the same type is not the same meaning | A merge making an unevaluated position contribute a read and false-rejecting a harmless statement |
-| Write a width formula in its standard form with its domain, and extend the walker to its own output when the emitted shape feeds back into it | The one parameter value the census did not run |
-| Do not assume the expression arena is a tree: read what the existing walkers filter before writing a new one, because that filter documents the arena's properties | A buffer sized by index meeting a back edge and the whole seal disappearing |
-| Never fold a depth or count limit into a plain true or false; make limit exhaustion a distinct state, and remove the limit where an iterative rewrite can | The folded value being another question's answer, deleting a diagnostic |
-| Confirm that a canonical predicate answers your question before calling it, and state the delta explicitly when it does not | "Is it pure" not being "may it be evaluated twice", and closing everything losing the genuinely pure cases |
-| Make every query used for a decision three-state; folding "not yet known" into "no" is a silent-wrong | A placeholder answering with a fabricated fact that the caller reads as a fact |
-| Ask whether a caller uses the answer for a decision before adding a fallback, not whether it is visible in the engine | A fallback that looks harmless in one lane demoting correct support to loud-wrong in another |
-| Exempt a synthesized name by producer IDENTITY — the registry or the pair the producer actually mints, read at the producer's source — never by name shape | A `$`-shape test matching legal user identifiers, silent on real duplicates in two rounds (§4.5.525) |
-| When the IR does not keep what a type is — its identity, its 2-state-ness — gate on where the type is WRITTEN (the declaration's own text), not on the kind the lowering recorded | A recorded kind the lowering got wrong: `enum bit [7:0]`, recorded 4-state, passed two rounds of 2-state checks (§4.5.566) |
-| Read a range as written in the declaration only when it starts before its own left bound: a range the parser synthesizes shares one span with its bounds, and that span can lie inside the declaration's text | A synthesized `logic [W-1:0]` carrying its type name's span, read by a span-window gate as a written dimension (§4.5.567) |
+| Walk expressions against an exhaustive allow-list of provably safe forms (a match compiler-checked for new variants, not a boolean, over every value sub-expression), failing closed on unknowns, flagging reads with no nameable root opaque (confirm cost is structurally narrow); never enumerate spellings/dangers; measure refusals and admissions | Quiet omissions; escaping names |
+| Extend a shared classifier, gate or fold arm only with full consumer census or per-consumer enabling; take walker polarity from the gate (accept: conservative/exhaustive; reject: positive), reading a catch-all's false as "may reference anything", not "unknown" | Arms answering in refusing lanes; working designs refused; name-blind answers |
+| Close a syntactic walker's blind spot by opting into an exhaustive walker, one axis parameterised (all segments, not head, for callee reach), never a new one; before a new walker read existing filters: the arena is not a tree | Repeated omissions; back edges |
+| Census every binder (declarations, imports, aliases, injected bodies, upward routine search, loop variables) before a name-keyed set admits; feed the augmented set only to same-polarity consumers; if the scope model misses a binder (contextual keyword), decline on any token-vector use of the name | Missed binders |
+| Never skip an arm's classifying recursion (compile and discard; count calls per arm); list arms answering from a rule, the child walk's too; they still descend for the guard | Lost admission; escaping hazards |
+| Mirror or lean on another phase's predicate as the same walk and resolver, not intent: diff both accept sets, ask which names it quantifies and when complete, and if the skip is needed | Fail-open gaps |
+| Count the enumeration behind a classifier's "sees all"; treat a region-wide `_ => None` tail as a per-leaf-kind silent-wrong class: list its kinds, ask which the standard makes exact (sign stamp, cast), measure each on every consumer | Unseen kinds |
+| Derive written arguments from engine write-back handlers as a write view of the argument table, not the read view's complement; a seed is both | Dropped seed writes |
+| Removing a false loud, run newly accepted cells through oracles and close the class it hid in the same bundle | Silent-wrong it masked |
+| List children instead of smearing "unknown"; separate evaluated from unevaluated positions; merge enumeration arms only on shared contract, not type | False stand-downs |
+| Widen a lattice, or split a boolean (operand reading vs result sign), until it separates needed answers; a narrower lattice misdiagnoses | Collapsed outcomes |
+| Special-case only with a distinguishable reason, checking if users can write the same spelling; before a fallback, ask if a caller decides on the answer, not if the engine shows it | Dropped live paths; demoted lanes |
+| Write a width formula in standard form with its domain; extend the walker to its own output when it feeds back | One unmeasured parameter value |
+| Make decision queries three-state: never fold "not yet known" or limit exhaustion into true/false; remove limits an iterative rewrite can | Fabricated facts |
+| Before reusing a predicate/folder, confirm it answers your question (its consumer's rule: bound/value, saturate/wrap, self-determined/context width); state the delta | Silent mismatched reuse |
+| Identify a subject by membership in the set its producer mints, recorded where minted, never by name list, shape or complement; pair an AST-field-free twin by a predicate no user collision satisfies, measuring collisions on PRE | User names passing as ours |
+| Where the IR does not keep a type's identity or 2-state-ness, gate on the declaration's own text, not on the kind the lowering recorded | A wrongly recorded kind passing type checks |
+| Read a range as written in the declaration only when it starts before its own left bound, since a parser-synthesized range shares one span with its bounds | A synthesized range read as a written dimension |
 
 ### 5.3 The predicate must match what it gates
 
 | Rule | Prevents |
 |---|---|
-| Make a classifier use the same name resolver as the lowering of the expression it classifies | Classifier and lowering diverging silently under shadowing |
-| Narrow a shared gate on the BINDING a reference resolves to, never on a property of a declaration that shares its name; when the binding is not available, leave the gate alone | Each narrowing keyed on the declaration — inertness, geometry, an outer-twin lookup — standing the gate down over a different wrong twin |
-| Extract a lowering's decision into a side-effect-free function and make the lowering match on it too | A docstring saying "mirrors X" being a drift waiting to be measured |
-| Make the shared decision function say which of its answers are facts | A mirror being exact only for nodes it built itself |
-| Make a gate that decides whether a body is safe to process walk the same statement arms as the processor it gates | The gate certifying a set the processor does not act on |
-| Put a dispatch hook at the very top, detection first, and enumerate deny hooks over every write path | A hook below another check never seeing the case |
-| Make a gate predicate match the destination consumer set exactly | Over- or under-approximation at the gate |
-| Build extensions as strictly additive, fail-closed subsets that leave the remainder on the old path | A non-additive change moving cells that were already right |
-| Extend by adding a discriminator branch with the existing path kept verbatim, and prove the new eligibility set disjoint | A rewritten shared path moving existing cells |
-| Pay for a first placement with an explicit gate keyed on a property the old lane's correct cells do not have, and sweep for movement | Placing a new lane first and silently moving cells the old lane got right |
-| Check the accuracy parity of a helper's branches before filling it with new traffic; a guard present in one branch is usually unmoved, not unnecessary | Routing new traffic into the narrow branch turning wrong into a different wrong |
-| Re-apply the caller's scope rule at a resolver-first hook, keyed on the node's root, and put the decline before both resolvers | A new arm bypassing the caller's own arm and folding the wrong object |
-| Name the consumer a constant folder was written for and the rule that consumer needs — bound versus value, saturate versus wrap, self-determined versus context width — before reusing it | A folder silently declining a whole family, never wrong-valued, so censuses miss it |
-| Make a twin of a predicate in another phase the same walk, not the same intent, and ask over which set of names it quantifies and when that set is complete | A parse-time twin being blind to declarations an elaborate-time walk sees |
-| Give a leaf with no width of its own a tri-state width — unknown, context-sized, or a known width — and grep every consumer for the predicate it uses to tell the first two apart | One predicate reading a placeholder as known, so a fold declines and a loud becomes a value |
-| Let the evaluator, not the table, supply the width of a region made only of context-sized leaves | The table having no answer for such a region |
-| Pass the position as a flag and make a resolver in a count or size position refuse rather than read an environment | A general resolver letting a local supply a count, or answering past a shadow |
-| Attach the four-state qualifier to any argument that an operator is safe to narrow | Low-bit closure holding only in two-state, so narrowing deletes an unknown |
-| Distinguish three states — a wrong answer, unknown, and a right answer — because replacing a wrong answer with unknown routes to a conservative path and can drop machinery | An "unknown" answer making a cast skip context descent |
-| Attach a width-invariance qualifier to low-bit closure and to "narrowing computes the same thing": some leaves' value depends on their width | An argument valid for ordinary leaves being applied to a fill |
-| Extract the sign half of a declaration rule as a pure function rather than folding the range to get it | A classifier emitting diagnostics and changing the program |
-| Follow the lowering's whole decision procedure, including pre-steps such as inline substitution; no fixed name-resolution order is a rule | Two orders each holding the other's counter-example |
-| Put a wrapper-piercing predicate inside the recursion | A wrapper below an operator being invisible |
-| Keep the original verdict statement verbatim in the body when adding a pre-filter, so a wrong filter falls back safely and instrumentation can show it never fires | The pre-filter becoming a second spelling of the rule |
-| Answer in code who establishes the property a new predicate asserts; when the answer is nobody, either establish it or narrow the predicate to a context where it holds | A predicate asserting a representation property being handed a value that lacks it |
-| Fix the contract of a shared kernel when an operand does not fit it, rather than rewriting the operand into an equivalent pair | A trick that is perfect on the value axis breaking a width cap into a silent unknown |
-| Separate the questions a single boolean was answering — how each operand is read, and what the result's sign is | Special-casing at the operand leaking cost into width, lanes and performance |
-| Count the early returns of the function that produces a width before basing a byte-identity argument on a width comparison | A short circuit on a special type running the operation at the wrong width |
-| Ask two questions of a cap you intend to delete — whether the constant is the boundary of representable values or of supported syntax, and what type consumes a value past it — and reject on fitness, not on width | Relaxing a domain guard as if it were a capability limit and leaking an out-of-domain value |
-| Read two spellings of one hazard diverging — direct refused, indirect accepted — as proof that the walker cannot see one layer down | A partial guard being accepted as complete |
-| Treat a parser-side fold as scope-free: widening the set of names it claims means probing every binder and tying the stand-down to that syntactic scope | A parser fold answering for a name a later declaration shadows |
-| Fix an ordering defect by moving a binder before its first consumer — a span comparison, or a split pass — never by moving it earlier | Moving a binder ahead of everything re-ordering every other consumer |
-| Treat an earlier failed attempt recorded in a comment as evidence about that attempt, not about the question, and name the term it was missing | A recorded failure being read as proof of impossibility |
-| Read every property a gate decides from the same environment it seeded | Two resolvers for one name being a divergence waiting for a scope |
-| State a widening's property — adding a rule can only add candidates — and enforce it, rather than patching the shapes in front of you | Each fix being written for one shape and the property breaking again through another door |
-| Make the baseline of a widening the whole rule set, not one privileged rule | A flag meaning "not the original rule" protecting only the original rule |
-| Do not gate a hazard whose discriminator is a runtime fact (whether a value changes after a block fires) on a static shape of the read set; build the wake or file the class | Every static cut refusing a correct design (a second trigger, a declaration-initialised handle) or admitting a stale one (a loop index) — three BLOCKINGs on one axis |
-| Make a runtime-ness detector ask the arm that lowers the node which spellings produce a runtime node, not which argument kinds appear | A constant-folding query over a runtime-carrying argument being refused as runtime |
-| Make a width or sign mirror consult the same sidecar the canonical rule consults; where the two disagree the mirror is fabricating, so fix the mirror, then census every context walk that treated the leaf as opaque — sealing at the honest width truncates what the opaque walk widened | A mirror answering a container's width for a member, and a mirror fix alone regressing the cells the opaque walk had been widening (§4.5.526: `ir_bits_of` answered a class handle's 32 bits for an 8-bit field; reading `class_field_widths` moved `fh = c.fld*x` from `0000fe01` to `00000001` until `class_field_leaf` joined four context walks) |
-| When one hook postpones a whole statement family, list what each member's execution consumes — text, a descriptor, a control step, a side effect — capture only the members whose whole effect the capture holds, keep every item one instance produces, and let the others run where they stand, loudly | A capture built for prints turning `$finish` into an empty line, `q.push_back(7)` into a printed `x 7`, `$fdisplay` into stdout text, and a two-task arm into its last task (§4.5.552) |
-| When a new spelling reaches an existing mechanism, run that mechanism's recorded residues on the new spelling, and set the free parameters of what you synthesize (a holder's kind, its default) to land on the oracle | A derived net with a wire's `z` default inheriting the recorded copy-net time-0 class, where a `logic` holder matched iverilog on both the `x` and the `z` copy (§4.5.554) |
-| When two functions produce the two halves of one answer — a type and its value — make the second select its arm by the exact predicate that selected the first's (or return both from one function), and check it against every `return` of the first | A value branch keyed on a broader proxy ("the tree contains an element" for "the certifier declined") pairing one arm's type with another lane's value; the consumer binds a type without requiring its value, so the mismatch is silent (§4.5.557) |
+| A classifier follows its lowering's resolver and whole procedure (pre-steps like inline substitution; no fixed resolution order) and reads gated properties from the environment it seeded | Divergence under shadowing |
+| Narrow a shared gate on the binding a reference resolves to, never a same-named declaration's property; without the binding, leave it | Wrong-twin narrowing |
+| Extract a lowering's decision, or a declaration rule's sign half (not by range folding), into a side-effect-free function the lowering also matches on, saying which answers are facts | Drifting mirrors; classifier side effects |
+| Make a gate or early-return predicate walk the arms of what it gates and match its consumer set exactly; gate every consumer of one walk on one predicate | Certifying unprocessed sets; diverging consumers |
+| Put a dispatch hook at top, detection first; deny-hook every write path | Shadowed hooks |
+| Extend additively and fail-closed: a discriminator branch, old path verbatim, proven-disjoint eligibility; a lane placed first gates on a property the old lane's right cells lack, then sweep for movement | Moving right cells |
+| Before routing traffic into a helper, audit it (unchecked arithmetic, boundary shift masks, copied defects) and its branches' accuracy parity; a one-branch guard is usually unmoved, not unneeded | Inherited defects |
+| Fold a package function in package scope, no module fallback for bare names; a resolver-first hook reapplies the caller's scope rule on the node's root, declining before both resolvers | Wrong same-named objects |
+| Give a widthless leaf a tri-state width (unknown, context-sized, known), grep how consumers tell the first two apart; let the evaluator, not the table, size all-context-sized regions | Placeholders read as known |
+| Pass position as a flag; a count/size resolver refuses, never reading an environment | Locals supplying counts |
+| Qualify "safe to narrow" and low-bit closure as four-state, width-invariant | Deleted unknowns; misapplied fills |
+| Distinguish wrong, unknown, right: swapping wrong for unknown reroutes to a conservative path able to drop machinery | Casts skipping context descent |
+| Put a wrapper-piercing predicate inside recursion; a hazard refused direct but accepted indirect means the walker is blind one layer down | Partial guards passed as complete |
+| Keep the old verdict verbatim behind a new pre-filter so a wrong filter falls back and instrumentation can show it never fires | Pre-filter as second spelling |
+| Name in code who establishes a predicate's asserted property (if nobody, establish it or narrow the predicate); ask a precondition about the argument passed, not the declared one | Unbacked assertions |
+| Fix a shared kernel's contract for an unfitting operand instead of rewriting it into an equivalent pair | Width caps broken into silent unknowns |
+| Before deleting a cap, ask if it bounds values (domain guard) or syntax (capability limit) and what type consumes values past it; measure each side; reject on fitness, not width | Out-of-domain leaks |
+| Treat a parser-side fold as scope-free: widening its names means probing every binder and tying stand-down to that scope | Folding shadowed names |
+| Bind a declaration's shape sets after the whole declarator parses, at every binder, censusing index kinds; fix an ordering defect by moving a binder before its first consumer (span comparison, split pass), never wholesale earlier | Too-early binding; reordered consumers |
+| Verify a derived decision is consumed (a comment claiming a key wins that code ignores usually hides a fall-through re-running its walk); read a commented failed attempt as evidence about it, naming its missing term | Discarded keys; false impossibility |
+| State and enforce a widening's property (rules only add candidates) against the whole rule set, not one privileged rule; don't patch shapes | Property breaking elsewhere |
+| Never gate a runtime-fact hazard on a static read-set shape (build the wake or file the class); detect runtime-ness by the spellings the lowering arm makes runtime, not argument kinds | Wrong static cuts; constant queries refused as runtime |
+| Make a width/sign mirror read the canonical sidecar; on disagreement fix the mirror, then census every context walk treating the leaf as opaque | Container widths for members |
+| A hook postponing a statement family captures only members whose whole effect (text, descriptor, control step, side effect) it holds, keeping every item one instance produces; others run in place, loudly | Corrupted member effects |
+| Run an existing mechanism's recorded residues on a new spelling reaching it; set synthesized free parameters (holder kind, default) to land on the oracle | Inherited residue classes |
+| Select a value's arm by the exact predicate selecting its type's (or return both from one function), checked against every return of the type's producer | Type-value mismatch |
 
 ### 5.4 Arms, early returns and escapes
 
 | Rule | Prevents |
 |---|---|
-| Ask what a gate actually prevents, not what its comment says it prevents | A refusal that fires for a different reason than the hazard leaving the hazard open |
-| State which properties of the declaration every arm must preserve, and check the siblings, when adding an arm to a selection chain | One declaration getting two answers in one design |
-| Treat a partial accept set as a decision about siblings: enumerate what the excluded cases share with the included ones | Excluding a sub-case to dodge a split reproducing the split inside the tool |
-| Read a guard's justification as a precondition on another component and check that component's current behaviour before removing the guard | Deleting the guard alone turning loud cells into silent-wrong |
-| Scope a surviving call site of a multi-site guard explicitly rather than letting an earlier arm shadow it, and record when a site is right only by accident | A guard with several call sites being retired wholesale while one site was doing a different, live job |
-| Fence the operand a clamp will act on, not the destination; the admission predicate must ask about every node the clamp can reach | A wide leaf under a narrow target passing the gate and losing a sign bit |
-| Check the arms of the child walk you recurse through: a guard must descend where an answer need not | Wrapping the hazard walking past the guard |
-| Treat the positional binding as the hazard when a desugar's parameter count becomes variable: make the count uniform per construct and measure a following value parameter | A following parameter silently eating a carrier slot |
-| Re-stamp a copy alias's sign at the one interpreter read and make the compiled paths decline on a mismatch | An alias that substitutes the source handing the source's declared sign to every consumer |
-| Fold a package function's body in the package's scope, and refuse the module-scope fallback for a bare name inside it | A same-named module constant answering for a different object than the text says |
-| Count which code paths do not run today because a conservative predicate answers false, before replacing it with the canonical rule | Cells that were accidentally right through the old path going correct-to-wrong |
-| Make a precondition predicate ask about the argument the caller actually passes, not the declared one | The predicate answering "safe" and the executor failing, blaming the check |
-| Do not split the context one consumer reads; "it is a cold field" is not a justification | Values coming from a new store while time and randomness come from the old one |
-| Give each kind of unreachable case its own assertion and name the layer that refuses; the filter, the gate and the assertion must ask the same question | One refusal claiming a gate row that does not exist, and the misunderstanding leaking into a test's admission filter |
-| Check the early returns of a value-conversion primitive: "already the right width" is not "nothing to do", and a difference between exit paths must be written down as intentional | One path keeping a flag the others clear, so every same-width assignment is silently wrong |
-| Keep a compensating clear in one place and let consumers rely on it | Two spellings in consumers hiding each other, so neither dies under mutation |
-| When one emitter hoists what another must then skip, make the skip a MEMBERSHIP test on the set the hoister actually emitted, never a re-evaluation of the admission predicate; and resolve admission under the prefix the lowering will use, through the lowering's own function | The same predicate answering differently under two scope prefixes, so a declarator is claimed by neither emitter and its initializer is lowered nowhere |
-| Decide a gate that looks at an operand's calls on the statement as WRITTEN, before any hoist rewrites it, and carry the verdict to the consumer on the node's span, which the hoists keep: the frame-call and system-call hoists replace a call with a temporary first, so a gate that reads the rewritten operand never sees the call | `'{default: f()}` evaluated once where verilator evaluates it per element — an automatic, a static and an output-formal function and `$fgetc` all reached a count the oracles split on (§4.5.567 round 1) |
-| Audit an existing helper for latent defects when a new path starts calling it: unchecked arithmetic, shift masks at the width boundary, copied functions inheriting the original's defect | The new traffic inheriting an old defect |
-| Judge name resolution and classification from an AST-gathered pure-function set rather than from mutable elaboration state | A diagnostic that exists only in one phase silently deleting a whole body at a success exit |
-| Put a stand-down in the arm whose hazard it answers, keyed on the statement; a gate that can answer without looking at the statement cannot be used for a statement-level decision | A module-global early return turning off unrelated arms of the same match |
-| Prove a value dead with "definitely written on every path", not "not read before the first write", and read the exact meaning of the reused predicate's success case | A conditional write satisfying the wrong contract and copy-out returning a stale value |
-| Do not unwrap a block to iterate its statements; that drops its declarations. Write the same meaning as a declaration initializer to check both spellings, and ask about redeclaration in a subroutine body | The declaration-initializer spelling passing while the statement spelling is refused |
-| Write an evaluator in the target domain rather than restricting inputs to tame someone else's fold; bounding the leaves does not bound the result | Permitted leaves building a result outside the domain, so spellings go loud-to-silent |
-| Positively identify a subject rather than trusting a name whitelist | A method-name whitelist admitting user class methods, child instance functions and module functions with the same names |
-| Transfer-audit every arm of the old predicate when replacing one: the replacement must prove it covers all of the old obligations, not that it is more accurate | One dropped arm being a regression and another a silent-wrong |
-| Restore a dropped arm by axis, not verbatim | A verbatim restore reinstating a pre-existing silent-wrong |
-| Check a constant fold used to predict runtime behaviour on three axes — domain, resolver and scope — and prefer an identifier-free allow-list where order independence is required | Any one axis differing diverging silently from the engine |
-| Prove trip count and syntactic escape separately before admitting a loop body's writes, and handle every loop form at once | An escape being erased by the walk's join, and elaboration depending on which loop form the user wrote |
-| Expand the condition of a branch you want to delete into a truth table and answer each row separately | Answering only the axis the branch is named after and leaving half the rows unexamined |
-| Separate decision from execution in a fast path — decide everything, then execute — so that "a decline has no side effects" becomes a property of the code | A partially executed fast path emitting a diagnostic and then declining |
-| Collect a run observation before its consumer exists, not at the end of the run from a structure whose fields may have been moved out | A move being silent where a partial move would be a compile error, and a grep audit missing it |
-| Obtain a classifier's observation export by restructuring the classifier itself to collect reasons, never by writing a new predicate | A second predicate drifting from the classifier |
-| Confirm every offset and stride is handled when going from one dimension to several, and keep direction in one place | A double flip of direction |
-| Decide a deferred mirror's offset and direction-dependent kind at resolution time | Baking it at lowering time making the opposite case silent |
-| Mirror the read's flatten prefix for a nested or packed select write, failing closed on the shapes it cannot express | The write landing on a different bit |
-| Defer what is unknown at defer time, pre-resolve caller-scope dependencies into the sidecar, and lower each argument into every representation resolution may need | Information unavailable at one phase being guessed |
-| Treat a gap between a predicate and its own comment as the defect, and re-read every guarantee near a guard you change | A kind-only predicate swallowing a shape its comment excludes |
-| Mark items added to a classification set so they neither gain candidacy nor remove anyone else's | Merely gathering a span under a new rule making a name look shadowed |
-| Pass three questions before moving an evaluation — how many times, when, and what it reads — and use an inertness predicate for everything the move passes over | "It is pure, so moving it is free" answering only purity |
-| Write the necessary condition when a constraint's stated justification is only sufficient | A whole idiom staying closed behind a sufficient condition |
-| Define a shadow set as what a scope actually declared, not as what appears under its key | A flattened block-local, whose key merely looks inner, being picked up by every other reader of that scope |
-| Verify that a derived decision is actually consumed; when a comment says one key wins and the code does not, a fall-through is usually re-running its own walk | The innermost key being derived and then thrown away |
-| Replace an assumption with a lookup: a constraint that looks like missing machinery is usually a caller assuming a special case the general path already normalises. Keep the special case an identity so the IR stays byte-identical | New machinery duplicating an existing normalisation |
-| Use capture, mutate, install where the source can alias the destination, and document both the aliased and the non-aliased case | In-place ordering silently losing a value in recursion or copy-out |
-| Fresh-probe the simplest form before rewriting on the strength of "the executor cannot do this": check storage interior mutability and the classification that routed it there | Building infrastructure for a feature that mostly works already |
-| Build a guard on the value, not on syntax | A literal-shape guard being pierced by the first change that reaches the same value another way |
-| Prefer a value-based judgement, over the lowered IR and over every sub-expression, to a shape-based one | A walker missing new shapes, where a value cannot hide |
-| Decide whether a cap you are deleting is a capability limit or a domain guard, and measure one cell on each side of the boundary | Relaxing a domain guard leaking an out-of-domain value at a success exit |
-| Ask about sign at the self-determined width | A width-unlimited fold being unable to separate signed from unsigned with the same bit pattern, and false-rejecting correct designs |
-| Define opt-in as "where the paired record is actually reached", not "where it can be enabled", and count the early returns in between | The flag turning on the width while the record never runs |
-| Do not fold an overflow modulo without a context width | The fold answering at a width the language does not use |
-| Check that a static claim is true of the value when you begin consuming it, and find the place where it was cancelling out | Fixing one side breaking the cancellation |
-| List what the sibling arms do besides the arithmetic before trusting an early return on a no-op arm | A no-op for one rule skipping every rule |
-| Fix a self-firing guard by changing the route, not the guard | Relaxing the guard re-opening the case the suite pins |
-| Ask what the consumer channel can carry after widening what a producer may carry, and enforce the difference where the two meet | The new spelling's door being closed while the open door declares the wrong width |
-| Say in the comment which of the two "no value" answers a region or enable test reads when a fold feeds both a value and a test, and prove the arm cannot turn one into the other | The enable test reading the wrong one |
-| Ask whether the lie a guard's comment names is the type's fault, and check what the consumers already do | A decline that was right for a clamp being kept for a truthful record and blocking correct cells |
-| Decide at the producer whether a recorded string is relative or absolute, spell absoluteness in the string itself, make every renderer honour the marker, and census the renderers | A value recorded relative to a runtime prefix encoding the caller and being unrepairable downstream |
-| Record a producer's keys at the one site that mints them and key on membership; never strip by "everything that is not this" | A complement silently including every shape you did not enumerate |
-| Bind a declaration's shape sets once the whole declarator is parsed, at every binder, and census the index kinds | A shape being bound at the type token, before the dimensions after the name are parsed |
-| Write a width rule as two functions — a shape pass and an evaluation pass — and let the second take the width the first computed | A bottom-up fold computing each node at its own width and looking right on every leaf whose operands already share the final width |
-| Gate a named source replacing a literal on constness at the consumer that has the names, not on resolvability | "Does it resolve now" being a property of pass order, so refusing turns correct designs loud and accepting a variable reads before initialisation |
-| Write the pairing predicate of a twin without an AST field so a user-written collision cannot satisfy it, and measure the collision on PRE | A user redeclaration satisfying the twin predicate |
-| Run the target evaluator on the degenerate inputs your rewrite can produce before choosing the target shape, and pick the one whose failure is loud | A rewrite routing a new shape into an old evaluator inheriting that evaluator's leniencies |
-| Cap arithmetic that builds a range from a width at the width the value can actually occupy | A shift by a user-parameterised width wrapping in release and failing in debug |
-| Cap a recorded quantity at the source | An amplifying path being unreachable only because a different component happens to refuse first |
-| Check the direction of the risk: release correct with debug or CI failing is the worst split to debug, and the fix belongs at the producer | A consumer-side absorption hiding a producer defect |
-| Do not let an invariant rest on a side condition, and fix an unreachable arm that leans on one in the same round | The side condition changing and the invariant becoming false |
-| Let the standard, not the code, decide which positions are self-determined | A context rule being applied where the standard declares self-determination |
-| Grep a value's consumers before writing "this only decides one thing", and split the variable in two when a sentinel cannot be tolerated everywhere | A sentinel doubling as a sizing context |
-| Make a tail that asserts an invariant unconditional | A conditional stamp meaning the property is absent exactly when the condition is false |
-| Treat a memo without invalidation as a claim that the value cannot change: grep every write site, and narrow the cache to a prefix where invalidation is impossible | In-place patching changing a cached answer, so unrelated later lines change an earlier result |
+| Judge a gate by what it prevents, not its comment: a predicate-comment gap is the defect; re-read guarantees near a changed guard; ask if the lie its comment names is the type's fault, checking what consumers already do | Open hazards; needless declines |
+| Adding a selection-chain arm, state declaration properties every arm must preserve and check siblings; a partial accept set decides siblings: list what excluded cases share with included ones | Two answers per declaration |
+| Before removing a guard, check what its justification depends on; scope each surviving site of a multi-site guard explicitly, recording accidental rightness; fix a self-firing guard by rerouting, not relaxing | Loud cells going silent-wrong |
+| Fence the operand a clamp acts on, not the destination; admission asks about every node the clamp can reach | Lost sign bits |
+| If a desugar's parameter count varies, make it uniform per construct and measure a following value parameter | Parameters eating carrier slots |
+| Re-stamp a copy alias's sign at the one interpreter read; compiled paths decline on mismatch | Leaked source sign |
+| Never split context one consumer reads; "cold field" justifies nothing | Mixed stores |
+| Give each unreachable kind its own assertion naming the refusing layer; filter, gate, assertion ask one question | Phantom gate rows |
+| Before trusting an early return (no-op arm, conversion's already-right width) or byte identity from a width comparison, count exits (width producer's too) and list what other paths do beyond arithmetic; document differences as intentional | Skipped clears/rules/widths |
+| Keep a compensating clear in one place consumers rely on | Copies masking each other |
+| Skip what another emitter hoisted by membership in the hoisted set, never re-running admission; resolve it under the lowering's prefix by its function; decide a call-sensitive gate on the statement as written, carrying the verdict on the node's span | Unlowered initializers; hoist-blind gates |
+| Judge resolution/classification from an AST-gathered pure-function set, not mutable elaboration state | Phase-only diagnostics |
+| Put a stand-down in the arm whose hazard it answers, keyed on the statement; a statement-blind gate cannot decide per statement | Disabled sibling arms |
+| Prove death by "written on every path", not "unread before first write", checking the reused predicate's exact success meaning | Stale copy-out |
+| Never unwrap a block to iterate statements (drops declarations); test declaration-initializer spelling and subroutine redeclaration too | Spellings disagreeing |
+| Write evaluators in target domain, not input limits (bounded leaves don't bound results); run the target evaluator on a rewrite's degenerate inputs before choosing target shape, picking one failing loudly | Out-of-domain results; inherited leniencies |
+| Replacing a predicate, count paths it kept from running, prove every old arm's obligation covered (not accuracy), restore a dropped arm by axis (its conditions' questions), not verbatim | Correct-to-wrong cells |
+| Check a runtime-predicting fold on domain, resolver, scope; prefer an identifier-free allow-list where order must not matter | Engine divergence |
+| Prove trip count and syntactic escape separately before admitting loop-body writes, for all loop forms at once | Erased escapes |
+| Expand a branch you'd delete into a truth table and answer each row; where a constraint's justification is only sufficient, write the necessary condition | Unexamined rows; closed idioms |
+| In a fast path decide everything, then execute, so a decline has no side effects | Pre-decline diagnostics |
+| Collect run observations as they occur, not at run end from movable fields; export a classifier's observations by making it collect reasons, never a new predicate | Silent moves; drifting predicates |
+| Going multi-dimensional, handle every offset/stride/direction in one place; set a deferred mirror's offset and direction-dependent kind at resolution; give nested/packed select writes the read's flatten prefix, else fail closed | Double flips; wrong bits |
+| Defer unknowns, pre-resolve caller-scope dependencies into the sidecar, lower each argument into every representation resolution may need | Guesswork |
+| Define a shadow set by what a scope declared, not what sits under its key; mark added classification items so they neither gain candidacy nor remove others' | False shadowing |
+| Before moving an evaluation answer how often, when, what it reads, with an inertness predicate over everything the move passes over | Purity-only answers |
+| Before building for apparently missing machinery ("the executor cannot"), fresh-probe the simplest form, check interior mutability and routing, replace a caller's special-case assumption with a lookup (special case an identity, IR byte-identical) | Building what works |
+| Capture, mutate, install where source may alias destination; document both cases | Lost values |
+| Guard and judge on the value, over lowered IR and every sub-expression, in the funnel seeing it, not on syntax or shape | Pierced shape guards |
+| Let the standard decide self-determined positions; ask sign at self-determined width; never fold overflow modulo without context width | Wrong sign/width |
+| Define opt-in as where the paired record is reached, not where it can be enabled, counting early returns between | Width on, record never run |
+| After widening a producer, enforce what consumer channels can carry where they meet | Wrong widths |
+| Grep a value's consumers before saying it decides one thing; split a sentinel not tolerated everywhere; if a fold feeds a value and a test, comment which "no value" the test reads and prove no arm swaps them | Double-duty values |
+| Decide relative vs absolute for a recorded string at the producer, spelled in the string, honoured, censused across renderers | Unrepairable relative values |
+| Write a width rule as two functions: a shape pass, and an evaluation pass taking the width the shape pass computed | A bottom-up fold at each node's own width, right only where operands already share the final width |
+| Gate a named source replacing a literal on constness at the consumer holding the names, not resolvability | Pass-order dependence |
+| Cap at source (width-built ranges at the value's real width; recorded quantities where recorded) and fix the producer: release-correct, debug/CI-failing is the worst split | Masked producer defects |
+| Make invariants unconditional (asserting tails too; fix unreachable arms leaning on side conditions in the same round); check a static claim holds when first consumed, finding what it cancelled against | Conditional properties; broken cancellations |
+| Treat a non-invalidating memo as a no-change claim: grep every write site; narrow it to a prefix where invalidation is impossible | Stale cached answers |
+| Check a helper's documented preconditions at each new call site and build a sibling where they fail; do not list its callers in its doc | Misuse past a precondition; stale caller lists |
+| Make a mutual recursion's termination structural (every departing call takes a proper sub-expression or one ungated entry) and pin it with a mutant, not an audit of arms | A cycle through a catch-all arm |
+| Charge a recursion budget only where a position can re-enter the callee's declaration (a default argument), not on nested arguments, and gate a delegate that restarts depth at 0 | Early louds; a depth-reset overflow |
 
 ### 5.5 Scope, ownership and order
 
 | Rule | Prevents |
 |---|---|
-| Keep "which scope" and "whose it is" as separate answers, and change every reader when you introduce ownership | Scopes without a minted prefix sharing a key, so a flush claims someone else's item |
-| Give ownership order and initialisation order separate data structures | One axis being unable to satisfy both |
-| Make an ordering requirement data — a rank path — when it cannot be expressed as pass order | No rearrangement of passes being able to satisfy it |
-| Separate "runs first" from "creates no event"; when measurement says the order is right and the behaviour is still wrong, you need a phase | An initialisation write handing an edge-sensitive process an edge |
-| Disqualify only the offending element, never the whole name; things that cannot exist simultaneously have no standing to disqualify each other | A dead branch of a conditional generate breaking a live pair elsewhere |
-| Before letting a name resolver see a binding kind it could not see, census every lane that resolves at a prefix other than the declaring scope of the code it folds — a package or `$unit` routine, a function at a generate call site, a typedef, formal, return or default range, a constant function's body; the old blindness was those lanes' only protection, and instrumenting them one per review round does not converge | The >64-bit select resolvers: 33 roots in three rounds, each round a new lane (package bodies, then interpreter ordering and frame reservation, then generate call sites and `$unit`), reverted (§4.5.560) |
-| A lowering-context flag (`array_iter`, the `subst` stack, `const_call_pkg`) answers for the text being lowered, and it is still set while that text's callees are folded: an inlined body, a default, a function the constant interpreter runs. Key a rule on such a flag only in the lane whose VALUE reads the same flag, and census who else is running while it is set | The iterator decline in the shared select resolver reached the interpreter folding a function called from the `with` expression, whose value came from the parameter: `v[0 +: cw()]` became 1 bit wide where PRE and verilator gave 3; an imported routine's callee ran under the importer's package state and passed an own-routine gate (§4.5.561) |
-| A scratch binding pass at a foreign prefix restores every table it writes, not only the one its unwind list names | The instance-array prepass restored the i64 values alone, and a child's header parameter answered the parent's `dut.P` (§4.5.560) |
-| Fold a type a declaration states in the declaring scope; where the reader sits in another scope, decline rather than approximate which scopes coincide — every approximation meets one more scope that shadows it | A callee's return range folded at the call site: a generate block's, then a `$unit` function's calling module's, constant sized it in three review rounds (§4.5.558) |
-| Split a value that answers three questions into its components | One key breaking in several places at once |
-| Record which role an added behaviour belongs to when a function serves two, and split by parameter | A syntactic region behaving like a real scope |
-| Collect in one pass what must interleave in declaration order | Two loops producing two orders that never interleave |
-| Choose an ownership discriminator expressive enough to separate the two nearest candidates, and check that they give different answers | A boolean being unable to separate two nested scopes |
-| Verify a sibling lane's mirror edit against the ORDER of its producer, and measure a cell on that lane; a dead mirror and a working one are indistinguishable in a scoped suite | A mirror computed before the pass that fills the map it reads being shipped as coverage of that lane |
-| Read the qualifiers in a refusal comment and count the cases where the condition is false | A true sentence being silent about a third case, which is harder to see than one that has expired |
-| Answer "what catches this if it is wrong?" before adding an approximation; when the answer is nobody, it is a judgement and must ask the real question | A misrouted expression reaching no evaluator at all |
-| Count side-effect sites, not operations, when designing a re-run fallback, and put the bail before the effect | The canonical path emitting a diagnostic twice |
-| Count the values whose only consumer was the branch you are deleting | A verdict with no consumer being dead, and dead verdicts being silent |
-| Recognise that a call path's head may be the function name or the receiver, and that the segment count decides which | An argument-only walker missing every method call on a variable |
-| Apply a monotone invariant at every recursion point, not only at the top level | A construct working outside a loop and not inside one |
-| Do not treat a statement as unknown because it carries a timing prefix; a timing prefix only adds expressions | One prefixed statement ending the whole walk |
-| Make a reader total before opening a row, and keep it total with a structural pin | A trait's default implementation being a silent capability opt-out that returns plausible values |
-| Check the shape of each routing bitmap: a handle's slot can be half-dead, so the question is membership and a present word | A bare handle read being routed to an empty heap |
-| Store a registered type's bounds as folded literals or as unshadowable carrier names, never as the parsed expression; a bound expression is re-resolved in every consumer's scope. A parse-time fold of a NAME is not a folded literal: the parser's constant table does not follow every declaration that shadows a constant (a for-init or foreach variable, a class parameter, an enum label), so only a literal the source wrote stands in for a bound at a use site | A typedef or type parameter registered as `[W-1:0]` taking an inner generate block's `W` where the declaration's own scope holds (§4.5.515 review, six designs on one root); a return variable's dims folded at the function header from a module `localparam W` a class parameter `W` shadowed, and a range proof passed on a `localparam K` a `for (int K …)` shadowed (§4.5.564, rounds 1–2) |
-| A refusal keyed on what a select's BASE evaluates to follows every expansion the lowering performs on that base — parentheses, both arms of `?:`, a `let` with arguments, without (a bare name) and through a formal, to any depth — by running the lowering's own expansion, not a copy of it with a bound | `let g(x) = f(x); g(a)[1]`, then `let g0 = f(x); g0[1]`, a `let` choosing between two calls and a 17-let chain each selected the flat bit of a multi-dimensional return where verilator names the element (§4.5.564, rounds 1–2) |
-| An arm that WIDENS a route excludes what it cannot carry and leaves it on the route it had; it never refuses. A refusal needs a predicate for "the difference is observable", and "the proof walk cannot prove it" is not that predicate: it refused a one-scope root, a pure-import design and an idempotent write, each printing the oracle value | Three call-site guard shapes on one axis, each regressing a working design, before the exclusion-only arm shipped (§4.5.516, three review rounds) |
-| A parser map keyed by NAME (`var_struct`, `struct_scalar_vars`, `struct_layouts`) answers for the last writer of the name, not for the declaration a use reaches: certify a use's declaration where names are resolved (the parser stamps the declaration it assumed, elaborate verifies it), never by narrowing when the parser trusts the map. Each narrowing meets one more construct that writes the name — a function formal, a class property leaking past `endclass`, an import after the declaration, a later typedef, a labeled assertion's action block | A pattern arm laid out by a struct its target was never declared with (§4.5.571: the live maps, a unit-level binding diff with layout ids, and a record at the declaration's classification each failed review on this axis; all reverted) |
-| A lowering that newly takes a construct the old binary refused inherits every check that reads the ORIGINAL statement before lowering: the check must count exactly the positions and statement kinds the lowering takes — no fewer (a missed read lets the lowering read a flattened block-local), no more (a check widened to every position refuses designs the old binary ran right). Widen only into statement kinds the check already walks, and give a record of a declaration's type no more trust than the binding the parser used AT the declaration | §4.5.572: the scope-leak check did not read keyed values (`52` for `12`), then read them everywhere (refused `'{default: v}` designs PRE ran right), then walked no `force` (`52` again); the parser's wildcard-import binding had already given a declaration the package's struct (`102` for `06`); reverted |
-| A construct the language resolves by SCOPE and vita lowers by POSITION, once per phase (a generate block's declarations), is carried only where no name resolution is involved: literal inputs, written directly in the scope, nothing above it reads its names, and those names declared once in the scope. "Declared above, so a fact" fails through a constant above whose own input is declared below, a read the parser already folded (`$bits(t)` arrives as a literal) and a called function's free names; verifying between phases fails because other writers share the key; a refusal of the illegal pairs needs every binder of the scope. A parser-synthesized literal carries the span of what it replaced — `raw.len() == span.len()` tells a source literal — and a keyword range (`dec_range`) has empty spans | §4.5.565: each review round found the next lane of a wider rule (a verify-by-effect, a declared-before rule, a collision refusal missing `else` / `case`-arm labels) |
-| Decide a choice the elaboration walks would re-make in every phase (a generate-case arm) once per construct instance — keyed by the scope prefix and the span — and reuse it in every later phase. Caching whether its inputs were AVAILABLE on the first walk is not enough: an input can be available in every phase and still bind to a different object (a forward label meets an outer same-named constant in the Nets walk and the inner one later) | §4.5.581: a bit-domain label decision made per phase took nets from one arm and processes from another (`D1W a 8 bits=4`, the oracles `a 200 bits=8`); the round-1 availability cache left r1, r1b and C1 mixing (`k 8 bits=4`, `def 9 bits=8`) — reverted (§2 🆕 V) |
-| A table entry carried from a SIBLING scope is adopted insert-if-absent, decided once per key for every table that describes it; the scope's own definition always wins and the carry never writes the enclosing scope's tables | One instance holding TWO copies of a static local because the adopt overwrote a key the scope's own import lane had bound and lowered against, and a deposit into the parent stranding a static root's automatic callee and handing a later parent call an interface-lowered frame, loud → silent (§4.5.517, rounds 1–2) |
-| A lane that lowers bodies installs every gate table the module lane installs (`decl_pos`, the block-local maps, the routine tables): a gate keyed on a per-scope table is VACUOUS, not conservative, in a lane that never fills it. And a scope guard living in SHARED import code carries the scope discriminator (`$unit` versus same-scope) from every call site — the same predicate is an error in one scope and a shadow in the other (IEEE §26.3 versus §26.4) | The interface window passing `R=3` where the module twin was loud, because `check_decl_precedes_use` read an empty table; and one guard refusing a legal `$unit` import in both lanes while missing the same-scope collision in the task namespace (§4.5.518, rounds 2–3) |
-| Decide a wildcard import's binding of a bare type name once per NAME, for every map any kind writes, from who bound it — the importing scope's own typedef, type parameter or explicit import is never rebound — never per map from that map's own entry | A per-map `or_insert` let a package union land beside a local struct of the same name and mark it a union, and a replace keyed on "a unit-scope type the module did not redeclare as a non-type" rebound the module's own typedef whenever the unit also declared one: `102 bits=12` where both oracles print `06 bits=8` (§4.5.573) |
-| Offer from a package only what it EXPORTS, read from the record its own declarations write; a package-scoped key a consumer registers for another purpose (a layout kept for the package's own variables' replay) is not an export | A wildcard import that copied every `p::X` key wrote the layout of a type p had merely imported under a unit typedef's `st` (`12 2 2 003` where all three oracles print `12 4 8 0ff`), and a widened replacement turned the same leak into a right → wrong under a unit import (§4.5.573) |
-| Before widening WHICH bindings a nearer scope rebinds, census who resolves the name later: a variable or nested member that keeps its type by bare NAME is retargeted by every nearer rebinding, and a replacement that clears the old binding assumes the new one is complete — measure both on the enclosing scope's variables and on an identical outer type | A generate block's repeated import made the module's own `st` p's and a module variable declared with it read `x5` for `5`; clearing a replaced name from every map lost a unit layout the package's diffed twins omitted (`s.a` E3010); a class binder's clear broke a unit struct's nested `st` member — three widenings built and reverted in one slice (§4.5.573 review rounds 1–2) |
-| Keep one current binding per key at the binders: a binder that rebinds a key in one map clears the key's entry in every other map that can answer for the name, and a scoped rebinding (a genvar) suspends and restores it. A reader cannot recover which of two same-key writes is current — "the narrow one wins" and "the wide one wins" each fail one family | §4.5.581: a genvar or a local enum label under a same-named >64-bit constant left the wide entry, which the bit domain asked first (`case (i)` took `default` where PRE and all three oracles take the arm); skipping a wide entry beside a narrow one then read pa's 5 for pb's 2^64 + 7 after `import pa::*; import pb::W;` — two rounds, reverted (§2 🆕 U) |
-| Attach a precondition to the executor, not the feature | The delegated path's precondition applied to the driven path refusing every target design |
-| Check whether an existing correction already covers a legitimate difference in two computations' input sizes before adding a conservative signal | Treating a missing entry as a signal and making the two sets diverge |
-| Check what a desugar merged before adding a rule that judges after it, and restore the flag when the merged forms have different oracle answers | A shorthand being silently accepted under a rule written for a different form |
-| Make an implicit declaration a phase, not a use-site action, and keep exactly one collector | One design giving two verdicts depending on pass order |
-| Make a regex argument about the maximum range the match can consume | "This pattern cannot match that" being true only when the counter-example is isolated |
-| Let the lexer look at the previous significant token when one spelling has two meanings in the grammar | Different spacings of one construct being treated differently |
-| Ask whether a guard is needed in the opposite direction after building it in one | The closing side still consuming the terminator |
-| Read the engine code when a gate's premise is "the engine cannot do this", and make the discriminator use the same set as the storage it drives | The fallback path already handling the shape while the gate under-approximates |
-| Make a gate that asks whether an executor can run a statement look at the whole statement; the effect can be in the right-hand side | An assignment being classified by its destination and silently doing nothing |
-| Use different predicates for "is this an effect" and "can this executor never do it" | Re-using one set for both re-routing a whole family and turning working designs loud |
-| Let the code that reads a set decide where it is populated, and compare fill time against read time exhaustively | The set being filled after the call sites that read it are lowered |
-| Measure a third time instead of guessing a third time when a comment says the real condition is not yet named, and gate on the destination rather than the whole body | Reverts that lose measured-correct shapes |
-| Place a new arm that lowers an lvalue below every check documented as detected first | A string element write becoming a silent packed bit write |
-| Make the scope of a hazard analysis equal to the scope of the transformation, and analyse the expressions a statement evaluates as one sequence | Cross-boundary ordering hazards being invisible and an existing guard being disabled |
-| Put repairable and unrepairable hazards on different channels | Unrepairable reads being quietly believed fixed |
-| Merge two similar gates rather than leaving both | Two similar gates both being unaudited |
-| Judge aliasing by target, not by spelling | An unrelated child scope disqualifying its parent |
-| Ask a two-discriminator state with one dedicated predicate | Checking one flag leaving the other half ungated, which fails in debug and writes to the wrong destination in release |
-| Do not describe where a write happens as a statement shape; a call that returns a value can appear anywhere an expression can | Most reported items in a family being that one defect |
-| Make the set of admitted nodes equal to the set where the lowering can emit copy-out: wider than the lowering is loud, narrower is a false-loud | Working designs being refused |
-| Use the branch's knowledge of the condition's value, and measure those premises with an oracle rather than asserting them | Collapsing a condition to one bit making a standard idiom loud |
-| Add a third lattice value for "read-safe, no write promised" | A conditional write falling into "references, therefore reads" |
-| Compare the binding rather than forbidding a name; when two scopes resolve to the same thing, the two lowerings are the same lowering | Ordinary cross-scope references being killed |
-| Open the time gate in the same slice as the reference gate | A callee proven inert for a name still yielding the scheduler |
-| Justify an early return on "already safe" only where the invariant is monotone | Ownership changing exactly at the point the early return skips |
-| Move a symmetric decision into a pure pre-computation | An order-dependent gate never checking the first declaration |
-| Use the desugar's own representation to state the rule where it is simpler and more general | A member-based rule being unable to express hand-written part-selects |
-| Remember that structure fan-out renames a variable but not the call argument | A walk that tracks member names seeing the argument as touching nothing |
-| Re-check any rule written as "direct child" the moment nesting becomes possible | Deeper keys being claimed by nobody |
-| Raise a primitive's guards to the top of the function when you add a stage outside the primitive | The new stage not inheriting the primitive's guards |
-| Nest a dependent field inside the variant whose validity it depends on | An invalid combination having somewhere to be written, so a grade's message becomes dead code |
-| Ask about sign on a self-determined walk with the same admission as the bound walk | A width-unlimited fold being unable to tell two spellings apart that differ only in width and sign |
-| Read a value from both representations when one alone leaks half a family, and make both width- and sign-correct | A saturating fold turning a negative into a count and reporting a false message |
-| Write an opt-in predicate as reachability to the recording site, not as the condition for enabling | Early exits between the enable and the record |
-| Do not use an enumeration's catch-all arm as a gate predicate; a name such as "implicit" usually means classified and not recorded | The parser knowing something the AST throws away, so distinct declarations are indistinguishable downstream |
-| Put a recovered parser fact in as the last fallback so an explicit declaration still wins | An explicit range being overridden by the recovered default |
-| Ask a guard in the domain of the question it answers: whether a declaration is of a type is a declaration question, whether an expression folds to one is a value question | Widening the resolver refusing a legal override, and reverting letting the folded default swallow it |
-| Separate "the width can be computed" from "the width's provenance can be vouched for"; to claim the second, every leaf on the path must vouch for it | Provenance being laundered through a map that also records inferred widths |
-| Enumerate the observers of every effect you move, asking whether a name reads that resource, not whether it uses its argument | An overlap gate keyed on root names being empty, and its emptiness becoming the reason to pass |
-| Fix a stale proxy by retyping it — take the set it was always about — not by extending the predicate | Each new domain needing another alternation term |
-| Check what the other paths into a guard build | A predicate with no arm for a generated shape falling into its catch-all and measuring as a no-op |
-| Record a syntactic fact at the site that knows it when a predicate needs a fact the data structure does not carry, and test the degenerate count | A degenerate case leaving the same key as the general one |
-| Ask whether a funnel is reached before the name is resolvable | "Every write position calls it" not being "every write position is checked" |
-| Use a three-valued provenance record for scope resolution: set-or-clear cannot distinguish "this scope bound the name and it is not declared" from "this scope never bound it" | The walk sailing outward and vouching for an ancestor |
-| Name a stored key's lifetime: a layout that names another type by its bare key dies at the end of the unit that declared it | Cells outside the one spelling that was tested failing |
-| Apply each import before the first thing it must be visible to, in two passes around the binder, not "earlier" | A body import reaching the header |
-| Key a new path positively on the names it is for, never on "did not fold": that predicate is two populations | Deliberate declines being admitted to the new path |
-| Read what the runtime reads for the same decision when a new analysis follows an IR field for control flow; a field only ever patched after the fact is a snapshot, not a fact | A walk missing every target whose placeholder is still in place |
-| Record a stand-down after the enclosing construct's scope snapshot so the restore drops it, and pin both halves | The fix trading one silent width for a permanently loud site |
-| Treat a first-activation guard as a different semantics from a t0 initialization: enumerate every input written between t0 and the first activation (formals, module nets) and decline initializers that read them, and make the decline per-declarator except where a declined initializer READS a hoisted one — that read is the only shape where hoisting half the frame yields a third answer | A static initializer reading a formal binding the first call's argument, and a frame-wide decline dropping the retention of every admitted sibling |
-| Fill a set that a sorted lowering pass READS before the pass starts, from the AST, not per body as each body lowers | The callee sorting before its caller seeing an empty set, emitting the plain shape and panicking in the engine |
-| When a sidecar puts ExprIds back into a position a gate's comment says holds none, census every arena walker that enumerates that position (the tier-3 `frames` gate, wprog, probe) in the same slice | A stale "is not an ExprId" comment turning a bare-store seam into a panic |
-| A membership predicate keys on the POSITIVE set it means, never on absence from a sibling set: an item in NEITHER set passes a negative test. When the positive set already exists for that hazard, use it — the sibling that documents the hazard is the evidence | `singleton_scope_key` deciding "singleton generate scope" as `!gen_loop_labels.contains`, so a one-element INSTANCE ARRAY label — in neither label set — was committed `u` → `u[0]` and `u.q` printed a value both oracles reject (§4.5.524 A); an operand gate listing what a size cast cannot carry, which found a string variable in round 1 and a class handle in round 2 (§4.5.567) |
-| Rebuild a derived summary from its ENDPOINTS after a phase that writes the same slot more than once, instead of OR-ing every hop into it; and never let a delivery ORDER depend on whether a redundant recomputation moved anything — measure the changed and the unchanged shape of the same design against both oracles | A time-0 edge mask carrying a phantom hop (`z → 1 → 0` read as posedge and negedge), and the first batch running before or after the settle's wakes according to whether the phantom existed (§4.5.535: `I` then `W` on a constant driver, `W` then `I` on an initializer-read one, both oracles `I` then `W`) |
-| Decide a LIST-level rule on the list after sorting its terms, never per term: a per-term refusal fires before the list knows whether a live term remains. Drop the dead term and keep the rest, and refuse only when nothing live is left | `@(V or W)` with a constant `V` and a live net `W` refusing the whole process, where the sibling EDGE lane already had the rule and its comment stated it (§4.5.524 T1) |
-| A conversion the language defines on the VALUE gets one engine spelling, and every lane (store, cast, bind) calls it; an IR-0 composition of primitives that "reproduces" it inherits the primitives' own limits (`$rtoi` saturates) and names the operand more than once | Two spellings of real→integer that agreed in range and disagreed past 2^127 (§4.5.536: the store saturated one way, the cast composition another, and both against the oracles) |
-| A store rule defined on the destination TYPE lives in the funnel that knows the destination — the element or field funnel converts at the element's or field's width and sign; a pre-coercion at the HANDLE net's width is the wrong width for every field wider than the handle, and a lane that reaches the funnel with the value still real (a push, a native store) converts nothing | `longint f; c.f = -2.5` at 32 bits zero-extended on the engine and the IEEE word on tier-3; `q.push_back(300.5)` the IEEE word on every backend (§4.5.540) |
-| A zero-delay write is an event of the region the LRM names, delivered where that region's other events are promoted, never on the time-advance path; and a time-0 landing is decided only after the settle has CONVERGED and only after the declaration initializers have run, by the one pass that evaluates the delayed rhs — a decision inside an unconverged pass commits a transition baseline to a transient value, and an extra evaluation per pass moves `$random` draws and diagnostic counts of designs the slice was not about | `assign #0` landing after the Postponed region (§4.5.538: a `#0` cascade never saw it, `$strobe` read the old value); the first fix's in-fixpoint landing (review r1: `assign #(0,9) y = (w === 1'bz)` above `assign w = 1'b0` landed 1 for nine units, both oracles x/0; `assign #5 y = $random` drew differently) |
-| An event is a change AFTER the observer armed; match a level waiter against a per-change sequence stamped at the write, never against the batch's accumulated dirt or an arm-time value snapshot (the first fires on writes made before the arm, the second is blind to a glitch back to the arm value and to heap content); but a timing rule is only oracle-equal under the oracles' ORDER — before shipping an after-the-arm rule for a kind of wait, measure the same-time resume order on the common testbench shape (clock generator declared first, stimulus resuming from a longer delay) | A static level block re-running on a write made before it ran (§4.5.537, both oracles one line); the same slice's edge-wait rule, correct per IEEE, shifting every clock-generator-first testbench by a cycle because vita resumes same-time processes in declaration order — reverted, prerequisite recorded |
-| A same-time resume is ordered by the EVENT that made it runnable, not by the declaration of its process: a delay, `#0`, fork-arm or join resume takes a sequence number when it is scheduled, every wake found between two batch takes shares one number (declaration order inside the group, behind every resume already due), and a body's arms and its joined parent run right after that body yields. Fit the rule on every resumption kind before shipping it: the delay kind alone left the fork kind wrong, a number per propagate pass split one wake event over a continuous-assign hop, and a group number taken after the wheel drain put a landing's wake ahead of the tick's delay resumes | `#5; #5 A` before `#10 B` printed `A B` (both oracles `B A`); `fork … join $display(ticks)` printed `ticks=2` (both `1`); `wire w = r + 1; always @(w)` before `always @(r)` under a per-pass number printed `R W` (both `W R`) (§4.5.541) |
+| Keep "which scope" and "whose it is" as separate answers, and change every reader when you introduce ownership | A flush claiming another scope's item |
+| Give ownership order and initialisation order separate data structures, and turn an ordering requirement that pass order cannot express into data (a rank path) | Orders no pass arrangement can satisfy |
+| Separate "runs first" from "creates no event" (order measured right, behaviour wrong: add a phase); open the time gate in the reference gate's slice | Init writes making edges; inert callees yielding the scheduler |
+| Disqualify the offending element, not the whole name (things that cannot coexist cannot disqualify each other); decide a LIST-level rule on the sorted list, never per term: drop dead terms, refuse only if none live | Dead branches/terms killing live ones |
+| Before widening resolver visibility, census every foreign-prefix folding lane (package/`$unit` routine, generate call site, typedef/formal/return/default range, const-func body), not one per review round; before widening what a nearer scope rebinds, census later resolvers (bare-NAME-typed vars/members follow rebinding; clearing replacements assume completeness), measuring both on enclosing-scope vars and an identical outer type | Lanes only the old blindness protected; retargeted/lost bindings |
+| Key a rule on a lowering-context flag (`array_iter`, `subst` stack, `const_call_pkg`) only where the value reads it; census what folds while set (inlined bodies, defaults, interpreted callees) | Rules firing in callees |
+| A scratch binding pass at a foreign prefix restores every table it writes, not just its unwind list; record a stand-down after the enclosing scope snapshot so restore drops it, pin both halves | Leaked bindings; permanently loud sites |
+| Fold a declared type in its declaring scope (elsewhere decline, never approximate coinciding scopes); store registered bounds as folded literals/unshadowable carrier names, never parsed exprs; a parse-time NAME fold is no literal (misses for-init, foreach, class-param, enum-label shadows), so use sites trust only source literals | Types resolved in a shadowing scope |
+| Split a three-question value into components and a two-role func by param, recording each added behaviour's role; nest a dependent field in the variant it depends on | Keys breaking together; regions as scopes; writable invalid states |
+| An ownership discriminator must separate the two nearest candidates (check they differ); ask a two-discriminator state via one dedicated predicate | Unsplit nested scopes; half-gated state |
+| Count where a refusal comment's qualified condition is false; before approximating, answer "what catches this if wrong?" (if nobody, ask the real question); before adding a conservative signal, check if an existing correction covers a legitimate input-size difference | Unseen third cases; unevaluated misroutes; diverging sets |
+| For a re-run fallback count side-effect sites, not ops, bail before the effect; census a moved effect's observers by who reads the resource, not who uses its arg | Doubled diags; empty overlap gates passing |
+| Count values whose only consumer was the deleted branch; check what other paths into a guard build | Dead silent verdicts; generated shapes as no-ops |
+| A call path's head is the func name/receiver, by segment count; a timing prefix only adds exprs, never makes a stmt unknown; structure fan-out renames a var, not the call arg | Walks missing calls/args or stopping early |
+| Apply a monotone invariant at every recursion point; re-check "direct child" rules once nesting can occur; justify an "already safe" early return only where monotone | Loop-only failures; unclaimed deeper keys; skipped ownership changes |
+| Make a reader total before opening a row; pin totality structurally | Silent trait-default opt-outs |
+| Check each routing bitmap's shape: a handle's slot can be half-dead, so ask membership and a present word | Handle reads routed to an empty heap |
+| A refusal keyed on a select BASE's value follows every lowering expansion (parens, both `?:` arms, `let` with/without args, via formals, any depth) by running it, not a bounded copy | Flat bits for elements |
+| A route-widening arm excludes what it cannot carry, leaving it on its old route, never refusing; refusing needs an "observable difference" predicate, not "unprovable by the proof walk" | Working designs refused |
+| Certify a use's decl where names resolve (parser stamps, elaborate verifies), not by narrowing trust in a NAME-keyed parser map (`var_struct`, `struct_scalar_vars`, `struct_layouts`), which answers for the last writer | Wrong same-named layouts |
+| A lowering taking a construct PRE refused inherits every check reading the original stmt, exactly over the lowering's positions and stmt kinds (fewer leaks a flattened block-local, more is false-loud); widen only into walked kinds; trust a decl's type record only as far as the parser's binding there; put a new lvalue-lowering arm below every check documented as detected first; adding a stage outside a primitive, hoist its guards to func top | Silent-wrong/false-loud; new paths skipping guards |
+| Carry a SCOPE-resolved construct lowered by POSITION per phase (generate-block decls) only without name resolution: literal inputs written directly in scope; names declared once there, unread from above; "declared above" is no fact (constant above with input below, parser-folded `$bits(t)`, callee free names); between-phase verifying fails on shared keys; refusing illegal pairs needs every binder; `raw.len() == span.len()` marks source literals (synthesized ones carry the replaced span, `dec_range` an empty one) | Each wider rule meeting a new lane |
+| Move a symmetric decision into a pure precompute; decide a per-phase re-made choice (generate-case arm) once per instance, keyed by scope prefix and span, and reuse it; caching input availability fails (inputs bind differently per phase) | Order-dependent gates; arms mixed across phases |
+| Adopt a SIBLING scope's entry insert-if-absent, once per key across its tables; own defs win; never write enclosing tables | Duplicate statics; loud turned silent |
+| A body-lowering lane installs every module-lane gate table (`decl_pos`, block-local maps, routine tables); a shared import guard takes the `$unit`/same-scope discriminator from each call site | VACUOUS gates; wrong import verdicts |
+| Keep one current binding per name in all maps, at binders, never by reader precedence: bind a wildcard-imported bare type name once per NAME from who bound it (importer's own typedef, type param, explicit import stays); rebinding one map clears the rest; a scoped one (genvar) suspends and restores | Maps disagreeing on current write |
+| A package offers only what it EXPORTS, per its own decls' record; a key registered for another purpose (replay layout) is no export | Leaked imported types |
+| Check what a desugar merged before adding a rule judging after it (restore the flag where merged forms' oracle answers differ); state rules in its repr where simpler and more general | Shorthands passing another form's rule; rules missing hand-written part-selects |
+| Make implicit decl a phase with one collector, not a use-site action; collect in one pass what must interleave in decl order | Pass-order verdicts; never-interleaving orders |
+| Argue a regex from the max range the match can consume; when one spelling has two grammar meanings, the lexer reads the prior significant token; after guarding one direction, ask if the opposite needs it | Isolated-only proofs; spacing-dependent parses; eaten terminators |
+| When a gate claims "the engine cannot", read the engine; key it on the storage's set; admit exactly where the lowering can emit copy-out (wider loud, narrower false-loud); merge similar gates | Under-approximating/unaudited gates |
+| Attach a precondition to the executor, not the feature; judge executor capability on the whole stmt (rhs can hold effects); never locate a write by stmt shape (value-returning calls appear anywhere); "is an effect" and "can never do it" are separate predicates | Refused designs; no-op assignments; families re-routed loud |
+| A set's reader decides where it fills; compare fill/read time exhaustively, a sibling lane's mirror edit included (measure a cell on that lane); fill a sorted pass's read set from the AST before the pass, not per body | Empty sets at read; dead mirrors passing as coverage |
+| If a comment says the real condition is unnamed, measure a third time, not guess; gate on the destination, not the body | Reverts losing correct shapes |
+| Scope a hazard analysis to the transform, analyse a stmt's exprs as one sequence, channel (un)repairable hazards apart | Hidden/falsely-fixed hazards |
+| Judge aliasing by target binding, not spelling; never forbid a name: scopes resolving alike share a lowering | Cross-scope refs killed |
+| Use the branch's knowledge of the condition's value, premises measured by an oracle; add a third lattice value, "read-safe, no write promised" | Idioms made loud by one-bit collapse; conditional writes as reads |
+| Ask sign on a self-determined walk with the bound walk's admission; when one repr leaks half a family, read both, each width- and sign-correct | Width/sign spellings conflated; negatives saturated |
+| Write an opt-in predicate as reachability to the recording site, not the enable condition; ask if a funnel runs before the name resolves | Early exits between enable and record; called mistaken for checked |
+| Never gate on an enum catch-all ("implicit" usually means classified, unrecorded); record a needed fact at the syntactic site knowing it, test the degenerate count, put recovered facts last so explicit decls win | Lost parser facts; degenerate keys; overridden ranges |
+| Ask a guard in its question's domain: type-of-decl is a decl question, folds-to-type a value question | Legal overrides refused/swallowed |
+| Separate "width computable" from "provenance vouched" (every leaf must vouch); resolve scope three-valued: set-or-clear conflates "bound, undeclared" and "never bound" | Laundered provenance; vouching for ancestors |
+| Name a stored key's lifetime: a bare-key layout ref dies with its unit; apply each import before the first thing it must be visible to, two passes around the binder, not "earlier" | Untested spellings failing; body imports in headers |
+| Key a membership test, new path, stale proxy on the POSITIVE set it means, never absence from a sibling set, "did not fold", an extended predicate; reuse an existing positive set | Neither-set items/declines passing; ever-growing proxies |
+| Following an IR field for control flow, read what the runtime reads (an after-the-fact patched field is a snapshot); when a sidecar puts ExprIds where a gate's comment says none, census that position's arena walkers (tier-3 `frames`, wprog, probe) in the slice | Placeholder targets missed; stale-comment panics |
+| A first-activation guard is not t0 init: decline inits reading inputs written before first activation (formals, module nets), per declarator unless a declined one READS a hoisted one | First-call args bound; siblings dropped |
+| Rebuild a derived summary from ENDPOINTS after a slot-rewriting phase, not OR-ed hops; never let delivery ORDER hinge on a redundant recompute; measure (un)changed shapes on both oracles | Phantom edges; flipped order |
+| One engine spelling per value-defined conversion, called by every lane (store, cast, bind; IR-0 compositions inherit limits like `$rtoi` saturation, duplicate operands); destination-TYPE store rules live in the element/field funnel at its width/sign: handle-width pre-coercion breaks wider fields, a still-real lane (push, native store) converts nothing | Lanes disagreeing on one conversion |
+| Deliver a zero-delay write at its LRM region's promotion point, never on time advance; land time 0 once the settle CONVERGES after inits, in the one pass evaluating the delayed rhs | Transient baselines; shifted `$random` draws |
+| An event is a change after arming: match a level waiter to a per-change sequence stamped at write, not batch dirt or an arm-time snapshot; measure same-time resume order (clock gen first, stimulus from longer delay) before an after-the-arm wait rule | Pre-arm wakes; missed glitches; cycle shifts |
+| Order same-time resumes by the scheduling EVENT: delay, `#0`, fork-arm, join resumes number when scheduled; wakes between batch takes share one (decl order inside, after due resumes); a body's arms and joined parent run as it yields; fit every resumption kind | Decl-order resumes |
+| Register a declaration whose meaning depends on its scope instance from the walk that instantiates the scope, never from a structural prescan | Both generate branches registered; unbound genvars |
 
 ### 5.6 Domain reference
 
-Two reference rows carry the width and name axes that recur across gates. Each item is a measured
-source of silent-wrongs; keep them in agreement when touching either axis.
+Each item is a measured silent-wrong source; keep each axis consistent.
 
 | Axis | Rules that hold together |
 |---|---|
-| **Width and type** | Keep the self-width table and evaluation in agreement; route a width branch on the storage-kind discriminator before width, because handle kinds have width zero; keep string routing single-sourced; use the context-or-plain lowering for a target-width fill; read four-state raw as value masked by known; extend a resize by the right-hand sign and stamp the target sign; guard real-to-integer strictly; apply two-state unknown-to-zero per write path and per storage; carry string and handle formals in a sidecar mask; keep type signedness symmetric across every declaration; make comparison and case collective per the standard; give an untyped parameter its type from the value, failing open; const-fold only a single constant as provably safe |
-| **Name and scope** | Thread sticky attributes across a comma list; pair a flat map with nested scopes by lazy snapshot and restore covering both type and variable over the whole declaration region; keep alias and copy side maps name-keyed with set-or-clear; treat a flat registry plus scoped resolution as unmodelled scope precedence and file it as infrastructure; mirror a new variable binding on the declaration binding with enclosing snapshot and restore isolation; track consumption in collect-then-apply and make leftovers loud; funnel symbol aliases through the one resolver; normalise a sub-select offset by subtracting the declaration base and make a clamp loud rather than silent |
+| Width and type | Self-width table = eval; storage kind before width (handles: width 0); one string router; context-or-plain lowering for target-width fills; four-state raw = value & known; resize extends by rhs sign, stamps target sign; strict real-to-integer guard; two-state unknown-to-zero per write path/storage; string/handle formals in sidecar mask; symmetric signedness across decls; collective comparison/case per LRM; untyped param typed by value, failing open; only a lone constant folds as provably safe |
+| Name and scope | Sticky attrs threaded across comma lists; flat map vs nested scopes: lazy snapshot/restore of type and var over the whole decl region; alias/copy side maps name-keyed, set-or-clear; flat registry + scoped resolution = unmodelled precedence, filed as infra; new var binding mirrors decl binding with enclosing snapshot/restore isolation; consumption collect-then-apply, leftovers loud; symbol aliases via the one resolver; sub-select offset minus decl base, clamp loud |
 
 ## 6. Measurement
 
-Measurement beats argument. A claim about behaviour is not settled until a probe, a sweep or a
-census has produced it, and the probe itself is a claim to check.
+A behaviour claim is settled only by probe, sweep or census; the probe is a claim too.
 
 ### 6.1 What counts as evidence
 
 | Rule | Prevents |
 |---|---|
-| Write why a counter-example is structurally impossible when it cannot be built | A failed reproduction attempt being recorded as "it does not happen" |
-| Treat a line that differs from the oracle inside an anchor as a finding: measure it, record it, assign an owner | A divergence being filed as anchor noise |
-| Confirm whether a diagnostic's severity decides the exit class before writing that only the error stream differs | An item being graded a grade too low and deferred |
-| Confirm which stream a diagnostic goes to before writing "unobservable"; counting streams and checking streams are different jobs | A same-stream case being recorded as needing merged descriptors |
-| Distinguish a projection from a measurement in writing, and re-measure when a batch closes | A projected number being cited as a measured one while new rows drift the accumulation |
-| Settle a claim about attribution with a corpus sweep | Two lenses reporting opposite things about the same shape |
-| Ask which instrument would have made an outside diagnosis right when it is wrong | The missing instrument being the more valuable item and going unbuilt |
-| Re-measure the re-measurement: a refutation is a claim too | A narrow census refuting a correct report because it read one output column |
-| Re-measure a revert's stated reason before ranking or building on it | A revert propagating its reason faster than a feature propagates its behaviour, so several documents citing each other are one measurement |
-| Delete the competitor and ask again when a tool's answer matches what a competing write would leave | Ordering and a dropped write looking identical |
-| Measure a candidate discriminator against the design that matters | A map's docstring describing its intent while only a run describes its contents |
-| Build the design that tests any bound you write beside a known imprecision | A bound asserted in the same breath as the imprecision going unmeasured |
-| Count the input distribution before arguing that a control-flow difference shows up in other bits | An untested assumption standing in for a measurement |
-| Name the axis of a byte-identity argument and enumerate the observation channels — value, diagnostic, exit class, order, time — and check which channel someone else's comment was about | "The values are the same" being read as "the output is the same" |
+| When a counter-example cannot be built, write why it is structurally impossible | A failed repro recorded as "it does not happen" |
+| When an outside diagnosis is wrong, ask which instrument would have made it right | The missing instrument going unbuilt |
+| Treat oracle-differing anchor lines as findings (measure, record, assign owner); before writing "only stderr differs" or "unobservable", check if severity sets exit class and which stream it reaches | Divergences filed as noise |
+| Settle attribution by corpus sweep; label projections, re-measure them at batch close; re-measure a refutation or revert's reason before ranking/building on it | Unmeasured claims cited |
+| Run candidate discriminators on the design that matters; build designs testing any bound stated beside known imprecision; count input distribution before claiming control-flow differences reach other bits | Assumptions as measurements |
+| If an answer matches what a competing write would leave, delete the competitor, re-ask; name a byte-identity argument's axis and channels (value, diagnostic, exit class, order, time) and which a comment meant | "Same values" read as "same output"; dropped writes as order |
 
 ### 6.2 Probes
 
 | Rule | Prevents |
 |---|---|
-| Re-derive a stated oracle rule from a probe finer than the effect | The probe's own rounding being read as the oracle's answer |
-| Pick a probe from the smallest quantity the rule can produce, not from the design's units | The probe being unable to resolve the effect |
-| Use the band's edges as the proof of the mechanism: the fix must move every cell inside the band and none outside it | A fix accepted without evidence that it is the right mechanism |
-| Build a twin that fixes the axis a report names and varies everything else | Designs differing in several places being unable to say which difference produced the result |
-| Overflow the destination in any probe that measures width or truncation, and make the grid finer than the delay being measured | A value that fits giving the same answer whether narrowing happens or not |
-| Compare byte output through `hexdump -C` | Control bytes disappearing in a terminal, so output reads as empty |
-| Suspect the harness first when a probe's conclusion disagrees with a constant read from the code, and observe through a width-preserving path with no convenience conversion | A convenience conversion truncating and coincidentally matching the oracle |
-| Use a width-preserving format in any probe that measures width | A convenience conversion erasing the discriminator |
-| Never truncate PRE output | A failure on the second line being missed and a pre-existing defect attributed to your change |
-| Re-measure attribution yourself even when two lenses converge, and read a debug-only assertion as a smell because debug fails where release is silently wrong | A pre-existing defect being filed as your regression |
-| Measure an ordering rule with an observable witness whose value differs per occurrence, and measure the whole rule before fixing one symptom | A report seeing one face of the rule and the patch breaking another relation |
-| Move a coverage instrument so it answers for every executor | An instrument present in one path making an experiment look dead |
-| Flip the default and run the whole suite as the cheapest coverage instrument; it is a measurement, not an implementation, so revert it afterwards | A corpus differential being far weaker and missing the alternative path entirely |
-| Instrument all layers independently even where production short-circuits | The layers behind the first refusal never being measured |
-| Say so when the attribution unit is contaminated, and check that the weight is not one design repeated | A count of tests being meaningless because most of them are one path |
-| Read the run manifest's backend and refusal fields before claiming two backends agree | A comparison that did not check which backend ran not being a comparison |
-| Declare the timescale precision finer than the smallest probe offset you write (`#0.5` under `1ns/1ns` rounds to a boundary and every cell becomes a race) | Fourteen agreed cells reading as a two-oracle disagreement |
-| Read a computed width from a direct readout (`$bits`, the child's own localparam), never infer it from a fully determined output: a declared width LARGER than the run-time net extends the net, so it is invisible in a size cast and shows only where the leaf's self width sets the region (a narrower destination, a shift) | A width fold answering 12 where the binder bound 4 reading as CLEAN on every size-cast cell |
+| Probe finer than effect: re-derive an oracle rule at smallest quantity it yields, not design units; overflow destination in width probes; grid finer than delay; timescale precision finer than smallest offset (`#0.5` under `1ns/1ns` rounds) | Probe rounding read as answer |
+| Prove a mechanism at band edges (every cell inside moves, none outside); build a twin fixing reported axis, varying the rest | Unproven mechanisms |
+| Read bytes via `hexdump -C`, widths via width-preserving paths without convenience conversion; if a probe contradicts a code constant, suspect harness first | Hidden bytes; erased discriminators |
+| Read computed widths directly (`$bits`, child's localparam), never from determined output; too-large widths show only where leaf's self width sets region (narrower destination, shift) | Wider wrong widths unseen |
+| Never truncate PRE output; re-measure attribution yourself even when lenses converge, reading a debug-only assertion as a hint that release is silently wrong | Pre-existing defects blamed on you |
+| Measure ordering rules whole, with per-occurrence witness values, before fixing one symptom; test ordering changes with two same-time processes writing one variable; alias destinations to see order | Invisible order; partial patches |
+| Instrument, never audit by eye, answering for every executor/layer even where production short-circuits | Unmeasured paths, layers |
+| Flip the default, run the whole suite (always when a backend uses an alternative store) as cheapest coverage instrument, then revert | Alternative path never reached |
+| Flag contaminated attribution units, check weight is not one design repeated; read run manifest's backend/refusal fields before claiming backends agree | Skewed or unchecked comparisons |
 
 ### 6.3 PRE, POST and sweeps
 
 | Rule | Prevents |
 |---|---|
-| Extract PRE with `git archive main` into a scratch directory (`tar -x -C <scratch>/presrc`) and build it separately, not as a worktree; a change to existing binding or classification requires it | An oracle-only differential being unable to distinguish a correct-turned-loud cell from a pre-existing gap |
-| Score a PRE-and-POST sweep in three classes: loud-to-correct, silent-to-loud, wording-only | A two-class sweep hiding the class that is a regression |
-| Ask of every queue mechanism both which cells become correct and which cells are correct today | The change fixing the reported cell and breaking a neighbouring correct one |
-| Re-measure a queue row's mechanism as carefully as its symptom | Fixing the recorded site breaking a cell that is correct today |
-| Run the shapes your new lane handles through the existing lane and record what it returns before placing yours later; a wrong number forbids the safe placement | "It can only add answers where the old one had none" preserving both silent-wrongs |
-| Diff the per-file distribution and the first line of each file's page after a ladder rung, never the total | A diagnostic cap hiding the pages behind it, so clearing some leaves the count unchanged |
-| Measure what the baseline did for the shapes a stricter invariant would newly refuse; a restriction is only safe where the baseline was already refusing | A simpler, stricter rule regressing in bulk |
-| Read a differential sweep as certifying only the fields it varies | The only axis that mattered never being varied |
-| Measure narrowing, equal and widening separately when changing a site that passes a context width down | The same code being right for widening and a different computation for narrowing |
-| Write down which axes a sweep multiplies before counting cells, and do not claim zero regressions from your own sweep | A large sweep of one shape saying zero while a sweep of another shape says otherwise |
-| Count fixed and regressed separately | A total hiding two directions that nearly cancel |
-| Write the axis list before building a sweep and hand it to the reviewer with a demand for the missing axis | A missing axis not announcing itself, and adding cells not being a defence |
-| Measure the fallback plan too | "The intersection that never regressed" being a hypothesis |
-| Attribute a flip-run failure by running the same test on the PARENT under the same flip before filing it against the bundle | A pre-existing backend divergence being charged to the slice that ran the flip |
+| When changing existing binding/classification, build PRE from `git archive main` extracted to scratch (`tar -x -C <scratch>/presrc`), not a worktree | New louds read as old gaps |
+| Score PRE/POST sweeps in three classes (loud-to-correct, silent-to-loud, wording-only), fixed/regressed apart, and ladder rungs by per-file counts and each page's first line, never totals | Totals hiding regressions, pages |
+| Measure which cells become and which are correct now: queue row's mechanism, not just symptom; existing lane's answers on new lane's shapes before placing it later (a wrong one forbids that); baseline for shapes a stricter invariant newly refuses (restrict only where it refused) | Breaking correct cells; keeping wrong ones |
+| A sweep certifies only axes it varies: list them first, demand missing one from reviewers, claim no zero-regression from own sweep, split narrowing/equal/widening for passed-down context widths, measure fallback plan too | Deciding axis never varied; fallbacks unmeasured |
+| Attribute a flip-run failure by running the same test on PARENT under the same flip before filing it against the bundle | A pre-existing backend divergence charged to the slice |
 
 ### 6.4 Oracle censuses and their budget
 
 | Rule | Prevents |
 |---|---|
-| Do not count diagnostics with the `VITA_SCW_CHECK` self-check enabled | The check's own diagnostics inflating the count |
-| Budget a hand-run oracle census at the rate it actually sustains — a `verilator` census runs about 1500 cells per 30 minutes: run it over a width subset, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted, saying so in the briefing | The census not finishing, or an untrusted oracle cell being recorded as measured |
-| Treat a width and its value as one answer: truncation commutes with some operators and not with division, remainder or right shift, so always pin a cell from the non-commuting family | A census built from the commuting family certifying a value that was already truncated |
-| Ladder the axis you changed across the width boundaries: 8, 16, 32, 33, 64 | "Fixed" being indistinguishable from "fixed below the old default's width" |
-| Treat a value-preserving wrapper as a width claim: name the width each side computes at and check the identity holds at both | The stated invariant not being true at the width the expression uses |
-| Treat the order of two queue rows that share a root as a measurement: run the cells that separate the two orders, not the cells the rows quote | Cells that both candidate orders answer the same way being cited as evidence |
-| Find the cell where two candidate rules differ before adopting one, and check it is the cell you measured; where each rule owns a disjoint set of leaves, ship both and say what separates them | A cell both rules answer the same way being recorded as a measurement, making the choice a coin flip |
-| Measure a warning that a change has a wider blast radius; the decisive probe is the size at which the wrong reading stops being out of range | A slice being priced for a sweep it does not need |
+| Count no diagnostics with `VITA_SCW_CHECK` on; budget a hand-run census at its sustained rate (`verilator` ~1500 cells/30 min): width subset, one `--prefix` per executable, untrusted-oracle cells hand-IEEE'd, flagged in briefing | Inflated counts; untrusted cells |
+| Treat width and value as one answer: pin a non-commuting cell (division, remainder, right shift), ladder changed axis over 8, 16, 32, 33, 64, check value-preserving wrappers at each side's width | Truncated values certified |
+| Decide between two rules (or two root-sharing queue rows' order) only on a cell where they differ, check it is the cell measured; if each owns disjoint leaves, ship both, saying what separates them | Coin-flip choices |
+| Measure a wider-blast-radius warning at the size where wrong reading enters range | Pricing unneeded sweeps |
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 8002 tests, 15 skipped. Named gates
-that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
-frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
-diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,
-backend equivalence, and the vendored-libm determinism pins.
+Full local gate: `cargo nextest run --workspace --locked`. Green in the commit moving them: `sim-ir` schema-hash, frozen-shape, no-float, body-reference suites; artifact header, round-trip; diagnostic-code bijection; parser depth, node-budget guards; live `iverilog` differential; backend equivalence; vendored-libm determinism pins.
 
-A test has teeth when a wrong implementation fails it. Coverage, a green suite and byte-identity are
-not teeth on their own; the standard of proof is a mutation that must die, a control the fix must
-move, or an anchor no shared code can shift.
+A test has teeth if a wrong implementation fails it: a mutation that must die, a control the fix must move, an anchor no shared code can shift; not coverage, green or byte-identity alone.
 
 ### 7.1 What gives a test teeth
 
 | Rule | Prevents |
 |---|---|
-| Run a new guard's test against the reverted binary: green is coverage, a red revert is evidence of teeth | A test passing because the design never burns the code path |
-| Measure entry to a zero-coverage surface with mutation | An honest body plus a green suite plus code in the file reading exactly like coverage |
-| Know the axes mutation cannot see — fields nothing compares, summed floors, aggregate assertions satisfied by one stub, and catch-alls accepting any failure — and pin counts exactly, one property per assertion | A battery reporting full coverage over an unprotected field |
-| Count what a gate executes by statement and effect kind, and map each kind to the observer that can see it: store, queue, diagnostic, exit code, arm state | Half the executed statements having their whole effect in a queue, so dropping them keeps the suite green |
-| Build the design where the two inputs diverge | A parameter's existence being unverified while every caller passes the same value |
-| Observe both sides separately when verifying an asymmetric rule | A one-sided observer certifying both sides |
-| Keep one condition per question, and re-run the whole mutation set after a fix, looking at what came back to life as well as what newly dies | Overlapping guards deepening defence and destroying observability, so a fix silently kills another test's teeth |
-| Assert that a probe entered the branch it was written for, with a counter or an ordering assertion | Mutations passing vacuously because the branch was never entered, the smallest value often being a different branch |
-| Mutate each operand of a sum, product or shift separately, and check the harness default is not that operation's identity | An operand being indistinguishable from the whole expression because the other one is always the identity |
-| Test provenance by deliberately desynchronising two sources and asserting that a call given one answers with that one's value | A gate asserting the two results are equal passing an implementation that ignores its argument |
-| Do not add a parameter no mutation can kill | A dead parameter being indistinguishable from a real gap |
-| Include the operations where two paths diverge — comparison of unequal lengths, concatenation, replication — not only the ones where they coincide | A whole operator family staying hidden behind equality and length |
-| Put a detector for "no output and a success exit" in every sweep, and grep the corpus for the combination when a sweep is silent | A regression that deletes the result entirely scanning as clean |
-| Prove a differential gate has teeth by reverting each of its behaviours one at a time and requiring every revert to fail, drawing the behaviour list from the call sites | Vacuous behaviours and store sites that are never entered |
-| Treat observation granularity as an axis and sweep both: per-event observation erases batch effects, batch observation buries per-event effects | Half the matrix never being swept because two axes share a predicate |
-| Verify a gate's teeth on new code with a deliberate failure, and read a coverage number that does not move as the signal that the path is not entered | A narrowed refusal leaving the admitted count unchanged and the work looking finished |
-| Re-read what a failing test models before calling it a regression; a gate can harden against the fix | A correct fix being reverted because its paired initial state was not updated |
-| Test a cache by keeping the owner alive and changing the input state; when ownership makes that hard, build a seam that hands over state without handing over the cache | A fresh owner per state making staleness structurally invisible |
-| Count a positive marker in any probe that asserts absence; zero means suspect the harness first | "The diagnostic disappeared" being a harness failure that reads as a finding |
-| Read the assertions before calling a test a pin or a measurement, and verify the premise of any skip or early return on the spot | A census test asserting only that something is non-zero and printing its numbers to a captured stream |
-| Compare diagnostic counters as well as values in an equivalence gate, and count whether the corpus contains an admitted shape that moves the counter | A duplicate diagnostic eating the per-run cap, and a comparison of zero against zero certifying nothing |
-| Confirm that a battery, sweep or fuzz you cite actually passes through the branch in question before writing that it was measured exhaustively | Every case in the battery sitting on one side of the branch |
-| Do not leave a gate suite red: flip the behaviour's assertion in the same edit that changes the behaviour, and re-measure after removing a refusal row | A red test masking its own area's mutations |
-| Give a dedicated observation channel to each axis where the value does not move: operand order needs a side-effecting evaluation, stage placement needs a boundary sweep | A value-only gate passing every reordering and every relocation |
-| Observe only what the mutation moves in an anchor | A broad observation dragging in a known divergence, so the anchor certifies wrong behaviour and later blocks its fix |
-| Name the anchor that protects shared code every time you widen sharing | Sharing removing drift and removing the differential's sensitivity with it |
-| Pair an artifact comparison with an assertion that the artifact exists | Two absent artifacts comparing equal and counting as a match |
-| Count every line that mentions a signal when moving it from one place to another: update the positive assertions and re-aim the negative ones | Negative assertions staying green in a file where the subject cannot appear at all |
-| Count the whole family of sidecar tables a feature needs, not one of them | A missing sidecar making a test vacuous rather than failing, so both backends do the same wrong thing |
-| Compare stdout, diagnostics and exit class in a backend or path differential | Omitting one channel letting a descent on that axis pass |
-| Verify a guard actually fires on its target subset, a direct per-item count being the robust form | A vacuous guard reading as protection |
-| Pin any "this wrapper covers every site" comment with a test | Most of the sites being covered and the rest running away |
-| Ask what the number would be if the feature did nothing; when that equals the expected answer, the cell is decoration | A probe whose answer equals its failure mode certifying itself |
-| Re-measure a slice-local pin inside the bundle before shipping it: a value pinned in one worktree is a BUNDLE pin the moment a sibling slice touches the same expression | A control pinned at a sibling slice's silent value going out as if it were the oracle's |
-| Establish a pin's claimed property a second way | A property that holds only one way measuring a path, not a property |
-| Run the neighbours of the fixed cell, not the fixed cell | The fix being confirmed on the only cell that was ever checked |
-| Build a design with two same-time processes writing the same variable to test an ordering change | A green suite, a green corpus and byte-identical waveforms being no evidence at all about order |
-| Convert all deliberate-loud pins before re-running, because a test asserting many cells stops at the first | A fail-fast test hiding the pins behind it |
-| Test a twin renderer against the runtime spelling of the same construct in the same design, byte for byte, before consulting the oracle | The twin approximating, with the divergence found only by an oracle sweep |
-| Write the census first and copy the oracle's raw line into the test | Hand-computed expected values not being pins |
-| Make a loud pin name the gate it measures, and test it by changing the spelling the gate does not key on | The pin being loud because of a different gate than the one it claims |
-| Prove the rest untouched with the cheapest byte-identity oracles the repository has — the examples' waveforms, the corpus digests and the full suite — before any review round | An observationally unconfined change being reviewed instead of measured |
+| Prove teeth by failure: new guard's test against reverted binary and deliberate failure; each differential behaviour (from call sites) reverted singly; per-item count that a guard fires on target; unmoving coverage means an unentered path | Vacuous tests, guards |
+| Measure entry to a zero-coverage surface by mutation, knowing its blind axes (uncompared fields, summed floors, one-stub aggregates, catch-all failures); pin counts exactly, one property per assertion, never relaxed to floors (cheapen gate instead) | Unprotected fields at full coverage; floors hiding drift |
+| Count each statement/effect kind a gate executes, map it to its observer (store, queue, diagnostic, exit code, arm state); diff stdout, diagnostics, their counters (with admitted corpus shapes moving them) and exit class across backends/paths, and every channel of new store points (value, dirty set, edge kind, last writer, waveform, deferred-diagnostic queues); give each axis the value misses its own channel: order via side-effecting operands, placement via boundary sweep | Value-only gates missing effects |
+| Make inputs discriminate: diverge two inputs; mutate each sum/product/shift operand with non-identity defaults; desync two sources, assert a call given one returns its value; discriminator off first slot; a name in every arg of new tasks; diverging operations (unequal-length compare, concatenation, replication); values every wrong implementation answers differently (odd for division, past the word for width, negative for sign), commenting why | Inputs passing anything |
+| Observe both sides of asymmetric rules apart, test asymmetric parameters in both orders, sweep observation granularity per-event and batch | One-sided or half-swept evidence |
+| Keep one condition per question and gate suite green (flip assertion in the edit changing behaviour; re-measure after removing refusal rows); after a fix re-run every mutation, checking what revived and died | Masked or killed teeth |
+| Read assertions before calling a test a pin or measurement; assert a probe, battery, sweep or fuzz enters its target branch (counter/ordering assertion; smallest value is often another branch); verify skip/early-return premises on the spot | All cases on one side |
+| Re-read what a failing test models before calling it a regression (gates harden against fixes); convert all deliberate-loud pins before re-running (a many-cell test stops at the first) | Reverting correct fixes; pins hidden by fail-fast |
+| Test a cache by keeping its owner alive while the input state changes; when ownership makes that hard, build a seam that hands over state without the cache | Invisible staleness |
+| Pair artifact comparisons with existence assertions; on moving a signal, count every line naming it: update positive assertions, re-aim negative ones; pin a "wrapper covers every site" comment with a test; grep any test a comment cites as a lock | Vacuous comparisons; phantom locks |
+| Read what a harness filters before reusing it, and re-check every slice that its hand-picked list installs every sidecar table the feature needs | Vacuous tests |
+| Ask what a cell would show if the feature did nothing; if that equals the expected answer, the cell is decoration | A probe certifying itself |
+| Read a verdict path narrower than the failure modes as no information | Green meaning nothing |
+| Establish a pin's claimed property a second way, and check that a decomposed oracle gives the same answer as the original form | A path measured as a property; a diverging decomposition |
+| Re-measure a slice-local pin in the bundle before shipping (a sibling touching the expression makes it a bundle pin); run the fixed cell's neighbours, not the cell | Unconfirmed pins, fixes |
+| Write the census first; pin a value as a value, not an exit code: copy the oracle's raw line, pin a residue's observed value (quoting PRE only after running it), write why the number is what it is | Unmeasured or unexplained pins |
+| Make a loud pin name its gate, tested by changing a spelling the gate ignores; shape a refusal pin so each gate half refuses it by its own name; pin remaining bypass paths by count per file, naming each one's blocking row | Pins loud via another gate |
+| Before any review round, prove the rest untouched with cheapest byte-identity oracles: example waveforms, corpus digests, full suite | Reviewing instead of measuring |
+| Read the prose beside a passing assertion as an unverified claim: a green test checks its values, never the explanation next to them | A wrong explanation under green asserts |
 
 ### 7.2 Anchors, differentials and oracle-free areas
 
 | Rule | Prevents |
 |---|---|
-| In oracle-free areas the teeth are hand-IEEE pins plus an internal equivalence differential: a new spelling must be byte-identical to a verified existing one | An unverifiable area having no regression detection at all |
-| Ask what a simulator you are importing a rule from merges that vita keeps separate — storage, defaults, identity, event channels — and write the failing design for each merged field | The sentence the rule rests on being true of one object and false of the other |
-| Build the twin that differs only in the merged field | Both naive translations shipping and failing in opposite directions |
-| Pin the working form as well as the non-goal when pinning a non-goal | The loud widening later and swallowing the working form |
-| Choose a base case verified correct on every axis except the one under test | A broken base case being unable to separate two defects |
-| Verify a mutation actually changes meaning before reporting survival | An equivalent mutation's survival being filed as a coverage hole |
-| Test save and restore with nesting, never with siblings | A design that resets on entry making siblings structurally immune |
-| Put the discriminating operand somewhere other than the first argument slot | Two different implementations giving the same answer on the first slot |
-| Pin at least one cross product of a new axis with each existing axis | Two test files each having one axis and none having both, which is exactly where the regression lives |
-| Add a guard for an invisible failure even when its value is only recovered by the next slice | A value that silently disappears |
-| Confirm with mutation, in every change that moves code into sharing, that an absolute anchor protects the rule | Shared-function mutations passing the whole differential battery |
-| Treat a differential's teeth as decreasing as delegation grows: full coverage can mean no oracle teeth, so a delegation change owes an absolute anchor | Both backends printing the same wrong answer with the differential green |
-| Read the product build as having no oracle: the alternative executors are selectable only behind a default-on feature, and a build without it cannot choose them | "Byte-identical to the other backend" being cited in a build where the other backend cannot run |
-| Ask the flip run in the current default's direction so the oracle axis keeps being exercised | The suite quietly becoming single-backend and the whole rule going vacuous |
-| Pin an emptied gate table with an emptiness assertion and a note on why it is empty, rather than deleting it | The next row being added with no obligation to build a design or say why it cannot |
-| Invert a test whose subject has disappeared — keep the design, flip the expectation — and retire it only after moving the teeth somewhere else | The design that produced the last real case being deleted with the test |
-| Wire a losing experiment into the real executor and run the whole suite | Being behind a feature flag being treated as an exemption from verification |
-| Measure the safety of buffer reuse with a contamination probe: fill the borrowed buffer with garbage before every call and run the whole suite | "Nobody reads a slot this call did not write" staying an assertion |
-| Classify a surviving mutation three ways — equivalent, blind axis, or redundant — and delete a duplicate check the callee already performs | A redundant check making two twins disagree about where the question is answered |
-| Grep the name of any test a comment cites as a lock | The cited test never having existed, so the path was never locked |
-| Justify a guard whose property the return type cannot carry by the other half of the rule, not by a test | A comparison that is structurally blind to a type stamp |
-| Update a documentation pin by strengthening it | A pin that checks one word letting the same class of falsehood return |
-| Strengthen the pin that protects a user-visible sentence in the same change that alters it | The help surface being the least-tested and staying false longest |
-| Read a verdict path narrower than the failure modes as no information at all | Green meaning nothing |
-| Prove an equivalence without restating the rule: ask the same bits at two widths so the general path is the oracle | The test containing a copy of the rule |
-| Make a pin a derivation, not a record: write why the number is what it is | The next reader being unable to tell whether the number is right, and re-pinning a wrong one |
-| Run a property anchor against every backend, not only the one you changed | The sibling backend keeping the same defect |
-| Name the mutant that would survive without a proposed test row before adding it | A row that decides nothing being worse than none, because it reads as coverage |
-| Include rows on the reject arm | A battery made only of admitted rows being unable to test admission |
-| Read what a harness filters before reusing it | A filtered harness being structurally blind to the filtered axis |
-| Check that a test row leaves the defect's symptom somewhere it can be observed; position decides whether a row kills a mutant | A defect being structurally immune in the position the row happens to use |
-| Give a fast path placed inside the canonical implementation a test-only entry point with an explicit switch | Every existing test through the canonical path exercising only the fast path |
-| Compare every channel a new store point owns: value, dirty set, edge kind, last writer, waveform queue, deferred diagnostic queue | A value-only snapshot being blind to the other channels |
-| Review your own test design and assert that the code under test runs | A test design that never enters the paths it was written for |
-| Re-run a mutation that died by non-termination against your own tests only | A suite that stops being unable to say which row discriminated |
-| Ask where the discriminator would be before calling a surviving mutation equivalent, and write "equivalent" only after failing to find one | A vacuous row being built, or a real defect missed |
-| Write the equivalence test for a shape fast path against the function you are skipping, not against a table of expected answers | The fast path and the general path disagreeing about a shape the fast path did not compute |
+| In oracle-free areas use hand-IEEE pins plus an internal equivalence differential (a new spelling byte-identical to a verified one), and test a twin renderer against the runtime spelling in one design before the oracle | Areas with no regression detection; approximating twins |
+| When importing another simulator's rule, list what it merges that vita keeps separate (storage, defaults, identity, event channels), build a twin differing only in each | Premise true of one object only |
+| Pin working form beside a non-goal, the opposite half of any rule you fix, both wrap cells (unsigned, signed) | Swallowed forms; fixes moved or undone |
+| Use a base case verified correct on all axes but the one tested; nest save/restore tests, never siblings; cross a new axis with each existing one at least once; leave defect's symptom observable in the row's position | Masked or immune defects |
+| Guard an invisible failure even if only the next slice recovers its value; justify a guard whose property the return type cannot carry by the rule's other half, not a test | Vanishing values; type-blind comparisons |
+| When sharing/delegation grows, name/build the absolute anchor (a design's meaning fixed as a value) protecting the rule, observing only what the mutation moves; check it by mutation; run every anchor on every backend; full coverage can mean no oracle teeth | Backends agreeing on wrong answers |
+| Treat product build as oracle-free (alternative executors only behind a default-on feature); flip in current default's direction, both spellings: `Backend`'s `#[default]` and `SimOpts`' `backend:` literal | Vacuous backend comparisons |
+| Keep evidence when a subject goes: assert an emptied gate table empty with reason; invert a test (keep design, flip expectation), retiring it once its teeth moved; pin a removed row's neighbours with reasons | Load-bearing designs deleted |
+| Wire a losing experiment into the real executor; fill borrowed buffers with garbage before every call, running the whole suite | Untested flags, assertions |
+| Classify a survivor as equivalent, blind axis or redundant after checking it changes meaning, write why, delete a check the callee already does | Equivalent/uncovered confused |
+| Update a documentation pin by strengthening it, and strengthen the pin guarding a user-visible sentence in the same change that alters that sentence | Doc falsehoods returning or staying |
+| Give a fast path inside the canonical implementation a test-only switch; test equivalence against general path (same bits at two widths; skipped function), not a restated rule or answer table | Tests copying the rule or blind to general path |
+| Include reject-arm rows; each, and its neighbour pin, must be refused by the stage under test, not earlier; detect an empty harness with a test pinning feature's refusal | Vacuous refusal pins |
 
 ### 7.3 Oracles: choosing, disqualifying and recording
 
 | Rule | Prevents |
 |---|---|
-| Pin the fact a self-describing artifact asserts, never the phrasing | A test asserting the sentence and passing while the sentence is false |
-| Assert the value when a pin's subject is a value, and strip every other error source from the cell to confirm it still fails | A test asserting a non-zero exit being satisfied by an unrelated error in the same design |
-| Ask each tool the same question in two positions — a direct interrogator and an indirect one — before recording an axis as an oracle split; a tool that answers those differently is not an oracle there | An axis being parked as unarbitrable while a third, wrong answer is kept |
-| Run the UNSHADOWED control on each oracle before recording a shadowing cell as a split: a tool that cannot bind the construct at all answers the shadow twin with the outer object, and that is its defect, not a reading | iverilog, which binds no generate-block enum label, recorded as the other side of an "inner label or outer net" split (§4.5.565) |
-| Prefer a suite run to an argument | A decision being defended in prose while a shipped test already refutes it |
-| Pair every relation pin with a test that pins the values against an oracle, and say so in both files | Both columns being uniformly wrong, the relation holding, and the suite staying green |
-| Put two spellings of the same access in one design with the same bits; when an oracle answers them differently it is not the oracle for that cell | Two designs making one contradiction read as two independent results |
-| Write "unmeasured", not "equivalent", when you could not construct a reaching design | A gap being closed on paper and refuted by a small design later |
-| Write linear tests knowing they cannot see exponential cost | A depth test proving nothing about the limit it was written for |
-| Bring a second oracle before declaring vita ahead, count how many places the claim is encoded, and leave the list of things to flip with it | A single-oracle conclusion being pinned in several places and then refuted |
-| Let the ladder decide when two oracles split, not a majority, and measure a new oracle's scope of applicability before using it | A masking oracle producing plausible garbage that is adopted as an answer |
-| Give a memo its own test | The cache being unprotected and indistinguishable from dead code |
-| Confirm the harness installs a feature's sidecar before testing that feature | A missing sidecar making the path nonexistent rather than failing |
-| Build the oracle for a string-returning method as a synthetic function and check exact length | An oracle silently padding its own answer |
-| Remove a test temporary directory before creating it; process identifiers are reused and each test is its own process | A test asserting absence being red only in the full suite, which reads as a product defect |
-| Build the strongest regression test as an internal equivalence differential: a new spelling produces byte-identical output to an equivalent existing spelling, and unsupported cases are identically loud on both | A new spelling drifting from the verified one |
-| Fix prose in place and leave correct assertions alone when a reading was wrong; then add the fine-grained twin so the rule is pinned once | Correct measurements being deleted along with the wrong explanation |
-| Check that the cell a row's property rests on compiles on both oracles before shaping a fix around that property | A rejected cell being recorded as an oracle split |
-| Run the control spelling on every oracle before writing an oracle count, and re-run it when the row is picked up again | A row underselling its strongest cell, or overselling a one-oracle cell as two-oracle |
-| Record the crash text and mark the cell one-oracle when a tool crashes | Silence being read as agreement |
-| Keep vita's own explicit spelling as the regression oracle where both external oracles refuse | An oracle-free cell having no regression detection |
-| Treat a failing deliberate-loud pin as a claim to re-measure against the oracle, never a regression on sight, and move the file's prose reason with it | A loud-to-correct conversion being reverted as a regression |
-| Ask the oracle whether a sibling path should follow, never a consistency argument | Extending by consistency alone voluntarily enlarging the unverifiable area |
-| Measure first the axes where a two-state tool is not an oracle: unknown values, out-of-range indices and event or delta order. Its scope is two-state arithmetic, width and sign | Plausible garbage being adopted as an oracle answer |
-| Read zero suite coverage of an arm as unverified, not as true | A claim being true everywhere the suite reaches and false outside it |
-| Record an oracle's own defects with the width or range condition attached | The next sweep reading the oracle's defect as a vita regression |
-| Run iverilog itself before calling a literal's reading two-oracle: sv2v rewrites literals on the way to iverilog | §4.5.569: `2147483648` into 64 bits is `0000000080000000` in iverilog and vita and `ffffffff80000000` in verilator and in sv2v → iverilog — a split recorded for a round as agreement against vita |
-| Let the specification decide, not a majority, when two oracles are each wrong on a different axis, and record the verdict with its condition | A self-contradicting oracle being followed |
-| Read a value differential as blind to a performance collapse; the gate is what catches it | Two lenses and a large sweep passing while a cost explodes |
-| Ask whether an oracle exists rather than assuming either way, and expect it to be half an oracle; pin the halves to different tests | A whole area being treated as oracle-free for many slices |
-| Pin the boundary of a new leniency with the oracle by running each position, rather than inferring it from a specification sentence | "It is standard, so be generous" becoming silent acceptance of typos |
-| Anchor a new benchmark against an external published reference value as well as against mutual agreement between tools | Several tools being wrong together |
-| Convert a test that pins a loud into a value pin when the loud becomes correct, and keep the narrative in the docstring | The reason it was loud being lost |
-| Contrast a suspicious construct with a different type in the same position when the parser may have silently demoted a lifetime | A qualifier being dropped in silence for one type only |
-| Measure an obvious fix and revert it when wrong | Reading a specification sentence without separating the two situations it covers |
-| Read a two-state oracle's zero as its two-state-ness, not as an oracle split; where one oracle rejects and the other accepts, it is a real split and off limits | A two-state artefact parking an axis as unarbitrable |
-| Record the second oracle's actual output text, not the conclusion drawn from it | The load-bearing half of "both oracles agree" being the one that was assumed |
-| When a fix removes an answer and names ONE fallback, census every producer that does not feed that fallback and measure each on the must-stay set; a cell that is right only because two widths coincide is not a control | An operator-top override and `defparam`, correct by a width coincidence, regressing 8 → 32 the moment the literal arm was gated (§4.5.470) |
-| Check a testbench for same-time-step blocking writes to a sampled input before reading a finish-time or cycle-count divergence as a defect; two oracles agreeing on a §4.7 ordering race is a coincidence of their schedulers, and the race-free (non-blocking) form is what settles it | A conformant process order being filed as a silent-wrong |
-| Ask whether another lane of the tool already answers the question before reaching for an external oracle; a self-contradiction proves a defect and needs no third party | A defect that one binary demonstrates against itself going unmeasured |
-| Name the missing capability in a loud pin's docstring, with the measured expected values from both oracles | A pin that says only "this is loud" telling a future reader nothing about whether loud is still right |
-| Open and read the cited text when a comment calls another implementation buggy | The standard and the other tool being on the same side, with vita the outlier |
-| Disqualify an oracle that answers the SAME first read differently depending on whether a LATER read exists; ask it once with the second read present and once without, in two designs with identical bits, before recording an axis as a split | verilator answering a same-delta copy-net read `ffa5` alone and `0000` beside a second read, which would have parked 5 iverilog-consistent cells as unarbitrable (§4.5.521) |
+| Before recording an oracle split, ask each tool the same bits several ways (direct and indirect interrogator; two spellings in one design; a first read alone and beside a later read, in two same-bit designs); a tool answering differently is no oracle there | Self-contradicting oracles |
+| Before an oracle count, split or fix rests on a cell, check it compiles on both oracles, run control spelling (for shadowing, the unshadowed one) on each, again when resumed; a tool unable to bind the construct answers with the outer object: a defect, not a reading | Mis-stated oracle counts |
+| Prefer a suite run to an argument; measure an obvious fix, revert it when wrong | Prose over measurement |
+| Pair every relation pin with an oracle value pin, noted in both files | Uniformly wrong columns passing |
+| Write "unmeasured", not "equivalent", without a reaching design; read zero arm coverage as unverified; a linear test cannot see exponential cost, nor a value differential a performance collapse (the gate does) | Gaps closed on paper; unseen cost |
+| Before declaring vita ahead, bring a second oracle, count where the claim is encoded, list what flips with it; anchor new benchmarks to an external published reference too | Unanchored agreement |
+| Let the ladder settle an oracle split, the spec when each is wrong on a different axis, never a majority; record verdict with its condition; a corpus row on a ruled-unarbitrable axis gets a third state pinning both answers, naming the ruling | Masking oracles; self-certified rows |
+| Ask if an oracle exists, measure its scope before use, expecting half an oracle (pin halves apart); a two-state tool answers two-state arithmetic, width and sign: measure first its non-oracle axes (unknowns, out-of-range indices, event/delta order); its zero is two-state-ness, but reject-vs-accept is a real split, off limits | Garbage adopted; axes wrongly parked |
+| Build a string-method oracle as a synthetic function, check exact length | Silent oracle padding |
+| Remove a test temp dir before creating it; PIDs recur across per-test processes | Full-suite-only red |
+| When a reading was wrong, fix prose in place, keep correct assertions, add a fine-grained twin | Deleting correct measurements |
+| Record oracle evidence raw: second oracle's output text, crash text (cell one-oracle), iverilog's own run before calling a literal two-oracle (sv2v rewrites literals), oracle defects with width/range condition | Assumed agreement |
+| Ask the oracle, running each position, if a sibling path follows or where a new leniency ends (pin it); never argue from consistency or a spec sentence | Accepted typos; unverified growth |
+| Pin a refusal's wording only while it has no value, its docstring marking a wording pin, naming missing capability and both oracles' values; once correct, convert it to a value pin, keeping narrative | Bulk breakage; lost reasons |
+| When parser may have demoted a lifetime, contrast another type in the same position | One type's qualifier dropped |
+| When a fix removes an answer and names one fallback, census every producer not feeding it, measure each on the must-stay set; a cell right by width coincidence is no control | Coincidental producers regressing |
+| Before calling a finish-time/cycle-count divergence a defect, check for same-step blocking writes to sampled inputs; oracles agreeing on a §4.7 race is coincidence; non-blocking form settles it | Conformant order as silent-wrong |
+| Ask if another lane answers before an external oracle (a self-contradiction proves a defect); read cited text when a comment calls another implementation buggy | Unmeasured defects; vita the outlier |
+| Read a self-contradiction as proof of a defect, never of which half is wrong; decide the direction by a PRE three-way measurement before fixing | Fixing the half that was right |
+| Build the strongest regression test as an internal equivalence differential: a new spelling byte-identical to an equivalent existing one, unsupported cases identically loud on both; where both external oracles refuse, keep vita's own explicit spelling as the regression oracle | New spellings drifting; oracle-free cells unpinned |
+| Treat a failing deliberate-loud pin as a claim to re-measure against the oracle, never a regression on sight, and move the file's prose reason with it | A loud-to-correct conversion reverted as a regression |
+| Assert the value when a pin's subject is a value, and strip every other error source from the cell to confirm it still fails | An unrelated error satisfying a non-zero-exit assertion |
+| Pin the fact a self-describing artifact asserts, never its phrasing | A test passing while the sentence is false |
+| Give a memo its own test | An unprotected cache indistinguishable from dead code |
+| Confirm the harness installs a feature's sidecar before testing that feature | A missing sidecar making the path nonexistent, not failing |
 
 ### 7.4 The mutation battery
 
 | Rule | Prevents |
 |---|---|
-| Default the battery scope to the whole workspace — `cargo nextest run --workspace --locked --no-fail-fast` — and never select packages and a test target together (`-p A -p B --test X`), because the target filter applies to every selected package | A narrow filter manufacturing false survivals |
-| Run a generous narrow set first and re-confirm only the survivors at full scope when a full pass is prohibitively slow; a narrow filter can produce a false survival but never a false kill | Either abandoning the battery as too slow or trading away its soundness |
-| Count non-termination, crash signals, leak failures and retried failures as kills, not only plain failures: scan the runner's output for `FAIL`, `TRY 1 FAIL`, `TIMEOUT`, `SIGSEGV`/`SIGABRT`/`ABORT` and `LEAK-FAIL` | A hang or crash being reported as survived, filing a real defect as covered |
-| Treat survival as unexplained: build a discriminator and measure it, write the equivalence argument into the code where it is equivalent, and prove unreachability with a deliberate failure | Survival being filed as equivalence and a real gap closed on paper |
-| Investigate a fake survival anyway; the question is why it did not die, not whether the mutation was applied | A false survival being discarded along with the real defect it points at |
-| Fill an expectation column before running: state the expected outcome of every mutant | A wrong expectation passing unnoticed as another death, so a misunderstanding ships |
-| Give every emitted table a gate that is an asymmetric upstream mutation: name the change its numbers must be invariant under and pin that pair | A determinism golden that runs the same input twice being unable to see a rail that reports the wrong number |
-| Treat a count protected only by tests that never exercise two producers together as untested | Coverage of each producer alone certifying a combination nobody ran |
-| Prove each shortcut mutation's equivalence individually and confirm reachability separately | Survival being indistinguishable from "no test exists" |
-| Ask the canonical implementation back with an equality assertion for any value a shortcut invents rather than reads | A non-obvious premise being defended by argument |
-| Write down why each mutation survived, and pin a cost-only specialisation with an operation-mix census rather than a value differential | Equivalent and uncovered being indistinguishable |
-| Pin the non-vacuous count separately from the total in a differential | A count of agreeing designs hiding how many compared one implementation with itself |
-| Do not relax an exact coverage pin into a floor; when a pin breaks often, make the gate cheaper instead | A floor passing after the true value grows and then halves |
-| Choose test values that separate the domains: an odd number for division, a value past the word boundary for width, a negative for sign | A value that cannot separate two domains letting a wrong premise stand |
-| Include both orders when testing an asymmetric parameter | Only the harmless direction being present |
-| Build a test for the correctness argument itself: imagine the mutation that inverts the argument and put the design that kills it in the same commit | A paragraph of reasoning having no pin |
-| Verify that a decomposed oracle gives the same answer as the original form | The decomposition itself diverging |
-| Run a whole-suite flip when a backend uses an alternative store | A design that runs on the default backend never reaching the alternative store, so nothing sees the defect |
-| Do not put a shape an earlier stage already rejects into a reject row's neighbouring pin | The pin being vacuous and claiming the lower stage does the upper stage's job |
-| Put a name in every argument position when admitting a new task | A defect whose only discriminator is a non-literal argument being structurally invisible |
-| Pin the remaining bypass paths by count per file plus the name of the row that blocks each | The next change that opens a row breaking there first, which is the point |
-| Choose the shape of a refusal pin so that both halves of the gate refuse it by their own name | One change admitting every test that used the same refused shape |
-| Instrument instead of auditing by eye | A multi-site audit done by reading |
-| Record what killed each mutant, and run the battery with `--no-fail-fast` | Several killers turning out to be one test, and change-detector pins reading as coverage |
-| Re-check the harness's hand-picked sidecar list every slice | A row having been vacuous from the day it was written |
-| Read an unused-assignment warning in a control-flow arm as a possible defect, not a style issue | A missing alternative branch ending a process early |
-| Treat building the discriminator for a surviving mutation as a defect-finding procedure, not a mutation-killing one | Survivors hiding a real divergence |
-| Check that a refusal design is not refused at an earlier stage | The test passing while measuring nothing |
-| Find who re-decides the value before concluding a surviving mutation is equivalent | A downstream re-binding making upstream context invisible |
-| Build the one discriminator shape that works, even when it is awkward | Ordinary inputs being unable to discriminate |
-| Alias two destinations to see order | Order being invisible when every destination differs |
-| Measure whether a survivor is unreachable rather than equivalent, and write the two differently | An unreached arm of moved code being disguised as a kill |
-| Pin every neighbour of a removed row with its reason | A wrong reason letting someone later delete a load-bearing row |
-| Build an absolute anchor that fixes what a design means as a value | A differential between two backends being blind in principle to a rule they both read |
-| Detect an empty harness by writing a test that pins the feature's refusal | The row being green while the design does not do what it says |
-| Separate "the gate is weak" from "the mutation is insufficient" before reading a survival | Deleting one of two summed terms leaving the row firing and saying nothing |
-| Add and remove an unrelated statement and see whether the answer changes | A classifier that sees only part of the statement passing for an unrelated reason |
-| Read clustered survivors as a diagnosis of the test axis and state their common property in one sentence | Survivors being treated as code defects one at a time |
-| Keep a defensive arm you cannot reach where the alternative silently drops the statement, and write in the docstring that it was measured dead, how, and what the honest behaviour would be | "Unreachable" and "unreached in every test run so far" being treated as the same claim |
-| Ask what the defect would look like and build that, rather than building the shape and observing it is fine | A probe whose operation is idempotent making the hazard invisible |
-| Restore both the source and the binary after each mutation case | A source-only restore leaving the canonical build emitting mutant values |
-| Derive the restore set from the mutant list, never hard-code it, and compare `git status --short` before and after the battery | A mutation outside the hard-coded set staying applied, making every later verdict a false kill |
-| Read "a mutant that should change nothing died" as battery contamination and check the tree before explaining the case | A contaminated run being rationalised case by case |
-| Specify each substitution by line number | A pattern matching two sites applying to neither and being recorded as survived |
-| Score a mutation that touches a loop-exit condition on a bounded runner only, and run the battery in the foreground | An unbounded simulation exhausting memory, taking the machine down, and leaving the mutation in the tree |
-| Check the exit code of the substitution and of the build, record a failure as a build failure rather than a survival, and grep the source for the changed line | A failed edit running a stale binary and the result being recorded as survival |
-| Restore a mutation from a byte snapshot copied by explicit path with `cp`, never with `git checkout -- .` | Uncommitted work being destroyed and later kills becoming unattributable |
-| Snapshot every file the working tree reports as modified, not only the mutation targets | Files outside the snapshot being reverted and the change's edits vanishing silently |
-| Run the restore loop under a shell that word-splits as the script expects: declare `#!/bin/bash`, because `zsh` passes an unquoted `$VAR` list as one argument | The restore silently copying nothing and mutations stacking across cases |
-| Install the restore as `trap restore EXIT` inside the script, and keep an isolation guard that diffs against the snapshot before each case | An external timeout killing the command before the restore runs |
-| Verify a substitution pattern by counting string occurrences, never by applying it to the tree and reverting | The verification pass itself reverting unrelated files |
-| Flush the runner's results line by line, keep a copy of the original outside the tree, and confirm by process identifier — not by `grep -c`, whose quoting returns a false zero — that no previous runner is alive | Two runners writing the same files and leaving a mutation in the tree |
+| Run battery as `cargo nextest run --workspace --locked --no-fail-fast`, recording each killer; never `-p A -p B --test X` (target filter hits every package); if too slow, re-confirm a generous narrow set's survivors at full scope (narrow can false-survive, never false-kill) | False survivals; one killer as many |
+| Count non-termination, crash, leak, retried failures as kills (`FAIL`, `TRY 1 FAIL`, `TIMEOUT`, `SIGSEGV`/`SIGABRT`/`ABORT`, `LEAK-FAIL`); re-run a non-termination kill against own tests only | Hangs scored as survived |
+| Write every mutant's expected outcome before running the battery | A wrong expectation passing as another death |
+| Add no parameter that no mutation can kill, and before adding a test row name the mutant that would survive without it | Dead parameters; rows that decide nothing |
+| Pin a correctness argument: imagine the mutation that inverts it and commit the design that kills it in the same commit | Reasoning with no pin |
+| Treat survival as unexplained: find who re-decides the value, build the one working discriminator however awkward (a defect-finding step), write equivalence argument in code only after failing, prove unreachability by deliberate failure | Real gaps closed on paper |
+| Ask why even a fake survival did not die; separate "gate weak" from "mutation insufficient"; read clustered survivors as a test-axis diagnosis, stating their common property in one sentence | Discarded defects; one-by-one chasing |
+| Gate every emitted table, workload, golden or differential with an asymmetric one-line upstream mutation (one end of data path) that must move it, pinning the change its numbers must stay invariant under | Unmovable digests; cancelling mutations |
+| Pin a differential's non-vacuous count apart from its total; a count no test exercises with two producers together is untested | Hidden self-comparisons; unrun combinations |
+| Write unreachable and equivalent survivors differently, proving each shortcut's equivalence/reachability apart; keep an unreachable defensive arm whose absence silently drops the statement, documented as measured dead, how, and honest behaviour | Unreached passing as killed |
+| Assert a value a shortcut invents (not reads) equal to the canonical implementation's; pin a cost-only specialisation with an operation-mix census | Premises defended by argument |
+| Build what the defect would look like, not a shape that turns out fine: add and remove an unrelated statement to see if answer changes; read an unused-assignment warning in a control-flow arm as a possible defect | Idempotent probes; missing branches |
+| Restore source and binary after each case from a set derived from mutant list, never hard-coded; compare `git status --short` before/after battery; read a died should-change-nothing mutant as contamination, checking tree first | Mutants left applied |
+| Specify substitutions by line number; verify a pattern by counting occurrences, never apply-and-revert; check substitution/build exit codes, grep changed line, record failure as build failure | Stale binaries scored as survival; unrelated files reverted |
+| Restore from a byte snapshot of every modified file via `cp` by explicit path (never `git checkout -- .`), under `#!/bin/bash` (`zsh` passes unquoted `$VAR` as one argument), as `trap restore EXIT` with a pre-case diff against snapshot | Lost edits; stacked mutants |
+| Score loop-exit mutations only on a bounded runner; run battery in foreground; flush results per line, copy the original outside tree, confirm by PID (not `grep -c`, which false-zeroes) no earlier runner lives | Memory exhaustion; leftover mutants |
 
 ### 7.5 Golden, corpus and determinism gates
 
 | Rule | Prevents |
 |---|---|
-| Put the minimum condition that breaks a boundary into the boundary's test, and do not let a docstring carry a wrong argument as authority | The test named for the boundary not defending it |
-| Build an order-sensitive probe on the side where mapping order and execution order differ | A same-side probe being unable to separate the two orders |
-| Suspect the harness first when a differential reports zero divergences: assert the row counts of both files and the key ordering, and plant a known divergence | A comparison of zero rows reading as agreement |
-| Make a diagnostic-counting needle a discriminating fragment of the rendered form | A one-character needle being coincidentally right and later wrong |
-| Measure a corrected diagnostic message against the cases that still reject, not against the ones the change opened | The replacement claiming support for a position that is correctly refused |
-| Accumulate a digest over the whole run, folded per cycle after reset, not over the final state | A final-state print hiding every divergence the design later overwrites |
-| Mutate one line of the upstream design and re-run every new workload, golden or differential gate | A digest that does not move being empty and indistinguishable from a working one |
-| Make the mutation asymmetric, touching one end of the data path only | A symmetric mutation cancelling on both ends, so "the mutation did not take" and "the workload cannot measure" are confused |
-| Fold every request strobe and every byte enable of the bus into the digest, loads included, and the cycle count, every cycle | A request at address 0 reading as no request, a load's byte-enable mutation leaving the digest unchanged, and idle cycles vanishing — before the first request a rotated zero is zero, and 64 idle cycles are a full rotation — so a core that starts a cycle late prints the pin |
-| Admit a 2-state oracle's digest only after randomising the x state over at least 64 seeds, and assert a testbench reset with an edge rather than a declaration initialiser | Five lucky seeds certifying a testbench that failed to print its pin on 29 of 62: the core ran on a gated clock whose enable is itself reset state, so with no reset edge a 4-state simulator reset the core through the gated clock's 0→x edge, and a 2-state run reset it only when its random initial state left the gate open |
-| Give a corpus row a third state when its axis has been ruled unarbitrable: pin both answers and name the ruling | The row being permanently red, or pinning vita's own answer and self-certifying |
-| Put two spellings of the same construct side by side in one file with one output line where a language offers several spellings of one meaning | Spellings differing and nobody noticing |
-| Pin the opposite half of any rule you fix | Being unable to tell whether the rule was fixed or moved |
-| Pin the two boundary cells, unsigned wrap and signed wrap | A later simplification undoing the narrowing silently |
-| Put the widened spelling and the original spelling side by side in the census | A width-twin defect being invisible without the pair, where the tool contradicting itself proves a defect |
-| Put the observed value in the assertion of a residue-pinning test, quoting PRE only after running PRE | A regression being enshrined as expected behaviour |
-| Test a state-moving transformation at the boundary | A value-dependent defect agreeing with the oracle in the middle and diverging only at the end |
-| Use two cheap detectors when routing: the domain twin and the scope twin | The suite going green with both defects present because no test paired the new domain with those contexts |
-| Pin the wording of a refusal only while the construct has no value, say in the docstring that it is a wording pin, and convert it to a value pin when a value exists | Wording pins breaking in bulk when the refusals they quote are removed |
-| Choose probe inputs where every wrong implementation gives a different answer, and say in the comment why that input | A fixed-point input passing whatever the implementation does |
-| Assert the value in a new battery cell rather than an exit code | Predicting an oracle's answer and pinning the prediction instead of measuring it |
-| Flip both spellings of the default backend for the flip run — the `Backend` derive's `#[default]` and the `backend:` literal in `SimOpts` initialisation; changing one moves half the CLI | A flip run that exercises only one entry point |
+| Put the minimum boundary-breaking condition in the boundary's test (a docstring's wrong argument is no authority); probe order where mapping/execution order differ, a state-moving transformation at the boundary | Undefended boundaries; end-only defects |
+| Suspect harness when a probe asserts absence or a differential finds zero divergences: count a positive marker, assert both row counts and key order, plant a known divergence; detect "no output, success exit" in every sweep, grepping corpus when silent | Harness failures read as clean |
+| Count diagnostics by a discriminating fragment of rendered form; check a corrected message against cases that still reject | Coincidental needles; over-claiming messages |
+| Fold digest every cycle after reset over the whole run, not final state: every request strobe/byte enable, loads included, plus cycle count; admit a 2-state oracle's digest only after randomising x state over 64+ seeds, with testbench reset asserted by an edge, not a declaration initialiser | Unseen divergences; lucky seeds |
+| Put spellings of one meaning (a widened beside the original) side by side in one file, one output line (a self-contradiction proves a defect); test routing with domain and scope twins | Unnoticed twin defects |
 
 ## 8. Performance measurement
-
-A performance number is a measurement with a method, or it is nothing. Every A/B is release-built,
-interleaved, run in both orders, and attributed to a mechanism before it is used.
 
 ### 8.1 The A/B protocol
 
 | Rule | Prevents |
 |---|---|
-| Interleave a performance A/B by run and run both orders, discarding the first run | Sequential blocks and a single order each producing a result whose sign is an artefact of position |
-| Measure with release binaries only, check the binary size when snapshotting, and record the profile in the briefing | A debug binary reporting a large fake regression |
-| Measure retired instructions, not wall time, when the target delta is below one percent | Repeated rounds disagreeing in sign between minimum and median |
-| Build a harmless control binary — the pre-change source plus the layout change only — for any A/B; per-shape movement of a percent or two is layout, not execution | A field addition alone moving benchmarks in both directions with no executed code changed |
-| Check that two profiles share a denominator, and record both | A run that ends inside the sampling window shrinking the denominator, so every unchanged function looks larger |
-| Convert share to share times wall time when asking whether a function changed, and keep the post-change share as-is when asking what is expensive now | An overall improvement raising every unchanged function's share |
-| Run an A/B back to back and re-measure the baseline each time | Machine state drifting within a session |
-| Bisect a performance regression the way you bisect a wrong value, using a synthetic probe and a control twin that changes one attribute | A real design mixing two costs that a probe separates |
-| Build measurement discipline into the default shape of the tool — take everything to be measured at once, so round-robin is the default and the first round is discarded — and warn when handed a debug binary | Each caller re-deriving the protocol and getting it wrong |
-| Choose a committed control for a performance record | Numbers from untracked third-party material not reproducing |
-| Build with `CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=1` and a separate `CARGO_TARGET_DIR` to profile, and parse the "Sort by top of stack" section | Stripped symbols making every frame anonymous, and the call-tree section giving the root everything |
-| Verify inlining after extracting a hot tail, and use the built-in control group of shapes that never call the new callee to attribute movement to layout | A small extraction costing several percent until it is inlined |
-| Write the design and workload a performance sentence was measured on into the sentence | A statement about headroom being refuted by the next shape |
-| State the design and the workload behind any estimate of what an optimisation is worth | A ceiling from one design being a property of that design |
-| Record the shape a revert's measurement covered, not only its verdict, and re-run when a new workload shows that shape | "It buys nothing" being true of the designs measured and false of real RTL |
-| Say which design a cost was measured on and what fraction of its run the cost could occupy when grading a cost invisible | A measurement that could not have shown anything being cited as evidence of nothing |
+| Interleave a performance A/B by run, both orders, back to back, discarding the first run and re-measuring the baseline each time; make that the tool's default (measure all at once, round-robin), warning on a debug binary | A sign set by position or drift |
+| Measure release binaries only, check binary size when snapshotting, record the profile in the briefing | A debug binary's fake regression |
+| Below a one-percent target delta, measure retired instructions, not wall time | Minimum and median disagreeing |
+| Give any A/B a harmless control binary (pre-change source plus only the layout change): a percent or two per shape is layout; after extracting a hot tail verify inlining, with shapes never calling it as control | Layout read as execution |
+| Check two profiles share a denominator, record both; ask "did it change" in share × wall time, "what is expensive now" in post-change share | Unchanged functions looking larger |
+| Bisect a performance regression like a wrong value, with a synthetic probe and a one-attribute control twin; choose a committed control for any performance record | Mixed costs; unreproducible numbers |
+| Profile with `CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=1` and a separate `CARGO_TARGET_DIR`, parsing "Sort by top of stack" | Anonymous frames; root takes all |
+| Name the design and workload behind every performance sentence or estimate, and when grading a cost invisible, say what fraction of that design's run it could occupy | One design's result read as general |
+| Record the shape a revert's measurement covered, not just its verdict; re-run when a new workload shows that shape | "Buys nothing" true only where measured |
 
 ### 8.2 Attribution before optimisation
 
 | Rule | Prevents |
 |---|---|
-| Do not use a measured gain as a result until you have a mechanism for it | The number being right and the attribution wrong |
-| Record both absolute times with any ratio between two layers | A ratio alone lying when the other layer improves |
-| Re-profile before trusting a recorded bottleneck, and read "my specialised code is barely in the profile" as the path not being entered | The queue naming one component and the profile naming another |
-| Do the division even when the candidate looks small — its value is that it makes you open the function | A larger win inside the same function going unfound |
-| Do the division before building: calls to move times cost difference per path, over total runtime | A profile percentage being mistaken for a target size, and the first failing gate for the only one |
-| Multiply a scan's unit by its call frequency and count the calls by instrumentation | A function's name not giving its unit, so a per-delta cost reads as per-timestep |
-| Ask first whether every fast path that already exists is being called | A helper that documents its own reason for existing having a caller that never calls it |
-| Look for places that build a proof and then discard it | A structure that crosses regions dropping the classification the next region has to recompute |
-| Open the call graph under a profile line | A top-of-stack row being an inlined blob that does not name the target |
-| Re-read the "this is an allocation choice, not semantics" notes on any path a routing change makes newly hot | A per-call scratch allocation that was free becoming the cost |
-| Ask the real admission predicate by extracting and calling it, rather than approximating a boundary with a necessary condition | Approximating the boundary sending shapes to no evaluator at all |
-| Profile after the census: a remaining rejection list does not mean the axis is worth anything | Opening a whole axis for a ceiling that is a rounding error |
-| Measure what percentage a shared function occupies in each layer before writing that fixing it benefits all of them | One layer having its own inlined copy and another barely using the function |
-| Measure both candidates' ceilings with discriminating designs before ordering them | Choosing by count being luck rather than an argument |
-| Count how many branches inside a hot function actually run before optimising it; the profile says where it is hot and only a census says which shape runs there | Optimising the branch that almost never runs |
-| Write the stop verdict before implementing: sum the profile share of what a stage targets and compare it with the stop threshold | The stage being built and then scored |
-| Count which lines inside a hot function disappear, not the function's share | A hot function's name not being what it does |
-| Ask whether a clone in the hottest loop is required | A clone added to satisfy the borrow checker outliving the condition that needed it |
-| Date any fixed-cost number a plan rests on and re-measure it before deciding | A plan built on a number that has since changed by a large factor |
-| Treat headroom and a plan that captures it as different propositions; when the remaining stages sum to a fraction of the ceiling, change the axis or close and record it | "Try harder" replacing a decision |
-| Count the executed operations before writing a code-generation plan | The plan's premise being a claim about the hot path's composition that nobody measured |
-| Check whether the reason a previous attempt lost still holds | A preceding stage having consumed a later stage's justification |
-| Treat a function you decided to share as a wall for code generation; one spelling and inlined cannot both apply | The decision being made implicitly as an implementation detail |
-| Look at the program-length distribution: when half the executed programs are one operation, the cost is in the calling convention | The optimisation targeting what is computed instead of what it takes to compute one thing |
-| Measure the ratio of choosing which call to make against what the call does before changing the representation | Replacing one form with another being a complete wash |
-| Treat a register file as an interface: splitting a statement into two operations sends a large value to memory and back | The compiled form being slower than the interpreted walk |
-| Demand a differential for a performance report's root cause as well as for a correctness report's, and delete cause candidates by experiment | A scaling diagnosis being refuted by the oracle showing steeper scaling |
-| Do not add an optimisation with no measured gain | A second code path being a drift risk in itself |
-| Build a discriminating question and measure it yourself when a report gives you a location | A bottleneck's location not being its cause |
-| Acquire the comparison tier and measure it rather than recording that you cannot | A document carrying "the gap size is unknown" while the tool is one install away |
-| Run an A/B on whether an optimisation accepts a design before claiming its effect | Coverage being a different axis from speed, with zero coverage visible only by changing the benchmark |
-| Count how many times a correctness primitive names its operand: performance is also a ladder | An impure operand named more often meaning more side effects, and a pure one becoming linear in width |
-| Build the benchmark that contains the shape in the same change that alters its cost | The cost change being invisible |
-| Build the cell where the tool does automatically what a report did by hand | Pasted source text having no formals, so the comparison is not the one the report asked for |
-| Count rather than time when an operator looks slow: put a print inside the operand and read the multiplier as an integer | Timing saying "expensive" where counting says the multiplier is exactly the declared width |
-| Grep the other callers of the thing you are about to gate | A sibling that already solved it holding the sound predicate, the measurement and often the report |
-| Get enough points to fit a curve before accepting or rejecting a scaling claim, and report the residuals | Two points being unable to distinguish linear from super-linear |
-| Divide a per-evaluation cost out from the evaluation count early | A conservative purity predicate's blast radius being invisible until someone counts |
-| License a skip by a complete dependency set, not by purity: reproduce the rule the oracles use, collect the callee's reads, and decline when one read cannot be attributed | Refusing every call and re-evaluating on every pass |
-| Grep any predicate that delegates to a whole-tree helper and then recurses; a promise about the answer is not a promise about the cost | A construct-free input becoming superlinear |
-| Ask whether the condition of a loop over a whole collection can be asked once | A loop that reads as processing a subset touching everything |
+| Use a measured gain only with its mechanism, add no optimisation without a measured gain, and record both absolute times with any layer ratio | Wrong attribution; a drifting path |
+| Re-profile before trusting a recorded bottleneck (specialised code barely in the profile means its path is not entered), date and re-measure fixed costs a plan rests on, and check a past attempt's losing reason still holds | Deciding on stale numbers |
+| Do the division before building, even for a small-looking candidate: calls moved × cost difference per path, over total runtime; scale a scan's unit by its call frequency, counted by instrumentation | Share read as size or unit; bigger in-function wins missed |
+| Ask first whether every existing fast path is called, and look for places that build a proof and then discard it | Unused paths; recomputation |
+| Open the call graph under a profile line; before optimising a hot function census which branches run (the profile says where, not which shape) and count lines that would disappear, not its share | Optimising a rare branch or a name |
+| Re-read "allocation choice, not semantics" notes on paths a routing change makes hot, and ask if a hottest-loop clone is required | Free allocations becoming the cost |
+| Extract and call the real admission predicate, not a necessary-condition approximation of the boundary | Shapes sent to no evaluator |
+| Profile after the census (a remaining rejection list does not make an axis worth anything) and write the stop verdict before implementing: targeted profile share against the stop threshold; headroom and a plan capturing it differ, so when remaining stages sum to a fraction of the ceiling, change axis or close and record | Building for a rounding error |
+| Measure a shared function's share per layer before claiming a fix helps all, and candidates' ceilings on discriminating designs before ordering them | Inlined copies; ordering by count |
+| Before a code-generation plan count executed operations and program lengths (half one-op means the cost is the calling convention); measure choosing a call against what it does before changing the representation | A plan on an unmeasured premise |
+| Treat a function you decided to share as a code-generation wall (one spelling and inlined cannot both apply), and a register file as an interface: splitting a statement into two operations sends a large value through memory | Implicit decisions; slower compiled code |
+| Give a performance report's root cause a differential, deleting cause candidates by experiment; given a location, build and measure a discriminating question; acquire the comparison tier rather than record you cannot; build the cell where the tool does automatically what the report did by hand | A location taken for a cause |
+| A/B whether an optimisation accepts a design before claiming its effect; add a shape's benchmark in the change altering its cost | Invisible coverage or cost |
+| Count how often a correctness primitive names its operand (performance is also a ladder); count, not time, a slow-looking operator by printing inside the operand and reading the multiplier as an integer; divide a per-evaluation cost out from the count early | Side-effect and width-linear blowups |
+| Grep the other callers of what you'll gate, and any predicate delegating to a whole-tree helper then recursing (a promise about the answer is not one about cost) | Missed siblings; superlinearity |
+| Fit a curve on enough points, with residuals, before accepting or rejecting a scaling claim | Two points hiding superlinearity |
+| License a skip by a complete dependency set, not purity: reproduce the oracles' rule, collect the callee's reads, decline on an unattributable read | Re-evaluating every call each pass |
+| Ask whether a whole-collection loop's condition can be asked once | A "subset" loop touching all |
 
 ### 8.3 Baselines and targets
 
 | Rule | Prevents |
 |---|---|
-| Use `iverilog` and vita's own alternative backend as the performance baseline; both share vita's contract of four-state, event-driven simulation | A different contract measuring something else |
-| Never make a two-state compiled simulator a performance target; cite its numbers only as the ceiling compilation can buy, always with the sentence that the contract differs | Unknown-value planes, delta cycles and event-queue cost all being booked as slowness |
-| Fix the cost model rather than moving a limit; a recursion depth cap replaced by a node budget is still a cap unless the walk deduplicates | The seal disappearing on a small, deeply nested source |
-| Alternate the direction of a fixpoint that iterates a map in declaration order, and leave the honest bound in the comment | A chain in the unfavourable direction settling one link per round |
-| Check three things when extracting a block into a helper: whether the block read a local, whether that local remains at the call site, and whether the node kind is a link in a recursive chain — and return early inside the helper when all three hold | Each node folding its operand twice, which is exponential in depth |
+| Baseline on `iverilog` and vita's alternative backend (vita's four-state, event-driven contract); never target a two-state compiled simulator, citing it only as compilation's ceiling, contract difference stated | Contract costs booked as slowness |
+| Fix the cost model rather than moving a limit; a node budget replacing a depth cap is still a cap unless the walk deduplicates | The seal vanishing on deep sources |
+| Alternate the direction of a fixpoint iterating a map in declaration order, leaving the honest bound in the comment | One link settling per round |
+| When extracting a block into a helper, return early inside it if the block read a local that remains at the call site and the node kind links a recursive chain | Exponential double folding |
 
 ## 9. Artifacts and determinism
 
-Artifacts are byte-identical across supported platforms, and the `sim-ir` shapes that back them are
-frozen. Byte identity comes before performance.
-
 | Rule | Prevents |
 |---|---|
-| Prefer a change that leaves the golden IR untouched: check the common funnel shared by both executors first, and keep non-target designs byte-identical | A change flipping the golden root hash for designs it does not affect |
-| Treat `crates/vita-artifact/src/header.rs::CURRENT_FORMAT_VERSION` as the only canonical statement of the format version; never copy the number into prose | A restated constant freezing while the real one moves |
-| Bump the format version for exactly three reasons: a frozen `sim-ir` shape change, adding a staged trailer sidecar, and an existing sidecar's enumeration gaining a variant | An artifact silently mis-decoding, or a skipped bump giving the user an unhelpful loud |
-| Bump for an appended enumeration variant even though it is backward compatible: the bump buys the accurate format-mismatch diagnostic. Inserting a variant in the middle is a frozen-shape change instead | The user getting "undecodable trailer", which does not say how to fix it |
-| Put cross-platform byte identity ahead of performance | A faster non-deterministic representation breaking reproducibility |
-| Re-pin only the AST schema hash for an AST field addition; a value-only change re-pins neither | A needless full artifact regeneration, or a missed one |
-| Use an ordered map when a parser generates AST items | A hash map violating the cross-platform byte-identical golden |
-| Sort scope keys numerically, not as strings | Lexicographic ordering interleaving generated scope numbers wrongly |
-| Key an order by a pass-independent value such as a source offset when the order's definition is declaration position | Two things counted in different passes never interleaving |
-| Split a counter per slot when two traversals share it and visit different sets | The same item getting a different number in each phase |
-| Write out the whole vector being compared before citing a sort key as justification | Lexicographic sorting grouping across slots instead of by element, where the tie-break is not really a tie |
-| Key a new rule on the new shape so everything else takes the same path as before | Existing designs moving |
-| Choose a carrier value that is impossible for every design predating the change | The guard perturbing designs it has nothing to do with |
-| Make a relative fallback reproduce the old output byte for byte for producers you did not convert | Unconverted producers changing output |
-| Over-approximate a divergence between a pre-resolve and a post-resolve computation with a sidecar flag so both sides derive from one source | The two phases computing different answers |
-| Read the trailer chain — what the pipeline writes and what the staged reader reads — before choosing between a sidecar and a derivation; a format bump is the fix's cost, not a reason to build an alternative | A criterion for choosing an item being mistaken for a constraint on its fix |
-| Answer a determinism golden that goes red on a new non-deterministic field by an explicit declaration — isolate it or make it deterministic — and keep an existence assertion beside the exclusion | The field's property never being written down in code, and the rule going vacuous |
-| Check whether an existing node already carries the meaning before adding a field to a frozen or hashed type | An avoidable schema-hash flip |
-| Follow the infrastructure precedents: climb the system-task ladder from no side effect, to engine state with a side table, to an engine effect with a frozen identifier and a format bump; desugar a side-effecting system function in statement form for single evaluation; keep engine-facing sidecars append-only with defaults; isolate a reused shared buffer by taking and restoring it; emit several items from one parse function through a pending queue drained at the top of the collection loop; save, restore and clear persistent side maps, because scope restore does not reach them | Each item being a measured source of artifact or pollution defects |
+| Prefer golden-IR-neutral changes: check the funnel both executors share first, keep non-target designs byte-identical, key a new rule on the new shape, pick a carrier value no older design can hold, make a relative fallback reproduce unconverted producers byte for byte | Unrelated designs or hashes moving |
+| `crates/vita-artifact/src/header.rs::CURRENT_FORMAT_VERSION` alone states the format version; never copy the number into prose | A restated constant freezing |
+| Bump the format version for exactly a frozen `sim-ir` shape change, a new staged trailer sidecar, or a sidecar enumeration gaining a variant, appended ones included for the accurate mismatch diagnostic; a mid-list insertion is a shape change | Silent mis-decode; vague loud |
+| Keep artifacts byte-identical across supported platforms, with frozen `sim-ir` shapes, ahead of performance | Non-reproducible output |
+| Before adding a field to a frozen or hashed type, check no node already carries the meaning; an AST field re-pins only the AST schema hash, a value-only change neither | Avoidable or missed re-pins |
+| Order deterministically: ordered maps for parser-generated AST items, scope keys sorted numerically, a pass-independent key (source offset) for declaration order, a counter per slot when traversals visit different sets, the whole compared vector written out before citing a sort key | Platform- or pass-dependent order |
+| Read the trailer chain (what the pipeline writes, what the staged reader reads) before choosing sidecar or derivation; a format bump is a cost, not a reason for an alternative; over-approximate a pre-/post-resolve divergence with a sidecar flag so both derive from one source | Phases disagreeing |
+| Answer a determinism golden reddened by a new non-deterministic field with an explicit declaration (isolate it or make it deterministic) plus an existence assertion beside the exclusion | A vacuous, unwritten property |
+| Follow the precedents: system-task ladder (no effect → engine state + side table → engine effect + frozen id + format bump); side-effecting system functions desugared to statements, evaluated once; append-only defaulted engine-facing sidecars; shared buffers taken and restored; multi-item parses via a pending queue drained atop the collection loop; persistent side maps saved, restored and cleared, as scope restore misses them | Artifact and pollution defects |
 
 ## 10. Working rules
 
@@ -1256,78 +771,51 @@ frozen. Byte identity comes before performance.
 
 | Rule | Prevents |
 |---|---|
-| Keep a source file under about a thousand lines and split on approach: submodules with a prelude re-export, crate-visible items, and re-export from the crate root. Types stay at the crate root so child modules keep access to private fields | A file growing past the point where a reviewer can hold it, and a split that has to fight visibility |
-| Keep a single large function and a single trait implementation whole; those are the documented exceptions to the size rule | A split that breaks a trait implementation into pieces no reader can follow |
-| Never move a schema-hashed type between modules: the canonical key embeds the module path, so a move flips the hash and invalidates every artifact on disk. Frozen `sim-ir` types and every AST type live at their crate root | An invisible artifact-wide staleness caused by a refactor |
-| Keep frozen types verbatim: adding, removing or reordering a field flips the root hash. Do it only deliberately, with the format bump and the golden re-pin in the same commit | An accidental shape change invalidating every artifact |
-| Spell `sim-ir` cross-type fields fully qualified as `sim_ir::Foo`; `crates/sim-ir/tests/body_refs.rs` rejects bare references | A bare reference producing a registry key that does not match the canonical one |
-| Check parser recursion with `RUST_MIN_STACK=2097152` — the 2 MiB CI test-thread stack the depth guard is tuned to, where a local shell defaults to 8 MiB — after touching the block-body path, and extract an `#[inline(never)]` cold helper or box large locals when the frame grows | Deep nesting overflowing the stack |
-| Treat a per-level frame as a budget: box a value in the callee, never in the recursive frame, and use the parser's depth-guard test as the canary | One added value costing bytes per nesting level until the depth guard overflows |
-| Separate concurrent sessions with a worktree | A shared checkout moving its head under another session and stranding commits |
+| Keep a source file under about a thousand lines, split on approach into submodules with a prelude re-export and crate-visible items, re-exported from the crate root, types kept at the root for private-field access; a single large function or trait implementation stays whole (the documented exceptions) | Unreviewable files; split impls |
+| Never move a schema-hashed type between modules (the canonical key embeds the module path): frozen `sim-ir` types and every AST type live at their crate root; keep frozen types verbatim, adding, removing or reordering a field only deliberately, with format bump and golden re-pin in the same commit | Artifact-wide staleness |
+| Spell `sim-ir` cross-type fields fully qualified as `sim_ir::Foo`; `crates/sim-ir/tests/body_refs.rs` rejects bare references | A non-canonical registry key |
+| After touching the block-body path, check parser recursion with `RUST_MIN_STACK=2097152` (the 2 MiB CI test-thread stack the depth guard is tuned to; local shells have 8 MiB); treat a per-level frame as a budget: extract an `#[inline(never)]` cold helper or box large values in the callee, never the recursive frame, the depth-guard test as canary | Stack overflow on deep nesting |
+| Separate concurrent sessions with a worktree | A head moving under another session |
 
 ### 10.2 Planning and slicing
 
 | Rule | Prevents |
 |---|---|
-| Ship the subset that provably does not need a prerequisite, and prove the subset rather than asserting it from a naming convention | A change being blocked entirely, or shipping on an unproven convention |
-| Make the retirement of a multi-call-site predicate a change of its own, recorded with the measurement and the prescribed deletion | Folding it into the change that invalidated it widening that change's blast radius |
-| Pre-verify in simulation the expression a desugar will generate, pin every variant of a context-determined feature before implementing, give a large semantic space its own slice, and record the plan durably | The desugar emitting an expression the simulator handles differently |
-| Order work by risk: a pure parser desugar reusing existing AST, then routing to an existing mechanism, then composing single-property primitives, then new infrastructure | The riskiest option being chosen first |
-| Draw slice boundaries where the oracle is, and measure the corpus before planning the order | A conceptually clean decomposition producing a gate that cannot run a single corpus design |
-| Reproduce an incoming report and then re-find the cause | The reported diagnosis naming a feature that already works |
-| Price a loud-to-correct item in two-oracle cells per edit site before picking it out of a row that lists several | Several edit sites buying one cell while a neighbour buys many for one |
-| Read a dependency running the wrong way as the signal that the rules belong lower, not that a twin may approximate | A twin being allowed to diverge for a build-graph reason |
-| Do not build a third executor as a substitute; the only permitted separations are role and build | A third implementation being a third spelling of the semantics |
-| Keep the reference interpreter out of performance optimisation; when the profile points at it, the answer is that the design should not be running there | Every specialisation becoming a second spelling of the rule |
-| Read "not a product surface" as a statement about the selection flag, not about the function | Live code being treated as dead |
-| Write an option as an enumeration, not a boolean, when the question is which input to pass rather than on or off | A third policy being added without the callers reconsidering |
-| Distinguish "the default is the right shape" from "the wrong shape is unrepresentable", and claim the second only when the type makes the wrong state impossible | A paragraph arguing that rules must be types while the wrong form still compiles |
-| Price a name-keyed rewrite by asking where the key is constructed; the absence of a funnel is the estimate | "Small and additive" turning out to be a prerequisite |
-| Admit a change to implementation with a lane table: list every shared function it edits or routes into (a fold, resolver, walker, classifier or gate with more than one caller) and every consumer lane each one reaches, and mark each lane measured (census cells on PRE and the oracles), opted out (the new behaviour is a parameter that lane does not pass, so its output is byte-identical) or unmeasured. Build only when no lane is unmeasured; otherwise narrow the change to opt-in for the measured lanes, or file the shared change as its own prerequisite row and do not build it in the slice. The table goes into the briefing | A slice that routes into shared code meeting its blockers in lanes it never measured and spending the whole round budget before reverting (§4.5.562 `fold_init`, §4.5.571 and §4.5.572 the shared scope-leak check and parser binding, §4.5.581 `wide_name_bits`) |
+| Ship the subset that provably needs no prerequisite, proved, not asserted from a naming convention; retire a multi-call-site predicate in its own change, recorded with the measurement and the prescribed deletion | Blocked changes; wider blast radius |
+| Pre-verify in simulation the expression a desugar will generate, pin every variant of a context-determined feature before implementing, give a large semantic space its own slice, and record the plan durably | Generated code run differently |
+| Order work by risk (pure parser desugar on existing AST, routing to an existing mechanism, composing single-property primitives, new infrastructure), cut slices where the oracle is, and measure the corpus before planning the order | Riskiest first; gates running no corpus design |
+| Reproduce an incoming report, then re-find the cause; price a loud-to-correct item in two-oracle cells per edit site before picking it from a multi-site row | Fixing what works; cheap cells first |
+| Read a dependency running the wrong way as a sign the rules belong lower, not that a twin may approximate; build no third executor as a substitute (the only permitted separations are role and build); keep the reference interpreter out of performance work: a design the profile finds there should not run there | Extra spellings of the semantics |
+| Read "not a product surface" as about the selection flag, not the function | Live code treated as dead |
+| Write an option as an enumeration, not a boolean, when the question is which input to pass; claim "the wrong shape is unrepresentable" only when the type makes it impossible, not when the default is merely right | Unreviewed policies; false type claims |
+| Price a name-keyed rewrite by where the key is constructed; the absence of a funnel is the estimate | "Small and additive" being a prerequisite |
+| Admit a change to implementation with a lane table in the briefing: each shared function it edits or routes into (fold, resolver, walker, classifier or gate with more than one caller), each consumer lane it reaches, each lane marked measured (census cells on PRE and the oracles), opted out (a parameter the lane does not pass, byte-identical) or unmeasured; build only with no lane unmeasured, else narrow to opt-in for measured lanes or file the shared change as its own prerequisite row | Unmeasured-lane blockers burning the round budget |
 
 ### 10.3 Comments, documents and queues
 
 | Rule | Prevents |
 |---|---|
-| Treat the document that enumerates a parallel-table set as part of the code and update it in the same edit | The enumeration falling a table behind on the day it is written |
-| Re-prove in this file any property a comment asserts | A neighbour's property copied into a comment being false the moment it is copied |
-| Diff the two bodies as part of writing a comment that says "twin of" | The comment being false |
-| Name what actually holds an invariant and say so in the documentation | The next change leaning on the same false argument |
-| Re-check before committing whether another change in the same slice invalidated the premise you wrote into a comment | The stated reason being false and carrying your signature |
-| Say what a temporary workaround is for when you use one, and remove it when you fix the root | The workaround becoming the next change's defect |
-| Delete a caller-less macro or helper but leave the reason for its deletion in place | The next reader believing the gate still has teeth |
-| Read what another copy of the same rule already says before writing a comment about it | One file documenting a backstop as required while another records that removing it is byte-identical |
-| Write what you measured to reach a "cannot" verdict, not why it cannot be done | "Cannot" in a comment being a claim that the next change refutes |
-| Check against the code any comment asserting that duplication was avoided | Hand-matched arms drifting while the comment says they cannot |
-| Re-read the documents written before a review when the review changes the design; the high-risk sentences are the ones naming a file, a function or a count | A paragraph shipping false in both its place and its count, with every gate green, because no test reads prose |
-| Name an implementation with the reason it is there when it must be named | A later move reading as a detail instead of a contradiction |
-| Write a queue edit, including a deferral, into the canonical queue first and mirror it afterwards, checking the mirrors at every close | Mirrors carrying rows their own declared source does not have |
-| Say what a constant is for and point at the canonical site instead of restating it in prose, and grep the number itself when a bump ships | Restated constants decaying silently with every gate green |
+| Record a finished slice only in its commit message (`§4.5.N`, the bug, the mechanism, byte-identity, the review): no archive entry, snapshot row, lessons entry or REMAINING_WORK rewrite; find a past slice with `git log --grep` | Per-slice doc writes no later step reads |
+| Keep ROADMAP to open work, one line per item, and put no gate or test counts in any document | Prose and counts going stale |
+| Write a queue edit, deferrals included, into the canonical queue only, deleting mirrors rather than syncing them; give a question one canonical section, splitting it where two are needed, and verify a doc migration by sorted line sets (`comm -23`), not headings | Stale copies; items lost in a move |
+| Treat a document enumerating a parallel-table set as code, updated in the same edit; say what a constant is for and point at its canonical site, not restating it, grepping the number when a bump ships | Enumerations and constants decaying |
+| Re-prove in this file any property a comment asserts: diff both bodies for "twin of", check "duplication avoided" against the code, read other copies of the rule, and re-verify every sentence of a comment block you open to fix one | Copied or neighbouring claims false |
+| Name what actually holds an invariant, and the reason an implementation is there when it must be named | Leaning on a false argument |
+| Before committing, re-check comment premises another change in the slice may have broken, and re-read documents written before a review that changed the design (risky sentences name a file, function or count) | False prose under green gates |
+| Say what a temporary workaround is for and remove it with the root fix; delete a caller-less macro or helper but leave the reason for its deletion | Workaround defects; toothless gates |
+| Write what you measured to reach a "cannot" verdict, not why it cannot be done | A "cannot" the next change refutes |
 
 ### 10.4 Tooling and machine safety
 
 | Rule | Prevents |
 |---|---|
-| Read twenty lines either side of an insertion point after a scripted splice | A new item inserted before a documentation block stealing that block |
-| Assert the anchor exists before a scripted splice and verify the result | A replacement that matched nothing reporting failure as success |
-| Require a full diff and an oracle re-verification for any agent given write access | A write tool replacing a whole file, with a small count change as the only symptom |
-| Make each edit an independent write, grep to confirm it landed, then write the comment or the report; a multi-edit script must report failures and continue rather than aborting | An abort in the middle losing every earlier write while the comment claims a state that does not exist |
-| Re-establish the state after any tool result that did not visibly complete: `git status --short` and `git diff --stat` for an edit, a re-read for a write, a re-run for a command | A truncated result being equally consistent with an execution failure, so later steps reason about a tree that does not exist |
-| Rebuild after changing build configuration, because product and oracle configurations share a target path | A fast "finished" line meaning the previous configuration's binary is still there |
-| Never run two full suites concurrently | Hard-coded temporary paths making the two processes write the same files, which reads as a product flake |
-| Verify a feature flag with `cargo tree -p <crate> --no-default-features -e features`, reference dependent crates with `default-features = false`, and rebuild after the change | Feature unification silently re-enabling the default and a green build proving nothing |
-| Redirect a gate's output to a file and capture its exit code separately (`cargo … > /tmp/x.log 2>&1; T=$?`); after an unavoidable pipe, read zsh's `${pipestatus[1]}` or bash's `${PIPESTATUS[0]}`, because `$?` reports the last command's status | A compile failure reading as green |
-| Take a hang out of the battery and measure it once by hand | A terminate-after not being a cheap kill, because the child keeps writing to the pipe |
-| Do not add a pre-emptive build before the test runner; the runner builds anyway | The build pass running twice |
-| Wait on a process identifier (`while kill -0 $PID; do sleep …; done`), never on a `pgrep -f` pattern that matches the waiting shell's own command line | A permanent deadlock that looks exactly like a slow compile |
-| Run a background wait's predicate once by hand before arming it, prefer a condition read from an artifact you have inspected, and kill the wait when the answer arrives another way | A wait on a string the producer never writes running until someone notices |
-| Never send an uncatchable kill to a test runner mid-build | The lock surviving and the next run blocking at no CPU |
-| Grep every site that decides a default value before flipping it | Only part of the surface moving while the result is called a whole-suite run |
-| Write a log line from a parallel process with a single write, and make the aggregation declare contamination when it meets a value outside the known set | Interleaved fragments tearing rows and inflating counts |
-| Treat a revert as an edit: specify the deleted range by line, grep the deleted symbols for surviving references, and check that adjacent tests, documents and helpers were not deleted with it | A regression test being deleted invisibly, because the suite is green either way |
-| Before a new ERROR from a lint-class rule, run one shape per file through the second tool and put the resulting table in the module doc; a shape the second tool accepts is a warning at most, and a shape nobody ran is recorded "unmeasured", never "accepts" | Six in-tree fixtures failing under a rule written from the LRM sentence (§4.5.472): whole-vs-partial writes, `always_latch`, `input` vs `inout` actuals were all separate cells |
-
----
-
-The measurements behind these rules — the designs that were run, the numbers that came back, and
-which rule each incident bought — are in [history/lessons.md](history/lessons.md).
+| For a scripted splice, assert the anchor exists, then verify the result and read twenty lines either side of the insertion point | A stolen doc block; no-match as success |
+| Require a full diff and an oracle re-verification for any agent given write access | An unnoticed whole-file replacement |
+| Make each edit an independent write and grep that it landed before the comment or report, a multi-edit script reporting failures and continuing; after a result that did not visibly complete, re-establish state (`git status --short` and `git diff --stat` for an edit, re-read a write, re-run a command) | Reasoning about writes that did not land |
+| Rebuild after changing build configuration (product and oracle share a target path); verify a feature flag with `cargo tree -p <crate> --no-default-features -e features`, reference dependent crates with `default-features = false`, rebuild, and test the feature-off build as its own CI job with `--lib` (unification and a test target's dev-dependency re-enable it) | Testing a binary you did not mean |
+| Never run two full suites concurrently, add no pre-emptive build before the test runner, and never send an uncatchable kill to a runner mid-build | Shared-path flakes; double builds; stale locks |
+| Redirect a gate's output to a file, capturing its exit code separately (`cargo … > /tmp/x.log 2>&1; T=$?`), and after an unavoidable pipe read zsh `${pipestatus[1]}` or bash `${PIPESTATUS[0]}`, not `$?`; write a parallel process's log line in one write, aggregation flagging contamination on a value outside the known set | Failures read as green; torn rows |
+| Take a hang out of the battery and measure it once by hand | A child still writing to the pipe |
+| Wait on a process identifier (`while kill -0 $PID; do sleep …; done`), never a `pgrep -f` pattern matching the waiting shell; run a wait's predicate once by hand before arming it, prefer an inspected artifact's condition, and kill the wait when the answer arrives another way | Deadlock; waiting on a string never written |
+| Grep every site deciding a default before flipping it; treat a revert as an edit: specify the deleted range by line, grep deleted symbols for surviving references, check adjacent tests, documents and helpers survived | Partial flips; invisibly deleted tests |
+| Before a new error from a lint-class rule, run one shape per file through the second tool and put the table in the module doc; a shape it accepts is a warning at most, an unrun shape "unmeasured", never "accepts" | A rule failing in-tree fixtures |
