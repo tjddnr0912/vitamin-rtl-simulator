@@ -1185,7 +1185,7 @@ The parser stops recording after 50 diagnostics.
 
 Every row is derived from the source at the current commit and pinned by a test
 in the workspace suite. The gate is
-`cargo nextest run --workspace --locked`: 7352 tests, all passing, 15 skipped.
+`cargo nextest run --workspace --locked`; CI runs it on Linux, macOS and RHEL 9.
 
 Where an external oracle exists, a construct is settled by differential testing
 against it:

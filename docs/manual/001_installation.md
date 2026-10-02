@@ -266,7 +266,7 @@ session forces a rebuild, so pick one and stay on it.
 
 | Command | Role | Result at HEAD |
 |---|---|---|
-| `cargo nextest run --workspace --locked` | The full gate, locally and in CI (CI adds `--no-fail-fast`); reads `.config/nextest.toml`, which caps any single test at 60 s with four attempts | 7352 tests run, 7352 passed, 15 skipped, exit 0, 35.8 s |
+| `cargo nextest run --workspace --locked` | The full gate, locally and in CI (CI adds `--no-fail-fast`); reads `.config/nextest.toml`, which caps any single test at 60 s with four attempts | exit 0 (CI is the record) |
 | `cargo test --workspace --locked` | Still runs the same suite, without the cap, but is not what CI runs; CI runs only `cargo test --doc --workspace --locked`, because nextest does not run doctests | — |
 
 The lint and format gates, which CI also enforces:
@@ -283,7 +283,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the contributor workflow.
 ## 1.9 Keeping `target/` small
 
 Cargo writes a fresh hashed executable per test target per build and never reclaims the
-superseded ones. The workspace carries 613 integration-test targets, so a repeated
+superseded ones. The workspace carries hundreds of integration-test targets, so a repeated
 `cargo test --workspace` accumulates a full set each time. One development machine measured
 59 GiB across 357,247 files over two months, about 25 GiB per month.
 

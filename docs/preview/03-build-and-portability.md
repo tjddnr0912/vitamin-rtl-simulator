@@ -452,7 +452,7 @@ Not in CI at HEAD: any Windows runner, any release or publish workflow, and `car
 | Role | the full gate, locally and in CI (CI adds `--no-fail-fast`) | still works; CI runs only its doctest half, `cargo test --doc --workspace --locked` |
 | Reads `.config/nextest.toml` | yes | no |
 | Per-test timeout | `slow-timeout = { period = "60s", terminate-after = 4 }`, a hard four-minute ceiling | none |
-| Result at HEAD | 7352 tests, 7352 passed, 15 skipped, exit 0, about 36 s | the same suite, far slower |
+| Result at HEAD | exit 0; CI is the record | the same suite, far slower |
 
 The 15 skipped tests are the `#[ignore]`d performance probes; they are data, not gates.
 
@@ -516,7 +516,7 @@ cached build rather than a vendor-supplied binary.
 
 ## 12. Build-tree hygiene
 
-The workspace carries 613 integration-test targets. Cargo writes a new hashed binary per
+The workspace carries hundreds of integration-test targets. Cargo writes a new hashed binary per
 test target per build and never reclaims the superseded ones, so `target/` grows on the
 order of tens of gigabytes a month under repeated full-workspace test runs.
 
@@ -547,5 +547,3 @@ binary or a simulation result.
 - [16-schema-hash-spec.md](16-schema-hash-spec.md) — the proc-macro hash the build produces
 - [../../CONTRIBUTING.md](../../CONTRIBUTING.md) — the same rules as a contributor workflow
 - [../manual/001_installation.md](../manual/001_installation.md) — installation for users
-- [../history/specs/2026-05-26-vitamin-rtl-simulator-design.md](../history/specs/2026-05-26-vitamin-rtl-simulator-design.md)
-  — the original whole-project specification, superseded by this set

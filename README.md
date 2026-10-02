@@ -221,8 +221,8 @@ The schemas are specified in
 | Toolchain | rustc/cargo 1.85.0 is the floor, pinned in `rust-toolchain.toml`; vita's own crates are edition 2021. `--locked` is required |
 | Workspace | 17 member crates, plus a vendored `third_party/libm` held outside the workspace |
 | Platforms | Linux and macOS. CI builds and tests on ubuntu-latest, macos-latest and a RHEL 9 / UBI 9 container, and fetches and runs the workload corpus on all three. Windows is not a target |
-| Tests | `cargo nextest run --workspace --locked` runs 8981 tests, all passing, with 15 skipped (they are `#[ignore]`d performance probes, not gates), in about 40 s. CI runs the same command with `--no-fail-fast`, plus `cargo test --doc --workspace --locked` for doctests |
-| Artifact format version | 34 |
+| Tests | `cargo nextest run --workspace --locked` is run by CI on Linux, macOS and RHEL 9 (with `--no-fail-fast`), plus `cargo test --doc --workspace --locked` for doctests |
+| Artifact format version | `crates/vita-artifact/src/header.rs` (`CURRENT_FORMAT_VERSION`) |
 | Diagnostics | 70 codes, each with a mnemonic, a `VITA-####` number and a reference entry |
 | Licence | MIT or Apache-2.0, at your option |
 

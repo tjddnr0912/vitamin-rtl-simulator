@@ -4,7 +4,7 @@ All notable changes to **vitamin** are recorded here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); dates are ISO-8601.
 
 Per-slice engineering detail lives in [docs/history/ROADMAP_ARCHIVE.md](docs/history/ROADMAP_ARCHIVE.md)
-(§4.5.x) and [docs/history/DEVLOG.md](docs/history/DEVLOG.md); the sections below summarise what
+(§4.5.x); the sections below summarise what
 changed for a user of the simulator.
 
 ## [Unreleased]

@@ -795,7 +795,7 @@ The staged flow has to carry the same information across process boundaries:
    diagnostic line** between the two paths *and* pins the location absolutely — parity alone would
    pass two equally location-less lines.
 
-Trailer versions, against `CURRENT_FORMAT_VERSION = 31`: the source-map tail is v28, statement
+Trailer versions, against `CURRENT_FORMAT_VERSION` (`crates/vita-artifact/src/header.rs`): the source-map tail is v28, statement
 locations v29, statement and expression scopes v30, process instance scopes v31.
 
 Where no resolver is installed at all — elaborate unit tests, AST-only callers, engine harnesses —

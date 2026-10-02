@@ -45,30 +45,11 @@ The full local gate:
 cargo nextest run --workspace --locked
 ```
 
-7352 tests run, 7352 passed, 15 skipped, exit code 0, 35.8 s of wall clock.
+Exit code 0; CI is the record of counts.
 
 ### 2.1 Inventory
 
-613 integration-test targets live directly under `crates/*/tests/`.
-
-| Crate | `tests/*.rs` targets | `#[test]` in `tests/` | `#[test]` in `src/` | total |
-|---|---:|---:|---:|---:|
-| `cli` | 564 | 6333 | 25 | 6358 |
-| `sim-engine` | 32 | 447 | 273 | 720 |
-| `sim-ir` | 7 | 23 | 2 | 25 |
-| `vita-artifact` | 3 | 10 | 0 | 10 |
-| `hdl-parser` | 2 | 6 | 68 | 74 |
-| `corpus-runner` | 1 | 8 | 17 | 25 |
-| `diag` | 1 | 3 | 2 | 5 |
-| `hdl-ast` | 1 | 2 | 1 | 3 |
-| `vita-schema` | 1 | 3 | 0 | 3 |
-| `vita-artifact-derive` | 1 | 3 | 0 | 3 |
-| `elaborate` | 0 | 0 | 65 | 65 |
-| `hdl-preprocess` | 0 | 0 | 46 | 46 |
-| `vcd-writer` | 0 | 0 | 17 | 17 |
-| `hdl-lexer` | 0 | 0 | 11 | 11 |
-| `vita-log` | 0 | 0 | 4 | 4 |
-| `hdl-builtins`, `vcd-diff` | 0 | 0 | 0 | 0 |
+Each crate's tests live in `crates/<crate>/tests/`, and CI runs the whole suite.
 
 Every `cli` test runs the real binary through `Command::new(env!("CARGO_BIN_EXE_vita"))` and
 writes its design into the system temp directory under a name carrying an atomic counter and
@@ -77,19 +58,19 @@ carry no `#[test]` (`cli/tests/sva_property_util/`,
 `sim-engine/tests/{common,dyn_storage_util,end_to_end_util,frame_call_util}/`) are shared
 helper modules, not targets.
 
-Seventeen `cli` targets — the `*_report_gaps.rs` and `*_report.rs` families — collect gaps
+Some `cli` targets — the `*_report_gaps.rs` and `*_report.rs` families — collect gaps
 reported by users of the tool. Each reported row is re-measured against a fresh probe, then
 either closed or made loud; the target keeps the case so it cannot come back.
 
-### 2.2 The 15 skipped tests
+### 2.2 The skipped tests
 
 Every `#[ignore]` in the workspace is a performance probe, and no performance number is ever
 a gate:
 
-| File | `#[ignore]` | Reason string |
-|---|---:|---|
-| `crates/sim-engine/tests/perf_baseline.rs` | 14 | `perf baseline (DATA, not a gate); run with --ignored --nocapture` |
-| `crates/cli/tests/perf_call_regime.rs` | 1 | `perf probe (DATA, not a gate); run with --ignored --nocapture` |
+| File | Reason string |
+|---|---|
+| `crates/sim-engine/tests/perf_baseline.rs` | `perf baseline (DATA, not a gate); run with --ignored --nocapture` |
+| `crates/cli/tests/perf_call_regime.rs` | `perf probe (DATA, not a gate); run with --ignored --nocapture` |
 
 The three tests in `perf_call_regime.rs` that are *not* ignored are gates on the validity of
 the timed row, not on its value: the two spellings of the design must compute the same

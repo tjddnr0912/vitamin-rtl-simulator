@@ -1055,5 +1055,4 @@ absent — is not implemented.
 - [16-schema-hash-spec.md](16-schema-hash-spec.md) · [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md) — the hash mechanism and the frozen IR
 - [19-ai-agent-observability.md](19-ai-agent-observability.md) — the one-shot observability rail
 - [../manual/004_cli-reference.md](../manual/004_cli-reference.md) · [../manual/007_error-codes.md](../manual/007_error-codes.md) — the user-facing surface
-- [../history/specs/2026-05-26-vitamin-rtl-simulator-design.md](../history/specs/2026-05-26-vitamin-rtl-simulator-design.md) — the originating design
 - Prior art: Cadence `xmvlog` / `xmelab` / `xmsim` with `cds.lib`; Synopsys `vlogan` / `vcs` / `simv` with `synopsys_sim.setup`; Icarus `iverilog` → `.vvp` → `vvp`; GHDL `-a` / `-e` / `-r`; Yosys RTLIL `src` attributes; the rustc strict version hash as a version-gate model

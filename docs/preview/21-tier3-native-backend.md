@@ -7,7 +7,7 @@ report when it declines a whole design, and the equivalence gate that keeps its 
 identical to the other two executors' answers.
 
 The execution record that produced this backend is not part of the contract; it lives in
-[history/ROADMAP_ARCHIVE_PHASE_A-D](../history/ROADMAP_ARCHIVE_PHASE_A-D.md). The numbers that
+[history/ROADMAP_ARCHIVE.md](../history/ROADMAP_ARCHIVE.md). The numbers that
 justify a rule are quoted here in the present tense, without the work item that measured them.
 
 ---
@@ -673,7 +673,7 @@ control flow differs. Output bytes cannot diverge in a backend-specific way.
 | Tier-3 differential | `native/run_tests.rs` | `agree(src, name)` runs the same IR on `Bytecode` and `Native` with per-design VCD targets and a merged output/diagnostic sink |
 | Design gate | `sim-engine/tests/native_gate.rs` | Each reject family actually fires; corpus eligibility is an exact pinned count |
 | iverilog differential | `sim-engine/tests/differential.rs` | vita against `iverilog` + `vvp`; skips gracefully when the tools are absent, and the design still runs through vita |
-| The whole suite with this default | The default build | The gate that finds what a corpus differential cannot: 7,352 tests, all backends' shared paths exercised by real designs |
+| The whole suite with this default | The default build | The gate that finds what a corpus differential cannot: the whole workspace suite, all backends' shared paths exercised by real designs |
 
 Three anti-vacuity rules are part of the gate, not decoration:
 

@@ -277,7 +277,6 @@ These are the conditions the test suite and CI enforce; the layer-by-layer contr
   the catalogue under a CI gate.
 - The three executors produce identical stdout, identical waveform bytes and the same finish reason
   on the equivalence corpus.
-- The full local gate is `cargo nextest run --workspace --locked`: 7352 tests, 7352 passed, 15
-  skipped. CI runs it too, with `--no-fail-fast`, then `cargo test --doc --workspace --locked`
+- The full local gate is `cargo nextest run --workspace --locked`. CI runs it with `--no-fail-fast`, then `cargo test --doc --workspace --locked`
   (nextest does not run doctests), plus a product-shape job that builds and tests with
   `--no-default-features` and asserts that an absent executor is refused loudly.

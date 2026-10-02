@@ -260,7 +260,7 @@ There is no Windows runner and no release or publish workflow.
 
 ## Build-tree hygiene
 
-The workspace carries 613 integration-test targets. Cargo writes a new hashed
+The workspace carries hundreds of integration-test targets. Cargo writes a new hashed
 binary per test target per build and never reclaims the superseded ones, so
 `target/` grows quickly under repeated full-workspace test runs — on the order
 of tens of gigabytes a month on a development machine.
