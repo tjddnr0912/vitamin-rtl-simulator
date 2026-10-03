@@ -7,8 +7,9 @@ What stands between HEAD and the two goals. The open items and the queue are in 
 
 ## D. Prerequisites that block work from starting
 
-One line each: prerequisite — what it means; what it blocks. None blocks a row on a corpus design's current page: they block frozen §2 rows and synthetic-origin §3 rows, and wake with them. Oracle splits are recorded, never chased.
+One line each: prerequisite — what it means; what it blocks. None blocks a row on a corpus design's current page: they block frozen §2 rows, synthetic-origin §3 rows and one external-report residue (§3.b `unique-if-chain`'s subroutine bodies), and wake with them. Oracle splits are recorded, never chased.
 
+- No t0 run of a continuous assign's function on x ahead of the `initial` that writes its inputs (§2 🆕 AB, §5.2 row 3), a constant-function arm for the synthesized no-match report (§3.b `unique-const-fn`, §5.2 row 2) and a package-scoped call closure walk that admits it (§3.b `unique-pkg-closure`) — today a continuous assign runs the function it calls once more at t0 on x, the constant interpreter refuses a call that reaches the arm, and the closure walk refuses a legal `pk::f(…)`; they block §3.b `unique-if-chain`'s residue (1), arming chains in function and task bodies.
 - One current binding per key (§2 🆕 U, §5.2 row 4) — a genvar, local enum label or import that rebinds a key clears or suspends the other map's entry; blocks §2 🆕 T and 🆕 S (a)'s wide half.
 - A generate-case arm decided once per construct instance (§2 🆕 V, §5.2 row 5) — the same arm and label bindings in every elaboration phase; blocks §2 🆕 T.
 - The sign of a constant typed by an overridden type parameter (§2 🆕 W, §5.2 row 6) — blocks 🆕 S (a)'s i64 half, which also needs every decline to fall back to PRE's own-width compare.
