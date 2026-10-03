@@ -21,8 +21,12 @@ pub fn scratch() -> PathBuf {
 pub struct Run {
     /// stdout, whole (the `$display` lines and `simulation ended …`).
     pub out: String,
-    /// Each diagnostic as `<line:col> <CODE> <[in …] [at time …]>`, the default-timescale
-    /// note dropped — the report's identity without its fixed message text.
+    /// Each diagnostic as `<line:col> <CODE> <[in …] [at time …]>`, the report's identity
+    /// without its fixed message text. Two lines are dropped: the default-timescale
+    /// warning (W1017) and the unique-overlap info (I2021). Both are once per parse,
+    /// printed by the parse stage, so the staged chain prints them at `vcmp` and its
+    /// `vrun` never does; keeping them would break `staged_matches`. I2021 is pinned in
+    /// `unique_overlap_note.rs`.
     pub diags: Vec<String>,
     pub code: i32,
 }
@@ -30,7 +34,11 @@ pub struct Run {
 pub fn diags(stderr: &str) -> Vec<String> {
     stderr
         .lines()
-        .filter(|l| l.contains("[VITA-") && !l.contains("W-PP-TIMESCALE-DEFAULT"))
+        .filter(|l| {
+            l.contains("[VITA-")
+                && !l.contains("W-PP-TIMESCALE-DEFAULT")
+                && !l.contains("I-PARSE-UNIQUE-OVERLAP-UNCHECKED")
+        })
         .map(|l| {
             let code = l
                 .split("[VITA-")

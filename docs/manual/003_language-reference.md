@@ -760,8 +760,8 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `while`, `repeat`, `forever` | Supported | |
 | `do … while ( … );` | Supported | A parse-time desugar. |
 | `foreach` | Supported | See §6.4. |
-| `unique` / `priority` on `if` and `case` | Supported | A runtime no-match injects a report: `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031`, text `value is unhandled for priority or unique case statement`. On `if` in procedural code outside a function or task body, the report covers the whole `else if` series (Limitations §1.4). Multi-match checking is a documented cut — the lowered cascade is first-match-wins, so an overlap is unobservable. |
-| `unique0` / `priority0` | Supported | They keep the qualifier's intent and suppress the no-match report. |
+| `unique` / `priority` on `if` and `case` | Supported | A runtime no-match injects a report: `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031`, text `value is unhandled for priority or unique case statement`. On `if` in procedural code outside a function or task body, the report covers the whole `else if` series (Limitations §1.4). Multi-match checking is a documented cut — the lowered cascade is first-match-wins, so an overlap is unobservable; `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` / `VITA-I2021` (Info) says so once per parse, at the first `unique` / `unique0` (Limitations §1.4). |
+| `unique0` / `priority0` | Supported | They keep the qualifier's intent and suppress the no-match report. A `unique0` is not checked for overlaps either, so it counts for `VITA-I2021`; vita's non-standard `priority0` does not. |
 | A `unique`/`priority` qualifier on anything but `if`/`case` | Loud | `VITA-E2002` |
 | `break;` / `continue;` | Supported | Contextual: recognised only in that exact shape, so a legacy net named `break` keeps working. |
 | `return [expr];` | Supported | `return <expr>` in a void task, or `return` outside a subroutine body, is Loud. |

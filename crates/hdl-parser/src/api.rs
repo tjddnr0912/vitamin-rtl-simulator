@@ -17,7 +17,8 @@ pub fn parse(tokens: &[Spanned], src: &str) -> (Option<SourceUnit>, Vec<ParseErr
 }
 
 /// [`parse`] plus the non-fatal [`ParseWarn`]s — a construct that parsed fine but that
-/// other tools read differently. They ride a SEPARATE channel from `ParseError` because
+/// other tools read differently, or one whose IEEE check vita skips (the first `unique`
+/// / `unique0` qualifier). They ride a SEPARATE channel from `ParseError` because
 /// a warning must not gate the parse, and because a severity field on the error type
 /// would put "did this stop the parse?" and "how bad is it?" in one place.
 pub fn parse_with_warnings(

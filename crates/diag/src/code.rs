@@ -89,6 +89,7 @@ msgcodes! {
     ParseUnexpectedToken   => ("E-PARSE-UNEXPECTED-TOKEN",  "VITA-E2002", Error,   "unexpected token"),
     ParseImplicitNet       => ("W-PARSE-IMPLICIT-NET",      "VITA-W2003", Warning, "implicit net inferred (default_nettype wire)"),
     ParseSelectBase        => ("W-PARSE-SELECT-BASE",       "VITA-W2004", Warning, "a bit/part select on something IEEE 1800 §11.5.1 does not allow one on; other tools reject it"),
+    ParseUniqueOverlapUnchecked => ("I-PARSE-UNIQUE-OVERLAP-UNCHECKED", "VITA-I2021", Info, "`unique`/`unique0` overlaps are not checked (IEEE 1800 §12.4.2/§12.5.3); said once per parse"),
     // 3xxx ELABORATE
     ElabMultidriver        => ("E-ELAB-MULTIDRIVER",        "VITA-E3001", Error,   "net driven by multiple structural drivers"),
     ElabPortMismatch       => ("E-ELAB-PORT-MISMATCH",      "VITA-E3002", Error,   "instance port binding incompatible with module"),

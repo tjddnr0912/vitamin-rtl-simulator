@@ -336,8 +336,10 @@ pub(crate) fn frontend_pp_to_unit_mapped(
 
     // ── parse ─────────────────────────────────────────────────────────────
     let (unit, parse_errors, parse_warns) = hdl_parser::parse_with_warnings(&tokens, expanded);
-    // Emitted BEFORE the error gate below: a portability warning is about a construct
-    // that parsed fine, so a syntax error elsewhere in the file must not swallow it.
+    // W2004 is emitted BEFORE the error gate below: a portability warning is about a
+    // construct that parsed fine, so a syntax error elsewhere in the file must not
+    // swallow it. The unique-overlap site is only held here (emitted further down).
+    let mut unique_overlap_at = None;
     for w in &parse_warns {
         let msg = match w.kind {
             hdl_parser::ParseWarnKind::NonStandardSelectBase => {
@@ -347,6 +349,11 @@ pub(crate) fn frontend_pp_to_unit_mapped(
                  it; iverilog rejects every form of it and Verilator rejects a select \
                  on a parenthesised expression or on a literal. Assign the value to a \
                  variable first, then select from that"
+            }
+            // The parser records at most one: its first-wins latch is the only "once".
+            hdl_parser::ParseWarnKind::UniqueOverlapUnchecked => {
+                unique_overlap_at = Some(w.span);
+                continue;
             }
         };
         sink.emit(LogEvent::Diagnostic(Diagnostic {
@@ -389,6 +396,26 @@ pub(crate) fn frontend_pp_to_unit_mapped(
         }));
         return None;
     };
+    // AFTER every return above, unlike W2004: a preprocessor error, a lex or syntax
+    // error, and `no design units found in source` (only compilation-unit items) print
+    // exactly what they printed before this line existed. Anything that fails later
+    // still prints it, a duplicate unit (E2001, raised by elaborate) and a design with
+    // no top module included: nothing at this stage knows that outcome, and `vcmp`
+    // never elaborates.
+    if let Some(span) = unique_overlap_at {
+        sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Info,
+            code: MsgCode::ParseUniqueOverlapUnchecked,
+            message: "`unique` / `unique0` overlaps are not checked: when more than one case \
+                      item or `if` condition matches, the first one runs and no violation is \
+                      reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed \
+                      once, at the first such statement in source order"
+                .to_string(),
+            location: Some(loc_from_span(&pp.map, span.lo as usize, span.hi as usize)),
+            context: Vec::new(),
+            sim_time: None,
+        }));
+    }
     // Resolve each module's `timescale by file order (region offsets and module spans
     // share the expanded-text coordinate space). The result rides into elaborate.
     let modules: Vec<(&str, usize)> = unit

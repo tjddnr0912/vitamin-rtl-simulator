@@ -3,7 +3,7 @@
 Every diagnostic vitamin prints carries a stable code: a number like `VITA-E3009`
 and a mnemonic like `E-ELAB-UNSUPPORTED`. This chapter defines the rendered
 diagnostic format, the severity levels and how to change them, the process exit
-codes, and the complete catalogue of all 70 registered codes.
+codes, and the complete catalogue of all 71 registered codes.
 
 For installing and running the tools see [Installation](001_installation.md) and
 the [CLI Reference](004_cli-reference.md), which covers `vita` and the staged
@@ -177,7 +177,7 @@ Error and Fatal are the always-logged spine. `-Wno-E-ELAB-UNRESOLVED-NAME` is
 accepted, because the mnemonic resolves, and has no effect: a suppression flag
 can never hide a real failure.
 
-Of the 70 registered codes, 31 default to Warning and 2 to Info, so those 33 are
+Of the 71 registered codes, 31 default to Warning and 3 to Info, so those 34 are
 the suppressible set by default. Promotion applies to the 31 Warning-default
 codes. Notes are suppressed through their parent error's code, which drops the
 note while the error itself still prints.
@@ -332,7 +332,7 @@ whose leading digit is the stage.
 
 In the catalogue below, "Reserved" marks a code that is registered, documented
 and resolvable by `vita explain`, `-Wno-` and `-Werror=`, but that no code path
-in the tool produces. Six of the 68 are in that state.
+in the tool produces. Six of the 71 are in that state.
 
 ---
 
@@ -375,6 +375,7 @@ Emitted by the lexer and parser, the last language-dependent stage.
 | `VITA-E2002` | `E-PARSE-UNEXPECTED-TOKEN` | Error | A token no grammar rule can continue: a missing `;`, a stray keyword, an unbalanced `begin`/`end`, a malformed expression. Every lexer error also carries this code. |
 | `VITA-W2003` | `W-PARSE-IMPLICIT-NET` | Warning | An undeclared identifier is inferred as an implicit net under `` `default_nettype wire ``. |
 | `VITA-W2004` | `W-PARSE-SELECT-BASE` | Warning | A bit or part select on an operand IEEE 1800 §11.5.1 does not allow one on. Other tools reject it. Emitted ahead of the parse-error gate, so a syntax error elsewhere cannot swallow it. |
+| `VITA-I2021` | `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` | Info | The design has a `unique` or `unique0` `case` / `if`, and vita does not check those for more than one match (IEEE 1800 §12.4.2 / §12.5.3); the first match runs and nothing is reported. Once per parse, at the first such qualifier in source order, reached or not. Not printed when the run stops in the parse stage (a preprocessor error, a lex or syntax error, or `no design units found in source`); anything that fails later still prints it, including a duplicate design unit (`VITA-E2001`, reported by elaboration) and a design with no top module. |
 
 Constructs the parser does not model surface here. Constructs that parse but
 cannot be lowered surface as `E-ELAB-UNSUPPORTED` instead.
@@ -602,7 +603,7 @@ hash.
 
 ## Codes with no emitter
 
-Six of the 68 are registered and documented but produced by no code path. They
+Six of the 71 are registered and documented but produced by no code path. They
 resolve in `vita explain`, `-Wno-` and `-Werror=`, and their numbers are
 permanently reserved.
 

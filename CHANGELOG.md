@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — the log says `unique` overlaps are not checked
+
+- New code `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` / `VITA-I2021` (Info). vitamin does not check a
+  `unique` / `unique0` `case` or `if` for more than one match (IEEE 1800-2017 §12.4.2 /
+  §12.5.3): the first match runs and nothing is reported, and a clean log read as "checked".
+  Now one line says so, once per parse, at the first `unique` or `unique0` qualifier in source
+  order, whether or not that statement is reached. `priority` (and vita's non-standard
+  `priority0`) never prints it.
+- Printed by `vita` and `vcmp`, never by `velab` or `vrun`. A run that stops in the parse
+  stage (a preprocessor error, a lex or syntax error, or `no design units found in source`)
+  does not print it; anything that fails later still does, including a duplicate design unit
+  (`VITA-E2001`) and a design with no top module. It is counted under `notes=`, `-Werror` does not promote it, the exit code is unchanged, and
+  `-Wno-I2021` drops it. Nothing else changes: stdout, VCD, artifacts and the `VITA-W4031`
+  no-match report are as before.
+
 ### Fixed — a `unique if … else if` chain reports its no-match
 
 - `unique if (a) … else if (b) …` with no final `else` now reports `VITA-W4031` when no

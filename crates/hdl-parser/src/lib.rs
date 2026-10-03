@@ -142,13 +142,15 @@ pub struct ParseError {
     pub found_span: Span,
 }
 
-/// A NON-FATAL parse observation: the construct is accepted and its value is
-/// unchanged here, but other tools read it differently — so the log has to say so.
+/// A NON-FATAL parse observation: the construct is accepted, but the log has to say
+/// something about it — other tools read it differently, or vita skips a check the
+/// standard asks for. The parse result is the same with or without it.
 ///
-/// Separate from [`ParseError`] on purpose: a warning must not abort the run, and a
-/// severity field on the error type would put "did this stop the parse?" and "how bad
-/// is it?" in one place, which is how a gate ends up suppressing something it should
-/// not (Error/Fatal are unsuppressible; these are `-Wno-`-able).
+/// Separate from [`ParseError`] on purpose: an observation must not abort the run, and
+/// a severity field on the error type would put "did this stop the parse?" and "how
+/// bad is it?" in one place, which is how a gate ends up suppressing something it
+/// should not (Error/Fatal are unsuppressible; these are `-Wno-`-able). The kind
+/// carries no severity either: the one consumer (the cli frontend) picks it per kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseWarn {
     pub span: Span,
@@ -158,7 +160,16 @@ pub struct ParseWarn {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseWarnKind {
     /// A bit/part select whose BASE is not a variable reference (IEEE 1800 §11.5.1).
+    /// One per source site.
     NonStandardSelectBase,
+    /// The FIRST `unique` / `unique0` qualifier of the parse, at its token. At most one
+    /// per parse (`Parser::record_unique_qualifier`). vita does not check these for
+    /// more than one matching item or condition (IEEE 1800-2017 §12.4.2 / §12.5.3), and
+    /// a clean log must not read as "checked". One line says so: the check is missing
+    /// for every site alike, so a line per site would add no information. `priority`
+    /// never counts (IEEE defines no multiple-match rule for it), nor does vita's
+    /// non-standard `priority0`.
+    UniqueOverlapUnchecked,
 }
 
 impl ParseError {
@@ -593,6 +604,7 @@ pub struct Parser<'t, 's> {
     src_end: u32,
     pub errors: Vec<ParseError>,
     /// Non-fatal observations — see [`ParseWarn`]. Never gates the parse.
+    /// Pushed only through `warn_select_base` and `record_unique_qualifier`.
     pub warnings: Vec<ParseWarn>,
     error_limit: usize,
     /// P2-5: live expression-recursion depth; capped so a pathological
@@ -1149,6 +1161,27 @@ impl<'t, 's> Parser<'t, 's> {
         self.warnings.push(ParseWarn {
             span,
             kind: ParseWarnKind::NonStandardSelectBase,
+        });
+    }
+
+    /// Record a `unique` / `unique0` qualifier at `span` (the qualifier token) as
+    /// [`ParseWarnKind::UniqueOverlapUnchecked`], unless one is recorded already.
+    ///
+    /// The latch keys on the KIND, not the span, so the first qualifier in token order
+    /// wins. That makes this the single home of "once per parse": the frontend renders
+    /// whatever it is given. Token order is expanded-buffer order (argv files in order,
+    /// an `include`d file's text where it is included), so elaboration never moves it.
+    fn record_unique_qualifier(&mut self, span: Span) {
+        if self
+            .warnings
+            .iter()
+            .any(|w| w.kind == ParseWarnKind::UniqueOverlapUnchecked)
+        {
+            return;
+        }
+        self.warnings.push(ParseWarn {
+            span,
+            kind: ParseWarnKind::UniqueOverlapUnchecked,
         });
     }
 

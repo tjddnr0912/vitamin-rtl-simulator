@@ -223,7 +223,7 @@ The schemas are specified in
 | Platforms | Linux and macOS. CI builds and tests on ubuntu-latest, macos-latest and a RHEL 9 / UBI 9 container, and fetches and runs the workload corpus on all three. Windows is not a target |
 | Tests | `cargo nextest run --workspace --locked` is run by CI on Linux, macOS and RHEL 9 (with `--no-fail-fast`), plus `cargo test --doc --workspace --locked` for doctests |
 | Artifact format version | `crates/vita-artifact/src/header.rs` (`CURRENT_FORMAT_VERSION`) |
-| Diagnostics | 70 codes, each with a mnemonic, a `VITA-####` number and a reference entry |
+| Diagnostics | 71 codes, each with a mnemonic, a `VITA-####` number and a reference entry |
 | Licence | MIT or Apache-2.0, at your option |
 
 ## Where to read next

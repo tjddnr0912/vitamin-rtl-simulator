@@ -435,7 +435,10 @@ impl Parser<'_, '_> {
     /// arm (iverilog-pinned text class: "value is unhandled..."). A statement
     /// that already HAS an else/default cannot miss — left untouched. The
     /// multi-match uniqueness check is a documented cut (the lowered cascade
-    /// is first-match-wins, so overlap is unobservable).
+    /// is first-match-wins, so overlap is unobservable); the first `unique` /
+    /// `unique0` qualifier of the parse records `UniqueOverlapUnchecked` so the
+    /// log says so. `priority` records nothing (IEEE defines no multiple-match
+    /// rule for it), nor does vita's non-standard `priority0`.
     ///
     /// ⚠️ The task is [`UNIQUE_VIOLATION_TASK`], not `$warning`. A §12.5.3
     /// violation report is a fact the SIMULATOR produces; a `$warning` is a task
@@ -466,16 +469,24 @@ impl Parser<'_, '_> {
     /// doc names the reasons).
     pub(crate) fn parse_unique_priority(&mut self) -> Stmt {
         let qspan = self.cur_span();
-        // §12.4.2: the `0` variants keep the multi-match intent but SUPPRESS
-        // the no-match violation — so they parse as the PLAIN if/case with no
-        // synthetic warn injection (hand-IEEE: Icarus rejects `unique0 if`
-        // outright and ignores the unique/unique0 distinction on case).
+        // `unique0` (§12.4.2) keeps the multi-match intent but SUPPRESSES the
+        // no-match violation; vita's non-standard `priority0` (IEEE 1800 has no
+        // such keyword) is the same twin of `priority`. Both parse as the PLAIN
+        // if/case with no synthetic warn injection (hand-IEEE: Icarus rejects
+        // `unique0 if` outright and ignores the unique/unique0 distinction on case).
         let suppress_no_match = matches!(
             self.peek(),
             Some(TokenKind::Word(WordKind::Keyword(
                 Kw::Unique0 | Kw::Priority0
             )))
         );
+        // The multiple-match check is the cut named above: say so, once per parse.
+        if matches!(
+            self.peek(),
+            Some(TokenKind::Word(WordKind::Keyword(Kw::Unique | Kw::Unique0)))
+        ) {
+            self.record_unique_qualifier(qspan);
+        }
         self.bump(); // unique / priority / unique0 / priority0
         let warn_stmt = |span: Span| Stmt::SysTaskCall {
             name: Ident {

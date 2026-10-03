@@ -385,6 +385,64 @@ rejects: `a[7:0][3:0]`, slice-of-slice, which starts at a name and so passes thi
 (`logic [15:0] t = (a^b)>>8; o = t[7:0];`). Suppress with `-Wno-W-PARSE-SELECT-BASE`, promote
 with `-Werror=`.
 
+### VITA-I2021 · `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` (Info)
+**The design contains a `unique` or `unique0` `case` / `if`, and vita does not check those for
+more than one match.** IEEE 1800-2017 §12.4.2 and §12.5.3 say a `unique` or `unique0`
+statement is violated when more than one `if` condition or case item matches: the
+implementation issues a violation report and runs the first match. vita runs the first match
+and issues no report. The check is a documented cut (manual 006 §1.4), and this line exists so
+that a clean log does not read as "checked". The other check is unaffected: a `unique` or
+`priority` statement that matches nothing still reports `VITA-W4031`, and `unique0` (with
+vita's non-standard `priority0`) still suppresses it. `priority` never prints this line,
+because IEEE defines no multiple-match rule for it. `priority0`, a vita keyword that IEEE 1800
+does not define, never prints it either.
+```
+module m;
+  logic [1:0] r = 2'b11; int y;
+  initial begin
+    #1 unique casez (r)
+      2'b?1: y = 1;   // runs: the first match
+      2'b1?: y = 2;   // also matches r = 2'b11; not reported
+    endcase
+    $display("y=%0d", y);
+  end
+endmodule
+->  m.sv:4:8: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps
+    are not checked: when more than one case item or `if` condition matches, the first one runs
+    and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed
+    once, at the first such statement in source order
+```
+When it prints:
+
+- Once per parse, at the first `unique` / `unique0` qualifier in source order (command-line
+  file order, with `` `include ``d text where it is included; a macro expansion is located at
+  its call site). Later sites print nothing: the cut is the same for all of them.
+- Whether or not the site is ever reached. A qualifier in a module that is not instantiated, in
+  an untaken `generate` branch or in a function that is never called still counts. A qualifier
+  removed by `` `ifdef `` does not.
+- By the stage that parses: `vita` and `vcmp` (once per `vcmp` invocation). `velab` and `vrun`
+  read artifacts and never print it.
+- Not when the run stops in the parse stage: after a preprocessor error, a lex or syntax error,
+  or `error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: no design units found in source` (a source
+  holding only compilation-unit items), the log is exactly what it was before this code
+  existed. Anything that fails after that still prints it, including a duplicate design unit
+  (`VITA-E2001`, reported by elaboration) and a design with no top module (`VITA-E3009`): the
+  line is printed before elaboration starts, and `vcmp` never elaborates.
+
+It is Info: counted under `notes=`, never promoted by `-Werror`, and it never changes the exit
+code.
+
+Other tools, on the example above: iverilog 13 prints
+`m.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored.` at compile time, once per
+elaborated `case` site (it does not accept `unique if` at all), and runs the first match.
+Verilator 5.052 with `--assert` checks the overlap at run time, once per evaluation:
+`[1] %Error: m.sv:4: Assertion failed in m: unique case, but multiple matches found for '2'h3'`
+(`'unique if' statement violated` for an `if`).
+
+**Fix:** none needed; the run is otherwise unaffected. To check overlaps, run the design under a
+simulator that implements the check. Suppress with `-Wno-I-PARSE-UNIQUE-OVERLAP-UNCHECKED` (or
+`-Wno-I2021`).
+
 ---
 
 ## 3xxx · ELABORATE
@@ -1563,7 +1621,7 @@ an artifact-class failure, not an RTL defect. Not suppressible.
 
 ## Appendix A · Reserved codes (survey inventory)
 
-The body sections above define the 70 codes registered in the `MsgCode` enum. This appendix is
+The body sections above define the 71 codes registered in the `MsgCode` enum. This appendix is
 a separate inventory: 96 additional error and warning conditions defined by IEEE 1800-2017 and
 IEEE 1364-2005, and by the published documentation of Verilator, Icarus iverilog, VCS, Xcelium
 and GHDL. They are collected in advance so that implementing one of those conditions starts

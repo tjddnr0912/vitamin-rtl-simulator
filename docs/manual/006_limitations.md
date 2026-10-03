@@ -206,11 +206,22 @@ both tools are silent: a block written before the block that feeds it, when noth
 declaration initializers, constants or continuous assigns drive the chain (§3.1); §3.2
 lists the time-0 splits.
 
-The multi-match uniqueness check is a documented cut, and nothing announces it at run time yet
-(Icarus Verilog says `sorry: Case unique/unique0 qualities are ignored.` when it compiles;
-ROADMAP §3.b `unique-overlap-note`). The lowered decision cascade is
+The multi-match uniqueness check is a documented cut. The lowered decision cascade is
 first-match-wins, so an overlap between arms is unobservable in the result, and reporting
-it would require a second evaluation of every arm.
+it would require a second evaluation of every arm. The log says so:
+`I-PARSE-UNIQUE-OVERLAP-UNCHECKED` / `VITA-I2021` (Info) is printed once per parse, at the
+first `unique` or `unique0` qualifier in source order, whether or not that statement is ever
+reached (an uninstantiated module, an untaken `generate` branch or an uncalled function
+counts). `priority` never prints it (IEEE defines no multiple-match rule for it), nor does
+vita's non-standard `priority0`. In the staged flow only `vcmp` prints it, once per
+invocation; `velab` and `vrun` never parse. Only a run that stops in the parse stage leaves it
+out: a preprocessor error, a lex or syntax error, or `no design units found in source`
+(`VITA-E2002`, a source holding only compilation-unit items). Anything that fails later still
+prints it, including a duplicate design unit (`VITA-E2001`, reported by elaboration) and a
+design with no top module. Icarus Verilog prints `sorry: Case unique/unique0 qualities are
+ignored.` when it compiles, once per elaborated `case` site (an uncalled function counts, an
+uninstantiated module under `-s` and an untaken `generate` branch do not). Verilator with
+`--assert` checks the overlap at run time.
 
 ### 1.5 Format specifiers that consume without printing
 
