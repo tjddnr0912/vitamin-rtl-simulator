@@ -220,7 +220,7 @@ Every diagnostic carries a stable, namespaced code with two spellings: a grep-fr
 rather than free strings, a code cannot drift between the site that emits it and the site that
 suppresses it.
 
-The enum holds **68** codes at HEAD.
+The enum holds **71** codes at HEAD.
 
 ### Number bands
 
@@ -256,7 +256,7 @@ runs three assertions:
 
 | Test | Asserts |
 |---|---|
-| `msgcode_matches_doc15_body_one_to_one` | `MsgCode::ALL.len() == 68`, and the sorted mnemonic set of the enum equals that of the catalogue body |
+| `msgcode_matches_doc15_body_one_to_one` | `MsgCode::ALL.len() == 71`, and the sorted mnemonic set of the enum equals that of the catalogue body |
 | `doc15_severity_and_number_match_enum` | Each catalogue entry's `VITA-####` and parenthesised severity equal `code_num()` and `default_severity().token()`, case-folded |
 | `mnemonics_and_numbers_are_unique` | No duplicate mnemonic, no duplicate number |
 
