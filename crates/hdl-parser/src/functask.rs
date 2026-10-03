@@ -643,11 +643,16 @@ impl Parser<'_, '_> {
     /// form — input/output/inout formal decls, hoisted into `ports`), then exactly
     /// ONE body statement (usually a `begin … end`), up to the endfunction/endtask
     /// closer. `ports` is appended to for non-ANSI formals.
+    ///
+    /// Every function and task body — module, interface, package, program, `$unit`
+    /// and class, constructors included — is parsed here, so this is where
+    /// `first_if_arm_only` is set for the whole body and restored after it.
     pub(crate) fn tf_body(
         &mut self,
         end: BlockEnd2,
         ports: &mut Vec<TfPort>,
     ) -> (Vec<NetVarDecl>, Vec<TypedefDecl>, Stmt) {
+        let outer_first_if = std::mem::replace(&mut self.first_if_arm_only, true);
         let mut body_decls = Vec::new();
         // Body-local `typedef enum` nodes (round-5 Gap B) — the function/task has a
         // `body_enums` AST slot to carry them to elaborate for label-constant
@@ -847,6 +852,7 @@ impl Parser<'_, '_> {
         if let Some(scope) = typedef_scope {
             self.restore_scope(scope);
         }
+        self.first_if_arm_only = outer_first_if;
         (body_decls, body_enums, body)
     }
 

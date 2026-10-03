@@ -9,6 +9,22 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a `unique if … else if` chain reports its no-match
+
+- `unique if (a) … else if (b) …` with no final `else` now reports `VITA-W4031` when no
+  condition is true, at the first `if`, as Verilator does; it reported nothing. This holds in
+  procedural code outside a subroutine: `initial`, `always`, `always_ff`, `always_comb`,
+  `always_latch`, `final` and the `fork` branches inside them. Only a bare `if` right after
+  `else` (an attribute between them is ignored) continues the series; a `begin … end` block, a labelled statement, a delay, event or
+  `wait` control, `;`, a `case`, an immediate `assert` or a qualified `unique` / `priority` /
+  `unique0` / `priority0 if` after `else` ends it. `priority if` chains report the same way
+  (IEEE 1800-2017 §12.4.2); `unique0` / `priority0` chains stay silent.
+- Still silent where Verilator reports (manual 006 §1.4): a chain in any function or task
+  body, and an outer series whose `else` is a qualified `if` (`unique if (a) … else unique0
+  if (b) …`, which IEEE 1800-2017 Syntax 12-2 makes the series' final `else` statement). A
+  continuous assign runs the function it calls once more at time 0, on `x`, before the
+  `initial` that writes its inputs; that is now listed in manual 006 §3.1.
+
 ### Fixed — an `always_comb` / `always_latch` time-0 pass waits for its inputs
 
 - IEEE 1800-2017 §9.2.2.2 runs an `always_comb` once at time zero "after all initial and always

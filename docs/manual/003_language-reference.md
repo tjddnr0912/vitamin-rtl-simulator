@@ -760,7 +760,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `while`, `repeat`, `forever` | Supported | |
 | `do … while ( … );` | Supported | A parse-time desugar. |
 | `foreach` | Supported | See §6.4. |
-| `unique` / `priority` on `if` and `case` | Supported | A runtime no-match injects a report: `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031`, text `value is unhandled for priority or unique case statement`. Multi-match checking is a documented cut — the lowered cascade is first-match-wins, so an overlap is unobservable. |
+| `unique` / `priority` on `if` and `case` | Supported | A runtime no-match injects a report: `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031`, text `value is unhandled for priority or unique case statement`. On `if` in procedural code outside a function or task body, the report covers the whole `else if` series (Limitations §1.4). Multi-match checking is a documented cut — the lowered cascade is first-match-wins, so an overlap is unobservable. |
 | `unique0` / `priority0` | Supported | They keep the qualifier's intent and suppress the no-match report. |
 | A `unique`/`priority` qualifier on anything but `if`/`case` | Loud | `VITA-E2002` |
 | `break;` / `continue;` | Supported | Contextual: recognised only in that exact shape, so a legacy net named `break` keeps working. |

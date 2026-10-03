@@ -873,6 +873,34 @@ pub struct Parser<'t, 's> {
     /// is never instantiated, so nothing can override it) — the A2a array-parameter
     /// path reads this to accept `parameter T X[N] = '{…}` there.
     in_package: bool,
+    /// True while a function or task body is parsed (`tf_body`): every function and
+    /// task — module, interface, package, program, `$unit` and class, constructors
+    /// included. A `unique` / `priority if … else if` chain there keeps the
+    /// first-`if`-only violation arm, the rule before §4.5.585, so subroutine bodies
+    /// keep PRE's tree (`parse_unique_priority`); chains are armed only in procedural
+    /// code outside a subroutine (`initial`, `always*`, `final` and the `fork`
+    /// branches inside them). Measured reasons, one per route into a body:
+    /// - the constant-function interpreter refuses at elaboration (`VITA-E3009`) a
+    ///   function whose call reaches an armed tail (ROADMAP §3.b `unique-const-fn`);
+    /// - a continuous assign runs the function it calls once more at time 0, on `x`,
+    ///   before the `initial` that writes its inputs (ROADMAP §2 🆕 AB), and that run
+    ///   reaches what the function calls: a class method through a handle or `this.`,
+    ///   a constructor through `new`, an item `function void` with no formals, and a
+    ///   task (a function calling a task is accepted). An armed miss there reports at
+    ///   time 0 where both oracles are silent;
+    /// - the package-scoped call closure walk (`elaborate/src/package.rs`
+    ///   `pkg_stmt_pure_orig`) treats the synthesized arm as impure, so arming a body
+    ///   a `pk::f(…)` call reaches refuses (`VITA-E3009`) a design PRE runs (a lone
+    ///   `unique if` there is refused already).
+    first_if_arm_only: bool,
+    /// The `lo` of every `Stmt::If` that `parse_if` parsed as the statement right
+    /// after an `else` whose next written token is `if`. `parse_unique_priority`
+    /// follows an `else if` series only through these. An immediate `assert` /
+    /// `assume` after `else` is a `Stmt::If` too (`parse_assert`) and ends the
+    /// series; so does a qualified `unique` / `priority` / `unique0` / `priority0 if`,
+    /// which IEEE 1800-2017 Syntax 12-2 makes the series' final `else` statement (it
+    /// arms itself by its own qualifier).
+    else_if_at: std::collections::BTreeSet<u32>,
 }
 
 /// One enclosing-loop entry for `break`/`continue` desugar. The labels name the
@@ -945,6 +973,8 @@ impl<'t, 's> Parser<'t, 's> {
             pattern_rebound: std::collections::HashSet::new(),
             in_package: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
+            first_if_arm_only: false,
+            else_if_at: std::collections::BTreeSet::new(),
         }
     }
 

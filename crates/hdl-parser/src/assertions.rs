@@ -448,6 +448,22 @@ impl Parser<'_, '_> {
     ///
     /// `unique case (e) inside …` passes through unchanged: the `inside` branch is
     /// inside `parse_case`, so it gets the same synthesized default.
+    ///
+    /// On `if` the qualifier covers the whole `else if` series (IEEE §12.4.2), so
+    /// the arm goes on the LAST `if` of the series and reports at the first `if`'s
+    /// span, as Verilator does. The series is decided from the written tokens: the
+    /// walk follows `else_s` only into an `if` that `parse_if` recorded right after
+    /// `else` (`else_if_at`, a bare `if`), never by node kind — an `else assert (b) …`
+    /// is a `Stmt::If` too and ends the series. A `begin … end`, a labelled
+    /// statement, a delay or event control or `;` after `else` also ends it with no
+    /// arm (Verilator is silent there too); then-branches are never entered. A
+    /// qualified `unique` / `priority` / `unique0` / `priority0 if` after `else` is
+    /// the series' final `else` statement (IEEE 1800-2017 Syntax 12-2): the outer
+    /// series gets no arm, and the inner statement arms itself by its own qualifier
+    /// (`unique0` / `priority0` stay silent). Verilator instead continues the outer
+    /// series through an `else unique0 if` (ROADMAP §3.b `unique-if-chain`). In a
+    /// function or task body only a lone `if` is armed (`first_if_arm_only`, whose
+    /// doc names the reasons).
     pub(crate) fn parse_unique_priority(&mut self) -> Stmt {
         let qspan = self.cur_span();
         // §12.4.2: the `0` variants keep the multi-match intent but SUPPRESS
@@ -477,9 +493,29 @@ impl Parser<'_, '_> {
         match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(Kw::If))) => {
                 let mut s = self.parse_if();
-                if let Stmt::If { else_s, span, .. } = &mut s {
-                    if else_s.is_none() && !suppress_no_match {
-                        *else_s = Some(Box::new(warn_stmt(*span)));
+                let Stmt::If { span: first, .. } = s else {
+                    return s;
+                };
+                if suppress_no_match {
+                    return s;
+                }
+                let mut tail = &mut s;
+                if !self.first_if_arm_only {
+                    while matches!(tail, Stmt::If { else_s: Some(e), .. }
+                        if matches!(&**e, Stmt::If { span, .. } if self.else_if_at.contains(&span.lo)))
+                    {
+                        let Stmt::If {
+                            else_s: Some(e), ..
+                        } = tail
+                        else {
+                            break;
+                        };
+                        tail = e;
+                    }
+                }
+                if let Stmt::If { else_s, .. } = tail {
+                    if else_s.is_none() {
+                        *else_s = Some(Box::new(warn_stmt(first)));
                     }
                 }
                 s

@@ -76,7 +76,15 @@ impl Parser<'_, '_> {
         let then_s = Box::new(self.parse_statement());
         // dangling-else binds EAGERLY to this (nearest) if
         let else_s = if self.eat_kw(Kw::Else) {
-            Some(Box::new(self.parse_statement()))
+            // The next `if` of an `else if` series is decided from the written
+            // tokens (`else_if_at`, read by `parse_unique_priority`): only a bare
+            // `if` right after `else` continues it (IEEE 1800-2017 Syntax 12-2).
+            let written_if = self.at_kw(Kw::If);
+            let e = self.parse_statement();
+            if let (true, Stmt::If { span, .. }) = (written_if, &e) {
+                self.else_if_at.insert(span.lo);
+            }
+            Some(Box::new(e))
         } else {
             None
         };

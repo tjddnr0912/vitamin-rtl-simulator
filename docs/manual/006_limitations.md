@@ -172,8 +172,26 @@ run.
 `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031` with the message `value is unhandled for
 priority or unique case statement`, pinned to Icarus Verilog's wording. `unique0` and
 `priority0` parse as the plain statement with that report suppressed, per §12.4.2.
-On `if`, the arm is injected only when the first `if` has no `else`, so an `if … else if`
-chain with no final `else` reports nothing (ROADMAP §3.b `unique-if-chain`).
+On `if`, in procedural code outside a subroutine — `initial`, `always`, `always_ff`,
+`always_comb`, `always_latch`, `final` and the `fork` branches inside them — the arm goes on
+the last `if` of the `else if` series and reports at the first `if`, as Verilator does.
+Only a bare `if` right after `else` continues the series (an attribute `(* … *)` between
+them is ignored). Anything else after `else` ends
+it: a `begin … end` block, a labelled statement, a delay, event or `wait` control, `;`, a
+`case`, an immediate `assert`, or a qualified `unique` / `priority` / `unique0` /
+`priority0 if`. A qualified `if` after `else` is the series' final `else` statement (IEEE
+1800-2017 Syntax 12-2) and reports only by its own qualifier, so `unique if (a) … else
+unique0 if (b) …` reports nothing where Verilator continues the outer series through the
+`unique0 if` and reports. Inside every function and task body only a lone `if` is armed, so
+a chain there reports nothing where Verilator reports (ROADMAP §3.b `unique-if-chain`).
+Three things hold the arm back there: the constant-function interpreter would refuse a
+function at elaboration (`VITA-E3009`) once its call reaches the miss (ROADMAP §3.b
+`unique-const-fn`); a continuous assign runs the function it calls once more at time 0, on
+`x` (§3.1), and that run reaches what the function calls, so an armed miss would report at
+time 0 where both tools are silent; and a package-scoped call `pk::f(…)` that reaches an
+armed body would be refused (`VITA-E3009`; ROADMAP §3.b `unique-pkg-closure`). The message
+says `case statement` on `if` forms too; Verilator says `'unique if' statement violated`
+(ROADMAP §3.b `unique-if-text`).
 
 The report is printed when the arm executes, so a zero-delay glitch reports too, at once,
 as Icarus Verilog (on `case`; it rejects `unique if`) and Verilator report it. Neither
@@ -821,6 +839,7 @@ matches the reference tools or refuses loudly.
 | An `always_comb` / `always_latch` written before the block that feeds it, in a chain that only declaration initializers, constants or continuous assigns drive at time 0: `logic a = 1'b0, b;` with `always_comb unique case ({a, b}) …` written before `always_comb b = a;` | the consumer's time-0 pass reads `b` as `x`, so `VITA-W4031` (or an `assert`'s `VITA-E4003`) at time 0 | both tools are silent at time 0, each by its own order of the time-0 passes: Icarus Verilog runs them in reverse source order, Verilator in dependency order. Icarus Verilog reports the same consumer-first read when `a` changes later | Write the block that feeds another before it |
 | A range bound taken from a select of a parameter wider than 64 bits: `parameter [135:8] K = …; wire [K[31:24]-1:0] n;` with `K[31:24]` equal to 222 | `$bits(n)` is 1, exit 0, while `$display` of the same select prints 222 | both tools declare 222 bits | Hoist the select into a `localparam` narrower than 64 bits, then use that in the bound |
 | `$random` or `$time` inside a function body reached from a continuous assign: `wire [7:0] m = f(8'd5);` where `f` adds `$random` | re-draws on every settle pass, so `m` changes across passes | both tools freeze the value | Assign it once in an `initial` or `always` block rather than a continuous assign |
+| A function reached from a continuous assign whose inputs an `initial` writes at time 0: `assign y = f(a, b);` beside `initial begin a = 0; b = 1; … end` | `f` runs once more at time 0, before the `initial`, on `x`: a `$display` in it prints `x`, a `unique` / `priority` miss reports `VITA-W4031`, an immediate `assert` fails with `VITA-E4003` and the run exits 1 | both tools run `f` at time 0 only after the `initial`'s writes: the `$display` prints the written values, nothing reports, exit 0 | Call `f` from an `always_comb` (`always_comb y = f(a, b);`), whose time-0 pass waits for its inputs |
 | `%p` of an associative array with a negative integer key | signed-order iteration at 64-bit key width: `K='{'hffffffffffffffff:'h7, 'h2:'h8}` | Verilator sorts the rendered hex and prints the declared `int` width | Use non-negative keys; every workload-corpus design does, and they agree exactly |
 | A signal declared as a `clocking` output (`clocking cb; output q; endclocking`) | driven to `x`, or frozen | Verilator: the expected sequence | Avoid `clocking` output declarations. Icarus Verilog 13 cannot parse `clocking`, so only one reference tool can be consulted here |
 | VCD `$scope` typing of generate blocks | `module gi` / `module gl[0]` | Icarus Verilog: `begin gi` / `begin gl[0]` | Cosmetic in the waveform tree; the NAMES agree (a singleton is `gi`, a loop iteration `gl[0]`), only the scope type differs |
