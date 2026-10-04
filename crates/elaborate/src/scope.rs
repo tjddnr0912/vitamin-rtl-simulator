@@ -157,6 +157,12 @@ impl Elaborator<'_> {
         // instead of a fresh `format!` allocation per scope level (byte-identical
         // keys; on a hit the scratch is moved out as the owned return).
         let mut key = String::new();
+        // §4.5.589: an owned package routine's text, in a split's window half, binds
+        // its declaring package's constant first; a miss walks exactly as before
+        // (`decl_scope.rs`).
+        if self.decl_probe_key(name, &mut key, &hit) {
+            return Some(key);
+        }
         loop {
             key.clear();
             if prefix.is_empty() {

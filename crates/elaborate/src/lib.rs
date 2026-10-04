@@ -77,6 +77,7 @@ mod cover_synth;
 mod crv;
 mod da;
 mod decl_collide;
+mod decl_scope;
 mod driver;
 mod dyn_md_elem;
 mod dynarr;
@@ -500,11 +501,16 @@ struct Elaborator<'s> {
     /// v7 P2-D: package name → its function/task definitions (clones — the
     /// same inline-expansion tables modules use).
     pkg_funcs: BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,
-    // Package → the routines it DECLARES (not the ones an import merged into
-    // `pkg_funcs` / `pkg_tasks`). A routine imported into another package still runs
-    // under the importing package's scope (ROADMAP §2); a rule that reads the package's
-    // own declarations is only sound for the package's own routines.
-    pkg_own_rtns: BTreeMap<String, BTreeSet<String>>,
+    // Package → the FUNCTIONS it declares, and → the TASKS it declares (not the ones an
+    // import merged into `pkg_funcs` / `pkg_tasks`). A routine imported into another
+    // package still runs under the importing package's scope (ROADMAP §2); a rule that
+    // reads the package's own declarations is only sound for the package's own
+    // routines. Two sets, because the two tables are separate: a package that declares
+    // `task h` and wildcard-imports a `function h` has that function filed in
+    // `pkg_funcs` under its own name (§4.5.589 review round 2). Ask through
+    // `pkg_owns`, naming the kind.
+    pkg_own_funcs: BTreeMap<String, BTreeSet<String>>,
+    pkg_own_tasks: BTreeMap<String, BTreeSet<String>>,
     // The bare name of the function the constant interpreter is running, beside
     // `const_call_pkg` — see `pkg_fn_own`.
     const_call_fn: std::cell::RefCell<Option<String>>,
@@ -996,6 +1002,21 @@ struct Elaborator<'s> {
     /// function or constant, never to the calling module's same-named one, and a
     /// name the package does not declare stays unbound (loud).
     const_call_pkg: std::cell::RefCell<Option<String>>,
+    /// §4.5.589: whose routine text is being folded (`decl_scope.rs`) — the window a
+    /// bare constant or callee probes first, in the window half of a split.
+    decl_arm: std::cell::RefCell<decl_scope::DeclArm>,
+    /// §4.5.589: which half of a `decl_split` is running.
+    decl_phase: std::cell::Cell<decl_scope::DeclPhase>,
+    /// §4.5.589: the owned routines whose HEADER is being folded, innermost last —
+    /// the re-entry guard's stack.
+    decl_hdr: std::cell::RefCell<Vec<std::rc::Rc<decl_scope::DeclWin>>>,
+    /// §4.5.589: a header re-entered in a window half; the splits around it keep PRE.
+    decl_reentered: std::cell::Cell<bool>,
+    /// §4.5.589: one window per owned routine `(package, name, kind)`, so its declared-name
+    /// set is computed once.
+    decl_wins: std::cell::RefCell<
+        BTreeMap<(String, String, decl_scope::RtnKind), std::rc::Rc<decl_scope::DeclWin>>,
+    >,
     task_table: BTreeMap<String, ast::TaskDef>,
     // The package a routine in `func_table`/`task_table` was DECLARED in, when it got
     // there through an import. A routine's body must resolve in its own declaring

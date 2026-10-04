@@ -414,9 +414,13 @@ impl Elaborator<'_> {
             return false;
         };
         // A package function's body is walked in ITS scope (a sibling call inside it
-        // names the package's function, not the importer's) — `const_fn_def`.
+        // names the package's function, not the importer's) — `const_fn_def`. Its
+        // return range is its header text (§4.5.589, `const_fn_ret_wsign_in`).
+        let win_pkg = pkg.clone();
         let saved_pkg = self.const_call_pkg.replace(pkg);
-        let safe = self.const_fn_ret_wsign(f).is_some_and(|(w, _)| w >= 32)
+        let safe = self
+            .const_fn_ret_wsign_in(f, win_pkg.as_deref())
+            .is_some_and(|(w, _)| w >= 32)
             && f.ports
                 .iter()
                 .all(|p| Self::decl_is_wide(p.net_or_var, p.range.as_ref()))

@@ -831,14 +831,14 @@ impl Elaborator<'_> {
                 }
                 ast::ModuleItem::Func(f) => {
                     funcs.insert(f.name.name.clone(), f.clone());
-                    self.pkg_own_rtns
+                    self.pkg_own_funcs
                         .entry(pkg.clone())
                         .or_default()
                         .insert(f.name.name.clone());
                 }
                 ast::ModuleItem::Task(t) => {
                     tasks.insert(t.name.name.clone(), t.clone());
-                    self.pkg_own_rtns
+                    self.pkg_own_tasks
                         .entry(pkg.clone())
                         .or_default()
                         .insert(t.name.name.clone());
@@ -933,6 +933,20 @@ impl Elaborator<'_> {
         // module `int m = p::pv + 100;` read 0) and its writes produced events an
         // `always @(p::pv)` could see. `RANK_PACKAGE` sorts below every root instance.
         self.flush_ranked(Self::RANK_PACKAGE);
+        // §4.5.589: this package's own bindings stay reachable under its synthetic
+        // prefix for the declaring-scope window (`decl_scope.rs`) — snapshot here,
+        // re-installed after the unwind below.
+        let kept = self.decl_keep_snapshot(
+            &self.cur_prefix,
+            saved
+                .iter()
+                .map(|(k, _)| k)
+                .chain(saved_meta.iter().map(|(k, _)| k))
+                .chain(saved_real.iter().map(|(k, _)| k))
+                .chain(saved_str.iter().map(|(k, _)| k))
+                .chain(saved_wide.iter().map(|(k, _)| k))
+                .chain(saved_range.iter().map(|(k, _)| k)),
+        );
         for (k, prev) in saved.into_iter().rev() {
             match prev {
                 Some(v) => {
@@ -1003,6 +1017,7 @@ impl Elaborator<'_> {
             }
         }
         self.cur_prefix = saved_prefix;
+        self.decl_keep_restore(kept);
         self.pkg_consts.insert(pkg.clone(), consts);
         if !types.is_empty() {
             self.pkg_types.insert(pkg.clone(), types);

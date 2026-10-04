@@ -293,7 +293,7 @@ impl Elaborator<'_> {
             // A call is as wide as its declared return type.
             K::Call { name, .. } => self
                 .const_fn_def(name)
-                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
+                .and_then(|(f, p)| self.const_fn_ret_wsign_in(f, p.as_deref()))
                 .map(|(w, _)| w),
             _ => None,
         }
@@ -377,7 +377,7 @@ impl Elaborator<'_> {
             },
             K::Call { name, .. } => self
                 .const_fn_def(name)
-                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
+                .and_then(|(f, p)| self.const_fn_ret_wsign_in(f, p.as_deref()))
                 .is_some_and(|(_, s)| s),
             // `$clog2`/`$bits` yield a signed 32-bit int.
             K::SysCall { .. } => true,

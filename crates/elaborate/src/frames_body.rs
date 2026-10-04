@@ -356,7 +356,7 @@ impl Elaborator<'_> {
                 &func.body,
                 Some(&func.name.name),
             );
-            self.push_rtn_pkg_scope(p, declared);
+            self.push_rtn_pkg_scope(p, &func.name.name, decl_scope::RtnKind::Func, declared);
         }
         let scope_seg = format!("$func${name}");
         // return-kw: a frame function's `return [expr]` assigns the func-named return
@@ -532,7 +532,7 @@ impl Elaborator<'_> {
                 &task.body,
                 None,
             );
-            self.push_rtn_pkg_scope(pk, declared);
+            self.push_rtn_pkg_scope(pk, &task.name.name, decl_scope::RtnKind::Task, declared);
         }
         let scope_seg = format!("$func${name}");
         let saved_owner = self.cur_frame_owner;

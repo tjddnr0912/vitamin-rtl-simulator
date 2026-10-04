@@ -1322,12 +1322,16 @@ impl Elaborator<'_> {
         if !netvar_kind_is_int_const(d.kind) {
             return None; // real/string/array local → loud
         }
+        // §4.5.589: a body-local declaration's range is the routine's own text.
+        let win = self.decl_local_win();
+        let armed = self.decl_enter(&win, false);
         let m = self.const_decl_wsign(
             self.shape_kind(d.kind, &d.shape_param),
             d.range.as_ref(),
             &d.packed,
             self.shape_signed(d.signed, &d.shape_param),
         );
+        self.decl_exit(armed);
         for n in &d.names {
             envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
             match &n.init {
@@ -1386,6 +1390,11 @@ impl Elaborator<'_> {
                 Some((def, Some(p.name.clone())))
             }
             [f] => {
+                // §4.5.589: the window half of an owned routine's text binds a
+                // function its package declares first (`decl_probe_fn`).
+                if let Some(hit) = self.decl_probe_fn(&f.name) {
+                    return Some(hit);
+                }
                 if let Some(pkg) = self.const_call_pkg.borrow().as_ref() {
                     let def = self.pkg_funcs.get(pkg)?.get(&f.name)?;
                     return Some((def, Some(pkg.clone())));
@@ -1398,20 +1407,40 @@ impl Elaborator<'_> {
     }
 
     /// The package of the function the constant interpreter is running, when that
-    /// package DECLARES the function (`pkg_own_rtns`). A function imported into another
+    /// package DECLARES that FUNCTION (`pkg_owns`). A function imported into another
     /// package is found in, and seeded from, the IMPORTING package (`const_fn_def`,
     /// ROADMAP §2), so a rule that reads the package's own declarations answers for a
     /// different constant there: `None`.
     pub(crate) fn pkg_fn_own(&self) -> Option<String> {
         let pkg = self.const_call_pkg.borrow().clone()?;
         let f = self.const_call_fn.borrow().clone()?;
-        self.pkg_own_rtns
-            .get(&pkg)
-            .is_some_and(|s| s.contains(&f))
+        self.pkg_owns(&pkg, &f, decl_scope::RtnKind::Func)
             .then_some(pkg)
     }
 
     pub(crate) fn eval_const_call(
+        &self,
+        name: &ast::HierPath,
+        args: &[ast::Expr],
+        caller_env: &std::collections::BTreeMap<String, i64>,
+        caller_w: &ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        // §4.5.589 body lane: a constant call in an owned package routine's BODY being
+        // lowered (a cast width, a replication count, a select bound) is that
+        // routine's text — PRE first, then its package's function where PRE answered
+        // (`decl_scope.rs`).
+        if let Some(win) = self.decl_body_win() {
+            let armed = self.decl_enter(&Some(win), false);
+            let r = self
+                .decl_split(|| self.eval_const_call_at(name, args, caller_env, caller_w, depth));
+            self.decl_exit(armed);
+            return r;
+        }
+        self.eval_const_call_at(name, args, caller_env, caller_w, depth)
+    }
+
+    fn eval_const_call_at(
         &self,
         name: &ast::HierPath,
         args: &[ast::Expr],
@@ -1425,7 +1454,12 @@ impl Elaborator<'_> {
         }
         let (f, pkg) = self.const_fn_def(name)?;
         let name = name.segments.last()?.name.as_str();
-        let (rw, rs) = self.const_fn_ret_wsign(f)?;
+        // §4.5.589: the callee's HEADER text — return range, formal ranges, formal
+        // defaults — folds as its declaring package's text when that package declares
+        // it (`decl_scope.rs`); the ARGUMENTS below stay the caller's. `None` from the
+        // arming is a header re-entered in a window half: decline.
+        let win = self.decl_win(pkg.as_deref(), &f.name.name, decl_scope::RtnKind::Func);
+        let (rw, rs) = self.with_decl_hdr(&win, |s| s.const_fn_ret_wsign(f))??;
         if args.len() > f.ports.len() {
             return None; // too many args
         }
@@ -1446,15 +1480,17 @@ impl Elaborator<'_> {
             // A tf-port with no data type is `logic` with the given range (1 bit
             // when there is none) — `input [3:0] a` is the commonest Verilog-2005
             // spelling and used to get no width at all.
-            let tw = self.const_decl_wsign(
-                self.shape_kind(
-                    p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
-                    &p.shape_param,
-                ),
-                p.range.as_ref(),
-                &[],
-                self.shape_signed(p.signed, &p.shape_param),
-            );
+            let tw = self.with_decl_hdr(&win, |s| {
+                s.const_decl_wsign(
+                    s.shape_kind(
+                        p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
+                        &p.shape_param,
+                    ),
+                    p.range.as_ref(),
+                    &[],
+                    s.shape_signed(p.signed, &p.shape_param),
+                )
+            })?;
             // An explicit ARGUMENT folds at the CALLER's depth: it descends a
             // finite AST (`g(g(g(0)))` is three distinct nodes), so charging it
             // a level only shrinks how deep a legitimate design may nest —
@@ -1470,7 +1506,9 @@ impl Elaborator<'_> {
             let av = if let Some(a) = args.get(i) {
                 self.eval_const_assign(a, caller_env, caller_w, depth, tw)?
             } else if let Some(d) = &p.default {
-                self.eval_const_assign(d, &env, &envw, depth + 1, tw)?
+                self.with_decl_hdr(&win, |s| {
+                    s.decl_split(|| s.eval_const_assign(d, &env, &envw, depth + 1, tw))
+                })??
             } else {
                 return None; // too few args, no default
             };
@@ -1519,7 +1557,11 @@ impl Elaborator<'_> {
             };
             Some(coerce_int_width(ret, rw, rs))
         };
+        // §4.5.589: the body is not header text — it runs with any window cleared
+        // and resolves by `const_call_pkg`, exactly as before.
+        let cleared = self.decl_enter(&None, false);
         let r = body();
+        self.decl_exit(cleared);
         self.const_call_pkg.replace(saved_pkg);
         self.const_call_fn.replace(saved_fn);
         r

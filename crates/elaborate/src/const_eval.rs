@@ -548,7 +548,7 @@ impl Elaborator<'_> {
             // once width-aware evaluation made a negative return value possible.
             ast::ExprKind::Call { name, .. } => self
                 .const_fn_def(name)
-                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
+                .and_then(|(f, p)| self.const_fn_ret_wsign_in(f, p.as_deref()))
                 .is_some_and(|(_, s)| s),
             ast::ExprKind::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),

@@ -737,7 +737,7 @@ impl Elaborator<'_> {
                     if self.const_eval_in_scope(&p.value).is_some() {
                         if let Some(m) = self
                             .const_fn_def(name)
-                            .and_then(|(f, _)| self.const_fn_ret_wsign(f))
+                            .and_then(|(f, p)| self.const_fn_ret_wsign_in(f, p.as_deref()))
                         {
                             return Some(m);
                         }

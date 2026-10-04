@@ -665,7 +665,15 @@ impl Elaborator<'_> {
     /// `ast_const_leaves_min32` fails closed on a select for the same reason.
     ///
     /// A bound with no select takes the identical call it always did.
+    ///
+    /// §4.5.589: in an owned package routine's text the bound folds PRE first, then
+    /// in the declaring scope where PRE answered (`decl_split`); anywhere else it is
+    /// the one fold below.
     pub(crate) fn const_range_bound_fold(&self, e: &ast::Expr) -> Option<i64> {
+        self.decl_split(|| self.const_range_bound_fold_at(e))
+    }
+
+    fn const_range_bound_fold_at(&self, e: &ast::Expr) -> Option<i64> {
         if self.ast_has_param_select(e) {
             return self.const_int_selfdet(e);
         }

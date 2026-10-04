@@ -438,6 +438,7 @@ impl Elaborator<'_> {
         //     fill grows to that width (non-fill ⇒ byte-identical via lower_expr).
         let mut actual_ids: Vec<u32> = Vec::with_capacity(eff_args.len());
         let mut dyn_binds: Vec<(String, u32)> = Vec::new();
+        let hdr_win = self.decl_win(pkg.as_deref(), &func.name.name, decl_scope::RtnKind::Func);
         for (i, &a) in eff_args.iter().enumerate() {
             let p = &inputs[i];
             // R2: a read-only `input` dyn-array formal ALIASES the caller's DynArray
@@ -462,11 +463,15 @@ impl Elaborator<'_> {
             }
             let kind =
                 self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            // §4.5.589: the formal's range is the callee's own text (`decl_scope.rs`);
+            // the actual itself stays the caller's.
+            let armed = self.decl_enter(&hdr_win, true);
             let (w, _, _, _) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
+            self.decl_exit(armed);
             // §13.5.3 / §11.6.1: the actual is ASSIGNED to the formal, so the formal's
             // declared width is the actual's context — the same opt-in a body
             // assignment takes (§4.5.491), with the same real-target / real-operand
@@ -476,7 +481,7 @@ impl Elaborator<'_> {
             // whose formal is a net the engine sizes against, was right. A default
             // actual of a PACKAGE routine is lowered in the package's scope
             // (§13.5.4, `with_default_arg_scope`).
-            let id = self.with_default_arg_scope(&fname, p, a, |s| {
+            let id = self.with_default_arg_scope(&fname, decl_scope::RtnKind::Func, p, a, |s| {
                 s.lower_inline_assign_rhs(a, w, ast_kind_is_bit_vector(kind))
             });
             actual_ids.push(id);
@@ -496,9 +501,9 @@ impl Elaborator<'_> {
                 &func.body,
                 Some(&func.name.name),
             );
-            self.push_rtn_pkg_scope(p, declared);
+            self.push_rtn_pkg_scope(p, &func.name.name, decl_scope::RtnKind::Func, declared);
         }
-        let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args);
+        let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args, &hdr_win);
         if in_pkg {
             self.pop_rtn_pkg_scope();
         }
@@ -651,6 +656,9 @@ impl Elaborator<'_> {
         // ONLY so the bind can ask `cast_operand_is_real`, whose AST half sees a
         // real-returning user function that the IR half cannot.
         ast_actuals: &[&ast::Expr],
+        // §4.5.589: the routine's window when its package declares it — its formal,
+        // return and local ranges are its own text (`decl_scope.rs`).
+        hdr_win: &Option<std::rc::Rc<decl_scope::DeclWin>>,
     ) -> u32 {
         // A multi-dim packed local element-select (`p[k]`) folds as a BIT-select on
         // the inline subst value (which carries no packed dims) — silently wrong.
@@ -693,11 +701,13 @@ impl Elaborator<'_> {
             }
             let kind =
                 self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let armed = self.decl_enter(hdr_win, true);
             let (w, _, _, formal_signed) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
+            self.decl_exit(armed);
             let bound =
                 self.bind_formal_actual(eid, ast_actuals.get(i).copied(), kind, w, formal_signed);
             self.subst.push((p.name.name.clone(), bound));
@@ -709,7 +719,9 @@ impl Elaborator<'_> {
         // size fill literals AND to resize the assigned value to the LHS-declared
         // (width, sign), which the inline SSA path otherwise misses (see
         // `resize_inline_assign`).
+        let armed = self.decl_enter(hdr_win, true);
         let (ret_w, ret_signed) = self.func_return_dims(func);
+        self.decl_exit(armed);
         // Sibling-block same-name string/handle collision (INLINE path): two
         // block-local decls sharing a NAME but differing in string/handle-ness
         // flatten into one name-keyed `formal_str`/`subst` binding (innermost-wins),
@@ -762,17 +774,20 @@ impl Elaborator<'_> {
                 d.kind,
                 ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
             );
+            let armed = self.decl_enter(hdr_win, true);
             let (mut w, _, _, signed) = self.range_to_dims(
                 self.shape_kind(d.kind, &d.shape_param),
                 d.range.as_ref(),
                 self.shape_signed(d.signed, &d.shape_param),
             );
+            let packed_w = self.frame_packed_width(d);
+            self.decl_exit(armed);
             // A multi-dim PACKED local (`logic [1:0][7:0] p`) has its FULL flat width
             // = product of all packed dims; `range_to_dims` returns only the OUTER dim
             // (`[1:0]` ⇒ 2), so a whole-value assign (`p = 16'hABCD`) would truncate to
             // 2 bits (silent-wrong). Use the full packed width. (An element-select of
             // such a local is separately routed to the frame path / loud-rejected.)
-            if let Some((pw, _, _)) = self.frame_packed_width(d) {
+            if let Some((pw, _, _)) = packed_w {
                 w = pw;
             }
             // The RESOLVED kind (a type parameter names its kind through

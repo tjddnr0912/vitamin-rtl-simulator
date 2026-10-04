@@ -36,7 +36,15 @@ pub(crate) struct RtnPkgScope {
     pub(crate) pkg: String,
     /// Every name the routine declares itself — bound innermost, so a same-named
     /// package item must not shadow it.
-    pub(crate) declared: BTreeSet<String>,
+    pub(crate) declared: std::rc::Rc<BTreeSet<String>>,
+    /// The routine's declared name.
+    pub(crate) rtn: String,
+    /// Function or task.
+    pub(crate) kind: decl_scope::RtnKind,
+    /// `pkg` DECLARES the routine as that kind (`pkg_owns`) — the positive set
+    /// §4.5.589's body lane keys on; a routine imported into another package is filed
+    /// under the importer and is not its own.
+    pub(crate) owned: bool,
 }
 
 /// Every name a routine declares: its formals, its top-level body locals, every
@@ -144,8 +152,21 @@ impl Elaborator<'_> {
     }
 
     /// Enter a package routine's body scope. Paired with [`Self::pop_rtn_pkg_scope`].
-    pub(crate) fn push_rtn_pkg_scope(&mut self, pkg: String, declared: BTreeSet<String>) {
-        self.cur_rtn_pkg.push(RtnPkgScope { pkg, declared });
+    pub(crate) fn push_rtn_pkg_scope(
+        &mut self,
+        pkg: String,
+        rtn: &str,
+        kind: decl_scope::RtnKind,
+        declared: BTreeSet<String>,
+    ) {
+        let owned = self.pkg_owns(&pkg, rtn, kind);
+        self.cur_rtn_pkg.push(RtnPkgScope {
+            pkg,
+            declared: std::rc::Rc::new(declared),
+            rtn: rtn.to_string(),
+            kind,
+            owned,
+        });
     }
 
     pub(crate) fn pop_rtn_pkg_scope(&mut self) {
@@ -217,6 +238,7 @@ impl Elaborator<'_> {
     pub(crate) fn with_default_arg_scope<T>(
         &mut self,
         rtn_name: &str,
+        kind: decl_scope::RtnKind,
         p: &ast::TfPort,
         a: &ast::Expr,
         f: impl FnOnce(&mut Self) -> T,
@@ -232,7 +254,8 @@ impl Elaborator<'_> {
         };
         match pkg {
             Some(pkg) => {
-                self.push_rtn_pkg_scope(pkg, BTreeSet::new());
+                let bare = rtn_name.rsplit("::").next().unwrap_or(rtn_name);
+                self.push_rtn_pkg_scope(pkg, Self::rtn_key_bare(bare), kind, BTreeSet::new());
                 let out = f(self);
                 self.pop_rtn_pkg_scope();
                 out

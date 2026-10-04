@@ -390,14 +390,22 @@ impl Elaborator<'_> {
             Some(c) => c.clone(),
             None => {
                 let mut v = Vec::with_capacity(task.ports.len());
+                // §4.5.589: the formals' ranges are the task's own text.
+                let hdr_win = self.decl_win(
+                    self.rtn_key_pkg(&tname).as_deref(),
+                    &task.name.name,
+                    decl_scope::RtnKind::Task,
+                );
                 for p in &task.ports {
                     let kind = self
                         .shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                    let armed = self.decl_enter(&hdr_win, true);
                     let (w, msb, lsb, signed) = self.range_to_dims(
                         self.shape_kind(kind, &p.shape_param),
                         p.range.as_ref(),
                         self.shape_signed(p.signed, &p.shape_param),
                     );
+                    self.decl_exit(armed);
                     let local = self.nets.len() as u32;
                     let lname = format!("__taskarg_{}_{}_{}", tname, p.name.name, local);
                     self.add_net(
@@ -483,7 +491,9 @@ impl Elaborator<'_> {
                     // caller-scope read (pre-bind); a package routine's DEFAULT actual
                     // resolves in the package (§13.5.4, `with_default_arg_scope`).
                     let actual_eid =
-                        self.with_default_arg_scope(&tname, p, a, |s| s.lower_ctx_or_plain(a, fw));
+                        self.with_default_arg_scope(&tname, decl_scope::RtnKind::Task, p, a, |s| {
+                            s.lower_ctx_or_plain(a, fw)
+                        });
                     let cin = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: whole_net_lvalue(local),
                         rhs: actual_eid,
@@ -742,7 +752,7 @@ impl Elaborator<'_> {
                 &task.body,
                 None,
             );
-            self.push_rtn_pkg_scope(pk, declared);
+            self.push_rtn_pkg_scope(pk, &task.name.name, decl_scope::RtnKind::Task, declared);
         }
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);

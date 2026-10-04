@@ -76,6 +76,11 @@ impl Elaborator<'_> {
         // it; non-fill ⇒ byte-identical via lower_expr). Omitted trailing actuals are
         // filled with their formals' default values (§13.5.3).
         let ports = func.ports.clone();
+        let hdr_win = self.decl_win(
+            self.rtn_key_pkg(&rtn_key).as_deref(),
+            fname,
+            decl_scope::RtnKind::Func,
+        );
         let Some(eff_args) = self.fill_default_args(fname, &ports, args) else {
             return self.placeholder_expr();
         };
@@ -190,13 +195,18 @@ impl Elaborator<'_> {
             // `range_to_dims` EMITS diagnostics, so a second call with the same
             // arguments printed the same warning (and counted the same error)
             // twice — measured, `input logic [3:-2]` reported W3056 two times.
+            // §4.5.589: the formal's range is the callee's own text (`decl_scope.rs`).
+            let armed = self.decl_enter(&hdr_win, true);
             let (w, _, _, formal_signed) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
+            self.decl_exit(armed);
             // A package routine's DEFAULT actual resolves in the package (§13.5.4).
-            let eid = self.with_default_arg_scope(&rtn_key, p, a, |s| s.lower_ctx_or_plain(a, w));
+            let eid = self.with_default_arg_scope(&rtn_key, decl_scope::RtnKind::Func, p, a, |s| {
+                s.lower_ctx_or_plain(a, w)
+            });
             // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL actual
             // bound to an INTEGRAL formal rounds and narrows to the formal's
             // width. This value goes straight into the frame slot, so without it
@@ -508,8 +518,13 @@ impl Elaborator<'_> {
                     } else {
                         // A package routine's DEFAULT actual resolves in the package
                         // (§13.5.4, `with_default_arg_scope`).
-                        let eid = self
-                            .with_default_arg_scope(tname, p, a, |s| s.lower_ctx_or_plain(a, fw));
+                        let eid = self.with_default_arg_scope(
+                            tname,
+                            decl_scope::RtnKind::Task,
+                            p,
+                            a,
+                            |s| s.lower_ctx_or_plain(a, fw),
+                        );
                         // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL
                         // actual bound to an INTEGRAL formal rounds and narrows to the
                         // formal's width. The slot in-bind hands the raw value straight
@@ -894,7 +909,9 @@ impl Elaborator<'_> {
             match p.dir {
                 ast::PortDir::Input => {
                     let eid =
-                        self.with_default_arg_scope(&fname, p, a, |s| s.lower_ctx_or_plain(a, fw));
+                        self.with_default_arg_scope(&fname, decl_scope::RtnKind::Func, p, a, |s| {
+                            s.lower_ctx_or_plain(a, fw)
+                        });
                     in_binds.push((slot, eid));
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {

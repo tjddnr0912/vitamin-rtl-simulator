@@ -776,8 +776,17 @@ impl Elaborator<'_> {
             }
         }
         // §7.4.2 / §4.5.359: the function's RETURN net, same unit as the formals below.
+        // §4.5.589: the return range, the formals' and the locals' ranges are the
+        // routine's own text; the package that declares it binds them (`decl_scope.rs`).
+        let hdr_win = self.decl_win(
+            self.rtn_key_pkg(name).as_deref(),
+            &func.name.name,
+            decl_scope::RtnKind::Func,
+        );
+        let armed = self.decl_enter(&hdr_win, true);
         let ret_odd_bound = self.declared_odd_bound(func.range.as_ref()).is_some();
         let (ret_width, ret_signed) = self.func_return_dims_opt(func, ret_odd_bound);
+        self.decl_exit(armed);
         let ret_is_real = matches!(
             func.ret_type,
             ast::ParamType::Real | ast::ParamType::Realtime
@@ -791,6 +800,9 @@ impl Elaborator<'_> {
         // function) while the body still says `name` (round-7).
         let ret_name = func.name.name.clone();
         let auto_override = self.with_scope(&scope_seg, |s| {
+            // §4.5.589: armed through the block-locals; the repeat counters, case
+            // temporaries and static guard below are vita's own slots, not its text.
+            let armed = s.decl_enter(&hdr_win, true);
             // [0..n_params): input formals, port order.
             for p in &func.ports {
                 // §4.5.177: an `input` DYNAMIC-array formal (`int c[]`) in a FRAMED
@@ -1018,6 +1030,7 @@ impl Elaborator<'_> {
             // Block-locals declared inside a `begin … end` in the body (after the
             // top-level body_decls in the flat slot order).
             auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
+            s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&func.body, base_net);
             s.reserve_frame_case_tmps(&func.body, base_net);
             s.reserve_frame_static_guard(&func.body_decls, &func.body, base_net, func.automatic);
@@ -1227,7 +1240,15 @@ impl Elaborator<'_> {
             }
         }
         let scope_seg = format!("$func${name}");
+        // §4.5.589: the formals' and locals' ranges are the task's own text (the
+        // function twin above says why the window ends before the repeat counters).
+        let hdr_win = self.decl_win(
+            self.rtn_key_pkg(name).as_deref(),
+            &task.name.name,
+            decl_scope::RtnKind::Task,
+        );
         let auto_override = self.with_scope(&scope_seg, |s| {
+            let armed = s.decl_enter(&hdr_win, true);
             // [0..n_params): formals (input AND output, declared order).
             for p in &task.ports {
                 let kind =
@@ -1358,6 +1379,7 @@ impl Elaborator<'_> {
             }
             // Block-locals declared inside a `begin … end` in the body.
             auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
+            s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&task.body, base_net);
             s.reserve_frame_case_tmps(&task.body, base_net);
             s.reserve_frame_static_guard(&task.body_decls, &task.body, base_net, task.automatic);
