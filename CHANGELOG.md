@@ -9,6 +9,26 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a package routine's ranges and defaults name its own package's functions and constants
+
+- IEEE 1800-2017 §13.4 / §26.3: a package function's or task's return, formal and local ranges, its
+  formals' defaults and a constant call in its body name what the package declares. vitamin folded
+  that text where the call was, so a module (or another package's routine) that declared a function or
+  constant of the same name supplied it instead: in package `q`,
+  `function automatic logic [f(2):0] h(...)` with `q`'s `f` returning 3 was 8 bits wide, not 4,
+  when the caller declared its own `f` returning 7 (`h(1000)` printed `v=232`, where Icarus Verilog
+  and Verilator print `v=8`).
+  The package's own binding now answers wherever the text was folded at the call site: a
+  constant-function call in a `localparam` or an override, a call at run time (framed or inlined),
+  `$bits(q::h(...))`, the width and sign a call gives an untyped parameter, and a cast, replication
+  or part-select width in a package routine's body.
+- Unchanged: a design vitamin refused stays refused, so package routine text that names its own
+  package's constant or function from a caller declaring nothing of that name is still
+  `VITA-E3009` / `VITA-E3010`. Still open (ROADMAP §2): `$unit` routines, generate-scoped
+  routines, an instance array's header pre-pass, a routine one package imports from another, and
+  the local declarations of a static package task still resolve names where they are called or
+  imported, not where they are declared.
+
 ### Added — the log says `unique` overlaps are not checked
 
 - New code `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` / `VITA-I2021` (Info). vitamin does not check a
