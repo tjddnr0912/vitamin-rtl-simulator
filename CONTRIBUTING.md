@@ -244,6 +244,14 @@ from the `--help` text.
   random, parameterized classes, virtual interfaces — pin the expected value
   from the IEEE 1364/1800 text and state in the test header why there is no tool
   oracle.
+- `crates/elaborate/tests/structure_ratchet.rs` counts from source the functions that
+  pattern-match 3+ `ExprKind` variants outside `hdl_ast::walk` (per crate — a new
+  expression walker filters `Expr::for_each_child` instead), the `pub(crate)` `Option`
+  functions in `elaborate/src/const_*.rs`, the call sites of `const_eval_in_scope` /
+  `const_eval_u32` / `const_self_width`, the `String`-keyed map and set fields of
+  `Elaborator`, and `sim-engine`'s `pub use elaborate::` items. A rise fails; a fall fails
+  with "lower the baseline to N" — set that key in `tests/structure_ratchet.baseline` in
+  the same commit, and never raise one.
 - `crates/sim-engine/tests/backend_equiv.rs` asserts the three executors produce
   byte-identical output. A change to one executor's semantics belongs in all of
   them, or in none.

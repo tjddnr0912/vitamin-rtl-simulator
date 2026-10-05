@@ -427,61 +427,26 @@ fn walk_expr_refs(e: &ast::Expr, f: &mut impl FnMut(&str)) {
                 f(&p.segments[0].name);
             }
         }
-        K::Paren { inner } => walk_expr_refs(inner, f),
-        K::Unary { operand, .. } => walk_expr_refs(operand, f),
-        K::Binary { lhs, rhs, .. } => {
-            walk_expr_refs(lhs, f);
-            walk_expr_refs(rhs, f);
-        }
-        K::Ternary {
-            cond,
-            then_e,
-            else_e,
-        } => {
-            walk_expr_refs(cond, f);
-            walk_expr_refs(then_e, f);
-            walk_expr_refs(else_e, f);
-        }
-        K::BitSelect { base, index } => {
-            walk_expr_refs(base, f);
-            walk_expr_refs(index, f);
-        }
-        K::PartSelect { base, msb, lsb } => {
-            walk_expr_refs(base, f);
-            walk_expr_refs(msb, f);
-            walk_expr_refs(lsb, f);
-        }
-        K::IndexedPart {
-            base,
-            offset,
-            width,
-            ..
-        } => {
-            walk_expr_refs(base, f);
-            walk_expr_refs(offset, f);
-            walk_expr_refs(width, f);
-        }
-        K::Concat { parts } => parts.iter().for_each(|p| walk_expr_refs(p, f)),
-        K::Replicate { count, value } => {
-            walk_expr_refs(count, f);
-            value.iter().for_each(|p| walk_expr_refs(p, f));
-        }
-        K::Call { args, .. } | K::SysCall { args, .. } => {
-            args.iter().for_each(|a| walk_expr_refs(a, f))
-        }
         // ⚠️ `Cast` is the ONE variant that `expr_reads_only_locals` admits and this walk
         // could miss, so a reference hiding in `int'(u)` counted as ZERO and the body was
         // not routed. Both siblings in this file already have the arm
-        // (`expr_reads_only_locals`, `expr_selects_name`); this is the same spelling.
-        // Every other unwalked variant — `MinTypMax`, `MethodCall`, `New`, `ClassNew`,
-        // `Dist`, the assignment patterns, `RandomizeWith`, `ArrayMethodWith`,
-        // `NamedArg` — is refused by that gate before this walk is reached.
-        K::Cast { target, expr } => {
-            walk_expr_refs(expr, f);
-            if let ast::CastTarget::Size(sz) = target {
-                walk_expr_refs(sz, f);
-            }
-        }
+        // (`expr_reads_only_locals`, `expr_selects_name`). A size cast's width is a child
+        // too. Every other unwalked variant — `MinTypMax`, `MethodCall`, `New`,
+        // `ClassNew`, `Dist`, the assignment patterns, `RandomizeWith`,
+        // `ArrayMethodWith`, `NamedArg` — is refused by that gate before this walk is
+        // reached.
+        K::Paren { .. }
+        | K::Unary { .. }
+        | K::Binary { .. }
+        | K::Ternary { .. }
+        | K::BitSelect { .. }
+        | K::PartSelect { .. }
+        | K::IndexedPart { .. }
+        | K::Concat { .. }
+        | K::Replicate { .. }
+        | K::Call { .. }
+        | K::SysCall { .. }
+        | K::Cast { .. } => e.for_each_child(|_, c| walk_expr_refs(c, f)),
         _ => {}
     }
 }

@@ -363,14 +363,17 @@ pub(crate) fn ast_any(e: &ast::Expr, pred: &dyn Fn(&ast::Expr) -> bool) -> bool 
     if pred(e) {
         return true;
     }
-    let parts: Vec<&ast::Expr> = match &e.kind {
-        ast::ExprKind::Concat { parts } => parts.iter().collect(),
-        ast::ExprKind::Replicate { count, value } => {
-            std::iter::once(&**count).chain(value.iter()).collect()
-        }
-        _ => Elaborator::const_fold_children(e),
-    };
-    parts.into_iter().any(|p| ast_any(p, pred))
+    let descends = Elaborator::const_fold_descends(e)
+        || matches!(
+            &e.kind,
+            ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. }
+        );
+    let mut found = false;
+    if descends {
+        // Stops asking at the first hit, as `Iterator::any` did.
+        e.for_each_child(|_, c| found = found || ast_any(c, pred));
+    }
+    found
 }
 
 /// Does `e` mention a single-segment name for which `is_local` holds?

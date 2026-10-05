@@ -11,5 +11,11 @@ sim-ir = { path = "../sim-ir" }
 diag = { path = "../diag" }
 serde = { workspace = true }
 
+[dev-dependencies]
+# `tests/structure_ratchet.rs` parses the workspace's source. Both crates are already in
+# the lockfile through `vita-artifact-derive`; `visit` adds no dependency.
+syn = { workspace = true, features = ["visit"] }
+proc-macro2 = { workspace = true }
+
 [lints]
 workspace = true

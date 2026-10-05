@@ -1,0 +1,11 @@
+# Structure ratchet baseline (tests/structure_ratchet.rs). A count may only fall:
+# when the test reports "lower the baseline to N", set that key to N in the same change.
+# Never raise a value.
+a.expr_kind_matchers.elaborate = 159
+a.expr_kind_matchers.hdl-parser = 23
+b.const_option_fns = 102
+c.calls.const_eval_in_scope = 98
+c.calls.const_eval_u32 = 10
+c.calls.const_self_width = 27
+d.elaborator_string_keyed = 85
+e.sim_engine_elaborate_reexports = 24

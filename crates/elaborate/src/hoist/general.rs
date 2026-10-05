@@ -58,113 +58,41 @@ pub(crate) enum Shape<'a> {
     Unevaluated(Vec<&'a ast::Expr>),
 }
 
-/// The shape of `e` — see [`Shape`]. Children are listed in iverilog's measured
-/// left-to-right evaluation order.
+/// The shape of `e` — see [`Shape`]. Children and their classes come from
+/// [`ast::Expr::for_each_child`] and [`ast::Expr::regime`], which list them in
+/// iverilog's measured left-to-right evaluation order and classify each variant with no
+/// wildcard arm: a `min:typ:max` choice, a `dist`, a `randomize() with` and a `with`
+/// iterator are `NoHoist`; a `$bits`-family argument is `Unevaluated`.
 ///
 /// Children that must fold to a CONSTANT (a part-select bound, a replication count, a
-/// cast size) are listed as ordinary unconditional children on purpose: a call there
-/// can never be constant, so hoisting it merely moves the failure to the const-fold,
-/// which reports "not constant" — accurate, and it keeps this shape description
-/// exhaustive, which is what lets the four walkers stay in agreement.
+/// cast size) are ordinary unconditional children on purpose: a call there can never be
+/// constant, so hoisting it merely moves the failure to the const-fold, which reports
+/// "not constant" — accurate, and it keeps this shape description exhaustive, which is
+/// what lets the four walkers stay in agreement.
 pub(crate) fn shape(e: &ast::Expr) -> Shape<'_> {
-    use ast::ExprKind as K;
-    match &e.kind {
-        K::Binary { op, lhs, rhs } => match op {
-            ast::BinOp::LogAnd => Shape::ShortCircuit {
-                sc_val: 0,
+    use ast::walk::Regime;
+    let mut cs: Vec<&ast::Expr> = Vec::new();
+    e.for_each_child(|_, c| cs.push(c));
+    match e.regime() {
+        Regime::Uncond => Shape::Uncond(cs),
+        Regime::NoHoist => Shape::NoHoist(cs),
+        Regime::Unevaluated => Shape::Unevaluated(cs),
+        Regime::ShortCircuit { short_on } => match cs[..] {
+            [lhs, rhs] => Shape::ShortCircuit {
+                sc_val: u32::from(short_on),
                 lhs,
                 rhs,
             },
-            ast::BinOp::LogOr => Shape::ShortCircuit {
-                sc_val: 1,
-                lhs,
-                rhs,
+            _ => unreachable!("a `&&`/`||` node has exactly two operands"),
+        },
+        Regime::Ternary => match cs[..] {
+            [cond, then_e, else_e] => Shape::Ternary {
+                cond,
+                then_e,
+                else_e,
             },
-            _ => Shape::Uncond(vec![lhs, rhs]),
+            _ => unreachable!("a `?:` node has exactly three operands"),
         },
-        K::Ternary {
-            cond,
-            then_e,
-            else_e,
-        } => Shape::Ternary {
-            cond,
-            then_e,
-            else_e,
-        },
-        K::Unary { operand, .. } => Shape::Uncond(vec![operand]),
-        K::Paren { inner } => Shape::Uncond(vec![inner]),
-        K::Concat { parts } => Shape::Uncond(parts.iter().collect()),
-        K::Replicate { count, value } => {
-            let mut cs = vec![count.as_ref()];
-            cs.extend(value.iter());
-            Shape::Uncond(cs)
-        }
-        // A system function that does not evaluate its operand (`$bits`, the array
-        // queries) must not have a copy-out hoisted out of it — that would perform a side
-        // effect the source never performs — and its operand reads nothing at run time.
-        K::SysCall { name, args } if syscall_does_not_evaluate(&name.name) => {
-            Shape::Unevaluated(args.iter().collect())
-        }
-        K::Call { args, .. } | K::SysCall { args, .. } | K::ClassNew { args } => {
-            Shape::Uncond(args.iter().collect())
-        }
-        K::MethodCall { recv, args, .. } => {
-            let mut cs = vec![recv.as_ref()];
-            cs.extend(args.iter());
-            Shape::Uncond(cs)
-        }
-        K::BitSelect { base, index } => Shape::Uncond(vec![base, index]),
-        K::PartSelect { base, msb, lsb } => Shape::Uncond(vec![base, msb, lsb]),
-        K::IndexedPart {
-            base,
-            offset,
-            width,
-            ..
-        } => Shape::Uncond(vec![base, offset, width]),
-        K::Cast { target, expr } => match target {
-            ast::CastTarget::Size(s) => Shape::Uncond(vec![s, expr]),
-            _ => Shape::Uncond(vec![expr]),
-        },
-        K::AssignPattern(parts) => Shape::Uncond(parts.iter().collect()),
-        K::AssignPatternKeyed(parts) => Shape::Uncond(parts.iter().map(|(_, v)| v).collect()),
-        K::NamedArg { value, .. } => Shape::Uncond(value.iter().map(|v| v.as_ref()).collect()),
-        K::New { size, src } => {
-            let mut cs = vec![size.as_ref()];
-            cs.extend(src.iter().map(|s| s.as_ref()));
-            Shape::Uncond(cs)
-        }
-        K::TimeLit { num, .. } => Shape::Uncond(vec![num]),
-        // Leaves — no child can carry a call.
-        K::IntLit { .. }
-        | K::RealLit { .. }
-        | K::StrLit { .. }
-        | K::PkgScoped { .. }
-        | K::Ident(_)
-        | K::Null
-        | K::Dollar
-        | K::Error => Shape::Uncond(vec![]),
-        // `min:typ:max` picks ONE of three, so hoisting all three would fire two copy-outs
-        // the source never performs. A `with` iterator runs per element and a constraint
-        // sampler is not a once-through evaluation. All three DO read, though, so their
-        // children are listed: the eval-order walk has to see those reads, and the detector
-        // has to answer honestly (a `$bits`/`min:typ:max` sitting elsewhere in the statement
-        // must not make the whole thing stand down).
-        K::MinTypMax { min, typ, max } => Shape::NoHoist(vec![min, typ, max]),
-        K::Dist { value, items } => {
-            let mut cs = vec![value.as_ref()];
-            for it in items {
-                cs.push(it.lo.as_ref());
-                cs.extend(it.hi.as_deref());
-                cs.push(it.weight.as_ref());
-            }
-            Shape::NoHoist(cs)
-        }
-        K::RandomizeWith(rw) => {
-            let mut cs: Vec<&ast::Expr> = rw.args.iter().collect();
-            cs.extend(rw.constraints.iter());
-            Shape::NoHoist(cs)
-        }
-        K::ArrayMethodWith(am) => Shape::NoHoist(vec![&am.with_expr]),
     }
 }
 

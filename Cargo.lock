@@ -337,8 +337,10 @@ version = "0.2.1"
 dependencies = [
  "diag",
  "hdl-ast",
+ "proc-macro2",
  "serde",
  "sim-ir",
+ "syn",
 ]
 
 [[package]]

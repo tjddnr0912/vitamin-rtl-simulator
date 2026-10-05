@@ -255,51 +255,50 @@ impl Elaborator<'_> {
 
     /// The sub-expressions of `e` that the const domain can descend into — one
     /// traversal shared by all three conditions so they cannot cover different sets.
+    /// Every child of a kind [`Self::const_fold_descends`] admits, in
+    /// [`ast::Expr::for_each_child`] order; none of any other kind.
+    pub(crate) fn const_fold_children(e: &ast::Expr) -> Vec<&ast::Expr> {
+        let mut cs = Vec::new();
+        if Self::const_fold_descends(e) {
+            e.for_each_child(|_, c| cs.push(c));
+        }
+        cs
+    }
+
+    /// Does the const domain descend into `e`'s children?
     ///
-    /// COMPLETENESS: the arms below are exactly the `ExprKind`s that
+    /// COMPLETENESS: the kinds below are exactly the `ExprKind`s that
     /// [`Self::const_eval_in_scope`] has a fold arm for. Any other kind returns None
     /// there, so the whole fold declines before these predicates could matter — which
     /// is why an empty child list for an unlisted kind is safe rather than a hole.
-    pub(crate) fn const_fold_children(e: &ast::Expr) -> Vec<&ast::Expr> {
+    /// A `Cast`'s children include the width of `N'(e)`, which the fold folds too.
+    ///
+    /// `PartSelect` / `IndexedPart` are the twins of `BitSelect`, restoring the
+    /// COMPLETENESS invariant now that `const_eval_in_scope` folds those kinds.
+    /// ⚠️ The invariant is what makes them required, NOT a specific hazard. An earlier
+    /// comment claimed they were load-bearing for `ast_mentions_substituted_name`; the
+    /// mutation battery could not build a case where that is what they deliver
+    /// (`const_select_base` and `param_sel_range` both refuse a substituted name on
+    /// their own), and the only test that kills their removal is the >64-bit
+    /// DIAGNOSTIC one, via `wide_param_name_in`. Recorded rather than left
+    /// overclaiming — they stay because the invariant is the contract three
+    /// predicates read.
+    pub(crate) fn const_fold_descends(e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
-        match &e.kind {
-            K::Paren { inner } => vec![inner],
-            K::TimeLit { num, .. } => vec![num],
-            K::Unary { operand, .. } => vec![operand],
-            K::Binary { lhs, rhs, .. } => vec![lhs, rhs],
-            K::Ternary {
-                cond,
-                then_e,
-                else_e,
-            } => vec![cond, then_e, else_e],
-            K::BitSelect { base, index } => vec![base, index],
-            // The part / indexed-part twins of the arm above, restoring this
-            // function's stated COMPLETENESS invariant now that `const_eval_in_scope`
-            // folds those kinds.
-            //
-            // ⚠️ The invariant is what makes them required, NOT a specific hazard.
-            // An earlier comment here claimed they were load-bearing for
-            // `ast_mentions_substituted_name`; the mutation battery could not build a
-            // case where that is what the arms deliver (`const_select_base` and
-            // `param_sel_range` both refuse a substituted name on their own), and the
-            // only test that kills their removal is the >64-bit DIAGNOSTIC one, via
-            // `wide_param_name_in`. Recorded rather than left overclaiming — the arms
-            // stay because the invariant is the contract three predicates read.
-            K::PartSelect { base, msb, lsb } => vec![base, msb, lsb],
-            K::IndexedPart {
-                base,
-                offset,
-                width,
-                ..
-            } => vec![base, offset, width],
-            K::SysCall { args, .. } | K::Call { args, .. } => args.iter().collect(),
-            K::Cast { target, expr } => match target {
-                // `N'(e)` folds its WIDTH expression too, so it is a child.
-                ast::CastTarget::Size(n) => vec![n, expr],
-                _ => vec![expr],
-            },
-            _ => vec![],
-        }
+        matches!(
+            &e.kind,
+            K::Paren { .. }
+                | K::TimeLit { .. }
+                | K::Unary { .. }
+                | K::Binary { .. }
+                | K::Ternary { .. }
+                | K::BitSelect { .. }
+                | K::PartSelect { .. }
+                | K::IndexedPart { .. }
+                | K::SysCall { .. }
+                | K::Call { .. }
+                | K::Cast { .. }
+        )
     }
 
     /// Condition 3's trigger: does `e` contain an operator whose SV result can

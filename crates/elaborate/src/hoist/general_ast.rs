@@ -3,10 +3,10 @@
 //!
 //! Three groups, all mechanical: rebuilding an expression node around already-rewritten
 //! children ([`rebuild`], driven by [`shape_children`] so it cannot disagree with `shape`),
-//! flattening and rebuilding an lvalue's index expressions, and the two name predicates that
-//! say which system tasks/functions the hoister must leave alone.
+//! flattening and rebuilding an lvalue's index expressions, and the name predicate that says
+//! which system tasks the hoister must leave alone. The system functions that do not evaluate
+//! their operand are `hdl_ast::walk::syscall_does_not_evaluate`, where the child walk reads them.
 
-use super::general::{shape, Shape};
 use super::*;
 
 impl Elaborator<'_> {
@@ -140,18 +140,20 @@ impl Elaborator<'_> {
 /// [`Elaborator::subst_pre_call_reads`]) both feed this list to [`rebuild`], so neither can
 /// visit a child the other misses.
 pub(crate) fn shape_children(e: &ast::Expr) -> Vec<&ast::Expr> {
-    match shape(e) {
-        Shape::Uncond(cs) => cs,
-        Shape::ShortCircuit { lhs, rhs, .. } => vec![lhs, rhs],
-        Shape::Ternary {
-            cond,
-            then_e,
-            else_e,
-        } => vec![cond, then_e, else_e],
+    use ast::walk::ChildPos as P;
+    let mut cs = Vec::new();
+    e.for_each_child(|pos, c| match pos {
+        P::Uncond
+        | P::ShortCircuitLhs
+        | P::ShortCircuitRhs
+        | P::TernaryCond
+        | P::TernaryThen
+        | P::TernaryElse => cs.push(c),
         // Not hoist sites — the node is rebuilt unchanged, which is safe because
         // `inout_hoistable_general` already refused any call inside one.
-        Shape::NoHoist(_) | Shape::Unevaluated(_) => vec![],
-    }
+        P::NoHoist | P::Unevaluated => {}
+    });
+    cs
 }
 
 /// Rebuild `e` around `children`, which must be exactly [`shape_children`]'s list for `e`
@@ -322,28 +324,5 @@ pub(crate) fn is_deferred_print_task(name: &str) -> bool {
             | "$fstrobeb"
             | "$fstrobeo"
             | "$fstrobeh"
-    )
-}
-
-/// A system FUNCTION that does not EVALUATE its operand — it reports a static property of
-/// the operand's type (IEEE 1800 §20.5 `$bits`, §20.6 array queries). Hoisting a copy-out
-/// out of one of these would fire a side effect the source never performs, so `shape` reports
-/// the node `Opaque` and the general hoister stands down.
-///
-/// Measured: iverilog leaves the side effect unperformed for `$bits`; `$clog2` and
-/// `$isunknown` DO evaluate their operand and are deliberately absent.
-pub(crate) fn syscall_does_not_evaluate(name: &str) -> bool {
-    matches!(
-        name,
-        "$bits"
-            | "$size"
-            | "$high"
-            | "$low"
-            | "$left"
-            | "$right"
-            | "$increment"
-            | "$dimensions"
-            | "$unpacked_dimensions"
-            | "$typename"
     )
 }

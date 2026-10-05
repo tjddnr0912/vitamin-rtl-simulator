@@ -5,7 +5,6 @@
 //! a call WRITES (named-argument aware), whether a hierarchical read can ALIAS a bare local,
 //! which actuals of a call statement are reads, and whether we are inside a frame body.
 
-use super::general::{shape, Shape};
 use super::*;
 
 impl Elaborator<'_> {
@@ -74,15 +73,9 @@ pub(crate) fn named_arg_value(e: &ast::Expr) -> &ast::Expr {
 /// Every child `shape` models, INCLUDING the ones that are not hoist sites — for walks that
 /// only need to find things (a mutated root, a call), never to rewrite.
 pub(crate) fn shape_all_children(e: &ast::Expr) -> Vec<&ast::Expr> {
-    match shape(e) {
-        Shape::Uncond(cs) | Shape::NoHoist(cs) | Shape::Unevaluated(cs) => cs,
-        Shape::ShortCircuit { lhs, rhs, .. } => vec![lhs, rhs],
-        Shape::Ternary {
-            cond,
-            then_e,
-            else_e,
-        } => vec![cond, then_e, else_e],
-    }
+    let mut cs = Vec::new();
+    e.for_each_child(|_, c| cs.push(c));
+    cs
 }
 
 impl Elaborator<'_> {
