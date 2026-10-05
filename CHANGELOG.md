@@ -9,6 +9,35 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an imported name has one binding
+
+- IEEE 1800-2017 §26.3: two wildcard imports offering one name make it ambiguous. Where one of
+  the two was a constant wider than 64 bits or a package variable, vitamin bound the first
+  package's: `import pa::*; import pb::*;` with `pa::P = 3` and a 65-bit `pb::P` printed `P=3`,
+  where Icarus Verilog and sv2v refuse `P`. Written next to each other, the two imports now
+  leave `P` unbound, `VITA-E3010` where it is used, as two ≤64-bit constants already did. Two
+  wildcard imports in a package body are checked the same way (the second package's `P`
+  answered).
+- An explicit import wins the wildcard import in every expression. vitamin kept the losing
+  wildcard's binding beside it, and different expressions read different ones:
+  `import pa::*; import pb::P;` with a 65-bit `pb::P` printed the 65-bit value but chose
+  `small` in `if (P > 65'd100)` and made `logic [P[3:0]:0]` 4 bits wide from `pa::P = 3`; it
+  now chooses `big` and 10 bits, as Icarus Verilog and sv2v do. The same holds
+  for an explicit variable import over a wildcard >64-bit constant, and for a module's explicit
+  >64-bit import over a compilation-unit explicit import of the name.
+- Now `VITA-E3009`, as Icarus Verilog and sv2v refuse them: an explicit import of a name the
+  same scope declares as an enum label (`import pk::E1; typedef enum {E0, E1} e_t;`), and two
+  explicit imports of one constant or variable name from two packages in one scope
+  (`import pa::P; import pb::P;`). The same package imported twice, and a module import of a
+  name the compilation unit also imports, stay legal.
+- Unchanged: with an item of the scope between two wildcard imports, a reference between them
+  keeps the first package's binding (§26.3). Still open (ROADMAP §2): a `genvar`, an enum label
+  or a ≤64-bit explicit import named like a >64-bit constant still reads the wider value in
+  some expressions; with an item between two wildcard imports, a reference after the second is
+  not always refused; compilation-unit and module imports form one import scope; a string or
+  real constant does not make a name ambiguous; a type or function name imported explicitly
+  from two packages takes the second import.
+
 ### Fixed — a package routine's ranges and defaults name its own package's functions and constants
 
 - IEEE 1800-2017 §13.4 / §26.3: a package function's or task's return, formal and local ranges, its
