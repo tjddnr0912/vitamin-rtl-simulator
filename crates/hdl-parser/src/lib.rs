@@ -894,12 +894,13 @@ pub struct Parser<'t, 's> {
     /// branches inside them). Measured reasons, one per route into a body:
     /// - the constant-function interpreter refuses at elaboration (`VITA-E3009`) a
     ///   function whose call reaches an armed tail (ROADMAP §3.b `unique-const-fn`);
-    /// - a continuous assign runs the function it calls once more at time 0, on `x`,
-    ///   before the `initial` that writes its inputs (ROADMAP §2 🆕 AB), and that run
-    ///   reaches what the function calls: a class method through a handle or `this.`,
-    ///   a constructor through `new`, an item `function void` with no formals, and a
-    ///   task (a function calling a task is accepted). An armed miss there reports at
-    ///   time 0 where both oracles are silent;
+    /// - a continuous assign that reaches a class handle re-runs the function it calls
+    ///   on every settle pass (ROADMAP §2 🆕 AB (a); §4.5.590 removed only its time-0
+    ///   run on `x`), and that run reaches what the function calls: a class method
+    ///   through a handle or `this.`, a constructor through `new`, an item
+    ///   `function void` with no formals, and a task (a function calling a task is
+    ///   accepted). An armed miss there reports more often than verilator does
+    ///   (ROADMAP §3.b `unique-if-chain`);
     /// - the package-scoped call closure walk (`elaborate/src/package.rs`
     ///   `pkg_stmt_pure_orig`) treats the synthesized arm as impure, so arming a body
     ///   a `pk::f(…)` call reaches refuses (`VITA-E3009`) a design PRE runs (a lone

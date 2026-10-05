@@ -24,8 +24,10 @@ mod kernel;
 mod propagate;
 mod run_loop;
 mod scan_arm;
+mod t0_hold;
 mod wait_fork;
 pub(crate) use scan_arm::*;
+pub(crate) use t0_hold::T0Hold;
 pub(crate) use wait_fork::*;
 
 /// A schedulable process resume. `proc` is a runtime ACTIVITY id (index into
@@ -537,6 +539,11 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// at the `#0` promotion of both run loops.
     pub(crate) pre_init: bool,
     pub(crate) armed: bool,
+    /// The time-0 hold of the continuous assigns that reach an effectful call (ROADMAP
+    /// §2 🆕 AB): which ones, their release waves, and whether the hold is still on.
+    /// Built once here, read by both settle loops; the rule and its measurements are
+    /// in `sched::t0_hold`.
+    pub(crate) t0_hold: Box<T0Hold>,
     /// Body-step budget — see `SimOpts::max_body_steps`. Separate from `max_deltas`
     /// because it answers a different question: not "did the scheduler reach a
     /// fixpoint" but "has ONE activation run this long without suspending".

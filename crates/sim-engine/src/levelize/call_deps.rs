@@ -82,14 +82,7 @@ pub(crate) fn func_read_deps(
         // one, "is this net a local?" has no answer and every call declines.
         return (vec![None; n], vec![false; n]);
     }
-    // Nets belonging to SOME frame window. A read of one from another function is a
-    // read of storage whose changes `note_change` does not report to `ca_of_net`.
-    let mut framed = vec![false; ir.nets.len()];
-    for &(base, len) in windows {
-        let lo = (base as usize).min(framed.len());
-        let hi = lo.saturating_add(len as usize).min(framed.len());
-        framed[lo..hi].iter_mut().for_each(|f| *f = true);
-    }
+    let framed = frame_nets(ir, windows);
     let mut reads: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
     let mut callees: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
     let mut ok = vec![true; n];
@@ -150,6 +143,112 @@ pub(crate) fn func_read_deps(
             .collect(),
         safe,
     )
+}
+
+/// Nets belonging to SOME frame window. A read of one from another function is a read
+/// of storage whose changes `note_change` does not report to `ca_of_net`.
+fn frame_nets(ir: &SimIr, windows: &[(u32, u32)]) -> Vec<bool> {
+    let mut framed = vec![false; ir.nets.len()];
+    for &(base, len) in windows {
+        let lo = (base as usize).min(framed.len());
+        let hi = lo.saturating_add(len as usize).min(framed.len());
+        framed[lo..hi].iter_mut().for_each(|f| *f = true);
+    }
+    framed
+}
+
+/// Per `FuncDef`: does a call to this function leave NOTHING behind that a time-0
+/// evaluation on the declared defaults could make observable — no output, no report,
+/// no exit, no state a later call reads? The time-0 hold (`sched::t0_hold`) holds a
+/// continuous assign reaching a callee for which this is `false`.
+///
+/// `true` exactly when [`func_read_deps`] admits the function (its walk accepts every
+/// statement, expression and terminator through every callee, and the closure
+/// converged) AND no system task is reachable from its body or any callee's. The walk
+/// admits the `$display` family because it re-runs per evaluation — the very effect
+/// the hold is about — so that test is added here; every other effect (`$random`, a
+/// heap read, a task call, a write outside the frame) the walk already declines.
+/// Conservative in one direction only: a declined pure callee is held, which costs a
+/// reordered time-0 evaluation, never a value.
+pub(crate) fn func_effect_free(
+    ir: &SimIr,
+    windows: &[(u32, u32)],
+    is_heap: &dyn Fn(u32) -> bool,
+) -> Vec<bool> {
+    let n = ir.funcs.len();
+    let (fdeps, _) = func_read_deps(ir, windows, is_heap);
+    let framed = frame_nets(ir, windows);
+    let mut free = vec![false; n];
+    let mut callees: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
+    for fi in 0..n {
+        // `Some` implies `windows` is index-aligned (`func_read_deps` declines all
+        // otherwise).
+        if fdeps[fi].is_none() {
+            continue;
+        }
+        let (base, len) = windows[fi];
+        let mine = |net: u32| net >= base && net < base.saturating_add(len);
+        let mut reads = BTreeSet::new();
+        let walked = walk_func_body(
+            ir,
+            fi,
+            &mine,
+            &framed,
+            is_heap,
+            &mut reads,
+            &mut callees[fi],
+        );
+        free[fi] = walked && !body_has_systask(ir, fi);
+    }
+    // A callee that is not effect-free makes its caller not effect-free. Monotone (a
+    // `true` only ever turns `false`), so the loop ends.
+    loop {
+        let mut moved = false;
+        for fi in 0..n {
+            if free[fi]
+                && callees[fi]
+                    .iter()
+                    .any(|&c| !free.get(c as usize).copied().unwrap_or(false))
+            {
+                free[fi] = false;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    free
+}
+
+/// Is a `Stmt::SysTask` in any block reachable from function `fi`'s entry?
+fn body_has_systask(ir: &SimIr, fi: usize) -> bool {
+    let Some(fd) = ir.funcs.get(fi) else {
+        return true;
+    };
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![fd.entry];
+    let mut next = Vec::new();
+    while let Some(b) = stack.pop() {
+        if !seen.insert(b) {
+            continue;
+        }
+        let Some(blk) = ir.blocks.get(b as usize) else {
+            return true;
+        };
+        if blk.stmts.iter().any(|&sid| {
+            matches!(
+                ir.stmts.get(sid as usize),
+                Some(sim_ir::Stmt::SysTask { .. })
+            )
+        }) {
+            return true;
+        }
+        next.clear();
+        succs(&blk.term, &mut next);
+        stack.extend_from_slice(&next);
+    }
+    false
 }
 
 /// One function's own body, without its callees: collect the module nets it reads and

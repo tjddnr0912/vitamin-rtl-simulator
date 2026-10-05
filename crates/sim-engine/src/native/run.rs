@@ -362,6 +362,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     // promotion) is a batch of one followed by the loop-top settle, while the
     // batch it interrupts waits in `t0_parked`.
     let mut t0_first_batch_done = k.active.is_empty();
+    // ROADMAP §2 🆕 AB — the engine's line: with no first batch the hold has
+    // nothing to wait for.
+    if t0_first_batch_done {
+        k.sched.t0_hold.begin_release();
+    }
     let mut t0_combs_owed = t0_settle_combs;
     let mut t0_serial: std::collections::VecDeque<NativeReady> = std::collections::VecDeque::new();
     // The implicit passes, each a trigger (`WakeTable::take_t0_trigger`).
@@ -391,6 +396,12 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             for r in std::mem::take(&mut k.spawned) {
                 push_sorted_native(&mut k.active, r);
             }
+            // A frame fatal latched outside a body — by a continuous assign's call in
+            // the previous settle, the time-0 settle included — ends the run here,
+            // before the next settle: the engine's loop-top `check_call_fatal`.
+            if check_call_fatal(k) {
+                return done(k, FinishReason::Error);
+            }
             // ACTIVE: continuous assigns settle FIRST, then processes drain —
             // the engine's order. A settle that moved nets may have produced an
             // edge on a cont-assign-driven net (a port-bound clock), so change
@@ -399,6 +410,12 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 None => return done(k, FinishReason::DeltaLimit),
                 Some(true) => propagate(k),
                 Some(false) => {}
+            }
+            // …and one the settle itself latched (`assign y = f(a);` with a `$fatal`
+            // in `f`), which no body returns as `Step::Fatal`: the engine's
+            // post-settle `check_call_fatal`.
+            if check_call_fatal(k) {
+                return done(k, FinishReason::Error);
             }
             let t0_live = t0_parked.is_some()
                 || !t0_combs_owed.is_empty()
@@ -443,6 +460,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 None
             };
             if let Some(mut batch) = batch {
+                // ROADMAP §2 🆕 AB — the engine's line: the first batch is taken,
+                // the next settle releases the held assigns.
+                if !t0_first_batch_done {
+                    k.sched.t0_hold.begin_release();
+                }
                 t0_first_batch_done = true;
                 // Wake-group refresh point (2): every batch take.
                 k.sched.refresh_wake_seq();
@@ -733,6 +755,88 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     }
 }
 
+/// The tier-3 continuous-assign settle — the engine's `Scheduler::settle_cont_assigns`:
+/// the first settle after the first time-0 batch is the release of the held assigns
+/// (ROADMAP §2 🆕 AB, `sched::t0_hold`), every other one the fixpoint below.
+fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) -> Option<bool> {
+    if !k.sched.t0_hold.active() {
+        return settle_cont_assigns_inner::<false>(k, ir, delta_count);
+    }
+    if k.sched.t0_hold.release_due() {
+        return settle_releasing_t0(k, ir, delta_count);
+    }
+    settle_cont_assigns_inner::<true>(k, ir, delta_count)
+}
+
+/// The release settle — the engine twin `Scheduler::settle_releasing_t0` carries the
+/// argument: the non-held assigns to a fixpoint, the held ones wave by wave, then the
+/// X-DROP of the nets only the waves dirtied.
+fn settle_releasing_t0(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) -> Option<bool> {
+    let mut any = settle_cont_assigns_inner::<true>(k, ir, delta_count)?;
+    let before: std::collections::BTreeSet<u32> = k.arena.ch.dirty.collect().into_iter().collect();
+    k.sched.t0_hold.begin_waves();
+    while let Some(wave) = k.sched.t0_hold.next_wave() {
+        for ci in wave {
+            k.arena.ch.ca_dirty.insert(ci as usize);
+        }
+        any |= settle_cont_assigns_inner::<true>(k, ir, delta_count)?;
+    }
+    k.sched.t0_hold.finish();
+    let dirty = k.arena.ch.dirty.collect();
+    for n in crate::sched::T0Hold::x_drop(&*k, ir, dirty, &before) {
+        k.arena.ch.dirty.remove(n as usize);
+    }
+    Some(any)
+}
+
+/// The per-pass hold step — the engine twin `Scheduler::hold_t0_pass`: drop every held
+/// assign from `pass` (its release marks it dirty again), and drive a held delayed
+/// assign's initial `x`
+/// without evaluating its rhs. `true` when that drive changed a net.
+fn hold_t0_pass(k: &mut NativeKernel, ir: &SimIr, pass: &mut Vec<u32>) -> bool {
+    let held: Vec<u32> = pass
+        .iter()
+        .copied()
+        .filter(|&ci| k.sched.t0_hold.held_now(ci as usize))
+        .collect();
+    if held.is_empty() {
+        return false;
+    }
+    pass.retain(|&ci| !k.sched.t0_hold.held_now(ci as usize));
+    let mut changed = false;
+    for ci in held.into_iter().map(|c| c as usize) {
+        if ir.cont_assigns[ci].delay.is_some() && k.sched.delayed_owes_initial_x(ci) {
+            let lhs = &ir.cont_assigns[ci].lhs;
+            let rhs = ir.cont_assigns[ci].rhs;
+            let w = k
+                .sched
+                .st
+                .lvalue_width(lhs)
+                .max(k.sched.st.wt.get(rhs).width);
+            let offs = k.k_resolve_lvalue_offsets(lhs);
+            changed |= k.write_routed(lhs, crate::value::Value::xs(w, false), &offs);
+        }
+    }
+    changed
+}
+
+/// The engine's `Scheduler::check_call_fatal`, called where the engine's loop calls it:
+/// at the drain loop's top before the settle and again right after it. A frame fatal
+/// latched where no body returns `Step::Fatal` — a continuous assign's call in a settle —
+/// ends the run there, with the deferred queues and the postponed region drained first;
+/// the check before the settle is what stops a run whose time-0 settle latched one
+/// before the release can run another call.
+fn check_call_fatal(k: &mut NativeKernel) -> bool {
+    if !k.k_call_fatal() || k.sched.st.finished {
+        return false;
+    }
+    k.sched.st.finished = true;
+    k.sched.st.had_fatal = true;
+    k.sched.drain_deferred_on_finish();
+    flush_postponed(k);
+    true
+}
+
 /// `Scheduler::settle_cont_assigns` for the class the gate admits: re-evaluate
 /// every continuous assign until no net moves.
 ///
@@ -765,7 +869,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
 /// shares `self.delta_count` between the settle and the region cascade: a design
 /// that settles slowly and oscillates slowly must hit the limit at the same
 /// point on both backends.
-fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) -> Option<bool> {
+fn settle_cont_assigns_inner<const HOLD: bool>(
+    k: &mut NativeKernel,
+    ir: &SimIr,
+    delta_count: &mut u64,
+) -> Option<bool> {
     if ir.cont_assigns.is_empty() {
         return Some(false);
     }
@@ -777,6 +885,10 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
     // experiment that located the cost in the per-visit test itself.
     let profiling = k.sched.st.proc_prof.is_some();
     let prof_timed = k.sched.st.proc_prof.as_ref().is_some_and(|p| p.timed);
+    // ROADMAP §2 🆕 AB: inside the release's waves the always-visited set is its held
+    // members and the resolved groups those with a held member — the engine twin
+    // (`Scheduler::settle_cont_assigns_inner`) says why.
+    let waves = HOLD && k.sched.t0_hold.in_waves();
     // Hoisted out of the fixpoint: both are scratch, and a fixpoint runs this
     // body once per delta.
     let mut md_members: Vec<usize> = Vec::new();
@@ -808,10 +920,20 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             // construction — the "ascending index = declaration order" the goldens
             // depend on is now a property of the traversal instead of a cost paid
             // to recover it.
-            for &ci in k.sched.ca_always() {
+            let always = if waves {
+                k.sched.t0_hold.held_always()
+            } else {
+                k.sched.ca_always()
+            };
+            for &ci in always {
                 k.arena.ch.ca_dirty.insert(ci as usize);
             }
             k.arena.ch.ca_dirty.drain_with(|ci| pass.push(ci));
+            // ROADMAP §2 🆕 AB: a held assign leaves the pass (its release marks it
+            // dirty again).
+            if HOLD {
+                changed |= hold_t0_pass(k, ir, &mut pass);
+            }
             for ci in pass.iter().map(|&c| c as usize) {
                 // BORROWED from `ir`, not cloned out of it. This used to be
                 // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
@@ -869,7 +991,26 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             // only the store reads and the write are this backend's. Re-evaluating
             // every driver each pass also re-emits any E4002 the driver's RHS earns
             // — that matches the engine, which never worklists this loop.
-            for mi in 0..k.sched.md_groups().len() {
+            let groups = if waves {
+                k.sched.t0_hold.md_held_groups().len()
+            } else {
+                k.sched.md_groups().len()
+            };
+            for gi in 0..groups {
+                let mi = if waves {
+                    k.sched.t0_hold.md_held_groups()[gi]
+                } else {
+                    gi
+                };
+                // ROADMAP §2 🆕 AB: a group with a held member waits for the release.
+                if HOLD
+                    && k.sched.md_groups()[mi]
+                        .1
+                        .iter()
+                        .any(|&c| k.sched.t0_hold.held_now(c))
+                {
+                    continue;
+                }
                 let (net, kind) = {
                     let g = &k.sched.md_groups()[mi];
                     (g.0, g.2)
@@ -1060,6 +1201,10 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
     let copies = crate::alias::copy_nets_landed(ir, &landed);
     for cn in &copies {
         for &ci in &cn.cas {
+            // ROADMAP §2 🆕 AB: a held copy is evaluated at the release.
+            if k.sched.t0_hold.held_now(ci) {
+                continue;
+            }
             let lhs = &ir.cont_assigns[ci].lhs;
             let rhs = ir.cont_assigns[ci].rhs;
             let v = k.k_eval_for_lvalue(lhs, rhs);

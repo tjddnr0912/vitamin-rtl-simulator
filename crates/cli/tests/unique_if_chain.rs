@@ -19,13 +19,14 @@
 //! `first_if_arm_only`), so a chain there stays silent where Verilator reports (ROADMAP
 //! §3.b `unique-if-chain`, BLOCKED). Measured reasons: the constant-function interpreter
 //! refuses at elaboration (`VITA-E3009`) a function whose call reaches an armed tail
-//! (ROADMAP §3.b `unique-const-fn`); a continuous assign runs the function it calls once
-//! more at time 0, on `x`, before the `initial` that writes its inputs, and that run
-//! reaches what the function calls (a class method, a constructor, an item
-//! `function void` with no formals, a task), so an armed miss there would report at time
-//! 0 where both tools are silent (ROADMAP §2 🆕 AB); and the package-scoped call closure
-//! walk treats the synthesized arm as impure, so a `pk::f(…)` call reaching an armed
-//! body would be refused.
+//! (ROADMAP §3.b `unique-const-fn`); a continuous assign that calls a class method
+//! through a handle is re-evaluated on every settle pass, so an armed miss in what that
+//! method reaches (a class method, a constructor) reports three times at time 2 where
+//! Verilator reports twice (ROADMAP §2 🆕 AB residue — the extra time-0 run on `x`
+//! before the `initial` writes the inputs, which also reached an item `function void`
+//! with no formals and a task, is gone since §4.5.590); and the package-scoped call
+//! closure walk treats the synthesized arm as impure, so a `pk::f(…)` call reaching an
+//! armed body would be refused.
 //!
 //! Oracle: verilator 5.052 (`--binary --timing --assert`, run with
 //! `+verilator+error+limit+1000`), quoted verbatim above each pin. iverilog 13 rejects
@@ -578,7 +579,8 @@ endmodule
 /// Residue: the chains in the function `fchain` (t1) and the task `tchain` (t3) stay
 /// silent where Verilator reports: arming a function body would refuse a constant
 /// function that reaches the no-match (`function_body_chain_still_folds`, ROADMAP §3.b
-/// `unique-const-fn`) and let a continuous assign report at time 0 (ROADMAP §2 🆕 AB).
+/// `unique-const-fn`) and, through a continuous assign calling a class method, report
+/// once per settle pass (ROADMAP §2 🆕 AB residue).
 #[test]
 fn subroutine_chains_stay_silent_lone_ifs_report() {
     let r = run(
@@ -1120,9 +1122,11 @@ endmodule
 /// [4] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
 /// ```
 /// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling,
-/// the chain written as a lone `unique if`, on the pre-slice binary — it prints
-/// `n_ca_objf2_tbL_H.sv:4:31 … [in top.C.f] [at time 0]` ×4 through the continuous
-/// assign, where Verilator prints nothing at time 0 (ROADMAP §2 🆕 AB).
+/// the chain written as a lone `unique if` — it prints `n_ca_objf2_tbL_H.sv:4:31 … [in
+/// top.C.f]` ×3 at time 2, ×2 at 3 and ×2 at 4 through the continuous assign, where
+/// Verilator reports twice at each: the assign reads a class handle and is re-evaluated
+/// on every settle pass (ROADMAP §2 🆕 AB residue). Before §4.5.590 it also printed ×4
+/// `[at time 0]`, where Verilator prints nothing.
 #[test]
 fn a_class_function_a_continuous_assign_calls_stays_silent() {
     let r = run(
@@ -1173,10 +1177,12 @@ endmodule
 /// [4] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
 /// [4] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
 /// ```
-/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling on
-/// the pre-slice binary, and a candidate build of this slice that armed every class
-/// method — it prints `t2t_c_fg_this_H.sv:4:31 … [in top.C.g] [at time 0]` ×2, where
-/// Verilator prints nothing at time 0 (ROADMAP §2 🆕 AB).
+/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling —
+/// it prints `t2t_c_fg_this_H.sv:4:31 … [in top.C.g]` ×3 at time 2, ×2 at 3 and ×2 at
+/// 4, where Verilator reports twice at each (ROADMAP §2 🆕 AB residue: a class-handle
+/// assign re-runs on every settle pass). Before §4.5.590 it, and a candidate build of
+/// the `unique-if-chain` slice that armed every class method, also printed ×2 `[at time
+/// 0]`, where Verilator prints nothing.
 #[test]
 fn a_void_method_called_through_this_stays_silent_at_time_0() {
     let r = run(
@@ -1230,11 +1236,20 @@ endmodule
 /// [4] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
 /// [4] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
 /// ```
-/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling on
-/// the pre-slice binary — it prints `u20_c_fnew_member_H.sv:5:31 … [in top.D.new]
-/// [at time 0]` ×2, where Verilator prints nothing at time 0 (ROADMAP §2 🆕 AB). The
-/// two `VITA-W4020` lines are the time-0 run of `d = new(…)` through a handle not yet
-/// constructed, before this slice too.
+/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling —
+/// it prints `u20_c_fnew_member_H.sv:5:31 … [in top.D.new]` ×3 at time 2, ×2 at 3 and
+/// ×2 at 4, where Verilator reports twice at each (ROADMAP §2 🆕 AB residue); before
+/// §4.5.590 it also printed ×2 `[at time 0]`, where Verilator prints nothing.
+///
+/// The one `VITA-W4020 … (write ignored) [at time 0]` is the assign's single time-0
+/// call, made after `initial obj = new;`: `d = new(…)` writes the member handle of the
+/// constructed `obj` and that write is ignored (a pre-existing gap, PROBE_CATALOG); the
+/// later ignored writes print nothing, one report per net. Before §4.5.590 both lines
+/// came from the two calls on `x` through the handle not yet constructed, a `(read X)`
+/// and a `(write ignored)` — measured on a twin printing `d == null` per call: before,
+/// both ahead of `dut init`; after, one `(write ignored)` behind it, `d == null` on
+/// every call (Verilator: 1 on the first call, 0 after). No oracle: iverilog aborts on
+/// the class handle (`recv_object(...) not implemented`).
 #[test]
 fn a_constructor_called_through_new_stays_silent_at_time_0() {
     let r = run(
@@ -1277,7 +1292,7 @@ endmodule
         "stderr:\n{}",
         r.err
     );
-    assert_eq!(r.err.matches("VITA-W4020").count(), 2, "{}", r.err);
+    assert_eq!(r.err.matches("VITA-W4020").count(), 1, "{}", r.err);
 }
 
 /// verilator, `q6a_fn_vfn_noformal.sv` (a continuous assign calls `f`, which calls a
@@ -1301,10 +1316,11 @@ endmodule
 /// t=3 y=0
 /// q6a_fn_vfn_noformal_case.sv:19: $finish called at 4 (1s)
 /// ```
-/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling on
-/// the pre-slice binary, and the `unique case` twin on this one — it reports
-/// `… [in top.u.g] [at time 0]` and again at time 2: `f` runs `g()` in the continuous
-/// assign's time-0 pass, where both tools are silent at time 0 (ROADMAP §2 🆕 AB).
+/// Silent at every time (ROADMAP §3.b `unique-if-chain`). Armed — the `_H` spelling,
+/// and the `unique case` twin — it reports `… [in top.u.g] [at time 2]` once, as
+/// iverilog does on the twin. Before §4.5.590 it also reported `[at time 0]`: `f` ran
+/// `g()` in the continuous assign's time-0 call on `x`, where both tools are silent at
+/// time 0 (ROADMAP §2 🆕 AB).
 #[test]
 fn a_void_function_a_continuous_assign_reaches_stays_silent_at_time_0() {
     let r = run(

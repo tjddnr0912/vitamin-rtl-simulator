@@ -138,6 +138,10 @@ impl Scheduler<'_, '_> {
         // With no first batch there is nothing for the held wakes or the comb
         // passes to wait for (`take_t0_wakes` left the first batch empty).
         let mut t0_first_batch_done = self.cur.active.is_empty();
+        // ROADMAP §2 🆕 AB: with no first batch the hold has nothing to wait for.
+        if t0_first_batch_done {
+            self.t0_hold.begin_release();
+        }
         // T0 COMB PASSES (IEEE 1800 §9.2.2.2, §4.5.584). Each pass an
         // `always_comb` / `always_latch` owes at time 0 runs as a batch of ONE,
         // followed by the loop-top settle, while the batch it interrupts waits in
@@ -249,6 +253,11 @@ impl Scheduler<'_, '_> {
                     None
                 };
                 if let Some(mut batch) = batch {
+                    // ROADMAP §2 🆕 AB: the first batch is taken; the next settle
+                    // releases the held assigns.
+                    if !t0_first_batch_done {
+                        self.t0_hold.begin_release();
+                    }
                     t0_first_batch_done = true;
                     self.refresh_wake_seq(); // wake-group refresh point (2): batch take
                                              // Index-based: a body's `spawned` arms are spliced in after it.

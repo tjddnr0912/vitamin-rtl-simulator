@@ -76,6 +76,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod call_deps;
 mod read_through;
 use call_deps::expr_call_reads;
+pub(crate) use call_deps::func_effect_free;
 pub(crate) use call_deps::func_read_deps;
 pub(crate) use read_through::proc_read_alias;
 

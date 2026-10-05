@@ -632,6 +632,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             .map(|m| (m.base_net, m.locals_len))
             .collect();
         let deps = crate::levelize::ca_deps(st.ir, &windows, &heap);
+        // ROADMAP §2 🆕 AB: the assigns held until the first time-0 batch has run
+        // (`sched::t0_hold`). Built from the same dependency answer the dirty settle
+        // uses, before `heap`'s borrow of `st` ends.
+        let t0_hold = T0Hold::build(st.ir, &deps, &windows, &heap, &ca_md);
         let mut ca_always: Vec<u32> = Vec::new();
         let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
         for (ci, (dep, ok)) in deps.iter().enumerate() {
@@ -646,6 +650,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             }
         }
         st.ca_of_net = ca_of_net;
+        let mut t0_hold = t0_hold;
+        t0_hold.index_lanes(&ca_always, &md_nets, &delayed_ca_idx);
         // §2 row 33: procedural read-through of whole-net copies (`crate::alias`).
         let (alias, alias_word) = crate::alias::copy_alias(st.ir, &st.two_state);
         st.wt.install_read_alias(crate::levelize::proc_read_alias(
@@ -709,6 +715,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             finish_pending: false,
             pre_init,
             armed: false,
+            t0_hold: Box::new(t0_hold),
             max_body_steps,
             time_limit,
             scratch_changed: Vec::new(),
@@ -752,6 +759,25 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// child's `always @(posedge clk)`). One delta budget per time-step (doc-06).
     #[must_use]
     pub fn settle_cont_assigns(&mut self) -> Option<bool> {
+        // ROADMAP §2 🆕 AB (`sched::t0_hold`): with nothing held — every settle of a
+        // design whose assigns reach no effectful call, and every settle after the
+        // release — this is the pre-hold fixpoint, monomorphised without a hold
+        // test. Otherwise the first settle after the first time-0 batch is the
+        // release, and the settles before it skip the held assigns.
+        if !self.t0_hold.active() {
+            return self.settle_cont_assigns_inner::<false>();
+        }
+        if self.t0_hold.release_due() {
+            return self.settle_releasing_t0();
+        }
+        self.settle_cont_assigns_inner::<true>()
+    }
+
+    /// The fixpoint itself, `settle_cont_assigns` without the time-0 release —
+    /// which calls it once per wave. Same contract. `HOLD` = the time-0 hold is on
+    /// (`T0Hold::active`); with `false` every hold test compiles away.
+    #[must_use]
+    pub(super) fn settle_cont_assigns_inner<const HOLD: bool>(&mut self) -> Option<bool> {
         let mut any = false;
         // ── R14 (ROADMAP §3 ⑭): the settle-loop counter, and WHERE ITS COST IS,
         // measured rather than argued ──
@@ -777,6 +803,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // whole fixpoint is exactly equivalent — that part is free either way.
         let profiling = self.st.proc_prof.is_some();
         let prof_timed = self.st.proc_prof.as_ref().is_some_and(|p| p.timed);
+        // ROADMAP §2 🆕 AB: inside the release's waves (`T0Hold::in_waves`) only the
+        // held assigns can move — by the closure no other assign reads a net a held
+        // one drives — so the always-visited set shrinks to its held members and the
+        // multi-driver resolution to the groups with a held member.
+        let waves = HOLD && self.t0_hold.in_waves();
         // TIME-0 ZERO-DELAY LANDING, outer loop (the tier-3 twin is
         // `native::run::settle_cont_assigns`; the rule is on
         // `Scheduler::armed`): once the fixpoint has CONVERGED,
@@ -806,16 +837,25 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // not move recomputes its previous value, and the write funnel drops a
                 // same-value write without noting a change — so the visit it replaces was
                 // observationally a no-op. The teeth are in `ca_deps` being COMPLETE.
-                let pass: Vec<u32> = {
+                let mut pass: Vec<u32> = {
                     let mut v = std::mem::take(&mut self.st.ca_dirty);
                     for &ci in &v {
                         self.st.ca_dirty_flag[ci as usize] = false;
                     }
-                    v.extend_from_slice(&self.ca_always);
+                    v.extend_from_slice(if waves {
+                        self.t0_hold.held_always()
+                    } else {
+                        &self.ca_always
+                    });
                     v.sort_unstable();
                     v.dedup();
                     v
                 };
+                // ROADMAP §2 🆕 AB: a held assign leaves the pass (its release marks it
+                // dirty again).
+                if HOLD {
+                    changed |= self.hold_t0_pass(&mut pass);
+                }
                 for ci in pass.into_iter().map(|c| c as usize) {
                     if self.st.ir.cont_assigns[ci].delay.is_some() {
                         // A delayed driver's output register holds x until its FIRST
@@ -853,7 +893,21 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
                 // drivers by 4-state wire resolution, then write the net once. Part of
                 // the same fixpoint (a driver's RHS can depend on another resolved net).
-                for mi in 0..self.md_nets.len() {
+                let groups = if waves {
+                    self.t0_hold.md_held_groups().len()
+                } else {
+                    self.md_nets.len()
+                };
+                for gi in 0..groups {
+                    let mi = if waves {
+                        self.t0_hold.md_held_groups()[gi]
+                    } else {
+                        gi
+                    };
+                    // ROADMAP §2 🆕 AB: a group with a held member waits for the release.
+                    if HOLD && self.md_nets[mi].1.iter().any(|&c| self.t0_hold.held_now(c)) {
+                        continue;
+                    }
                     let net = self.md_nets[mi].0;
                     let net_w = self.st.nets[net as usize].width;
                     let cis = self.md_nets[mi].1.clone();
@@ -942,11 +996,28 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // read from the one field that defines it, so the pre-filter cannot
         // become a second spelling of the rule. (`self.st.ir` is a `&SimIr`
         // fixed for this scheduler's life, so the filter cannot go stale.)
-        for i in 0..self.delayed_ca_idx.len() {
-            let ci = self.delayed_ca_idx[i] as usize;
+        // ROADMAP §2 🆕 AB: read once per call. Inside the release's waves only the
+        // held delayed assigns are visited (no other one reads a held net, so no
+        // other rhs can have moved), and a held one is skipped until released.
+        let holding = self.t0_hold.active();
+        let waves = holding && self.t0_hold.in_waves();
+        let count = if waves {
+            self.t0_hold.held_delayed().len()
+        } else {
+            self.delayed_ca_idx.len()
+        };
+        for i in 0..count {
+            let ci = if waves {
+                self.t0_hold.held_delayed()[i] as usize
+            } else {
+                self.delayed_ca_idx[i] as usize
+            };
             let Some(d) = self.st.ir.cont_assigns[ci].delay else {
                 continue;
             };
+            if holding && self.t0_hold.held_now(ci) {
+                continue;
+            }
             let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
             let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
             // R14: charged around the WHOLE match and not inside the `None`
@@ -1293,6 +1364,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let copies = crate::alias::copy_nets_landed(self.st.ir, &landed);
         for cn in &copies {
             for &ci in &cn.cas {
+                // ROADMAP §2 🆕 AB: a held copy is evaluated at the release.
+                if self.t0_hold.held_now(ci) {
+                    continue;
+                }
                 let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
                 let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                 let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
