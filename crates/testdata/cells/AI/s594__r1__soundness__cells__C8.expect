@@ -1,0 +1,70 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__soundness__cells__C8
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/soundness/cells/C8.sv
+roadmap_row: §2 🆕 AI
+set: r1/soundness/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: LOUD->WRONG
+verdict_source: s594/r1/soundness/REPORT.md:25
+notes: oracle raw lines quoted at s594/r1/soundness/cells/c2batch.out:7; named at s594/COMMIT_DOCS.txt:38
+alias: r2/soundness/cells/C8 (byte-identical source) verdict: LOUD->WRONG verdict_source: s594/r1/soundness/REPORT.md:25
+alias: i/r2/C8 (byte-identical source) verdict: =PRE verdict_source: s594/i/r2_delta_pa_pb.txt:14
+alias: i/r2/lens/sound/C8 (byte-identical source) verdict: =PRE verdict_source: s594/i/r2_delta_pa_pb.txt:21
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | i/r2/C8.ivl | 49 bytes
+L=0 K=2
+C8.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | i/r2/lens/sound/C8.ivl | 49 bytes | identical to block 1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | i/r2/C8.vl | 576 bytes
+%Warning-WIDTHEXPAND: C8.sv:5:28: Operator ADD expects 32 bits on the LHS, but LHS's FUNCREF 'fl' generates 8 bits.
+%Warning-WIDTHEXPAND: C8.sv:5:36: Operator SHIFTL expects 32 bits on the LHS, but LHS's CONST '8'h1' generates 8 bits.
+%Warning-WIDTHEXPAND: C8.sv:6:27: Operator ADD expects 32 bits on the LHS, but LHS's CONST '8'h0' generates 8 bits.
+L=x K=2
+- C8.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | i/r2/lens/sound/C8.vl | 575 bytes
+%Warning-WIDTHEXPAND: C8.sv:5:28: Operator ADD expects 32 bits on the LHS, but LHS's FUNCREF 'fl' generates 8 bits.
+%Warning-WIDTHEXPAND: C8.sv:5:36: Operator SHIFTL expects 32 bits on the LHS, but LHS's CONST '8'h1' generates 8 bits.
+%Warning-WIDTHEXPAND: C8.sv:6:27: Operator ADD expects 32 bits on the LHS, but LHS's CONST '8'h0' generates 8 bits.
+L=x K=2
+- C8.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | i/r2/C8.s2v | 53 bytes
+L=x K=2
+C8.s2v.v:13: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | i/r2/lens/sound/C8.s2v | 53 bytes | identical to block 5
+=== block 7 | vita [d3] | i/r2/C8.d3 | 271 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+C8.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the `+` operation has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [d3] | i/r2/lens/sound/C8.d3 | 271 bytes | identical to block 7
+=== block 9 | vita [pa] | i/r2/C8.pa | 178 bytes
+L=2 K=2
+simulation ended (Finish) at time 100
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 10 | vita [pa] | i/r2/lens/sound/C8.pa | 178 bytes | identical to block 9
+=== block 11 | vita [pb] | i/r2/C8.pb | 271 bytes | identical to block 7
+=== block 12 | vita [pb] | i/r2/lens/sound/C8.pb | 271 bytes | identical to block 7
+=== block 13 | vita [pre] | i/r2/C8.pre | 271 bytes | identical to block 7
+=== block 14 | vita [pre] | i/r2/lens/sound/C8.pre | 271 bytes | identical to block 7
+=== block 15 | vita [pre594] | i/r2/C8.pre594 | 271 bytes | identical to block 7
+=== block 16 | vita [pre594] | i/r2/lens/sound/C8.pre594 | 271 bytes | identical to block 7
+=== end

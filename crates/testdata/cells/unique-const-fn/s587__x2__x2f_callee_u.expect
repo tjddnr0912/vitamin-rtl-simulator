@@ -1,0 +1,34 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x2__x2f_callee_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x2/x2f_callee_u.sv
+roadmap_row: §3.b unique-const-fn
+set: x2
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S8
+verdict: u-form declines (= PRE)
+verdict_source: s587/IMPL.md:159
+notes: IMPL X2 cells line
+alias: post_c/lanes2_work/x2_x2f_callee_u/x2f_callee_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./x2f_callee_u.ivl | 96 bytes
+x2f_callee_u.sv:4: syntax error
+x2f_callee_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_x2f_callee_u.build | 0 bytes
+
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./x2f_callee_u.vl | 233 bytes
+P=xxxx
+- x2f_callee_u.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 90.909 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | vita [S8] | ./x2f_callee_u.s8 | 612 bytes
+x2f_callee_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+x2f_callee_u.sv:9:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=1
+rc=1
+=== end

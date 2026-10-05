@@ -1,0 +1,86 @@
+# §4.5.585 r1 DIFFERENTIAL lens — REPORT (live; updated after every question)
+
+VERDICT r1: FAIL on F3 (one BLOCKING candidate, new false W4031 vs hand-IEEE in `priority if … else unique0 if`); everything else holds. wall_s ~2100.
+
+PRE  = S/s585/pre/vita  md5 c766b8d59edabaef96436e7b46e75dc6 (75f255d4)
+POST = S/s585/post/vita md5 6328a971c02b99269f42a1b39f545fda (wt-s585 + slice.patch md5 ce8e4ae7879e48cbc652a6ac1fcdd818)
+JIT  = S/s585/tgt-jit/release/vita (VITA_JIT=1)
+Cells: S/s585/r1/diff/cells. Harness: S/s585/r1/diff/h.py (written below).
+
+## Status
+- [x] Q0 mechanism: span key = offset into ONE expanded buffer (cli/src/frontend.rs:338 one parse_with_warnings per preprocessed text; api.rs:27 one Parser); Stmt::If producers at statement position = parse_if (lo=`if`) + parse_assert (lo=`assert`); no statement-level backtracking (self.pos rewinds only in expr/type-param code) => a cross-file / macro / include span collision is structurally impossible
+- [x] Q1 preprocessor: p1_macro (9 shapes: `else if` macro, whole chain macro, `IFX`, assert macro after else, ifdef/ifndef between else and if, `UQ` qualifier macro, multi-line macro, chain macro after else), p1d (-D FOO), p2_inc (task chain in include, include after else holding `if`, include holding assert), p3_multi (2 files), p3f (-f): POST = verilator line+time in every row, PRE silent; staged = one-shot. NO FINDING
+- [x] Q2 structural: s1_struct (fork join_none task at t0, for, while, repeat, do-while, case item, chain in then-branch of a chain, named begin, recursive automatic task x3, forever+break, generate-for always x2): POST = verilator 19/19 (line, time, multiplicity), PRE silent. s2_comb_tbL (always_comb->task->task chain, always @*->item void fn with chain in for, always_latch; TB last, t0 match, t2 miss): POST t2 x3, no t0; verilator t2 (+ its t3/t4 re-evals); staged = one-shot. NO FINDING
+- [x] Q3 jumps: s3a_jumps_nofe (break/continue as chain branches in for, continue before chain, return in task + item void fn chain, disable named block, while(1)+break, do-while+continue): POST = verilator 12/12, PRE silent. Side (pre-existing, PRE=POST, loud, unrelated): `int q[3] = '{1,2,3}; foreach (q[k])` -> E3010 `__foreach_k_*` + E3009 `enum method q.first` (s3b_foreach). NO FINDING
+- [x] Q4 flags (w/q4/q4.sv chain t1 + lone t2 + priority chain t3): rc PRE/POST: none 0/0; -Werror 1/1 (errors 2/4); -Werror=W4031 1/1 (errors 1/3); -Wno-W4031 0/0 (0 lines both). A chain-only miss now flips -Werror=W4031 rc 0->1; verilator default (no +error+limit) rc=1 `$stop` at the first violation, so the direction matches. NO FINDING
+- [x] Q5 side effects (q5_sidefx, f1/f2/f3 counting calls): PRE = POST = sv2v->iverilog counts (1 1 1 / 2 2 1 / 3 3 1 / 5 5 1); verilator double-evaluates (3 3 2 ...; not the count oracle). The arm adds no evaluation. `i++` in a condition = E2002 PRE = POST (pre-existing). NO FINDING
+- [x] Q6 x/z/multibit/inside (q6_xz): POST = verilator at t1,t3,t5,t7; POST extra t6 (`w=4'bxxxx`: `w[3:2]==2'b00` and `v[0]|w[0]` are x -> false -> miss; verilator 2-state reads w=0 -> hit) = hand-IEEE §12.4 (x condition is false) + §12.4.2 -> no-oracle, same class as census dif_c08. matches/&&& (q6m) E2002 PRE = POST, verilator unsupported. NO FINDING
+- [x] Q7 run.json (obs.py over 283 cells = every census cell g/c* + p/*.sv (no _H) + mine; 195 with a run.json both sides, the rest elaboration refusals both sides): backend, native{eligible,buildable,refused,reject_reasons}, codegen{able,total,frame_bodies,reject_reasons}, subroutines counts + items[].route/sites, exit: SAME 195/195. Only `wprog` asked/declined differs, 5 cells (b02_frame_lanes 7/3->10/5, ifc_vfn_rt 0/0->3/2, dif_c17 6/0->9/2, dif_c20 10/7->13/9, s2_comb_tbL 10/0->21/6; reasons all `frame_net`). Isolated (w/q7b): m4/m5 = automatic task with output formal called from always_comb: asked 3->7, declined 0->2 frame_net, ALSO when the arm never executes (m5); m1 (always block chain), m2 (task from always @), m3 (always_latch) unchanged. Route-neutral perf-counter signal -> see O1
+- [x] Q8 b00_repro: verilator t1@7, t2@10; POST t1@7:12, t2@10:12, t3@13:14 (lone `priority if`, PRE has it too: pre-existing, verilator silent on priority); PRE lacks t1. JIT (VITA_JIT=1) = POST; staged = one-shot. CLOSED
+- [x] Q9 flag scope: q9_ifc (interface task, interface `function void`, program task, `function static void`, generate-block `function automatic void`): POST = verilator 5/5. q9b_classes_unit (class fn chain, class task, virtual task dispatched to derived, param class Q#(2) task): POST = verilator on the 3 tasks, class fn silent = PRE (table residue). Out-of-block `function void C::g` = E2002 at `::` (w1, PRE = POST) so item=true never sees a class method. Classes in a package = E3009 PRE = POST (q9_classes). NO FINDING
+- [x] Q10 class fn `fork t(); join_none` -> class task chain, through a CA (q10_cfork_ca) and from initial (q10b): PRE = POST refuse E3010 `call to undeclared task t [in $class$C$f]` + E3009 frame fork; verilator runs both. Route closed (loud, pre-existing). NO FINDING
+- [x] Q11 JIT: JIT(VITA_JIT=1) == POST native on all 289 eq.py cells (Q13); w/jit/hj.sv (20000 activations, chain in always @(s) + task chain from always_comb): `JITBODY templates_compiled=2 refused=0 activations=20001`, JIT stdout == POST non-JIT byte-for-byte (15000 W4031, n=37500 m=37499); PRE n/m equal, 0 W4031
+- [x] Q12 corpus-runner (ONE run, wt-s585, target/release/vita md5 6328a971 = POST): rc 0. Table rows verbatim: sha256/aes/picorv32/darkriscv/biriscv/serv/verilog-axi/verilog-ethernet/ibex `vita absent - fetch first`; `keccak vita ok 3.952s`; `keccak-arr vita ok 12.119s`; totals line `coverage: 11/11 of the corpus runs under vita`. Failing rows: none. => only 2/11 OBSERVED (the worktree has no bench/*/src).
+  Supplement (no corpus-runner): `vita vcmp -o` (.vu = parsed AST snapshot velab consumes) on all 11 workloads from the main checkout's fetched sources with each workload's -D/-I: PRE .vu md5 == POST .vu md5 for 11/11 (ibex 09c9fcc8…). Control: m_if_unique .vu differs PRE/POST, m_if_unique0 equal. grep `(unique|priority|unique0) if (` over main bench/ = 0. The slice is parser-only, so identical .vu => identical elaborate/sim for the corpus.
+
+- [x] Q13 invariant battery (eq.py; must hold whether or not an arm fires): VCD byte-equal (minus $date/$version), stdout equal minus W4031 lines, --obs-procs processes[] evals equal, per native/interp/vm, + JIT(VITA_JIT=1) == POST native. Over 289 cells (all census cells + mine + cells/eq e1 comb network/e2 tasks with ref+output formals from always_ff/always_comb/negedge/e3 #0 glitches/e4 TB-first/e4b TB-last, all with $dumpvars): 285 all-OK; 4 STDOUT-DIFF = E3009 TEXT only, rc 1 both (pkg_vfn_via_f_rt, pkg_vfn2_via_f_rt, t5s_pkg_fg_scoped, u3s_pkg_fg_nowrite_scoped) -> O2. JIT == POST in 289/289.
+  e2/e3 verilator extra lines = OVERLAP reports (`k<3`/`k<6`; a=b=1 at the #0) = documented multi-match cut, not no-match.
+
+- [x] Q14 $assertcontrol(4,32)/(4,128) (q14_assertctl): vita W3056 `unsupported system task $assertcontrol skipped` PRE = POST, lone reports under it in PRE too; verilator COMPILE-FAIL (unsupported assertion_type). $assertoff not covering unique/priority = IEEE 1800-2017 Table 20-5 ($assertoff = assertion_type 15, excludes Unique 32/Unique0 64/Priority 128) = verilator (census dif_c19). NO FINDING
+
+- [x] Q15 virtual interface from a class (q15_vif_ca via CA, q15b from initial): E2002 `expected function or task after virtual in a class body` PRE = POST (route closed, loud).
+- [x] Q16 nested qualifiers spread over lines (q16_nested_ml, q16b_nested_ml2) -> F1, F2
+- [x] Q17 FSM state x before reset (q17_fsm_x, chain in always_ff): POST W4031 t5 = PRE on the `unique case` twin (q17c) = iverilog twin `Time: 5`; verilator silent (2-state st=0). x class, no-oracle for verilator. NO FINDING
+- [x] Q19 limits: statement nesting cap 256 (E2002) hits PRE and POST at the same N (w/deep: N<=254 run on all 3 backends both sides, N>=255 E2002 both; no crash to 32000); -Werror=W4031 with 2000 misses (w/elim): POST runs to the end, errors=2000, rc 1 (PRE rc 0), no early stop. NO FINDING
+- [x] Q20 t0 order variants (s2b TB-first, s2c always@* before initial, s2d after): POST t2 only = verilator first report; no t0. NO FINDING
+- [x] Q21 per-file offset collision built on purpose (q21_offs_top.sv + q21_offs_b.sv as two sources): A's two recorded `else if` tokens at per-file offsets 129/158; B's `else assert (b) else if (c)` has `assert` at 129 and the fail-action `if` at 158. verilator t1@5 only; POST t1@5:15 only (no t3 arm in B); staged = one-shot. Offsets are global in the expanded buffer. NO FINDING
+- [x] Q22 no lost report: over 319 outputs (g/out2 + r1/diff/out), every PRE W4031 (file:line:col+time, multiset) is in POST: 0 missing
+- [x] Q18 item `function void` calling a task from always_comb (q18_fv_calls_task): verilator `%Error-FUNCTIMECTL … Functions cannot invoke tasks`, iverilog rejects; PRE runs it (rc 0, silent), POST runs it + W4031 t2 in the task -> O3 (pre-existing over-acceptance)
+
+- [x] Q23 `priority if … else unique0 if …` (q23_prio_u0) -> F3
+- [x] Q24 t0 chain in top `initial` reading a child's decl-init var and a CA-driven net (q24): PRE = POST = verilator silent. NO FINDING
+- [x] Q26 common RTL: always_comb chain over a register that is x until the first clock (q26_comb_xreg): POST one W4031 at t0 = PRE/POST on the `unique case` twin (q26c) = iverilog twin `Time: 0`; verilator silent (2-state). x class. NO FINDING
+- [x] Q27 work-library flow (vcmp --work L=libL per file, velab -L, vrun; w/lib, w/lib2): two separately parsed units with overlapping offsets: POST 1 W4031 t1 (= one-shot), no arm in the second unit's assert path. Library-flow runtime diagnostics carry no file:line and no [in scope] for EVERY report (PRE lone W4031 and user $warning W4007 too) = pre-existing, PRE = POST.
+- [x] Q25 product build: S/s585/tgt-nodef POST == default POST stdout byte-equal on 11 lens cells (s1, s3a, q9_ifc, q9b, q16, q16b, q23, p1, q6, s2, b00); PRE nodef == PRE likewise (nodef binaries' md5 not in the brief: provenance UNVERIFIED)
+
+## Findings
+
+### F3 BLOCKING (candidate; main judge may downgrade for rarity) — new false W4031: a `priority if` absorbs an inner `else unique0 if` and reports a miss that no reference reports
+- cells/q23_prio_u0.sv, a=b=c=0:
+  - t1 line 5 `priority if (a) r = 1; else unique0 if (b) r = 2;`
+  - t2 lines 6-8 `priority if (a) r = 1; / else unique0 if (b) r = 2; / else if (c) r = 3;`
+- verilator raw: nothing at t1/t2 (only `[3] %Error: q23_prio_u0.sv:9: Assertion failed in top: 'unique if' statement violated` for the line-9 `unique if … else unique0 if` = F2). sv2v->iverilog: nothing (qualifiers dropped; not a report oracle). PRE: nothing.
+- POST: `q23_prio_u0.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]` and `q23_prio_u0.sv:6:17: … [at time 2]` (all 3 backends).
+- Hand-IEEE 1800-2017 (the only reference for `priority if`; verilator checks none): Syntax 12-2 `{ else if (…) }` takes no qualifier, so `else unique0 if …` is the series' explicit final `else statement`; §12.4.2 "a violation report shall be issued if no condition matches unless there is an explicit else" -> outer silent; `unique0` suppresses the inner miss -> silent. PRE was right.
+- Mechanism: stmt_ctl.rs `written_if` records `unique0|priority0 if` after `else`; assertions.rs walk passes through the unarmed inner `unique0` chain and arms its tail with the outer `priority` span. The absorption is copied from verilator's `unique if` behaviour (F2), which says nothing about `priority`.
+- New instance (PRE silent), 4-way: real gap (vs hand-IEEE; verilator checks no `priority if`; iverilog 13 rejects `priority if` (w/ivp: `p.sv:4: syntax error`); sv2v drops qualifiers). Not in the census table, the tests or the shape tests (every pinned `else unique0 if` has a `unique` outer). Contradicts the CHANGELOG line "`priority if` chains report the same way (IEEE 1800-2017 §12.4.2)".
+- Also reached by `priority0` (vita-only keyword) after `else`; same walk.
+
+(no other BLOCKING so far)
+
+### F1 NON-BLOCKING, KNOWN (pinned: crates/cli/tests/unique_if_chain.rs vl_lines t2 `12:20` / t4 `18:20` with the comment "at the inner line where Verilator names the outer one"; PLAN D2 excluded vl_lines 11/17) — extra instances of the same attribution class: a `unique`/`priority if` CHAIN written after `else` of a `unique if` reports at the INNER `if` line; verilator reports at the OUTER line
+- cells/q16_nested_ml.sv t6 (lines 15-17 `unique if (a) … / else unique if (b) … / else if (c) …`): verilator `[6] %Error: q16_nested_ml.sv:15: Assertion failed in top: 'unique if' statement violated`; PRE none; POST `q16_nested_ml.sv:16:20: warning[VITA-W4031] … [at time 6]`.
+- cells/q16b_nested_ml2.sv t1 (`else priority if (b) … else if (c)` under `unique if` @5): verilator `:5`, PRE none, POST `6:22`; t2 (`else if (b) … else unique if (c) … else if (d)` under `unique if` @8): verilator `:8`, PRE none, POST `10:20`.
+- Same time, same count; only the line. Pre-existing root (PRE = POST, lone inner qualified if): q16 t1 (vl :5, PRE/POST 6:20), t2 (vl :7, 8:22), t7 (vl :18, 20:20), q16b t8 (vl :29, 31:20).
+- Single-line census cells (f1c2_qual C3/C8, b01) cannot show it (outer and inner on one line).
+- 4-way: oracle split. Verilator attributes to the outermost `unique if`; IEEE 1800-2017 §12.4 Syntax 12-2 (`{ else if (…) }` takes no qualifier, so `else unique if` is the final `else statement` = a new conditional_statement) gives the miss to the inner series = POST's line. Not a real gap vs IEEE; a line mismatch vs the designated oracle.
+
+### F2 NON-BLOCKING, KNOWN/deliberate (pinned vl_lines t3 `14:15`, t5 `21:15` = verilator) — the walk is internally inconsistent across inner qualifiers: it absorbs `else unique0 if` into the outer series (verilator's rule) but lets `else unique|priority if` own the report (IEEE's rule)
+- cells/q16_nested_ml.sv t3 (`unique if (a) r = 1; / else unique0 if (b) r = 2;` lines 9-10): verilator `[3] … q16_nested_ml.sv:9: … 'unique if' statement violated`; PRE none; POST `q16_nested_ml.sv:9:15 … [at time 3]`. q16b t3 (`else unique0 if (b) … else if (c)`): verilator :12, PRE none, POST 12:15.
+- Hand-IEEE §12.4.2 (`a violation report shall be issued if no condition matches unless there is an explicit else`) + Syntax 12-2: the outer series HAS an explicit else (the `unique0 if` statement) and `unique0` suppresses the inner miss => silent (= PRE).
+- So under verilator's rule F1 is wrong; under IEEE's rule this t3 report is wrong; no single reference makes both right. Designed (PLAN: "`else unique0 if` is followed"), matches the designated oracle; flagged for the main judge, not blocking.
+
+### O1 NON-BLOCKING perf (not correctness): an armed chain in a task/void-function FRAME body costs ~8.6% on a hot path even when the arm never fires
+- w/perf/pf.sv: always_comb -> automatic task (output formal) with a 4-way `unique if` chain that always matches, 3e6 calls. Interleaved, warm-up discarded, 5 pairs per order: PRE median 3.072 s, POST 3.337 s (POST/PRE 1.0864; A->B 1.0748, B->A 1.0965, same sign both orders).
+- Control pfe.sv (same task, user-written `else $display("never")`): PRE 3.353 = POST 3.322 (0.991) -> the cost is the pre-existing cost of a system-task statement in a frame body; the slice puts one in every armed chain. Control pc.sv (chain directly in always_comb, no task): 1.0026 (orders flip sign = noise).
+- run.json signal of the same thing: wprog asked/declined grows (frame_net) in task frames (Q7, m4/m5); route/backend/codegen unchanged.
+- Corpus has no `unique`/`priority if` chain (plan grep count 0), so no corpus row moves. A PRE lone armed `unique if` in a task pays the same cost.
+
+### O2 NON-BLOCKING diagnostic text (loud both sides): E3009 text changes when a package non-void function reaches an armed package `function void` by a scoped call
+- t5s_pkg_fg_scoped, u3s_pkg_fg_nowrite_scoped (+ grounding's pkg_vfn_via_f_rt, pkg_vfn2_via_f_rt): rc 1 both, code + location equal; PRE `frame function/task pk::f body uses an assignment to a net outside the function ...`, POST `package-scoped call pk::f(...) reaches pk::g, whose body names something outside its own formals/locals ...`.
+- Pre-existing classifier: PRE gives the POST text for the same design with a user-written `else $display("miss")` (w/msg/disp.sv). Already in GROUNDING Q3 side note; not in the brief's table.
+
+### O3 NON-BLOCKING pre-existing over-acceptance (PRE = POST accept): a module `function void` that calls a task runs
+- cells/q18_fv_calls_task.sv: verilator `%Error-FUNCTIMECTL: q18_fv_calls_task.sv:9:5: Functions cannot invoke tasks (IEEE 1800-2023 13.4)`; iverilog compile rc!=0; PRE rc 0 `t=1 y=2`/`t=3 y=0`; POST same + `q18_fv_calls_task.sv:5:12: warning[VITA-W4031] … [in top.t] [at time 2]`.
+- PLAN's proposed PROBE_CATALOG line says "the module twin is refused (u2s, u2a: E3009)" — true only for NON-void module functions; the `function void` twin is accepted. No t0 reach (a void function cannot sit in a CA; always_comb's t0 pass waits, §2 🆕 Z).
+

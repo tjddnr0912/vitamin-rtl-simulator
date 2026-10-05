@@ -1,0 +1,13 @@
+lens   s581/blk/pin.sv  POST3b=PRE
+lens   s581/blk/b1.sv  POST3b=PRE
+lens   s581/blk/b2.sv  POST3b=PRE
+lens   s581/ladder/W65fne.sv  POST3b=PRE
+lens   s581/ladder/W128fq.sv  POST3b=PRE
+lens   s581/ladder/W128fne.sv  POST3b=PRE
+lens   s581/ladder/W68fne.sv  POST3b=PRE
+lens   s581/ladder/W68fq.sv  POST3b=PRE
+lens   s581/ladder/W65fq.sv  POST3b=PRE
+666    s580/lens_snd3/p/p3.sv -DG2 POST3b=PRE
+666    s580/lens_snd3/p/p3.sv -DG7 POST3b=PRE
+666    s580/lens_snd3/p/p3.sv -DLV POST3b=PRE
+{'census': '0 moved of 252', 's2': '0 moved of 174', 'lens': '9 moved of 520', '666': '3 moved of 666'}

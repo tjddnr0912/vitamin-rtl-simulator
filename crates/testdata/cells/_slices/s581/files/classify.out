@@ -1,0 +1,71 @@
+{'unchanged': 148, 'skip->match': 10, 'skip->refuse': 21, 'decided->changed': 36} total 215
+L06  | def              -> a                  | skip->match [3-oracle] POST=oracle
+L07  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [3-oracle]
+L12  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [1-oracle(2 refuse)]
+L13  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [1-oracle(2 refuse)]
+L14  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+L15  | def              -> ERR:VITA-E3010     | skip->refuse; all oracles refuse (illegal design)
+L24  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+L26  | def              -> a                  | skip->match [3-oracle] POST=oracle
+L30  | def              -> a                  | skip->match [3-oracle] POST=oracle
+T1   | def              -> a                  | skip->match [3-oracle] POST=oracle
+T2   | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+T3   | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+T4   | def              -> def                | unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+C1   | def              -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+X05  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+X09  | def              -> a                  | skip->match [2-oracle(1 refuse)] POST=oracle
+X13  | def              -> def                | unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+X19  | b                -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+X20  | def              -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+X21  | def              -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+X23  | def              -> def                | unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+S06  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S07  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S11  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S16  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S21  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S23  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S29  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S30  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S32  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S34  | def              -> ERR:VITA-E3010     | skip->refuse; oracle split (iv=def vl=a); PRE matched iverilog
+S36  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S37  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S39  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S44  | b                -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+O01  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+O02  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+O03  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+M04  | b                -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+M06  | b                -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+M08  | def              -> a                  | skip->match [3-oracle] POST=oracle
+M10  | a                -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [2-oracle(1 refuse)]
+M11  | a                -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [1-oracle(2 refuse)]
+M12  | a                -> ERR:VITA-E3010     | skip->refuse; all oracles refuse (illegal design)
+N08  | def_0/def_1/def_ -> a_1/def_0/def_2    | skip->match [3-oracle] POST=oracle
+N09  | def_0/def_1      -> a_0/def_1          | decided->changed [SPLIT] oracle split (iv=def_0/def_1 vl=a_0/def_1)
+N10  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+N11  | def_0/def_1      -> a_0/def_1          | decided->changed [3-oracle] POST=oracle
+W03  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+W11  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+W16  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+W19  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+E03  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+E05  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+E06  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+R04  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+R05  | def              -> a                  | skip->match [3-oracle] POST=oracle
+R06  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+R07  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+R08  | b                -> ERR:VITA-E3010     | skip->refuse; PRE wrong [2-oracle(1 refuse)]
+O11  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+O12  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+O21  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+S48  | def              -> ERR:VITA-E3010     | skip->refuse; PRE ACCIDENTALLY RIGHT [3-oracle]
+P01  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+P02  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+P03  | def              -> a                  | decided->changed [3-oracle] POST=oracle
+P04  | def              -> a                  | skip->match [3-oracle] POST=oracle
+P05  | def              -> a                  | skip->match [3-oracle] POST=oracle
+P06  | def              -> a                  | decided->changed [3-oracle] POST=oracle

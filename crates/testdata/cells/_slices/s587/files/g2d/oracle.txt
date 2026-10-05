@@ -1,0 +1,20 @@
+=== k_evlsb_if_M
+  POST: ev at 1|rc=0|
+  IVL : k_evlsb_if_M.sv:4: syntax error|k_evlsb_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : %Error-UNSUPPORTED: k_evlsb_if_M.sv:8:29: Unsupported: Impure function calls in sensitivity lists|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== k_evlsb_case_M
+  POST: VITA-E3009 edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-selec|rc=1|
+  IVL : WARNING: k_evlsb_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 0  Scope: top.f|ev at 1|rc=0|
+  VL  : %Error-UNSUPPORTED: k_evlsb_case_M.sv:8:29: Unsupported: Impure function calls in sensitivity lists|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== k_inoff_if_M
+  POST: m=ef|rc=0|
+  IVL : k_inoff_if_M.sv:4: syntax error|k_inoff_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: k_inoff_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|m=ef|rc=0|
+=== k_inoff_case_M
+  POST: VITA-E3009 variable indexed part-select on a multi-dim packed array is unsupported (iverilog 13.0 also rejects|rc=1|
+  IVL : k_inoff_case_M.sv:7: assert: elab_expr.cc:6122: failed assertion prefix_indices.size()+1 == net->sig|sh: line 1: 56495 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L |     56496 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/fo|rc=134|
+  VL  : [1] %Error: k_inoff_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h0|m=ef|rc=0|
+=== k_evlvl_if_M
+  POST: VITA-E3009 a level (non-edge) event control on a select of a dynamic-storage handle, a string, a subroutine's |rc=1|
+  IVL : k_evlvl_if_M.sv:4: syntax error|k_evlvl_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : %Error-UNSUPPORTED: k_evlvl_if_M.sv:8:21: Unsupported: Impure function calls in sensitivity lists|%Error: Exiting due to 1 error(s)|build_rc=1|

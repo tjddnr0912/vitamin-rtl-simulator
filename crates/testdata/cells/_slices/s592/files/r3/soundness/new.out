@@ -1,0 +1,49 @@
+== AS1_assert_in_arm
+         iv: ERR:AS1_assert_in_arm.sv:7: sorry: concurrent_assertion_item not supported(rc1)
+         sv: NONE
+         vl: NONE
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: NONE
+== CM1_multiname_init
+         iv: v=9 bits=4
+         sv: v=200 bits=8
+         vl: v=200 bits=8
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: v=8 bits=4
+== CS1_str_init_arm
+         iv: s=a
+         sv: s=b
+         vl: s=b
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: s=b
+== SN1_hierparam_samelabel
+         iv: P=1
+         sv: P=2
+         vl: P=2
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: P=1
+        pre: P=2
+== SN2_hierparam_otherarm
+         iv: ERR:SN2_hierparam_otherarm.sv:10: error: Unable to bind wire/reg/memory `g(rc1)
+         sv: P=2
+         vl: P=2
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:undeclared hierarchical name `gb.g2.P` (no such cr(rc1)
+        pre: P=2
+== SN3_hierparam_recarm
+         iv: P=1
+         sv: P=1
+         vl: ERR:%Error: SN3_hierparam_recarm.sv:10:39: Can't find definition of 'g1'(rc1)
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: P=1
+        pre: P=1
+== SN4_for_hierparam
+         iv: ERR:SN4_for_hierparam.sv:7: error: Unable to bind wire/reg/memory `gb.L['s(rc1)
+         sv: P=12
+         vl: P=12
+     post_b: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:undeclared hierarchical name `gb.L[2].P` (no such (rc1)
+        pre: P=12

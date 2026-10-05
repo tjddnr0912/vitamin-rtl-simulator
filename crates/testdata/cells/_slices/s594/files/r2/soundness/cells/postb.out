@@ -1,0 +1,32 @@
+W1 | post_b: L=23  | staged=same
+W1L | post_b: L=23  | staged=same
+W1s | post_b: L=23  | staged=same
+W2 | post_b: L=23  | staged=same
+W3 | post_b: L=23  | staged=same
+W5 | post_b: L=23  | staged=same
+W6 | post_b: L=23  | staged=same
+W8 | post_b: L=23  | staged=same
+W7 | post_b: P=65535 B=16  | staged=same
+E1 | post_b: t.u1 L=1 M=0 t.u2 L=1 M=0 t.u3 L=0 M=0  | staged=same
+R1 | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: this sub-expression has no constant-fold arm [in t]  | staged=same
+R2 | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t] error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: the con
+C0 | post_b: L=1  | staged=same
+C1 | post_b: L=0  | staged=same
+C2 | post_b: GI=else  | staged=same
+C3 | post_b: L=0  | staged=same
+C3c | post_b: L=0  | staged=same
+C4 | post_b: k=0  | staged=same
+C6 | post_b: L=8 K=8  | staged=same
+C8 | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the `+` operation has no constant-fold arm [in t]  | staged=same
+C9 | post_b: vb=4  | staged=same
+X1 | post_b: L=252 M=1  | staged=same
+X2 | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t] error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M` value is not a constant: `g(…)` has no constant-f
+Fa | post_b: L=0  | staged=same
+Fc | post_b: L1=0 U=252 B=8  | staged=same
+Fk | post_b: U=252 B=8  | staged=same
+Pr | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pf(…)` has no constant-fold arm [in t]  | staged=same
+Pd | post_b: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pd(…)` has no constant-fold arm [in t]  | staged=same
+Uu | post_b: L=0 r=1  | staged=same
+Prr | post_b: r=1  | staged=same
+Pdr | post_b: r=1  | staged=same
+Uur | post_b: r=1  | staged=same

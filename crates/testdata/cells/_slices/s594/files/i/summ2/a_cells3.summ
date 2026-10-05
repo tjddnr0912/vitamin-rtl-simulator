@@ -1,0 +1,364 @@
+### Kcl_L
+  pre594 : L=8
+  pa : L=8
+  pb : L=8
+  ivl : L=8
+  s2v : L=8
+  vl : L=8
+### Kcl_LAE
+  pre594 : L=8
+  pa : L=8
+  pb : L=8
+  ivl : L=x
+  s2v : L=x
+  vl : L=x
+### Kcl_R
+  pre594 : L=8
+  pa : L=8
+  pb : L=8
+  ivl : L=8
+  s2v : L=8
+  vl : L=8
+### Kcl_RAE
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  pa : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  pb : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  ivl : L=x
+  s2v : L=x
+  vl : L=x
+### Kcl_RG
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  pa : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  pb : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  ivl : L=8
+  s2v : L=8
+  vl : L=8
+### Kdl_EAE
+  pre594 : w=1 t=0
+  pa : w=1 t=0
+  pb : w=1 t=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : w=1 t=0
+  vl : w=1 t=0
+### Kdl_LAE
+  pre594 : w=1 t=254
+  pa : w=1 t=254
+  pb : w=1 t=254
+  ivl : w=1 t=0
+  s2v : w=1 t=0
+  vl : w=1 t=0
+### Kdl_LG
+  pre594 : w=1 t=254
+  pa : w=1 t=254
+  pb : w=1 t=254
+  ivl : w=1 t=0
+  s2v : w=1 t=0
+  vl : w=1 t=0
+### Kdl_R1
+  pre594 : w=1 t=5
+  pa : w=1 t=5
+  pb : w=1 t=5
+  ivl : w=1 t=5
+  s2v : w=1 t=5
+  vl : w=1 t=0
+### Kdl_RAE
+  pre594 : w=1 t=0
+  pa : w=1 t=0
+  pb : w=1 t=0
+  ivl : w=1 t=0
+  s2v : w=1 t=0
+  vl : w=1 t=0
+### Kdl_RG
+  pre594 : w=1 t=254
+  pa : w=1 t=254
+  pb : w=1 t=254
+  ivl : w=1 t=0
+  s2v : w=1 t=0
+  vl : w=1 t=0
+### Kfn_cfL_lp
+  pre594 : L=1
+  pa : L=1
+  pb : L=1
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_cfL_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=1
+### Kfn_cfR_lp
+  pre594 : L=0
+  pa : L=0
+  pb : L=0
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_cfR_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=1
+### Kfn_clG_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pa : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pb : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  ivl : L=8
+  s2v : L=8
+  vl : L=8
+### Kfn_clG_rt
+  pre594 : RT=8
+  pa : RT=8
+  pb : RT=8
+  ivl : RT=8
+  s2v : RT=8
+  vl : RT=8
+### Kfn_clL_lp
+  pre594 : L=8
+  pa : L=8
+  pb : L=8
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### Kfn_clL_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=x
+  vl : RT=8
+### Kfn_clR_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pa : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pb : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### Kfn_clR_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=x
+  vl : RT=8
+### Kfn_cpG_lp
+  pre594 : L=0
+  pa : L=0
+  pb : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Kfn_cpG_rt
+  pre594 : RT=1
+  pa : RT=1
+  pb : RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl : RT=1
+### Kfn_cpL_lp
+  pre594 : L=1
+  pa : L=1
+  pb : L=1
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_cpL_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=1
+### Kfn_cpR_lp
+  pre594 : L=0
+  pa : L=0
+  pb : L=0
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_cpR_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=1
+### Kfn_rdG_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pa : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pb : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Kfn_rdG_rt
+  pre594 : RT=1
+  pa : RT=1
+  pb : RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl : RT=1
+### Kfn_rdL_lp
+  pre594 : L=0
+  pa : L=0
+  pb : L=0
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_rdL_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=0
+### Kfn_rdR_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pa : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  pb : !VITA-E3009 parameter `L` value is not a constant: `fk(…)` has no constant-fold ar
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Kfn_rdR_rt
+  pre594 : RT=0
+  pa : RT=0
+  pb : RT=0
+  ivl : RT=0
+  s2v : RT=X
+  vl : RT=0
+### Klv_LAE
+  pre594 : L=254 B=8
+  pa : L=254 B=8
+  pb : L=254 B=8
+  ivl : L=x B=10
+  s2v : L=x B=8
+  vl : L=x B=8
+### Klv_LG
+  pre594 : L=254 B=8
+  pa : L=254 B=8
+  pb : L=254 B=8
+  ivl : L=254 B=10
+  s2v : L=254 B=8
+  vl : L=254 B=8
+### Klv_RAE
+  pre594 : L=4294967294 B=32
+  pa : L=4294967294 B=32
+  pb : L=4294967294 B=32
+  ivl : L=x B=10
+  s2v : L=x B=8
+  vl : L=x B=8
+### Klv_RG
+  pre594 : L=4294967294 B=32
+  pa : L=4294967294 B=32
+  pb : L=4294967294 B=32
+  ivl : L=254 B=10
+  s2v : L=254 B=8
+  vl : L=254 B=8
+### Koi_L
+  pre594 : P=-4
+  pa : P=-4
+  pb : P=-4
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Koi_R
+  pre594 : P=-4
+  pa : P=-4
+  pb : P=-4
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Koi_Rp
+  pre594 : P=-4
+  pa : P=-4
+  pb : P=-4
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Kot_L
+  pre594 : P=65532
+  pa : P=65532
+  pb : P=65532
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Kot_R
+  pre594 : P=65532
+  pa : P=65532
+  pb : P=65532
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Kot_Rp
+  pre594 : P=65532
+  pa : P=65532
+  pb : P=65532
+  ivl : P=252
+  s2v : P=252
+  vl : P=252
+### Kpw_EAE
+  pre594 : pw=0
+  pa : pw=0
+  pb : pw=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error: Internal Error: Kpw_EAE.sv:6:55: ../V3Number.cpp:1063: toUInt with 4-sta
+### Kpw_L0
+  pre594 : pw=2
+  pa : pw=2
+  pb : pw=2
+  ivl : pw=2
+  s2v : pw=2
+  vl : pw=2
+### Kpw_LAE
+  pre594 : pw=2
+  pa : pw=2
+  pb : pw=2
+  ivl : !1 error(s) during elaboration.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error: Internal Error: Kpw_LAE.sv:5:47: ../V3Number.cpp:1063: toUInt with 4-sta
+### Kpw_R0
+  pre594 : pw=0
+  pa : pw=2
+  pb : pw=2
+  ivl : pw=2
+  s2v : pw=2
+  vl : pw=2
+### Kpw_RAE
+  pre594 : pw=0
+  pa : pw=0
+  pb : pw=0
+  ivl : !1 error(s) during elaboration.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error: Internal Error: Kpw_RAE.sv:6:51: ../V3Number.cpp:1063: toUInt with 4-sta
+### Kpw_RG
+  pre594 : pw=0
+  pa : pw=0
+  pb : pw=0
+  ivl : pw=2
+  s2v : pw=2
+  vl : pw=2
+### Krp_LG
+  pre594 : k=2
+  pa : k=2
+  pb : k=2
+  ivl : k=2
+  s2v : k=2
+  vl : k=2
+### Krp_RG
+  pre594 : k=2
+  pa : k=2
+  pb : k=2
+  ivl : k=2
+  s2v : k=2
+  vl : k=2
+### Krp_rtx
+  pre594 : k=0
+  pa : k=0
+  pb : k=0
+  ivl : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 25027 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp | !rc=142
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 25319 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=0

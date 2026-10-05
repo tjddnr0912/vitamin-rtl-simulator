@@ -1,0 +1,92 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__o04_t0_always_hash0
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/o04_t0_always_hash0.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog
+vita_tags: PRE
+verdict: vita-wrong vs iv (order)
+verdict_source: s583/GROUNDING.md:52
+alias: m/sw/c_o04_t0_always_hash0/o04_t0_always_hash0 (byte-identical source) verdict: vita-wrong vs iv (order) verdict_source: s583/GROUNDING.md:52
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+PRE] iverilog 13.0 (version captured in slice) | ./o04_t0_always_hash0.out | 603 bytes
+##### o04_t0_always_hash0.sv
+=== iverilog
+compile rc=0 msgs: o04_t0_always_hash0.sv:5: warning: System task ($display) cannot be synthesized in an always_comb process.
+o04_t0_always_hash0.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+eval t=0 r=01
+o04_t0_always_hash0.sv:12: $finish called at 2 (1s)
+=== vita (native=interp=vm)
+rc=0
+eval t=0 r=xx
+o04_t0_always_hash0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+eval t=0 r=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_o04_t0_always_hash0/obs_POST/results.jsonl | 133 bytes
+{"v":1,"t":2,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":2,"errors":0,"warnings":2,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_o04_t0_always_hash0/obs_POST/run.json | 1438 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "o04_t0_always_hash0.sv", "blake3": "a90b403f3d378841f2687f1fe4e3e31855f0d7d131ec779a9fe53d0b872bac9a"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 2,
+  "counts": {"errors": 0, "warnings": 2, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 4, "frame_bodies": 0, "reject_reasons": {"delay": 3}},
+  "wprog": {"asked": 6, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925644,
+  "wall_s": 0.000372,
+  "elab_s": 0.000269,
+  "sim_s": 0.000099
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_o04_t0_always_hash0/obs_PRE/results.jsonl | 133 bytes | identical to block 2
+=== block 5 | vita [PRE/obs] | m/sw/c_o04_t0_always_hash0/obs_PRE/run.json | 1438 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "o04_t0_always_hash0.sv", "blake3": "a90b403f3d378841f2687f1fe4e3e31855f0d7d131ec779a9fe53d0b872bac9a"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 2,
+  "counts": {"errors": 0, "warnings": 2, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 4, "frame_bodies": 0, "reject_reasons": {"delay": 3}},
+  "wprog": {"asked": 6, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925644,
+  "wall_s": 0.000377,
+  "elab_s": 0.000273,
+  "sim_s": 0.000101
+}
+=== end

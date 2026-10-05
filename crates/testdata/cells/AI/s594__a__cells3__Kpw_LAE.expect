@@ -1,0 +1,46 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__a__cells3__Kpw_LAE
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/a/cells3/Kpw_LAE.sv
+roadmap_row: §2 🆕 AI
+set: a/cells3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3r,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3r: md5 ca572e0c4873c3903ceb48545e4d814b commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Kpw_LAE.ivl | 213 bytes
+Kpw_LAE.sv:5: error: Indexed part select width must be an integral constants greater than zero.
+Kpw_LAE.sv:5:      : This width expression violates that rule: (2'd0)+(fl('sd2))
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Kpw_LAE.vl | 106 bytes
+%Error: Internal Error: Kpw_LAE.sv:5:47: ../V3Number.cpp:1063: toUInt with 4-state 8'bxxxxxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Kpw_LAE.s2v | 219 bytes
+Kpw_LAE.s2v.v:9: error: Indexed part select width must be an integral constants greater than zero.
+Kpw_LAE.s2v.v:9:      : This width expression violates that rule: (2'd0)+(fl('sd2))
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [d1] | ./Kpw_LAE.d1 | 75 bytes
+pw=2
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./Kpw_LAE.d3 | 75 bytes | identical to block 4
+=== block 6 | vita [p3r] | ./Kpw_LAE.p3r | 75 bytes | identical to block 4
+=== block 7 | vita [p3r] | ./Kpw_LAE.p3r.route | 13 bytes
+t fl frame 1
+=== block 8 | vita [pa] | ./Kpw_LAE.pa | 75 bytes | identical to block 4
+=== block 9 | vita [pb] | ./Kpw_LAE.pb | 75 bytes | identical to block 4
+=== block 10 | vita [pre] | ./Kpw_LAE.pre | 75 bytes | identical to block 4
+=== block 11 | vita [pre] | ./Kpw_LAE.pre.route | 13 bytes | identical to block 7
+=== block 12 | vita [pre594] | ./Kpw_LAE.pre594 | 75 bytes | identical to block 4
+=== end

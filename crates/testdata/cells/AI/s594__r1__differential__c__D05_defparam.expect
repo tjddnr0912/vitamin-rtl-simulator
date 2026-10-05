@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__differential__c__D05_defparam
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/differential/c/D05_defparam.sv
+roadmap_row: §2 🆕 AI
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre594,stgpa,stgpb
+verdict: unrecorded
+verdict_source: unrecorded
+alias: i/r2/lens/diff_c/D05_defparam (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./D05_defparam.ivl | 62 bytes
+R: N=16 L=1
+D05_defparam.sv:8: $finish called at 10 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./D05_defparam.vl | 239 bytes
+R: N=16 L=1
+- D05_defparam.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 714.283 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./D05_defparam.s2v | 66 bytes
+R: N=16 L=1
+D05_defparam.s2v.v:10: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [d3] | i/r2/lens/diff_c/D05_defparam.d3 | 181 bytes
+R: N=16 L=1
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [pa] | i/r2/lens/diff_c/D05_defparam.pa | 181 bytes | identical to block 4
+=== block 6 | vita [pa] | ./D05_defparam.post | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R: N=16 L=1
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [pb] | i/r2/lens/diff_c/D05_defparam.pb | 181 bytes | identical to block 4
+=== block 8 | vita [pb] | ./D05_defparam.postb | 181 bytes | identical to block 6
+=== block 9 | vita [pre594] | i/r2/lens/diff_c/D05_defparam.pre594 | 181 bytes | identical to block 4
+=== block 10 | vita [pre594] | ./D05_defparam.pre | 181 bytes | identical to block 6
+=== end

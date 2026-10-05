@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p12__Ev12
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p12/Ev12.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p12
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s593/PLAN.md:95
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./Ev12.ivl | 61 bytes
+L=252 M=1 K=1 vb=5
+Ev12.sv:9: $finish called at 1 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./Ev12.vl | 578 bytes
+%Warning-WIDTHEXPAND: Ev12.sv:5:20: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+%Warning-WIDTHEXPAND: Ev12.sv:6:21: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+%Warning-WIDTHEXPAND: Ev12.sv:7:21: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+L=252 M=1 K=1 vb=5
+- Ev12.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ns; walltime 0.000 s; speed 38.462 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./Ev12.s2v | 64 bytes
+L=252 M=1 K=1 vb=5
+Ev12.s2v.v:11: $finish called at 1 (1s)
+rc=0
+=== block 4 | vita [cut] | ./Ev12.cut | 95 bytes
+L=4294967292 M=0 K=0 vb=4
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./Ev12.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./Ev12.pre | 95 bytes | identical to block 4
+=== block 7 | vita [pre] | ./Ev12.pre.route | 0 bytes | identical to block 5
+=== end

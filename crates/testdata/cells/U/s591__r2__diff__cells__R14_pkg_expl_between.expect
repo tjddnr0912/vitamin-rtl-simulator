@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__diff__cells__R14_pkg_expl_between
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/diff/cells/R14_pkg_expl_between.sv
+roadmap_row: §2 🆕 U
+set: r2/diff/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POSTA,POSTB,POSTB_SEP,PRE
+verdict: | R14 | package: explicit `px::Q` between two wildcards | Z=9 | E3009 | E3009 | "Ambiguous use of 'P'..." | Z=3 | "ambiguously refers" |
+verdict_source: s591/r2/diff/REPORT.md:23
+notes: verbatim excerpt of the source line
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./R14_pkg_expl_between.ivl | 102 bytes
+R14_pkg_expl_between.sv:8: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./R14_pkg_expl_between.vl | 243 bytes
+r14 Z=3
+- R14_pkg_expl_between.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./R14_pkg_expl_between.s2v | 112 bytes
+rc=1
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+=== block 4 | vita [POSTA] | ./R14_pkg_expl_between.posta | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `Z` value is not a foldable constant [in pd]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTB] | ./R14_pkg_expl_between.postb | 233 bytes | identical to block 4
+=== block 6 | vita [PRE] | ./R14_pkg_expl_between.pre | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r14 Z=9
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== end

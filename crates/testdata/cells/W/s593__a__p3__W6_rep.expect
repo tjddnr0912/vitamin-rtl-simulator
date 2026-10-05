@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__W6_rep
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/W6_rep.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE=some
+verdict_source: s593/a/p3.summ:1129
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./W6_rep.ivl | 74 bytes
+W6_rep.sv:4: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./W6_rep.vl | 232 bytes
+r=10101010
+- W6_rep.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 333.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./W6_rep.s2v | 58 bytes
+r=10101010
+W6_rep.s2v.v:16: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./W6_rep.cut | 492 bytes
+W6_rep.sv:10:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: a replication count that reads an unpacked-array element must be a foldable, non-negative constant (an out-of-range / negative / non-constant index, or a descending / non-zero-based / multi-dimensional array shape, is unsupported) [in t.u]
+W6_rep.sv:10:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: a replication count of zero is only legal as a direct operand of a concatenation (IEEE §11.4.12.1) [in t.u]
+errors=2 warnings=0 notes=0
+rc=1
+=== block 5 | vita [pre] | ./W6_rep.pre | 80 bytes
+r=10101010
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [pre] | ./W6_rep.pre.route | 0 bytes
+
+=== end

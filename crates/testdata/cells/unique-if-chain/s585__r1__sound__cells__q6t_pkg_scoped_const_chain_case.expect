@@ -1,0 +1,67 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q6t_pkg_scoped_const_chain_case
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q6t_pkg_scoped_const_chain_case.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST2
+verdict: unique-pkg-closure
+verdict_source: s585/DOCS_ROWS.md:26
+notes: runs: q6t_pkg_scoped_const_chain_case s__q6t_pkg_scoped_const_chain_case
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [iverilog,PRE] iverilog 13.0 (version captured in slice) | r1/sound/out/q6t_pkg_scoped_const_chain_case.out | 960 bytes
+##### q6t_pkg_scoped_const_chain_case
+=== iverilog compile rc=0 msgs: q6t_pkg_scoped_const_chain_case.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+WARNING: q6t_pkg_scoped_const_chain_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: pk::g
+t=1 y=1
+WARNING: q6t_pkg_scoped_const_chain_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 2  Scope: pk::g
+t=3 y=0
+q6t_pkg_scoped_const_chain_case.sv:22: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=1
+q6t_pkg_scoped_const_chain_case.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::f(...)` reaches `pk::g`, whose body names something outside its own formals/locals, same-package constants, variables and subroutines — lowering it here would resolve that name in the CALLING module; `import pk::*` and call `f` by its bare name instead [in top.u]
+errors=1 warnings=1 notes=0
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/s__q6t_pkg_scoped_const_chain_case.out | 2967 bytes
+##### s__q6t_pkg_scoped_const_chain_case
+=== verilator compile rc=0 run rc=0 [run by r3]
+[0] %Error: q6t_pkg_scoped_const_chain_case.sv:4: Assertion failed in pk.g: unique case, but none matched for '32'h00000002'
+t=1 y=1
+t=3 y=0
+- q6t_pkg_scoped_const_chain_case.sv:22: Verilog $finish
+=== iverilog compile rc=0 msgs: q6t_pkg_scoped_const_chain_case.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+WARNING: q6t_pkg_scoped_const_chain_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: pk::g
+t=1 y=1
+WARNING: q6t_pkg_scoped_const_chain_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 2  Scope: pk::g
+t=3 y=0
+q6t_pkg_scoped_const_chain_case.sv:22: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=1
+q6t_pkg_scoped_const_chain_case.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::f(...)` reaches `pk::g`, whose body names something outside its own formals/locals, same-package constants, variables and subroutines — lowering it here would resolve that name in the CALLING module; `import pk::*` and call `f` by its bare name instead [in top.u]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+q6t_pkg_scoped_const_chain_case.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::f(...)` reaches `pk::g`, whose body names something outside its own formals/locals, same-package constants, variables and subroutines — lowering it here would resolve that name in the CALLING module; `import pk::*` and call `f` by its bare name instead [in top.u]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+q6t_pkg_scoped_const_chain_case.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::f(...)` reaches `pk::g`, whose body names something outside its own formals/locals, same-package constants, variables and subroutines — lowering it here would resolve that name in the CALLING module; `import pk::*` and call `f` by its bare name instead [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q6t_pkg_scoped_const_chain_case.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+q6t_pkg_scoped_const_chain_case.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::f(...)` reaches `pk::g`, whose body names something outside its own formals/locals, same-package constants, variables and subroutines — lowering it here would resolve that name in the CALLING module; `import pk::*` and call `f` by its bare name instead [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q6t_pkg_scoped_const_chain_case.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== end

@@ -1,0 +1,322 @@
+== Sq00  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq01
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  G 0 | L 0 1 bits=1 | R 0 1
+   pt   G 0 | L 0 1 bits=1 | R 0 1
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq02  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq03
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  G 0 | L 0 1 bits=1 | R 0 1
+   pt   G 0 | L 0 1 bits=1 | R 0 1
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq04
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  G 0 | L 0 1 bits=1 | R 0 1
+   pt   G 0 | L 0 1 bits=1 | R 0 1
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq05  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq06
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq07
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq08
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  G 0 | L 0 1 bits=1 | R 0 1
+   pt   G 0 | L 0 1 bits=1 | R 0 1
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq09  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq10  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq11  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq12  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq13  <<VITA-MOVES
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq14  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq15  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq16  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq17  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq18  <<VITA-MOVES
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq19  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq20  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq21  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   ERR:rc1(rc1)
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq22  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   ERR:rc1(rc1)
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq23  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq24  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq25  <<VITA-MOVES
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq26  <<VITA-MOVES
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq27  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 0 | L 0 1 bits=1 | R 1 0
+   pt   G 0 | L 0 1 bits=1 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq28  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 0 | L 0 1 bits=1 | R 1 0
+   pt   G 0 | L 0 1 bits=1 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq29  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq30  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 0 | L 0 1 bits=1 | R 1 0
+   pt   G 0 | L 0 1 bits=1 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq31  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 0 | L 0 1 bits=1 | R 1 0
+   pt   G 0 | L 0 1 bits=1 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq32
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq33  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq34  <<VITA-MOVES
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq35
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq36  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq37  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq38  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq39  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq40
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq41
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq42  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq43  <<VITA-MOVES
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | L 1 0 bits=2 | R 1 0
+== Sq44
+   iv   G 0 | L 0 1 bits=1 | R 0 1
+   sv   G 0 | L 0 1 bits=1 | R 0 1
+   vl   G 0 | L 0 1 bits=1 | R 0 1
+   pre  G 0 | L 0 1 bits=1 | R 0 1
+   pt   G 0 | L 0 1 bits=1 | R 0 1
+   post G 0 | L 0 1 bits=1 | R 0 1
+== Sq45
+   iv   G 1 | L 1 0 bits=2 | R 1 0
+   sv   G 1 | L 1 0 bits=2 | R 1 0
+   vl   G 1 | L 1 0 bits=2 | R 1 0
+   pre  G 1 | L 1 0 bits=2 | R 1 0
+   pt   G 1 | L 1 0 bits=2 | R 1 0
+   post G 1 | L 1 0 bits=2 | R 1 0

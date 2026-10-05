@@ -1,0 +1,479 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff3__G1
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff3/G1.sv
+roadmap_row: §2 🆕 S
+set: lens_diff3
+oracles_present: iverilog,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: F1 BLOCKING (rule: POST2 loud -> POST3 silent)
+verdict_source: s580/lens_diff3/REPORT.md:22
+notes: R4 cmp3_post4 bucket(s): both×24,pre×14 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 144
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./G1_L1.iv.txt | 50 bytes
+L1 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./G1_L10.iv.txt | 51 bytes
+L10 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./G1_L10P.iv.txt | 52 bytes
+L10P item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./G1_L11.iv.txt | 51 bytes
+L11 dflt
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./G1_L12.iv.txt | 51 bytes
+L12 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./G1_L1P.iv.txt | 51 bytes
+L1P item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./G1_L2.iv.txt | 50 bytes
+L2 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./G1_L2P.iv.txt | 51 bytes
+L2P item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./G1_L3.iv.txt | 50 bytes
+L3 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 10 | oracle iverilog 13.0 (version captured in slice) | ./G1_L4.iv.txt | 50 bytes
+L4 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 11 | oracle iverilog 13.0 (version captured in slice) | ./G1_L4P.iv.txt | 51 bytes
+L4P item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 12 | oracle iverilog 13.0 (version captured in slice) | ./G1_L5.iv.txt | 50 bytes
+L5 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 13 | oracle iverilog 13.0 (version captured in slice) | ./G1_L5N.iv.txt | 51 bytes
+L5N item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 14 | oracle iverilog 13.0 (version captured in slice) | ./G1_L6.iv.txt | 50 bytes
+L6 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 15 | oracle iverilog 13.0 (version captured in slice) | ./G1_L7.iv.txt | 50 bytes
+L7 dflt
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 16 | oracle iverilog 13.0 (version captured in slice) | ./G1_L8.iv.txt | 50 bytes
+L8 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 17 | oracle iverilog 13.0 (version captured in slice) | ./G1_L8P.iv.txt | 51 bytes
+L8P item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 18 | oracle iverilog 13.0 (version captured in slice) | ./G1_L9.iv.txt | 50 bytes
+L9 item
+G1.sv:106: $finish called at 5 (1s)
+
+rc=0
+=== block 19 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L1.sv.txt | 56 bytes
+L1 item
+G1_L1.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 20 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L10.sv.txt | 58 bytes
+L10 item
+G1_L10.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 21 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L10P.sv.txt | 60 bytes
+L10P item
+G1_L10P.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 22 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L11.sv.txt | 58 bytes
+L11 dflt
+G1_L11.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 23 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L12.sv.txt | 58 bytes
+L12 item
+G1_L12.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 24 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L1P.sv.txt | 58 bytes
+L1P item
+G1_L1P.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 25 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L2.sv.txt | 56 bytes
+L2 item
+G1_L2.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 26 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L2P.sv.txt | 58 bytes
+L2P item
+G1_L2P.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 27 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L3.sv.txt | 56 bytes
+L3 item
+G1_L3.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 28 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L4.sv.txt | 56 bytes
+L4 item
+G1_L4.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 29 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L4P.sv.txt | 58 bytes
+L4P item
+G1_L4P.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 30 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L5.sv.txt | 56 bytes
+L5 item
+G1_L5.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 31 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L5N.sv.txt | 58 bytes
+L5N item
+G1_L5N.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 32 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L6.sv.txt | 56 bytes
+L6 item
+G1_L6.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 33 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L7.sv.txt | 56 bytes
+L7 dflt
+G1_L7.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 34 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L8.sv.txt | 56 bytes
+L8 item
+G1_L8.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 35 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L8P.sv.txt | 58 bytes
+L8P item
+G1_L8P.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 36 | oracle sv2v 0.0.13 (version captured in slice) | ./G1_L9.sv.txt | 56 bytes
+L9 item
+G1_L9.sv2v.v:15: $finish called at 5 (1s)
+
+rc=0
+=== block 37 | vita [POST] | ./G1_L1.post.txt | 177 bytes
+L1 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 38 | vita [POST] | ./G1_L10.post.txt | 178 bytes
+L10 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 39 | vita [POST] | ./G1_L10P.post.txt | 179 bytes
+L10P item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 40 | vita [POST] | ./G1_L11.post.txt | 178 bytes
+L11 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 41 | vita [POST] | ./G1_L12.post.txt | 178 bytes
+L12 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 42 | vita [POST] | ./G1_L1P.post.txt | 178 bytes
+L1P dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 43 | vita [POST] | ./G1_L2.post.txt | 177 bytes
+L2 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 44 | vita [POST] | ./G1_L2P.post.txt | 178 bytes
+L2P item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 45 | vita [POST] | ./G1_L3.post.txt | 177 bytes
+L3 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 46 | vita [POST] | ./G1_L4.post.txt | 177 bytes
+L4 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 47 | vita [POST] | ./G1_L4P.post.txt | 178 bytes
+L4P item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 48 | vita [POST] | ./G1_L5.post.txt | 177 bytes
+L5 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 49 | vita [POST] | ./G1_L5N.post.txt | 178 bytes
+L5N dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 50 | vita [POST] | ./G1_L6.post.txt | 177 bytes
+L6 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 51 | vita [POST] | ./G1_L7.post.txt | 177 bytes
+L7 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 52 | vita [POST] | ./G1_L8.post.txt | 177 bytes
+L8 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 53 | vita [POST] | ./G1_L8P.post.txt | 178 bytes
+L8P item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 54 | vita [POST] | ./G1_L9.post.txt | 177 bytes
+L9 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 55 | vita [POST2] | ./G1_L1.post2.txt | 397 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:5:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 56 | vita [POST2] | ./G1_L1.post2q.txt | 397 bytes | identical to block 55
+=== block 57 | vita [POST2] | ./G1_L10.post2.txt | 178 bytes | identical to block 38
+=== block 58 | vita [POST2] | ./G1_L10.post2q.txt | 178 bytes | identical to block 38
+=== block 59 | vita [POST2] | ./G1_L10P.post2.txt | 179 bytes | identical to block 39
+=== block 60 | vita [POST2] | ./G1_L10P.post2q.txt | 179 bytes | identical to block 39
+=== block 61 | vita [POST2] | ./G1_L11.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:97:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 62 | vita [POST2] | ./G1_L11.post2q.txt | 398 bytes | identical to block 61
+=== block 63 | vita [POST2] | ./G1_L12.post2.txt | 399 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:102:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 64 | vita [POST2] | ./G1_L12.post2q.txt | 399 bytes | identical to block 63
+=== block 65 | vita [POST2] | ./G1_L1P.post2.txt | 178 bytes | identical to block 42
+=== block 66 | vita [POST2] | ./G1_L1P.post2q.txt | 178 bytes | identical to block 42
+=== block 67 | vita [POST2] | ./G1_L2.post2.txt | 177 bytes
+L2 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 68 | vita [POST2] | ./G1_L2.post2q.txt | 177 bytes | identical to block 67
+=== block 69 | vita [POST2] | ./G1_L2P.post2.txt | 178 bytes | identical to block 44
+=== block 70 | vita [POST2] | ./G1_L2P.post2q.txt | 178 bytes | identical to block 44
+=== block 71 | vita [POST2] | ./G1_L3.post2.txt | 177 bytes
+L3 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 72 | vita [POST2] | ./G1_L3.post2q.txt | 177 bytes | identical to block 71
+=== block 73 | vita [POST2] | ./G1_L4.post2.txt | 177 bytes
+L4 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 74 | vita [POST2] | ./G1_L4.post2q.txt | 177 bytes | identical to block 73
+=== block 75 | vita [POST2] | ./G1_L4P.post2.txt | 178 bytes | identical to block 47
+=== block 76 | vita [POST2] | ./G1_L4P.post2q.txt | 178 bytes | identical to block 47
+=== block 77 | vita [POST2] | ./G1_L5.post2.txt | 177 bytes
+L5 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 78 | vita [POST2] | ./G1_L5.post2q.txt | 177 bytes | identical to block 77
+=== block 79 | vita [POST2] | ./G1_L5N.post2.txt | 178 bytes
+L5N item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 80 | vita [POST2] | ./G1_L5N.post2q.txt | 178 bytes | identical to block 79
+=== block 81 | vita [POST2] | ./G1_L6.post2.txt | 177 bytes
+L6 item
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 82 | vita [POST2] | ./G1_L6.post2q.txt | 177 bytes | identical to block 81
+=== block 83 | vita [POST2] | ./G1_L7.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:67:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 84 | vita [POST2] | ./G1_L7.post2q.txt | 398 bytes | identical to block 83
+=== block 85 | vita [POST2] | ./G1_L8.post2.txt | 177 bytes | identical to block 52
+=== block 86 | vita [POST2] | ./G1_L8.post2q.txt | 177 bytes | identical to block 52
+=== block 87 | vita [POST2] | ./G1_L8P.post2.txt | 178 bytes | identical to block 53
+=== block 88 | vita [POST2] | ./G1_L8P.post2q.txt | 178 bytes | identical to block 53
+=== block 89 | vita [POST2] | ./G1_L9.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 90 | vita [POST2] | ./G1_L9.post2q.txt | 398 bytes | identical to block 89
+=== block 91 | vita [POST3] | ./G1_L1.post3.txt | 177 bytes | identical to block 37
+=== block 92 | vita [POST3] | ./G1_L1.post3q.txt | 177 bytes | identical to block 37
+=== block 93 | vita [POST3] | ./G1_L10.post3.txt | 178 bytes | identical to block 38
+=== block 94 | vita [POST3] | ./G1_L10.post3q.txt | 178 bytes | identical to block 38
+=== block 95 | vita [POST3] | ./G1_L10P.post3.txt | 179 bytes | identical to block 39
+=== block 96 | vita [POST3] | ./G1_L10P.post3q.txt | 179 bytes | identical to block 39
+=== block 97 | vita [POST3] | ./G1_L11.post3.txt | 178 bytes | identical to block 40
+=== block 98 | vita [POST3] | ./G1_L11.post3q.txt | 178 bytes | identical to block 40
+=== block 99 | vita [POST3] | ./G1_L12.post3.txt | 178 bytes | identical to block 41
+=== block 100 | vita [POST3] | ./G1_L12.post3q.txt | 178 bytes | identical to block 41
+=== block 101 | vita [POST3] | ./G1_L1P.post3.txt | 178 bytes | identical to block 42
+=== block 102 | vita [POST3] | ./G1_L1P.post3q.txt | 178 bytes | identical to block 42
+=== block 103 | vita [POST3] | ./G1_L2.post3.txt | 177 bytes | identical to block 67
+=== block 104 | vita [POST3] | ./G1_L2.post3q.txt | 177 bytes | identical to block 67
+=== block 105 | vita [POST3] | ./G1_L2P.post3.txt | 178 bytes | identical to block 44
+=== block 106 | vita [POST3] | ./G1_L2P.post3q.txt | 178 bytes | identical to block 44
+=== block 107 | vita [POST3] | ./G1_L3.post3.txt | 177 bytes | identical to block 71
+=== block 108 | vita [POST3] | ./G1_L3.post3q.txt | 177 bytes | identical to block 71
+=== block 109 | vita [POST3] | ./G1_L4.post3.txt | 177 bytes | identical to block 73
+=== block 110 | vita [POST3] | ./G1_L4.post3q.txt | 177 bytes | identical to block 73
+=== block 111 | vita [POST3] | ./G1_L4P.post3.txt | 178 bytes | identical to block 47
+=== block 112 | vita [POST3] | ./G1_L4P.post3q.txt | 178 bytes | identical to block 47
+=== block 113 | vita [POST3] | ./G1_L5.post3.txt | 177 bytes | identical to block 77
+=== block 114 | vita [POST3] | ./G1_L5.post3q.txt | 177 bytes | identical to block 77
+=== block 115 | vita [POST3] | ./G1_L5N.post3.txt | 178 bytes | identical to block 79
+=== block 116 | vita [POST3] | ./G1_L5N.post3q.txt | 178 bytes | identical to block 79
+=== block 117 | vita [POST3] | ./G1_L6.post3.txt | 177 bytes | identical to block 81
+=== block 118 | vita [POST3] | ./G1_L6.post3q.txt | 177 bytes | identical to block 81
+=== block 119 | vita [POST3] | ./G1_L7.post3.txt | 177 bytes | identical to block 51
+=== block 120 | vita [POST3] | ./G1_L7.post3q.txt | 177 bytes | identical to block 51
+=== block 121 | vita [POST3] | ./G1_L8.post3.txt | 177 bytes | identical to block 52
+=== block 122 | vita [POST3] | ./G1_L8.post3q.txt | 177 bytes | identical to block 52
+=== block 123 | vita [POST3] | ./G1_L8P.post3.txt | 178 bytes | identical to block 53
+=== block 124 | vita [POST3] | ./G1_L8P.post3q.txt | 178 bytes | identical to block 53
+=== block 125 | vita [POST3] | ./G1_L9.post3.txt | 357 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern is not a single literal has no constant value [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 126 | vita [POST3] | ./G1_L9.post3q.txt | 357 bytes | identical to block 125
+=== block 127 | vita [PRE] | ./G1_L1.pre.txt | 177 bytes | identical to block 37
+=== block 128 | vita [PRE] | ./G1_L10.pre.txt | 178 bytes | identical to block 38
+=== block 129 | vita [PRE] | ./G1_L10P.pre.txt | 179 bytes | identical to block 39
+=== block 130 | vita [PRE] | ./G1_L11.pre.txt | 178 bytes | identical to block 40
+=== block 131 | vita [PRE] | ./G1_L12.pre.txt | 178 bytes | identical to block 41
+=== block 132 | vita [PRE] | ./G1_L1P.pre.txt | 178 bytes | identical to block 42
+=== block 133 | vita [PRE] | ./G1_L2.pre.txt | 177 bytes | identical to block 43
+=== block 134 | vita [PRE] | ./G1_L2P.pre.txt | 178 bytes | identical to block 44
+=== block 135 | vita [PRE] | ./G1_L3.pre.txt | 177 bytes | identical to block 45
+=== block 136 | vita [PRE] | ./G1_L4.pre.txt | 177 bytes | identical to block 46
+=== block 137 | vita [PRE] | ./G1_L4P.pre.txt | 178 bytes | identical to block 47
+=== block 138 | vita [PRE] | ./G1_L5.pre.txt | 177 bytes | identical to block 48
+=== block 139 | vita [PRE] | ./G1_L5N.pre.txt | 178 bytes | identical to block 49
+=== block 140 | vita [PRE] | ./G1_L6.pre.txt | 177 bytes | identical to block 50
+=== block 141 | vita [PRE] | ./G1_L7.pre.txt | 177 bytes | identical to block 51
+=== block 142 | vita [PRE] | ./G1_L8.pre.txt | 177 bytes | identical to block 52
+=== block 143 | vita [PRE] | ./G1_L8P.pre.txt | 178 bytes | identical to block 53
+=== block 144 | vita [PRE] | ./G1_L9.pre.txt | 177 bytes | identical to block 54
+=== end

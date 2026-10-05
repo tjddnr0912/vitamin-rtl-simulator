@@ -1,0 +1,162 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__plan__c3__pl_e4_port_tbfirst
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/plan/c3/pl_e4_port_tbfirst.sv
+roadmap_row: §2 🆕 AB
+set: plan/c3
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,POSTDEV,P6,P5_SIDE,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: call:neither->neither rep:->oracle evt:->oracle val:VL->IV
+verdict_source: s590/fin/axscan_fin.txt:89
+notes: 2 byte-identical output copies listed as alias
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 5
+=== block 1 | combined [verilator+iverilog|PRE+P5_SIDE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | plan/out_c3/pl_e4_port_tbfirst.out | 1756 bytes
+##### pl_e4_port_tbfirst
+=== verilator compile rc=0 run rc=0
+i0 y=00
+f t=0 x=0 z=1
+B t=0 y=01
+f t=0 x=0 z=1
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+- pl_e4_port_tbfirst.sv:10: Verilog $finish
+=== iverilog compile rc=0 msgs: pl_e4_port_tbfirst.sv:24: warning: System task ($display) cannot be synthesized in an always_comb process.
+pl_e4_port_tbfirst.sv:21: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+i0 y=zz
+f t=0 x=0 z=1
+B t=0 y=01
+Y t=0 y=01
+P t=0 y=01
+t=1 y=01
+pl_e4_port_tbfirst.sv:10: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f t=0 x=x z=x
+pl_e4_port_tbfirst.sv:21:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.f] [at time 0]
+i0 y=00
+f t=0 x=0 z=1
+Y t=0 y=01
+B t=0 y=01
+P t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+i0 y=xx
+f t=0 x=0 z=1
+B t=0 y=01
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 2 | combined [verilator+iverilog|PRE+P6] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | p6/full_plc3/pl_e4_port_tbfirst.out | 1756 bytes
+##### pl_e4_port_tbfirst
+=== verilator compile rc=0 run rc=0
+i0 y=00
+f t=0 x=0 z=1
+B t=0 y=01
+f t=0 x=0 z=1
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+- pl_e4_port_tbfirst.sv:10: Verilog $finish
+=== iverilog compile rc=0 msgs: pl_e4_port_tbfirst.sv:24: warning: System task ($display) cannot be synthesized in an always_comb process.
+pl_e4_port_tbfirst.sv:21: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+i0 y=zz
+f t=0 x=0 z=1
+B t=0 y=01
+Y t=0 y=01
+P t=0 y=01
+t=1 y=01
+pl_e4_port_tbfirst.sv:10: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f t=0 x=x z=x
+pl_e4_port_tbfirst.sv:21:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.f] [at time 0]
+i0 y=00
+f t=0 x=0 z=1
+Y t=0 y=01
+B t=0 y=01
+P t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+i0 y=zz
+f t=0 x=0 z=1
+B t=0 y=01
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 3 | vita [PRE+P5_SIDE] | p6/p5ref_plc3/pl_e4_port_tbfirst.out | 1251 bytes
+##### pl_e4_port_tbfirst
+=== vita PRE (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f t=0 x=x z=x
+pl_e4_port_tbfirst.sv:21:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.f] [at time 0]
+i0 y=00
+f t=0 x=0 z=1
+Y t=0 y=01
+B t=0 y=01
+P t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+i0 y=xx
+f t=0 x=0 z=1
+B t=0 y=01
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 4 | vita [PRE+P6] | p6/p6_plc3/pl_e4_port_tbfirst.out | 1251 bytes
+##### pl_e4_port_tbfirst
+=== vita PRE (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f t=0 x=x z=x
+pl_e4_port_tbfirst.sv:21:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.f] [at time 0]
+i0 y=00
+f t=0 x=0 z=1
+Y t=0 y=01
+B t=0 y=01
+P t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+pl_e4_port_tbfirst.sv:21:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+i0 y=zz
+f t=0 x=0 z=1
+B t=0 y=01
+P t=0 y=01
+Y t=0 y=01
+t=1 y=01
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 5 | vita [PRE+POSTDEV] | p6/dev_plc3/pl_e4_port_tbfirst.out | 1251 bytes | identical to block 4
+=== end

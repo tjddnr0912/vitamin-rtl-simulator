@@ -1,0 +1,4 @@
+p1                     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+p2                     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `g(…)` has no constant-fold arm
+p3                     rc=0   W4031=2 sites=fi:frame:0,fp:frame:1,fu:frame:1 out=[x=7 y=7 ] 
+p3b                    rc=0   W4031=2 sites=fp:frame:1,fu:frame:1  out=[x=7 y=7 ] 

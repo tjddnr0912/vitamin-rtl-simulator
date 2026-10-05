@@ -1,0 +1,71 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk2__u__e02_rt_misc
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk2/u/e02_rt_misc.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk2/u
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: N4 NON-BLOCKING
+verdict_source: s587/r1/diff/REPORT.md:57
+notes: findings line naming `e02`
+alias: post_c/lanes2_work/r1_diff_atk2_u_e02_rt_misc/e02_rt_misc (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/atk2/lanes/e02_rt_misc (byte-identical source) verdict: N4 NON-BLOCKING verdict_source: s587/r1/diff/REPORT.md:57
+alias: r2/diff/re/atk2/u/e02_rt_misc (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-b-jit: md5 f5f5cb52283f4a87701adf9a3b1b8d4d commit unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./e02_rt_misc.ivl | 94 bytes
+e02_rt_misc.sv:4: syntax error
+e02_rt_misc.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./e02_rt_misc.vl | 623 bytes
+[0] %Error: e02_rt_misc.sv:4: Assertion failed in top.f: 'unique if' statement violated
+-Info: e02_rt_misc.sv:4: Verilog $stop, ignored due to +verilator+error+limit
+[0] %Error: e02_rt_misc.sv:4: Assertion failed in top.f: 'unique if' statement violated
+s=abab r1=3 r2=c
+[1] %Error: e02_rt_misc.sv:4: Assertion failed in top.f: 'unique if' statement violated
+[1] -Info: e02_rt_misc.sv:14: top: i=2
+- e02_rt_misc.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 47.619 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_e02_rt_misc.build | 0 bytes
+
+=== block 4 | vita [POST-b-jit] | r1/diff/atk2/lanes/e02_rt_misc.jit | 1090 bytes
+s=abab r1=3 r2=c
+simulation ended (Finish) at time 1
+e02_rt_misc.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 1]
+e02_rt_misc.sv:14:5: info[VITA-I4005] I-RUN-USER-INFO: i=2 [in top] [at time 1]
+JITBODY templates_compiled=1 refused=0 activations=1
+errors=0 warnings=4 notes=2
+rc=0
+=== block 5 | vita [S7] | ./e02_rt_misc.s7 | 1037 bytes
+e02_rt_misc.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+s=abab r1=3 r2=c
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 1]
+e02_rt_misc.sv:14:5: info[VITA-I4005] I-RUN-USER-INFO: i=2 [in top] [at time 1]
+simulation ended (Finish) at time 1
+errors=0 warnings=4 notes=2
+rc=0
+=== block 6 | vita [S8] | ./e02_rt_misc.s8 | 1033 bytes
+e02_rt_misc.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+s= r1=3 r2=c
+e02_rt_misc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 1]
+e02_rt_misc.sv:14:5: info[VITA-I4005] I-RUN-USER-INFO: i=2 [in top] [at time 1]
+simulation ended (Finish) at time 1
+errors=0 warnings=4 notes=2
+rc=0
+=== end

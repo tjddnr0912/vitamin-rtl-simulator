@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r2__diff__cells__r2e_restore
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r2/diff/cells/r2e_restore.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r2/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,JIT2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: r2e_restore
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+blocks: 1
+=== block 1 | combined [verilator,PRE,POST2,JIT2] verilator 5.052 (version captured in slice) | r2/diff/out/r2e_restore.out | 3033 bytes
+r2e_restore | vl:0@r2e_restore.sv:22,1@r2e_restore.sv:29,1@r2e_restore.sv:22,1@r2e_restore.sv:22,2@r2e_restore.sv:4,2@r2e_restore.sv:8,2@r2e_restore.sv:18,2@r2e_restore.sv:22,2@r2e_restore.sv:22,4@r2e_restore.sv:22,4@r2e_restore.sv:22,5@r2e_restore.sv:22,5@r2e_restore.sv:22 | PRE:- rc=0 | POST:W4031:0@r2e_restore.sv:22:12,W4031:1@r2e_restore.sv:29:14,W4031:4@r2e_restore.sv:22:12 rc=0 | JIT==POST:True | P==P:False
+##### r2e_restore
+=== verilator compile rc=0 run rc=0
+[0] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[1] %Error: r2e_restore.sv:29: Assertion failed in top.outer.inner: 'unique if' statement violated
+[1] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[1] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[2] %Error: r2e_restore.sv:4: Assertion failed in $unit.K.kf: 'unique if' statement violated
+[2] %Error: r2e_restore.sv:8: Assertion failed in $unit.K.kt: 'unique if' statement violated
+[2] %Error: r2e_restore.sv:18: Assertion failed in top.mt: 'unique if' statement violated
+[2] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[2] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[4] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[4] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+- r2e_restore.sv:34: Verilog $finish
+[5] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+[5] %Error: r2e_restore.sv:22: Assertion failed in top: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=0
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+r2e_restore.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+r2e_restore.sv:29:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.outer.inner] [at time 1]
+r2e_restore.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+=== vita POSTJIT (native)
+rc=0
+r2e_restore.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+r2e_restore.sv:29:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.outer.inner] [at time 1]
+r2e_restore.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

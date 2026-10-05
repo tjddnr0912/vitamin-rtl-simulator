@@ -1,0 +1,759 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__diff__cells__f07_rchain_random_probe
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/diff/cells/f07_rchain_random_probe.sv
+roadmap_row: §2 🆕 AB
+set: r3/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,PRE3,POSTC,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP,R5DEV
+verdict: assign only in its own wave made r_chain linear and f07 12 calls (PRE 30, both oracles 6), but soundness found a BLOCKING stale value: through a declined callee's body read the assign stayed computed on a held net's default past t0 (r4a `W2 t=1 w2=0`, r4c, r4d, r4g, and the differential's g06 `ev u=0 t=1`:
+verdict_source: s590/COMMIT_SLICE.txt:134
+notes: verdict_class = verbatim excerpt of the source line (wrapped commit-message lines joined)
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTD_JIT: unresolved (no row in the slice META binaries table)
+vita_binary: POSTD_NODEF: unresolved (no row in the slice META binaries table)
+vita_binary: PRE3_SEP: md5 78439b423ee29af2d2a6a5034a4ff409 commit 75f46453
+vita_binary: POSTD_SEP: unresolved (no row in the slice META binaries table)
+vita_binary: R5DEV: md5 8c800916aaa11d72c15fbd5031167f33 commit unrecorded
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+PRE3+POSTC+POSTD+POSTD_JIT+POSTD_NODEF+PRE3_SEP+POSTD_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/diff/o/f07_rchain_random_probe.out | 12935 bytes
+##### f07_rchain_random_probe
+=== PRE2 (native=interp=vm)
+rc=0
+g t=0 x=x r=303379748
+g t=0 x=x r=-1064739199
+g t=0 x=x r=-2071669239
+g t=0 x=x r=-1309649309
+g t=0 x=x r=112818957
+g t=0 x=x r=1189058957
+g t=0 x=x r=-1295874971
+g t=0 x=x r=-1992863214
+g t=0 x=x r=15983361
+g t=0 x=x r=114806029
+g t=0 x=x r=992211318
+g t=0 x=x r=512609597
+g t=0 x=x r=1993627629
+g t=0 x=x r=1177417612
+g t=0 x=x r=2097015289
+g t=0 x=x r=-482925370
+g t=0 x=x r=-487095099
+g t=0 x=x r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=1 r=-490058043
+g t=0 x=0 r=777537884
+g t=0 x=1 r=-561108803
+g t=0 x=0 r=-1767155667
+g t=0 x=1 r=-1297668507
+g t=1 x=0 r=-1309711773
+g t=1 x=1 r=91457290
+g t=1 x=0 r=-1069866368
+g t=1 x=1 r=274997536
+g t=1 x=0 r=1433945514
+g t=1 x=1 r=-825439075
+t1 w5=0 rnd=-887079274
+g t=1 x=0 r=-1987856365
+g t=1 x=1 r=-2034485235
+g t=1 x=0 r=-1448618413
+g t=1 x=1 r=899669355
+g t=1 x=0 r=-358208811
+g t=1 x=1 r=-2129180158
+g t=2 x=0 r=-682213714
+g t=2 x=1 r=251652381
+g t=2 x=0 r=-406490417
+g t=2 x=1 r=293882147
+g t=2 x=0 r=84501770
+g t=2 x=1 r=-445445430
+g t=2 x=0 r=-1640936388
+g t=2 x=1 r=2036907506
+g t=2 x=0 r=1160667530
+g t=2 x=1 r=549761857
+g t=2 x=0 r=-330615592
+g t=2 x=1 r=1008792440
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== PRE3 (native=interp=vm)
+rc=0
+g t=0 x=x r=303379748
+g t=0 x=x r=-1064739199
+g t=0 x=x r=-2071669239
+g t=0 x=x r=-1309649309
+g t=0 x=x r=112818957
+g t=0 x=x r=1189058957
+g t=0 x=x r=-1295874971
+g t=0 x=x r=-1992863214
+g t=0 x=x r=15983361
+g t=0 x=x r=114806029
+g t=0 x=x r=992211318
+g t=0 x=x r=512609597
+g t=0 x=x r=1993627629
+g t=0 x=x r=1177417612
+g t=0 x=x r=2097015289
+g t=0 x=x r=-482925370
+g t=0 x=x r=-487095099
+g t=0 x=x r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=1 r=-490058043
+g t=0 x=0 r=777537884
+g t=0 x=1 r=-561108803
+g t=0 x=0 r=-1767155667
+g t=0 x=1 r=-1297668507
+g t=1 x=0 r=-1309711773
+g t=1 x=1 r=91457290
+g t=1 x=0 r=-1069866368
+g t=1 x=1 r=274997536
+g t=1 x=0 r=1433945514
+g t=1 x=1 r=-825439075
+t1 w5=0 rnd=-887079274
+g t=1 x=0 r=-1987856365
+g t=1 x=1 r=-2034485235
+g t=1 x=0 r=-1448618413
+g t=1 x=1 r=899669355
+g t=1 x=0 r=-358208811
+g t=1 x=1 r=-2129180158
+g t=2 x=0 r=-682213714
+g t=2 x=1 r=251652381
+g t=2 x=0 r=-406490417
+g t=2 x=1 r=293882147
+g t=2 x=0 r=84501770
+g t=2 x=1 r=-445445430
+g t=2 x=0 r=-1640936388
+g t=2 x=1 r=2036907506
+g t=2 x=0 r=1160667530
+g t=2 x=1 r=549761857
+g t=2 x=0 r=-330615592
+g t=2 x=1 r=1008792440
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== POSTD (native=interp=vm)
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== JIT POSTD native
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== PRODUCT POSTD
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== staged PRE3 vcmp=0 velab=0
+rc=0
+g t=0 x=x r=303379748
+g t=0 x=x r=-1064739199
+g t=0 x=x r=-2071669239
+g t=0 x=x r=-1309649309
+g t=0 x=x r=112818957
+g t=0 x=x r=1189058957
+g t=0 x=x r=-1295874971
+g t=0 x=x r=-1992863214
+g t=0 x=x r=15983361
+g t=0 x=x r=114806029
+g t=0 x=x r=992211318
+g t=0 x=x r=512609597
+g t=0 x=x r=1993627629
+g t=0 x=x r=1177417612
+g t=0 x=x r=2097015289
+g t=0 x=x r=-482925370
+g t=0 x=x r=-487095099
+g t=0 x=x r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=1 r=-490058043
+g t=0 x=0 r=777537884
+g t=0 x=1 r=-561108803
+g t=0 x=0 r=-1767155667
+g t=0 x=1 r=-1297668507
+g t=1 x=0 r=-1309711773
+g t=1 x=1 r=91457290
+g t=1 x=0 r=-1069866368
+g t=1 x=1 r=274997536
+g t=1 x=0 r=1433945514
+g t=1 x=1 r=-825439075
+t1 w5=0 rnd=-887079274
+g t=1 x=0 r=-1987856365
+g t=1 x=1 r=-2034485235
+g t=1 x=0 r=-1448618413
+g t=1 x=1 r=899669355
+g t=1 x=0 r=-358208811
+g t=1 x=1 r=-2129180158
+g t=2 x=0 r=-682213714
+g t=2 x=1 r=251652381
+g t=2 x=0 r=-406490417
+g t=2 x=1 r=293882147
+g t=2 x=0 r=84501770
+g t=2 x=1 r=-445445430
+g t=2 x=0 r=-1640936388
+g t=2 x=1 r=2036907506
+g t=2 x=0 r=1160667530
+g t=2 x=1 r=549761857
+g t=2 x=0 r=-330615592
+g t=2 x=1 r=1008792440
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+=== staged POSTD vcmp=0 velab=0
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+--- P2=P3 True C=D True P3=D False splitD False vcdCD True jit=D True prod=D True stD True stPair True
+=== iverilog run rc=0
+g t=0 x=0 r=303379748
+g t=0 x=1 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+t1 w5=0 rnd=-1295874971
+f07_rchain_random_probe.sv:13: $finish called at 2 (1s)
+=== verilator run rc=0
+g t=0 x=0 r=1604469840
+g t=0 x=1 r=612369497
+g t=0 x=0 r=-41050761
+g t=0 x=1 r=-1222506707
+g t=0 x=0 r=608244723
+g t=0 x=1 r=2003761928
+t1 w5=0 rnd=-1959092748
+- f07_rchain_random_probe.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE3+POSTD+R5DEV] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r5/movers/f07_rchain_random_probe.txt | 4442 bytes
+##### f07_rchain_random_probe  (/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s590/r3/diff/cells/f07_rchain_random_probe.sv)
+=== PRE3 rc=0 native=interp=vm:True
+g t=0 x=x r=303379748
+g t=0 x=x r=-1064739199
+g t=0 x=x r=-2071669239
+g t=0 x=x r=-1309649309
+g t=0 x=x r=112818957
+g t=0 x=x r=1189058957
+g t=0 x=x r=-1295874971
+g t=0 x=x r=-1992863214
+g t=0 x=x r=15983361
+g t=0 x=x r=114806029
+g t=0 x=x r=992211318
+g t=0 x=x r=512609597
+g t=0 x=x r=1993627629
+g t=0 x=x r=1177417612
+g t=0 x=x r=2097015289
+g t=0 x=x r=-482925370
+g t=0 x=x r=-487095099
+g t=0 x=x r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=1 r=-490058043
+g t=0 x=0 r=777537884
+g t=0 x=1 r=-561108803
+g t=0 x=0 r=-1767155667
+g t=0 x=1 r=-1297668507
+g t=1 x=0 r=-1309711773
+g t=1 x=1 r=91457290
+g t=1 x=0 r=-1069866368
+g t=1 x=1 r=274997536
+g t=1 x=0 r=1433945514
+g t=1 x=1 r=-825439075
+t1 w5=0 rnd=-887079274
+g t=1 x=0 r=-1987856365
+g t=1 x=1 r=-2034485235
+g t=1 x=0 r=-1448618413
+g t=1 x=1 r=899669355
+g t=1 x=0 r=-358208811
+g t=1 x=1 r=-2129180158
+g t=2 x=0 r=-682213714
+g t=2 x=1 r=251652381
+g t=2 x=0 r=-406490417
+g t=2 x=1 r=293882147
+g t=2 x=0 r=84501770
+g t=2 x=1 r=-445445430
+g t=2 x=0 r=-1640936388
+g t=2 x=1 r=2036907506
+g t=2 x=0 r=1160667530
+g t=2 x=1 r=549761857
+g t=2 x=0 r=-330615592
+g t=2 x=1 r=1008792440
+simulation ended (Finish) at time 2
+=== post_d rc=0 native=interp=vm:True
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+=== post_e rc=0 native=interp=vm:True
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=1 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=0 r=1189058957
+g t=0 x=1 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=1 r=512609597
+g t=1 x=0 r=1993627629
+g t=1 x=1 r=1177417612
+g t=1 x=0 r=2097015289
+g t=1 x=1 r=-482925370
+g t=1 x=0 r=-487095099
+g t=1 x=1 r=-720121174
+t1 w5=0 rnd=1924134885
+g t=1 x=0 r=-1143836041
+g t=1 x=1 r=-1993157102
+g t=1 x=0 r=1206705039
+g t=1 x=1 r=2033215986
+g t=1 x=0 r=-411658546
+g t=1 x=1 r=-201295128
+g t=2 x=0 r=-490058043
+g t=2 x=1 r=777537884
+g t=2 x=0 r=-561108803
+g t=2 x=1 r=-1767155667
+g t=2 x=0 r=-1297668507
+g t=2 x=1 r=-1309711773
+g t=2 x=0 r=91457290
+g t=2 x=1 r=-1069866368
+g t=2 x=0 r=274997536
+g t=2 x=1 r=1433945514
+g t=2 x=0 r=-825439075
+g t=2 x=1 r=-887079274
+simulation ended (Finish) at time 2
+=== iverilog rc=0
+g t=0 x=0 r=303379748
+g t=0 x=1 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+t1 w5=0 rnd=-1295874971
+=== verilator rc=0
+g t=0 x=0 r=1604469840
+g t=0 x=1 r=612369497
+g t=0 x=0 r=-41050761
+g t=0 x=1 r=-1222506707
+g t=0 x=0 r=608244723
+g t=0 x=1 r=2003761928
+t1 w5=0 rnd=-1959092748
+=== end

@@ -1,0 +1,36 @@
+designs=1 variants=44 moved(PRE!=POST3b)=22
+  D02: n=44 moved=22
+== MOVED rows: id | exp | PRE | POST3b | iverilog | sv2v
+S02_lp | R=0 | VITA-E3009 | R=0 | R=0 | R=0
+S02_gi | GI=else | VITA-E3010 | GI=else | GI=else | GI=else
+S09_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S09_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+S12_lp | R=1 | VITA-E3009 | R=1 | IVERR | R=1
+S12_gi | GI=then | VITA-E3010 | GI=then | IVERR | GI=then
+S13_lp | R=? | R=1 | R=0 | R=0 | R=0
+S13_gi | ? | GI=then | GI=else | GI=else | GI=else
+S14_lp | R=? | R=1 | R=0 | R=0 | R=0
+S14_gi | ? | GI=then | GI=else | GI=else | GI=else
+S16_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S16_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+S18_lp | R=0 | VITA-E3009 | R=0 | R=0 | R=0
+S18_gi | GI=else | VITA-E3010 | GI=else | GI=else | GI=else
+S19_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S19_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+S23_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S23_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+S24_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S24_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+S25_lp | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+S25_gi | GI=then | VITA-E3010 | GI=then | GI=then | GI=then
+== NOT moved, POST3b differs from an agreeing oracle pair (pre-existing candidates)
+S07_lp | R=1 | VITA-E3009 | VITA-E3009 | R=1 | R=1
+S07_gi | GI=then | VITA-E3010 | VITA-E3010 | GI=then | GI=then
+S08_lp | R=0 | VITA-E3009 | VITA-E3009 | R=0 | R=0
+S08_gi | GI=else | VITA-E3010 | VITA-E3010 | GI=else | GI=else
+S10_lp | R=0 | VITA-E3009 | VITA-E3009 | R=0 | R=0
+S10_gi | GI=else | VITA-E3010 | VITA-E3010 | GI=else | GI=else
+S21_lp | R=0 | VITA-E3009 | VITA-E3009 | R=0 | R=0
+S21_gi | GI=else | VITA-E3010 | VITA-E3010 | GI=else | GI=else
+S22_lp | R=1 | VITA-E3009 | VITA-E3009 | R=1 | R=1
+S22_gi | GI=then | VITA-E3010 | VITA-E3010 | GI=then | GI=then

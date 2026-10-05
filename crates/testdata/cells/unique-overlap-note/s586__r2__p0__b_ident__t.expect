@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r2__p0__b_ident__t
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r2/p0/b_ident/t.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r2/p0/b_ident
+oracles_present: iverilog,verilator
+vita_tags: unrecorded
+verdict: PROBE_CATALOG
+verdict_source: s586/DOCS_ROWS.md:545
+notes: runs: r2/p0/b_ident
+alias: docs_cells/b_ident/t (byte-identical source) verdict: PROBE_CATALOG verdict_source: s586/DOCS_ROWS.md:545
+vita_binary: POST3: md5 ef8fa1e020501546ba751e111d1e0f95 commit 3066170e
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./iv.cerr | 0 bytes
+
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./iv.cout | 0 bytes | identical to block 1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./iv.crc | 2 bytes
+0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./iv.err | 0 bytes | identical to block 1
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./iv.out | 37 bytes
+p=1
+t.sv:6: $finish called at 2 (1s)
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./iv.rc | 2 bytes | identical to block 3
+=== block 7 | oracle verilator 5.052 (version captured in slice) | ./vl.cerr | 0 bytes | identical to block 1
+=== block 8 | oracle verilator 5.052 (version captured in slice) | ./vl.crc | 2 bytes | identical to block 3
+=== block 9 | oracle verilator 5.052 (version captured in slice) | ./vl.err | 0 bytes | identical to block 1
+=== block 10 | oracle verilator 5.052 (version captured in slice) | ./vl.out | 213 bytes
+p=1
+- t.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 39.216 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 11 | oracle verilator 5.052 (version captured in slice) | ./vl.rc | 2 bytes | identical to block 3
+=== block 12 | vita [POST3] | docs_cells/b_ident/post3.err | 839 bytes
+t.sv:2:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'priority0'
+t.sv:4:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'if' or 'case' after a unique/priority qualifier, found '='
+t.sv:4:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '='
+t.sv:5:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found keyword 'priority0'
+t.sv:5:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'priority0'
+t.sv:5:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found keyword 'priority0'
+t.sv:5:35: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'if' or 'case' after a unique/priority qualifier, found ')'
+t.sv:5:35: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found ')'
+errors=8 warnings=0 notes=0
+=== block 13 | vita [POST3] | docs_cells/b_ident/post3.out | 0 bytes | identical to block 1
+=== block 14 | vita [POST3] | docs_cells/b_ident/post3.rc | 2 bytes
+1
+=== block 15 | vita [PRE] | docs_cells/b_ident/pre.err | 839 bytes | identical to block 12
+=== block 16 | vita [PRE] | docs_cells/b_ident/pre.out | 0 bytes | identical to block 1
+=== block 17 | vita [PRE] | docs_cells/b_ident/pre.rc | 2 bytes | identical to block 14
+=== end

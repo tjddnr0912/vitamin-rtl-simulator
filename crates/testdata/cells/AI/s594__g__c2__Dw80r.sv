@@ -1,0 +1,7 @@
+`timescale 1ns/1ns
+module t;
+  localparam int N = 2;
+  localparam logic [79:0] L = {N{40'hFF_FFFF_FFFF}} >> 4;
+  initial #1 $display("L=%h", L);
+  initial #20 $finish;
+endmodule

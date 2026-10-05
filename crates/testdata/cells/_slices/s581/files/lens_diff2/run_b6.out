@@ -1,0 +1,14 @@
+== r7  <<VITA-MOVES
+   iv   0 def 9 bits=4 | 1 a 200 bits=8
+   sv   0 def 9 bits=4 | 1 a 200 bits=8
+   vl   0 def 9 bits=4 | 1 a 200 bits=8
+   pre  0 def 9 bits=4 | 1 def 9 bits=4
+   post 0 def 9 bits=4 | 1 a 200 bits=8
+   post2 0 def 9 bits=4 | 1 a 200 bits=8
+== r7u  <<VITA-MOVES
+   iv   0 def 9 bits=4 | 1 a 200 bits=8
+   sv   0 def 9 bits=4 | 1 a 200 bits=8
+   vl   0 def 9 bits=4 | 1 a 200 bits=8
+   pre  0 def 9 bits=4 | 1 def 9 bits=4
+   post 0 def 9 bits=4 | 1 a 200 bits=8
+   post2 0 def 9 bits=4 | 1 a 200 bits=8

@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__sound__c__c07_forvar
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/sound/c/c07_forvar.sv
+roadmap_row: §2 🆕 AD
+set: r1/sound/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-b,POST-c,PRE,POST-a-sep,POST-b-sep,POST-c-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r1/sound/REPORT.md:21
+alias: post_b/lens/sound/c07_forvar (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./c07_forvar.ivl | 58 bytes
+L=3 v=3
+c07_forvar.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./c07_forvar.vl | 233 bytes
+L=3 v=3
+- c07_forvar.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./c07_forvar.s2v | 61 bytes
+L=3 v=3
+c07_forvar.s2v.v:26: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POST-a] | ./c07_forvar.post | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L=3 v=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-a-sep] | ./c07_forvar.sposta | 234 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+L=3 v=3
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST-b] | ./c07_forvar.postb | 178 bytes | identical to block 4
+=== block 7 | vita [POST-b-sep] | ./c07_forvar.spostb | 234 bytes | identical to block 5
+=== block 8 | vita [POST-c] | ./c07_forvar.postc | 178 bytes | identical to block 4
+=== block 9 | vita [POST-c-sep] | ./c07_forvar.spostc | 234 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./c07_forvar.pre | 178 bytes | identical to block 4
+=== end

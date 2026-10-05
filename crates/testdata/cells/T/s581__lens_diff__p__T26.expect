@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__T26
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/T26.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./T26.iv.txt | 197 bytes
+T26.sv:13: error: A hierarchical reference (`i.Z') is not allowed in a constant expression.
+T26.sv:12: error: Cannot evaluate  genvar case item expression: i.Z
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./T26.vl.txt | 244 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module top T26.sv -Mdir obj_T26
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./T26.vlb.txt | 238 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module top T26.sv -Mdir obj_T26
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./T26.sv.txt | 46 bytes
+@sub top.o.i.u 08000000000000001
+@j def
+
+rc=0
+=== block 5 | vita [POST] | ./T26.post.txt | 142 bytes
+T26.sv:8:13: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant [in top.o]
+errors=1 warnings=0 notes=0
+
+rc=1
+=== block 6 | vita [POST-T] | ./T26.pt.txt | 142 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./T26.pre.txt | 142 bytes | identical to block 5
+=== end

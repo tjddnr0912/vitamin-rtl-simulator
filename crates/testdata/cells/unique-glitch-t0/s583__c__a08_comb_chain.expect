@@ -1,0 +1,113 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__a08_comb_chain
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/a08_comb_chain.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: t0: vita-wrong vs iv; t5: iv=vita, vl order-flagged
+verdict_source: s583/GROUNDING.md:39
+alias: m/sw/c_a08_comb_chain/a08_comb_chain (byte-identical source) verdict: t0: vita-wrong vs iv; t5: iv=vita, vl order-flagged verdict_source: s583/GROUNDING.md:39
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./a08_comb_chain.out | 1179 bytes
+##### a08_comb_chain.sv
+=== iverilog
+compile rc=0 msgs: a08_comb_chain.sv:5: warning: System task ($display) cannot be synthesized in an always_comb process.
+a08_comb_chain.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+evalcase t=0 ab=00
+evalcase t=5 ab=10
+WARNING: a08_comb_chain.sv:6: value is unhandled for priority or unique case statement
+         Time: 5  Scope: top
+evalcase t=5 ab=11
+t=6 y=3 done
+a08_comb_chain.sv:15: $finish called at 7 (1s)
+=== verilator
+compile rc=0
+run rc=0
+evalcase t=0 ab=00
+evalcase t=5 ab=11
+evalcase t=5 ab=11
+t=6 y=3 done
+evalcase t=6 ab=11
+evalcase t=6 ab=11
+- a08_comb_chain.sv:15: Verilog $finish
+evalcase t=7 ab=11
+evalcase t=7 ab=11
+=== vita (native=interp=vm)
+rc=0
+evalcase t=0 ab=0x
+a08_comb_chain.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+evalcase t=0 ab=00
+evalcase t=5 ab=10
+a08_comb_chain.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+evalcase t=5 ab=11
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_a08_comb_chain/obs_POST/results.jsonl | 133 bytes
+{"v":1,"t":7,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":7,"errors":0,"warnings":3,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_a08_comb_chain/obs_POST/run.json | 1420 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "a08_comb_chain.sv", "blake3": "3dedd48a330e71bb0bac638d8ecaf2a06a406b6a14e476ff7e51074599c71ebc"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 3, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 3, "total": 5, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 6, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000396,
+  "elab_s": 0.000281,
+  "sim_s": 0.000112
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_a08_comb_chain/obs_PRE/results.jsonl | 133 bytes | identical to block 2
+=== block 5 | vita [PRE/obs] | m/sw/c_a08_comb_chain/obs_PRE/run.json | 1420 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "a08_comb_chain.sv", "blake3": "3dedd48a330e71bb0bac638d8ecaf2a06a406b6a14e476ff7e51074599c71ebc"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 3, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 3, "total": 5, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 6, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000434,
+  "elab_s": 0.000305,
+  "sim_s": 0.000125
+}
+=== end

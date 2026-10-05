@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__S7_rep
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/S7_rep.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:667
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./S7_rep.ivl | 55 bytes
+r=10101010
+S7_rep.sv:5: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./S7_rep.vl | 231 bytes
+r=10101010
+- S7_rep.sv:5: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 263.158 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./S7_rep.s2v | 57 bytes
+r=10101010
+S7_rep.s2v.v:6: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./S7_rep.cut | 80 bytes
+r=10101010
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./S7_rep.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./S7_rep.pre | 80 bytes
+r=00001010
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [pre] | ./S7_rep.pre.route | 0 bytes | identical to block 5
+=== end

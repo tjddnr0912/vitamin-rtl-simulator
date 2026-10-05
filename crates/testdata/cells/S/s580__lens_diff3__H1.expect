@@ -1,0 +1,307 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff3__H1
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff3/H1.sv
+roadmap_row: §2 🆕 S
+set: lens_diff3
+oracles_present: iverilog,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: F3 NON-BLOCKING (correct -> loud)
+verdict_source: s580/lens_diff3/REPORT.md:29
+notes: R4 cmp3_post4 bucket(s): both×10,post3×14 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 88
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./H1_H1.iv.txt | 46 bytes
+H1 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./H1_H2.iv.txt | 46 bytes
+H2 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./H1_H2I.iv.txt | 47 bytes
+H2I 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./H1_H2U.iv.txt | 47 bytes
+H2U 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./H1_H3.iv.txt | 46 bytes
+H3 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./H1_H3U.iv.txt | 47 bytes
+H3U 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./H1_H4.iv.txt | 46 bytes
+H4 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./H1_H5.iv.txt | 46 bytes
+H5 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./H1_H6.iv.txt | 46 bytes
+H6 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 10 | oracle iverilog 13.0 (version captured in slice) | ./H1_H7.iv.txt | 46 bytes
+H7 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 11 | oracle iverilog 13.0 (version captured in slice) | ./H1_H8.iv.txt | 46 bytes
+H8 1
+H1.sv:50: $finish called at 2 (1s)
+
+rc=0
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H1.sv.txt | 53 bytes
+H1 1
+H1_H1.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 13 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H2.sv.txt | 53 bytes
+H2 1
+H1_H2.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 14 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H2I.sv.txt | 55 bytes
+H2I 1
+H1_H2I.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 15 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H2U.sv.txt | 55 bytes
+H2U 1
+H1_H2U.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 16 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H3.sv.txt | 53 bytes
+H3 1
+H1_H3.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 17 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H3U.sv.txt | 55 bytes
+H3U 1
+H1_H3U.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 18 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H4.sv.txt | 53 bytes
+H4 1
+H1_H4.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 19 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H5.sv.txt | 53 bytes
+H5 1
+H1_H5.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 20 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H6.sv.txt | 53 bytes
+H6 1
+H1_H6.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 21 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H7.sv.txt | 213 bytes
+H1_H7.sv2v.v:29: error: The function uL.fs8 has been called with missing/empty parameters.
+H1_H7.sv2v.v:29:      : Verilog doesn't allow passing empty parameters to functions.
+1 error(s) during elaboration.
+
+rc=1
+=== block 22 | oracle sv2v 0.0.13 (version captured in slice) | ./H1_H8.sv.txt | 53 bytes
+H8 1
+H1_H8.sv2v.v:31: $finish called at 2 (1s)
+
+rc=0
+=== block 23 | vita [POST] | ./H1_H1.post.txt | 341 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 24 | vita [POST] | ./H1_H2.post.txt | 174 bytes
+H2 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 25 | vita [POST] | ./H1_H2I.post.txt | 175 bytes
+H2I 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 26 | vita [POST] | ./H1_H2U.post.txt | 175 bytes
+H2U 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 27 | vita [POST] | ./H1_H3.post.txt | 174 bytes
+H3 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 28 | vita [POST] | ./H1_H3U.post.txt | 175 bytes
+H3U 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 29 | vita [POST] | ./H1_H4.post.txt | 174 bytes
+H4 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 30 | vita [POST] | ./H1_H5.post.txt | 174 bytes
+H5 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 31 | vita [POST] | ./H1_H6.post.txt | 174 bytes
+H6 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 32 | vita [POST] | ./H1_H7.post.txt | 174 bytes
+H7 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 33 | vita [POST] | ./H1_H8.post.txt | 174 bytes
+H8 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 34 | vita [POST2] | ./H1_H1.post2.txt | 174 bytes
+H1 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 35 | vita [POST2] | ./H1_H1.post2q.txt | 174 bytes | identical to block 34
+=== block 36 | vita [POST2] | ./H1_H2.post2.txt | 174 bytes | identical to block 24
+=== block 37 | vita [POST2] | ./H1_H2.post2q.txt | 174 bytes | identical to block 24
+=== block 38 | vita [POST2] | ./H1_H2I.post2.txt | 175 bytes | identical to block 25
+=== block 39 | vita [POST2] | ./H1_H2I.post2q.txt | 175 bytes | identical to block 25
+=== block 40 | vita [POST2] | ./H1_H2U.post2.txt | 175 bytes | identical to block 26
+=== block 41 | vita [POST2] | ./H1_H2U.post2q.txt | 175 bytes | identical to block 26
+=== block 42 | vita [POST2] | ./H1_H3.post2.txt | 174 bytes | identical to block 27
+=== block 43 | vita [POST2] | ./H1_H3.post2q.txt | 174 bytes | identical to block 27
+=== block 44 | vita [POST2] | ./H1_H3U.post2.txt | 175 bytes | identical to block 28
+=== block 45 | vita [POST2] | ./H1_H3U.post2q.txt | 175 bytes | identical to block 28
+=== block 46 | vita [POST2] | ./H1_H4.post2.txt | 174 bytes | identical to block 29
+=== block 47 | vita [POST2] | ./H1_H4.post2q.txt | 174 bytes | identical to block 29
+=== block 48 | vita [POST2] | ./H1_H5.post2.txt | 174 bytes | identical to block 30
+=== block 49 | vita [POST2] | ./H1_H5.post2q.txt | 174 bytes | identical to block 30
+=== block 50 | vita [POST2] | ./H1_H6.post2.txt | 174 bytes | identical to block 31
+=== block 51 | vita [POST2] | ./H1_H6.post2q.txt | 174 bytes | identical to block 31
+=== block 52 | vita [POST2] | ./H1_H7.post2.txt | 174 bytes | identical to block 32
+=== block 53 | vita [POST2] | ./H1_H7.post2q.txt | 174 bytes | identical to block 32
+=== block 54 | vita [POST2] | ./H1_H8.post2.txt | 174 bytes | identical to block 33
+=== block 55 | vita [POST2] | ./H1_H8.post2q.txt | 174 bytes | identical to block 33
+=== block 56 | vita [POST3] | ./H1_H1.post3.txt | 341 bytes | identical to block 23
+=== block 57 | vita [POST3] | ./H1_H1.post3q.txt | 341 bytes | identical to block 23
+=== block 58 | vita [POST3] | ./H1_H2.post3.txt | 348 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with a signed pattern needs the left operand's signedness, which is not known at this point [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 59 | vita [POST3] | ./H1_H2.post3q.txt | 348 bytes | identical to block 58
+=== block 60 | vita [POST3] | ./H1_H2I.post3.txt | 348 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with a signed pattern needs the left operand's signedness, which is not known at this point [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 61 | vita [POST3] | ./H1_H2I.post3q.txt | 348 bytes | identical to block 60
+=== block 62 | vita [POST3] | ./H1_H2U.post3.txt | 175 bytes | identical to block 26
+=== block 63 | vita [POST3] | ./H1_H2U.post3q.txt | 175 bytes | identical to block 26
+=== block 64 | vita [POST3] | ./H1_H3.post3.txt | 348 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with a signed pattern needs the left operand's signedness, which is not known at this point [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 65 | vita [POST3] | ./H1_H3.post3q.txt | 348 bytes | identical to block 64
+=== block 66 | vita [POST3] | ./H1_H3U.post3.txt | 175 bytes | identical to block 28
+=== block 67 | vita [POST3] | ./H1_H3U.post3q.txt | 175 bytes | identical to block 28
+=== block 68 | vita [POST3] | ./H1_H4.post3.txt | 348 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:36:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with a signed pattern needs the left operand's signedness, which is not known at this point [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 69 | vita [POST3] | ./H1_H4.post3q.txt | 348 bytes | identical to block 68
+=== block 70 | vita [POST3] | ./H1_H5.post3.txt | 174 bytes | identical to block 30
+=== block 71 | vita [POST3] | ./H1_H5.post3q.txt | 174 bytes | identical to block 30
+=== block 72 | vita [POST3] | ./H1_H6.post3.txt | 174 bytes
+H6 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 73 | vita [POST3] | ./H1_H6.post3q.txt | 174 bytes | identical to block 72
+=== block 74 | vita [POST3] | ./H1_H7.post3.txt | 174 bytes | identical to block 32
+=== block 75 | vita [POST3] | ./H1_H7.post3q.txt | 174 bytes | identical to block 32
+=== block 76 | vita [POST3] | ./H1_H8.post3.txt | 348 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with a signed pattern needs the left operand's signedness, which is not known at this point [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 77 | vita [POST3] | ./H1_H8.post3q.txt | 348 bytes | identical to block 76
+=== block 78 | vita [PRE] | ./H1_H1.pre.txt | 303 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H1.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 79 | vita [PRE] | ./H1_H2.pre.txt | 174 bytes | identical to block 24
+=== block 80 | vita [PRE] | ./H1_H2I.pre.txt | 175 bytes
+H2I x
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 81 | vita [PRE] | ./H1_H2U.pre.txt | 175 bytes | identical to block 26
+=== block 82 | vita [PRE] | ./H1_H3.pre.txt | 174 bytes | identical to block 27
+=== block 83 | vita [PRE] | ./H1_H3U.pre.txt | 175 bytes | identical to block 28
+=== block 84 | vita [PRE] | ./H1_H4.pre.txt | 174 bytes | identical to block 29
+=== block 85 | vita [PRE] | ./H1_H5.pre.txt | 174 bytes | identical to block 30
+=== block 86 | vita [PRE] | ./H1_H6.pre.txt | 174 bytes | identical to block 31
+=== block 87 | vita [PRE] | ./H1_H7.pre.txt | 174 bytes | identical to block 32
+=== block 88 | vita [PRE] | ./H1_H8.pre.txt | 174 bytes | identical to block 33
+=== end

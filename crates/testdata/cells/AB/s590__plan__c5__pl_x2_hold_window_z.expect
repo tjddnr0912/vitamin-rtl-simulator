@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__plan__c5__pl_x2_hold_window_z
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/plan/c5/pl_x2_hold_window_z.sv
+roadmap_row: §2 🆕 AB
+set: plan/c5
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,POSTDEV,P6,P5_SIDE,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: call:->oracle
+verdict_source: s590/fin/axscan_fin.txt:98
+notes: 2 byte-identical output copies listed as alias
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 5
+=== block 1 | combined [verilator+iverilog|PRE+P5_SIDE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | plan/out_c5/pl_x2_hold_window_z.out | 623 bytes
+##### pl_x2_hold_window_z
+=== verilator compile rc=0 run rc=0
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+f t=1 x=1
+- pl_x2_hold_window_z.sv:13: Verilog $finish
+f t=2 x=1
+=== iverilog compile rc=0 run rc=0
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+pl_x2_hold_window_z.sv:13: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=x
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [verilator+iverilog|PRE+P6] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | p6/full_plc5/pl_x2_hold_window_z.out | 623 bytes | identical to block 1
+=== block 3 | vita [PRE+P5_SIDE] | p6/p5ref_plc5/pl_x2_hold_window_z.out | 355 bytes
+##### pl_x2_hold_window_z
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=x
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f t=0 x=1
+V t=0 v=0 n=1
+t=1 w=1 v=0 n=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== block 4 | vita [PRE+P6] | p6/p6_plc5/pl_x2_hold_window_z.out | 355 bytes | identical to block 3
+=== block 5 | vita [PRE+POSTDEV] | p6/dev_plc5/pl_x2_hold_window_z.out | 355 bytes | identical to block 3
+=== end

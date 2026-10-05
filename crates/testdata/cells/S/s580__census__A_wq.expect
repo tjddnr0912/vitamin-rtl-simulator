@@ -1,0 +1,65 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__census__A_wq
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/census/A_wq.sv
+roadmap_row: §2 🆕 S
+set: census
+oracles_present: iverilog
+vita_tags: post-dbg-r1,post2dbg,postrel,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 2
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./A_wq.ivd.txt | 197 bytes
+A01q 1
+A02q 1
+A03q 1
+A04q 0
+A07q 1
+A08q 1
+A09q 1
+A10q 1
+A11q 1
+A12q 1
+A13q 1
+A14q 1
+A20q 0
+A21q 1
+A22q 1
+A23q 0
+A24q 1
+A28q 1
+A29q 1
+A30q 1
+A31q 1
+A32q 1
+A_wq.sv:27: $finish called at 1 (1ns)
+rc=0
+=== block 2 | vita [PRE] | ./A_wq.pre.txt | 223 bytes
+A01q 1
+A02q 1
+A03q 1
+A04q 0
+A07q 1
+A08q 1
+A09q 1
+A10q 1
+A11q 1
+A12q 1
+A13q 1
+A14q 1
+A20q 0
+A21q 1
+A22q 1
+A23q 0
+A24q 1
+A28q 1
+A29q 1
+A30q 1
+A31q 1
+A32q 1
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== end

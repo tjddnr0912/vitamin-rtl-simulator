@@ -1,0 +1,72 @@
+let ast::ExprKind::Ident(path) = &n.kind else {
+// §2 🆕 L ⓩ: a SELECT of a name whose declared range does not start
+// at 0 is answered whole (`const_param_select_shifted_bits`), and
+// here with THIS interpreter's environment so an index naming a body
+// local folds (`A1[i +: 4]`). A COUNT position may not read those
+// locals — the rule spelled out below — so it asks with an empty one.
+//
+// ⚠️⚠️ THE SHADOW RULE APPLIES TO THE SELECT'S BASE, and it must be
+// applied HERE, before either attempt: the select resolver reaches
+// the module parameter through `lookup_scoped`, which knows nothing
+// about this interpreter's locals, and `wide_name_bits` below asks it
+// again with an empty environment. Without this, a function formal
+// shadowing a non-zero-LSB module parameter —
+// `localparam logic [11:4] A = 8'h3C;` beside
+// `function f(input logic [7:0] A); f = {A[7:4], A[7:4]};` — folded
+// the MODULE parameter (`cc`) while vita's own runtime call answered
+// `ff` with both oracles. Review round 1, BLOCKING.
+if Self::select_root_name(n)
+.is_some_and(|r| envw.contains_key(r) || env.contains_key(r))
+{
+// Neither the shifted arm nor `wide_name_bits` may answer: both
+// resolve the root through MODULE scope. Declining hands the
+// select to the structural arm, which folds the base through
+// this same resolver — whose Ident arm reads the local.
+return None;
+}
+let (senv, senvw) = if is_count {
+(&empty_env, &empty_envw)
+} else {
+(env, envw)
+};
+if let Some(r) = self.const_param_select_shifted_bits(n, senv, senvw) {
+return Some(r);
+}
+return self.wide_name_bits(n);
+};
+let [seg] = path.segments.as_slice() else {
+return None; // a hierarchical name is not a constant here
+};
+// ⚠️⚠️ A COUNT / SIZE position may not read this interpreter's LOCALS. They
+// are runtime storage — `int n = 2; {n{4'hA}}` is not a constant expression
+// and iverilog rejects the function — and a local that merely SHADOWS must
+// stop the walk here rather than fall through to the module parameter
+// below, which would answer for a different object than the reference
+// names. Both were measured as blocking defects in §4.5.371.
+if is_count && (envw.contains_key(&seg.name) || env.contains_key(&seg.name)) {
+return None;
+}
+let (v, w, s) = match envw.get(&seg.name).copied() {
+Some((w, s)) if (1..=64).contains(&w) => (*env.get(&seg.name)?, w, s),
+Some(_) => return None, // declared here, shape unknown or too wide
+None => {
+let v = self.lookup_scoped(&seg.name)?;
+let (w, s) = self
+.walk_scopes(&seg.name, &self.param_meta)
+.unwrap_or((32, false));
+if !(1..=64).contains(&w) {
+return None;
+}
+(v, w, s)
+}
+};
+let keep = if w >= 64 { !0u64 } else { (1u64 << w) - 1 };
+// One word is exactly `bp_zero(w)`'s allocation for w in 1..=64, and the
+// two planes must stay the same length — `bp_set` bounds-checks `val` and
+// then indexes `unk` with the same word, so an unequal pair would panic.
+let bits = ir::BitPacked {
+val: vec![(v as u64) & keep],
+unk: vec![0],
+};
+debug_assert_eq!(bits.val.len(), bits.unk.len());
+Some((bits, w, s))

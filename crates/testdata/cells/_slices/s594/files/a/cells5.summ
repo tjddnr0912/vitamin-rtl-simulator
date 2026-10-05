@@ -1,0 +1,36 @@
+### W128_lp
+  pre : !VITA-E3009 parameter `L` value is not a constant: undefined name `A128` is not a 
+  p3r : !VITA-E3009 parameter `L` value is not a constant: undefined name `A128` is not a 
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=0
+### W64s_lp
+  pre : L=1
+  p3r : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=1
+### W64s_u
+  pre : L=0
+  p3r : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### W65_lp
+  pre : !VITA-E3009 parameter `L` value is not a constant: undefined name `A65` is not a c
+  p3r : !VITA-E3009 parameter `L` value is not a constant: undefined name `A65` is not a c
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### W65_or
+  pre : !VITA-E3009 parameter `L` value is not a constant: undefined name `A65` is not a c
+  p3r : !VITA-E3009 parameter `L` value is not a constant: undefined name `A65` is not a c
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=0
+### W65_rb
+  pre : !VITA-E3009 a reference to net/variable `A65` is not allowed in a constant range b
+  p3r : !VITA-E3009 a reference to net/variable `A65` is not allowed in a constant range b
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : vb=5
+  vl : vb=5

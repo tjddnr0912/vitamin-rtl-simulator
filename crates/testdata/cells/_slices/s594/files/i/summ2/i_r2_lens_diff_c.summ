@@ -1,0 +1,266 @@
+### D01_fnlp_shadow
+  pre594 : !VITA-E2002 expected statement, found keyword 'localparam'
+  pa : !VITA-E2002 expected statement, found keyword 'localparam'
+  pb : !VITA-E2002 expected statement, found keyword 'localparam'
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1
+### D02_fnlp_arr_shadow
+  pre594 : !VITA-E2002 expected statement, found '['
+  pa : !VITA-E2002 expected statement, found '['
+  pb : !VITA-E2002 expected statement, found '['
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L=1
+  vl : R: L=1
+### D03_gen_shadow
+  pre594 : R: L=1
+  pa : R: L=1
+  pb : R: L=1
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1
+### D04_genvar_count
+  pre594 : R: g=16 L=1 | R: g=4 L=1
+  pa : R: g=16 L=1 | R: g=4 L=1
+  pb : R: g=16 L=1 | R: g=4 L=1
+  ivl : R: g=16 L=1 | R: g=4 L=1
+  s2v : R: g=16 L=1 | R: g=4 L=1
+  vl : R: g=16 L=1 | R: g=4 L=1
+### D05_defparam
+  pre594 : R: N=16 L=1
+  pa : R: N=16 L=1
+  pb : R: N=16 L=1
+  ivl : R: N=16 L=1
+  s2v : R: N=16 L=1
+  vl : R: N=16 L=1
+### D06_lpchain_ovr
+  pre594 : R: M=8 L=1
+  pa : R: M=8 L=1
+  pb : R: M=8 L=1
+  ivl : R: M=8 L=1
+  s2v : R: M=8 L=1
+  vl : R: M=8 L=1
+### D07_ovr_arr_elem
+  pre594 : R: L=4294967292 B=32 K=1
+  pa : R: L=252 B=8 K=1
+  pb : R: L=252 B=8 K=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L=252 B=8 K=0
+  vl : R: L=252 B=8 K=1
+### D08a_pkg_count
+  pre594 : R: L1=1 L2=1
+  pa : R: L1=1 L2=1
+  pb : R: L1=1 L2=1
+  ivl : R: L1=1 L2=1
+  s2v : R: L1=1 L2=1
+  vl : R: L1=1 L2=1
+### D08b_pkg_elem
+  pre594 : R: L3=4294967292 B3=32 K3=1
+  pa : R: L3=252 B3=8 K3=1
+  pb : R: L3=252 B3=8 K3=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L3=252 B3=8 K3=0
+  vl : R: L3=252 B3=8 K3=1
+### D09_count_spellings
+  pre594 : R: L1=1 L2=256 B2=32 L3=1 L4=16 B4=32
+  pa : R: L1=1 L2=0 B2=8 L3=1 L4=0 B4=4
+  pb : R: L1=1 L2=0 B2=8 L3=1 L4=0 B4=4
+  ivl : R: L1=1 L2=256 B2=9 L3=1 L4=16 B4=5
+  s2v : R: L1=1 L2=256 B2=8 L3=1 L4=16 B4=4
+  vl : R: L1=1 L2=0 B2=8 L3=1 L4=0 B4=4
+### D10a_signed_rep
+  pre594 : !VITA-E3009 parameter `L1` value is not a foldable constant expression [in t]
+  pa : !VITA-E3009 parameter `L1` value is not a foldable constant expression [in t]
+  pb : !VITA-E3009 parameter `L1` value is not a foldable constant expression [in t]
+  ivl : R: L1=-1 B1=9 L2=1 L3=15
+  s2v : R: L1=-1 B1=8 L2=1 L3=15
+  vl : R: L1=-1 B1=8 L2=1 L3=15
+### D10b_signed_elem
+  pre594 : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  pa : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  pb : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L2=252 L3=-4 L4=252 B4=16
+  vl : R: L2=252 L3=-4 L4=-4 B4=16
+### D11_cast
+  pre594 : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  pa : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  pb : !VITA-E3009 parameter `L2` value is not a foldable constant expression [in t]
+  ivl : R: L1=252 B1=16 L2=-1 L3=7
+  s2v : R: L1=252 B1=16 L2=-1 L3=7
+  vl : R: L1=252 B1=16 L2=-1 L3=7
+### D12_concat
+  pre594 : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+  pa : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+  pb : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+  ivl : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+  s2v : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+  vl : R: L1=252 B1=8 L2=4032 B2=12 L3=252 B3=12
+### D13_nested_rep
+  pre594 : R: L1=256 B1=32 L2=256 L3=65536 B3=32
+  pa : R: L1=0 B1=8 L2=0 L3=0 B3=16
+  pb : R: L1=0 B1=8 L2=0 L3=0 B3=16
+  ivl : R: L1=256 B1=9 L2=256 L3=65536 B3=17
+  s2v : R: L1=256 B1=8 L2=256 L3=65536 B3=16
+  vl : R: L1=0 B1=8 L2=0 L3=0 B3=16
+### D14_shift_pow
+  pre594 : R: L1=240 B1=32 L2=-4 L3=225 L4=4294967295 L5=32768
+  pa : R: L1=0 B1=4 L2=-4 L3=1 L4=255 L5=32768
+  pb : R: L1=0 B1=4 L2=-4 L3=1 L4=255 L5=32768
+  ivl : R: L1=0 B1=4 L2=-4 L3=225 L4=63 L5=32768
+  s2v : R: L1=0 B1=4 L2=-4 L3=225 L4=63 L5=32768
+  vl : R: L1=0 B1=4 L2=-4 L3=1 L4=63 L5=32768
+### D15_ternary_sign
+  pre594 : R: L1=4294967292 B1=32 L2=1 L3=1
+  pa : R: L1=252 B1=8 L2=1 L3=0
+  pb : R: L1=252 B1=8 L2=1 L3=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L1=252 B1=8 L2=0 L3=0
+  vl : R: L1=252 B1=8 L2=1 L3=0
+### D16_2d_elem
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A2` is not a c
+  pa : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A2` is not a c
+  pb : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A2` is not a c
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L1=252 B1=8 L2=0 L3=3
+  vl : !%Error: D16_2d_elem.sv:4:19: Expecting expression to be constant, but variable i
+### D17_packed_arr
+  pre594 : R: L1=252 B1=32 L2=1 L3=252
+  pa : R: L1=252 B1=8 L2=1 L3=252
+  pb : R: L1=252 B1=8 L2=1 L3=252
+  ivl : !sorry: packed array parameters are not supported yet.
+  s2v : R: L1=252 B1=8 L2=1 L3=252
+  vl : R: L1=252 B1=8 L2=1 L3=252
+### D18_string_arr
+  pre594 : !VITA-E2002 expected ';', found '['
+  pa : !VITA-E2002 expected ';', found '['
+  pb : !VITA-E2002 expected ';', found '['
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : !  error, called at src/Language/SystemVerilog/AST/Type.hs:118:14 in ma
+  vl : R: L=1 s=ab
+### D19_real_arr
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: undefined name `RA` is not a c
+  pa : !VITA-E3009 parameter `L1` value is not a constant: undefined name `RA` is not a c
+  pb : !VITA-E3009 parameter `L1` value is not a constant: undefined name `RA` is not a c
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : !  error, called at src/Language/SystemVerilog/AST/Type.hs:118:14 in ma
+  vl : R: L1=-1.50 L2=1.50 L3=1
+### D20_oob_elem
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A` is not a co
+  pa : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A` is not a co
+  pb : !VITA-E3009 parameter `L1` value is not a constant: undefined name `A` is not a co
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L1=xxxxxxxxx L2=x B2=32
+  vl : R: L1=00000011 L2=4294967292 B2=32
+### D21_gen_if_case
+  pre594 : R: GC=def | R: GI=else
+  pa : R: GC=def | R: GI=then
+  pb : R: GC=def | R: GI=then
+  ivl : R: GC=fc | R: GI=then
+  s2v : R: GC=fc | R: GI=then
+  vl : R: GC=fc | R: GI=then
+### D22_gen_for
+  pre594 : 
+  pa : R: i=0 | R: i=1 | R: i=2 | R: i=3
+  pb : R: i=0 | R: i=1 | R: i=2 | R: i=3
+  ivl : R: i=0 | R: i=1 | R: i=2 | R: i=3
+  s2v : R: i=0 | R: i=1 | R: i=2 | R: i=3
+  vl : R: i=0 | R: i=1 | R: i=2 | R: i=3
+### D23a_bits_range
+  pre594 : R: B1=4 vb=255
+  pa : R: B1=4 vb=3
+  pb : R: B1=4 vb=3
+  ivl : R: B1=4 vb=3
+  s2v : R: B1=4 vb=3
+  vl : R: B1=4 vb=3
+### D23b_elem_range
+  pre594 : R: B1=8 wb=4 ub=255
+  pa : R: B1=8 wb=4 ub=3
+  pb : R: B1=8 wb=4 ub=3
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: B1=8 wb=4 ub=3
+  vl : R: B1=8 wb=4 ub=3
+### D24_case_rt
+  pre594 : R: C=hit
+  pa : R: C=hit
+  pb : R: C=hit
+  ivl : R: C=hit
+  s2v : R: C=hit
+  vl : R: C=hit
+### D25_inside_wild
+  pre594 : !VITA-E3009 parameter `L2` value is not a constant: 8'b1111_11xx has no constant-f
+  pa : R: L1=1 L2=1 L3=1
+  pb : R: L1=1 L2=1 L3=1
+  ivl : !error: localparam must have a value.
+  s2v : R: L1=1 L2=1 L3=1
+  vl : R: L1=1 L2=1 L3=1
+### D26_wide
+  pre594 : !VITA-E3009 parameter `L1` value is not a foldable constant expression [in t]
+  pa : R: L1=252 B1=70 L2=0 B2=70 L3=63
+  pb : R: L1=252 B1=70 L2=0 B2=70 L3=63
+  ivl : R: L1=252 B1=71 L2=1180591620717411303424 B2=71 L3=63
+  s2v : R: L1=252 B1=70 L2=1180591620717411303424 B2=70 L3=63
+  vl : R: L1=252 B1=70 L2=0 B2=70 L3=63
+### D27_xz
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: 8'bx has no constant-fold arm 
+  pa : !VITA-E3009 parameter `L1` value is not a constant: 8'bx has no constant-fold arm 
+  pb : !VITA-E3009 parameter `L1` value is not a constant: 8'bx has no constant-fold arm 
+  ivl : R: L1=xxxxxxxxx L2=xxxxxxxxx L3=x
+  s2v : R: L1=xxxxxxxxx L2=xxxxxxxxx L3=x
+  vl : R: L1=xxxxxxxx L2=xxxxxxxx L3=x
+### D28a_runtime
+  pre594 : R: r32=252 d=252
+  pa : R: r32=252 d=252
+  pb : R: r32=252 d=252
+  ivl : R: r32=252 d=252
+  s2v : R: r32=252 d=252
+  vl : R: r32=252 d=252
+### D28b_runtime_elem
+  pre594 : R: r32=252 d=252
+  pa : R: r32=252 d=252
+  pb : R: r32=252 d=252
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: r32=252 d=252
+  vl : R: r32=252 d=252
+### D29_call_in_arm
+  pre594 : !VITA-E3009 parameter `L2` value is not a constant: the `>>` operation has no cons
+  pa : !VITA-E3009 parameter `L2` value is not a constant: the `>>` operation has no cons
+  pb : !VITA-E3009 parameter `L2` value is not a constant: the `>>` operation has no cons
+  ivl : R: L1=1 L2=63
+  s2v : R: L1=1 L2=63
+  vl : R: L1=1 L2=63
+### D30_fnvar_arm
+  pre594 : R: L=0
+  pa : R: L=0
+  pb : R: L=0
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1
+### D31_rep_partsel
+  pre594 : R: L1=abcd B1=16 L2=c
+  pa : R: L1=abcd B1=16 L2=c
+  pb : R: L1=abcd B1=16 L2=c
+  ivl : R: L1=abcd B1=16 L2=c
+  s2v : R: L1=abcd B1=16 L2=c
+  vl : R: L1=abcd B1=16 L2=c
+### D33_zero_count
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: the concatenation `{…}` has no
+  pa : !VITA-E3009 parameter `L1` value is not a constant: the concatenation `{…}` has no
+  pb : !VITA-E3009 parameter `L1` value is not a constant: the concatenation `{…}` has no
+  ivl : R: L1=252 B1=8 L2=252 B2=8
+  s2v : R: L1=252 B1=8 L2=252 B2=8
+  vl : R: L1=252 B1=8 L2=252 B2=8
+### D34_genidx_elem
+  pre594 : R: g=0 L=4294967292 B=32 | R: g=1 L=3 B=32
+  pa : R: g=0 L=252 B=8 | R: g=1 L=3 B=8
+  pb : R: g=0 L=252 B=8 | R: g=1 L=3 B=8
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: g=0 L=252 B=8 | R: g=1 L=3 B=8
+  vl : R: g=0 L=252 B=8 | R: g=1 L=3 B=8
+### D35_iface_count
+  pre594 : R: L=1
+  pa : R: L=1
+  pb : R: L=1
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1

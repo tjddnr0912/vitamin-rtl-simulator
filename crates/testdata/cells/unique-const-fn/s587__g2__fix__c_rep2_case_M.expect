@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g2__fix__c_rep2_case_M
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g2/fix/c_rep2_case_M.sv
+roadmap_row: §3.b unique-const-fn
+set: g2/fix
+oracles_present: none-on-this-copy
+vita_tags: MECH,POST-b,POST-c,POST-a,PRE,PRE-sep,S3,S4,S8
+verdict: pre-existing silent-wrong
+verdict_source: s587/GROUNDING.md:98
+notes: GROUNDING family E list; oracle outputs on alias copy
+alias: g2o/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: post_b/velab_work/c_rep2_case_M/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: post_c/velab_work/c_rep2_case_M/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: r1/diff/c444/g2/fix/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: r1/diff/velab/w/g2__fix__c_rep2_case_M/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: r2/diff/re/c444/g2/fix/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+alias: r2/diff/velab/w/g2__fix__c_rep2_case_M/c_rep2_case_M (byte-identical source) verdict: pre-existing silent-wrong verdict_source: s587/GROUNDING.md:98
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | g2o/c_rep2_case_M.ivl | 139 bytes
+c_rep2_case_M.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+r=0000007f
+c_rep2_case_M.sv:8: $finish called at 5 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | g2o/c_rep2_case_M.vl | 379 bytes
+%Warning-WIDTHEXPAND: c_rep2_case_M.sv:7:12: Operator ASSIGNW expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+r=0000007f
+- c_rep2_case_M.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 21.186 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | g2o/vl_c_rep2_case_M.build | 492 bytes
+%Warning-WIDTHEXPAND: c_rep2_case_M.sv:7:12: Operator ASSIGNW expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+                                           : ... note: In instance 'top'
+    7 |   assign r = {f(2){1'b1}};
+      |            ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 4 | vita [MECH] | ./c_rep2_case_M.mech | 518 bytes
+c_rep2_case_M.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r=00000000
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=1
+rc=0
+=== block 5 | vita [PRE] | ./c_rep2_case_M.pre | 518 bytes | identical to block 4
+=== block 6 | vita [S3] | ./c_rep2_case_M.s3 | 518 bytes | identical to block 4
+=== block 7 | vita [S4] | ./c_rep2_case_M.s4 | 518 bytes | identical to block 4
+=== block 8 | vita [S8] | ./c_rep2_case_M.s8 | 518 bytes | identical to block 4
+=== end

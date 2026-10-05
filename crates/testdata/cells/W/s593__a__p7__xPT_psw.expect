@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p7__xPT_psw
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p7/xPT_psw.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p7
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p7.summ:487
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./xPT_psw.ivl | 220 bytes
+xPT_psw.sv:4: error: Indexed part select width must be an integral constants greater than zero.
+xPT_psw.sv:4:      : This width expression violates that rule: ((PV)w(4'sb1z00))+('sd3)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./xPT_psw.vl | 131 bytes
+%Error: Internal Error: xPT_psw.sv:4:43: ../V3Number.cpp:1063: toUInt with 4-state 32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./xPT_psw.s2v | 235 bytes
+xPT_psw.s2v.v:4: error: Indexed part select width must be an integral constants greater than zero.
+xPT_psw.s2v.v:4:      : This width expression violates that rule: (((PV)|(4'sd4))==(4'sd-4))+('sd3)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [cut] | ./xPT_psw.cut | 81 bytes
+ps=00000101
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./xPT_psw.cut.route | 16 bytes
+t fxs64 frame 0
+=== block 6 | vita [pre] | ./xPT_psw.pre | 81 bytes
+ps=00000001
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [pre] | ./xPT_psw.pre.route | 16 bytes | identical to block 5
+=== end

@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__G_p2_a_forward_referenced_matching_label_m_9263ee19
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/G_p2_a_forward_referenced_matching_label_m_9263ee19.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c5.p5.summ:211
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/generate_case_and_wildcard_prerequisites__p2_a_forward_referenced_matching_label_mixes_arms__28545_5 (byte-identical source) verdict: PRE!=all verdict_source: s593/g/c5.p5.summ:211
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.ivl | 394 bytes
+G_p2_a_forward_referenced_matching_label_m_9263ee19.sv:6: error: Unable to bind parameter `K' in `t.gb'
+G_p2_a_forward_referenced_matching_label_m_9263ee19.sv:9:      : A symbol with that name was declared here. Check for declaration after use.
+G_p2_a_forward_referenced_matching_label_m_9263ee19.sv:4: error: Cannot evaluate  genvar case item expression: K
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.vl | 201 bytes
+D1P k 200 bits=8
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: end at 1ns; walltime 0.000 s; speed 90.909 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.s2v | 22 bytes
+D1P k 200 bits=8
+rc=0
+=== block 4 | vita [post1] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post1 | 87 bytes
+D1P k 8 bits=4
+simulation ended (Quiescent) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post2 | 87 bytes | identical to block 4
+=== block 7 | vita [post2] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post3] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post3 | 87 bytes | identical to block 4
+=== block 9 | vita [post3] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post3.route | 0 bytes | identical to block 5
+=== block 10 | vita [post5] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post5 | 87 bytes | identical to block 4
+=== block 11 | vita [post5] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.post5.route | 0 bytes | identical to block 5
+=== block 12 | vita [pre] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.pre | 87 bytes | identical to block 4
+=== block 13 | vita [pre] | ./G_p2_a_forward_referenced_matching_label_m_9263ee19.pre.route | 0 bytes | identical to block 5
+=== end

@@ -1,0 +1,90 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m2_sidefx_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m2_sidefx_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: accept = sv2v = verilator
+verdict_source: s582/post/CENSUS.md:13
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b2__m2_sidefx_ci/iv.out | 1739 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:8: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:8: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:11: error: Incomprehensible case expression.
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m2_sidefx_ci/vl.out | 445 bytes
+f(3) call 1
+A m=4 cnt=1
+f(9) call 1
+B m=0 cnt=1
+f(7) call 1
+C m=5 cnt=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 222.222 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m2_sidefx_ci/sv.out | 114 bytes
+f(3) call 1
+A m=4 cnt=1
+f(9) call 1
+B m=0 cnt=1
+f(7) call 1
+C m=5 cnt=1
+sv2v.v:47: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [POST] | post/census/grounding__b2__m2_sidefx_ci/post.out | 459 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f(3) call 1
+A m=4 cnt=1
+f(9) call 1
+B m=0 cnt=1
+f(7) call 1
+C m=5 cnt=1
+simulation ended (Finish) at time 10
+errors=0 warnings=2 notes=0
+rc=0
+=== block 5 | vita [POST] | post2/cmp/grounding__b2__m2_sidefx_ci.sv/post.err | 345 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+errors=0 warnings=2 notes=0
+=== block 6 | vita [POST] | post2/cmp/grounding__b2__m2_sidefx_ci.sv/post.out | 114 bytes
+f(3) call 1
+A m=4 cnt=1
+f(9) call 1
+B m=0 cnt=1
+f(7) call 1
+C m=5 cnt=1
+simulation ended (Finish) at time 10
+rc=0
+=== block 7 | vita [POST2] | post2/cmp/grounding__b2__m2_sidefx_ci.sv/post2.err | 345 bytes | identical to block 5
+=== block 8 | vita [POST2] | post2/cmp/grounding__b2__m2_sidefx_ci.sv/post2.out | 114 bytes | identical to block 6
+=== block 9 | vita [POST2] | post3/cmp/grounding__b2__m2_sidefx_ci.sv/post2.err | 345 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/grounding__b2__m2_sidefx_ci.sv/post2.out | 114 bytes | identical to block 6
+=== block 11 | vita [POST3] | post3/cmp/grounding__b2__m2_sidefx_ci.sv/post3.err | 345 bytes | identical to block 5
+=== block 12 | vita [POST3] | post3/cmp/grounding__b2__m2_sidefx_ci.sv/post3.out | 114 bytes | identical to block 6
+=== block 13 | vita [PRE] | grounding/b2/out_m2_sidefx_ci/vita.out | 2370 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5:37: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:5:37: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:8:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:8:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:11:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found keyword 'default'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2_sidefx_ci.sv:11:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'default'
+errors=7 warnings=1 notes=0
+rc=1
+=== end

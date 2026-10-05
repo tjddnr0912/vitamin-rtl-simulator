@@ -1,0 +1,540 @@
+### B_a_s8  [PRE!=all]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### B_c_s8  [PRE!=all]
+  pre : case=252
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### B_d_s8  [PRE!=all]
+  pre : X=252 lt0=0 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### B_e_s8  [PRE!=all]
+  pre : w16=00fc i32=252
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### B_g_s8  [PRE!=all]
+  pre : gif=nonneg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### B_k_s8  [PRE!=all]
+  pre : gcase=def
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### B_r_s8  [PRE!=all]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### B_s_s8  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### B_w_s8  [PRE!=all]
+  pre : vb=261
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### B_x_s8  [PRE!=all]
+  pre : cmp=0 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### E_a_twin  [ALL]
+  pre : shr=-2 mul=-12 div=-2 mod=-1
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### E_c_twin  [ALL]
+  pre : case=m4
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### E_d_twin  [ALL]
+  pre : X=-4 lt0=1 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### E_e_twin  [ALL]
+  pre : w16=fffc i32=-4
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### E_g_twin  [ALL]
+  pre : gif=neg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### E_k_twin  [ALL]
+  pre : gcase=m4
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### E_r_twin  [ALL]
+  pre : R1=-4 R2=1 R3=-2
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### E_s_twin  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### E_w_twin  [ALL]
+  pre : vb=5
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### E_x_twin  [ALL]
+  pre : cmp=1 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### G_a_s8  [PRE!=all]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### G_c_s8  [PRE!=all]
+  pre : case=252
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### G_d_s8  [PRE!=all]
+  pre : X=252 lt0=0 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### G_e_s8  [PRE!=all]
+  pre : w16=00fc i32=252
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### G_g_s8  [PRE!=all]
+  pre : gif=nonneg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### G_k_s8  [PRE!=all]
+  pre : gcase=def
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### G_r_s8  [PRE!=all]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### G_s_s8  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### G_w_s8  [PRE!=all]
+  pre : vb=261
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### G_x_s8  [PRE!=all]
+  pre : cmp=0 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### H_a_ctl  [ALL]
+  pre : shr=-2 mul=-12 div=-2 mod=-1
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### H_a_s8  [PRE!=all]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### H_a_uctl  [ALL]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=126 mul=756 div=126 mod=0
+  ivl : shr=126 mul=756 div=126 mod=0
+  s2v : shr=126 mul=756 div=126 mod=0
+  vl  : shr=126 mul=756 div=126 mod=0
+### H_c_ctl  [ALL]
+  pre : case=m4
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### H_c_s8  [PRE!=all]
+  pre : case=252
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### H_c_uctl  [ALL]
+  pre : case=252
+  post1: case=252
+  ivl : case=252
+  s2v : case=252
+  vl  : case=252
+### H_d_ctl  [ALL]
+  pre : X=-4 lt0=1 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### H_d_s8  [PRE!=all]
+  pre : X=252 lt0=0 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### H_d_uctl  [ALL]
+  pre : X=252 lt0=0 b=8
+  post1: X=252 lt0=0 b=8
+  ivl : X=252 lt0=0 b=8
+  s2v : X=252 lt0=0 b=8
+  vl  : X=252 lt0=0 b=8
+### H_e_ctl  [ALL]
+  pre : w16=fffc i32=-4
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### H_e_s8  [PRE!=all]
+  pre : w16=00fc i32=252
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### H_e_uctl  [ALL]
+  pre : w16=00fc i32=252
+  post1: w16=00fc i32=252
+  ivl : w16=00fc i32=252
+  s2v : w16=00fc i32=252
+  vl  : w16=00fc i32=252
+### H_g_ctl  [ALL]
+  pre : gif=neg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### H_g_s8  [PRE!=all]
+  pre : gif=nonneg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### H_g_uctl  [ALL]
+  pre : gif=nonneg
+  post1: gif=nonneg
+  ivl : gif=nonneg
+  s2v : gif=nonneg
+  vl  : gif=nonneg
+### H_k_ctl  [ALL]
+  pre : gcase=m4
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### H_k_s8  [PRE!=all]
+  pre : gcase=def
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### H_k_uctl  [ALL]
+  pre : gcase=def
+  post1: gcase=def
+  ivl : gcase=def
+  s2v : gcase=def
+  vl  : gcase=def
+### H_r_ctl  [ALL]
+  pre : R1=-4 R2=1 R3=-2
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### H_r_s8  [PRE!=all]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### H_r_uctl  [ALL]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=252 R2=0 R3=126
+  ivl : R1=252 R2=0 R3=126
+  s2v : R1=252 R2=0 R3=126
+  vl  : R1=252 R2=0 R3=126
+### H_s_ctl  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### H_s_s8  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### H_s_uctl  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=252 us=252
+  s2v : sg=252 us=252
+  vl  : sg=-4 us=252
+### H_w_ctl  [ALL]
+  pre : vb=5
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### H_w_s8  [PRE!=all]
+  pre : vb=261
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### H_w_uctl  [ALL]
+  pre : vb=261
+  post1: vb=261
+  ivl : vb=261
+  s2v : vb=261
+  vl  : vb=261
+### H_x_ctl  [ALL]
+  pre : cmp=1 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### H_x_s8  [PRE!=all]
+  pre : cmp=0 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### H_x_uctl  [ALL]
+  pre : cmp=0 mix=253
+  post1: cmp=0 mix=253
+  ivl : cmp=0 mix=253
+  s2v : cmp=0 mix=253
+  vl  : cmp=0 mix=253
+### L_a_ctl  [ALL]
+  pre : shr=-2 mul=-12 div=-2 mod=-1
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### L_a_s8  [PRE!=all]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=-2 mul=-12 div=-2 mod=-1
+  ivl : shr=-2 mul=-12 div=-2 mod=-1
+  s2v : shr=-2 mul=-12 div=-2 mod=-1
+  vl  : shr=-2 mul=-12 div=-2 mod=-1
+### L_a_uctl  [ALL]
+  pre : shr=126 mul=756 div=126 mod=0
+  post1: shr=126 mul=756 div=126 mod=0
+  ivl : shr=126 mul=756 div=126 mod=0
+  s2v : shr=126 mul=756 div=126 mod=0
+  vl  : shr=126 mul=756 div=126 mod=0
+### L_c_ctl  [ALL]
+  pre : case=m4
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### L_c_s8  [PRE!=all]
+  pre : case=252
+  post1: case=m4
+  ivl : case=m4
+  s2v : case=m4
+  vl  : case=m4
+### L_c_uctl  [ALL]
+  pre : case=252
+  post1: case=252
+  ivl : case=252
+  s2v : case=252
+  vl  : case=252
+### L_d_ctl  [ALL]
+  pre : X=-4 lt0=1 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### L_d_s8  [PRE!=all]
+  pre : X=252 lt0=0 b=8
+  post1: X=-4 lt0=1 b=8
+  ivl : X=-4 lt0=1 b=8
+  s2v : X=-4 lt0=1 b=8
+  vl  : X=-4 lt0=1 b=8
+### L_d_uctl  [ALL]
+  pre : X=252 lt0=0 b=8
+  post1: X=252 lt0=0 b=8
+  ivl : X=252 lt0=0 b=8
+  s2v : X=252 lt0=0 b=8
+  vl  : X=252 lt0=0 b=8
+### L_e_ctl  [ALL]
+  pre : w16=fffc i32=-4
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### L_e_s8  [PRE!=all]
+  pre : w16=00fc i32=252
+  post1: w16=fffc i32=-4
+  ivl : w16=fffc i32=-4
+  s2v : w16=fffc i32=-4
+  vl  : w16=fffc i32=-4
+### L_e_uctl  [ALL]
+  pre : w16=00fc i32=252
+  post1: w16=00fc i32=252
+  ivl : w16=00fc i32=252
+  s2v : w16=00fc i32=252
+  vl  : w16=00fc i32=252
+### L_g_ctl  [ALL]
+  pre : gif=neg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### L_g_s8  [PRE!=all]
+  pre : gif=nonneg
+  post1: gif=neg
+  ivl : gif=neg
+  s2v : gif=neg
+  vl  : gif=neg
+### L_g_uctl  [ALL]
+  pre : gif=nonneg
+  post1: gif=nonneg
+  ivl : gif=nonneg
+  s2v : gif=nonneg
+  vl  : gif=nonneg
+### L_k_ctl  [ALL]
+  pre : gcase=m4
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### L_k_s8  [PRE!=all]
+  pre : gcase=def
+  post1: gcase=m4
+  ivl : gcase=m4
+  s2v : gcase=m4
+  vl  : gcase=m4
+### L_k_uctl  [ALL]
+  pre : gcase=def
+  post1: gcase=def
+  ivl : gcase=def
+  s2v : gcase=def
+  vl  : gcase=def
+### L_r_ctl  [ALL]
+  pre : R1=-4 R2=1 R3=-2
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### L_r_s8  [PRE!=all]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=-4 R2=1 R3=-2
+  ivl : R1=-4 R2=1 R3=-2
+  s2v : R1=-4 R2=1 R3=-2
+  vl  : R1=-4 R2=1 R3=-2
+### L_r_uctl  [ALL]
+  pre : R1=252 R2=0 R3=126
+  post1: R1=252 R2=0 R3=126
+  ivl : R1=252 R2=0 R3=126
+  s2v : R1=252 R2=0 R3=126
+  vl  : R1=252 R2=0 R3=126
+### L_s_ctl  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### L_s_s8  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=-4 us=-4
+  s2v : sg=-4 us=-4
+  vl  : sg=-4 us=252
+### L_s_uctl  [PRE=some]
+  pre : sg=-4 us=252
+  post1: sg=-4 us=252
+  ivl : sg=252 us=252
+  s2v : sg=252 us=252
+  vl  : sg=-4 us=252
+### L_w_ctl  [ALL]
+  pre : vb=5
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### L_w_s8  [PRE!=all]
+  pre : vb=261
+  post1: vb=5
+  ivl : vb=5
+  s2v : vb=5
+  vl  : vb=5
+### L_w_uctl  [ALL]
+  pre : vb=261
+  post1: vb=261
+  ivl : vb=261
+  s2v : vb=261
+  vl  : vb=261
+### L_x_ctl  [ALL]
+  pre : cmp=1 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### L_x_s8  [PRE!=all]
+  pre : cmp=0 mix=253
+  post1: cmp=1 mix=253
+  ivl : cmp=1 mix=253
+  s2v : cmp=1 mix=253
+  vl  : cmp=1 mix=253
+### L_x_uctl  [ALL]
+  pre : cmp=0 mix=253
+  post1: cmp=0 mix=253
+  ivl : cmp=0 mix=253
+  s2v : cmp=0 mix=253
+  vl  : cmp=0 mix=253

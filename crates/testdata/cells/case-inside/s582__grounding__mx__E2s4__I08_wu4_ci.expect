@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__mx__E2s4__I08_wu4_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/mx/E2s4__I08_wu4_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/mx
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: matrix cell; row results in grounding/mx/analysis.txt, aggregate in step0/step0b.out
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | grounding/mx/out_E2s4__I08_wu4_ci/vl.out | 634 bytes
+4'b0000 0 0 0 0
+4'b0001 0 0 0 0
+4'b0010 0 0 0 0
+4'b0011 0 0 0 0
+4'b0100 0 0 0 0
+4'b0101 0 0 0 0
+4'b0110 0 0 0 0
+4'b0111 0 0 0 0
+4'b1000 0 0 0 0
+4'b1001 0 0 0 0
+4'b1010 1 1 1 1
+4'b1011 0 0 0 0
+4'b1100 0 0 0 0
+4'b1101 0 0 0 0
+4'b1110 1 1 1 1
+4'b1111 0 0 0 0
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/mx/E2s4__I08_wu4_ci.sv:100: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 344.827 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | grounding/mx/out_E2s4__I08_wu4_ci/sv.out | 299 bytes
+4'b0000 0 0 0 0
+4'b0001 0 0 0 0
+4'b0010 0 0 0 0
+4'b0011 0 0 0 0
+4'b0100 0 0 0 0
+4'b0101 0 0 0 0
+4'b0110 0 0 0 0
+4'b0111 0 0 0 0
+4'b1000 0 0 0 0
+4'b1001 0 0 0 0
+4'b1010 1 1 1 1
+4'b1011 0 0 0 0
+4'b1100 0 0 0 0
+4'b1101 0 0 0 0
+4'b1110 1 1 1 1
+4'b1111 0 0 0 0
+sv2v.v:393: $finish called at 10 (1s)
+rc=0
+=== end

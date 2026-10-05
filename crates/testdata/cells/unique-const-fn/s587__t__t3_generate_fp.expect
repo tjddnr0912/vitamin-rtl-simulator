@@ -1,0 +1,25 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t3_generate_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t3_generate_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t3_generate_fp.ivl | 96 bytes
+gi=1 hits=00000111 steps=00101010 gc=1 gl=1
+t3_generate_fp.sv:37: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t3_generate_fp.vl | 273 bytes
+gi=1 hits=00000111 steps=00101010 gc=1 gl=1
+- t3_generate_fp.sv:37: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 153.846 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t3_generate_fp.build | 0 bytes
+
+=== end

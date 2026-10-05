@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r2__sound__cells__d3b_program_initial
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r2/sound/cells/d3b_program_initial.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r2/sound/cells
+oracles_present: verilator
+vita_tags: PRE,PRE-H,POST2,JIT2,NODEF2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: PRE-H spelling; runs: d3b_program_initial
+aux: s585__r2__sound__cells__d3b_program_initial.aux/r2/sound/cells/d3b_program_initial_H.sv (origin s585/r2/sound/cells/d3b_program_initial_H.sv)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: PRE-H: md5 unrecorded commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+vita_binary: NODEF2: md5 f97f67cf3a0daeea5a19c81925570a42 commit unrecorded
+blocks: 4
+=== block 1 | combined [verilator,PRE,PRE-H,POST2] verilator 5.052 (version captured in slice) | r2/sound/out/d3b_program_initial.out | 1336 bytes
+##### d3b_program_initial
+=== verilator compile rc=0 run rc=0
+[0] %Error: d3b_program_initial.sv:3: Assertion failed in top.u: 'unique if' statement violated
+p t=0 r=0
+[2] %Error: d3b_program_initial.sv:4: Assertion failed in top.u: 'unique if' statement violated
+p t=2 r=0
+- d3b_program_initial.sv:9: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+p t=0 r=0
+p t=2 r=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=0
+d3b_program_initial_H.sv:3:50: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+p t=0 r=0
+d3b_program_initial_H.sv:4:53: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p t=2 r=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+d3b_program_initial.sv:3:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+p t=0 r=0
+d3b_program_initial.sv:4:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p t=2 r=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | vita [JIT2] | r2/sound/lanes/d3b_program_initial.jit | 443 bytes
+d3b_program_initial.sv:3:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+p t=0 r=0
+d3b_program_initial.sv:4:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p t=2 r=0
+JITBODY templates_compiled=1 refused=0 activations=1
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== block 3 | vita [NODEF2] | r2/sound/lanes/d3b_program_initial.nod | 390 bytes
+d3b_program_initial.sv:3:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+p t=0 r=0
+d3b_program_initial.sv:4:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p t=2 r=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== block 4 | vita [POST2] | r2/sound/lanes/d3b_program_initial.def | 390 bytes | identical to block 3
+=== end

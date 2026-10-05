@@ -1,0 +1,108 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__c1__b_ui_v_d1_leaffirst
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/c1/b_ui_v_d1_leaffirst.sv
+roadmap_row: §2 🆕 Z
+set: c1
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE
+verdict: row 2 defect (chain never reports), not this row
+verdict_source: s584/GROUNDING.md:21
+alias: c3/orig/b_ui_v_d1_leaffirst (byte-identical source) verdict: row 2 defect (chain never reports), not this row verdict_source: s584/GROUNDING.md:21
+alias: c3/sp/R1/b_ui_v_d1_leaffirst (byte-identical source) verdict: row 2 defect (chain never reports), not this row verdict_source: s584/GROUNDING.md:21
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PROTO/POSTA: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/POSTB: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/PRE: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R4f: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5h: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hp: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hpss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5i: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5s: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7p: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7ps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7pss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+blocks: 30
+=== block 1 | combined [PRE]  | c3/sp/R1/b_ui_v_d1_leaffirst.out | 142 bytes
+##### b_ui_v_d1_leaffirst.sv
+=== vita (native=interp=vm)
+rc=0
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== block 2 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./b_ui_v_d1_leaffirst.out | 1051 bytes
+##### b_ui_v_d1_leaffirst.sv
+=== iverilog
+compile rc=4
+b_ui_v_d1_leaffirst.sv:4: syntax error
+b_ui_v_d1_leaffirst.sv:4: Syntax in assignment statement l-value.
+b_ui_v_d1_leaffirst.sv:4: syntax error
+b_ui_v_d1_leaffirst.sv:4: Syntax in assignment statement l-value.
+=== verilator
+compile rc=0
+run rc=0
+t=1 y=1
+[2] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+[2] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+t=3 y=0
+[3] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+- b_ui_v_d1_leaffirst.sv:15: Verilog $finish
+[4] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+[4] %Error: b_ui_v_d1_leaffirst.sv:4: Assertion failed in top.u: 'unique if' statement violated
+=== vita (native=interp=vm)
+rc=0
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== block 3 | vita [A] | r2run/r1a/c1__b_ui_v_d1_leaffirst.out | 113 bytes
+=== vita (native=interp=vm)
+rc=0
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== block 4 | vita [POST2] | r2run/post2/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 5 | vita [POST2] | r3run/post2/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 6 | vita [POST3] | r3run/post3/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 7 | vita [POST3] | r4run/post3/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 8 | vita [POST4] | r4run/post4/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 9 | vita [PRE] | r2run/pre/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 10 | vita [PRE] | r3run/pre/c1__b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 11 | vita [PROTO/POSTA] | r2/POSTA/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 12 | vita [PROTO/POSTB] | r2/POSTB/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 13 | vita [PROTO/PRE] | r2/PRE/b_ui_v_d1_leaffirst.out | 106 bytes
+=== vita (interp=vm)
+rc=0
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== block 14 | vita [PROTO/PRE] | r3/PRE/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 15 | vita [PROTO/R4f] | r2/R4f/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 16 | vita [PROTO/R5] | r2/R5/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 17 | vita [PROTO/R5h] | r2/R5h/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 18 | vita [PROTO/R5hp] | r2/R5hp/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 19 | vita [PROTO/R5hp] | r3/R5hp/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 20 | vita [PROTO/R5hps] | r2/R5hps/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 21 | vita [PROTO/R5hps] | r3/R5hps/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 22 | vita [PROTO/R5hpss] | r2/R5hpss/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 23 | vita [PROTO/R5i] | r2/R5i/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 24 | vita [PROTO/R5s] | r2/R5s/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 25 | vita [PROTO/R7] | r2/R7/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 26 | vita [PROTO/R7p] | r2/R7p/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 27 | vita [PROTO/R7p] | r3/R7p/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 28 | vita [PROTO/R7ps] | r2/R7ps/b_ui_v_d1_leaffirst.out | 106 bytes | identical to block 13
+=== block 29 | vita [PROTO/R7ps] | r3/R7ps/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== block 30 | vita [PROTO/R7pss] | r2/R7pss/b_ui_v_d1_leaffirst.out | 113 bytes | identical to block 3
+=== end

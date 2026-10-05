@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__A4_psw
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/A4_psw.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:151
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./A4_psw.ivl | 223 bytes
+A4_psw.sv:5: error: Indexed part select width must be an integral constants greater than zero.
+A4_psw.sv:5:      : This width expression violates that rule: ((fx('sd2))w(4'b0z00))+('sd3)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./A4_psw.vl | 130 bytes
+%Error: Internal Error: A4_psw.sv:5:45: ../V3Number.cpp:1063: toUInt with 4-state 32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./A4_psw.s2v | 236 bytes
+A4_psw.s2v.v:8: error: Indexed part select width must be an integral constants greater than zero.
+A4_psw.s2v.v:8:      : This width expression violates that rule: (((fx('sd2))|(4'd4))==(4'd4))+('sd3)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [cut] | ./A4_psw.cut | 81 bytes
+ps=00000101
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./A4_psw.cut.route | 13 bytes
+t fx frame 1
+=== block 6 | vita [pre] | ./A4_psw.pre | 81 bytes | identical to block 4
+=== block 7 | vita [pre] | ./A4_psw.pre.route | 13 bytes | identical to block 5
+=== end

@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p7__B10_ad
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p7/B10_ad.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p7
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: ALL
+verdict_source: s593/a/p7.summ:127
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./B10_ad.ivl | 50 bytes
+asz=4
+B10_ad.sv:8: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./B10_ad.vl | 353 bytes
+%Warning-WIDTHEXPAND: B10_ad.sv:5:28: Operator EQWILD expects 64 bits on the RHS, but RHS's CONST '4'sb1z00' generates 4 bits.
+asz=4
+- B10_ad.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 416.666 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./B10_ad.s2v | 53 bytes
+asz=4
+B10_ad.s2v.v:11: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./B10_ad.cut | 75 bytes
+asz=4
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./B10_ad.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./B10_ad.pre | 75 bytes | identical to block 4
+=== block 7 | vita [pre] | ./B10_ad.pre.route | 0 bytes | identical to block 5
+=== end

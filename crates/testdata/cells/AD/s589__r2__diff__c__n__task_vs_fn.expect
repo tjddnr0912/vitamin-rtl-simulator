@@ -1,0 +1,75 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r2__diff__c__n__task_vs_fn
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r2/diff/c/n/task_vs_fn.sv
+roadmap_row: §2 🆕 AD
+set: r2/diff/c/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-b,POST-b-sep,PRE,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r2/diff/REPORT.md:34
+alias: r3/diff/c/n/task_vs_fn (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/r2/r2_diff_n/task_vs_fn (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./task_vs_fn.ivl | 238 bytes
+task_vs_fn.sv:9: error: No function named `h' found in this context (p).
+task_vs_fn.sv:9: error: Dimensions must be constant.
+task_vs_fn.sv:9       : This MSB expression violates the rule: (h())-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./task_vs_fn.vl | 323 bytes
+%Error: task_vs_fn.sv:9:29: Cannot call a task/void-function as a function: 'h'
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing --assert -Wno-fatal --Mdir vl_task_vs_fn -o sim task_vs_fn.sv
+build_rc=139
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./task_vs_fn.s2v | 253 bytes
+task_vs_fn.s2v.v:6: error: No function named `p_h' found in this context (top).
+task_vs_fn.s2v.v:6: error: Dimensions must be constant.
+task_vs_fn.s2v.v:6       : This MSB expression violates the rule: (p_h())-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [POST-b] | ./task_vs_fn.pb | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=7
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-b-sep] | ./task_vs_fn.pbs | 228 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=7
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST-c] | post_c/r2/r2_diff_n/task_vs_fn.postc | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=255
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST-c] | r3/diff/c/b1/task_vs_fn.pc | 92 bytes
+error[VITA-E8005]: cannot read 'task_vs_fn.sv': No such file or directory (os error 2)
+rc=3
+=== block 8 | vita [POST-c] | r3/diff/c/n/task_vs_fn.pc | 174 bytes | identical to block 6
+=== block 9 | vita [POST-c-sep] | post_c/r2/r2_diff_n/task_vs_fn.spostc | 230 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=255
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 10 | vita [POST-c-sep] | r3/diff/c/b1/task_vs_fn.pcs | 120 bytes
+error[VITA-E8005]: cannot read 'task_vs_fn.sv': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+rc=3
+=== block 11 | vita [POST-c-sep] | r3/diff/c/n/task_vs_fn.pcs | 230 bytes | identical to block 9
+=== block 12 | vita [PRE] | ./task_vs_fn.pre | 174 bytes | identical to block 6
+=== end

@@ -1,0 +1,378 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__r1__diff__r2u__ud8_udp_comb_mutual
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/r1/diff/r2u/ud8_udp_comb_mutual.sv
+roadmap_row: §2 🆕 Z
+set: r1/diff/r2u
+oracles_present: iverilog,verilator
+vita_tags: A,A/obs-native,A/obs-vm,POST2,POST2/obs-native,POST2/obs-vm,POST3,POST4,PRE,PRE/obs-native,PRE/obs-vm,unrecorded(r1/diff/r2stg)/vcmp,unrecorded(r1/diff/r2stg)/velab
+verdict: split [sev: NOTE]
+verdict_source: s584/r1/diff/REPORT.md:60
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: A/obs-native: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: A/obs-vm: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2/obs-native: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST2/obs-vm: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PRE/obs-native: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: PRE/obs-vm: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 20
+=== block 1 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud8_udp_comb_mutual.out | 603 bytes
+##### ud8_udp_comb_mutual
+=== iverilog
+compile rc=0
+run rc=0
+b2 t=0 c=x u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+ud8_udp_comb_mutual.sv:12: $finish called at 1 (1s)
+=== verilator
+compile rc=0
+run rc=0
+b2 t=0 c=0 u_o=1 z=1
+e t=1 c=0 u_o=1 z=1
+- ud8_udp_comb_mutual.sv:12: Verilog $finish
+=== vita[pre-native pre-interp pre-vm]
+rc=0
+b2 t=0 c=0 u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== vita[a-native a-interp a-vm post2-native post2-interp post2-vm]
+rc=0
+b2 t=0 c=x u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 2 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud8_udp_comb_mutual.out2 | 603 bytes | identical to block 1
+=== block 3 | combined [iverilog+verilator+PRE+POST2+POST3] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud8_udp_comb_mutual.out3 | 615 bytes
+##### ud8_udp_comb_mutual
+=== iverilog
+compile rc=0
+run rc=0
+b2 t=0 c=x u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+ud8_udp_comb_mutual.sv:12: $finish called at 1 (1s)
+=== verilator
+compile rc=0
+run rc=0
+b2 t=0 c=0 u_o=1 z=1
+e t=1 c=0 u_o=1 z=1
+- ud8_udp_comb_mutual.sv:12: Verilog $finish
+=== vita[pre-native pre-interp pre-vm]
+rc=0
+b2 t=0 c=0 u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== vita[post2-native post2-interp post2-vm post3-native post3-interp post3-vm]
+rc=0
+b2 t=0 c=x u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 4 | vita [A/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.a.native/results.jsonl | 133 bytes
+{"v":1,"t":1,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":1,"errors":0,"warnings":1,"fatals":0}
+=== block 5 | vita [A/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.a.native/run.json | 5952 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 6, "total": 7, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": {"asked": 9, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 7, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 6, "kind": "always_comb", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000742,
+  "elab_s": 0.000432,
+  "sim_s": 0.000165
+}
+=== block 6 | vita [A/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.a.vm/results.jsonl | 133 bytes | identical to block 4
+=== block 7 | vita [A/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.a.vm/run.json | 5599 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "vm",
+  "backend_requested": "vm",
+  "codegen": {"able": 6, "total": 7, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": null,
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 7, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 6, "kind": "always_comb", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000494,
+  "elab_s": 0.000354,
+  "sim_s": 0.000136
+}
+=== block 8 | vita [POST2] | r3run/post2/r1_diff_r2u__ud8_udp_comb_mutual.out | 138 bytes
+=== vita (native=interp=vm)
+rc=0
+b2 t=0 c=x u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 9 | vita [POST2/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.post2.native/results.jsonl | 133 bytes | identical to block 4
+=== block 10 | vita [POST2/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.post2.native/run.json | 6235 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 7, "total": 8, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": {"asked": 12, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 8, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1},
+    {"domain": "process", "index": 6, "kind": "initial", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 1},
+    {"domain": "process", "index": 7, "kind": "always", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000551,
+  "elab_s": 0.000396,
+  "sim_s": 0.000151
+}
+=== block 11 | vita [POST2/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.post2.vm/results.jsonl | 133 bytes | identical to block 4
+=== block 12 | vita [POST2/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.post2.vm/run.json | 5881 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "vm",
+  "backend_requested": "vm",
+  "codegen": {"able": 7, "total": 8, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": null,
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 8, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1},
+    {"domain": "process", "index": 6, "kind": "initial", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 1},
+    {"domain": "process", "index": 7, "kind": "always", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000548,
+  "elab_s": 0.000405,
+  "sim_s": 0.000139
+}
+=== block 13 | vita [POST3] | r3run/post3/r1_diff_r2u__ud8_udp_comb_mutual.out | 138 bytes | identical to block 8
+=== block 14 | vita [POST3] | r4run/post3/r1_diff_r2u__ud8_udp_comb_mutual.out | 138 bytes | identical to block 8
+=== block 15 | vita [POST4] | r4run/post4/r1_diff_r2u__ud8_udp_comb_mutual.out | 138 bytes | identical to block 8
+=== block 16 | vita [PRE] | r3run/pre/r1_diff_r2u__ud8_udp_comb_mutual.out | 138 bytes
+=== vita (native=interp=vm)
+rc=0
+b2 t=0 c=0 u_o=x z=x
+e t=1 c=0 u_o=1 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 17 | vita [PRE/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.pre.native/results.jsonl | 133 bytes | identical to block 4
+=== block 18 | vita [PRE/obs-native] | r1/diff/r2obs/ud8_udp_comb_mutual.pre.native/run.json | 5952 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 6, "total": 7, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": {"asked": 9, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 7, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 6, "kind": "always_comb", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000566,
+  "elab_s": 0.000404,
+  "sim_s": 0.000158
+}
+=== block 19 | vita [PRE/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.pre.vm/results.jsonl | 133 bytes | identical to block 4
+=== block 20 | vita [PRE/obs-vm] | r1/diff/r2obs/ud8_udp_comb_mutual.pre.vm/run.json | 5599 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "ud8_udp_comb_mutual.sv", "blake3": "d3c13661a568c4eb054bf20634c881f5c9d3260d1aee482fc7c10059a5f15c3e"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 1,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "vm",
+  "backend_requested": "vm",
+  "codegen": {"able": 6, "total": 7, "frame_bodies": 0, "reject_reasons": {"delay": 1}},
+  "wprog": null,
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": {"timed": false, "counts": {"processes": 7, "assigns": 2, "total_evals": 14},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 9, "evals": 2},
+    {"domain": "assign", "index": 1, "kind": "port", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 6, "col": 14, "evals": 2},
+    {"domain": "process", "index": 2, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 8, "col": 3, "evals": 2},
+    {"domain": "process", "index": 5, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 12, "col": 3, "evals": 2},
+    {"domain": "process", "index": 6, "kind": "always_comb", "scope": "top.u", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 1, "col": 1, "evals": 2},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 3, "col": 13, "evals": 1},
+    {"domain": "process", "index": 1, "kind": "always_comb", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 7, "col": 3, "evals": 1},
+    {"domain": "process", "index": 3, "kind": "initial", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 10, "col": 3, "evals": 1},
+    {"domain": "process", "index": 4, "kind": "always", "scope": "top", "file": "/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/diff/r2u/ud8_udp_comb_mutual.sv", "line": 11, "col": 3, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less", "distinct": 3, "total_calls": 5,
+  "items": [
+    {"name": "$display", "calls": 2},
+    {"name": "$time", "calls": 2},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` object does not file at all, and hierarchical calls, whose sites it does not count, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its SOURCE by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on the declaration, which is many-to-many. One declaration owns one static row per (module, name) key that names it (a generate copy, an importing or including module and a second spelling each add one) and one runtime row per instance FuncId; a static row's sites is never summed across rows sharing a triple; an inlined static row shares its triple with a framed row when another module frames the same routine; a hierarchical callee has a static row with sites 0 beside its runtime rows; a class method has runtime rows only", "time_semantics": "time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which", "distinct": 0, "total_calls": 0,
+  "items": []},
+  "utc_unix_s": 1790971368,
+  "wall_s": 0.000599,
+  "elab_s": 0.000386,
+  "sim_s": 0.000209
+}
+=== end

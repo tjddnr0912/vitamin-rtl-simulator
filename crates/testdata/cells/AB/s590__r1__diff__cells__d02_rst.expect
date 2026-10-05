@@ -1,0 +1,114 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__d02_rst
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/d02_rst.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: PRE2==POST, both == iverilog: d01 gated clock t0 edges, d02 async reset via held CA, d03 always_comb producer, d04 NBA input, d05 #0 input, d08 $strobe/$monitor, d17 always@*/always_comb reader.
+verdict_source: s590/r1/diff/REPORT.md:10
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o1/d02_rst.out | 683 bytes
+##### d02_rst
+=== PRE2 (native=interp=vm)
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=1 notes=0
+--- PRE2==POST(all backends): True  POST split: False  VCD PRE2==POST(all): True
+=== iverilog run rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+d02_rst.sv:19: $finish called at 33 (1s)
+=== verilator run rc=0
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+- d02_rst.sv:19: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/d02_rst.out | 1253 bytes
+##### d02_rst
+=== PRE2 (native=interp=vm)
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=1 notes=0
+--- PRE2==POSTA True  POSTA==POSTC True  PRE2==POSTC True  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+simulation ended (Finish) at time 33
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+RN t=0
+RN2 t=1
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+d02_rst.sv:19: $finish called at 33 (1s)
+=== verilator run rc=0
+t=6 q=0 q2=0
+t=16 q=1 q2=1
+t=26 q=2 q2=2
+- d02_rst.sv:19: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

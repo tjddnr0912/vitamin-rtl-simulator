@@ -1,0 +1,61 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__e04_nomatch
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/e04_nomatch.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: POST,PRE,POST2
+verdict: P3 pre-existing, doc wording
+verdict_source: s586/r1/diff/REPORT.md:19
+notes: runs: r1/diff/iv/e04_nomatch r1/diff/v/e04_nomatch r1/diff/v2/e04_nomatch r1/diff/vl/e04_nomatch
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/e04_nomatch/cout | 356 bytes
+e04_nomatch.sv:7: syntax error
+e04_nomatch.sv:7: Syntax in assignment statement l-value.
+e04_nomatch.sv:7: syntax error
+e04_nomatch.sv:7: Syntax in assignment statement l-value.
+e04_nomatch.sv:9: syntax error
+e04_nomatch.sv:9: Syntax in assignment statement l-value.
+e04_nomatch.sv:9: syntax error
+e04_nomatch.sv:9: Syntax in assignment statement l-value.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/e04_nomatch/crc | 2 bytes
+8
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/e04_nomatch/cout | 271 bytes
+%Error: e04_nomatch.sv:7:15: syntax error, unexpected if
+    7 |     priority0 if (a) y = 3; else if (b) y = 4;
+      |               ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/e04_nomatch/crc | 2 bytes
+1
+=== block 5 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/e04_nomatch/rc | 6 bytes
+NOBIN
+=== block 6 | vita [POST] | r1/diff/v/e04_nomatch/post.err | 750 bytes
+e04_nomatch.sv:6:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e04_nomatch.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+e04_nomatch.sv:9:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+errors=0 warnings=3 notes=1
+=== block 7 | vita [POST] | r1/diff/v/e04_nomatch/post.out | 42 bytes
+y=0
+simulation ended (Finish) at time 100
+=== block 8 | vita [POST] | r1/diff/v/e04_nomatch/post.rc | 2 bytes
+0
+=== block 9 | vita [POST2] | r1/diff/v2/e04_nomatch/post2.err | 750 bytes | identical to block 6
+=== block 10 | vita [POST2] | r1/diff/v2/e04_nomatch/post2.out | 42 bytes | identical to block 7
+=== block 11 | vita [POST2] | r1/diff/v2/e04_nomatch/post2.rc | 2 bytes | identical to block 8
+=== block 12 | vita [PRE] | r1/diff/v/e04_nomatch/pre.err | 413 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e04_nomatch.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+e04_nomatch.sv:9:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+errors=0 warnings=3 notes=0
+=== block 13 | vita [PRE] | r1/diff/v/e04_nomatch/pre.out | 42 bytes | identical to block 7
+=== block 14 | vita [PRE] | r1/diff/v/e04_nomatch/pre.rc | 2 bytes | identical to block 8
+=== block 15 | vita [PRE] | r1/diff/v2/e04_nomatch/pre.err | 413 bytes | identical to block 12
+=== block 16 | vita [PRE] | r1/diff/v2/e04_nomatch/pre.out | 42 bytes | identical to block 7
+=== block 17 | vita [PRE] | r1/diff/v2/e04_nomatch/pre.rc | 2 bytes | identical to block 8
+=== end

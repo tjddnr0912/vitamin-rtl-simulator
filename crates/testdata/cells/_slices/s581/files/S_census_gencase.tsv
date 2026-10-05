@@ -1,0 +1,253 @@
+id	file	scrutinee	label	iverilog	sv2v	verilator	PRE	POST-T	class
+L01	census/cells/L01.sv	2	1 | 2	b	b	b	b	b	unchanged
+L02	census/cells/L02.sv	3	P	a	a	a	a	a	unchanged
+L03	census/cells/L03.sv	4	P + 1	a	a	a	a	a	unchanged
+L04	census/cells/L04.sv	P16	"ab"	a	a	a	a	a	unchanged
+L05	census/cells/L05.sv	16'h6162	S1	a	a	a	a	a	unchanged
+L06	census/cells/L06.sv	P	"a" + 1	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+L07	census/cells/L07.sv	16'h6163	S1 + 1	a	a	a	def	def	unchanged; PRE!=oracle [3-oracle] residue
+L08	census/cells/L08.sv	16'h6162	SS	a	a	a	a	a	unchanged
+L09	census/cells/L09.sv	1	$clog2(2)	a	a	a	a	a	unchanged
+L10	census/cells/L10.sv	3	f(2)	a	a	a	a	a	unchanged
+L11	census/cells/L11.sv	2	E2	a	a	a	a	a	unchanged
+L12	census/cells/L12.sv	1	1.0	ERR:L12.sv:3: error: Cannot evaluate genvar case item expression: 1.00000	ERR:L12.sv2v.v:3: error: Cannot evaluate genvar case item expression: 1.00	a	def	def	unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+L13	census/cells/L13.sv	1	R	ERR:L13.sv:4: error: Cannot evaluate genvar case item expression: R	ERR:L13.sv2v.v:4: error: Cannot evaluate genvar case item expression: R	a	def	def	unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+L14	census/cells/L14.sv	3	top.P	ERR:L14.sv:5: error: A hierarchical reference (`top.P') is not allowed in 	a	a	def	def	unchanged; PRE!=oracle [2-oracle(1 refuse)] residue
+L15	census/cells/L15.sv	1	w	ERR:L15.sv:5: error: A reference to a net or variable (`w') is not allowed	ERR:L15.sv2v.v:5: error: A reference to a net or variable (`w') is not all	ERR:%Error: L15.sv:5:7: Expecting expression to be constant, but variable 	def	def	unchanged
+L16	census/cells/L16.sv	5	pk::K (8-bit pkg const)	a	a	a	a	a	unchanged
+L17	census/cells/L17.sv	3	W	a	a	a	a	a	unchanged
+L18	census/cells/L18.sv	1	W	def	def	def	def	def	unchanged
+L19	census/cells/L19.sv	1	65'h1_0000_0000_0000_0001	def	def	def	def	def	unchanged
+L20	census/cells/L20.sv	1	65'd1	a	a	a	a	a	unchanged
+L21	census/cells/L21.sv	15	P4	a	a	a	a	a	unchanged
+L22	census/cells/L22.sv	-1	PS	a	a	a	a	a	unchanged
+L23	census/cells/L23.sv	15	PS	def	def	def	def	def	unchanged
+L24	census/cells/L24.sv	4'd15	PS	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+L25	census/cells/L25.sv	1	g()	a	a	a	a	a	unchanged
+L26	census/cells/L26.sv	8'h62	"a" + 1	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+L27	census/cells/L27.sv	2	$bits(2'b00)	a	a	a	a	a	unchanged
+L28	census/cells/L28.sv	1	P > 0	a	a	a	a	a	unchanged
+L29	census/cells/L29.sv	0	W>>64 (=1) | 0	b	b	b	b	b	unchanged
+L30	census/cells/L30.sv	1	W >> 64	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+T1	census/cells/T1.sv	1	LPA	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+T2	census/cells/T2.sv	1	$isunknown(4'bx100 ==? 4'b1?00)	a	a	ERR:%Error: T2.sv:4:18: Use of x/? constant in generate case statement, (n	def	a	skip->match [2-oracle(1 refuse)] POST=oracle
+T3	census/cells/T3.sv	0	(4'bx100 ==? 4'b1?00) >> 1	a	a	ERR:%Error: T3.sv:4:8: Use of x/? constant in generate case statement, (no	def	a	skip->match [2-oracle(1 refuse)] POST=oracle
+T4	census/cells/T4.sv	1	4'b1100 inside {{2'b1?, 2'b00}}	ERR:T4.sv:4: sorry: "inside" expressions not supported yet.	a	ERR:%Error: T4.sv:4:24: Use of x/? constant in generate case statement, (n	def	def	unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+C1	census/cells/C1.sv	1	(4'bx100 ==? 4'b1?00)	def	def	ERR:%Error: C1.sv:4:8: Use of x/? constant in generate case statement, (no	def	def	unchanged
+C2	census/cells/C2.sv	1	65'd1	a	a	a	a	a	unchanged
+C3	census/cells/C3.sv	1	4'bx	def	def	ERR:%Error: C3.sv:4:7: Use of x/? constant in generate case statement, (no	def	def	unchanged
+X01	census/cells/X01.sv	4'b1100	4'b1x00	def	def	ERR:%Error: X01.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X02	census/cells/X02.sv	1	1'bx | 1	b	b	ERR:%Error: X02.sv:4:7: Use of x/? constant in generate case statement, (n	b	b	unchanged
+X03	census/cells/X03.sv	1	4'bz	def	def	ERR:%Error: X03.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X04	census/cells/X04.sv	4	4'b1z00	def	def	ERR:%Error: X04.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X05	census/cells/X05.sv	0	4'b1x00 & 4'b0011	a	a	ERR:%Error: X05.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged; PRE!=oracle [2-oracle(1 refuse)] residue
+X06	census/cells/X06.sv	1	4'b1x00 == 4'b1100	def	def	ERR:%Error: X06.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X07	census/cells/X07.sv	0	4'b1x00 == 4'b0000	a	a	ERR:%Error: X07.sv:4:7: Use of x/? constant in generate case statement, (n	a	a	unchanged
+X08	census/cells/X08.sv	1	4'b1x00 === 4'b1x00	a	a	ERR:%Error: X08.sv:4:7: Use of x/? constant in generate case statement, (n	a	a	unchanged
+X09	census/cells/X09.sv	1	$isunknown(4'b1x00)	a	a	ERR:%Error: X09.sv:4:18: Use of x/? constant in generate case statement, (	def	a	skip->match [2-oracle(1 refuse)] POST=oracle
+X10	census/cells/X10.sv	1	|4'b100x	a	a	ERR:%Error: X10.sv:4:8: Use of x/? constant in generate case statement, (n	a	a	unchanged
+X11	census/cells/X11.sv	1	(4'b1100 ==? 4'b1?00)	a	a	ERR:%Error: X11.sv:4:20: Use of x/? constant in generate case statement, (	a	a	unchanged
+X12	census/cells/X12.sv	0	(4'b1100 ==? 4'b0?00)	a	a	ERR:%Error: X12.sv:4:20: Use of x/? constant in generate case statement, (	a	a	unchanged
+X13	census/cells/X13.sv	1	4'b1100 inside {4'b1?00}	ERR:X13.sv:4: sorry: "inside" expressions not supported yet.	a	ERR:%Error: X13.sv:4:23: Use of x/? constant in generate case statement, (	def	a	skip->match [1-oracle(2 refuse)] POST=oracle
+X14	census/cells/X14.sv	1	4'b1100 inside {4'b1100, 4'b0000}	ERR:X14.sv:4: sorry: "inside" expressions not supported yet.	a	a	a	a	unchanged
+X15	census/cells/X15.sv	4'b1100	PX	def	def	def	ERR:VITA-E3009	ERR:VITA-E3009	unchanged-loud
+X16	census/cells/X16.sv	0	|4'b000x	def	def	ERR:%Error: X16.sv:4:8: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X17	census/cells/X17.sv	1	{64'd0, 1'bx} | 1	b	b	ERR:%Error: X17.sv:4:15: Use of x/? constant in generate case statement, (	b	b	unchanged
+X18	census/cells/X18.sv	1	65'bx | 1	b	b	ERR:%Error: X18.sv:4:7: Use of x/? constant in generate case statement, (n	b	b	unchanged
+X19	census/cells/X19.sv	4'b1100	{2'b11, 2'bx0} | 4'b0001 | 4'b1100	b	b	ERR:%Error: X19.sv:4:15: Use of x/? constant in generate case statement, (	b	b	unchanged
+X20	census/cells/X20.sv	1	1'bx ? 1 : 1	a	a	ERR:%Error: X20.sv:4:7: Use of x/? constant in generate case statement, (n	def	def	unchanged; PRE!=oracle [2-oracle(1 refuse)] residue
+X21	census/cells/X21.sv	1	(4'bx100 !=? 4'b1?00)	def	def	ERR:%Error: X21.sv:4:8: Use of x/? constant in generate case statement, (n	def	def	unchanged
+X22	census/cells/X22.sv	0	(4'b1100 ==? 4'b0?00) >> 1	a	a	ERR:%Error: X22.sv:4:20: Use of x/? constant in generate case statement, (	a	a	unchanged
+X23	census/cells/X23.sv	1	4'b1100 inside {4'b11x0}	ERR:X23.sv:4: sorry: "inside" expressions not supported yet.	a	ERR:%Error: X23.sv:4:23: Use of x/? constant in generate case statement, (	def	a	skip->match [1-oracle(2 refuse)] POST=oracle
+S01	census/cells/S01.sv	1'bx	1'bx	a	a	ERR:%Error: S01.sv:3:11: Use of x/? constant in generate case statement, (	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+S02	census/cells/S02.sv	65'd1	1	a	a	a	a	a	unchanged
+S03	census/cells/S03.sv	W	W	a	a	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+S04	census/cells/S04.sv	"ab"	16'h6162	a	a	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+S05	census/cells/S05.sv	-1	-1	a	a	a	a	a	unchanged
+S06	census/cells/S06.sv	-1	32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S07	census/cells/S07.sv	4'sb1111	4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S08	census/cells/S08.sv	4'sb1111	-1	a	a	a	a	a	unchanged
+S09	census/cells/S09.sv	4'b1111	-1	def	def	def	def	def	unchanged
+S10	census/cells/S10.sv	4'sb1111	8'd255	def	def	def	def	def	unchanged
+S11	census/cells/S11.sv	4'sb1111	8'd15	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S12	census/cells/S12.sv	8'sb11111111	4'sb1111	a	a	a	a	a	unchanged
+S13	census/cells/S13.sv	64'hFFFF_FFFF_FFFF_FFFF	-1	def	def	a	a	a	unchanged; oracle split (iv=def vl=a)
+S14	census/cells/S14.sv	64'hFFFF_FFFF_FFFF_FFFF	-64'sd1	a	a	a	a	a	unchanged
+S15	census/cells/S15.sv	-1	64'hFFFF_FFFF_FFFF_FFFF	def	def	a	a	a	unchanged; oracle split (iv=def vl=a)
+S16	census/cells/S16.sv	32'hFFFFFFFF	-1	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S17	census/cells/S17.sv	33'h1FFFFFFFF	-1	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+S18	census/cells/S18.sv	-33'sd1	-1	a	a	a	a	a	unchanged
+S19	census/cells/S19.sv	65'h1FFFFFFFFFFFFFFFF	-1	def	def	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+S20	census/cells/S20.sv	4'sb1000	-8	a	a	a	a	a	unchanged
+S21	census/cells/S21.sv	4'sb1000	4'd8	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S22	census/cells/S22.sv	4'sb1000	8	def	def	def	def	def	unchanged
+S23	census/cells/S23.sv	4'd8	4'sb1000	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S24	census/cells/S24.sv	4'd15	8'sb11111111	def	def	def	def	def	unchanged
+S25	census/cells/S25.sv	4'd15	8'sb00001111	a	a	a	a	a	unchanged
+S26	census/cells/S26.sv	-1	33'h1FFFFFFFF	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+S27	census/cells/S27.sv	-1	33'h0FFFFFFFF	a	a	def	def	def	unchanged; oracle split (iv=a vl=def)
+S28	census/cells/S28.sv	$signed(4'b1111)	4'b1111	a	a	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+S29	census/cells/S29.sv	PI	32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S30	census/cells/S30.sv	UP	4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S31	census/cells/S31.sv	PU	-1	def	def	def	def	def	unchanged
+S32	census/cells/S32.sv	PS8	8'hFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S33	census/cells/S33.sv	64'hFFFF_FFFF_FFFF_FFFF	64'hFFFF_FFFF_FFFF_FFFF	a	a	a	a	a	unchanged
+S34	census/cells/S34.sv	-64'sd1	65'h1FFFFFFFFFFFFFFFF	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+S35	census/cells/S35.sv	-64'sd1	-65'sd1	a	a	a	a	a	unchanged
+S36	census/cells/S36.sv	4'b1111	UP	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S37	census/cells/S37.sv	4'b1111	PS	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S38	census/cells/S38.sv	-1	PI	a	a	a	a	a	unchanged
+S39	census/cells/S39.sv	32'hFFFFFFFF	PI	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+S40	census/cells/S40.sv	8'sd127	8'sd127	a	a	a	a	a	unchanged
+S41	census/cells/S41.sv	P	-1	a	a	a	a	a	unchanged
+S42	census/cells/S42.sv	f(2)	3	a	a	a	a	a	unchanged
+S43	census/cells/S43.sv	f(2)	65'd3	a	a	a	a	a	unchanged
+S44	census/cells/S44.sv	f(2)	$isunknown(4'bx100 ==? 4'b1?00) | 3	b	b	ERR:%Error: S44.sv:5:18: Use of x/? constant in generate case statement, (	b	b	unchanged
+S45	census/cells/S45.sv	UP	4'sb1111	a	a	a	a	a	unchanged
+S46	census/cells/S46.sv	U8	-1	def	def	def	def	def	unchanged
+S47	census/cells/S47.sv	f(2)	{64'd0, 1'bx} | 3	b	b	ERR:%Error: S47.sv:5:15: Use of x/? constant in generate case statement, (	b	b	unchanged
+O01	census/cells/O01.sv	P	parameter int P = 0 ov=-1 | 32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O02	census/cells/O02.sv	P	parameter logic signed [3:0] P = 0 ov=-1 | 4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O03	census/cells/O03.sv	P	parameter P = 0 ov=4'sb1111 | 4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O04	census/cells/O04.sv	P	parameter logic [7:0] P = 0 ov=-1 | -1	def	def	def	def	def	unchanged
+O05	census/cells/O05.sv	P	parameter P = 0 ov=8'hFF | -1	def	def	def	def	def	unchanged
+O06	census/cells/O06.sv	P	parameter [64:0] P = 0 ov=1 | 65'd1	a	a	a	a	a	unchanged
+O07	census/cells/O07.sv	4'd3	parameter int P = 0 ov=3 | P	a	a	a	a	a	unchanged
+O08	census/cells/O08.sv	1	parameter logic [64:0] P = 0 ov={1'b1, 64'd1} | P	def	def	def	def	def	unchanged
+O09	census/cells/O09.sv	1	parameter logic [64:0] P = 0 ov=65'd1 | P	a	a	a	a	a	unchanged
+O10	census/cells/O10.sv	1	parameter P = 0 ov=65'd1 | P	a	a	a	a	a	unchanged
+M01	census/cells/M01.sv	2	1, 2 | 2	a	a	a	a	a	unchanged
+M02	census/cells/M02.sv	3	1 | 3 | 3	b	b	b	b	b	unchanged
+M03	census/cells/M03.sv	1	default | 1	a	a	a	a	a	unchanged
+M04	census/cells/M04.sv	1	$isunknown(4'bx100 ==? 4'b1?00) | 1	a	a	ERR:%Error: M04.sv:4:18: Use of x/? constant in generate case statement, (	b	a	skip->match [2-oracle(1 refuse)] POST=oracle
+M05	census/cells/M05.sv	1	1 | $isunknown(4'bx100 ==? 4'b1?00)	a	a	ERR:%Error: M05.sv:5:18: Use of x/? constant in generate case statement, (	a	a	unchanged
+M06	census/cells/M06.sv	0	$isunknown(4'bx100 ==? 4'b1?00) | 0	b	b	ERR:%Error: M06.sv:4:18: Use of x/? constant in generate case statement, (	b	b	unchanged
+M07	census/cells/M07.sv	1	1'bx, 1	a	a	ERR:%Error: M07.sv:4:7: Use of x/? constant in generate case statement, (n	a	a	unchanged
+M08	census/cells/M08.sv	1	65'd2, LPA	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+M09	census/cells/M09.sv	1	2	NONE	NONE	NONE	NONE	NONE	unchanged
+M10	census/cells/M10.sv	0	(4'bx100 ==? 4'b1?00), 0	a	a	ERR:%Error: M10.sv:4:8: Use of x/? constant in generate case statement, (n	a	a	unchanged
+M11	census/cells/M11.sv	1	1.0, 1	ERR:M11.sv:3: error: Cannot evaluate genvar case item expression: 1.00000	ERR:M11.sv2v.v:3: error: Cannot evaluate genvar case item expression: 1.00	a	a	a	unchanged
+M12	census/cells/M12.sv	1	w, 1	ERR:M12.sv:5: error: A reference to a net or variable (`w') is not allowed	ERR:M12.sv2v.v:5: error: A reference to a net or variable (`w') is not all	ERR:%Error: M12.sv:5:7: Expecting expression to be constant, but variable 	a	a	unchanged
+N01	census/cells/N01.sv	genvar i	for i 0..2: case(i) 0/1/def	c0_0/c1_1/cd_2	c0_0/c1_1/cd_2	c0_0/c1_1/cd_2	c0_0/c1_1/cd_2	c0_0/c1_1/cd_2	unchanged
+N02	census/cells/N02.sv	2	for i: localparam [64:0] L = 65'd1 + i; case(2) L	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	unchanged
+N03	census/cells/N03.sv	7	shadow: outer [64:0] L=5, inner [64:0] L=7	a	a	a	a	a	unchanged
+N04	census/cells/N04.sv	7	shadow: outer [64:0] L=5, inner logic[3:0] L=7	a	a	a	a	a	unchanged
+N05	census/cells/N05.sv	5	shadow: outer logic[3:0] L=5, inner [64:0] L=7	def	def	def	def	def	unchanged
+N06	census/cells/N06.sv	2 (nested case)	case(1) 1: case(2) 65'd2	a	a	a	a	a	unchanged
+N07	census/cells/N07.sv	1	for i: localparam [64:0] LG = i; case(1) LG	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	unchanged
+N08	census/cells/N08.sv	i	for i: case(i) {64'd0,1'b1}	a_1/def_0/def_2	a_1/def_0/def_2	a_1/def_0/def_2	def_0/def_1/def_2	a_1/def_0/def_2	skip->match [3-oracle] POST=oracle
+N09	census/cells/N09.sv	i	for i: case(i) -1 / 32'hFFFFFFFF	def_0/def_1	def_0/def_1	a_0/def_1	def_0/def_1	a_0/def_1	decided->changed [SPLIT] oracle split (iv=def_0/def_1 vl=a_0/def_1)
+N10	census/cells/N10.sv	P (module param in gen block)	gen-if: localparam logic signed [3:0] Q=-1; case(Q) 4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+N11	census/cells/N11.sv	i	for i: localparam logic [3:0] Q = i; case(Q) -1+i... label i	a_0/def_1	a_0/def_1	a_0/def_1	def_0/def_1	a_0/def_1	decided->changed [3-oracle] POST=oracle
+Z01	census/cells/Z01.sv	1	casez in generate	ERR:Z01.sv:3: syntax error	ERR:Z01.sv:3:5: Parse error: missing expected `endgenerate`	ERR:%Error: Z01.sv:3:5: syntax error, unexpected casez	ERR:VITA-E2002	ERR:VITA-E2002	unchanged-loud
+Z02	census/cells/Z02.sv	1	casex in generate	ERR:Z02.sv:3: syntax error	ERR:Z02.sv:3:5: Parse error: missing expected `endgenerate`	ERR:%Error: Z02.sv:3:5: syntax error, unexpected casex	ERR:VITA-E2002	ERR:VITA-E2002	unchanged-loud
+W01	census/cells/W01.sv	4'd15 + 4'd1	0 | 16	a	a	b	b	b	unchanged; oracle split (iv=a vl=b)
+W02	census/cells/W02.sv	4'd15 + 4'd1	4'd0 | 5'd16	a	a	b	b	b	unchanged; oracle split (iv=a vl=b)
+W03	census/cells/W03.sv	4'd15 + 4'd1	4'd0	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+W04	census/cells/W04.sv	4'sb1111	-1 | 8'd0	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+W05	census/cells/W05.sv	4'sb1111	-1 | 8'sd0	a	a	a	a	a	unchanged
+W06	census/cells/W06.sv	4'sb1111	4'sb1111 | 8'd0	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+W07	census/cells/W07.sv	4'sb1000	8'sb11111000 | 4'd0	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+W08	census/cells/W08.sv	5'd16	4'd15 + 4'd1	def	def	a	a	a	unchanged; oracle split (iv=def vl=a)
+W09	census/cells/W09.sv	8'd0	4'd15 + 4'd1	a	a	def	def	def	unchanged; oracle split (iv=a vl=def)
+W10	census/cells/W10.sv	P4 + 4'd1	0 | 16	a	a	b	b	b	unchanged; oracle split (iv=a vl=b)
+W11	census/cells/W11.sv	P4 + 4'd1	4'd0	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+W12	census/cells/W12.sv	4'd15 + 4'd1	4'd0 | f(1)	a	a	def	def	def	unchanged; oracle split (iv=a vl=def)
+W13	census/cells/W13.sv	4'sb1111	8'sb11111111 | 4'd0	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+W14	census/cells/W14.sv	4'sb1111	4'd2 | -1	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+W15	census/cells/W15.sv	~4'd0	8'hFF | 4'hF	b	b	a	def	def	unchanged; oracle split (iv=b vl=a)
+W16	census/cells/W16.sv	~4'd0	4'hF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+W17	census/cells/W17.sv	4'd8 >> 1	5'd4	a	a	a	a	a	unchanged
+W18	census/cells/W18.sv	4'd8 << 1	5'd16 | 4'd0	b	b	a	a	a	unchanged; oracle split (iv=b vl=a)
+W19	census/cells/W19.sv	4'd8 << 1	4'd0	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+W20	census/cells/W20.sv	8'd200 + 8'd100	9'd300 | 8'd44	b	b	a	a	a	unchanged; oracle split (iv=b vl=a)
+E01	census/cells/E01.sv	P	A | B | C	c	c	c	c	c	unchanged
+E02	census/cells/E02.sv	P	A | B	a	a	a	a	a	unchanged
+E03	census/cells/E03.sv	P	32'hFFFFFFFF | B	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+E04	census/cells/E04.sv	2'b10	C | A	c	c	c	c	c	unchanged
+E05	census/cells/E05.sv	P	4'b1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+E06	census/cells/E06.sv	4'b1111	M	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+F01	census/cells/F01.sv	4'b1111	'1	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+F02	census/cells/F02.sv	8'hFF	'1	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+F03	census/cells/F03.sv	4'b0000	'0	a	a	a	a	a	unchanged
+F04	census/cells/F04.sv	65'h1_FFFF_FFFF_FFFF_FFFF	'1	def	def	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+F05	census/cells/F05.sv	4'b1111	'1 | 8'd0	def	def	def	def	def	unchanged
+F06	census/cells/F06.sv	4'b1x00	4'b1x00	a	a	ERR:%Error: F06.sv:3:11: Use of x/? constant in generate case statement, (	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+F07	census/cells/F07.sv	'1	4'b1111	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+F08	census/cells/F08.sv	4'sb1111	8'sd255	a	a	a	a	a	unchanged
+F09	census/cells/F09.sv	8'sd255	-1	a	a	a	a	a	unchanged
+R01	census/cells/R01.sv	M	LPA	a	a	a	a	a	unchanged
+R02	census/cells/R02.sv	M	LPA | 1	b	b	b	b	b	unchanged
+R03	census/cells/R03.sv	M	0 | 1	b	b	b	b	b	unchanged
+R04	census/cells/R04.sv	M	32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+R05	census/cells/R05.sv	M	"a" + 1	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+R06	census/cells/R06.sv	P0 - 1	32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+R07	census/cells/R07.sv	PI0 - 1	32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+R08	census/cells/R08.sv	M	$isunknown(4'bx100 ==? 4'b1?00) | 1	a	a	ERR:%Error: R08.sv:5:18: Use of x/? constant in generate case statement, (	b	a	skip->match [2-oracle(1 refuse)] POST=oracle
+O11	census/cells/O11.sv	P	parameter P = 0 ov=-1 | 32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O12	census/cells/O12.sv	P	parameter P = 4'd0 ov=-1 | 32'hFFFFFFFF	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O13	census/cells/O13.sv	P	parameter P = 0 ov=8'hFF | 8'hFF	a	a	a	a	a	unchanged
+O14	census/cells/O14.sv	P	parameter P = -1 ov=-1 | 4'b1111	def	def	def	def	def	unchanged
+O15	census/cells/O15.sv	P	parameter P = 4'sb1111 ov=4'd15 | -1	def	def	a	def	def	unchanged; oracle split (iv=def vl=a)
+O16	census/cells/O16.sv	P	parameter P = 4'd15 ov=4'sb1111 | -1	a	a	def	a	a	unchanged; oracle split (iv=a vl=def)
+O19	census/cells/O19.sv	P	parameter P = 8'd0 ov=4'sb1111 | -1	a	a	a	a	a	unchanged
+O20	census/cells/O20.sv	4'b1111	parameter P = 4'sb1111 ov=4'd15 | P	a	a	a	a	a	unchanged
+O21	census/cells/O21.sv	4'b1111	parameter P = 4'd15 ov=4'sb1111 | P	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+O22	census/cells/O22.sv	1	parameter P = 0 ov=65'd1 | P	a	a	a	a	a	unchanged
+O23	census/cells/O23.sv	P	parameter P = 0 ov=65'h1_0000_0000_0000_0001 | 65'h1_0000_0000_0000_0001	a	a	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+O17	census/cells/O17.sv	P (defparam)	parameter P = 4'd0; defparam u.P = 4'sb1111 | -1	a	a	a	a	a	unchanged
+O18	census/cells/O18.sv	P (defparam)	parameter logic [7:0] P = 0; defparam u.P = -1 | 8'hFF	a	a	a	a	a	unchanged
+Q01	census/cells/Q01.sv	S1	"ab"	a	a	a	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+Q02	census/cells/Q02.sv	16'h6162	S1 | "ab"	a	a	a	a	a	unchanged
+Q03	census/cells/Q03.sv	P	"ab" | "c"	c	c	c	c	c	unchanged
+Q04	census/cells/Q04.sv	8'h63	"c" | "ab"	c	c	c	c	c	unchanged
+Q05	census/cells/Q05.sv	24'h006263	"bc"	a	a	a	a	a	unchanged
+Q06	census/cells/Q06.sv	16'h6263	"\0bc"	a	a	a	a	a	unchanged
+S48	census/cells/S48.sv	f(2)	W	def	def	def	def	def	unchanged
+P01	census/cells/P01.sv	4'b1111	pk::KS signed 4-bit -1	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+P02	census/cells/P02.sv	4'b1111	imported KS signed 4-bit -1	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+P03	census/cells/P03.sv	4'b1111	$unit US signed 4-bit -1	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+P04	census/cells/P04.sv	1	pk::KW 65-bit >> 64	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+P05	census/cells/P05.sv	1	imported KW 65-bit >> 64	a	a	a	def	a	skip->match [3-oracle] POST=oracle
+P06	census/cells/P06.sv	4'b1111	pk::KU untyped 4'sb1111	a	a	a	def	a	decided->changed [3-oracle] POST=oracle
+G01	census/cells/G01.sv	1	module [64:0] i=9; for genvar i: case(1) i	a_1/def_0	a_1/def_0	a_1/def_0	a_1/def_0	a_1/def_0	unchanged
+G02	census/cells/G02.sv	i	module [64:0] i=9; for genvar i: case(i) 65 bit 9 / 1	def_0/one_1	def_0/one_1	def_0/one_1	def_0/one_1	def_0/one_1	unchanged
+G03	census/cells/G03.sv	1	module [64:0] W; gen block localparam W narrow; case(1) W >> 0	a	a	a	a	a	unchanged
+G04	census/cells/G04.sv	i	module signed [3:0] i=-1; for genvar i: case(i) 4b1111	def_0/def_1	def_0/def_1	def_0/def_1	def_0/def_1	def_0/def_1	unchanged
+NA01L	census/cells/NA01L.sv	7	7|label K, gen-if shadow narrow/narrow	a:1	a:1	a:1	a:1	a:1	unchanged
+NA01S	census/cells/NA01S.sv	K	K|scrutinee K, gen-if shadow narrow/narrow	seven:1	seven:1	seven:1	seven:1	seven:1	unchanged
+NA01F	census/cells/NA01F.sv	7	7|label K forward ref (decl after case), shadow narrow/narrow	def:99	a:1	a:1	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+NA02L	census/cells/NA02L.sv	7	7|label K, gen-if shadow wide/wide	a:1	a:1	a:1	a:1	a:1	unchanged
+NA02S	census/cells/NA02S.sv	K	K|scrutinee K, gen-if shadow wide/wide	seven:1	seven:1	seven:1	seven:1	seven:1	unchanged
+NA02F	census/cells/NA02F.sv	7	7|label K forward ref (decl after case), shadow wide/wide	def:99	a:1	a:1	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+NA03L	census/cells/NA03L.sv	7	7|label K, gen-if shadow narrow inner over wide outer	a:1	a:1	a:1	a:1	a:1	unchanged
+NA03S	census/cells/NA03S.sv	K	K|scrutinee K, gen-if shadow narrow inner over wide outer	seven:1	seven:1	seven:1	seven:1	seven:1	unchanged
+NA03F	census/cells/NA03F.sv	7	7|label K forward ref (decl after case), shadow narrow inner over wide outer	def:99	a:1	a:1	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+NA04L	census/cells/NA04L.sv	7	7|label K, gen-if shadow wide inner over narrow outer	a:1	a:1	a:1	a:1	a:1	unchanged
+NA04S	census/cells/NA04S.sv	K	K|scrutinee K, gen-if shadow wide inner over narrow outer	seven:1	seven:1	seven:1	seven:1	seven:1	unchanged
+NA04F	census/cells/NA04F.sv	7	7|label K forward ref (decl after case), shadow wide inner over narrow outer	def:99	a:1	a:1	ERR:VITA-E3010	ERR:VITA-E3010	unchanged-loud
+NA06L	census/cells/NA06L.sv	1	1|label i: genvar under same-named wide constant	a:1/def:99	a:1/def:99	a:1/def:99	a:1/def:99	a:1/def:99	unchanged
+NA06S	census/cells/NA06S.sv	i	i|scrutinee i: genvar under same-named wide constant	def:99/one:2	def:99/one:2	def:99/one:2	def:99/one:2	def:99/one:2	unchanged
+NA07L	census/cells/NA07L.sv	1	1|label K: sibling gen blocks with same-named wide localparams	b1a:1/b2def:3	b1a:1/b2def:3	b1a:1/b2def:3	b1a:1/b2def:3	b1a:1/b2def:3	unchanged
+NA07S	census/cells/NA07S.sv	K	K|scrutinee K: sibling gen blocks, narrow	b1hit:1/b2def:4	b1hit:1/b2def:4	b1hit:1/b2def:4	b1def:2/b2def:4	b1hit:1/b2def:4	decided->changed [3-oracle] POST=oracle
+NA08L	census/cells/NA08L.sv	1	1|label L=i*2+j (65-bit) nested loops	a_01:1/d_00:9/d_10:9/d_11:9	a_01:1/d_00:9/d_10:9/d_11:9	a_01:1/d_00:9/d_10:9/d_11:9	a_01:1/d_00:9/d_10:9/d_11:9	a_01:1/d_00:9/d_10:9/d_11:9	unchanged
+NA08S	census/cells/NA08S.sv	i*2+j	i*2+j|scrutinee nested loops vs 65-bit labels	d_00:9/d_11:9/one_01:1/two_10:2	d_00:9/d_11:9/one_01:1/two_10:2	d_00:9/d_11:9/one_01:1/two_10:2	d_00:9/d_11:9/one_01:1/two_10:2	d_00:9/d_11:9/one_01:1/two_10:2	unchanged
+NA09L	census/cells/NA09L.sv	7	7|label K: gen-scope variable shadowing a module param (illegal)	ERR:NA09L.sv:6: error: A reference to a net or variable (`K') is not allow	ERR:NA09L.sv2v.v:7: error: A reference to a net or variable (`K') is not a	ERR:%Error: NA09L.sv:6:7: Expecting expression to be constant, but variabl	a:1	a:1	unchanged
+NA09S	census/cells/NA09S.sv	K	K|scrutinee K: gen-scope variable shadowing a module param (illegal)	ERR:NA09S.sv:5: error: A reference to a net or variable (`K') is not allow	ERR:NA09S.sv2v.v:6: error: A reference to a net or variable (`K') is not a	ERR:%Error: NA09S.sv:5:11: Expecting expression to be constant, but variab	def:99	def:99	unchanged
+NA10L	census/cells/NA10L.sv	7	7|label K: block wildcard import beside module K	a:1	a:1	a:1	ERR:VITA-E3009	ERR:VITA-E3009	unchanged-loud
+NA10E	census/cells/NA10E.sv	7	7|label K: block explicit import pk::K (no module K)	a:1	a:1	a:1	ERR:VITA-E3009	ERR:VITA-E3009	unchanged-loud
+NA10T	census/cells/NA10T.sv	7	7|label K: block let K beside module K	ERR:NA10T.sv:4: sorry: let declarations (K) are not currently supported.	ERR:NA10T.sv:4:5: Parse error: missing expected `end`	a:1	def:99	def:99	unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+NA11M	census/cells/NA11M.sv	4'b1111	4'b1111|label EM: module enum signed label	a:1	a:1	a:1	def:99	a:1	decided->changed [3-oracle] POST=oracle
+NA11G	census/cells/NA11G.sv	4'b1111	4'b1111|label EM: gen-scope enum beside module localparam EM	def:99	a:1	a:1	def:99	a:1	decided->changed [SPLIT] oracle split (iv=def:99 vl=a:1)
+NA11S	census/cells/NA11S.sv	EM	EM|scrutinee EM: gen-scope enum	five:2	hit:1	hit:1	def:99	hit:1	decided->changed [SPLIT] oracle split (iv=five:2 vl=hit:1)
+NA12	census/cells/NA12.sv	P	P|instance-array element: sub case(1) P, top same-named P	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	unchanged
+NA12S	census/cells/NA12S.sv	P	P|instance-array element: sub case(P) signed narrow	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	a:top.ua[0].a:1/a:top.ua[1].a:1	d:top.ua[0].d:9/d:top.ua[1].d:9	a:top.ua[0].a:1/a:top.ua[1].a:1	decided->changed [3-oracle] POST=oracle
+NA13L	census/cells/NA13L.sv	7	7|label pk::K beside module K	a:1/b:2	a:1/b:2	a:1/b:2	a:1/b:2	a:1/b:2	unchanged
+NA13I	census/cells/NA13I.sv	5	5|label K: module K beside wildcard-imported pk::K (local wins)	a:1	a:1	a:1	a:1	a:1	unchanged
+NA13S	census/cells/NA13S.sv	pk::K	pk::K|scrutinee pk::KS signed beside module KS	hit:1	hit:1	hit:1	def:99	hit:1	decided->changed [3-oracle] POST=oracle
+L07T	census/cells/L07T.sv	16'h6164	S1 + 1	def	def	def	def	def	unchanged
+L13T	census/cells/L13T.sv	2	R	ERR:L13T.sv:4: error: Cannot evaluate genvar case item expression: R	ERR:L13T.sv2v.v:4: error: Cannot evaluate genvar case item expression: R	def	def	def	unchanged
+L14T	census/cells/L14T.sv	4	top.P	ERR:L14T.sv:5: error: A hierarchical reference (`top.P') is not allowed in	def	def	def	def	unchanged
+X05T	census/cells/X05T.sv	1	4'b1x00 & 4'b0011	def	def	ERR:%Error: X05T.sv:4:7: Use of x/? constant in generate case statement, (	def	def	unchanged
+X20T	census/cells/X20T.sv	0	1'bx ? 1 : 1	def	def	ERR:%Error: X20T.sv:4:7: Use of x/? constant in generate case statement, (	def	def	unchanged
+L12T	census/cells/L12T.sv	2	1.0	ERR:L12T.sv:3: error: Cannot evaluate genvar case item expression: 1.00000	ERR:L12T.sv2v.v:3: error: Cannot evaluate genvar case item expression: 1.0	def	def	def	unchanged

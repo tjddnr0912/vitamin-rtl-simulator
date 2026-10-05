@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__R3h
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/R3h.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_d,pre,pre_st,post_d_st
+verdict: sideways
+verdict_source: s592/r1/differential/REPORT.md:36
+notes: named at s592/r1/differential/REPORT.md:36
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./R3h.iv.txt | 51 bytes
+@bits=4
+R3h.sv:15: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./R3h.vl.txt | 91 bytes
+%Error: R3h.sv:14:48: Can't find definition of 'b'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./R3h.vlb.txt | 352 bytes
+%Error: R3h.sv:14:48: Can't find definition of 'b'
+                    : ... note: In instance 'top'
+   14 |   initial #1 $display("@bits=%0d", $bits(g.b.u.d));
+      |                                                ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./R3h.sv.txt | 55 bytes
+@bits=4
+R3h.sv2v.v:25: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_d] | ./R3h.postd.txt | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R3h.sv:7:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 12:24), so vita's elaboration passes choose different branches here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference [in top.g]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [pre] | ./R3h.pre.txt | 305 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R3h.sv:14:42: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits of hierarchical `g.b.u.d`: not a net or parameter with a static width (a string has none; an unknown name is one)
+errors=1 warnings=1 notes=0
+
+rc=1
+=== end

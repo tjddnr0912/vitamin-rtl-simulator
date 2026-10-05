@@ -1,0 +1,97 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P1
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P1.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: FINDING A (BLOCKING, new in round 2)
+verdict_source: s580/lens_snd2/REPORT.md:12
+notes: R4 cmp3_post4 bucket(s): post3×3,both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P1.ivd.txt | 231 bytes
+F1 1 1 0
+F2 1 1 1
+F3 1 0
+L1 1 1 0
+C1 1 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:25: $finish called at 2 (1ns)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P1_c.ivd.txt | 197 bytes
+C1 1 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:25: $finish called at 2 (1ns)
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./P1.iv.txt | 104 bytes
+rc=1 sv2v: src/Convert/Wildcard.hs:96:9-46: Non-exhaustive patterns in Based size signed base vals knds
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./P1.sv2v.err | 100 bytes
+sv2v: src/Convert/Wildcard.hs:96:9-46: Non-exhaustive patterns in Based size signed base vals knds
+
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./P1_c.iv.txt | 104 bytes | identical to block 3
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./P1_c.sv2v.err | 100 bytes | identical to block 4
+=== block 7 | vita [POST] | ./P1.post.txt | 3961 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=11 warnings=0 notes=0
+rc=1
+=== block 8 | vita [POST] | ./P1_c.post.txt | 1104 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=3 warnings=0 notes=0
+rc=1
+=== block 9 | vita [POST2] | ./P1.post2.txt | 126 bytes
+F1 0 0 1
+F2 0 0 0
+F3 1 0
+L1 1 1 0
+I1 0 0 0
+I2 0 1
+C1 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 10 | vita [POST2] | ./P1_c.post2.txt | 92 bytes
+I1 0 0 0
+I2 0 1
+C1 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [POST2-interp] | ./P1.p2interp.txt | 126 bytes | identical to block 9
+=== block 12 | vita [POST2-interp] | ./P1_c.p2interp.txt | 92 bytes | identical to block 10
+=== block 13 | vita [POST2-vm] | ./P1.p2vm.txt | 126 bytes | identical to block 9
+=== block 14 | vita [POST2-vm] | ./P1_c.p2vm.txt | 92 bytes | identical to block 10
+=== block 15 | vita [PRE] | ./P1.pre.txt | 2585 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=8 warnings=0 notes=0
+rc=1
+=== block 16 | vita [PRE] | ./P1_c.pre.txt | 92 bytes
+I1 0 0 0
+I2 0 x
+C1 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== end

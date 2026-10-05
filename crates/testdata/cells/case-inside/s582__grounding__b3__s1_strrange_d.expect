@@ -1,0 +1,30 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__s1_strrange_d
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/s1_strrange_d.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: verilator
+vita_tags: PRE
+verdict: no oracle
+verdict_source: s582/grounding/REPORT.md:174
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 3
+=== block 1 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_s1_strrange_d/vl.out | 294 bytes
+%Error: Internal Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/s1_strrange_d.sv:4:38: ../V3Number.cpp:1910: Number operation called with non-logic (double or string) argument: '"am""
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_s1_strrange_d/vl_build.log | 593 bytes
+%Error: Internal Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/s1_strrange_d.sv:4:38: ../V3Number.cpp:1910: Number operation called with non-logic (double or string) argument: '"am""
+    4 |     s = "am"; case (1'b1) (s inside {["aa":"az"]}): m = 1; (s inside {"b"}): m = 2; default: m = 0; endcase $display("am m=%0d", m);
+      |                                      ^
+                        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+=== block 3 | vita [PRE] | grounding/b3/out_s1_strrange_d/vita.out | 195 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+am m=1
+b m=2
+ba m=0
+a m=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

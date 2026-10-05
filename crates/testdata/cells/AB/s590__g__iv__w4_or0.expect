@@ -1,0 +1,12 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__g__iv__w4_or0
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/g/iv/w4_or0.sv
+roadmap_row: §2 🆕 AB
+set: g/iv
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: Self-contradiction
+verdict_source: s590/GROUNDING.md:24
+blocks: 0
+=== end

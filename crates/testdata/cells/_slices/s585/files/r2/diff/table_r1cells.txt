@@ -1,0 +1,44 @@
+b00_repro | vl:1@7,2@10 | PRE:2@10,3@13 | POST:1@7,2@10,3@13 | POST2:1@7,2@10,3@13 | ok
+e1_comb_net NO-R1
+e2_tasks | vl:0@7,5@7,15@7,40@7,50@7,70@7,75@7,85@7,95@7,120@7 | PRE:- | POST:5@12,85@12 | POST2:- | ok
+e3_glitch | vl:3@5,4@5,4@9 | PRE:- | POST:4@5,4@9 | POST2:4@5,4@9 | ok
+e4_tbfirst | vl:4@19,4@19,5@19,5@19,6@19,6@19 | PRE:- | POST:4@19 | POST2:4@19 | ok
+e4b_tblast | vl:4@4,4@4,5@4,5@4,6@4,6@4 | PRE:- | POST:4@4 | POST2:4@4 | ok
+p1_macro | vl:1@12,2@13,3@14,5@16,6@22,7@26,8@27,9@28 | PRE:- | POST:1@12,2@13,3@14,5@16,6@22,7@26,8@27,9@28 | POST2:1@12,2@13,3@14,5@16,6@22,7@26,8@27,9@28 | ok
+p1d_macro_defFOO | vl:1@12,2@13,3@14,7@26,8@27,9@28 | PRE:- | POST:1@12,2@13,3@14,7@26,8@27,9@28 | POST2:1@12,2@13,3@14,7@26,8@27,9@28 | STAGED-DIFF
+p2_inc | vl:1@2,2@7,4@11 | PRE:- | POST:1@2,2@7,4@11 | POST2:2@7,4@11 | ok
+p3_lib NO-R1
+p3_multi | vl:2@14,3@4,4@8 | PRE:- | POST:2@14,3@4,4@8 | POST2:2@14 | ok
+p3f_filelist | vl:2@14,3@4,4@8 | PRE:- | POST:2@14,3@4,4@8 | POST2:2@14 | STAGED-DIFF
+q10_cfork_ca | vl:- | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q10b_cfork_init | vl:1@3 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q14_assertctl | vl:n/a | PRE:1@6,2@10,3@13 | POST:1@5,1@6,1@7,2@9,2@10,3@12,3@13,3@14 | POST2:1@5,1@6,1@7,2@9,2@10,3@12,3@13,3@14 | ok
+q15_vif_ca | vl:2@4,2@4,3@4,3@4,4@4,4@4 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q15b_vif_init | vl:2@4,2@8 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q16_nested_ml | vl:1@5,2@7,3@9,4@12,5@14,6@15,7@18,8@22 | PRE:1@6,2@8,4@12,5@14,7@20 | POST:1@6,2@8,3@9,4@12,5@14,6@16,7@20,8@22 | POST2:1@6,2@8,4@12,5@14,6@16,7@20,8@22 | ok
+q16b_nested_ml2 | vl:1@5,2@8,3@12,4@16,5@19,6@23,7@26,8@29 | PRE:7@26,8@31 | POST:1@6,2@10,3@12,4@16,5@19,6@23,7@26,8@31 | POST2:1@6,2@10,4@16,5@19,6@23,7@26,8@31 | ok
+q17_fsm_x | vl:- | PRE:- | POST:5@7 | POST2:5@7 | ok
+q17c_fsm_x_case | vl:- | PRE:5@7 | POST:5@7 | POST2:5@7 | ok
+q18_fv_calls_task | vl:n/a | PRE:- | POST:2@5 | POST2:- | ok
+q21_offs_b NO-R1
+q21_offs_top | vl:1@5 | PRE:- | POST:1@5 | POST2:1@5 | ok
+q23_prio_u0 | vl:3@9 | PRE:- | POST:1@5,2@6,3@9 | POST2:- | ok
+q23b_prio_u0_task | vl:- | PRE:- | POST:1@5 | POST2:- | ok
+q24_t0_declinit | vl:- | PRE:- | POST:- | POST2:- | ok
+q26_comb_xreg | vl:- | PRE:- | POST:0@11 | POST2:0@11 | ok
+q26c_comb_xreg_case | vl:- | PRE:0@11 | POST:0@11 | POST2:0@11 | ok
+q5_sidefx | vl:1@8,4@14 | PRE:- | POST:1@8,3@12,4@14 | POST2:1@8,3@12,4@14 | ok
+q6_xz | vl:1@7,3@9,5@11,7@13 | PRE:- | POST:1@7,3@9,5@11,6@12,7@13 | POST2:1@7,3@9,5@11,6@12,7@13 | ok
+q6m_matches | vl:n/a | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q9_classes | vl:1@4,2@9,3@22,4@28 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+q9_ifc | vl:1@4,2@8,3@14,4@31,5@26 | PRE:- | POST:1@4,2@8,3@14,4@31,5@26 | POST2:- | ok
+q9b_classes_unit | vl:1@3,2@8,3@20,4@26 | PRE:- | POST:2@8,3@20,4@26 | POST2:- | ok
+s1_struct | vl:0@11,1@17,1@17,2@20,2@20,3@21,3@21,4@22,4@22,5@23,6@24,7@25,8@7,8@7,..+5 | PRE:- | POST:0@11,1@17,1@17,2@20,2@20,3@21,3@21,4@22,4@22,5@23,6@24,7@25,8@7,8@7,..+5 | POST2:1@17,1@17,2@20,2@20,3@21,3@21,4@22,4@22,5@23,6@24,7@25,9@27,9@27,10@34,..+1 | ok
+s2_comb_tbL | vl:2@20,2@13,2@4,2@20,2@13,2@4,3@20,3@13,3@4,3@20,3@13,3@4,4@20,4@13,..+4 | PRE:- | POST:2@4,2@13,2@20 | POST2:2@20 | ok
+s2b_comb_tbF | vl:2@32,2@25,2@16,2@32,2@25,2@16,3@32,3@25,3@16,3@32,3@25,3@16,4@32,4@25,..+4 | PRE:- | POST:2@16,2@25,2@32 | POST2:2@32 | ok
+s2c_star_init_order | vl:2@4,2@4,3@4,3@4 | PRE:- | POST:2@4 | POST2:2@4 | ok
+s2d_init_star_order | vl:2@10,2@10,3@10,3@10 | PRE:- | POST:2@10 | POST2:2@10 | ok
+s3_jumps | vl:1@18,1@18,1@18,2@24,2@24,3@7,4@29,5@33,5@33,6@12,7@35,7@35,8@36,8@36 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+s3a_jumps_nofe | vl:1@18,1@18,1@18,2@24,2@24,3@7,4@29,5@33,5@33,6@12,8@36,8@36 | PRE:- | POST:1@18,1@18,1@18,2@24,2@24,3@7,4@29,5@33,5@33,6@12,8@36,8@36 | POST2:1@18,1@18,1@18,2@24,2@24,4@29,5@33,5@33,8@36,8@36 | ok
+s3b_foreach | vl:1@6,1@6,2@7,2@7 | PRE:- | POST:- | POST2:- | STAGED-DIFF
+TOTAL {'cells': 40, 'lost': 0}

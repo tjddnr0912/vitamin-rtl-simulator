@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__r2__r26__S09A
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/r2/r26/S09A.sv
+roadmap_row: §2 🆕 S
+set: r2/r26
+oracles_present: iverilog,verilator
+vita_tags: r26-dbg2,r26-new,POST,POST2,PRE
+verdict: Still a silent default after round 2 (recorded, not inside/`==?`-specific, PRE-identical)
+verdict_source: s580/REPORT.md:426
+notes: R2-6 decline table row s580/REPORT.md:415 (position A); R4 cmp3_post4 bucket(s): both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./S09A.iv.txt | 44 bytes
+S09A 1
+S09A.sv:4: $finish called at 2 (1ns)
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./S09A.vl.txt | 95 bytes
+%Error: S09A.sv:3:26: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./S09A.vlc.txt | 362 bytes
+%Error: S09A.sv:3:26: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 't'
+    3 |   logic ad_S09 [(4'b1100 == 4'b1?00):0];
+      |                          ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | vita [POST] | ./S09A.post.txt | 76 bytes
+S09A x
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST2] | ./S09A.post2.txt | 76 bytes | identical to block 4
+=== block 6 | vita [PRE] | ./S09A.pre.txt | 76 bytes | identical to block 4
+=== end

@@ -1,0 +1,45 @@
+14 loud->value POST3=oracle
+1 loud->value split
+134 unchanged
+23 value->value POST3=oracle
+2 value->value split
+AD_I    PRE=AD_I x                   POST3=AD_I 2                   POST2=AD_I 2               iv=ERR:sorry: "insi sv=AD_I 2           vl=AD_I 2         value->value POST3=oracle
+AD_W    PRE=AD_W 1                   POST3=AD_W 2                   POST2=AD_W 2               iv=AD_W 2           sv=AD_W 2           vl=AD_W 2         value->value POST3=oracle
+BL_I    PRE=ERR:error[VITA-E3009]    POST3=BL_I item                POST2=BL_I item            iv=ERR:sorry: "insi sv=BL_I item        vl=BL_I item      loud->value POST3=oracle
+BL_W    PRE=BL_W default             POST3=BL_W item                POST2=BL_W item            iv=BL_W item        sv=BL_W item        vl=BL_W item      value->value POST3=oracle
+BO_I    PRE=ERR:error[VITA-E3009]    POST3=BO_P item                POST2=BO_P item            iv=ERR:sorry: "insi sv=BO_P item        vl=BO_P item      loud->value POST3=oracle
+BO_W    PRE=BO_P default             POST3=BO_P item                POST2=BO_P item            iv=BO_P item        sv=BO_P item        vl=BO_P item      value->value POST3=oracle
+BP_I    PRE=ERR:error[VITA-E3009]    POST3=BP_I item                POST2=BP_I item            iv=ERR:sorry: "insi sv=BP_I item        vl=BP_I item      loud->value POST3=oracle
+BP_W    PRE=BP_W default             POST3=BP_W item                POST2=BP_W item            iv=BP_W item        sv=BP_W item        vl=BP_W item      value->value POST3=oracle
+BS_I    PRE=ERR:error[VITA-E3009]    POST3=BS_I one                 POST2=BS_I one             iv=ERR:sorry: "insi sv=BS_I one         vl=BS_I one       loud->value POST3=oracle
+BS_W    PRE=BS_W default             POST3=BS_W one                 POST2=BS_W one             iv=BS_W one         sv=BS_W one         vl=BS_W one       value->value POST3=oracle
+CL_I    PRE=ERR:error[VITA-E3009]    POST3=CL_I 3                   POST2=CL_I 3               iv=ERR:sorry: "insi sv=CL_I 3           vl=CL_I 3         loud->value POST3=oracle
+CL_W    PRE=CL_W 2                   POST3=CL_W 3                   POST2=CL_W 3               iv=CL_W 3           sv=CL_W 3           vl=CL_W 3         value->value POST3=oracle
+EN_I    PRE=ERR:error[VITA-E3009]    POST3=EN_I 1 2                 POST2=EN_I 1 2             iv=ERR:sorry: "insi sv=EN_I 1 2         vl=EN_I 1 2       loud->value POST3=oracle
+EN_W    PRE=EN_W 0 1                 POST3=EN_W 1 2                 POST2=EN_W 1 2             iv=EN_W 1 2         sv=EN_W 1 2         vl=EN_W 1 2       value->value POST3=oracle
+GC_I    PRE=GC_I default             POST3=GC_I item                POST2=GC_I item            iv=ERR:sorry: "insi sv=GC_I item        vl=ERR:%Error: GC value->value POST3=oracle
+GC_W    PRE=GC_W default             POST3=GC_W item                POST2=GC_W item            iv=GC_W item        sv=GC_W item        vl=ERR:%Error: GC value->value POST3=oracle
+GI_I    PRE=ERR:error[VITA-E3010]    POST3=GI_I then                POST2=GI_I then            iv=ERR:sorry: "insi sv=GI_I then        vl=GI_I then      loud->value POST3=oracle
+GI_W    PRE=GI_W else                POST3=GI_W then                POST2=GI_W then            iv=GI_W then        sv=GI_W then        vl=GI_W then      value->value POST3=oracle
+GS_I    PRE=ERR:error[VITA-E3010]    POST3=GS_I one                 POST2=GS_I one             iv=ERR:sorry: "insi sv=GS_I one         vl=ERR:%Error: GS loud->value POST3=oracle
+GS_W    PRE=GS_W default             POST3=GS_W one                 POST2=GS_W one             iv=GS_W one         sv=GS_W one         vl=ERR:%Error: GS value->value POST3=oracle
+LP_I    PRE=ERR:error[VITA-E3009]    POST3=LP_I 1 1                 POST2=LP_I 1 1             iv=ERR:sorry: "insi sv=ERR:error: Malfo vl=LP_I 1 1       loud->value POST3=oracle
+LP_W    PRE=LP_W 0 1                 POST3=LP_W 1 1                 POST2=LP_W 1 1             iv=LP_W 1 1         sv=LP_W 1 1         vl=LP_W 1 1       value->value POST3=oracle
+LT_I    PRE=ERR:error[VITA-E3009]    POST3=LT_I 0001                POST2=LT_I 0001            iv=ERR:sorry: "insi sv=LT_I 0001        vl=LT_I 0001      loud->value POST3=oracle
+LT_W    PRE=LT_W 0000                POST3=LT_W 0001                POST2=LT_W 0001            iv=LT_W 0001        sv=LT_W 0001        vl=LT_W 0001      value->value POST3=oracle
+OT_I    PRE=ERR:error[VITA-E3009]    POST3=OT_P 00000000000000001   POST2=OT_P 000000000000000 iv=ERR:sorry: "insi sv=OT_P 00000000000 vl=OT_P 000000000 loud->value POST3=oracle
+OT_W    PRE=OT_P 00000000000000000   POST3=OT_P 00000000000000001   POST2=OT_P 000000000000000 iv=OT_P 00000000000 sv=OT_P 00000000000 vl=OT_P 000000000 value->value POST3=oracle
+OV_I    PRE=ERR:error[VITA-E3009]    POST3=OV_P 1 1                 POST2=OV_P 1 1             iv=ERR:sorry: "insi sv=OV_P 1 32        vl=OV_P 1 1       loud->value split
+OV_W    PRE=OV_P 0 1                 POST3=OV_P 1 1                 POST2=OV_P 1 1             iv=OV_P 1 1         sv=OV_P 1 32        vl=OV_P 1 1       value->value split
+PK_I    PRE=ERR:error[VITA-E3009]    POST3=PK_I 1                   POST2=PK_I 1               iv=ERR:sorry: "insi sv=PK_I 1           vl=PK_I 1         loud->value POST3=oracle
+PK_W    PRE=PK_W 0                   POST3=PK_W 1                   POST2=PK_W 1               iv=PK_W 1           sv=PK_W 1           vl=PK_W 1         value->value POST3=oracle
+PS_I    PRE=PS_I 1                   POST3=PS_I 00101               POST2=PS_I 00101           iv=ERR:sorry: "insi sv=PS_I 00101       vl=PS_I 00101     value->value POST3=oracle
+PS_W    PRE=PS_W 01                  POST3=PS_W 00101               POST2=PS_W 00101           iv=PS_W 00101       sv=PS_W 00101       vl=PS_W 00101     value->value POST3=oracle
+RB_I    PRE=RB_I 1                   POST3=RB_I 2                   POST2=RB_I 2               iv=ERR:sorry: "insi sv=RB_I 2           vl=RB_I 2         value->value POST3=oracle
+RB_W    PRE=RB_W 1                   POST3=RB_W 2                   POST2=RB_W 2               iv=RB_W 2           sv=RB_W 2           vl=RB_W 2         value->value POST3=oracle
+RP_I    PRE=RP_I 00000000            POST3=RP_I 00000011            POST2=RP_I 00000011        iv=ERR:sorry: "insi sv=RP_I 00000011    vl=RP_I 00000011  value->value POST3=oracle
+RP_W    PRE=RP_W 00000001            POST3=RP_W 00000011            POST2=RP_W 00000011        iv=RP_W 00000011    sv=RP_W 00000011    vl=RP_W 00000011  value->value POST3=oracle
+SC_I    PRE=ERR:error[VITA-E3009]    POST3=SC_I 00000001            POST2=SC_I 00000001        iv=ERR:sorry: "insi sv=SC_I 00000001    vl=SC_I 00000001  loud->value POST3=oracle
+SC_W    PRE=SC_W 00000000            POST3=SC_W 00000001            POST2=SC_W 00000001        iv=SC_W 00000001    sv=SC_W 00000001    vl=SC_W 00000001  value->value POST3=oracle
+SR1     PRE=ERR:error[VITA-E3009]    POST3=SR1 1                    POST2=SR1 1                iv=SR1 1            sv=SR1 1            vl=SR1 1          loud->value POST3=oracle
+SR2     PRE=SR2 0                    POST3=SR2 1                    POST2=SR2 1                iv=SR2 1            sv=SR2 1            vl=SR2 0          value->value split

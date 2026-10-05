@@ -1,0 +1,42 @@
+### M_cast_16_lp
+  pre594 : R: L=65532 B=16
+  pa : R: L=-4 B=16
+  pb : R: L=-4 B=16
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L=252 B=16
+  vl : R: L=-4 B=16
+### M_cast_16_rb
+  pre594 : R: vb=65533
+  pa : R: vb=5
+  pb : R: vb=5
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: vb=253
+  vl : R: vb=5
+### Scast_E
+  pre594 : R: L=252
+  pa : R: L=252
+  pb : R: L=252
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : R: L=252
+  vl : R: L=252
+### Scast_L
+  pre594 : R: L=252
+  pa : R: L=252
+  pb : R: L=252
+  ivl : R: L=252
+  s2v : R: L=252
+  vl : R: L=252
+### Scast_R
+  pre594 : R: L=252
+  pa : R: L=252
+  pb : R: L=252
+  ivl : R: L=252
+  s2v : R: L=252
+  vl : R: L=252
+### Scast_R_rt
+  pre594 : R: RT=252
+  pa : R: RT=252
+  pb : R: RT=252
+  ivl : R: RT=252
+  s2v : R: RT=252
+  vl : R: RT=252

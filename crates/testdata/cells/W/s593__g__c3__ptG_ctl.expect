@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c3__ptG_ctl
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c3/ptG_ctl.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c3.p5.summ:911
+notes: named at s593/GROUNDING.md:56
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./ptG_ctl.ivl | 117 bytes
+ptG_ctl.sv:7: error: Unable to bind wire/reg/memory `g[(X)+('sd5)].K' in `top.u'
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./ptG_ctl.vl | 123 bytes
+%Error: ptG_ctl.sv:7:37: Can't find definition of 'K' in dotted signal: 'g.K'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./ptG_ctl.s2v | 57 bytes
+gk=257
+ptG_ctl.s2v.v:19: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./ptG_ctl.post1 | 76 bytes
+gk=1
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./ptG_ctl.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./ptG_ctl.post2 | 76 bytes | identical to block 4
+=== block 7 | vita [post2] | ./ptG_ctl.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post5] | ./ptG_ctl.post5 | 76 bytes | identical to block 4
+=== block 9 | vita [post5] | ./ptG_ctl.post5.route | 0 bytes | identical to block 5
+=== block 10 | vita [pre] | ./ptG_ctl.pre | 76 bytes | identical to block 4
+=== block 11 | vita [pre] | ./ptG_ctl.pre.route | 0 bytes | identical to block 5
+=== end

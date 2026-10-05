@@ -1,0 +1,191 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__diff__cells__k03_kahn_net_indeg
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/diff/cells/k03_kahn_net_indeg.sv
+roadmap_row: §2 🆕 AB
+set: r2/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/k03_kahn_net_indeg.out | 2693 bytes
+##### k03_kahn_net_indeg
+=== PRE2 (native=interp=vm)
+rc=0
+g1 t=0 v=zzz
+g2 t=0 v=0zz
+f4 t=0 v=z
+f2 t=0 v=z
+f1 t=0 v=x
+f5 t=0 v=z
+f3 t=0 v=x
+f7 t=0 v=z
+f6 t=0 v=x
+g1 t=0 v=zzx
+g2 t=0 v=0zx
+f2 t=0 v=x
+f5 t=0 v=x
+f7 t=0 v=x
+g1 t=0 v=zxx
+g2 t=0 v=0xx
+f4 t=0 v=x
+f7 t=0 v=x
+g1 t=0 v=xxx
+f1 t=0 v=1
+f3 t=0 v=1
+f6 t=0 v=1
+g1 t=0 v=xx1
+g2 t=0 v=0x1
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=1
+g1 t=0 v=x11
+g2 t=0 v=011
+f4 t=0 v=1
+f7 t=0 v=1
+g1 t=0 v=111
+t1 v=111 s=11 R=111 Q=011
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=0
+f1 t=0 v=1
+f3 t=0 v=1
+f6 t=0 v=1
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=1
+f7 t=0 v=1
+g2 t=0 v=011
+f4 t=0 v=1
+g1 t=0 v=111
+t1 v=111 s=11 R=111 Q=011
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+f1 t=0 v=1
+f3 t=0 v=1
+f6 t=0 v=1
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=1
+f7 t=0 v=1
+g2 t=0 v=011
+f4 t=0 v=1
+g1 t=0 v=111
+t1 v=111 s=11 R=111 Q=011
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+--- PRE2==POSTA False  POSTA==POSTC True  PRE2==POSTC False  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+g1 t=0 v=zzz
+g2 t=0 v=0zz
+f4 t=0 v=z
+f2 t=0 v=z
+f1 t=0 v=x
+f5 t=0 v=z
+f3 t=0 v=x
+f7 t=0 v=z
+f6 t=0 v=x
+g1 t=0 v=zzx
+g2 t=0 v=0zx
+f2 t=0 v=x
+f5 t=0 v=x
+f7 t=0 v=x
+g1 t=0 v=zxx
+g2 t=0 v=0xx
+f4 t=0 v=x
+f7 t=0 v=x
+g1 t=0 v=xxx
+f1 t=0 v=1
+f3 t=0 v=1
+f6 t=0 v=1
+g1 t=0 v=xx1
+g2 t=0 v=0x1
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=1
+g1 t=0 v=x11
+g2 t=0 v=011
+f4 t=0 v=1
+f7 t=0 v=1
+g1 t=0 v=111
+t1 v=111 s=11 R=111 Q=011
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=0
+f1 t=0 v=1
+f3 t=0 v=1
+f6 t=0 v=1
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=1
+f7 t=0 v=1
+g2 t=0 v=011
+f4 t=0 v=1
+g1 t=0 v=111
+t1 v=111 s=11 R=111 Q=011
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+f6 t=0 v=1
+f3 t=0 v=1
+f1 t=0 v=1
+g1 t=0 v=xxx
+f4 t=0 v=x
+f2 t=0 v=1
+f5 t=0 v=1
+f7 t=0 v=x
+g2 t=0 v=0zz
+f4 t=0 v=1
+g1 t=0 v=x11
+g2 t=0 v=0x1
+f7 t=0 v=1
+g1 t=0 v=111
+g2 t=0 v=011
+t1 v=111 s=11 R=111 Q=011
+k03_kahn_net_indeg.sv:21: $finish called at 1 (1s)
+=== verilator run rc=0
+f7 t=0 v=0
+f6 t=0 v=1
+f1 t=0 v=1
+f3 t=0 v=1
+f2 t=0 v=1
+f5 t=0 v=1
+f4 t=0 v=1
+g1 t=0 v=111
+g2 t=0 v=001
+f7 t=0 v=1
+g2 t=0 v=011
+f7 t=0 v=1
+g2 t=0 v=011
+f7 t=0 v=1
+g2 t=0 v=011
+t1 v=111 s=11 R=111 Q=011
+- k03_kahn_net_indeg.sv:21: Verilog $finish
+f6 t=1 v=1
+f1 t=1 v=1
+f3 t=1 v=1
+f2 t=1 v=1
+f5 t=1 v=1
+f4 t=1 v=1
+g1 t=1 v=111
+g2 t=1 v=011
+f1 t=1 v=1
+f3 t=1 v=1
+f2 t=1 v=1
+f5 t=1 v=1
+f4 t=1 v=1
+g1 t=1 v=111
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

@@ -1,0 +1,289 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r4__diff__cells__g01_hu_body_read_later_wave
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r4/diff/cells/g01_hu_body_read_later_wave.sv
+roadmap_row: §2 🆕 AB
+set: r4/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE3,POSTD,POSTE,POSTE_JIT,POSTE_NODEF,PRE3_SEP,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+vita_binary: POSTE_JIT: unresolved (no row in the slice META binaries table)
+vita_binary: POSTE_NODEF: unresolved (no row in the slice META binaries table)
+vita_binary: PRE3_SEP: md5 78439b423ee29af2d2a6a5034a4ff409 commit 75f46453
+vita_binary: POSTE_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE3+POSTD+POSTE+POSTE_JIT+POSTE_NODEF+PRE3_SEP+POSTE_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r4/diff/o/g01_hu_body_read_later_wave.out | 4032 bytes
+##### g01_hu_body_read_later_wave
+=== PRE3 (native=interp=vm)
+rc=0
+f1 t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f1 t=0 v=0
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f2 t=0 v=1
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f3 t=0 v=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+ev u=0 t=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== POSTD (native=interp=vm)
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f3 t=0 v=0
+gr t=0 v=1 g1=1
+gr t=0 v=1 g1=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+ev u=0 t=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== POSTE (native=interp=vm)
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+ev u=0 t=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== JIT POSTE native
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+ev u=0 t=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== PRODUCT POSTE
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+ev u=0 t=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== staged PRE3 vcmp=0 velab=0
+rc=0
+f1 t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f1 t=0 v=0
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f2 t=0 v=1
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f3 t=0 v=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+ev u=0 t=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+=== staged POSTE vcmp=0 velab=0
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+ev u=0 t=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+--- D=E False P3=E False splitE False vcdDE True jit=E True prod=E True stE True stPair True
+=== iverilog run rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+t1 g1=1 u=x u2=0
+t4 u=x
+g01_hu_body_read_later_wave.sv:24: $finish called at 4 (1s)
+=== verilator run rc=0
+f1 t=0 v=0
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gr t=0 v=1 g1=1
+ev u=0 t=0
+t1 g1=1 u=0 u2=0
+f1 t=1 v=0
+f2 t=1 v=1
+f3 t=1 v=0
+gd t=1 v=1
+gr t=1 v=1 g1=1
+f1 t=3 v=0
+f2 t=3 v=1
+f3 t=3 v=0
+gd t=3 v=1
+gr t=3 v=1 g1=1
+t4 u=0
+- g01_hu_body_read_later_wave.sv:24: Verilog $finish
+f1 t=4 v=0
+f2 t=4 v=1
+f3 t=4 v=0
+gd t=4 v=1
+gr t=4 v=1 g1=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

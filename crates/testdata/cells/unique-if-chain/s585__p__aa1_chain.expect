@@ -1,0 +1,108 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__p__aa1_chain
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/p/aa1_chain.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: p
+oracles_present: verilator
+vita_tags: PRE,PRE-H,POSTC,POST,POST2
+verdict: t0 W4031 lines POST2 adds over PRE | POST2 W4031 lines PRE and verilator lack | 🆕 AA | SPLITS INHERITED
+verdict_source: s585/g/cmp3_final.txt:7 | s585/g/cmp3_final.txt:8 | s585/DOCS_ROWS.md:14 | s585/p/PINS.txt:1042
+notes: PRE-H spelling; runs: aa1_chain g__aa1_chain
+aux: s585__p__aa1_chain.aux/p/aa1_chain_H.sv (origin s585/p/aa1_chain_H.sv)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: PRE-H: md5 unrecorded commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 4
+=== block 1 | combined [verilator,PRE] verilator 5.052 (version captured in slice) | r2/sound/out/aa1_chain.out | 214 bytes
+##### aa1_chain
+=== verilator compile rc=0 run rc=0
+t=6 y=3 done
+- aa1_chain.sv:11: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== block 2 | combined [verilator,PRE,PRE-H,POST] verilator 5.052 (version captured in slice) | g/out2/aa1_chain.out | 1194 bytes
+##### aa1_chain
+=== verilator compile rc=0 run rc=0
+t=6 y=3 done
+- aa1_chain.sv:11: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=0
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [verilator,PRE,PRE-H,POST2] verilator 5.052 (version captured in slice) | g/out3/g__aa1_chain.out | 1197 bytes
+##### g__aa1_chain
+=== verilator compile rc=0 run rc=0
+t=6 y=3 done
+- aa1_chain.sv:11: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=0
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 4 | combined [verilator,PRE,PRE-H,POSTC] verilator 5.052 (version captured in slice) | g/out/aa1_chain.out | 1049 bytes
+##### aa1_chain
+=== verilator compile rc=0 run rc=0
+t=6 y=3 done
+- aa1_chain.sv:11: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=0
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+=== end

@@ -1,0 +1,98 @@
+== R00  <<VITA-MOVES
+   iv   0_0 hit | 0_1 hit | 0_10 hit | 0_11 hit | 0_12 hit | 0_13 hit | 0_14 hit | 0_15 hit | 0_16 hit | 0_17 hit | 0_18 hit | 0_19 hit | 0_2 hit | 0_20 hit | 0_21 hit | 0_22 hit | 0_23 hit | 0_24 hit | 0_3 hit | 0_4 hit | 0_5 hit | 0_6 hit | 0_7 hit | 0_8 hit | 0_9 hit
+   sv   ?
+   vl   0_0 hit | 0_1 hit | 0_10 hit | 0_11 hit | 0_12 hit | 0_13 hit | 0_14 hit | 0_15 hit | 0_16 hit | 0_17 hit | 0_18 hit | 0_19 hit | 0_2 hit | 0_20 hit | 0_21 hit | 0_22 hit | 0_23 hit | 0_24 hit | 0_3 hit | 0_4 hit | 0_5 hit | 0_6 hit | 0_7 hit | 0_8 hit | 0_9 hit
+   pre  0_0 hit | 0_1 hit | 0_10 hit | 0_11 hit | 0_12 hit | 0_13 hit | 0_14 hit | 0_15 hit | 0_16 hit | 0_17 hit | 0_18 def | 0_19 def | 0_2 hit | 0_20 def | 0_21 def | 0_22 def | 0_23 def | 0_24 hit | 0_3 hit | 0_4 hit | 0_5 hit | 0_6 hit | 0_7 hit | 0_8 hit | 0_9 hit
+   pt   0_0 hit | 0_1 hit | 0_10 hit | 0_11 hit | 0_12 hit | 0_13 hit | 0_14 hit | 0_15 hit | 0_16 hit | 0_17 hit | 0_18 hit | 0_19 hit | 0_2 hit | 0_20 hit | 0_21 hit | 0_22 hit | 0_23 hit | 0_24 hit | 0_3 hit | 0_4 hit | 0_5 hit | 0_6 hit | 0_7 hit | 0_8 hit | 0_9 hit
+   post 0_0 hit | 0_1 hit | 0_10 hit | 0_11 hit | 0_12 hit | 0_13 hit | 0_14 hit | 0_15 hit | 0_16 hit | 0_17 hit | 0_18 hit | 0_19 hit | 0_2 hit | 0_20 hit | 0_21 hit | 0_22 hit | 0_23 hit | 0_24 hit | 0_3 hit | 0_4 hit | 0_5 hit | 0_6 hit | 0_7 hit | 0_8 hit | 0_9 hit
+== R01  <<VITA-MOVES
+   iv   1_0 hit | 1_1 hit | 1_10 hit | 1_11 hit | 1_12 hit | 1_13 hit | 1_14 hit | 1_15 hit | 1_16 hit | 1_17 hit | 1_18 hit | 1_19 hit | 1_2 def | 1_20 hit | 1_21 hit | 1_22 hit | 1_23 hit | 1_24 hit | 1_3 def | 1_4 hit | 1_5 hit | 1_6 hit | 1_7 hit | 1_8 hit | 1_9 hit
+   sv   ?
+   vl   1_0 hit | 1_1 hit | 1_10 hit | 1_11 hit | 1_12 hit | 1_13 hit | 1_14 hit | 1_15 hit | 1_16 hit | 1_17 hit | 1_18 hit | 1_19 hit | 1_2 def | 1_20 hit | 1_21 hit | 1_22 hit | 1_23 hit | 1_24 hit | 1_3 def | 1_4 hit | 1_5 hit | 1_6 hit | 1_7 hit | 1_8 hit | 1_9 hit
+   pre  1_0 def | 1_1 hit | 1_10 hit | 1_11 def | 1_12 def | 1_13 def | 1_14 def | 1_15 def | 1_16 def | 1_17 def | 1_18 def | 1_19 def | 1_2 def | 1_20 def | 1_21 def | 1_22 def | 1_23 hit | 1_24 hit | 1_3 def | 1_4 hit | 1_5 hit | 1_6 hit | 1_7 hit | 1_8 hit | 1_9 hit
+   pt   1_0 hit | 1_1 hit | 1_10 hit | 1_11 hit | 1_12 hit | 1_13 hit | 1_14 hit | 1_15 hit | 1_16 hit | 1_17 hit | 1_18 hit | 1_19 hit | 1_2 def | 1_20 hit | 1_21 hit | 1_22 hit | 1_23 hit | 1_24 hit | 1_3 def | 1_4 hit | 1_5 hit | 1_6 hit | 1_7 hit | 1_8 hit | 1_9 hit
+   post 1_0 hit | 1_1 hit | 1_10 hit | 1_11 hit | 1_12 hit | 1_13 hit | 1_14 hit | 1_15 hit | 1_16 hit | 1_17 hit | 1_18 hit | 1_19 hit | 1_2 def | 1_20 hit | 1_21 hit | 1_22 hit | 1_23 hit | 1_24 hit | 1_3 def | 1_4 hit | 1_5 hit | 1_6 hit | 1_7 hit | 1_8 hit | 1_9 hit
+== R02  <<VITA-MOVES  <<POST!=ORACLE
+   iv   2_0 hit | 2_1 hit | 2_10 hit | 2_11 hit | 2_12 hit | 2_13 hit | 2_14 hit | 2_15 hit | 2_16 hit | 2_17 hit | 2_18 hit | 2_19 hit | 2_2 hit | 2_20 def | 2_21 def | 2_22 hit | 2_23 hit | 2_24 hit | 2_3 hit | 2_4 hit | 2_5 hit | 2_6 hit | 2_7 hit | 2_8 hit | 2_9 hit
+   sv   ?
+   vl   2_0 hit | 2_1 hit | 2_10 hit | 2_11 hit | 2_12 hit | 2_13 hit | 2_14 hit | 2_15 hit | 2_16 def | 2_17 hit | 2_18 def | 2_19 hit | 2_2 hit | 2_20 def | 2_21 hit | 2_22 hit | 2_23 hit | 2_24 hit | 2_3 hit | 2_4 hit | 2_5 hit | 2_6 def | 2_7 hit | 2_8 def | 2_9 hit
+   pre  2_0 hit | 2_1 hit | 2_10 def | 2_11 def | 2_12 def | 2_13 def | 2_14 def | 2_15 def | 2_16 def | 2_17 hit | 2_18 def | 2_19 hit | 2_2 hit | 2_20 hit | 2_21 def | 2_22 hit | 2_23 hit | 2_24 hit | 2_3 hit | 2_4 hit | 2_5 hit | 2_6 hit | 2_7 hit | 2_8 hit | 2_9 hit
+   pt   2_0 hit | 2_1 hit | 2_10 hit | 2_11 hit | 2_12 hit | 2_13 hit | 2_14 hit | 2_15 hit | 2_16 def | 2_17 hit | 2_18 def | 2_19 hit | 2_2 hit | 2_20 def | 2_21 def | 2_22 hit | 2_23 hit | 2_24 hit | 2_3 hit | 2_4 hit | 2_5 hit | 2_6 hit | 2_7 hit | 2_8 hit | 2_9 hit
+   post 2_0 hit | 2_1 hit | 2_10 hit | 2_11 hit | 2_12 hit | 2_13 hit | 2_14 hit | 2_15 hit | 2_16 def | 2_17 hit | 2_18 def | 2_19 hit | 2_2 hit | 2_20 def | 2_21 def | 2_22 hit | 2_23 hit | 2_24 hit | 2_3 hit | 2_4 hit | 2_5 hit | 2_6 hit | 2_7 hit | 2_8 hit | 2_9 hit
+== R03  <<POST!=ORACLE
+   iv   3_0 hit | 3_1 hit | 3_10 hit | 3_11 hit | 3_12 hit | 3_13 hit | 3_14 def | 3_15 hit | 3_16 hit | 3_17 hit | 3_18 def | 3_19 def | 3_2 hit | 3_20 hit | 3_21 hit | 3_22 hit | 3_23 hit | 3_24 hit | 3_3 hit | 3_4 hit | 3_5 hit | 3_6 hit | 3_7 hit | 3_8 hit | 3_9 hit
+   sv   ?
+   vl   3_0 hit | 3_1 hit | 3_10 hit | 3_11 hit | 3_12 hit | 3_13 hit | 3_14 hit | 3_15 hit | 3_16 hit | 3_17 def | 3_18 hit | 3_19 hit | 3_2 hit | 3_20 def | 3_21 hit | 3_22 hit | 3_23 hit | 3_24 hit | 3_3 hit | 3_4 hit | 3_5 hit | 3_6 hit | 3_7 hit | 3_8 hit | 3_9 hit
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+== R04  <<VITA-MOVES  <<POST!=ORACLE
+   iv   4_0 hit | 4_1 hit | 4_10 hit | 4_11 hit | 4_12 hit | 4_13 hit | 4_14 hit | 4_15 hit | 4_16 hit | 4_17 hit | 4_18 hit | 4_19 hit | 4_2 hit | 4_20 hit | 4_21 hit | 4_22 hit | 4_23 def | 4_24 def | 4_3 hit | 4_4 hit | 4_5 hit | 4_6 def | 4_7 def | 4_8 hit | 4_9 hit
+   sv   ?
+   vl   4_0 hit | 4_1 hit | 4_10 def | 4_11 def | 4_12 def | 4_13 def | 4_14 hit | 4_15 hit | 4_16 def | 4_17 def | 4_18 def | 4_19 def | 4_2 hit | 4_20 hit | 4_21 hit | 4_22 hit | 4_23 def | 4_24 def | 4_3 hit | 4_4 def | 4_5 hit | 4_6 hit | 4_7 def | 4_8 hit | 4_9 hit
+   pre  4_0 hit | 4_1 hit | 4_10 def | 4_11 def | 4_12 def | 4_13 def | 4_14 def | 4_15 def | 4_16 def | 4_17 def | 4_18 def | 4_19 def | 4_2 def | 4_20 hit | 4_21 def | 4_22 hit | 4_23 def | 4_24 def | 4_3 hit | 4_4 def | 4_5 hit | 4_6 hit | 4_7 def | 4_8 def | 4_9 def
+   pt   4_0 hit | 4_1 hit | 4_10 def | 4_11 def | 4_12 def | 4_13 def | 4_14 hit | 4_15 hit | 4_16 def | 4_17 def | 4_18 def | 4_19 def | 4_2 hit | 4_20 hit | 4_21 hit | 4_22 hit | 4_23 def | 4_24 def | 4_3 hit | 4_4 hit | 4_5 hit | 4_6 def | 4_7 def | 4_8 hit | 4_9 hit
+   post 4_0 hit | 4_1 hit | 4_10 def | 4_11 def | 4_12 def | 4_13 def | 4_14 hit | 4_15 hit | 4_16 def | 4_17 def | 4_18 def | 4_19 def | 4_2 hit | 4_20 hit | 4_21 hit | 4_22 hit | 4_23 def | 4_24 def | 4_3 hit | 4_4 hit | 4_5 hit | 4_6 def | 4_7 def | 4_8 hit | 4_9 hit
+== R05  <<VITA-MOVES  <<POST!=ORACLE
+   iv   5_0 hit | 5_1 hit | 5_10 hit | 5_11 def | 5_12 hit | 5_13 hit | 5_14 hit | 5_15 hit | 5_16 def | 5_17 def | 5_18 hit | 5_19 hit | 5_2 hit | 5_20 hit | 5_21 hit | 5_22 hit | 5_23 hit | 5_24 hit | 5_3 hit | 5_4 hit | 5_5 def | 5_6 def | 5_7 hit | 5_8 hit | 5_9 hit
+   sv   ?
+   vl   5_0 hit | 5_1 hit | 5_10 hit | 5_11 hit | 5_12 hit | 5_13 hit | 5_14 hit | 5_15 hit | 5_16 def | 5_17 def | 5_18 hit | 5_19 hit | 5_2 hit | 5_20 hit | 5_21 hit | 5_22 hit | 5_23 hit | 5_24 hit | 5_3 def | 5_4 hit | 5_5 hit | 5_6 def | 5_7 hit | 5_8 hit | 5_9 def
+   pre  5_0 hit | 5_1 def | 5_10 def | 5_11 def | 5_12 def | 5_13 hit | 5_14 def | 5_15 hit | 5_16 def | 5_17 def | 5_18 hit | 5_19 def | 5_2 def | 5_20 def | 5_21 def | 5_22 def | 5_23 def | 5_24 def | 5_3 def | 5_4 def | 5_5 def | 5_6 def | 5_7 def | 5_8 def | 5_9 def
+   pt   5_0 hit | 5_1 hit | 5_10 hit | 5_11 def | 5_12 def | 5_13 hit | 5_14 hit | 5_15 hit | 5_16 def | 5_17 def | 5_18 hit | 5_19 hit | 5_2 hit | 5_20 hit | 5_21 hit | 5_22 hit | 5_23 hit | 5_24 hit | 5_3 hit | 5_4 hit | 5_5 def | 5_6 def | 5_7 hit | 5_8 hit | 5_9 def
+   post 5_0 hit | 5_1 hit | 5_10 hit | 5_11 def | 5_12 def | 5_13 hit | 5_14 hit | 5_15 hit | 5_16 def | 5_17 def | 5_18 hit | 5_19 hit | 5_2 hit | 5_20 hit | 5_21 hit | 5_22 hit | 5_23 hit | 5_24 hit | 5_3 hit | 5_4 hit | 5_5 def | 5_6 def | 5_7 hit | 5_8 hit | 5_9 def
+== R06  <<VITA-MOVES
+   iv   6_0 hit | 6_1 hit | 6_10 hit | 6_11 hit | 6_12 hit | 6_13 hit | 6_14 hit | 6_15 hit | 6_16 hit | 6_17 hit | 6_18 hit | 6_19 hit | 6_2 hit | 6_20 hit | 6_21 hit | 6_22 hit | 6_23 hit | 6_24 hit | 6_3 hit | 6_4 hit | 6_5 hit | 6_6 hit | 6_7 hit | 6_8 hit | 6_9 hit
+   sv   ?
+   vl   6_0 hit | 6_1 hit | 6_10 hit | 6_11 hit | 6_12 hit | 6_13 hit | 6_14 hit | 6_15 hit | 6_16 hit | 6_17 hit | 6_18 hit | 6_19 hit | 6_2 hit | 6_20 hit | 6_21 hit | 6_22 hit | 6_23 hit | 6_24 hit | 6_3 hit | 6_4 hit | 6_5 hit | 6_6 hit | 6_7 hit | 6_8 hit | 6_9 hit
+   pre  6_0 hit | 6_1 hit | 6_10 def | 6_11 def | 6_12 hit | 6_13 hit | 6_14 hit | 6_15 hit | 6_16 hit | 6_17 hit | 6_18 def | 6_19 def | 6_2 hit | 6_20 def | 6_21 def | 6_22 def | 6_23 def | 6_24 hit | 6_3 hit | 6_4 hit | 6_5 hit | 6_6 def | 6_7 def | 6_8 def | 6_9 def
+   pt   6_0 hit | 6_1 hit | 6_10 hit | 6_11 hit | 6_12 hit | 6_13 hit | 6_14 hit | 6_15 hit | 6_16 hit | 6_17 hit | 6_18 hit | 6_19 hit | 6_2 hit | 6_20 hit | 6_21 hit | 6_22 hit | 6_23 hit | 6_24 hit | 6_3 hit | 6_4 hit | 6_5 hit | 6_6 hit | 6_7 hit | 6_8 hit | 6_9 hit
+   post 6_0 hit | 6_1 hit | 6_10 hit | 6_11 hit | 6_12 hit | 6_13 hit | 6_14 hit | 6_15 hit | 6_16 hit | 6_17 hit | 6_18 hit | 6_19 hit | 6_2 hit | 6_20 hit | 6_21 hit | 6_22 hit | 6_23 hit | 6_24 hit | 6_3 hit | 6_4 hit | 6_5 hit | 6_6 hit | 6_7 hit | 6_8 hit | 6_9 hit
+== R07  <<VITA-MOVES
+   iv   7_0 hit | 7_1 hit | 7_10 hit | 7_11 hit | 7_12 hit | 7_13 hit | 7_14 hit | 7_15 hit | 7_16 hit | 7_17 hit | 7_18 hit | 7_19 hit | 7_2 hit | 7_20 def | 7_21 def | 7_22 hit | 7_23 hit | 7_24 hit | 7_3 hit | 7_4 hit | 7_5 hit | 7_6 hit | 7_7 hit | 7_8 hit | 7_9 hit
+   sv   ?
+   vl   7_0 hit | 7_1 hit | 7_10 hit | 7_11 hit | 7_12 hit | 7_13 hit | 7_14 hit | 7_15 hit | 7_16 hit | 7_17 hit | 7_18 hit | 7_19 def | 7_2 hit | 7_20 hit | 7_21 hit | 7_22 def | 7_23 hit | 7_24 hit | 7_3 hit | 7_4 hit | 7_5 hit | 7_6 hit | 7_7 hit | 7_8 hit | 7_9 hit
+   pre  7_0 hit | 7_1 hit | 7_10 hit | 7_11 def | 7_12 def | 7_13 def | 7_14 def | 7_15 def | 7_16 def | 7_17 def | 7_18 hit | 7_19 def | 7_2 hit | 7_20 hit | 7_21 hit | 7_22 def | 7_23 hit | 7_24 hit | 7_3 hit | 7_4 hit | 7_5 hit | 7_6 hit | 7_7 hit | 7_8 hit | 7_9 hit
+   pt   7_0 hit | 7_1 hit | 7_10 hit | 7_11 hit | 7_12 hit | 7_13 hit | 7_14 hit | 7_15 hit | 7_16 hit | 7_17 hit | 7_18 hit | 7_19 def | 7_2 hit | 7_20 hit | 7_21 hit | 7_22 def | 7_23 hit | 7_24 hit | 7_3 hit | 7_4 hit | 7_5 hit | 7_6 hit | 7_7 hit | 7_8 hit | 7_9 hit
+   post 7_0 hit | 7_1 hit | 7_10 hit | 7_11 hit | 7_12 hit | 7_13 hit | 7_14 hit | 7_15 hit | 7_16 hit | 7_17 hit | 7_18 hit | 7_19 def | 7_2 hit | 7_20 hit | 7_21 hit | 7_22 def | 7_23 hit | 7_24 hit | 7_3 hit | 7_4 hit | 7_5 hit | 7_6 hit | 7_7 hit | 7_8 hit | 7_9 hit
+== R08  <<VITA-MOVES
+   iv   8_0 hit | 8_1 hit | 8_10 hit | 8_11 hit | 8_12 hit | 8_13 def | 8_14 def | 8_15 hit | 8_16 hit | 8_17 hit | 8_18 hit | 8_19 def | 8_2 hit | 8_20 def | 8_21 hit | 8_22 hit | 8_23 hit | 8_24 hit | 8_3 hit | 8_4 hit | 8_5 hit | 8_6 hit | 8_7 hit | 8_8 def | 8_9 hit
+   sv   ?
+   vl   8_0 hit | 8_1 hit | 8_10 hit | 8_11 hit | 8_12 hit | 8_13 def | 8_14 def | 8_15 hit | 8_16 hit | 8_17 hit | 8_18 hit | 8_19 def | 8_2 hit | 8_20 def | 8_21 hit | 8_22 hit | 8_23 hit | 8_24 hit | 8_3 hit | 8_4 hit | 8_5 hit | 8_6 hit | 8_7 hit | 8_8 def | 8_9 hit
+   pre  8_0 hit | 8_1 hit | 8_10 hit | 8_11 def | 8_12 hit | 8_13 def | 8_14 def | 8_15 hit | 8_16 hit | 8_17 def | 8_18 hit | 8_19 def | 8_2 hit | 8_20 def | 8_21 hit | 8_22 hit | 8_23 hit | 8_24 hit | 8_3 hit | 8_4 def | 8_5 def | 8_6 def | 8_7 def | 8_8 def | 8_9 def
+   pt   8_0 hit | 8_1 hit | 8_10 hit | 8_11 hit | 8_12 hit | 8_13 def | 8_14 def | 8_15 hit | 8_16 hit | 8_17 hit | 8_18 hit | 8_19 def | 8_2 hit | 8_20 def | 8_21 hit | 8_22 hit | 8_23 hit | 8_24 hit | 8_3 hit | 8_4 hit | 8_5 hit | 8_6 hit | 8_7 hit | 8_8 def | 8_9 hit
+   post 8_0 hit | 8_1 hit | 8_10 hit | 8_11 hit | 8_12 hit | 8_13 def | 8_14 def | 8_15 hit | 8_16 hit | 8_17 hit | 8_18 hit | 8_19 def | 8_2 hit | 8_20 def | 8_21 hit | 8_22 hit | 8_23 hit | 8_24 hit | 8_3 hit | 8_4 hit | 8_5 hit | 8_6 hit | 8_7 hit | 8_8 def | 8_9 hit
+== R09  <<VITA-MOVES
+   iv   9_0 hit | 9_1 hit | 9_10 hit | 9_11 hit | 9_12 hit | 9_13 hit | 9_14 hit | 9_15 hit | 9_16 hit | 9_17 hit | 9_18 hit | 9_19 def | 9_2 hit | 9_20 def | 9_21 hit | 9_22 hit | 9_23 hit | 9_24 hit | 9_3 hit | 9_4 hit | 9_5 hit | 9_6 hit | 9_7 hit | 9_8 hit | 9_9 hit
+   sv   ?
+   vl   9_0 hit | 9_1 hit | 9_10 hit | 9_11 hit | 9_12 hit | 9_13 hit | 9_14 hit | 9_15 hit | 9_16 hit | 9_17 def | 9_18 hit | 9_19 hit | 9_2 hit | 9_20 def | 9_21 hit | 9_22 hit | 9_23 hit | 9_24 hit | 9_3 hit | 9_4 hit | 9_5 hit | 9_6 hit | 9_7 hit | 9_8 hit | 9_9 hit
+   pre  9_0 hit | 9_1 hit | 9_10 def | 9_11 def | 9_12 def | 9_13 def | 9_14 def | 9_15 def | 9_16 hit | 9_17 def | 9_18 hit | 9_19 hit | 9_2 hit | 9_20 def | 9_21 hit | 9_22 def | 9_23 hit | 9_24 def | 9_3 def | 9_4 def | 9_5 def | 9_6 def | 9_7 def | 9_8 def | 9_9 def
+   pt   9_0 hit | 9_1 hit | 9_10 hit | 9_11 hit | 9_12 hit | 9_13 hit | 9_14 hit | 9_15 hit | 9_16 hit | 9_17 hit | 9_18 hit | 9_19 def | 9_2 hit | 9_20 def | 9_21 hit | 9_22 hit | 9_23 hit | 9_24 hit | 9_3 hit | 9_4 hit | 9_5 hit | 9_6 hit | 9_7 hit | 9_8 hit | 9_9 hit
+   post 9_0 hit | 9_1 hit | 9_10 hit | 9_11 hit | 9_12 hit | 9_13 hit | 9_14 hit | 9_15 hit | 9_16 hit | 9_17 hit | 9_18 hit | 9_19 def | 9_2 hit | 9_20 def | 9_21 hit | 9_22 hit | 9_23 hit | 9_24 hit | 9_3 hit | 9_4 hit | 9_5 hit | 9_6 hit | 9_7 hit | 9_8 hit | 9_9 hit
+== R10  <<VITA-MOVES
+   iv   10_0 def | 10_1 hit | 10_10 hit | 10_11 hit | 10_12 hit | 10_13 hit | 10_14 hit | 10_15 hit | 10_16 hit | 10_17 hit | 10_18 hit | 10_19 hit | 10_2 hit | 10_20 hit | 10_21 hit | 10_22 hit | 10_23 hit | 10_24 def | 10_3 hit | 10_4 hit | 10_5 hit | 10_6 hit | 10_7 hit | 10_8 hit | 10_9 hit
+   sv   ?
+   vl   10_0 def | 10_1 hit | 10_10 hit | 10_11 hit | 10_12 hit | 10_13 hit | 10_14 hit | 10_15 hit | 10_16 hit | 10_17 hit | 10_18 hit | 10_19 hit | 10_2 hit | 10_20 hit | 10_21 hit | 10_22 hit | 10_23 hit | 10_24 def | 10_3 hit | 10_4 hit | 10_5 hit | 10_6 hit | 10_7 hit | 10_8 hit | 10_9 hit
+   pre  10_0 def | 10_1 hit | 10_10 hit | 10_11 hit | 10_12 hit | 10_13 hit | 10_14 hit | 10_15 hit | 10_16 hit | 10_17 hit | 10_18 hit | 10_19 hit | 10_2 hit | 10_20 hit | 10_21 def | 10_22 hit | 10_23 def | 10_24 def | 10_3 hit | 10_4 hit | 10_5 hit | 10_6 hit | 10_7 hit | 10_8 hit | 10_9 hit
+   pt   10_0 def | 10_1 hit | 10_10 hit | 10_11 hit | 10_12 hit | 10_13 hit | 10_14 hit | 10_15 hit | 10_16 hit | 10_17 hit | 10_18 hit | 10_19 hit | 10_2 hit | 10_20 hit | 10_21 hit | 10_22 hit | 10_23 hit | 10_24 def | 10_3 hit | 10_4 hit | 10_5 hit | 10_6 hit | 10_7 hit | 10_8 hit | 10_9 hit
+   post 10_0 def | 10_1 hit | 10_10 hit | 10_11 hit | 10_12 hit | 10_13 hit | 10_14 hit | 10_15 hit | 10_16 hit | 10_17 hit | 10_18 hit | 10_19 hit | 10_2 hit | 10_20 hit | 10_21 hit | 10_22 hit | 10_23 hit | 10_24 def | 10_3 hit | 10_4 hit | 10_5 hit | 10_6 hit | 10_7 hit | 10_8 hit | 10_9 hit
+== R11  <<VITA-MOVES
+   iv   11_0 hit | 11_1 hit | 11_10 hit | 11_11 hit | 11_12 hit | 11_13 hit | 11_14 hit | 11_15 hit | 11_16 def | 11_17 def | 11_18 hit | 11_19 hit | 11_2 hit | 11_20 hit | 11_21 hit | 11_22 def | 11_23 def | 11_24 hit | 11_3 hit | 11_4 hit | 11_5 hit | 11_6 hit | 11_7 hit | 11_8 hit | 11_9 hit
+   sv   ?
+   vl   11_0 hit | 11_1 hit | 11_10 hit | 11_11 hit | 11_12 hit | 11_13 hit | 11_14 hit | 11_15 hit | 11_16 def | 11_17 def | 11_18 hit | 11_19 hit | 11_2 hit | 11_20 hit | 11_21 hit | 11_22 def | 11_23 def | 11_24 hit | 11_3 hit | 11_4 hit | 11_5 hit | 11_6 hit | 11_7 hit | 11_8 hit | 11_9 hit
+   pre  11_0 hit | 11_1 hit | 11_10 hit | 11_11 hit | 11_12 hit | 11_13 hit | 11_14 def | 11_15 hit | 11_16 def | 11_17 def | 11_18 hit | 11_19 hit | 11_2 hit | 11_20 def | 11_21 hit | 11_22 def | 11_23 def | 11_24 hit | 11_3 hit | 11_4 hit | 11_5 hit | 11_6 hit | 11_7 hit | 11_8 hit | 11_9 hit
+   pt   11_0 hit | 11_1 hit | 11_10 hit | 11_11 hit | 11_12 hit | 11_13 hit | 11_14 hit | 11_15 hit | 11_16 def | 11_17 def | 11_18 hit | 11_19 hit | 11_2 hit | 11_20 hit | 11_21 hit | 11_22 def | 11_23 def | 11_24 hit | 11_3 hit | 11_4 hit | 11_5 hit | 11_6 hit | 11_7 hit | 11_8 hit | 11_9 hit
+   post 11_0 hit | 11_1 hit | 11_10 hit | 11_11 hit | 11_12 hit | 11_13 hit | 11_14 hit | 11_15 hit | 11_16 def | 11_17 def | 11_18 hit | 11_19 hit | 11_2 hit | 11_20 hit | 11_21 hit | 11_22 def | 11_23 def | 11_24 hit | 11_3 hit | 11_4 hit | 11_5 hit | 11_6 hit | 11_7 hit | 11_8 hit | 11_9 hit
+== R12  <<VITA-MOVES
+   iv   12_0 hit | 12_1 hit | 12_10 hit | 12_11 hit | 12_12 hit | 12_13 hit | 12_14 hit | 12_15 hit | 12_16 hit | 12_17 hit | 12_18 hit | 12_19 hit | 12_2 hit | 12_20 hit | 12_21 hit | 12_22 hit | 12_23 hit | 12_24 hit | 12_3 hit | 12_4 hit | 12_5 hit | 12_6 hit | 12_7 hit | 12_8 hit | 12_9 hit
+   sv   ?
+   vl   12_0 hit | 12_1 hit | 12_10 hit | 12_11 hit | 12_12 hit | 12_13 hit | 12_14 hit | 12_15 hit | 12_16 hit | 12_17 hit | 12_18 hit | 12_19 hit | 12_2 hit | 12_20 def | 12_21 def | 12_22 def | 12_23 def | 12_24 hit | 12_3 hit | 12_4 hit | 12_5 hit | 12_6 hit | 12_7 hit | 12_8 hit | 12_9 hit
+   pre  12_0 def | 12_1 def | 12_10 hit | 12_11 hit | 12_12 def | 12_13 def | 12_14 def | 12_15 def | 12_16 def | 12_17 def | 12_18 hit | 12_19 hit | 12_2 def | 12_20 hit | 12_21 hit | 12_22 hit | 12_23 hit | 12_24 def | 12_3 def | 12_4 def | 12_5 def | 12_6 hit | 12_7 hit | 12_8 hit | 12_9 hit
+   pt   12_0 hit | 12_1 hit | 12_10 hit | 12_11 hit | 12_12 hit | 12_13 hit | 12_14 hit | 12_15 hit | 12_16 hit | 12_17 hit | 12_18 hit | 12_19 hit | 12_2 hit | 12_20 hit | 12_21 hit | 12_22 hit | 12_23 hit | 12_24 hit | 12_3 hit | 12_4 hit | 12_5 hit | 12_6 hit | 12_7 hit | 12_8 hit | 12_9 hit
+   post 12_0 hit | 12_1 hit | 12_10 hit | 12_11 hit | 12_12 hit | 12_13 hit | 12_14 hit | 12_15 hit | 12_16 hit | 12_17 hit | 12_18 hit | 12_19 hit | 12_2 hit | 12_20 hit | 12_21 hit | 12_22 hit | 12_23 hit | 12_24 hit | 12_3 hit | 12_4 hit | 12_5 hit | 12_6 hit | 12_7 hit | 12_8 hit | 12_9 hit
+== R13  <<VITA-MOVES  <<POST!=ORACLE
+   iv   13_0 hit | 13_1 hit | 13_10 hit | 13_11 hit | 13_12 hit | 13_13 hit | 13_14 hit | 13_15 hit | 13_16 hit | 13_2 def | 13_3 def | 13_4 hit | 13_5 hit | 13_6 hit | 13_7 hit | 13_8 def | 13_9 def
+   sv   ?
+   vl   13_0 hit | 13_1 hit | 13_10 hit | 13_11 hit | 13_12 hit | 13_13 hit | 13_14 hit | 13_15 hit | 13_16 hit | 13_2 def | 13_3 def | 13_4 hit | 13_5 hit | 13_6 hit | 13_7 def | 13_8 hit | 13_9 hit
+   pre  13_0 def | 13_1 def | 13_10 def | 13_11 hit | 13_12 hit | 13_13 hit | 13_14 hit | 13_15 hit | 13_16 hit | 13_2 def | 13_3 def | 13_4 def | 13_5 def | 13_6 hit | 13_7 def | 13_8 hit | 13_9 hit
+   pt   13_0 hit | 13_1 hit | 13_10 def | 13_11 hit | 13_12 hit | 13_13 hit | 13_14 hit | 13_15 hit | 13_16 hit | 13_2 def | 13_3 def | 13_4 hit | 13_5 hit | 13_6 hit | 13_7 def | 13_8 hit | 13_9 hit
+   post 13_0 hit | 13_1 hit | 13_10 def | 13_11 hit | 13_12 hit | 13_13 hit | 13_14 hit | 13_15 hit | 13_16 hit | 13_2 def | 13_3 def | 13_4 hit | 13_5 hit | 13_6 hit | 13_7 def | 13_8 hit | 13_9 hit

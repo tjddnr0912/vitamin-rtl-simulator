@@ -1,0 +1,120 @@
+== x2a_ret4
+  p.PRE   : P=0000 | rc=0
+  p.POSTb : P=0000 | rc=0
+  p.s8    : P=0000 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold ar | rc=1
+  u.POSTb : P=0000 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold ar | rc=1
+  p.ivl   : x2a_ret4_p.sv:5: error: Unable to evaluate parameter P value: top.fx(32'sd2) | 1 error(s) during elaboration. | rc=1
+  p.vl    : P=xxxx | rc=0
+  u.vl    : P=xxxx | rc=0
+== x2b_ret2
+  p.PRE   : P=0 | rc=0
+  p.POSTb : P=0 | rc=0
+  p.s8    : P=0 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `fi(…)` has no constant-fold ar | rc=1
+  u.POSTb : P=0 | rc=0
+  u.s8    : P=0 | rc=0
+  p.ivl   : x2b_ret2_p.sv:5: error: Unable to evaluate parameter P value: top.fi(32'sd2) | 1 error(s) during elaboration. | rc=1
+  p.vl    : P=0 | rc=0
+  u.vl    : P=0 | rc=0
+== x2c_local
+  p.PRE   : P=0000 | rc=0
+  p.POSTb : P=0000 | rc=0
+  p.s8    : P=0000 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=0000 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : P=xxxx | rc=0
+  p.vl    : P=xxxx | rc=0
+  u.vl    : P=xxxx | rc=0
+== x2d_partial
+  p.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.POSTb : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : P=xx11 | rc=0
+  p.vl    : P=xx11 | rc=0
+  u.vl    : P=xx11 | rc=0
+== x2e_after
+  p.PRE   : P=10 | rc=0
+  p.POSTb : P=10 | rc=0
+  p.s8    : P=10 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=10 | rc=0
+  u.s8    : P=10 | rc=0
+  p.ivl   : P=10 | rc=0
+  p.vl    : P=10 | rc=0
+  u.vl    : P=10 | rc=0
+== x2f_callee
+  p.PRE   : P=0000 | rc=0
+  p.POSTb : P=0000 | rc=0
+  p.s8    : P=0000 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=0000 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : x2f_callee_p.sv:9: error: Unable to evaluate parameter P value: top.f(32'sd2) | 1 error(s) during elaboration. | rc=1
+  p.vl    : P=xxxx | rc=0
+  u.vl    : P=xxxx | rc=0
+== x2g_sibling
+  p.PRE   : P=7 | rc=0
+  p.POSTb : P=7 | rc=0
+  p.s8    : P=7 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=7 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : x2g_sibling_p.sv:9: error: Unable to evaluate parameter P value: bool<32>((32'sd7)+(<select=top.g(32 | 1 error(s) during elaboration. | rc=1
+  p.vl    : P=x | rc=0
+  u.vl    : P=x | rc=0
+== x2h_noarm
+  p.PRE   : P=0000 Q=10 | rc=0
+  p.POSTb : P=0000 Q=10 | rc=0
+  p.s8    : P=0000 Q=10 | rc=0
+  u.PRE   : P=0000 Q=10 | rc=0
+  u.POSTb : P=0000 Q=10 | rc=0
+  u.s8    : P=0000 Q=10 | rc=0
+  p.ivl   : x2h_noarm_p.sv:9: error: Unable to evaluate parameter P value: top.g(32'sd3) | 1 error(s) during elaboration. | rc=1
+  p.vl    : P=xxxx Q=10 | rc=0
+  u.vl    : P=xxxx Q=10 | rc=0
+== x2i_integer
+  p.PRE   : P=0 | rc=0
+  p.POSTb : P=0 | rc=0
+  p.s8    : P=0 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=0 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : P=x | rc=0
+  p.vl    : P=x | rc=0
+  u.vl    : P=x | rc=0
+== x2j_bitlocal
+  p.PRE   : P=7 | rc=0
+  p.POSTb : P=7 | rc=0
+  p.s8    : P=7 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=7 | rc=0
+  u.s8    : P=7 | rc=0
+  p.ivl   : P=7 | rc=0
+  p.vl    : P=7 | rc=0
+  u.vl    : P=7 | rc=0
+== x2k_range
+  p.PRE   : b=1 | rc=0
+  p.POSTb : b=1 | rc=0
+  p.s8    : b=1 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.POSTb : b=1 | rc=0
+  u.s8    : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  p.ivl   : x2k_range_p.sv:5: error: Dimensions must be constant. | x2k_range_p.sv:5       : This MSB expression violates the rule: fx('sd2) | 1 error(s) during elaboration. | rc=1
+  p.vl    : %Error: x2k_range_p.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1 | %Error: Exiting due to 1 error(s) | build_rc=1
+  u.vl    : %Error: x2k_range_u.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1 | %Error: Exiting due to 1 error(s) | build_rc=1
+== x2l_bitwrite
+  p.PRE   : P=0001 | rc=0
+  p.POSTb : P=0001 | rc=0
+  p.s8    : P=0001 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  u.POSTb : P=0001 | rc=0
+  u.s8    : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm | rc=1
+  p.ivl   : P=xxx1 | rc=0
+  p.vl    : P=xxx1 | rc=0
+  u.vl    : P=xxx1 | rc=0

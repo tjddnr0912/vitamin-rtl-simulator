@@ -1,0 +1,22 @@
+B1_bind_fwd                  IEEE:SIDE ACCEPT->ACCEPT  SVVL:n/a   | iv=ERR:B1_bind_fwd.sv:15: syntax error(rc2) | pre=top.c.gb.g w=8 bits=4 | post_c=top.c.gb.g w=1 bits=4
+F15_zero_nets_iter           IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=NONE | pre=top.b.g[0] | top.b.g[1] | post_c=NONE
+F3i_iarr_two_mismatch        IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.u[0].gb.x x | top.u[1].gb.x x | pre=top.u[0].gb.y y | top.u[1].gb.y y | post_c=top.u[0].gb.x x | top.u[1].gb.x x
+F6_samecount_vals            IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.b.g[1] | top.b.g[2] | pre=top.b.g[2] | top.b.g[3] | post_c=top.b.g[1] | top.b.g[2]
+M12c_chain_wide65            IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | pre=top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2
+M12e_chain_u64max            IEEE:UP LOUD->OK  SVVL:n/a   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | pre=ERR:VITA-E3010:undeclared net/variable `top.b[0].g[-1].w` [i | post_c=top.b.g[1] w=1 | top.b.g[2] w=2
+MSG1_blame_innocent          IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.b.x x | pre=top.b.y y | post_c=top.b.x x
+NEG1_step_neg                IEEE:n/a  SVVL:n/a   | iv=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | pre=? | post_c=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+STALL1_step_zero             IEEE:UP WRONG->OK  SVVL:n/a   | iv=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | pre=top.b.g[0] w=0 | post_c=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+U8_initA_wide                IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | pre=top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2
+U8e_initA_u64max             IEEE:UP LOUD->OK  SVVL:n/a   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | pre=ERR:VITA-E3010:undeclared net/variable `top.b[0].g[-1].w` [i | post_c=top.b.g[1] w=1 | top.b.g[2] w=2
+
+== pre -> post_c under IEEE (45 cells)
+    34 same                   
+     7 UP WRONG->OK           F15_zero_nets_iter F3i_iarr_two_mismatch F6_samecount_vals M12c_chain_wide65 MSG1_blame_innocent STALL1_step_zero U8_initA_wide
+     2 UP LOUD->OK            M12e_chain_u64max U8e_initA_u64max
+     1 SIDE ACCEPT->ACCEPT    B1_bind_fwd
+     1 n/a                    NEG1_step_neg
+== pre -> post_c under SVVL (45 cells)
+    34 same                   
+     6 DOWN OK->WRONG         F15_zero_nets_iter F3i_iarr_two_mismatch F6_samecount_vals M12c_chain_wide65 MSG1_blame_innocent U8_initA_wide
+     5 n/a                    B1_bind_fwd M12e_chain_u64max NEG1_step_neg STALL1_step_zero U8e_initA_u64max

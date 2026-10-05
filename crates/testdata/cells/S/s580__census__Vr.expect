@@ -1,0 +1,27 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__census__Vr
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/census/Vr.sv
+roadmap_row: §2 🆕 S
+set: census
+oracles_present: doc-quote
+vita_tags: post-dbg-r1,post2dbg,postrel,PRE
+verdict: residue, recorded, not fixed (silent-wrong remains) [V01 V04 V08 V10] | real gap, closed by this slice (PRE silent-wrong → POST = oracle) [V09]
+verdict_source: s580/REPORT.md:313;s580/REPORT.md:317
+notes: oracle values quoted at s580/REPORT.md:207; 9 sub-cells; matrix row(s) s580/REPORT.md:196-205; R4 cmp3_post4 bucket(s): post3×1 (s580/r4/cmp3_post4.txt)
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 1
+=== block 1 | vita [PRE] | ./Vr.pre.txt | 123 bytes
+V01 x
+V02 1
+V03 1
+V04 x
+V05 x
+V07 0
+V08 x
+V09 x
+V10 x
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== end

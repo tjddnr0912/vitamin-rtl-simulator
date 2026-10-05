@@ -1,0 +1,10 @@
+module top;
+  function automatic logic [3:0] fx(input int a);
+    logic [3:0] t;
+    if (a == 1) t = 4'd5;
+    fx = t;
+  endfunction
+  wire [3:0] w = fx(2);
+  initial begin #1 $display("w=%b", w); $finish; end
+  initial #100 $finish;
+endmodule

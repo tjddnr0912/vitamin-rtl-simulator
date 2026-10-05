@@ -1,0 +1,1846 @@
+== AE1_scr_fx
+         iv: ERR:AE1_scr_fx.sv:9: error: Unable to evaluate parameter K value: top.fx(3(rc3)
+         sv: ERR:AE1_scr_fx.sv2v.v:9: error: Unable to evaluate parameter K value: top.(rc1)
+         vl: def K=xxxx
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: zero K=0000
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== AE1b_scr_fx_bwd
+         iv: ERR:AE1b_scr_fx_bwd.sv:4: error: Unable to evaluate parameter K value: top(rc1)
+         sv: ERR:AE1b_scr_fx_bwd.sv2v.v:9: error: Unable to evaluate parameter K value:(rc1)
+         vl: def K=xxxx
+       post: zero K=0000
+      postd: zero K=0000
+        pre: zero K=0000
+   probe_cache: zero K=0000
+   probe_d1: zero K=0000
+   probe_p4: zero K=0000
+   probe_p5: zero K=0000
+   probe_p6: zero K=0000
+== AE2_if_fx
+         iv: ERR:AE2_if_fx.sv:6: error: Unable to evaluate parameter K value: top.fx(32(rc5)
+         sv: ERR:AE2_if_fx.sv2v.v:9: error: Unable to evaluate parameter K value: top.f(rc1)
+         vl: then K=xxxx
+       post: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+      postd: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_d1: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p4: then K=0000
+   probe_p5: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p6: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+== AE3_lbl_fx
+         iv: ERR:AE3_lbl_fx.sv:8: error: Unable to evaluate parameter K value: top.fx(3(rc3)
+         sv: ERR:AE3_lbl_fx.sv2v.v:9: error: Unable to evaluate parameter K value: top.(rc1)
+         vl: def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p4: k 200 bits=8
+   probe_p5: k 8 bits=4
+   probe_p6: k 8 bits=4
+== AE4_width_fx
+         iv: ERR:AE4_width_fx.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc3)
+         sv: bits=x K=x
+         vl: ERR:%Error: AE4_width_fx.sv:4:12: left side of bit range isn't a two-state(rc1)
+       post: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+      postd: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+        pre: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p4: bits=4 K=4
+   probe_p5: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p6: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+== AE5_alias_scr
+         iv: ERR:AE5_alias_scr.sv:3: error: Unable to evaluate parameter Q value: top.f(rc3)
+         sv: ERR:AE5_alias_scr.sv2v.v:7: error: Unable to evaluate parameter Q value: t(rc1)
+         vl: def K=xxxx
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: zero K=0000
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== AE5b_alias_scr_bwd
+         iv: ERR:AE5b_alias_scr_bwd.sv:3: error: Unable to evaluate parameter Q value: (rc1)
+         sv: ERR:AE5b_alias_scr_bwd.sv2v.v:7: error: Unable to evaluate parameter Q val(rc1)
+         vl: def K=xxxx
+       post: zero K=0000
+      postd: zero K=0000
+        pre: zero K=0000
+   probe_cache: zero K=0000
+   probe_d1: zero K=0000
+   probe_p4: zero K=0000
+   probe_p5: zero K=0000
+   probe_p6: zero K=0000
+== AE6_ovr_scr
+         iv: ERR:AE6_ovr_scr.sv:12: error: Unable to evaluate parameter P value: top.fx(rc3)
+         sv: ERR:AE6_ovr_scr.sv2v.v:25: error: Unable to evaluate parameter P value: to(rc1)
+         vl: def K=xxxx
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: zero K=0000
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== AE7_lbl_difflbl
+         iv: ERR:AE7_lbl_difflbl.sv:3: error: Unable to evaluate parameter Q value: top(rc3)
+         sv: ERR:AE7_lbl_difflbl.sv2v.v:7: error: Unable to evaluate parameter Q value:(rc1)
+         vl: def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].w` [in to(rc1)
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p4: k 200 bits=8
+   probe_p5: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].w` [in to(rc1)
+   probe_p6: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].w` [in to(rc1)
+== AE8_param_fx_fwdarg
+         iv: ERR:AE8_param_fx_fwdarg.sv:4: error: Unable to bind parameter `A' in `top.(rc1)
+         sv: ERR:AE8_param_fx_fwdarg.sv2v.v:10: error: Unable to evaluate parameter P v(rc1)
+         vl: def P=xxxx
+       post: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p4: zero P=0000
+   probe_p5: zero P=0000
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+== AE9_scr_fx_fwdarg
+         iv: ERR:AE9_scr_fx_fwdarg.sv:4: error: Unable to bind parameter `A' in `top.gb(rc2)
+         sv: ERR:AE9_scr_fx_fwdarg.sv2v.v:10: error: Cannot evaluate genvar case expres(rc1)
+         vl: def
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: zero
+   probe_p5: zero
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== AE9b_scr_fx_bwdarg
+         iv: ERR:AE9b_scr_fx_bwdarg.sv:5: error: Cannot evaluate genvar case expression(rc1)
+         sv: ERR:AE9b_scr_fx_bwdarg.sv2v.v:10: error: Cannot evaluate genvar case expre(rc1)
+         vl: def
+       post: zero
+      postd: zero
+        pre: zero
+   probe_cache: zero
+   probe_d1: zero
+   probe_p4: zero
+   probe_p5: zero
+   probe_p6: zero
+== B1_blklocal_fwd
+         iv: bits=4 t=15 K=4
+         sv: bits=8 t=255 K=8
+         vl: bits=8 t=255 K=8
+       post: bits=4 t=15 K=8
+      postd: bits=4 t=15 K=8
+        pre: bits=4 t=15 K=8
+   probe_cache: bits=4 t=15 K=8
+   probe_d1: bits=4 t=15 K=8
+   probe_p3: bits=8 t=255 K=8
+   probe_p4: bits=8 t=255 K=8
+   probe_p5: bits=8 t=255 K=8
+   probe_p6: bits=4 t=15 K=8
+== B1n_blklocal_fwd
+         iv: ERR:B1n_blklocal_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb.(rc3)
+         sv: bits=8 t=255 K=8
+         vl: bits=8 t=255 K=8
+       post: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+      postd: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+        pre: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p3: bits=8 t=255 K=8
+   probe_p4: bits=8 t=255 K=8
+   probe_p5: bits=8 t=255 K=8
+   probe_p6: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+== C01_ctl_plain
+         iv: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+         sv: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+         vl: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+       post: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+      postd: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+        pre: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_cache: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_d1: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_p3: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_p4: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_p5: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+   probe_p6: L0 c0 V=10 | L0 else bits=4 w=0 | L1 cd V=20 | L1 then bits=5 w=31 | L2 cd V=20 | L2 else bits=6 w=0
+== C02_ctl_shadowbwd
+         iv: eight bits=8 K=8
+         sv: eight bits=8 K=8
+         vl: eight bits=8 K=8
+       post: eight bits=8 K=8
+      postd: eight bits=8 K=8
+        pre: eight bits=8 K=8
+   probe_cache: eight bits=8 K=8
+   probe_d1: eight bits=8 K=8
+   probe_p3: eight bits=8 K=8
+   probe_p4: eight bits=8 K=8
+   probe_p5: eight bits=8 K=8
+   probe_p6: eight bits=8 K=8
+== E01_enumlbl_prebind
+         iv: def 9 bits=4 P=18446744073709551617
+         sv: one 200 bits=8 P=1
+         vl: one 200 bits=8 P=1
+       post: one 200 bits=8 P=1
+      postd: one 200 bits=8 P=1
+        pre: one 200 bits=8 P=1
+   probe_cache: one 200 bits=8 P=1
+   probe_d1: one 200 bits=8 P=1
+   probe_p3: one 200 bits=8 P=1
+   probe_p4: one 200 bits=8 P=1
+   probe_p5: one 200 bits=8 P=1
+   probe_p6: one 200 bits=8 P=1
+== E02_bitsnet_prebind
+         iv: eight 200 bits=8 P=8
+         sv: eight 200 bits=8 P=8
+         vl: eight 200 bits=8 P=8
+       post: def 9 bits=4 P=4
+      postd: def 9 bits=4 P=4
+        pre: def 9 bits=4 P=4
+   probe_cache: def 9 bits=4 P=4
+   probe_d1: def 9 bits=4 P=4
+   probe_p3: def 9 bits=4 P=4
+   probe_p4: def 9 bits=4 P=4
+   probe_p5: def 9 bits=4 P=4
+   probe_p6: def 9 bits=4 P=4
+== E03_cfn_prebind
+         iv: six 200 bits=8 P=6
+         sv: six 200 bits=8 P=6
+         vl: six 200 bits=8 P=6
+       post: six 200 bits=8 P=6
+      postd: six 200 bits=8 P=6
+        pre: six 200 bits=8 P=6
+   probe_cache: six 200 bits=8 P=6
+   probe_d1: six 200 bits=8 P=6
+   probe_p3: six 200 bits=8 P=6
+   probe_p4: six 200 bits=8 P=6
+   probe_p5: six 200 bits=8 P=6
+   probe_p6: six 200 bits=8 P=6
+== E03b_cfn_err
+         iv: P=6
+         sv: P=6
+         vl: P=6
+       post: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p3: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p4: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p5: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+== E04_badrange
+         iv: ERR:E04_badrange.sv:3: error: Unable to bind parameter `Nope' in `top.gb'(rc3)
+         sv: ERR:E04_badrange.sv2v.v:4: error: Unable to bind parameter `Nope' in `top.(rc3)
+         vl: ERR:%Error: E04_badrange.sv:3:23: Can't find definition of variable: 'Nope(rc1)
+       post: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+      postd: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+        pre: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p3: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p4: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p5: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p6: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+== E06_genvar_prebind
+         iv: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+         sv: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+         vl: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+       post: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+      postd: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+        pre: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_cache: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_d1: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_p3: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_p4: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_p5: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+   probe_p6: L0 def 9 bits=4 | L1 two 200 bits=8 | L2 def 9 bits=4
+== E08_fwdbits_param
+         iv: ERR:E08_fwdbits_param.sv:3: error: Unable to bind parameter `P' in `top.gb(rc2)
+         sv: eight 200 bits=8
+         vl: eight 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p3: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== E09_import_sh
+         iv: def 9 bits=4
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== E12_realsh
+         iv: P=3
+         sv: P=7
+         vl: P=7
+       post: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p3: P=7
+   probe_p4: P=7
+   probe_p5: P=7
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+== E12b_realsh_case
+         iv: ERR:E12b_realsh_case.sv:5: error: Cannot evaluate genvar case expression: (rc1)
+         sv: seven 200 bits=8
+         vl: seven 200 bits=8
+       post: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+   probe_p3: seven 200 bits=8
+   probe_p4: seven 200 bits=8
+   probe_p5: seven 200 bits=8
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `P` value is not a consta(rc1)
+== E13_enum_in_range
+         iv: ERR:E13_enum_in_range.sv:4: error: Unable to bind parameter `C' in `top.gb(rc2)
+         sv: bits=3 P=5
+         vl: bits=3 P=5
+       post: bits=3 P=5
+      postd: bits=3 P=5
+        pre: bits=3 P=5
+   probe_cache: bits=3 P=5
+   probe_d1: bits=3 P=5
+   probe_p3: ERR:VITA-E3009:undefined name `C` is not allowed in a constant ra(rc1)
+   probe_p4: bits=3 P=5
+   probe_p5: bits=3 P=5
+   probe_p6: bits=3 P=5
+== E14_enum_in_init
+         iv: ERR:E14_enum_in_init.sv:4: error: Unable to bind parameter `C' in `top.gb'(rc1)
+         sv: three P=3
+         vl: three P=3
+       post: three P=3
+      postd: three P=3
+        pre: three P=3
+   probe_cache: three P=3
+   probe_d1: three P=3
+   probe_p3: three P=3
+   probe_p4: three P=3
+   probe_p5: three P=3
+   probe_p6: three P=3
+== F1_forfwd_sh
+         iv: L0 w=10
+         sv: L0 w=10 | L1 w=11 | L2 w=12
+         vl: L0 w=10 | L1 w=11 | L2 w=12
+       post: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_cache: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate for decided differently by tw(rc1)
+   probe_p2: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p3: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p4: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p5: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p6: L0 w=10 | L1 w=11 | L2 w=12
+== F2_forfwd
+         iv: ERR:F2_forfwd.sv:3: error: Unable to bind parameter `N' in `top.gb'(rc2)
+         sv: L0 w=10 | L1 w=11 | L2 w=12
+         vl: L0 w=10 | L1 w=11 | L2 w=12
+       post: ERR:VITA-E3010:generate-for condition is not a constant: undefine(rc1)
+      postd: ERR:VITA-E3010:generate-for condition is not a constant: undefine(rc1)
+        pre: ERR:VITA-E3010:generate-for condition is not a constant: undefine(rc1)
+   probe_cache: ERR:VITA-E3010:generate-for condition is not a constant: undefine(rc1)
+   probe_d1: ERR:VITA-E3010:generate-for condition is not a constant: undefine(rc1)
+   probe_p2: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p3: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p4: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p5: L0 w=10 | L1 w=11 | L2 w=12
+   probe_p6: L0 w=10 | L1 w=11 | L2 w=12
+== F3_forfwd_sh_nonet
+         iv: L0
+         sv: L0 | L1 | L2
+         vl: L0 | L1 | L2
+       post: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: L0 | L1 | L2
+   probe_cache: L0 | L1 | L2
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate for decided differently by tw(rc1)
+   probe_p2: L0 | L1 | L2
+   probe_p3: L0 | L1 | L2
+   probe_p4: L0 | L1 | L2
+   probe_p5: L0 | L1 | L2
+   probe_p6: L0 | L1 | L2
+== G1_enum_fwdparam
+         iv: ERR:G1_enum_fwdparam.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc139)
+         sv: bits=6 v=1
+         vl: bits=6 v=1
+       post: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+      postd: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+        pre: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p3: ERR:VITA-E3010:undeclared net/variable `top.gb[0].EB` [in top.gb](rc1)
+   probe_p4: ERR:VITA-E3010:undeclared net/variable `top.gb[0].EB` [in top.gb](rc1)
+   probe_p5: ERR:VITA-E3010:undeclared net/variable `top.gb[0].EB` [in top.gb](rc1)
+   probe_p6: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+== H1_genfn_fwd
+         iv: f=4
+         sv: f=8
+         vl: f=8
+       post: f=8
+      postd: f=8
+        pre: f=8
+   probe_cache: f=8
+   probe_d1: f=8
+   probe_p3: f=8
+   probe_p4: f=8
+   probe_p5: f=8
+   probe_p6: f=8
+== I1_iffwd
+         iv: ERR:I1_iffwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc4)
+         sv: then 200 bits=8
+         vl: then 200 bits=8
+       post: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+      postd: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_d1: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p2: then 200 bits=8
+   probe_p3: then 200 bits=8
+   probe_p4: then 200 bits=8
+   probe_p5: then 200 bits=8
+   probe_p6: then 200 bits=8
+== I2_iffwd_sh
+         iv: else 9 bits=4
+         sv: then 200 bits=8
+         vl: then 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: then 8 bits=4
+   probe_cache: else 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate if decided differently by two(rc1)
+   probe_p2: then 200 bits=8
+   probe_p3: then 200 bits=8
+   probe_p4: then 200 bits=8
+   probe_p5: then 200 bits=8
+   probe_p6: then 200 bits=8
+== I3_iffwd_sh_rev
+         iv: then 200 bits=8
+         sv: else 9 bits=4
+         vl: else 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: else 9 bits=8
+   probe_cache: then 200 bits=8
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate if decided differently by two(rc1)
+   probe_p2: else 9 bits=4
+   probe_p3: else 9 bits=4
+   probe_p4: else 9 bits=4
+   probe_p5: else 9 bits=4
+   probe_p6: else 9 bits=4
+== I4_iffwd_sh_nonet
+         iv: else
+         sv: then
+         vl: then
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: then
+   probe_cache: else
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate if decided differently by two(rc1)
+   probe_p2: then
+   probe_p3: then
+   probe_p4: then
+   probe_p5: then
+   probe_p6: then
+== M1_modchain
+         iv: ERR:M1_modchain.sv:2: error: Unable to bind parameter `B' in `top'(rc1)
+         sv: A=3 B=3
+         vl: A=3 B=3
+       post: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+      postd: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+        pre: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_cache: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_d1: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_p2: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_p3: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_p4: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_p5: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+   probe_p6: ERR:VITA-E3009:parameter `A` value is not a constant: undefined n(rc1)
+== M2_genchain
+         iv: ERR:M2_genchain.sv:3: error: Unable to bind parameter `B' in `top.gb'(rc1)
+         sv: A=3 B=3
+         vl: A=3 B=3
+       post: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_p2: A=3 B=3
+   probe_p3: A=3 B=3
+   probe_p4: A=3 B=3
+   probe_p5: A=3 B=3
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+== M3_genchain_sh
+         iv: ERR:M3_genchain_sh.sv:10: error: Unable to bind parameter `R' in `top.gb'(rc1)
+         sv: five 5 bits=6 P=5
+         vl: five 5 bits=6 P=5
+       post: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+   probe_p2: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: five 5 bits=6 P=5
+   probe_p4: five 5 bits=6 P=5
+   probe_p5: five 5 bits=6 P=5
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+== M4_chain2sh
+         iv: seven P=7
+         sv: five P=5
+         vl: five P=5
+       post: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+      postd: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+        pre: five P=5
+   probe_cache: seven P=5
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: five P=5
+   probe_p4: five P=5
+   probe_p5: five P=5
+   probe_p6: five P=5
+== M5_cycle
+         iv: ERR:M5_cycle.sv:3: error: Recursive parameter reference found involving A.(rc2)
+         sv: ERR:M5_cycle.sv2v.v:4: error: Recursive parameter reference found involvin(rc2)
+         vl: ERR:%Error: M5_cycle.sv:4:16: Variable's initial value is circular: 'B'(rc1)
+       post: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_p3: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_p4: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_p5: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+== N1_netfwd
+         iv: ERR:N1_netfwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc3)
+         sv: K=8 bits=8 w=255
+         vl: K=8 bits=8 w=255
+       post: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+      postd: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+        pre: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p2: K=8 bits=8 w=255
+   probe_p3: K=8 bits=8 w=255
+   probe_p4: K=8 bits=8 w=255
+   probe_p5: K=8 bits=8 w=255
+   probe_p6: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+== N2_netfwd_sh
+         iv: K=4 bits=4 w=15
+         sv: K=8 bits=8 w=255
+         vl: K=8 bits=8 w=255
+       post: K=8 bits=4 w=15
+      postd: K=8 bits=4 w=15
+        pre: K=8 bits=4 w=15
+   probe_cache: K=8 bits=4 w=15
+   probe_d1: K=8 bits=4 w=15
+   probe_p2: K=8 bits=8 w=255
+   probe_p3: K=8 bits=8 w=255
+   probe_p4: K=8 bits=8 w=255
+   probe_p5: K=8 bits=8 w=255
+   probe_p6: K=8 bits=4 w=15
+== N2m2_modscope_case
+         iv: four
+         sv: def
+         vl: def
+       post: def
+      postd: def
+        pre: def
+   probe_cache: def
+   probe_d1: def
+   probe_p3: def
+   probe_p4: def
+   probe_p5: def
+   probe_p6: def
+== N2m_modscope_sh
+         iv: bits=4 w=15
+         sv: bits=8 w=255
+         vl: bits=8 w=255
+       post: bits=8 w=255
+      postd: bits=8 w=255
+        pre: bits=8 w=255
+   probe_cache: bits=8 w=255
+   probe_d1: bits=8 w=255
+   probe_p3: bits=8 w=255
+   probe_p4: bits=8 w=255
+   probe_p5: bits=8 w=255
+   probe_p6: bits=8 w=255
+== N2p_netonly_sh
+         iv: bits=4 w=15
+         sv: bits=8 w=255
+         vl: bits=8 w=255
+       post: bits=4 w=15
+      postd: bits=4 w=15
+        pre: bits=4 w=15
+   probe_cache: bits=4 w=15
+   probe_d1: bits=4 w=15
+   probe_p3: bits=8 w=255
+   probe_p4: bits=8 w=255
+   probe_p5: bits=8 w=255
+   probe_p6: bits=4 w=15
+== P1c_procread_fwd
+         iv: K=4 v=4 | top.gb.u P=4
+         sv: K=8 v=8 | top.gb.u P=8
+         vl: K=8 v=8 | top.gb.u P=8
+       post: K=8 v=8 | top.gb.u P=8
+      postd: K=8 v=8 | top.gb.u P=8
+        pre: K=8 v=8 | top.gb.u P=8
+   probe_cache: K=8 v=8 | top.gb.u P=8
+   probe_d1: K=8 v=8 | top.gb.u P=8
+   probe_p3: K=8 v=8 | top.gb.u P=8
+   probe_p4: K=8 v=8 | top.gb.u P=8
+   probe_p5: K=8 v=8 | top.gb.u P=8
+   probe_p6: K=8 v=8 | top.gb.u P=8
+== Q65_catalog
+         iv: P=2 bits=3
+         sv: P=11 bits=12
+         vl: P=11 bits=12
+       post: P=11 bits=3
+      postd: P=11 bits=3
+        pre: P=11 bits=3
+   probe_cache: P=11 bits=3
+   probe_d1: P=11 bits=3
+   probe_p3: P=11 bits=12
+   probe_p4: P=11 bits=12
+   probe_p5: P=11 bits=12
+   probe_p6: P=11 bits=3
+== Q65b_nested_begin
+         iv: N=1
+         sv: N=5
+         vl: N=5
+       post: N=1
+      postd: N=1
+        pre: N=1
+   probe_cache: N=1
+   probe_d1: N=1
+   probe_p3: N=1
+   probe_p4: N=1
+   probe_p5: N=1
+   probe_p6: N=1
+== S1_strsh
+         iv: def 9 bits=4
+         sv: s 200 bits=8
+         vl: s 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_p3: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_p4: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: a strin(rc1)
+== V01_d1p
+         iv: ERR:V01_d1p.sv:5: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V01m_modfwd
+         iv: ERR:V01m_modfwd.sv:4: error: Unable to bind parameter `K' in `top'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: k 200 bits=8
+      postd: k 200 bits=8
+        pre: k 200 bits=8
+   probe_cache: k 200 bits=8
+   probe_d1: k 200 bits=8
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V02_back
+         iv: k 200 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: k 200 bits=8
+      postd: k 200 bits=8
+        pre: k 200 bits=8
+   probe_cache: k 200 bits=8
+   probe_d1: k 200 bits=8
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V03_scrfwd
+         iv: ERR:V03_scrfwd.sv:3: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V04_scrfwd_sh
+         iv: one 1 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: k 200 bits=8
+   probe_cache: one 1 bits=8
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V04x_scrfwd_sh
+         iv: one 1 bits=6
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=6
+   probe_cache: one 1 bits=6
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V05a_r1
+         iv: def 9 bits=4
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V05b_r1b
+         iv: k 200 bits=8
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V05c_r1p
+         iv: k 200 bits=8
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: def 9 bits=8
+   probe_cache: k 200 bits=8
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V05d_r1q
+         iv: def 9 bits=4
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V06_C1
+         iv: def 9 bits=4 P=10000000000000005
+         sv: p 200 bits=8 P=00000000000000003
+         vl: p 200 bits=8 P=00000000000000003
+       post: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+      postd: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+        pre: p 8 bits=4 P=10000000000000005
+   probe_cache: def 9 bits=4 P=10000000000000005
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: p 200 bits=8 P=00000000000000003
+   probe_p3: p 200 bits=8 P=00000000000000003
+   probe_p4: p 200 bits=8 P=00000000000000003
+   probe_p5: p 200 bits=8 P=00000000000000003
+   probe_p6: p 200 bits=8 P=10000000000000005
+== V06n_C1narrow
+         iv: def 9 bits=4 P=5
+         sv: p 200 bits=8 P=3
+         vl: p 200 bits=8 P=3
+       post: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+      postd: ERR:VITA-E3010:this generate case depends on a parameter declared(rc1)
+        pre: p 8 bits=4 P=3
+   probe_cache: def 9 bits=4 P=3
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: p 200 bits=8 P=3
+   probe_p3: p 200 bits=8 P=3
+   probe_p4: p 200 bits=8 P=3
+   probe_p5: p 200 bits=8 P=3
+   probe_p6: p 200 bits=8 P=3
+== V07_U1
+         iv: top.uA.a a | top.uB.a a
+         sv: top.uA.a a | top.uB.a a
+         vl: top.uA.a a | top.uB.a a
+       post: top.uA.d def | top.uB.d def
+      postd: top.uA.d def | top.uB.d def
+        pre: top.uA.d def | top.uB.d def
+   probe_cache: top.uA.d def | top.uB.d def
+   probe_d1: top.uA.d def | top.uB.d def
+   probe_p2: top.uA.d def | top.uB.d def
+   probe_p3: top.uA.d def | top.uB.d def
+   probe_p4: top.uA.d def | top.uB.d def
+   probe_p5: top.uA.d def | top.uB.d def
+   probe_p6: top.uA.d def | top.uB.d def
+== V08_nested
+         iv: ERR:V08_nested.sv:5: error: Unable to bind parameter `K' in `top.gb.g2'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V08b_nestedcase
+         iv: ERR:V08b_nestedcase.sv:6: error: Unable to bind parameter `K' in `top.gb.o(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V08c_nestedouterfwd
+         iv: ERR:V08c_nestedouterfwd.sv:3: error: Unable to bind parameter `J' in `top.(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V09_forcase
+         iv: ERR:V09_forcase.sv:4: error: Unable to bind parameter `K' in `top.L[0]'(rc6)
+         sv: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+         vl: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: L0 def 9 bits=4 | L1 k 9 bits=4 | L2 def 9 bits=4
+   probe_cache: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+   probe_p3: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+   probe_p4: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+   probe_p5: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+   probe_p6: L0 def 9 bits=4 | L1 k 201 bits=8 | L2 def 9 bits=4
+== V09b_forcase_iter
+         iv: ERR:V09b_forcase_iter.sv:4: error: Unable to bind parameter `K' in `top.L[(rc6)
+         sv: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+         vl: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 10 bits=4
+   probe_cache: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+   probe_p3: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+   probe_p4: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+   probe_p5: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+   probe_p6: L0 def 9 bits=4 | L1 def 9 bits=4 | L2 k 202 bits=8
+== V10_iarr
+         iv: ERR:V10_iarr.sv:4: error: Unable to bind parameter `K' in `top.u[0].gb'(rc4)
+         sv: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8
+         vl: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.u[0].gb.g k 8 bits=4 | top.u[1].gb.g k 8 bits=4
+   probe_cache: top.u[0].gb.g def 9 bits=4 | top.u[1].gb.g def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8
+   probe_p3: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8
+   probe_p4: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8
+   probe_p5: top.u[0].gb.g k 8 bits=4 | top.u[1].gb.g k 8 bits=4
+   probe_p6: top.u[0].gb.g k 8 bits=4 | top.u[1].gb.g k 8 bits=4
+== V10e_iarr_exact
+         iv: ERR:V10e_iarr_exact.sv:4: error: Unable to bind parameter `K' in `top.v.gb(rc6)
+         sv: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8 | top.v.gb.g def 9 bits=4
+         vl: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8 | top.v.gb.g def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.u[0].gb.g k 8 bits=4 | top.u[1].gb.g k 8 bits=4 | top.v.gb.g def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p4: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8 | top.v.gb.g def 9 bits=4
+   probe_p6: top.u[0].gb.g k 200 bits=8 | top.u[1].gb.g k 200 bits=8 | top.v.gb.g def 9 bits=4
+== V12a_ovr
+         iv: ERR:V12a_ovr.sv:4: error: Unable to bind parameter `K' in `top.uA.gb'(rc4)
+         sv: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+         vl: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_cache: top.uA.gb.g def 9 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p3: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p4: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p5: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_p6: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+== V12b_defparam
+         iv: ERR:V12b_defparam.sv:4: error: Unable to bind parameter `K' in `top.uA.gb'(rc4)
+         sv: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+         vl: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_cache: top.uA.gb.g def 9 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p3: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p4: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p5: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_p6: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+== V12c_ovr_ctl
+         iv: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+         sv: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+         vl: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+       post: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+      postd: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+        pre: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_cache: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_d1: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p2: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p3: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p4: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p5: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p6: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+== V12e_ovr_exact
+         iv: ERR:V12e_ovr_exact.sv:4: error: Unable to bind parameter `K' in `top.uA.gb(rc4)
+         sv: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+         vl: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.uA.gb.g k 8 bits=4 | top.uB.gb.g def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p4: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+   probe_p6: top.uA.gb.g k 200 bits=8 | top.uB.gb.g def 9 bits=4
+== V12f_genvar_exact
+         iv: ERR:V12f_genvar_exact.sv:3: error: Unable to bind parameter `B' in `top.L[(rc16)
+         sv: L0 then 200 bits=8 | L1 else 9 bits=4 | L2 else 9 bits=4 | L3 then 203 bits=8
+         vl: L0 then 200 bits=8 | L1 else 9 bits=4 | L2 else 9 bits=4 | L3 then 203 bits=8
+       post: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+      postd: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_d1: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p4: L0 then 200 bits=8 | L1 else 9 bits=4 | L2 else 9 bits=4 | L3 then 203 bits=8
+   probe_p6: L0 then 200 bits=8 | L1 else 9 bits=4 | L2 else 9 bits=4 | L3 then 203 bits=8
+== V13_multilab
+         iv: ERR:V13_multilab.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V14_fwd_nomatch
+         iv: ERR:V14_fwd_nomatch.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V14b_fwd_nodef
+         iv: ERR:V14b_fwd_nodef.sv:5: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 9 bits=4
+         vl: k 9 bits=4
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].g2[0].w` [in to(rc1)
+   probe_cache: NONE
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 9 bits=4
+   probe_p3: k 9 bits=4
+   probe_p4: k 9 bits=4
+   probe_p5: k 9 bits=4
+   probe_p6: k 9 bits=4
+== V15_laterblk
+         iv: ERR:V15_laterblk.sv:4: error: A hierarchical reference (`gb.K') is not all(rc2)
+         sv: ERR:V15_laterblk.sv2v.v:5: error: A hierarchical reference (`gb.K') is not(rc2)
+         vl: ERR:%Error: Internal Error: V15_laterblk.sv:4:10: ../V3Const.cpp:3386: Not(rc1)
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V15b_sibling
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V16_hier
+         iv: ERR:V16_hier.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: h 200 bits=4
+         vl: h 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: h 8 bits=4
+   probe_cache: h 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: h 200 bits=8
+   probe_p3: h 200 bits=8
+   probe_p4: h 200 bits=8
+   probe_p5: h 200 bits=8
+   probe_p6: h 200 bits=8
+== V17_difflbl
+         iv: ERR:V17_difflbl.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].w` [in to(rc1)
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V18_inst
+         iv: ERR:V18_inst.sv:6: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8 | top.gb.g.u child-a
+         vl: k 200 bits=8 | top.gb.g.u child-a
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4 | top.gb.g.u child-a
+   probe_cache: def 9 bits=4 | top.gb.g.u child-b
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8 | top.gb.g.u child-a
+   probe_p3: k 200 bits=8 | top.gb.g.u child-a
+   probe_p4: k 200 bits=8 | top.gb.g.u child-a
+   probe_p5: k 200 bits=8 | top.gb.g.u child-a
+   probe_p6: k 200 bits=8 | top.gb.g.u child-a
+== V19_func
+         iv: ERR:V19_func.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k f=101
+         vl: k f=101
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k f=8
+   probe_cache: def f=8
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k f=101
+   probe_p3: k f=101
+   probe_p4: k f=101
+   probe_p5: k f=101
+   probe_p6: k f=101
+== V20_armlp
+         iv: ERR:V20_armlp.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8 W=8
+         vl: k 200 bits=8 W=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4 W=8
+   probe_cache: def 9 bits=4 W=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8 W=8
+   probe_p3: k 200 bits=8 W=8
+   probe_p4: k 200 bits=8 W=8
+   probe_p5: k 200 bits=8 W=8
+   probe_p6: k 200 bits=8 W=8
+== V21_armfor
+         iv: ERR:V21_armfor.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k j0 200 bits=8 | k j1 201 bits=8
+         vl: k j0 200 bits=8 | k j1 201 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k j0 8 bits=4 | k j1 9 bits=4
+   probe_cache: def j0 9 bits=4 | def j1 9 bits=4 | def j2 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k j0 200 bits=8 | k j1 201 bits=8
+   probe_p3: k j0 200 bits=8 | k j1 201 bits=8
+   probe_p4: k j0 200 bits=8 | k j1 201 bits=8
+   probe_p5: k j0 200 bits=8 | k j1 201 bits=8
+   probe_p6: k j0 200 bits=8 | k j1 201 bits=8
+== V22_armvar
+         iv: ERR:V22_armvar.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V23_armenum
+         iv: ERR:V23_armenum.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V24_region
+         iv: ERR:V24_region.sv:3: error: Unable to bind parameter `K' in `top'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V24b_region_net
+         iv: ERR:V24b_region_net.sv:2: error: Unable to bind parameter `K' in `top'(rc3)
+         sv: bits=8 K=8
+         vl: bits=8 K=8
+       post: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+      postd: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+        pre: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p3: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p4: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p5: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+   probe_p6: ERR:VITA-E3009:undefined name `K` is not allowed in a constant ra(rc1)
+== V24c_region_nested
+         iv: ERR:V24c_region_nested.sv:4: error: Unable to bind parameter `K' in `top.g(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V24s_region_import
+         iv: ERR:V24s_region_import.sv:9: error: 'K' has already been imported into thi(rc1)
+         sv: def
+         vl: def
+       post: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this module ((rc1)
+        pre: def
+   probe_cache: k
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: def
+   probe_p4: def
+   probe_p5: def
+   probe_p6: def
+== V25_iface
+         iv: ERR:V25_iface.sv:4: error: Unable to bind parameter `K' in `top.i.gb'(rc2)
+         sv: i 200 bits=4
+         vl: i 200 bits=8
+       post: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+      postd: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+        pre: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_cache: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_d1: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_p2: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_p3: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_p4: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_p5: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+   probe_p6: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+== V26_xlabel
+         iv: ERR:V26_xlabel.sv:5: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: ERR:%Error: V26_xlabel.sv:4:7: Use of x/? constant in generate case statem(rc1)
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V27_enumfwd
+         iv: ERR:V27_enumfwd.sv:4: error: Unable to bind parameter `EB' in `top.gb'(rc2)
+         sv: eb 200 bits=8
+         vl: eb 200 bits=8
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V28_bitsfwd
+         iv: def 9 bits=4
+         sv: k8 200 bits=8
+         vl: k8 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p2: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p3: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p4: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p5: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== V28b_bitsfwd_sh
+         iv: def 9 bits=4
+         sv: k8 200 bits=8
+         vl: k8 200 bits=8
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V28c_ifbits_sh
+         iv: else 9 bits=4
+         sv: then 200 bits=8
+         vl: then 200 bits=8
+       post: else 9 bits=4
+      postd: else 9 bits=4
+        pre: else 9 bits=4
+   probe_cache: else 9 bits=4
+   probe_d1: else 9 bits=4
+   probe_p2: else 9 bits=4
+   probe_p3: else 9 bits=4
+   probe_p4: else 9 bits=4
+   probe_p5: else 9 bits=4
+   probe_p6: else 9 bits=4
+== V29_genfn
+         iv: f 200 bits=8
+         sv: f 200 bits=8
+         vl: ERR:%Error: V29_genfn.sv:8:32: Constant function may not be declared under(rc1)
+       post: f 200 bits=8
+      postd: f 200 bits=8
+        pre: f 200 bits=8
+   probe_cache: f 200 bits=8
+   probe_d1: f 200 bits=8
+   probe_p2: f 200 bits=8
+   probe_p3: f 200 bits=8
+   probe_p4: f 200 bits=8
+   probe_p5: f 200 bits=8
+   probe_p6: f 200 bits=8
+== V30_strfwd
+         iv: ERR:V30_strfwd.sv:4: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: s 200 bits=8
+         vl: s 200 bits=8
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: s 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: s 200 bits=8
+   probe_p3: s 200 bits=8
+   probe_p4: s 200 bits=8
+   probe_p5: s 200 bits=8
+   probe_p6: s 200 bits=8
+== V30b_realfwd
+         iv: ERR:V30b_realfwd.sv:4: error: Unable to bind parameter `R' in `top.gb'(rc2)
+         sv: ERR:V30b_realfwd.sv2v.v:5: error: Cannot evaluate genvar case item express(rc1)
+         vl: r 200 bits=8
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== V31_widefwd
+         iv: ERR:V31_widefwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p2: k 200 bits=8
+   probe_p3: k 200 bits=8
+   probe_p4: k 200 bits=8
+   probe_p5: k 200 bits=8
+   probe_p6: k 200 bits=8
+== V32_typefwd
+         iv: def 9 bits=4
+         sv: t 200 bits=8
+         vl: ERR:%Error: V32_typefwd.sv:4:13: Reference to 'T' before declaration (IEEE(rc1)
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p2: def 9 bits=4
+   probe_p3: def 9 bits=4
+   probe_p4: def 9 bits=4
+   probe_p5: def 9 bits=4
+   probe_p6: def 9 bits=4
+== W1_wide_sh
+         iv: def 9 bits=4 K=10000000000000005
+         sv: k 200 bits=8 K=05
+         vl: k 200 bits=8 K=05
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4 K=05
+   probe_cache: def 9 bits=4 K=05
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p3: k 200 bits=8 K=05
+   probe_p4: k 200 bits=8 K=05
+   probe_p5: k 200 bits=8 K=05
+   probe_p6: k 200 bits=8 K=05
+== W2_narrow_over_wide_fwd
+         iv: K=05
+         sv: K=10000000000000007
+         vl: K=10000000000000007
+       post: K=10000000000000007
+      postd: K=10000000000000007
+        pre: K=10000000000000007
+   probe_cache: K=10000000000000007
+   probe_d1: K=10000000000000007
+   probe_p3: K=10000000000000007
+   probe_p4: K=10000000000000007
+   probe_p5: K=10000000000000007
+   probe_p6: K=10000000000000007
+== Z0a_lrm2631_var
+         iv: px=1 bx=2
+         sv: px=z bx=2
+         vl: px=0 bx=2
+       post: px=0 bx=2
+      postd: px=0 bx=2
+        pre: px=0 bx=2
+   probe_cache: px=0 bx=2
+   probe_d1: px=0 bx=2
+   probe_p6: px=0 bx=2
+== Z0b_lrm2631_par
+         iv: l2 X=1 | l4 X=2
+         sv: l2 X=2 | l4 X=2
+         vl: l2 X=2 | l4 X=2
+       post: l2 X=2 | l4 X=2
+      postd: l2 X=2 | l4 X=2
+        pre: l2 X=2 | l4 X=2
+   probe_cache: l2 X=2 | l4 X=2
+   probe_d1: l2 X=2 | l4 X=2
+   probe_p6: l2 X=2 | l4 X=2
+== Z0c_lrm2631_par_case
+         iv: pkg 9 bits=4
+         sv: local 200 bits=8
+         vl: local 200 bits=8
+       post: ERR:VITA-E3010:`X` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`X` is used before it is declared in this generate(rc1)
+        pre: local 8 bits=4
+   probe_cache: pkg 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: local 200 bits=8
+== Z1a2_scr_ae_bwd
+         iv: k P=xxxx bits=8
+         sv: k P=xxxx bits=8
+         vl: k P=xxxx bits=8
+       post: k P=0000 bits=8
+      postd: k P=0000 bits=8
+        pre: k P=0000 bits=8
+   probe_cache: k P=0000 bits=8
+   probe_d1: k P=0000 bits=8
+   probe_p6: k P=0000 bits=8
+== Z1a_scr_ae
+         iv: ERR:Z1a_scr_ae.sv:4: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: k P=xxxx bits=8
+         vl: k P=xxxx bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: k P=0000 bits=8
+== Z1b2_scr_ac_bwd
+         iv: k r=7f
+         sv: k r=7f
+         vl: k r=7f
+       post: k r=00
+      postd: k r=00
+        pre: k r=00
+   probe_cache: k r=00
+   probe_d1: k r=00
+   probe_p6: k r=00
+== Z1b_scr_ac
+         iv: ERR:Z1b_scr_ac.sv:4: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: k r=7f
+         vl: k r=7f
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: k r=00
+== Z1c_scr_hier
+         iv: ERR:Z1c_scr_hier.sv:3: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: h w=200 bits=4
+         vl: h w=200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: h w=200 bits=8
+== Z1d_lbl_inst
+         iv: ERR:Z1d_lbl_inst.sv:5: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k o=100
+         vl: k o=100
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].o` [in to(rc1)
+   probe_cache: def
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+== Z1e_lbl_inst_noread
+         iv: ERR:Z1e_lbl_inst_noread.sv:5: error: Unable to bind parameter `K' in `top.(rc2)
+         sv: k o=7
+         vl: k o=7
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].o` [in to(rc1)
+   probe_cache: def
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: k o=7
+== Z1f_for_inst_sh
+         iv: top.gb.L[0].u P=10
+         sv: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+         vl: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+       post: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+   probe_cache: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate for decided differently by tw(rc1)
+   probe_p6: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+== Z1g_for_ae_sh
+         iv: L0 w=10 P=xxxx
+         sv: L0 w=10 P=xxxx | L1 w=11 P=xxxx | L2 w=12 P=xxxx
+         vl: L0 w=10 P=xxxx | L1 w=11 P=xxxx | L2 w=12 P=xxxx
+       post: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_cache: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate for decided differently by tw(rc1)
+   probe_p6: L0 w=10 P=0000 | L1 w=11 P=0000 | L2 w=12 P=0000
+== Z1h_if_ac
+         iv: ERR:Z1h_if_ac.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc4)
+         sv: then r=7f
+         vl: then r=7f
+       post: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+      postd: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_d1: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p6: then r=00
+== Z1i_v14b_ae
+         iv: ERR:Z1i_v14b_ae.sv:6: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k P=xxxx
+         vl: k P=xxxx
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k P=0000
+   probe_cache: NONE
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: k P=0000
+== Z2a_armerr_sh
+         iv: ERR:Z2a_armerr_sh.sv:6: error: Unable to bind parameter `Nope' in `top.gb.(rc2)
+         sv: k 200
+         vl: ERR:%Error: Z2a_armerr_sh.sv:6:32: Can't find definition of variable: 'Nop(rc1)
+       post: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+      postd: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+        pre: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_d1: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p6: k 200
+== Z2b_armerr_sh_dup
+         iv: ERR:Z2b_armerr_sh_dup.sv:6: error: 'w' has already been declared in this s(rc1)
+         sv: k 200
+         vl: ERR:%Error: Z2b_armerr_sh_dup.sv:6:51: Duplicate declaration of signal: 'w(rc1)
+       post: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+      postd: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+        pre: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+   probe_cache: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+   probe_d1: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+   probe_p6: k 200
+== Z2c_negrange_fwd
+         iv: ERR:Z2c_negrange_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z2d_xz_fwd_sh
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+== Z2e_div0_fwd_sh
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+      postd: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_d1: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+== Z3a2_shl_bwd
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z3a_shl_fwd
+         iv: ERR:Z3a_shl_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z3b2_add32_bwd
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: zero 200 bits=8
+       post: zero 200 bits=8
+      postd: zero 200 bits=8
+        pre: zero 200 bits=8
+   probe_cache: zero 200 bits=8
+   probe_d1: zero 200 bits=8
+   probe_p6: zero 200 bits=8
+== Z3b_add32_fwd
+         iv: ERR:Z3b_add32_fwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: zero 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: zero 200 bits=8
+== Z3c2_widesgn_bwd
+         iv: k 200 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: k 200 bits=8
+      postd: k 200 bits=8
+        pre: k 200 bits=8
+   probe_cache: k 200 bits=8
+   probe_d1: k 200 bits=8
+   probe_p6: k 200 bits=8
+== Z3c_widesgn_fwd
+         iv: ERR:Z3c_widesgn_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: k 200 bits=8
+== Z3d2_widesel_bwd
+         iv: k 200 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+== Z3d_widesel_fwd
+         iv: ERR:Z3d_widesel_fwd.sv:3: error: Unable to bind parameter `K['sd64:'sd0]' (rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+       post: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+      postd: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_d1: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== Z3e2_negcmp_bwd
+         iv: neg 200 bits=8
+         sv: neg 200 bits=8
+         vl: neg 200 bits=8
+       post: neg 200 bits=8
+      postd: neg 200 bits=8
+        pre: neg 200 bits=8
+   probe_cache: neg 200 bits=8
+   probe_d1: neg 200 bits=8
+   probe_p6: neg 200 bits=8
+== Z3e_negcmp_fwd
+         iv: ERR:Z3e_negcmp_fwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc4)
+         sv: neg 200 bits=8
+         vl: neg 200 bits=8
+       post: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+      postd: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_d1: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p6: neg 200 bits=8
+== Z5a_procread_nosh
+         iv: ERR:Z5a_procread_nosh.sv:3: error: Unable to bind wire/reg/memory `K' in `(rc1)
+         sv: K=8
+         vl: K=8
+       post: K=8
+      postd: K=8
+        pre: K=8
+   probe_cache: K=8
+   probe_d1: K=8
+   probe_p6: K=8
+== Z5b_inst_nosh
+         iv: ERR:Z5b_inst_nosh.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc1)
+         sv: top.gb.u P=8
+         vl: top.gb.u P=8
+       post: top.gb.u P=8
+      postd: top.gb.u P=8
+        pre: top.gb.u P=8
+   probe_cache: top.gb.u P=8
+   probe_d1: top.gb.u P=8
+   probe_p6: top.gb.u P=8
+== Z5c_varinit_nosh
+         iv: ERR:Z5c_varinit_nosh.sv:3: error: Unable to bind wire/reg/memory `K' in `t(rc1)
+         sv: v=8
+         vl: v=8
+       post: v=8
+      postd: v=8
+        pre: v=8
+   probe_cache: v=8
+   probe_d1: v=8
+   probe_p6: v=8
+== Z5d_ca_nosh
+         iv: ERR:Z5d_ca_nosh.sv:4: error: Unable to bind wire/reg/memory `K' in `top.gb(rc2)
+         sv: w=8
+         vl: w=8
+       post: w=8
+      postd: w=8
+        pre: w=8
+   probe_cache: w=8
+   probe_d1: w=8
+   probe_p6: w=8
+== Z5e_d1w
+         iv: a 200 bits=8
+         sv: a 200 bits=8
+         vl: a 200 bits=8
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z5f_lazy_label
+         iv: one 1 bits=8
+         sv: one 1 bits=8
+         vl: one 1 bits=8
+       post: one 1 bits=8
+      postd: one 1 bits=8
+        pre: one 1 bits=8
+   probe_cache: one 1 bits=8
+   probe_d1: one 1 bits=8
+   probe_p6: one 1 bits=8
+== Z5g_typo_label
+         iv: ERR:Z5g_typo_label.sv:4: error: Unable to bind parameter `NOPE' in `top.gb(rc2)
+         sv: ERR:Z5g_typo_label.sv2v.v:5: error: Unable to bind parameter `NOPE' in `to(rc2)
+         vl: ERR:%Error: Z5g_typo_label.sv:4:7: Can't find definition of variable: 'NOP(rc1)
+       post: def 9 bits=4
+      postd: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_d1: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z5h_nested_encl_fwd_sh
+         iv: outer 9 bits=4
+         sv: inner 200 bits=8
+         vl: inner 200 bits=8
+       post: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in an enclosing (rc1)
+        pre: inner 8 bits=4
+   probe_cache: outer 9 bits=4
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: inner 200 bits=8
+== Z5i_hier_sibling_later
+         iv: ga K=5
+         sv: ga K=5
+         vl: ga K=5
+       post: ga K=5
+      postd: ga K=5
+        pre: ga K=5
+   probe_cache: ga K=5
+   probe_d1: ga K=5
+   probe_p6: ga K=5
+== Z5j_hier_self_before_decl
+         iv: self K=5
+         sv: self K=5
+         vl: self K=5
+       post: self K=5
+      postd: self K=5
+        pre: self K=5
+   probe_cache: self K=5
+   probe_d1: self K=5
+   probe_p6: self K=5
+== Z5k_region_hdr_collide
+         iv: ERR:Z5k_region_hdr_collide.sv:3: error: 'K' has already been declared in t(rc1)
+         sv: K=3
+         vl: ERR:%Error: Z5k_region_hdr_collide.sv:3:16: Duplicate declaration of signa(rc1)
+       post: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+      postd: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+        pre: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+   probe_cache: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+   probe_d1: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+   probe_p6: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+== Z5l_modlvl_procread_region_fwd
+         iv: ERR:Z5l_modlvl_procread_region_fwd.sv:2: error: Unable to bind wire/reg/me(rc1)
+         sv: K=5
+         vl: K=5
+       post: K=5
+      postd: K=5
+        pre: K=5
+   probe_cache: K=5
+   probe_d1: K=5
+   probe_p6: K=5
+== Z5m_genfn_body_fwd_sh
+         iv: k f=4
+         sv: def
+         vl: def
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: def
+   probe_cache: k f=8
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate case decided differently by t(rc1)
+   probe_p6: def
+== Z5n_genfor_body_param_chain_sh
+         iv: L0 one 9 bits=4 P=1 | L1 other 200 bits=8 P=2
+         sv: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11
+         vl: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11
+       post: ERR:VITA-E3010:this generate if depends on a parameter declared a(rc1)
+      postd: ERR:VITA-E3010:this generate if depends on a parameter declared a(rc1)
+        pre: L0 other 8 bits=4 P=10 | L1 other 200 bits=8 P=11
+   probe_cache: L0 one 9 bits=4 P=10 | L1 other 200 bits=8 P=11
+   probe_d1: ERR:VITA-E3009:P2-MISMATCH generate if decided differently by two(rc1)
+   probe_p6: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11

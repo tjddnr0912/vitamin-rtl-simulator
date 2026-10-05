@@ -1,0 +1,135 @@
+### C1  [PRE!=all]
+  pre : C1 p 8 bits=4 P=10000000000000005
+  ivl : C1 def 9 bits=4 P=10000000000000005
+  s2v : C1 p 200 bits=8 P=00000000000000003
+  vl  : C1 p 200 bits=8 P=00000000000000003
+### Efn_fn2  [PRE=some]
+  pre : fn2 f=1 r=1 | post 7
+  ivl : fn2 f=7 r=7 | post 7
+  s2v : !Efn_fn2.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : fn2 f=1 r=1 | post 7
+### Efn_tk2  [PRE=some]
+  pre : post 7 | tk2 r=1
+  ivl : post 7 | tk2 r=7
+  s2v : !Efn_tk2.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post 7 | tk2 r=1
+### Efr_fn2  [PRE=some]
+  pre : fn2 f=1 r=1 | post 2.500000
+  ivl : fn2 f=3 r=3 | post 2.500000
+  s2v : !Efr_fn2.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : fn2 f=1 r=1 | post 2.500000
+### Efr_tk2  [PRE=some]
+  pre : post 2.500000 | tk2 r=3
+  ivl : post 2.500000 | tk2 r=3
+  s2v : !Efr_tk2.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post 2.500000 | tk2 r=1
+### Efs_fn2  [PRE=some]
+  pre : fn2 f=1 r=1 | post AB
+  ivl : fn2 f=16706 r=16706 | post AB
+  s2v : !Efs_fn2.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : fn2 f=1 r=1 | post AB
+### Efs_tk2  [PRE=some]
+  pre : post AB | tk2 r=16706
+  ivl : post AB | tk2 r=16706
+  s2v : !Efs_tk2.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post AB | tk2 r=1
+### Efw_fn2  [PRE=some]
+  pre : fn2 f=1 r=1 | post 18446744073709551616
+  ivl : fn2 f=0 r=0 | post 18446744073709551616
+  s2v : !Efw_fn2.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : fn2 f=1 r=1 | post 18446744073709551616
+### Efw_tk2  [PRE=some]
+  pre : post 18446744073709551616 | tk2 r=0
+  ivl : post 18446744073709551616 | tk2 r=0
+  s2v : !Efw_tk2.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post 18446744073709551616 | tk2 r=1
+### Efwd_n  [PRE!=all]
+  pre : fwd K=7 E1=1
+  ivl : !error: 'E1' has already been imported into this scope from package 'pk'. | rc=1
+  s2v : fwd K=1 E1=1
+  vl  : fwd K=1 E1=1
+### Efwd_w  [PRE!=all]
+  pre : fwd K=0 E1=18446744073709551616
+  ivl : !error: 'E1' has already been imported into this scope from package 'pk'. | rc=1
+  s2v : fwd K=1 E1=1
+  vl  : fwd K=1 E1=1
+### Epk_imp  [PRE!=all]
+  pre : pki E1=1 K=0 b=32
+  ivl : pki E1=1 K=1 b=32
+  s2v : pki E1=1 K=1 b=32
+  vl  : pki E1=1 K=1 b=32
+### Eti_val  [ALL]
+  pre : eti E1=1 K=1 b=32 x=00000000000000000000000000000001
+  ivl : eti E1=1 K=1 b=32 x=00000000000000000000000000000001
+  s2v : eti E1=1 K=1 b=32 x=00000000000000000000000000000001
+  vl  : eti E1=1 K=1 b=32 x=00000000000000000000000000000001
+### Etn_val  [ALL]
+  pre : etn E1=1 K=1 b=32 x=00000000000000000000000000000001
+  ivl : etn E1=1 K=1 b=32 x=00000000000000000000000000000001
+  s2v : etn E1=1 K=1 b=32 x=00000000000000000000000000000001
+  vl  : etn E1=1 K=1 b=32 x=00000000000000000000000000000001
+### Ghr  [PRE!=all]
+  pre : hr sel=f0 top=xx | in top.u.g[0] i=335812727670730321938 | in top.u.g[1] i=335812727670730321938
+  ivl : hr sel=12 top=12 | in top.u.g[0] i=0 | in top.u.g[1] i=1
+  s2v : hr sel=12 top=12 | in top.u.g[0] i=0 | in top.u.g[1] i=1
+  vl  : hr sel=12 top=12 | in top.u.g[0] i=0 | in top.u.g[1] i=1
+### Ghr0  [ALL]
+  pre : hr sel=12 top=12
+  ivl : hr sel=12 top=12
+  s2v : hr sel=12 top=12
+  vl  : hr sel=12 top=12
+### Gnr_fn  [PRE!=all]
+  pre : fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=x
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=a
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=a
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=a
+### Gnr_val  [ALL]
+  pre : post sel=a | v top.g[0] i=0 | v top.g[1] i=1
+  ivl : post sel=a | v top.g[0] i=0 | v top.g[1] i=1
+  s2v : post sel=a | v top.g[0] i=0 | v top.g[1] i=1
+  vl  : post sel=a | v top.g[0] i=0 | v top.g[1] i=1
+### Gsi_val2  [PRE=some]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | val top.g[0] i=0 K=0 wv=0 | val top.g[1] i=1 K=1 wv=1
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | val top.g[0] i=0 K=0 wv=0 | val top.g[1] i=1 K=1 wv=1
+  s2v : 
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | val top.g[0] i=0 K=0 wv=0 | val top.g[1] i=1 K=1 wv=1
+### Gw_tk  [PRE!=all]
+  pre : tk top.g[0] r=9 | tk top.g[1] r=9
+  ivl : tk top.g[0] r=0 | tk top.g[1] r=1
+  s2v : tk top.g[0] r=0 | tk top.g[1] r=1
+  vl  : tk top.g[0] r=0 | tk top.g[1] r=1
+### Ipknw_c  [PRE=iv=s2v]
+  pre : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  ivl : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  s2v : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  vl  : pk Z=3 Y=4 K=3 B=32
+### Ipkpn_c  [ALL]
+  pre : pk Z=3 Y=4 K=3 B=32
+  ivl : pk Z=3 Y=4 K=3 B=32
+  s2v : pk Z=3 Y=4 K=3 B=32
+  vl  : pk Z=3 Y=4 K=3 B=32
+### Ipkpw_c  [ALL]
+  pre : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  ivl : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  s2v : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  vl  : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+### Ipkwn_c  [PRE=some]
+  pre : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+  ivl : pk Z=3 Y=4 K=3 B=32
+  s2v : pk Z=3 Y=4 K=3 B=32
+  vl  : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+### X3  [PRE!=all]
+  pre : W=10000000000000007 bits_v=6 eq=1
+  ivl : W=10000000000000007 bits_v=8 eq=1
+  s2v : W=10000000000000007 bits_v=8 eq=1
+  vl  : W=10000000000000007 bits_v=8 eq=1
+### X4  [PRE=iv=s2v]
+  pre : Z=10000000000000007 Y=10000000000000008
+  ivl : Z=10000000000000007 Y=10000000000000008
+  s2v : Z=10000000000000007 Y=10000000000000008
+  vl  : Z=00000000000000005 Y=00000000000000006
+### X6  [PRE!=all]
+  pre : W=10000000000000007 LI=7 LW=10000000000000007 n=10000000000000007 sel=7 top=10000000000000007 | sub.P=10000000000000007
+  ivl : !1 error(s) during elaboration. | !error: Unable to bind wire/reg/memory `X6.W' in `X6' | rc=1
+  s2v : !1 error(s) during elaboration. | !error: Unable to bind wire/reg/memory `X6.W' in `X6' | rc=1
+  vl  : W=00000005 LI=5 LW=00000000000000005 n=00000000000000005 sel=5 top=00000005 | sub.P=00000000000000005

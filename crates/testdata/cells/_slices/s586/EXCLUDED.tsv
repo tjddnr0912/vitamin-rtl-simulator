@@ -1,0 +1,299 @@
+category	path_or_glob	count	bytes	reason
+build-dir	doc_ex/obj_dir/**	25	745583	build dir (cargo target / verilator obj tree)
+build-dir	g/c01_ucasez/obj_dir/**	25	751884	build dir (cargo target / verilator obj tree)
+build-dir	g/c02_u0casez/obj_dir/**	25	751511	build dir (cargo target / verilator obj tree)
+build-dir	g/c03_ucase/obj_dir/**	25	751748	build dir (cargo target / verilator obj tree)
+build-dir	g/c04_u0case/obj_dir/**	25	751375	build dir (cargo target / verilator obj tree)
+build-dir	g/c05_uif/obj_dir/**	25	751009	build dir (cargo target / verilator obj tree)
+build-dir	g/c06_u0if/obj_dir/**	25	751019	build dir (cargo target / verilator obj tree)
+build-dir	g/c07_pcase/obj_dir/**	25	749679	build dir (cargo target / verilator obj tree)
+build-dir	g/c08_pif/obj_dir/**	25	749359	build dir (cargo target / verilator obj tree)
+build-dir	g/c09_ucase_noovl/obj_dir/**	25	749460	build dir (cargo target / verilator obj tree)
+build-dir	g/c10_func/obj_dir/**	25	752490	build dir (cargo target / verilator obj tree)
+build-dir	g/c11_task/obj_dir/**	25	752130	build dir (cargo target / verilator obj tree)
+build-dir	g/c12_class/obj_dir/**	30	779339	build dir (cargo target / verilator obj tree)
+build-dir	g/c13_uninst/obj_dir/**	25	749139	build dir (cargo target / verilator obj tree)
+build-dir	g/c13b_uninst_top/obj_dir/**	25	749139	build dir (cargo target / verilator obj tree)
+build-dir	g/c14_gen_untaken/obj_dir/**	25	749155	build dir (cargo target / verilator obj tree)
+build-dir	g/c15_pkgfn/obj_dir/**	25	752285	build dir (cargo target / verilator obj tree)
+build-dir	g/c16_two_sites/obj_dir/**	25	753537	build dir (cargo target / verilator obj tree)
+build-dir	g/c17_uncalled_fn/obj_dir/**	25	749155	build dir (cargo target / verilator obj tree)
+build-dir	g/c18_ucase_default/obj_dir/**	25	751499	build dir (cargo target / verilator obj tree)
+build-dir	g/c19_always_comb/obj_dir/**	25	755591	build dir (cargo target / verilator obj tree)
+build-dir	g/c20_inside/obj_dir/**	25	751964	build dir (cargo target / verilator obj tree)
+build-dir	g/c21_noovl_if/obj_dir/**	25	750049	build dir (cargo target / verilator obj tree)
+build-dir	g/c22_priority_only_noovl/obj_dir/**	25	749311	build dir (cargo target / verilator obj tree)
+build-dir	g/c23_two_unique_noovl/obj_dir/**	25	749447	build dir (cargo target / verilator obj tree)
+build-dir	g/c24_two_inst/obj_dir/**	25	757227	build dir (cargo target / verilator obj tree)
+build-dir	g/c25_multiline/obj_dir/**	25	751884	build dir (cargo target / verilator obj tree)
+build-dir	g/c52_include/vl/**	23	670614	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	probe_target/**	236287	17866676934	build dir (cargo target / verilator obj tree)
+build-dir	r1/diff/**	22	6920088	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.a	22	837864	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.cpp	159	551995	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.d	110	130990	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.dat	22	102643	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.h	91	158081	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.mk	44	78769	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/diff/**/*.o	88	7905808	verilator Mdir build tree (incl. Vt/Vtop binaries, .o, .a)
+build-dir	r1/sound/mut_latch/target/**	116940	9008910472	build dir (cargo target / verilator obj tree)
+build-dir	r2/p0/b_ident/obj_dir/**	25	745346	build dir (cargo target / verilator obj tree)
+build-dir	r2/prog/autonq/obj_dir/**	25	749916	build dir (cargo target / verilator obj tree)
+build-dir	r2/prog/b05/obj_dir/**	25	751084	build dir (cargo target / verilator obj tree)
+build-dir	r2/prog/modauto/obj_dir/**	23	669647	build dir (cargo target / verilator obj tree)
+build-dir	r2/prog/plain/obj_dir/**	25	751084	build dir (cargo target / verilator obj tree)
+built-binary	post/**	7	53009520	vita / vcmp / velab / vrun binaries (Mach-O); md5 in META binaries table
+built-binary	post2/**	7	53009520	vita / vcmp / velab / vrun binaries (Mach-O); md5 in META binaries table
+built-binary	post3/**	1	7338016	vita / vcmp / velab / vrun binaries (Mach-O); md5 in META binaries table
+built-binary	pre/**	5	36690016	vita / vcmp / velab / vrun binaries (Mach-O); md5 in META binaries table
+built-binary	probe_bin/**	7	53009520	vita / vcmp / velab / vrun binaries (Mach-O); md5 in META binaries table
+cargo-gate-corpus-mutation-log	corpus/**/*.log	2	2513	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	corpus/**/*.rc	2	4	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	fullgate/**/*.log	6	827875	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	fullgate/**/*.rc	6	12	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_build1.log	1	2026	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_clippy.log	1	3094	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_clippy2.log	1	335	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_doc.log	1	341	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t1.log	1	4612	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_cli3.log	1	4299	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_cli3b.log	1	4391	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_cliall.log	1	712508	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_diag.log	1	747	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_diagb.log	1	667	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_parser.log	1	7834	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	impl_t_parserb.log	1	7687	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	mut/**	1	5	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.log	62	242480	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.txt	3	12211	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	post/**/*.log	5	2265	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	post2/**/*.log	4	656	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	post3/**/*.log	1	233	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	pre/**/*.log	2	416	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	pre/**/*.rc	2	4	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	pre_ac_tests.log	1	2960	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_fails.txt	1	1093	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_jit.log	1	1640	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_jit.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_nextest.log	1	815852	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_nextest.rc	1	4	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_prod.log	1	435	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_prod.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_rel.log	1	4102	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_rel.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	probe_sep.log	1	242	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r1/**/*.log	4	819561	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r1/**/*.rc	2	4	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r2/**/*.done	1	5	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r2/**/*.log	5	726224	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r2/**/*.rcs	1	60	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+cargo-gate-corpus-mutation-log	r3log/**/*.log	3	17000	cargo build / nextest / clippy / gate / corpus / mutation / probe build logs and rc files
+doc-draft	GROUNDING.head	1	628	ROADMAP / PROBE_CATALOG / manual drafts, GROUNDING section sources (sec/*.md assembled into GROUNDING.md)
+doc-draft	docs_edit/**/*.md	5	259493	ROADMAP / PROBE_CATALOG / manual drafts, GROUNDING section sources (sec/*.md assembled into GROUNDING.md)
+doc-draft	docs_edit/**/*.py	3	25238	ROADMAP / PROBE_CATALOG / manual drafts, GROUNDING section sources (sec/*.md assembled into GROUNDING.md)
+doc-draft	docs_edit/**/*.txt	1	8703	ROADMAP / PROBE_CATALOG / manual drafts, GROUNDING section sources (sec/*.md assembled into GROUNDING.md)
+doc-draft	r3/explain*.txt	2	6693	`vita explain` text captured for the docs commit
+doc-draft	sec/**/*.md	8	36504	ROADMAP / PROBE_CATALOG / manual drafts, GROUNDING section sources (sec/*.md assembled into GROUNDING.md)
+harness-copy	lanes/post/**/*.sv	26	7073	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	lanes/post/**/*.svh	1	150	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	lanes/post2/**/*.sv	26	7073	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	lanes/post2/**/*.svh	1	150	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	lanes/pre/**/*.sv	20	5378	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	lanes/pre/**/*.svh	1	150	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/a01_x.sv	1	158	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/a01_y.sv	1	208	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n01_cu_func.sv	1	103	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n02_pkg_only.sv	1	144	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n03_class_only.sv	1	117	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n04_typedef_func.sv	1	143	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n05_lp_task.sv	1	127	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n06_iface_only.sv	1	143	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n07_ifdef_empty.sv	1	99	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n09_cu_plus_mod.sv	1	158	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n10_pp_err.sv	1	131	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n11_lex_str.sv	1	136	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n12_priority0.sv	1	179	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+harness-copy	r3/n13_lex_byte.sv	1	123	byte-identical copy (md5) of a manifested sv/aux (lane / r3 / staged copy)
+no-oracle-output	g/c30_staged/**/*.err	6	2280	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c30_staged/**/*.out	6	132	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c30_staged/**/*.sv	1	308	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c31_trace/**/*.sv	6	1416	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c31_trace/**/*.txt	1	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c42_prio_then_unique/**/*.err	1	355	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c42_prio_then_unique/**/*.out	1	36	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c42_prio_then_unique/**/*.sv	1	227	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c43_multifile/**/*.err	2	711	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c43_multifile/**/*.out	2	76	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c43_multifile/**/*.sv	2	307	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c44_parse_err/**/*.err	2	454	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c44_parse_err/**/*.out	2	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c44_parse_err/**/*.sv	1	117	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c45_ifdef_out/**/*.err	2	613	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c45_ifdef_out/**/*.out	2	72	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c45_ifdef_out/**/*.sv	1	176	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c46_macro/**/*.err	1	355	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c46_macro/**/*.out	1	36	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c46_macro/**/*.sv	1	181	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c47_timescale_werror/**/*.err	1	256	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c47_timescale_werror/**/*.out	1	36	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c47_timescale_werror/**/*.sv	1	169	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c49_examples/**/*.err	8	224	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c49_examples/**/*.out	8	1944	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c49_examples/**/*.rc	8	16	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c49_examples/**/*.sv	4	7101	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c49_examples/**/*.vcd	8	9376	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c50_worklib/**/*.err	10	1132	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c50_worklib/**/*.out	8	88	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c50_worklib/**/*.rc	8	16	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c50_worklib/**/*.sv	6	1239	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	g/c50_worklib/**/*.txt	2	222	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c51_constraint_unique/**/*.err	4	752	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c51_constraint_unique/**/*.out	4	80	vita output of a vita-only cell (no oracle run)
+no-oracle-output	g/c51_constraint_unique/**/*.sv	2	357	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	lanes/post/**	54	6954	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post/**/*.err	3	510	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post/**/*.out	3	44	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post/**/*.rc	3	6	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post/**/*.sv	23	10467	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	lanes/post/**/*.vcd	4	4688	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post2/**	54	6954	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post2/**/*.err	3	510	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post2/**/*.out	3	44	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post2/**/*.rc	3	6	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/post2/**/*.sv	23	10467	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	lanes/post2/**/*.vcd	4	4688	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/pre/**	54	3839	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/pre/**/*.err	3	183	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/pre/**/*.out	3	44	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/pre/**/*.rc	3	6	vita output of a vita-only cell (no oracle run)
+no-oracle-output	lanes/pre/**/*.sv	23	10467	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	lanes/pre/**/*.vcd	4	4688	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r1/sound/**/*.sv	16	2692	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	r2/cells/**/*.sv	1	241	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	r3/c03_class_only.sv	1	111	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	r3/c44.sv	1	117	SV never run on an oracle (vita-only probe / lane / soundness cell; see GROUNDING G3-G7, r1/sound/REPORT.md)
+no-oracle-output	r3/class_only.post2.err	1	533	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/class_only.post2.out	1	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/class_only.post2.rc	1	2	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/class_only.pre.err	1	192	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/class_only.pre.out	1	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/class_only.pre.rc	1	2	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.post2.err	1	115	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.post2.out	1	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.post2.rc	1	2	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.pre.err	1	115	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.pre.out	1	0	vita output of a vita-only cell (no oracle run)
+no-oracle-output	r3/syntax.pre.rc	1	2	vita output of a vita-only cell (no oracle run)
+repo-copy	mut/src/**	1392	22946763	repo snapshot copy (Cargo.toml + crates/)
+repo-copy	probe_src/**	1397	22921030	repo snapshot copy (Cargo.toml + crates/)
+repo-copy	r1/sound/mut2/src/**	1392	22946806	repo snapshot copy (Cargo.toml + crates/)
+repo-copy	r1/sound/mut_latch/src/**	1398	22948185	repo snapshot copy (Cargo.toml + crates/)
+run-metadata	g4_files.txt	1	615	file lists, ibex site census, timestamps, done markers
+run-metadata	g4_ibex_sites.txt	1	8498	file lists, ibex site census, timestamps, done markers
+run-metadata	lanes/**	3	15	file lists, ibex site census, timestamps, done markers
+run-metadata	r1/**	2	22	file lists, ibex site census, timestamps, done markers
+run-metadata	r1/**/*.log	1	0	file lists, ibex site census, timestamps, done markers
+run-metadata	r1/**/*.rc	1	2	file lists, ibex site census, timestamps, done markers
+run-metadata	r1/**/*.txt	1	333	file lists, ibex site census, timestamps, done markers
+rust-patch-or-test-draft	r1/sound/**/*.diff	1	27388	saved Rust patch / diff / source snapshot
+rust-patch-or-test-draft	r1/sound/**/*.orig	2	117666	saved Rust patch / diff / source snapshot
+rust-patch-or-test-draft	slice.patch	1	46893	saved Rust patch / diff / source snapshot
+rust-patch-or-test-draft	slice2.patch	1	49321	saved Rust patch / diff / source snapshot
+rust-patch-or-test-draft	slice3.patch	1	51114	saved Rust patch / diff / source snapshot
+script	assemble.sh	1	399	analysis / mutation / assembly script (not a runner)
+script	battery.sh	1	1481	analysis / mutation / assembly script (not a runner)
+script	mutate.py	1	7410	analysis / mutation / assembly script (not a runner)
+script	run_ibex.sh	1	500	analysis / mutation / assembly script (not a runner)
+third-party	g/c40_ibex/**	8	13429	vita PRE/probe outputs of the ibex corpus run (corpus workload)
+verilator-build-log	doc_ex/vl.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	docs_cells/n06/**/*.cout	1	0	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c01_ucasez/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c02_u0casez/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c03_ucase/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c04_u0case/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c05_uif/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c06_u0if/**/*.cout	1	4408	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c07_pcase/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c08_pif/**/*.cout	1	4408	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c09_ucase_noovl/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c10_func/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c11_task/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c12_class/**/*.cout	1	4513	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c13_uninst/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c13b_uninst_top/**/*.cout	1	4408	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c14_gen_untaken/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c15_pkgfn/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c16_two_sites/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c17_uncalled_fn/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c18_ucase_default/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c19_always_comb/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c20_inside/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c21_noovl_if/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c22_priority_only_noovl/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c23_two_unique_noovl/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c24_two_inst/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c25_multiline/**/*.cout	1	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	g/c52_include/**/*.cout	1	3412	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	r1/diff/**	5	22170	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	r2/p0/**/*.cout	3	4409	verilator compile stdout with no diagnostic line (c++ build commands only)
+verilator-build-log	r2/prog/**/*.cout	4	16734	verilator compile stdout with no diagnostic line (c++ build commands only)
+vita-obs-json	g/c41_lanes/**/*.json	2	2840	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	g/c41_lanes/**/*.jsonl	2	266	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/post/**/*.json	1	1420	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/post/**/*.jsonl	1	133	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/post2/**/*.json	1	1420	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/post2/**/*.jsonl	1	133	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/pre/**/*.json	1	1420	vita run.json / results.jsonl of vita-only lane runs
+vita-obs-json	lanes/pre/**/*.jsonl	1	133	vita run.json / results.jsonl of vita-only lane runs
+vita-staged	g/c30_staged/**/*.velab	1	730	vita staged artefact / work-library manifest
+vita-staged	g/c30_staged/**/*.vu	2	2254	vita staged artefact / work-library manifest
+vita-staged	g/c31_trace/**/*.velab	10	5315	vita staged artefact / work-library manifest
+vita-staged	g/c31_trace/**/*.vu	10	7692	vita staged artefact / work-library manifest
+vita-staged	g/c41_lanes/**/*.velab	1	720	vita staged artefact / work-library manifest
+vita-staged	g/c41_lanes/**/*.vu	1	1057	vita staged artefact / work-library manifest
+vita-staged	g/c48_lanes2/**/*.velab	1	720	vita staged artefact / work-library manifest
+vita-staged	g/c48_lanes2/**/*.vu	1	1057	vita staged artefact / work-library manifest
+vita-staged	g/c50_worklib/**/*.toml	4	2204	vita staged artefact / work-library manifest
+vita-staged	g/c50_worklib/**/*.velab	4	4342	vita staged artefact / work-library manifest
+vita-staged	g/c50_worklib/**/*.vu	8	5688	vita staged artefact / work-library manifest
+vita-staged	lanes/post/**/*.toml	1	551	vita staged artefact / work-library manifest
+vita-staged	lanes/post/**/*.velab	3	2518	vita staged artefact / work-library manifest
+vita-staged	lanes/post/**/*.vu	4	3536	vita staged artefact / work-library manifest
+vita-staged	lanes/post2/**/*.toml	1	551	vita staged artefact / work-library manifest
+vita-staged	lanes/post2/**/*.velab	3	2513	vita staged artefact / work-library manifest
+vita-staged	lanes/post2/**/*.vu	4	3536	vita staged artefact / work-library manifest
+vita-staged	lanes/pre/**/*.toml	1	551	vita staged artefact / work-library manifest
+vita-staged	lanes/pre/**/*.velab	3	2518	vita staged artefact / work-library manifest
+vita-staged	lanes/pre/**/*.vu	4	3536	vita staged artefact / work-library manifest
+vita-staged	r1/diff/**/*.velab	3	5841	vita staged artefact / work-library manifest
+vita-staged	r1/diff/**/*.vu	20	20136	vita staged artefact / work-library manifest
+vita-staged	r1/sound/**/*.velab	5	2318	vita staged artefact / work-library manifest
+vita-staged	r1/sound/**/*.vu	6	3820	vita staged artefact / work-library manifest
+vvp	doc_ex/a.vvp	1	1706	iverilog compiled image
+vvp	docs_cells/n06/**/*.vvp	1	1722	iverilog compiled image
+vvp	g/c01_ucasez/**/*.vvp	1	1816	iverilog compiled image
+vvp	g/c02_u0casez/**/*.vvp	1	1716	iverilog compiled image
+vvp	g/c03_ucase/**/*.vvp	1	1816	iverilog compiled image
+vvp	g/c04_u0case/**/*.vvp	1	1716	iverilog compiled image
+vvp	g/c07_pcase/**/*.vvp	1	1816	iverilog compiled image
+vvp	g/c09_ucase_noovl/**/*.vvp	1	2140	iverilog compiled image
+vvp	g/c10_func/**/*.vvp	1	2372	iverilog compiled image
+vvp	g/c11_task/**/*.vvp	1	2116	iverilog compiled image
+vvp	g/c12_class/**/*.vvp	1	2680	iverilog compiled image
+vvp	g/c13_uninst/**/*.vvp	1	2235	iverilog compiled image
+vvp	g/c13b_uninst_top/**/*.vvp	1	1292	iverilog compiled image
+vvp	g/c14_gen_untaken/**/*.vvp	1	1458	iverilog compiled image
+vvp	g/c15_pkgfn/**/*.vvp	1	2437	iverilog compiled image
+vvp	g/c16_two_sites/**/*.vvp	1	2268	iverilog compiled image
+vvp	g/c17_uncalled_fn/**/*.vvp	1	2146	iverilog compiled image
+vvp	g/c18_ucase_default/**/*.vvp	1	1781	iverilog compiled image
+vvp	g/c19_always_comb/**/*.vvp	1	1956	iverilog compiled image
+vvp	g/c22_priority_only_noovl/**/*.vvp	1	1781	iverilog compiled image
+vvp	g/c23_two_unique_noovl/**/*.vvp	1	2242	iverilog compiled image
+vvp	g/c24_two_inst/**/*.vvp	1	3076	iverilog compiled image
+vvp	g/c25_multiline/**/*.vvp	1	1816	iverilog compiled image
+vvp	g/c52_include/**/*.vvp	1	2386	iverilog compiled image
+vvp	r1/diff/**/*.vvp	20	49363	iverilog compiled image
+vvp	r1/sound/**/*.vvp	3	6093	iverilog compiled image
+vvp	r2/p0/**/*.vvp	1	1174	iverilog compiled image
+vvp	r2/prog/**/*.vvp	2	2895	iverilog compiled image

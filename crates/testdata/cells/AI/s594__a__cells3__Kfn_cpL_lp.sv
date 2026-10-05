@@ -1,0 +1,8 @@
+`timescale 1ns/1ns
+module t;
+  localparam logic signed [7:0] X = -4;
+  function automatic int fk(input int a); logic [3:0] r; fk = ((X + {2{r}}) == 8'hFC); endfunction
+  localparam L = fk(2);
+  initial #1 $display("L=%0d", L);
+  initial #40 $finish;
+endmodule

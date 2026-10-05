@@ -1,0 +1,36 @@
+## census/z/Z04.sv
+  POST : Z04.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+  POST : errors=1 warnings=0 notes=0
+  POST : rc=1
+  NEW  : Z04 1
+  NEW  : simulation ended (Finish) at time 1
+  NEW  : errors=0 warnings=0 notes=0
+  NEW  : rc=0
+## census/z/Z05.sv
+  POST : Z05 0 1
+  NEW  : Z05 1 0
+## fx/F17a.sv
+  POST : F17a.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+  POST : errors=1 warnings=0 notes=0
+  POST : rc=1
+  NEW  : L 1
+  NEW  : simulation ended (Finish) at time 0
+  NEW  : errors=0 warnings=0 notes=0
+  NEW  : rc=0
+## fx/F17b.sv
+  POST : F17b.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: 4'b0?00 has no constant-fold arm [in t]
+  POST : errors=1 warnings=0 notes=0
+  POST : rc=1
+  NEW  : L 1
+  NEW  : simulation ended (Finish) at time 0
+  NEW  : errors=0 warnings=0 notes=0
+  NEW  : rc=0
+## fx/G1.sv
+  POST : G1.sv:4:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L3` value is not a constant: 4'b0?00 has no constant-fold arm [in t]
+  POST : errors=1 warnings=0 notes=0
+  POST : rc=1
+  NEW  : G1 1 0 5
+  NEW  : simulation ended (Finish) at time 1
+  NEW  : errors=0 warnings=0 notes=0
+  NEW  : rc=0
+files 164 changed 5

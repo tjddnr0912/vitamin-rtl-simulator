@@ -1,0 +1,88 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P10b
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P10b.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: more loud->wrong
+verdict_source: s580/lens_diff/REPORT.md:28
+notes: R4 cmp3_post4 bucket(s): pre×1,neither×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P10b.iv.txt | 92 bytes
+L30 1
+L31 1
+R30 1
+R31 1
+R32 1
+R33 1
+G30 1
+OV 2
+P10b.sv:19: $finish called at 1000 (1s)
+rc=0
+=== block 2 | vita [POST] | ./P10b.post.txt | 218 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L30 0
+L31 0
+R30 1
+R31 1
+R32 1
+R33 1
+G30 1
+OV 8
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 3 | vita [POST] | ./P10b.postq.txt | 218 bytes | identical to block 2
+=== block 4 | vita [POST] | r2/lens/diff_P10b.post.txt | 218 bytes
+L30 0
+L31 0
+R30 1
+R31 1
+R32 1
+R33 1
+G30 1
+OV 8
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | r2/lens/diff_P10b.postq.txt | 218 bytes | identical to block 4
+=== block 6 | vita [POST2] | r2/lens/diff_P10b.post2.txt | 218 bytes
+L30 1
+L31 1
+R30 1
+R31 1
+R32 1
+R33 1
+G30 1
+OV 2
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST2] | r2/lens/diff_P10b.post2q.txt | 218 bytes | identical to block 6
+=== block 8 | vita [PRE] | ./P10b.pre.txt | 409 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P10b.sv:9:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L30` value is not a constant: 8'b1111_1?00 has no constant-fold arm [in t]
+P10b.sv:10:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L31` value is not a constant: 8'b1111_111? has no constant-fold arm [in t]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 9 | vita [PRE] | ./P10b.preq.txt | 218 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L30 0
+L31 0
+R30 1
+R31 1
+R32 0
+R33 0
+G30 0
+OV 8
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== end

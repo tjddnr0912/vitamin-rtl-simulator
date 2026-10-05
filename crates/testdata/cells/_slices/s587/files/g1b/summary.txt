@@ -1,0 +1,228 @@
+b_cl_case_M                  VITA: VITA-E2002 expected a plain data member or method (N7 MVP does not support rand/r|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected ')', found '#'|VITA-E2002 expected ';', found '#'|VITA-E2002 expected expression, found ')'|VITA-E2002 expected statement, found '::'|rc=1|
+                             IVL : b_cl_case_M.sv:6: syntax error|b_cl_case_M.sv:6: error: Invalid module item.|b_cl_case_M.sv:7: syntax error|b_cl_case_M.sv:7: error: Invalid module item.|
+                             VL  : P=7|rc=0|
+b_cl_if_M                    VITA: VITA-E2002 expected a plain data member or method (N7 MVP does not support rand/r|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected ')', found '#'|VITA-E2002 expected ';', found '#'|VITA-E2002 expected expression, found ')'|VITA-E2002 expected statement, found '::'|rc=1|
+                             IVL : b_cl_if_M.sv:4: syntax error|b_cl_if_M.sv:4: Syntax in assignment statement l-value.|b_cl_if_M.sv:6: syntax error|b_cl_if_M.sv:6: error: Invalid module item.|
+                             VL  : P=7|rc=0|
+b_cl_if_N                    VITA: VITA-E2002 expected a plain data member or method (N7 MVP does not support rand/r|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected ')', found '#'|VITA-E2002 expected ';', found '#'|VITA-E2002 expected expression, found ')'|VITA-E2002 expected statement, found '::'|rc=1|
+                             IVL : b_cl_if_N.sv:4: syntax error|b_cl_if_N.sv:4: Syntax in assignment statement l-value.|b_cl_if_N.sv:6: syntax error|b_cl_if_N.sv:6: error: Invalid module item.|
+                             VL  : P=10|rc=0|
+b_cl_pif_M                   VITA: VITA-E2002 expected a plain data member or method (N7 MVP does not support rand/r|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected class member (data member or `function`/`task` method), found|VITA-E2002 expected ')', found '#'|VITA-E2002 expected ';', found '#'|VITA-E2002 expected expression, found ')'|VITA-E2002 expected statement, found '::'|rc=1|
+                             IVL : b_cl_pif_M.sv:4: syntax error|b_cl_pif_M.sv:4: Syntax in assignment statement l-value.|b_cl_pif_M.sv:6: syntax error|b_cl_pif_M.sv:6: error: Invalid module item.|
+                             VL  : P=7|rc=0|
+b_dp_case_M                  VITA: VITA-E3009 a non-constant override value is unsupported [in top]|rc=1|
+                             IVL : W=7|rc=0|
+                             VL  : W=7|rc=0|
+b_dp_if_M                    VITA: VITA-E3009 a non-constant override value is unsupported [in top]|rc=1|
+                             IVL : b_dp_if_M.sv:8: syntax error|b_dp_if_M.sv:8: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=7|rc=0|
+b_dp_if_N                    VITA: W=10|rc=0|
+                             IVL : b_dp_if_N.sv:8: syntax error|b_dp_if_N.sv:8: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=10|rc=0|
+b_dp_pif_M                   VITA: VITA-E3009 a non-constant override value is unsupported [in top]|rc=1|
+                             IVL : b_dp_pif_M.sv:8: syntax error|b_dp_pif_M.sv:8: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=7|rc=0|
+b_en_case_M                  VITA: VITA-E3009 enum label `A` value is not a foldable constant [in top]|rc=1|
+                             IVL : b_en_case_M.sv:6: error: No function named `f' found in this context (top).|b_en_case_M.sv:6: error: Enumeration expression for A is not an integer constant.|3 error(s) during elaboration.|rc=3|
+                             VL  : A=7|rc=0|
+b_en_if_M                    VITA: VITA-E3009 enum label `A` value is not a foldable constant [in top]|rc=1|
+                             IVL : b_en_if_M.sv:4: syntax error|b_en_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : A=7|rc=0|
+b_en_if_N                    VITA: A=10|rc=0|
+                             IVL : b_en_if_N.sv:4: syntax error|b_en_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : A=10|rc=0|
+b_en_pif_M                   VITA: VITA-E3009 enum label `A` value is not a foldable constant [in top]|rc=1|
+                             IVL : b_en_pif_M.sv:4: syntax error|b_en_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : A=7|rc=0|
+b_gc_case_M                  VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : gc=7|rc=0|
+                             VL  : gc=7|rc=0|
+b_gc_if_M                    VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_gc_if_M.sv:4: syntax error|b_gc_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gc=7|rc=0|
+b_gc_if_N                    VITA: rc=0|
+                             IVL : b_gc_if_N.sv:4: syntax error|b_gc_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gc=other|rc=0|
+b_gc_pif_M                   VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_gc_pif_M.sv:4: syntax error|b_gc_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gc=7|rc=0|
+b_gf_case_M                  VITA: VITA-E2002 expected a constant generate-array index (decimal literal or literal-v|rc=1|
+                             IVL : b_gf_case_M.sv:9: error: Scope index expression is not constant: (f('sd2))-('sd1)|b_gf_case_M.sv:9: XXXXX: Errors evaluating scope index|b_gf_case_M.sv:9: error: Scope index expression is not constant: (f('sd2))-('sd1)|b_gf_case_M.sv:9: XXXXX: Errors evaluating scope index|
+                             VL  : %Error: b_gf_case_M.sv:9:51: Can't find definition of 'K' in dotted signal: 'g.K'|%Error: Exiting due to 1 error(s)|build_rc=1|
+b_gf_if_M                    VITA: VITA-E2002 expected a constant generate-array index (decimal literal or literal-v|rc=1|
+                             IVL : b_gf_if_M.sv:4: syntax error|b_gf_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Error: b_gf_if_M.sv:9:51: Can't find definition of 'K' in dotted signal: 'g.K'|%Error: Exiting due to 1 error(s)|build_rc=1|
+b_gf_if_N                    VITA: VITA-E2002 expected a constant generate-array index (decimal literal or literal-v|rc=1|
+                             IVL : b_gf_if_N.sv:4: syntax error|b_gf_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Error: b_gf_if_N.sv:9:51: Can't find definition of 'K' in dotted signal: 'g.K'|%Error: Exiting due to 1 error(s)|build_rc=1|
+b_gf_pif_M                   VITA: VITA-E2002 expected a constant generate-array index (decimal literal or literal-v|rc=1|
+                             IVL : b_gf_pif_M.sv:4: syntax error|b_gf_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Error: b_gf_pif_M.sv:9:51: Can't find definition of 'K' in dotted signal: 'g.K'|%Error: Exiting due to 1 error(s)|build_rc=1|
+b_gi_case_M                  VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : gi=7|rc=0|
+                             VL  : gi=7|rc=0|
+b_gi_if_M                    VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_gi_if_M.sv:4: syntax error|b_gi_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gi=7|rc=0|
+b_gi_if_N                    VITA: rc=0|
+                             IVL : b_gi_if_N.sv:4: syntax error|b_gi_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gi=other|rc=0|
+b_gi_pif_M                   VITA: VITA-E3010 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_gi_pif_M.sv:4: syntax error|b_gi_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : gi=7|rc=0|
+b_gl_case_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top.gb]|VITA-E3010 undeclared hierarchical name `gb.P` (no such cross-instance net or par|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_gl_if_M                    VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top.gb]|VITA-E3010 undeclared hierarchical name `gb.P` (no such cross-instance net or par|rc=1|
+                             IVL : b_gl_if_M.sv:4: syntax error|b_gl_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_gl_if_N                    VITA: P=10|rc=0|
+                             IVL : b_gl_if_N.sv:4: syntax error|b_gl_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_gl_pif_M                   VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top.gb]|VITA-E3010 undeclared hierarchical name `gb.P` (no such cross-instance net or par|rc=1|
+                             IVL : b_gl_pif_M.sv:4: syntax error|b_gl_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_loop_case_M                VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_loop_if_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_loop_if_M.sv:5: syntax error|b_loop_if_M.sv:5: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_loop_if_N                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_loop_if_N.sv:5: syntax error|b_loop_if_N.sv:5: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_loop_pif_M                 VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_loop_pif_M.sv:5: syntax error|b_loop_pif_M.sv:5: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_nest_case_M                VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=8|rc=0|
+                             VL  : P=8|rc=0|
+b_nest_if_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_nest_if_M.sv:4: syntax error|b_nest_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=8|rc=0|
+b_nest_if_N                  VITA: P=11|rc=0|
+                             IVL : b_nest_if_N.sv:4: syntax error|b_nest_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=11|rc=0|
+b_nest_pif_M                 VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_nest_pif_M.sv:4: syntax error|b_nest_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=8|rc=0|
+b_ov_case_M                  VITA: VITA-E3009 the override of parameter `W` is not a constant, so the declared defau|rc=1|
+                             IVL : W=7|rc=0|
+                             VL  : W=7|rc=0|
+b_ov_if_M                    VITA: VITA-E3009 the override of parameter `W` is not a constant, so the declared defau|rc=1|
+                             IVL : b_ov_if_M.sv:7: syntax error|b_ov_if_M.sv:7: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=7|rc=0|
+b_ov_if_N                    VITA: W=10|rc=0|
+                             IVL : b_ov_if_N.sv:7: syntax error|b_ov_if_N.sv:7: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=10|rc=0|
+b_ov_pif_M                   VITA: VITA-E3009 the override of parameter `W` is not a constant, so the declared defau|rc=1|
+                             IVL : b_ov_pif_M.sv:7: syntax error|b_ov_pif_M.sv:7: Syntax in assignment statement l-value.|rc=2|
+                             VL  : W=7|rc=0|
+b_pa_case_M                  VITA: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [a|rc=0|
+                             IVL : rc=1|
+                             VL  : A0=7|rc=0|
+b_pa_if_M                    VITA: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [a|rc=0|
+                             IVL : b_pa_if_M.sv:4: syntax error|b_pa_if_M.sv:4: Syntax in assignment statement l-value.|rc=3|
+                             VL  : A0=7|rc=0|
+b_pa_if_N                    VITA: rc=0|
+                             IVL : b_pa_if_N.sv:4: syntax error|b_pa_if_N.sv:4: Syntax in assignment statement l-value.|rc=3|
+                             VL  : A0=10|rc=0|
+b_pa_pif_M                   VITA: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [a|rc=0|
+                             IVL : b_pa_pif_M.sv:4: syntax error|b_pa_pif_M.sv:4: Syntax in assignment statement l-value.|rc=3|
+                             VL  : A0=7|rc=0|
+b_pk_case_M                  VITA: VITA-E3009 package parameter `P` value is not a foldable constant [in pk]|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_pk_if_M                    VITA: VITA-E3009 package parameter `P` value is not a foldable constant [in pk]|rc=1|
+                             IVL : b_pk_if_M.sv:4: syntax error|b_pk_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pk_if_N                    VITA: VITA-E3009 package parameter `P` value is not a foldable constant [in pk]|rc=1|
+                             IVL : b_pk_if_N.sv:4: syntax error|b_pk_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_pk_pif_M                   VITA: VITA-E3009 package parameter `P` value is not a foldable constant [in pk]|rc=1|
+                             IVL : b_pk_pif_M.sv:4: syntax error|b_pk_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pki_case_M                 VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_pki_if_M                   VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pki_if_M.sv:4: syntax error|b_pki_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pki_if_N                   VITA: P=10|rc=0|
+                             IVL : b_pki_if_N.sv:4: syntax error|b_pki_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_pki_pif_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pki_pif_M.sv:4: syntax error|b_pki_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pkx_case_M                 VITA: VITA-E3009 `pk.f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_pkx_if_M                   VITA: VITA-E3009 `pk.f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pkx_if_M.sv:4: syntax error|b_pkx_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pkx_if_N                   VITA: P=10|rc=0|
+                             IVL : b_pkx_if_N.sv:4: syntax error|b_pkx_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_pkx_pif_M                  VITA: VITA-E3009 `pk.f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pkx_pif_M.sv:4: syntax error|b_pkx_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pp_case_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=7|rc=0|
+                             VL  : P=7|rc=0|
+b_pp_if_M                    VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pp_if_M.sv:4: syntax error|b_pp_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pp_if_N                    VITA: P=10|rc=0|
+                             IVL : b_pp_if_N.sv:4: syntax error|b_pp_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=10|rc=0|
+b_pp_pif_M                   VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_pp_pif_M.sv:4: syntax error|b_pp_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=7|rc=0|
+b_pr_case_M                  VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : bits=8|rc=0|
+                             VL  : bits=8|rc=0|
+b_pr_if_M                    VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_pr_if_M.sv:4: syntax error|b_pr_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : bits=8|rc=0|
+b_pr_if_N                    VITA: rc=0|
+                             IVL : b_pr_if_N.sv:4: syntax error|b_pr_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : bits=11|rc=0|
+b_pr_pif_M                   VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_pr_pif_M.sv:4: syntax error|b_pr_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : bits=8|rc=0|
+b_pw_case_M                  VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_pw_case_M.sv:10: warning: Port 1 (p) of module sub expects 8 bit(s), given 16.|b_pw_case_M.sv:10:        : Pruning 8 high bits of the expression.|pw=8|rc=0|
+                             VL  : %Warning-WIDTHTRUNC: b_pw_case_M.sv:10:10: Input port connection 'p' expects 8 bits on the|pw=8|rc=0|
+b_pw_if_M                    VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_pw_if_M.sv:4: syntax error|b_pw_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Warning-WIDTHTRUNC: b_pw_if_M.sv:10:10: Input port connection 'p' expects 8 bits on the p|pw=8|rc=0|
+b_pw_if_N                    VITA: rc=0|
+                             IVL : b_pw_if_N.sv:4: syntax error|b_pw_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Warning-WIDTHTRUNC: b_pw_if_N.sv:10:10: Input port connection 'p' expects 11 bits on the |pw=11|rc=0|
+b_pw_pif_M                   VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_pw_pif_M.sv:4: syntax error|b_pw_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : %Warning-WIDTHTRUNC: b_pw_pif_M.sv:10:10: Input port connection 'p' expects 8 bits on the |pw=8|rc=0|
+b_sf_case_M                  VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : P=3|rc=0|
+                             VL  : P=3|rc=0|
+b_sf_if_M                    VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_sf_if_M.sv:4: syntax error|b_sf_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=3|rc=0|
+b_sf_if_N                    VITA: P=4|rc=0|
+                             IVL : b_sf_if_N.sv:4: syntax error|b_sf_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=4|rc=0|
+b_sf_pif_M                   VITA: VITA-E3009 `f(…)` has no constant-fold arm [in top]|rc=1|
+                             IVL : b_sf_pif_M.sv:4: syntax error|b_sf_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : P=3|rc=0|
+b_ur_case_M                  VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : size=7|rc=0|
+                             VL  : size=7|rc=0|
+b_ur_if_M                    VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_ur_if_M.sv:4: syntax error|b_ur_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : size=7|rc=0|
+b_ur_if_N                    VITA: rc=0|
+                             IVL : b_ur_if_N.sv:4: syntax error|b_ur_if_N.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : size=10|rc=0|
+b_ur_pif_M                   VITA: VITA-E3009 a function call that does not fold to a constant is not allowed in a c|rc=1|
+                             IVL : b_ur_pif_M.sv:4: syntax error|b_ur_pif_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+                             VL  : size=7|rc=0|

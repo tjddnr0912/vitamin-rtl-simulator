@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p7__xSYS_rb
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p7/xSYS_rb.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p7
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p7.summ:535
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./xSYS_rb.ivl | 66 bytes
+xSYS_rb.sv:4: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./xSYS_rb.vl | 143 bytes
+%Error: xSYS_rb.sv:4:85: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./xSYS_rb.s2v | 53 bytes
+vb=x
+xSYS_rb.s2v.v:11: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./xSYS_rb.cut | 74 bytes
+vb=5
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./xSYS_rb.cut.route | 13 bytes
+t fx frame 0
+=== block 6 | vita [pre] | ./xSYS_rb.pre | 175 bytes
+xSYS_rb.sv:4:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$clog2` that is not a constant here is not allowed in a constant range bound [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== end

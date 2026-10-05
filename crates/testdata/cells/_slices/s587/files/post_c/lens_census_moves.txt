@@ -1,0 +1,86 @@
+cells=262 identical_PRE_b_c=177 plain_twin_changed=0 moved_back_to_PRE=33 still_moved=52 new_move_c_only=0
+BACK r1/diff/atk/u/d01_ia_hdr_shadow
+BACK r1/diff/atk/u/d02_ia_port_shadow
+BACK r1/diff/atk2/u/e02_rt_misc
+BACK r1/sound/c/pkcast_u
+BACK r1/sound/c/pkfml_u
+BACK r1/sound/c/pkimp_u
+BACK r1/sound/c/pkloc_u
+BACK r1/sound/c/pkret_u
+BACK x1/gen_fn_ret_u
+BACK x1/gen_fn_u
+BACK x1/gen_hier_u
+BACK x1/imp_ce_ret_u
+BACK x1/imp_rt_ret_u
+BACK x1/imp_two_pkgs_u
+BACK x1/pk_ce_dflt_u
+BACK x1/pk_ce_ret_u
+BACK x1/pk_fr_loc_u
+BACK x1/pk_rt_cast_u
+BACK x1/pk_rt_fml_u
+BACK x1/pk_rt_loc_u
+BACK x1/pk_rt_psel_u
+BACK x1/pk_rt_rep_u
+BACK x1/pk_rt_ret_u
+BACK x1/pk_wq_u
+BACK x2/x2a_ret4_u
+BACK x2/x2c_local_u
+BACK x2/x2f_callee_u
+BACK x2/x2g_sibling_u
+BACK x2/x2i_integer_u
+BACK x2/x2k_range_u
+BACK x2/x2l_bitwrite_u
+BACK t2/t16_strrep
+BACK t2/t16_strrep_u
+MOVED r1/diff/atk/u/d03_ia_body_lp (pc==pb)
+MOVED r1/diff/atk/u/d04_gen_inst (pc==pb)
+MOVED r1/diff/atk/u/d05_pkg_two_mods (pc==pb)
+MOVED r1/diff/atk/u/d05b_pkg_two_mods_rev (pc==pb)
+MOVED r1/diff/atk/u/d06_nested_callee (pc==pb)
+MOVED r1/diff/atk/u/d08_cast_repeat (pc==pb)
+MOVED r1/diff/atk/u/d09_bodylocal_rtfn (pc==pb)
+MOVED r1/diff/atk/u/d10_xret (pc!=pb)
+MOVED r1/diff/atk/u/d13_overrides (pc==pb)
+MOVED r1/diff/atk/u/d14_topG (pc==pb)
+MOVED r1/diff/atk/u/d19_import_gen (pc==pb)
+MOVED r1/diff/atk/u/d21_returns (pc==pb)
+MOVED r1/diff/atk/u/d22_loopN (pc==pb)
+MOVED r1/diff/atk/u/d24_twice (pc==pb)
+MOVED r1/diff/atk/u/d26_prio_gen_nested (pc==pb)
+MOVED r1/diff/atk/u/d27_twins (pc==pb)
+MOVED r1/diff/atk/u/d30_elab_rt (pc==pb)
+MOVED r1/diff/atk/u/d31_stream_rt (pc==pb)
+MOVED r1/diff/atk/u/d33_enum_rt (pc==pb)
+MOVED r1/diff/atk/u/d34_hier (pc==pb)
+MOVED r1/diff/atk/u/d38_ca (pc==pb)
+MOVED r1/diff/atk/u/d40_wide (pc==pb)
+MOVED r1/diff/atk/u/d41_leak_override (pc==pb)
+MOVED r1/diff/atk/u/z_c_cast_if_M (pc==pb)
+MOVED r1/diff/atk/u/z_c_elabt_if_M (pc==pb)
+MOVED r1/diff/atk/u/z_c_rep2_if_M (pc==pb)
+MOVED r1/diff/atk/u/z_c_rep3_if_M (pc==pb)
+MOVED r1/diff/atk/u/z_c_rep_if_M (pc==pb)
+MOVED r1/diff/atk/u/z_c_strm_if_M (pc==pb)
+MOVED r1/diff/atk2/u/e03_ia_override (pc==pb)
+MOVED r1/diff/atk2/u/e04_ifc (pc==pb)
+MOVED r1/sound/c/ifleak_u (pc==pb)
+MOVED r1/sound/c/nest_u (pc==pb)
+MOVED r1/sound/c/pkrng_u (pc==pb)
+MOVED r1/sound/c/prep_u (pc==pb)
+MOVED r1/sound/c/st19_u (pc==pb)
+MOVED x1/pk_param_u (pc==pb)
+MOVED x2/x2b_ret2_u (pc==pb)
+MOVED x2/x2e_after_u (pc==pb)
+MOVED x2/x2j_bitlocal_u (pc==pb)
+MOVED x2/x2m_order_u (pc==pb)
+MOVED x2/x2n_order2_u (pc==pb)
+MOVED t/t1_params (pc==pb)
+MOVED t/t2_ranges (pc==pb)
+MOVED t/t3_generate (pc==pb)
+MOVED t/t3b_label (pc==pb)
+MOVED t/t4_widths (pc==pb)
+MOVED t/t4b_lsb (pc==pb)
+MOVED t/t4c_negcnt (pc==pb)
+MOVED t/t5_cast (pc==pb)
+MOVED t/t7a_lp_first (pc==pb)
+MOVED t/t7b_rpt_first (pc==pb)

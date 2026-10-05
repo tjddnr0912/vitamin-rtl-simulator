@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__probe__p5
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/probe/p5.sv
+roadmap_row: §3.b unique-const-fn
+set: probe
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/GROUNDING.md:100; oracle only quoted in a doc (s587/GROUNDING.md:100)
+blocks: 0
+=== end

@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__Z5d_ca_nosh
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/Z5d_ca_nosh.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+notes: named at s592/COMMIT_DOCS.txt:67
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Z5d_ca_nosh.iv.txt | 266 bytes
+Z5d_ca_nosh.sv:4: error: Unable to bind wire/reg/memory `K' in `top.gb'
+Z5d_ca_nosh.sv:6:      : A symbol with that name was declared here. Check for declaration after use.
+Z5d_ca_nosh.sv:4: error: Unable to elaborate r-value: K
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Z5d_ca_nosh.vl.txt | 231 bytes
+@w=8
+- Z5d_ca_nosh.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 499.999 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Z5d_ca_nosh.vlb.txt | 4433 bytes
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vtop.cpp Vtop___024root__0.cpp Vtop__main.cpp Vtop___024root__Slow.cpp Vtop___024root__0__Slow.cpp Vtop__Syms__Slow.cpp > Vtop__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vtop__ALL.o Vtop__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vtop__ALL.a    -pthread -lpthread   -o Vtop
+rm Vtop__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.033 MB sources in 2 modules, into 0.029 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.710 s (elab=0.000, cvt=0.002, bld=4.700); cpu 0.009 s on 1 threads; allocated 10.109 MB
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Z5d_ca_nosh.sv.txt | 59 bytes
+@w=8
+Z5d_ca_nosh.sv2v.v:12: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_a] | ./Z5d_ca_nosh.post.txt | 174 bytes
+@w=8
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_b] | ./Z5d_ca_nosh.post_b.txt | 174 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./Z5d_ca_nosh.post_c.txt | 174 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./Z5d_ca_nosh.post_d.txt | 174 bytes | identical to block 5
+=== block 9 | vita [postd] | ./Z5d_ca_nosh.postd.txt | 174 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./Z5d_ca_nosh.postd2.txt | 174 bytes | identical to block 5
+=== block 11 | vita [postd3] | ./Z5d_ca_nosh.postd3.txt | 174 bytes | identical to block 5
+=== block 12 | vita [postd4] | ./Z5d_ca_nosh.postd4.txt | 174 bytes | identical to block 5
+=== block 13 | vita [pre] | ./Z5d_ca_nosh.pre.txt | 174 bytes | identical to block 5
+=== end

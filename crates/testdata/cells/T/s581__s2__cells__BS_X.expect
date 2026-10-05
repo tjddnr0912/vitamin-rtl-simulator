@@ -1,0 +1,32 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__s2__cells__BS_X
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/s2/cells/BS_X.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: s2
+oracles_present: iverilog,sv2v
+vita_tags: POST2,POST3,POST,PRE
+verdict: unchanged
+verdict_source: s581/S2_matrix.tsv:49
+alias: lens_diff3/s2c/cells/BS_X (byte-identical source) verdict: unchanged verdict_source: s581/S2_matrix.tsv:49
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./BS_X.iv.txt | 19 bytes
+BS_X default
+
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./BS_X.sv.txt | 19 bytes | identical to block 1
+=== block 3 | vita [POST] | ./BS_X.post.txt | 165 bytes
+BS_X.sv:3:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+
+rc=1
+=== block 4 | vita [POST2] | ./BS_X.p2.txt | 165 bytes | identical to block 3
+=== block 5 | vita [POST3] | ./BS_X.p3.txt | 165 bytes | identical to block 3
+=== block 6 | vita [POST3b] | lens_diff3/s2c/cells/BS_X.post3b.txt | 165 bytes | identical to block 3
+=== block 7 | vita [PRE] | ./BS_X.pre.txt | 165 bytes | identical to block 3
+=== end

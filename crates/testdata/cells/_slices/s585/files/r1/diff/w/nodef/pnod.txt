@@ -1,0 +1,8 @@
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t=1 chain r=0
+b00_repro.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 single r=0
+b00_repro.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio r=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0

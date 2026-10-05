@@ -1,0 +1,53 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__i__probe__T3n_rpt
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/i/probe/T3n_rpt.sv
+roadmap_row: §2 🆕 AI
+set: i/probe
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3r,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s594/IMPL.md:36
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3r: md5 ca572e0c4873c3903ceb48545e4d814b commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./T3n_rpt.ivl | 235 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 53975 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp
+rc=142
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./T3n_rpt.vl | 571 bytes
+%Warning-WIDTHEXPAND: T3n_rpt.sv:5:73: Operator ADD expects 32 bits on the LHS, but LHS's VARREF 'r' generates 8 bits.
+%Warning-WIDTHTRUNC: T3n_rpt.sv:5:69: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's ADD generates 32 bits.
+%Warning-WIDTHEXPAND: T3n_rpt.sv:7:34: Bit extraction of var[7:0] requires 3 bit index, not 2 bits.
+k=3
+- T3n_rpt.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ns; walltime 0.000 s; speed 2.353 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./T3n_rpt.s2v | 239 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 55054 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp
+rc=142
+=== block 4 | vita [d1] | ./T3n_rpt.d1 | 74 bytes
+k=0
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./T3n_rpt.d3 | 74 bytes | identical to block 4
+=== block 6 | vita [p3r] | ./T3n_rpt.p3r | 74 bytes
+k=3
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [pa] | ./T3n_rpt.pa | 74 bytes | identical to block 4
+=== block 8 | vita [pb] | ./T3n_rpt.pb | 74 bytes | identical to block 4
+=== block 9 | vita [pre] | ./T3n_rpt.pre | 74 bytes | identical to block 4
+=== block 10 | vita [pre] | ./T3n_rpt.pre.route | 13 bytes
+t fl frame 1
+=== block 11 | vita [pre594] | ./T3n_rpt.pre594 | 74 bytes | identical to block 4
+=== end

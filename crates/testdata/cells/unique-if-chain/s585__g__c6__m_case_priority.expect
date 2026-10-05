@@ -1,0 +1,114 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c6__m_case_priority
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c6/m_case_priority.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c6
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g__m_case_priority m_case_priority
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/m_case_priority.out | 2377 bytes
+##### m_case_priority
+=== verilator compile rc=0 run rc=0
+[1] %Error: m_case_priority.sv:5: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=1 case done
+[2] %Error: m_case_priority.sv:10: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=2 casez done
+[3] %Error: m_case_priority.sv:15: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=3 casex done
+t=4 case-match done
+- m_case_priority.sv:25: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+WARNING: m_case_priority.sv:5: value is unhandled for priority or unique case statement
+         Time: 1  Scope: top
+t=1 case done
+WARNING: m_case_priority.sv:10: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+t=2 casez done
+WARNING: m_case_priority.sv:15: value is unhandled for priority or unique case statement
+         Time: 3  Scope: top
+t=3 casex done
+t=4 case-match done
+m_case_priority.sv:25: $finish called at 5 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+m_case_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 case done
+m_case_priority.sv:10:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 casez done
+m_case_priority.sv:15:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 casex done
+t=4 case-match done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+m_case_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 case done
+m_case_priority.sv:10:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 casez done
+m_case_priority.sv:15:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 casex done
+t=4 case-match done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__m_case_priority.out | 2380 bytes
+##### g__m_case_priority
+=== verilator compile rc=0 run rc=0
+[1] %Error: m_case_priority.sv:5: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=1 case done
+[2] %Error: m_case_priority.sv:10: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=2 casez done
+[3] %Error: m_case_priority.sv:15: Assertion failed in top: priority case, but non-match found for '2'h0'
+t=3 casex done
+t=4 case-match done
+- m_case_priority.sv:25: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+WARNING: m_case_priority.sv:5: value is unhandled for priority or unique case statement
+         Time: 1  Scope: top
+t=1 case done
+WARNING: m_case_priority.sv:10: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+t=2 casez done
+WARNING: m_case_priority.sv:15: value is unhandled for priority or unique case statement
+         Time: 3  Scope: top
+t=3 casex done
+t=4 case-match done
+m_case_priority.sv:25: $finish called at 5 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+m_case_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 case done
+m_case_priority.sv:10:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 casez done
+m_case_priority.sv:15:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 casex done
+t=4 case-match done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+m_case_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 case done
+m_case_priority.sv:10:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 casez done
+m_case_priority.sv:15:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 casex done
+t=4 case-match done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/m_case_priority.out | 2377 bytes | identical to block 1
+=== end

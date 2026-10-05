@@ -1,0 +1,144 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__diff__cells__f03_force_t0_release_later
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/diff/cells/f03_force_t0_release_later.sv
+roadmap_row: §2 🆕 AB
+set: r3/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,PRE3,POSTC,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTD_JIT: unresolved (no row in the slice META binaries table)
+vita_binary: POSTD_NODEF: unresolved (no row in the slice META binaries table)
+vita_binary: PRE3_SEP: md5 78439b423ee29af2d2a6a5034a4ff409 commit 75f46453
+vita_binary: POSTD_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE2+PRE3+POSTC+POSTD+POSTD_JIT+POSTD_NODEF+PRE3_SEP+POSTD_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/diff/o/f03_force_t0_release_later.out | 2064 bytes
+##### f03_force_t0_release_later
+=== PRE2 (native=interp=vm)
+rc=0
+f t=0 x=x
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== PRE3 (native=interp=vm)
+rc=0
+f t=0 x=x
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== POSTD (native=interp=vm)
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== JIT POSTD native
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== PRODUCT POSTD
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== staged PRE3 vcmp=0 velab=0
+rc=0
+f t=0 x=x
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=0 notes=0
+=== staged POSTD vcmp=0 velab=0
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=0 notes=0
+--- P2=P3 True C=D True P3=D False splitD False vcdCD True jit=D True prod=D True stD True stPair True
+=== iverilog run rc=0
+f t=0 x=1
+ev r=13 t=0
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+f03_force_t0_release_later.sv:17: $finish called at 6 (1s)
+=== verilator run rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=4 x=1
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+- f03_force_t0_release_later.sv:17: Verilog $finish
+f t=6 x=2
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

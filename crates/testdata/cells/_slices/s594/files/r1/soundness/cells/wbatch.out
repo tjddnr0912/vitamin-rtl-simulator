@@ -1,0 +1,108 @@
+== W1
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W1L
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W1s
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W2
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W3
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W5
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W6
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W8
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: L=23
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: L=23
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: L=23
+  VL: L=23
+  S2V: L=23
+== W7
+  PRE: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  PRE: P=65535 B=16
+  PRE: simulation ended (Finish) at time 100
+  PRE: errors=0 warnings=1 notes=0
+  POST: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+  POST: P=65535 B=16
+  POST: simulation ended (Finish) at time 100
+  POST: errors=0 warnings=1 notes=0
+  IVL: P=65535 B=16
+  VL: P=65535 B=16
+  S2V: P=65535 B=8

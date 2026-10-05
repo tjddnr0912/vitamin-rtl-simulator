@@ -1,0 +1,322 @@
+== Si00  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si01
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si02  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si03
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si04
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si05  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si06  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si07  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si08
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si09  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si10  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si11  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si12  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si13
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si14  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si15  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si16  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si17  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si18
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si19  <<VITA-MOVES
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  G 0 | I 0 bits=1 | R 1
+   pt   G 0 | I 0 bits=1 | R 1
+   post G 1 | I 1 bits=2 | R 1
+== Si20  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si21  <<VITA-MOVES
+   iv   ?
+   sv   ERR:rc1(rc1)
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si22  <<VITA-MOVES
+   iv   ?
+   sv   ERR:rc1(rc1)
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si23  <<VITA-MOVES
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  G 0 | I 0 bits=1 | R 1
+   pt   G 0 | I 0 bits=1 | R 1
+   post G 1 | I 1 bits=2 | R 1
+== Si24  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si25
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si26
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si27  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si28  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si29  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si30  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si31  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si32  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si33  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si34
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si35  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si36  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si37  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si38  <<VITA-MOVES
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  G 0 | I 0 bits=1 | R 1
+   pt   G 0 | I 0 bits=1 | R 1
+   post G 1 | I 1 bits=2 | R 1
+== Si39  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si40  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si41  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si42  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si43  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1
+== Si44
+   iv   ?
+   sv   G 0 | I 0 bits=1 | R 0
+   vl   G 0 | I 0 bits=1 | R 0
+   pre  G 0 | I 0 bits=1 | R 0
+   pt   G 0 | I 0 bits=1 | R 0
+   post G 0 | I 0 bits=1 | R 0
+== Si45  <<VITA-MOVES
+   iv   ?
+   sv   G 1 | I 1 bits=2 | R 1
+   vl   G 1 | I 1 bits=2 | R 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post G 1 | I 1 bits=2 | R 1

@@ -1,0 +1,134 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_snd3__p__f
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_snd3/p/f.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_snd3/p
+oracles_present: iverilog,sv2v
+vita_tags: POST3b,PRE
+verdict: = PRE
+verdict_source: s581/lens_snd3/REPORT.md:14
+alias: lens_snd3/p/run/P3b/F1/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F10/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F11/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F12/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F3/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F4/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F5/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F6/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/F7/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F1/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F10/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F11/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F12/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F3/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F4/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F5/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F6/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/F7/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F1/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F10/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F11/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F12/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F3/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F4/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F5/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F6/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/F7/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F1/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F10/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F11/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F12/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F3/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F4/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F5/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F6/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/F7/f (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 36
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F1.txt | 38 bytes
+L=1
+f.sv:31: $finish called at 2 (1s)
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F10.txt | 38 bytes | identical to block 1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F11.txt | 38 bytes | identical to block 1
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F12.txt | 38 bytes
+L=0
+f.sv:31: $finish called at 2 (1s)
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F3.txt | 38 bytes | identical to block 1
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F4.txt | 38 bytes | identical to block 1
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F5.txt | 38 bytes | identical to block 1
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F6.txt | 38 bytes | identical to block 1
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_F7.txt | 38 bytes | identical to block 4
+=== block 10 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F1.txt | 37 bytes
+L=1
+o.v:11: $finish called at 2 (1s)
+=== block 11 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F10.txt | 37 bytes
+L=1
+o.v:15: $finish called at 2 (1s)
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F11.txt | 37 bytes | identical to block 10
+=== block 13 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F12.txt | 37 bytes
+L=0
+o.v:11: $finish called at 2 (1s)
+=== block 14 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F3.txt | 37 bytes | identical to block 10
+=== block 15 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F4.txt | 37 bytes | identical to block 10
+=== block 16 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F5.txt | 37 bytes | identical to block 10
+=== block 17 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F6.txt | 37 bytes | identical to block 10
+=== block 18 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_F7.txt | 37 bytes
+L=0
+o.v:15: $finish called at 2 (1s)
+=== block 19 | vita [POST3b] | lens_snd3/p/out/P3b_F1.txt | 261 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:5:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 20 | vita [POST3b] | lens_snd3/p/out/P3b_F10.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:23:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 21 | vita [POST3b] | lens_snd3/p/out/P3b_F11.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:26:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 22 | vita [POST3b] | lens_snd3/p/out/P3b_F12.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:29:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 23 | vita [POST3b] | lens_snd3/p/out/P3b_F3.txt | 261 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:8:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 24 | vita [POST3b] | lens_snd3/p/out/P3b_F4.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:11:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 25 | vita [POST3b] | lens_snd3/p/out/P3b_F5.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:14:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 26 | vita [POST3b] | lens_snd3/p/out/P3b_F6.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:17:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 27 | vita [POST3b] | lens_snd3/p/out/P3b_F7.txt | 262 bytes
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f.sv:20:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+=== block 28 | vita [PRE] | lens_snd3/p/out/PRE_F1.txt | 261 bytes | identical to block 19
+=== block 29 | vita [PRE] | lens_snd3/p/out/PRE_F10.txt | 262 bytes | identical to block 20
+=== block 30 | vita [PRE] | lens_snd3/p/out/PRE_F11.txt | 262 bytes | identical to block 21
+=== block 31 | vita [PRE] | lens_snd3/p/out/PRE_F12.txt | 262 bytes | identical to block 22
+=== block 32 | vita [PRE] | lens_snd3/p/out/PRE_F3.txt | 261 bytes | identical to block 23
+=== block 33 | vita [PRE] | lens_snd3/p/out/PRE_F4.txt | 262 bytes | identical to block 24
+=== block 34 | vita [PRE] | lens_snd3/p/out/PRE_F5.txt | 262 bytes | identical to block 25
+=== block 35 | vita [PRE] | lens_snd3/p/out/PRE_F6.txt | 262 bytes | identical to block 26
+=== block 36 | vita [PRE] | lens_snd3/p/out/PRE_F7.txt | 262 bytes | identical to block 27
+=== end

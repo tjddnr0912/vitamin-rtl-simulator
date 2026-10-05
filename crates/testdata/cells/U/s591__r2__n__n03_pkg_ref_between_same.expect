@@ -1,0 +1,65 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__n__n03_pkg_ref_between_same
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/n/n03_pkg_ref_between_same.sv
+roadmap_row: §2 🆕 U
+set: r2/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,POSTA,POSTB,POSTB_SEP,PRE
+verdict: pre=val[ivl,s2v,vl] posta=LOUD[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:75
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/dump/828e2ab494fbc307 (byte-identical source) verdict: pre=val[ivl,s2v,vl] posta=LOUD[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=- verdict_source: s591/r2/lens_delta.txt:75
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r2/dump/828e2ab494fbc307.ivl | 68 bytes
+n03 A=3 B=3
+828e2ab494fbc307.sv:11: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./n03_pkg_ref_between_same.ivl | 76 bytes
+n03 A=3 B=3
+n03_pkg_ref_between_same.sv:11: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r2/dump/828e2ab494fbc307.vl | 243 bytes
+n03 A=3 B=3
+- 828e2ab494fbc307.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.941 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./n03_pkg_ref_between_same.vl | 252 bytes
+n03 A=3 B=3
+- n03_pkg_ref_between_same.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | r2/dump/828e2ab494fbc307.s2v | 70 bytes
+n03 A=3 B=3
+828e2ab494fbc307.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./n03_pkg_ref_between_same.s2v | 78 bytes
+n03 A=3 B=3
+n03_pkg_ref_between_same.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV3] | ./n03_pkg_ref_between_same.dev3 | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n03 A=3 B=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV3] | ./n03_pkg_ref_between_same.dev3.route | 0 bytes
+
+=== block 9 | vita [POSTA] | ./n03_pkg_ref_between_same.posta | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in pc]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 10 | vita [POSTB] | ./n03_pkg_ref_between_same.postb | 182 bytes | identical to block 7
+=== block 11 | vita [POSTB] | ./n03_pkg_ref_between_same.postb.route | 0 bytes | identical to block 8
+=== block 12 | vita [PRE] | ./n03_pkg_ref_between_same.pre | 182 bytes | identical to block 7
+=== block 13 | vita [PRE] | ./n03_pkg_ref_between_same.pre.route | 0 bytes | identical to block 8
+=== end

@@ -1,0 +1,32 @@
+##### verilator c1_assert_if.sv compile rc=0
+t=1 A1 done
+t=2 c-branch
+t=3 A3 done
+t=4 A4 done
+- c1_assert_if.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+run rc=0
+##### verilator c5_attr.sv compile rc=0
+[1] %Error: c5_attr.sv:4: Assertion failed in top: 'unique if' statement violated
+t=1 done
+- c5_attr.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+run rc=0
+##### verilator c3p_class_fn.sv compile rc=0
+[1] %Error: c3p_class_fn.sv:4: Assertion failed in top.C.m: 'unique if' statement violated
+[2] %Error: c3p_class_fn.sv:8: Assertion failed in top.C.f: 'unique if' statement violated
+t=2 r=0
+t=3 m-z
+[4] %Error: c3p_class_fn.sv:12: Assertion failed in top.mv: 'unique if' statement violated
+- c3p_class_fn.sv:21: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+run rc=0
+##### verilator c6_assert_default.sv compile rc=0
+[1] %Error: c6_assert_default.sv:4: Assertion failed in top: 'assert' failed.
+t=1 done
+- c6_assert_default.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+run rc=0
+##### verilator c2a_fv_in_cf.sv compile rc=1
+%Error: c2a_fv_in_cf.sv:9:26: Expecting expression to be constant, but can't determine constant for FUNCREF 'cf'
+%Error: Exiting due to 1 error(s)

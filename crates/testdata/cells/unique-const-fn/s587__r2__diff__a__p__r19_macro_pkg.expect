@@ -1,0 +1,44 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r19_macro_pkg
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r19_macro_pkg.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:38
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r19_macro_pkg.ivl | 59 bytes
+v=8 P=8
+r19_macro_pkg.sv:13: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r19_macro_pkg.vl | 671 bytes
+%Warning-WIDTHTRUNC: r19_macro_pkg.sv:4:53: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+%Warning-WIDTHEXPAND: r19_macro_pkg.sv:11:18: Operator VAR 'P' expects 32 bits on the Initial value, but Initial value's FUNCREF 'h' generates 4 bits.
+%Warning-WIDTHEXPAND: r19_macro_pkg.sv:13:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+v=8 P=8
+- r19_macro_pkg.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 83.333 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r19_macro_pkg.build | 1426 bytes
+%Warning-WIDTHTRUNC: r19_macro_pkg.sv:4:53: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+                                          : ... note: In instance 'top'
+    4 |   function automatic logic [f(2):0] h(input int x); return x; endfunction
+      |                                                     ^~~~~~
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: r19_macro_pkg.sv:11:18: Operator VAR 'P' expects 32 bits on the Initial value, but Initial value's FUNCREF 'h' generates 4 bits.
+                                            : ... note: In instance 'top'
+   11 |   localparam int P = q::h(1000);
+      |                  ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: r19_macro_pkg.sv:13:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+                                            : ... note: In instance 'top'
+   13 |   initial begin v = q::h(1000); $display("v=%0d P=%0d", v, P); #1 $finish; end
+      |                   ^
+=== end

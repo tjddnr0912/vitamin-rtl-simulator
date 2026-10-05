@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t4_widths_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t4_widths_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t4_widths_fp.ivl | 127 bytes
+r1=0000007f r2=0000007f r3=00001555
+ps=4d pr=cd m=89abcdef
+psw=ab80
+prw=ab00
+t4_widths_fp.sv:21: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t4_widths_fp.vl | 727 bytes
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:9:13: Operator ASSIGNW expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:11:11: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:12:8: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 14 bits.
+r1=0000007f r2=0000007f r3=00001555
+ps=4d pr=cd m=89abcdef
+psw=ab80
+prw=ab00
+- t4_widths_fp.sv:21: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 133.333 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t4_widths_fp.build | 1022 bytes
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:9:13: Operator ASSIGNW expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+                                          : ... note: In instance 'top'
+    9 |   assign r2 = {f(2){1'b1}};
+      |             ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:11:11: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+                                           : ... note: In instance 'top'
+   11 |     #1 r1 = {f(2){1'b1}};
+      |           ^
+%Warning-WIDTHEXPAND: t4_widths_fp.sv:12:8: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 14 bits.
+                                          : ... note: In instance 'top'
+   12 |     r3 = {f(2){2'b01}};
+      |        ^
+=== end

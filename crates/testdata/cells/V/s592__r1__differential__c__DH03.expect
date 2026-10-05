@@ -1,0 +1,58 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__DH03
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/DH03.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre,pre_st,post_b_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_lens_diff_pre.out:10
+alias: g/lens/diff/DH03 (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_diff_pre.out:10
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./DH03.iv.txt | 213 bytes
+DH03.sv:5: error: A hierarchical reference (`g.N') is not allowed in a constant expression.
+DH03.sv:5: error: Cannot evaluate generate "loop" conditional expression: (i)<(g.N)
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./DH03.vl.txt | 127 bytes
+%Error: DH03.sv:5:28: Parameter-resolved constants must not use dotted references: 'N'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./DH03.vlb.txt | 361 bytes
+%Error: DH03.sv:5:28: Parameter-resolved constants must not use dotted references: 'N'
+                    : ... note: In instance 'top'
+    5 |   for (genvar i = 0; i < g.N; i++) begin : L
+      |                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./DH03.sv.txt | 60 bytes
+@L0
+@L1
+@L2
+DH03.sv2v.v:15: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./DH03.post.txt | 291 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+DH03.sv:5:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: a hierarchical reference (`g.N`) is not a constant [in top]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_b] | r1/differential/det1/DH03.post.txt | 291 bytes | identical to block 5
+=== block 7 | vita [post_c] | g/lens/diff/DH03.post_c.txt | 291 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./DH03.postd.txt | 291 bytes | identical to block 5
+=== block 9 | vita [postd2] | g/lens/diff/DH03.postd2.txt | 291 bytes | identical to block 5
+=== block 10 | vita [postd3] | g/lens/diff/DH03.postd3.txt | 291 bytes | identical to block 5
+=== block 11 | vita [postd4] | g/lens/diff/DH03.postd4.txt | 291 bytes | identical to block 5
+=== block 12 | vita [pre] | ./DH03.pre.txt | 291 bytes | identical to block 5
+=== end

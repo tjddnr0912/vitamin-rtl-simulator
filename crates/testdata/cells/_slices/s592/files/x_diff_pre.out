@@ -1,0 +1,16 @@
+DI05m                        IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=outer | pre=inner | postd2=outer
+DM07                         IEEE:UP WRONG->OK  SVVL:n/a   | iv=L1 | L2 | pre=NONE | postd2=L1 | L2
+DM07b                        IEEE:UP WRONG->OK  SVVL:n/a   | iv=L1 | L501 | pre=NONE | postd2=L1 | L501
+DM08                         IEEE:UP WRONG->OK  SVVL:n/a   | iv=L0 | L1 | pre=NONE | postd2=L0 | L1
+DM09                         IEEE:UP WRONG->OK  SVVL:SIDE WRONG->WRONG   | iv=then | pre=NONE | postd2=then
+DM10                         IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=outer | pre=inner | postd2=outer
+DX03                         IEEE:UP WRONG->OK  SVVL:DOWN OK->WRONG   | iv=top.u1.g.b outer | top.u2.g.b outer | pre=top.u1.g.a inner | top.u2.g.b outer | postd2=top.u1.g.b outer | top.u2.g.b outer
+
+== pre -> postd2 under IEEE (40 cells)
+    33 same                   
+     7 UP WRONG->OK           DI05m DM07 DM07b DM08 DM09 DM10 DX03
+== pre -> postd2 under SVVL (40 cells)
+    33 same                   
+     3 DOWN OK->WRONG         DI05m DM10 DX03
+     3 n/a                    DM07 DM07b DM08
+     1 SIDE WRONG->WRONG      DM09

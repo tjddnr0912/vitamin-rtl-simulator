@@ -1,0 +1,160 @@
+DIFF s580/r2/r26/S05A.sv  | POST2==PRE
+   POST2 S05A x
+   POST2 simulation ended (Finish) at time 2
+   POST2 errors=0 warnings=0 notes=0
+   POST2 rc=0
+   POST  S05A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  errors=1 warnings=0 notes=0
+   POST  rc=1
+DIFF s580/r2/r26/S05B.sv  | POST2==PRE
+   POST2 S05B 1
+   POST2 simulation ended (Finish) at time 2
+   POST2 errors=0 warnings=0 notes=0
+   POST2 rc=0
+   POST  S05B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  errors=1 warnings=0 notes=0
+   POST  rc=1
+DIFF s580/r2/r26/S07A.sv  | POST2==PRE
+   POST2 S07A x
+   POST2 simulation ended (Finish) at time 2
+   POST2 errors=0 warnings=0 notes=0
+   POST2 rc=0
+   POST  S07A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  errors=1 warnings=0 notes=0
+   POST  rc=1
+DIFF s580/r2/r26/S07B.sv  | POST2==PRE
+   POST2 S07B 1
+   POST2 simulation ended (Finish) at time 2
+   POST2 errors=0 warnings=0 notes=0
+   POST2 rc=0
+   POST  S07B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  errors=1 warnings=0 notes=0
+   POST  rc=1
+DIFF s580/r2/r26/S08A.sv  | POST2!=PRE
+   POST2 S08A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not all
+   POST  S08A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+DIFF s580/r2/r26/S08B.sv  | POST2!=PRE
+   POST2 S08B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not all
+   POST  S08B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+DIFF s580/r2/r26/S14A.sv  | POST2!=PRE
+   POST2 S14A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not all
+   POST  S14A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+DIFF s580/r2/r26/S14B.sv  | POST2!=PRE
+   POST2 S14B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not all
+   POST  S14B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+DIFF s580/r4/fx/K02.sv  | POST2!=PRE
+   POST2 K02.sv:18:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not all
+   POST2 errors=1 warnings=0 notes=0
+   POST  K02.sv:15:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  K02.sv:16:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  K02.sv:18:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+   POST  errors=3 warnings=0 notes=0
+DIFF s580/r4/fx/K02q.sv  | POST2==PRE
+   POST2 errors=12 warnings=0 notes=0
+   POST  K02q.sv:12:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is 
+   POST  errors=13 warnings=0 notes=0
+DIFF s580/lens_diff2/Q3.sv -DFNRX | POST2!=PRE
+   POST2 G1 then
+   POST2 GS then
+   POST2 GC1 one
+   POST2 GL lab1
+   POST2 FNRX 1
+   POST2 OV1 1 1
+   POST2 OVS 1 1
+   POST2 OV0 0 1
+   POST2 PK1 1
+   POST2 PK0 0
+   POST2 LF1 1
+   POST2 LF0 0
+   POST2 LT1 1
+   POST2 LG 0
+   POST2 RB1 4
+   POST2 RB0 2
+   POST2 RBS 4
+   POST2 AD1 4
+   POST2 ADS 4
+   POST2 simulation ended (Finish) at time 3
+   POST2 errors=0 warnings=1 notes=0
+   POST2 rc=0
+   POST  Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+   POST  errors=1 warnings=1 notes=0
+   POST  rc=1
+DIFF s580/lens_diff2/Q3.sv -DTDX | POST2!=PRE
+   POST2 G1 then
+   POST2 GS then
+   POST2 GC1 one
+   POST2 GL lab1
+   POST2 TDX 1
+   POST2 OV1 1 1
+   POST2 OVS 1 1
+   POST2 OV0 0 1
+   POST2 PK1 1
+   POST2 PK0 0
+   POST2 LF1 1
+   POST2 LF0 0
+   POST2 LT1 1
+   POST2 LG 0
+   POST2 RB1 4
+   POST2 RB0 2
+   POST2 RBS 4
+   POST2 AD1 4
+   POST2 ADS 4
+   POST2 simulation ended (Finish) at time 3
+   POST2 errors=0 warnings=1 notes=0
+   POST2 rc=0
+   POST  Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+   POST  errors=1 warnings=1 notes=0
+   POST  rc=1
+DIFF s580/lens_diff2/Q3.sv -DFNRX -DIV | POST2!=PRE
+   POST2 G1 then
+   POST2 GS then
+   POST2 GC1 one
+   POST2 GL lab1
+   POST2 FNRX 1
+   POST2 OV1 1 1
+   POST2 OVS 1 1
+   POST2 OV0 0 1
+   POST2 PK1 1
+   POST2 PK0 0
+   POST2 LF1 1
+   POST2 LF0 0
+   POST2 LT1 1
+   POST2 LG 0
+   POST2 RB1 4
+   POST2 RB0 2
+   POST2 RBS 4
+   POST2 AD1 4
+   POST2 ADS 4
+   POST2 simulation ended (Finish) at time 3
+   POST2 errors=0 warnings=1 notes=0
+   POST2 rc=0
+   POST  Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+   POST  errors=1 warnings=1 notes=0
+   POST  rc=1
+DIFF s580/lens_diff2/Q3.sv -DTDX -DIV | POST2!=PRE
+   POST2 G1 then
+   POST2 GS then
+   POST2 GC1 one
+   POST2 GL lab1
+   POST2 TDX 1
+   POST2 OV1 1 1
+   POST2 OVS 1 1
+   POST2 OV0 0 1
+   POST2 PK1 1
+   POST2 PK0 0
+   POST2 LF1 1
+   POST2 LF0 0
+   POST2 LT1 1
+   POST2 LG 0
+   POST2 RB1 4
+   POST2 RB0 2
+   POST2 RBS 4
+   POST2 AD1 4
+   POST2 ADS 4
+   POST2 simulation ended (Finish) at time 3
+   POST2 errors=0 warnings=1 notes=0
+   POST2 rc=0
+   POST  Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+   POST  errors=1 warnings=1 notes=0
+   POST  rc=1
+variants 666 POST!=POST2 14

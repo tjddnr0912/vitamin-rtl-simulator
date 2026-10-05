@@ -1,0 +1,65 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__S01
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/S01.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./S01.iv.txt | 63 bytes
+S01.sv:2: sorry: "inside" expressions not supported yet.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./S01.vl.txt | 146 bytes
+%Error: S01.sv:15:16: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./S01.vlb.txt | 462 bytes
+%Error: S01.sv:15:16: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   15 |   case (A4 ==? 4'b1?00) 1'b1: begin : c1 initial $display("@gc 1"); end default: begin : c0 initial $display("@gc def"); end endcase
+      |                ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./S01.sv.txt | 191 bytes
+@gf 0
+@gf 1
+@gf 2
+@gf 3
+@gf 4
+@gf 5
+@gf 6
+@gf 7
+@gi 5
+@gi 7
+@gc 1
+@inst top.u[0] N=0
+@inst top.u[1] N=0
+@inst top.u[2] N=0
+@inst top.u2 N=11
+@pk C=4 D=aa
+@L aa LI=-1 S=1 rep=111 bits=8
+
+rc=0
+=== block 5 | vita [POST] | ./S01.post.txt | 281 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+S01.sv:11:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `S` value is not a constant: a string literal has no integral constant value [in top]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [POST-T] | ./S01.pt.txt | 382 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in p1]
+S01.sv:11:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `S` value is not a constant: a string literal has no integral constant value [in top]
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 7 | vita [PRE] | ./S01.pre.txt | 382 bytes | identical to block 6
+=== end

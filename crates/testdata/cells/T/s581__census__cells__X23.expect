@@ -1,0 +1,73 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__census__cells__X23
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/census/cells/X23.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: census
+oracles_present: iverilog,verilator,sv2v
+vita_tags: dbg-repo,POST2,POST3,POST-T,PRE,POST
+verdict: unchanged; PRE!=oracle [1-oracle(2 refuse)] residue
+verdict_source: s581/T_census.tsv:61
+notes: S_census_gencase.tsv:61 class 'skip->match [1-oracle(2 refuse)] POST=oracle'
+alias: lens_diff/rc/X23 (byte-identical source) verdict: unchanged; PRE!=oracle [1-oracle(2 refuse)] residue verdict_source: s581/T_census.tsv:61
+alias: lens_snd/c252/X23 (byte-identical source) verdict: unchanged; PRE!=oracle [1-oracle(2 refuse)] residue verdict_source: s581/T_census.tsv:61
+alias: lens_diff3/census_c/cells/X23 (byte-identical source) verdict: unchanged; PRE!=oracle [1-oracle(2 refuse)] residue verdict_source: s581/T_census.tsv:61
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./X23.iv.txt | 63 bytes
+X23.sv:4: sorry: "inside" expressions not supported yet.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./X23.vl.txt | 145 bytes
+%Error: X23.sv:4:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./X23.vlb.txt | 409 bytes
+%Error: X23.sv:4:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    4 |       4'b1100 inside {4'b11x0}: begin : g_a initial $display("X23 a"); end
+      |                       ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./X23.sv.txt | 12 bytes
+X23 a
+
+rc=0
+=== block 5 | vita [POST] | ./X23.s2.txt | 178 bytes
+X23 a
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [POST] | lens_diff/rc/X23.post.txt | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+X23 a
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST-T] | ./X23.post.txt | 180 bytes
+X23 def
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 8 | vita [POST-T] | lens_diff/rc/X23.postT.txt | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+X23 def
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [POST2] | ./X23.p2.txt | 178 bytes | identical to block 5
+=== block 10 | vita [POST3] | ./X23.p3.txt | 178 bytes | identical to block 5
+=== block 11 | vita [POST3b] | lens_diff3/census_c/cells/X23.post3b.txt | 178 bytes | identical to block 5
+=== block 12 | vita [PRE] | ./X23.pre.txt | 180 bytes | identical to block 7
+=== block 13 | vita [PRE] | lens_diff/rc/X23.pre.txt | 179 bytes | identical to block 8
+=== end

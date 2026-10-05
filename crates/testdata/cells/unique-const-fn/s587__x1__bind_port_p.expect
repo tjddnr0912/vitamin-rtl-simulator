@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x1__bind_port_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x1/bind_port_p.sv
+roadmap_row: §3.b unique-const-fn
+set: x1
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S8
+verdict: RIGHT -> stays opted in
+verdict_source: s587/IMPL.md:141
+notes: IMPL X1(c) census; class is the plain twin on PRE vs both oracles
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./bind_port_p.ivl | 48 bytes
+bind_port_p.sv:16: syntax error
+I give up.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./bind_port_p.vl | 398 bytes
+%Warning-WIDTHTRUNC: bind_port_p.sv:16:18: Input port connection 's' expects 4 bits on the pin connection, but pin connection's VARREF 's' generates 8 bits.
+top.t.c b=4 s=a
+- bind_port_p.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 55.556 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_bind_port_p.build | 506 bytes
+%Warning-WIDTHTRUNC: bind_port_p.sv:16:18: Input port connection 's' expects 4 bits on the pin connection, but pin connection's VARREF 's' generates 8 bits.
+                                         : ... note: In instance 'top.t'
+   16 | bind tgt chk c (.s(s));
+      |                  ^
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+=== block 4 | vita [S8] | ./bind_port_p.s8 | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+top.t.c b=4 s=a
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== end

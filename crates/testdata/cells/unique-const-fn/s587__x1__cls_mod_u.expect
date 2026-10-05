@@ -1,0 +1,46 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x1__cls_mod_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x1/cls_mod_u.sv
+roadmap_row: §3.b unique-const-fn
+set: x1
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S8
+verdict: LOUD in both / no data
+verdict_source: s587/IMPL.md:142
+notes: IMPL X1(c) census; class is the plain twin on PRE vs both oracles
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./cls_mod_u.ivl | 90 bytes
+cls_mod_u.sv:4: syntax error
+cls_mod_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./cls_mod_u.vl | 508 bytes
+%Warning-WIDTHTRUNC: cls_mod_u.sv:7:45: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+%Warning-WIDTHEXPAND: cls_mod_u.sv:11:28: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's METHODCALL 'm' generates 8 bits.
+v=232
+- cls_mod_u.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 8.929 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_cls_mod_u.build | 1112 bytes
+%Warning-WIDTHTRUNC: cls_mod_u.sv:7:45: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+                                      : ... note: In instance 'top'
+    7 |     function logic [f(2):0] m(input int x); return x; endfunction
+      |                                             ^~~~~~
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: cls_mod_u.sv:11:28: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's METHODCALL 'm' generates 8 bits.
+                                        : ... note: In instance 'top'
+   11 |   initial begin c = new; v = c.m(1000); $display("v=%0d", v); #1 $finish; end
+      |                            ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 4 | vita [S8] | ./cls_mod_u.s8 | 695 bytes
+cls_mod_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+cls_mod_u.sv:7:21: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset)
+errors=1 warnings=1 notes=1
+rc=1
+=== end

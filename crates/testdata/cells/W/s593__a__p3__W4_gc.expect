@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__W4_gc
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/W4_gc.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:979
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./W4_gc.ivl | 214 bytes
+W4_gc.sv:5: error: A hierarchical reference (`g.Y') is not allowed in a constant expression.
+W4_gc.sv:4: error: Cannot evaluate  genvar case item expression: (g.Y)w(8'b11111z00)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./W4_gc.vl | 188 bytes
+%Error: W4_gc.sv:5:14: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Internal Error: W4_gc.sv:5:8: ../V3Const.cpp:3386: Not linked
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./W4_gc.s2v | 54 bytes
+GC=item
+W4_gc.s2v.v:25: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./W4_gc.cut | 76 bytes
+GC=def
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./W4_gc.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./W4_gc.pre | 76 bytes | identical to block 4
+=== block 7 | vita [pre] | ./W4_gc.pre.route | 0 bytes | identical to block 5
+=== end

@@ -1,0 +1,71 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__g__c6__f2_gen_whole
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/g/c6/f2_gen_whole.sv
+roadmap_row: §2 🆕 AB
+set: g/c6
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,P3,P5_SIDE,POSTDEV,P6,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: rep:->oracle
+verdict_source: s590/fin/axscan_fin.txt:61
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P3: md5 6cecfd4586bbe8a2d6f81be6c48f9036 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 5
+=== block 1 | combined [verilator+iverilog|PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out_c6/f2_gen_whole.out | 1014 bytes
+##### f2_gen_whole
+=== verilator compile rc=0 run rc=0
+t=1 y=11
+- f2_gen_whole.sv:13: Verilog $finish
+=== iverilog compile rc=0 msgs: f2_gen_whole.sv:5: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+t=1 y=11
+f2_gen_whole.sv:13: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+f2_gen_whole.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+t=1 y=11
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=1
+=== block 2 | vita [PRE+P3] | g/p3_c6/f2_gen_whole.out | 1244 bytes
+##### f2_gen_whole
+=== vita PRE (native=interp=vm)
+rc=0
+f2_gen_whole.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+t=1 y=11
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+f2_gen_whole.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+t=1 y=11
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 3 | vita [PRE+P5_SIDE] | g/p5_c6/f2_gen_whole.out | 1389 bytes
+##### f2_gen_whole
+=== vita PRE (native=interp=vm)
+rc=0
+f2_gen_whole.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+f2_gen_whole.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.f] [at time 0]
+t=1 y=11
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+f2_gen_whole.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+t=1 y=11
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 4 | vita [PRE+P6] | p6/p6_c6/f2_gen_whole.out | 1244 bytes | identical to block 2
+=== block 5 | vita [PRE+POSTDEV] | p6/dev_c6/f2_gen_whole.out | 1244 bytes | identical to block 2
+=== end

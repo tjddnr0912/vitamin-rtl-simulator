@@ -1,0 +1,115 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__sound__newcells__r3d_nohold_lanes
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/sound/newcells/r3d_nohold_lanes.sv
+roadmap_row: §2 🆕 AB
+set: r3/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE3,POSTC,POSTD,POSTE,PRE3_SEP,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: unrecorded
+verdict_source: unrecorded
+notes: 34 byte-identical output copies listed as alias
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE3+POSTC+POSTD] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/sound/out/r3d_nohold_lanes.out | 1615 bytes
+##### r3d_nohold_lanes
+=== iverilog run rc=0
+VCD info: dumpfile d.vcd opened for output.
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+r3d_nohold_lanes.sv:10: $finish called at 9 (1s)
+
+=== verilator run rc=0
+-Info: r3d_nohold_lanes.sv:10: $dumpvar ignored, as Verilated without --trace
+E t=0 d=0 m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+- r3d_nohold_lanes.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 9ps; walltime 0.000 s; speed 187.500 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+--- r3d_nohold_lanes PRE3==POSTC:111 PRE3==POSTD:111 POSTC==POSTD:111 split=-
+=== block 2 | vita [PRE3+POSTD+POSTE] | r4/sound/out/r3d_nohold_lanes.out | 1045 bytes
+##### r3d_nohold_lanes
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+E t=0 d=x m=0
+E t=1 d=1 m=0
+E t=3 d=1 m=1
+E t=4 d=0 m=1
+E t=6 d=0 m=x
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+
+VCD d.vcd md5=2caacfecc704b7cc75e7bd26a5c6cf93
+--- r3d_nohold_lanes PRE3==POSTD:111 PRE3==POSTE:111 POSTD==POSTE:111 split=-
+=== end

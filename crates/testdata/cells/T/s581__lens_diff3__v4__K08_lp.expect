@@ -1,0 +1,15 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff3__v4__K08_lp
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff3/v4/K08_lp.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff3/v4
+oracles_present: iverilog,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); oracle values also quoted at s581/lens_diff3/r3d.tsv:16; values row s581/lens_diff3/r3d.tsv:16
+blocks: 1
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./K08_lp.sv.i.err | 215 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s581/lens_diff3/v4/K08_lp.sv:2: sorry: unpacked array parameters are not supported yet.
+=== end

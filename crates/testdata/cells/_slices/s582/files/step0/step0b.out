@@ -1,0 +1,7 @@
+rows=312 accepted=106 refused=206 reasons={'accept': 106, 'c3-sign': 147, 'c2-fill': 24, 'c4-width': 35}
+accepted rows with P!=C: 0 []
+accepted rows with V!=C: 0 []
+refused rows where P==C==V on every value (over-refusal): 129
+accepted observed vl!=P: 0 []
+accepted observed sv!=P: 0 []
+accepted observed pre!=P: 0 []

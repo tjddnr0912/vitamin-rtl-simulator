@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__U_a_struct_typed_localparam_takes_a_named__3d1ce5b8
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: PRE=some
+verdict_source: s593/g/c5.p5.summ:1380
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/typed_param_user_type__a_struct_typed_localparam_takes_a_named_and_a_positional_pattern__28927_13 (byte-identical source) verdict: PRE=some verdict_source: s593/g/c5.p5.summ:1380
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.ivl | 87 bytes
+U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.sv:2: syntax error
+I give up.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.vl | 290 bytes
+DIGEST=3 7 100011 0 6 1 4
+- U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 76.923 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.s2v | 118 bytes
+DIGEST=3 7 100011 0 6 1 4
+U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.s2v.v:10: $finish called at 1 (1s)
+rc=0
+=== block 4 | vita [post1] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post1 | 194 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+DIGEST=3 7 100011 0 6 1 4
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [post1] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post2 | 194 bytes | identical to block 4
+=== block 7 | vita [post2] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post5] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post5 | 194 bytes | identical to block 4
+=== block 9 | vita [post5] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.post5.route | 0 bytes | identical to block 5
+=== block 10 | vita [pre] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.pre | 194 bytes | identical to block 4
+=== block 11 | vita [pre] | ./U_a_struct_typed_localparam_takes_a_named__3d1ce5b8.pre.route | 0 bytes | identical to block 5
+=== end

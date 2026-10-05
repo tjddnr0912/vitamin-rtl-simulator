@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c3__ovH_long
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c3/ovH_long.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c3.p5.summ:365
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./ovH_long.ivl | 72 bytes
+X=-4 lt0=1 b=64 shr=-2
+ovH_long.sv:11: $finish called at 100 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./ovH_long.vl | 401 bytes
+%Warning-WIDTHEXPAND: ovH_long.sv:6:58: Operator VAR 'X' expects 64 bits on the Initial value, but Initial value's CONST '32'hfffffffc' generates 32 bits.
+X=-4 lt0=1 b=64 shr=-2
+- ovH_long.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ns; walltime 0.000 s; speed 7.692 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./ovH_long.s2v | 73 bytes
+X=-4 lt0=1 b=64 shr=-2
+ovH_long.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./ovH_long.post1 | 94 bytes
+X=-4 lt0=1 b=64 shr=-2
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./ovH_long.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./ovH_long.post2 | 94 bytes | identical to block 4
+=== block 7 | vita [post2] | ./ovH_long.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post5] | ./ovH_long.post5 | 94 bytes | identical to block 4
+=== block 9 | vita [post5] | ./ovH_long.post5.route | 0 bytes | identical to block 5
+=== block 10 | vita [pre] | ./ovH_long.pre | 129 bytes
+X=18446744073709551612 lt0=0 b=64 shr=9223372036854775806
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [pre] | ./ovH_long.pre.route | 0 bytes | identical to block 5
+=== end

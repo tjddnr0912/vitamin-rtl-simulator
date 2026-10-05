@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__H_review_pins_aa47bf1b
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/H_review_pins_aa47bf1b.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c5.p5.summ:603
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/header_import_param__review_pins__28601_44 (byte-identical source) verdict: PRE!=all verdict_source: s593/g/c5.p5.summ:603
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./H_review_pins_aa47bf1b.ivl | 266 bytes
+H_review_pins_aa47bf1b.sv:2: error: Unable to bind parameter `Nope' in `tb'
+H_review_pins_aa47bf1b.sv:2: error: Dimensions must be constant.
+H_review_pins_aa47bf1b.sv:2       : This MSB expression violates the rule: (Nope)-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./H_review_pins_aa47bf1b.vl | 127 bytes
+%Error: H_review_pins_aa47bf1b.sv:2:20: Can't find definition of variable: 'Nope'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./H_review_pins_aa47bf1b.s2v | 275 bytes
+H_review_pins_aa47bf1b.s2v.v:2: error: Unable to bind parameter `Nope' in `tb'
+H_review_pins_aa47bf1b.s2v.v:2: error: Dimensions must be constant.
+H_review_pins_aa47bf1b.s2v.v:2       : This MSB expression violates the rule: (Nope)-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [post1] | ./H_review_pins_aa47bf1b.post1 | 273 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H_review_pins_aa47bf1b.sv:2:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `Nope` is not allowed in a constant range bound [in tb]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [post2] | ./H_review_pins_aa47bf1b.post2 | 273 bytes | identical to block 4
+=== block 6 | vita [post5] | ./H_review_pins_aa47bf1b.post5 | 273 bytes | identical to block 4
+=== block 7 | vita [pre] | ./H_review_pins_aa47bf1b.pre | 273 bytes | identical to block 4
+=== end

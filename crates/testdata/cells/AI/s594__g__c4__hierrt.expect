@@ -1,0 +1,48 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__g__c4__hierrt
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/g/c4/hierrt.sv
+roadmap_row: §2 🆕 AI
+set: g/c4
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3: md5 147bbb984b327e4e83aa5a8346c73470 commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./hierrt.ivl | 269 bytes
+hierrt.sv:6: error: A hierarchical reference (`u.P') is not allowed in a constant expression.
+hierrt.sv:6: error: Dimensions must be constant.
+hierrt.sv:6       : This MSB expression violates the rule: (((X)|(u.P))==(8'd254))+('sd3)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./hierrt.vl | 225 bytes
+vb=5
+- hierrt.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 454.547 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./hierrt.s2v | 278 bytes
+hierrt.s2v.v:7: error: A hierarchical reference (`u.P') is not allowed in a constant expression.
+hierrt.s2v.v:7: error: Dimensions must be constant.
+hierrt.s2v.v:7       : This MSB expression violates the rule: (((X)|(u.P))==(8'd254))+('sd3)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [d1] | ./hierrt.d1 | 168 bytes
+hierrt.sv:6:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a hierarchical reference (`u.P`) is not allowed in a constant range bound [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [d3] | ./hierrt.d3 | 168 bytes | identical to block 4
+=== block 6 | vita [p3] | ./hierrt.p3 | 168 bytes | identical to block 4
+=== block 7 | vita [pa] | ./hierrt.pa | 168 bytes | identical to block 4
+=== block 8 | vita [pb] | ./hierrt.pb | 168 bytes | identical to block 4
+=== block 9 | vita [pre] | ./hierrt.pre | 168 bytes | identical to block 4
+=== block 10 | vita [pre594] | ./hierrt.pre594 | 168 bytes | identical to block 4
+=== end

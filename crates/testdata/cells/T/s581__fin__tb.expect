@@ -1,0 +1,24 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__fin__tb
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/fin/tb.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: fin
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); verilator: build log only, run output not captured
+blocks: 1
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./tb.vlb | 836 bytes
+%Error: tb.sv:3:28: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 't'
+    3 |   case (1) 4'b1100 inside {4'b1?00}: begin : i_X13 initial $display("X13 item"); end default: begin : d_X13 initial $display("X13 default"); end endcase
+      |                            ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: tb.sv:4:25: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 't'
+    4 |   case (1) (4'b1100 ==? 4'b1?00): begin : i_X11 initial $display("X11 item"); end default: begin : d_X11 initial $display("X11 default"); end endcase
+      |                         ^~~~~~~
+%Error: Exiting due to 2 error(s)
+=== end

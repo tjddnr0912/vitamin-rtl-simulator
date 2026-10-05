@@ -1,0 +1,168 @@
+== q1a
+   iv   ERR:q1a.sv:8: syntax error(rc134)
+   sv   ERR:q1a.sv:8:20: Parse error: unexpected token 'small' (KW_small(rc1)
+   vl   ERR:%Error: q1a.sv:8:20: syntax error, unexpected STRENGTH keywo(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q1b
+   iv   ERR:q1b.sv:8: syntax error(rc134)
+   sv   ERR:q1b.sv:8:20: Parse error: unexpected token 'small' (KW_small(rc1)
+   vl   ERR:%Error: q1b.sv:8:20: syntax error, unexpected STRENGTH keywo(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q1c
+   iv   ERR:q1c.sv:8: syntax error(rc134)
+   sv   ERR:q1c.sv:8:20: Parse error: unexpected token 'small' (KW_small(rc1)
+   vl   ERR:%Error: q1c.sv:8:20: syntax error, unexpected STRENGTH keywo(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q1d
+   iv   ERR:<command line>: error: invalid digit in hex value specified (rc10)
+   sv   NA
+   vl   ERR:%Error: q1d.sv:7:20: syntax error, unexpected STRENGTH keywo(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q1e
+   iv   ERR:q1e.sv:8: syntax error(rc134)
+   sv   ERR:q1e.sv:8:20: Parse error: unexpected token 'small' (KW_small(rc1)
+   vl   ERR:%Error: q1e.sv:8:20: syntax error, unexpected STRENGTH keywo(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q1f  <<POST!=ORACLE
+   iv   P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | big | hitw
+   sv   P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | big | hitw
+   vl   P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | big | hitw
+   pre  ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+   post2 ERR:VITA-E3010(rc1)
+== q1g  <<VITA-MOVES  <<POST!=ORACLE
+   iv   P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | big | hitw
+   sv   P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | big | hitw
+   vl   P=3 Q=4 w=3 sh=0 N=5 b=32 | hit3
+   pre  P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | hit3
+   post P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | hitw
+   post2 P=3 Q=4 w=3 sh=0 N=5 b=65 | hit3
+== q1h  <<POST!=ORACLE
+   iv   P=18446744073709551625 R=6 S=10 Q=18446744073709551626 w=18446744073709551625 f7=8 g7=14 | big | hitw
+   sv   P=18446744073709551625 R=6 S=10 Q=18446744073709551626 w=18446744073709551625 f7=8 g7=14 | big | hitw
+   vl   P=18446744073709551625 R=6 S=10 Q=18446744073709551626 w=18446744073709551625 f7=8 g7=14 | big | hitw
+   pre  ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+   post2 ERR:VITA-E3010(rc1)
+== q1i  <<VITA-MOVES
+   iv   b W=7 ww=7 | b b7 | h hw | h hw | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+   sv   b W=7 ww=7 | b b7 | h hw | h hw | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+   vl   b W=7 ww=7 | b b7 | h hw | h hw | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+   pre  b W=7 ww=7 | b b7 | h dd | h dd | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+   post b W=7 ww=7 | b b7 | h hw | h hw | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+   post2 b W=7 ww=7 | b b7 | h hw | h hw | h i=18446744073709551621 wi=18446744073709551621 | h i=18446744073709551621 wi=18446744073709551621 | top W=18446744073709551625
+== q1j  <<POST!=ORACLE
+   iv   big | g i=0 | g i=1 | hitw | top i=18446744073709551625 w=18446744073709551625 Q=18446744073709551626 sh=16
+   sv   big | g i=0 | g i=1 | hitw | top i=18446744073709551625 w=18446744073709551625 Q=18446744073709551626 sh=16
+   vl   big | g i=0 | g i=1 | hitw | top i=18446744073709551625 w=18446744073709551625 Q=18446744073709551626 sh=16
+   pre  ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+   post2 ERR:VITA-E3010(rc1)
+== q1k  <<POST!=ORACLE
+   iv   N=18446744073709551623 M=5 wn=18446744073709551623 wm=5 | hitM | hitN
+   sv   N=18446744073709551623 M=5 wn=18446744073709551623 wm=5 | hitM | hitN
+   vl   N=18446744073709551623 M=5 wn=18446744073709551623 wm=5 | hitM | hitN
+   pre  ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+   post2 ERR:VITA-E3010(rc1)
+== q1l  <<POST!=ORACLE
+   iv   1 P=3 Q=4 w=3 | 1 hit3 | 2 P=18446744073709551626 Q=18446744073709551627 w=18446744073709551626 | 2 dflt | 3 P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 | 3 hitw | top 3 18446744073709551626 18446744073709551625
+   sv   1 P=3 Q=4 w=3 | 1 hit3 | 2 P=18446744073709551626 Q=18446744073709551627 w=18446744073709551626 | 2 dflt | 3 P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 | 3 hitw | top 3 18446744073709551626 18446744073709551625
+   vl   1 P=3 Q=4 w=3 | 1 hit3 | 2 P=18446744073709551626 Q=18446744073709551627 w=18446744073709551626 | 2 dflt | 3 P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 | 3 hitw | top 3 18446744073709551626 18446744073709551625
+   pre  ERR:VITA-E3010(rc1)
+   post ERR:VITA-E3010(rc1)
+   post2 ERR:VITA-E3010(rc1)
+== q1m  <<POST!=ORACLE
+   iv   W=18446744073709551625 N=3 R=8 Q=18446744073709551625 pf=10 pw=18446744073709551625 | hitw
+   sv   W=18446744073709551625 N=3 R=8 Q=18446744073709551625 pf=10 pw=18446744073709551625 | hitw
+   vl   W=18446744073709551625 N=3 R=8 Q=18446744073709551625 pf=10 pw=18446744073709551625 | hitw
+   pre  ERR:VITA-E3009(rc1)
+   post ERR:VITA-E3009(rc1)
+   post2 ERR:VITA-E3009(rc1)
+== q3m  <<VITA-MOVES  <<POST!=ORACLE
+   iv   2 1 1 2 2 2 1 2 | 2 2 1 2 2 2 2 2
+   sv   2 1 1 2 2 2 1 2 | 2 2 x 2 2 2 2 2
+   vl   2 1 1 2 2 2 1 2 | 2 2 1 2 2 2 2 2
+   pre  ERR:VITA-E3009(rc1)
+   post ERR:VITA-E3009(rc1)
+   post2 2 1 1 2 2 2 1 2 | 2 2 1 2 2 2 1 2
+== q3r_m  <<POST!=ORACLE
+   iv   ERR:q3r_m.sv:6: syntax error(rc2)
+   sv   ERR:q3r_m.sv:25:9: Parse error: unexpected token 'new' (KW_new)(rc1)
+   vl   arith 4 | class 2 | fr 2 | ifsig 2 | lp 2 | modport 2 | port 2 | psel 1 | rep 1 | struct 3 | typedef 2 | unpk 2
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q3r_x
+   iv   ERR:q3r_x.sv:6: syntax error(rc2)
+   sv   ERR:q3r_x.sv:25:9: Parse error: unexpected token 'new' (KW_new)(rc1)
+   vl   ERR:%Error: q3r_x.sv:15:30: left side of bit range isn't a two-s(rc1)
+   pre  ERR:VITA-E2002(rc1)
+   post ERR:VITA-E2002(rc1)
+   post2 ERR:VITA-E2002(rc1)
+== q3x  <<POST!=ORACLE
+   iv   1 1 1 1 1 1 1 1 1 1 1 1 1
+   sv   x x x x x x x x x x x x x
+   vl   ERR:%Error: q3x.sv:2:33: left side of bit range isn't a two-stat(rc1)
+   pre  ERR:VITA-E3009(rc1)
+   post ERR:VITA-E3009(rc1)
+   post2 ERR:VITA-E3009(rc1)
+== r1  <<VITA-MOVES  <<POST!=ORACLE
+   iv   def 9 bits=4
+   sv   k 200 bits=8
+   vl   k 200 bits=8
+   pre  def 9 bits=4
+   post k 8 bits=4
+   post2 k 8 bits=4
+== r1b  <<VITA-MOVES  <<POST!=ORACLE
+   iv   k 200 bits=8
+   sv   def 9 bits=4
+   vl   def 9 bits=4
+   pre  def 9 bits=4
+   post def 9 bits=8
+   post2 def 9 bits=8
+== r2  <<VITA-MOVES  <<POST!=ORACLE
+   iv   ERR:r2.sv:4: error: Unable to bind parameter `F' in `top.g[0]'(rc3)
+   sv   0 a 200 bits=8 | 1 a 200 bits=8
+   vl   0 a 200 bits=8 | 1 a 200 bits=8
+   pre  0 def 9 bits=4 | 1 def 9 bits=4
+   post 0 a 8 bits=4 | 1 a 8 bits=4
+   post2 0 def 9 bits=4 | 1 def 9 bits=4
+== r3  <<VITA-MOVES  <<POST!=ORACLE
+   iv   ERR:r3.sv:4: error: Unable to bind parameter `F' in `top.$gen1[0(rc3)
+   sv   0 a 200 bits=8 | 1 a 200 bits=8
+   vl   0 a 200 bits=8 | 1 a 200 bits=8
+   pre  0 def 9 bits=4 | 1 def 9 bits=4
+   post 0 a 8 bits=4 | 1 a 8 bits=4
+   post2 0 def 9 bits=4 | 1 def 9 bits=4
+== r4  <<VITA-MOVES  <<POST!=ORACLE
+   iv   ERR:r4.sv:6: error: Unable to bind parameter `KB' in `top.gb'(rc2)
+   sv   1 a 200 bits=8 | 2 a 200 bits=8
+   vl   1 a 200 bits=8 | 2 a 200 bits=8
+   pre  1 def 9 bits=4 | 2 def 9 bits=4
+   post 1 a 200 bits=8 | 2 a 8 bits=4
+   post2 1 a 200 bits=8 | 2 def 9 bits=4
+== r5  <<VITA-MOVES  <<POST!=ORACLE
+   iv   ERR:./r5b.svh:1: error: Unable to bind parameter `KB' in `top.gb(rc2)
+   sv   1 a 200 bits=8 | 2 a 200 bits=8
+   vl   1 a 200 bits=8 | 2 a 200 bits=8
+   pre  1 def 9 bits=4 | 2 def 9 bits=4
+   post 1 a 200 bits=8 | 2 a 8 bits=4
+   post2 1 a 200 bits=8 | 2 def 9 bits=4
+== r6  <<POST!=ORACLE
+   iv   ERR:r6.sv:6: error: Unable to bind parameter `K' in `top.u1.arm1(rc6)
+   sv   if0 def 9 bits=4 | if1 a 200 bits=8 | m0 b 200 bits=8 | m1 a 200 bits=8
+   vl   if0 def 9 bits=4 | if1 a 200 bits=8 | m0 b 200 bits=8 | m1 a 200 bits=8
+   pre  ERR:VITA-E3009(rc1)
+   post ERR:VITA-E3009(rc1)
+   post2 ERR:VITA-E3009(rc1)

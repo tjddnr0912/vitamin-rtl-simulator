@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c3__X6
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c3/X6.sv
+roadmap_row: §2 🆕 U
+set: g/c3
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: [PRE!=all]
+verdict_source: s591/g/c3.summ:131
+notes: grounding PRE-vs-oracles tag; not a POST mover (absent from impl/moves_ground.txt)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./X6.ivl | 99 bytes
+X6.sv:13: error: Unable to bind wire/reg/memory `X6.W' in `X6'
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./X6.vl | 448 bytes
+%Warning-WIDTHEXPAND: X6.sv:7:18: Operator VAR 'LI' expects 32 bits on the Initial value, but Initial value's SEL generates 4 bits.
+W=00000005 LI=5 LW=00000000000000005 n=00000000000000005 sel=5 top=00000005
+sub.P=00000000000000005
+- X6.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 66.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./X6.s2v | 102 bytes
+X6.s2v.v:15: error: Unable to bind wire/reg/memory `X6.W' in `X6'
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [DEV3] | ./X6.dev3 | 286 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+W=10000000000000007 LI=7 LW=10000000000000007 n=10000000000000007 sel=7 top=10000000000000007
+sub.P=10000000000000007
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./X6.dev3.route | 0 bytes
+
+=== block 6 | vita [POSTA] | ./X6.posta | 286 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./X6.posta.route | 0 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./X6.postb | 286 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./X6.postb.route | 0 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./X6.pre | 286 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./X6.pre.route | 0 bytes | identical to block 5
+=== block 12 | vita [PROTO1] | ./X6.post1 | 286 bytes | identical to block 4
+=== block 13 | vita [PROTO1] | ./X6.post1.route | 0 bytes | identical to block 5
+=== block 14 | vita [PROTO2] | ./X6.post2 | 286 bytes | identical to block 4
+=== block 15 | vita [PROTO2] | ./X6.post2.route | 0 bytes | identical to block 5
+=== end

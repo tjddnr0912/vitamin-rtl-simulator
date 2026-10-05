@@ -1,0 +1,22 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_snd2__probes__q4__R1
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_snd2/probes/q4/R1.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_snd2/probes
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); verilator: build log only, run output not captured
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./vl_R1.log | 397 bytes
+%Error: R1.sv:3:44: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                  : ... note: In instance 'R1'
+    3 |   localparam logic [((4'bx100 ==? 4'b1?00) | 1'b0):0] P = '1;
+      |                                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./R1.s2v.err | 0 bytes
+
+=== end

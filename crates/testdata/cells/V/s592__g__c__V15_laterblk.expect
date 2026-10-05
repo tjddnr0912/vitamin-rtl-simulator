@@ -1,0 +1,65 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__V15_laterblk
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/V15_laterblk.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p2,probe_p3,probe_p4,probe_p5,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st,probe_p6_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+notes: named at s592/COMMIT_DOCS.txt:94
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: probe_p2: md5 fe6d04d15d761d647c4c5e0994e1f420 commit 75f46453
+vita_binary: probe_p3: md5 0b131be59368ffb543ffbb086410ea06 commit 75f46453
+vita_binary: probe_p4: md5 2bdc82586352e76a4a51e8c8ea2293ff commit 75f46453
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./V15_laterblk.iv.txt | 215 bytes
+V15_laterblk.sv:4: error: A hierarchical reference (`gb.K') is not allowed in a constant expression.
+V15_laterblk.sv:3: error: Cannot evaluate  genvar case item expression: gb.K
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./V15_laterblk.vl.txt | 84 bytes
+%Error: Internal Error: V15_laterblk.sv:4:10: ../V3Const.cpp:3386: Not linked
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./V15_laterblk.vlb.txt | 397 bytes
+%Error: Internal Error: V15_laterblk.sv:4:10: ../V3Const.cpp:3386: Not linked
+                                            : ... note: In instance 'top'
+    4 |       gb.K: begin : g wire [7:0] w = 8'd200; initial #1 $display("@k %0d bits=%0d", w, $bits(w)); end
+      |          ^
+                        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./V15_laterblk.sv.txt | 223 bytes
+V15_laterblk.sv2v.v:5: error: A hierarchical reference (`gb.K') is not allowed in a constant expression.
+V15_laterblk.sv2v.v:4: error: Cannot evaluate  genvar case item expression: gb.K
+2 error(s) during elaboration.
+
+rc=2
+=== block 5 | vita [post_a] | ./V15_laterblk.post.txt | 183 bytes
+@def 9 bits=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_b] | ./V15_laterblk.post_b.txt | 183 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./V15_laterblk.post_c.txt | 183 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./V15_laterblk.post_d.txt | 183 bytes | identical to block 5
+=== block 9 | vita [postd] | ./V15_laterblk.postd.txt | 183 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./V15_laterblk.postd2.txt | 183 bytes | identical to block 5
+=== block 11 | vita [postd3] | ./V15_laterblk.postd3.txt | 183 bytes | identical to block 5
+=== block 12 | vita [postd4] | ./V15_laterblk.postd4.txt | 183 bytes | identical to block 5
+=== block 13 | vita [pre] | ./V15_laterblk.pre.txt | 183 bytes | identical to block 5
+=== block 14 | vita [probe_p2] | ./V15_laterblk.probe_p2.txt | 183 bytes | identical to block 5
+=== block 15 | vita [probe_p3] | ./V15_laterblk.probe_p3.txt | 183 bytes | identical to block 5
+=== block 16 | vita [probe_p4] | ./V15_laterblk.probe_p4.txt | 183 bytes | identical to block 5
+=== end

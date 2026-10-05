@@ -1,0 +1,175 @@
+id	PRE	post3	POST	iverilog	sv2v	verilator	class
+AD_C	AD_C 2	AD_C 2	AD_C 2	AD_C 2	AD_C 2	AD_C 2	unchanged
+AD_I	AD_I x	AD_I 2	AD_I 2	ERR:sorry: "inside" expressions not supported yet	AD_I 2	AD_I 2	value->value POST=oracle
+AD_N	AD_N 1	AD_N 1	AD_N 1	ERR:sorry: "inside" expressions not supported yet	AD_N 1	AD_N 1	unchanged
+AD_Q	AD_Q 2	AD_Q 2	AD_Q 2	AD_Q 2	AD_Q 2	AD_Q 2	unchanged
+AD_W	AD_W 1	AD_W 2	AD_W 2	AD_W 2	AD_W 2	AD_W 2	value->value POST=oracle
+AD_X	AD_X x	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	AD_X 1	AD_X x	?	value->loud oracle-split
+BG_C	BG_C default	BG_C default	BG_C item	BG_C item	BG_C item	BG_C item	value->value POST=oracle POST!=post3
+BG_I	BG_I default	BG_I default	BG_I item	ERR:sorry: "inside" expressions not supported yet	BG_I item	BG_I item	value->value POST=oracle POST!=post3
+BG_N	BG_N default	BG_N default	BG_N default	ERR:sorry: "inside" expressions not supported yet	BG_N default	BG_N default	unchanged
+BG_Q	ERR:error[VITA-E3009]	BG_Q default	BG_Q item	BG_Q item	BG_Q item	BG_Q item	loud->value POST=oracle POST!=post3
+BG_W	ERR:error[VITA-E3009]	BG_W default	BG_W item	BG_W item	BG_W item	BG_W item	loud->value POST=oracle POST!=post3
+BG_X	ERR:error[VITA-E3009]	BG_X default	BG_X default	BG_X default	BG_X default	?	loud->value POST=oracle
+BI_C	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	BI_C 2	BI_C 2	BI_C 2	unchanged
+BI_I	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:sorry: "inside" expressions not supported yet	BI_I 2	BI_I 2	unchanged
+BI_N	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:sorry: "inside" expressions not supported yet	BI_N 1	BI_N 1	unchanged
+BI_Q	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	BI_Q 2	BI_Q 2	BI_Q 2	unchanged
+BI_W	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	BI_W 2	BI_W 2	BI_W 2	unchanged
+BI_X	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	ERR:error[VITA-E2002]	BI_X 1	BI_X x	?	unchanged
+BL_C	BL_C item	BL_C item	BL_C item	BL_C item	BL_C item	BL_C item	unchanged
+BL_I	ERR:error[VITA-E3009]	BL_I item	BL_I item	ERR:sorry: "inside" expressions not supported yet	BL_I item	BL_I item	loud->value POST=oracle
+BL_N	BL_N default	BL_N default	BL_N default	ERR:sorry: "inside" expressions not supported yet	BL_N default	BL_N default	unchanged
+BL_Q	BL_Q item	BL_Q item	BL_Q item	BL_Q item	BL_Q item	BL_Q item	unchanged
+BL_W	BL_W default	BL_W item	BL_W item	BL_W item	BL_W item	BL_W item	value->value POST=oracle
+BL_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	BL_X default	BL_X default	?	unchanged
+BOW_C	BOW_P item	BOW_P item	BOW_P item	BOW_P item	BOW_P item	BOW_P item	unchanged
+BOW_I	ERR:error[VITA-E3009]	BOW_P item	BOW_P item	ERR:sorry: "inside" expressions not supported yet	BOW_P item	BOW_P item	loud->value POST=oracle
+BOW_N	BOW_P default	BOW_P default	BOW_P default	ERR:sorry: "inside" expressions not supported yet	BOW_P default	BOW_P default	unchanged
+BOW_Q	ERR:error[VITA-E3009]	BOW_P item	BOW_P item	BOW_P item	BOW_P item	BOW_P item	loud->value POST=oracle
+BOW_W	ERR:error[VITA-E3009]	BOW_P item	BOW_P item	BOW_P item	BOW_P item	BOW_P item	loud->value POST=oracle
+BOW_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	BOW_P default	BOW_P default	?	unchanged
+BO_C	BO_P item	BO_P item	BO_P item	BO_P item	BO_P item	BO_P item	unchanged
+BO_I	ERR:error[VITA-E3009]	BO_P item	BO_P item	ERR:sorry: "inside" expressions not supported yet	BO_P item	BO_P item	loud->value POST=oracle
+BO_N	BO_P default	BO_P default	BO_P default	ERR:sorry: "inside" expressions not supported yet	BO_P default	BO_P default	unchanged
+BO_Q	BO_P item	BO_P item	BO_P item	BO_P item	BO_P item	BO_P item	unchanged
+BO_W	BO_P default	BO_P item	BO_P item	BO_P item	BO_P item	BO_P item	value->value POST=oracle
+BO_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	BO_P default	BO_P default	?	unchanged
+BP_C	BP_C item	BP_C item	BP_C item	BP_C item	BP_C item	BP_C item	unchanged
+BP_I	ERR:error[VITA-E3009]	BP_I item	BP_I item	ERR:sorry: "inside" expressions not supported yet	BP_I item	BP_I item	loud->value POST=oracle
+BP_N	BP_N default	BP_N default	BP_N default	ERR:sorry: "inside" expressions not supported yet	BP_N default	BP_N default	unchanged
+BP_Q	BP_Q item	BP_Q item	BP_Q item	BP_Q item	BP_Q item	BP_Q item	unchanged
+BP_W	BP_W default	BP_W item	BP_W item	BP_W item	BP_W item	BP_W item	value->value POST=oracle
+BP_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	BP_X default	BP_X default	?	unchanged
+BS_C	BS_C one	BS_C one	BS_C one	BS_C one	BS_C one	BS_C one	unchanged
+BS_I	ERR:error[VITA-E3009]	BS_I one	BS_I one	ERR:sorry: "inside" expressions not supported yet	BS_I one	BS_I one	loud->value POST=oracle
+BS_N	BS_N default	BS_N default	BS_N default	ERR:sorry: "inside" expressions not supported yet	BS_N default	BS_N default	unchanged
+BS_Q	BS_Q one	BS_Q one	BS_Q one	BS_Q one	BS_Q one	BS_Q one	unchanged
+BS_W	BS_W default	BS_W one	BS_W one	BS_W one	BS_W one	BS_W one	value->value POST=oracle
+BS_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	BS_X default	BS_X default	?	unchanged
+BW_C	BW_C default	BW_C default	BW_C item	BW_C item	BW_C item	BW_C item	value->value POST=oracle POST!=post3
+BW_I	BW_I default	BW_I default	BW_I item	ERR:sorry: "inside" expressions not supported yet	BW_I item	BW_I item	value->value POST=oracle POST!=post3
+BW_N	BW_N default	BW_N default	BW_N default	ERR:sorry: "inside" expressions not supported yet	BW_N default	BW_N default	unchanged
+BW_Q	ERR:error[VITA-E3009]	BW_Q default	BW_Q item	BW_Q item	BW_Q item	BW_Q item	loud->value POST=oracle POST!=post3
+BW_W	ERR:error[VITA-E3009]	BW_W default	BW_W item	BW_W item	BW_W item	BW_W item	loud->value POST=oracle POST!=post3
+BW_X	ERR:error[VITA-E3009]	BW_X default	BW_X default	BW_X default	BW_X default	?	loud->value POST=oracle
+CF_C	CF_C 3	CF_C 3	CF_C 3	CF_C 3	CF_C 3	CF_C 3	unchanged
+CF_I	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:sorry: "inside" expressions not supported yet	CF_I 3	CF_I 3	unchanged
+CF_N	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:sorry: "inside" expressions not supported yet	CF_N 2	CF_N 2	unchanged
+CF_Q	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	CF_Q 3	CF_Q 3	CF_Q 3	unchanged
+CF_W	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	CF_W 3	CF_W 3	CF_W 3	unchanged
+CF_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	CF_X 0	CF_X x	?	unchanged
+CL_C	CL_C 3	CL_C 3	CL_C 3	CL_C 3	CL_C 3	CL_C 3	unchanged
+CL_I	ERR:error[VITA-E3009]	CL_I 3	CL_I 3	ERR:sorry: "inside" expressions not supported yet	CL_I 3	CL_I 3	loud->value POST=oracle
+CL_N	CL_N 2	CL_N 2	CL_N 2	ERR:sorry: "inside" expressions not supported yet	CL_N 2	CL_N 2	unchanged
+CL_Q	CL_Q 3	CL_Q 3	CL_Q 3	CL_Q 3	CL_Q 3	CL_Q 3	unchanged
+CL_W	CL_W 2	CL_W 3	CL_W 3	CL_W 3	CL_W 3	CL_W 3	value->value POST=oracle
+CL_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	CL_X x	CL_X x	?	unchanged
+EN_C	EN_C 1 2	EN_C 1 2	EN_C 1 2	EN_C 1 2	EN_C 1 2	EN_C 1 2	unchanged
+EN_I	ERR:error[VITA-E3009]	EN_I 1 2	EN_I 1 2	ERR:sorry: "inside" expressions not supported yet	EN_I 1 2	EN_I 1 2	loud->value POST=oracle
+EN_N	EN_N 0 1	EN_N 0 1	EN_N 0 1	ERR:sorry: "inside" expressions not supported yet	EN_N 0 1	EN_N 0 1	unchanged
+EN_Q	EN_Q 1 2	EN_Q 1 2	EN_Q 1 2	EN_Q 1 2	EN_Q 1 2	EN_Q 1 2	unchanged
+EN_W	EN_W 0 1	EN_W 1 2	EN_W 1 2	EN_W 1 2	EN_W 1 2	EN_W 1 2	value->value POST=oracle
+EN_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error: Enumeration name EB has an undefined inferr	EN_X X x	?	unchanged
+FW1	FW1 1	FW1 1	FW1 1	FW1 1	ERR:rc1	FW1 1	unchanged
+GC_C	GC_C item	GC_C item	GC_C item	GC_C item	GC_C item	GC_C item	unchanged
+GC_I	GC_I default	GC_I item	GC_I item	ERR:sorry: "inside" expressions not supported yet	GC_I item	ERR:%Error: GC_I.sv:3:29: Use of x/? constant in gener	value->value POST=oracle
+GC_N	GC_N default	GC_N default	GC_N default	ERR:sorry: "inside" expressions not supported yet	GC_N default	ERR:%Error: GC_N.sv:3:36: Use of x/? constant in gener	unchanged
+GC_Q	GC_Q item	GC_Q item	GC_Q item	GC_Q item	GC_Q item	ERR:%Error: GC_Q.sv:3:25: Use of x/? constant in gener	unchanged
+GC_W	GC_W default	GC_W item	GC_W item	GC_W item	GC_W item	ERR:%Error: GC_W.sv:3:32: Use of x/? constant in gener	value->value POST=oracle
+GC_X	GC_X default	GC_X default	GC_X default	GC_X default	GC_X default	?	unchanged
+GF_C	GF_C 0 | GF_C 1	GF_C 0 | GF_C 1	GF_C 0 | GF_C 1	GF_C 0 | GF_C 1	GF_C 0 | GF_C 1	GF_C 0 | GF_C 1	unchanged
+GF_I	ERR:error[VITA-E3010]	GF_I 0 | GF_I 1	GF_I 0 | GF_I 1	ERR:sorry: "inside" expressions not supported yet	GF_I 0 | GF_I 1	GF_I 0 | GF_I 1	loud->value POST=oracle
+GF_N	GF_N 0	GF_N 0	GF_N 0	ERR:sorry: "inside" expressions not supported yet	GF_N 0	GF_N 0	unchanged
+GF_Q	ERR:error[VITA-E3010]	GF_Q 0 | GF_Q 1	GF_Q 0 | GF_Q 1	GF_Q 0 | GF_Q 1	GF_Q 0 | GF_Q 1	GF_Q 0 | GF_Q 1	loud->value POST=oracle
+GF_W	ERR:error[VITA-E3010]	GF_W 0 | GF_W 1	GF_W 0 | GF_W 1	GF_W 0 | GF_W 1	GF_W 0 | GF_W 1	GF_W 0 | GF_W 1	loud->value POST=oracle
+GF_X	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	ERR:error: Generate "loop" conditional expression cann	ERR:error: Generate "loop" conditional expression cann	?	unchanged
+GI_C	GI_C then	GI_C then	GI_C then	GI_C then	GI_C then	GI_C then	unchanged
+GI_I	ERR:error[VITA-E3010]	GI_I then	GI_I then	ERR:sorry: "inside" expressions not supported yet	GI_I then	GI_I then	loud->value POST=oracle
+GI_N	GI_N else	GI_N else	GI_N else	ERR:sorry: "inside" expressions not supported yet	GI_N else	GI_N else	unchanged
+GI_Q	GI_Q then	GI_Q then	GI_Q then	GI_Q then	GI_Q then	GI_Q then	unchanged
+GI_W	GI_W else	GI_W then	GI_W then	GI_W then	GI_W then	GI_W then	value->value POST=oracle
+GI_X	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	GI_X else	GI_X else	?	unchanged
+GS_C	GS_C one	GS_C one	GS_C one	GS_C one	GS_C one	GS_C one	unchanged
+GS_I	ERR:error[VITA-E3010]	GS_I one	GS_I one	ERR:sorry: "inside" expressions not supported yet	GS_I one	ERR:%Error: GS_I.sv:3:26: Use of x/? constant in gener	loud->value POST=oracle
+GS_N	GS_N default	GS_N default	GS_N default	ERR:sorry: "inside" expressions not supported yet	GS_N default	ERR:%Error: GS_N.sv:3:33: Use of x/? constant in gener	unchanged
+GS_Q	GS_Q one	GS_Q one	GS_Q one	GS_Q one	GS_Q one	ERR:%Error: GS_Q.sv:3:22: Use of x/? constant in gener	unchanged
+GS_W	GS_W default	GS_W one	GS_W one	GS_W one	GS_W one	ERR:%Error: GS_W.sv:3:29: Use of x/? constant in gener	value->value POST=oracle
+GS_X	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	ERR:error[VITA-E3010]	GS_X default	GS_X default	?	unchanged
+IU_C	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	IU_C 0 | IUc_C 0	IU_C 0 | IUc_C 0	IU_C 0 | IUc_C 0	unchanged
+IU_I	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:sorry: "inside" expressions not supported yet	IU_I 0 | IUc_I 0	IU_I 0 | IUc_I 0	unchanged
+IU_N	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:sorry: "inside" expressions not supported yet	IU_N 0 | IUc_N 0	IU_N 0 | IUc_N 0	unchanged
+IU_Q	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	IU_Q 0 | IUc_Q 0	IU_Q 0 | IUc_Q 0	IU_Q 0 | IUc_Q 0	unchanged
+IU_W	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	IU_W 0 | IUc_W 0	IU_W 0 | IUc_W 0	IU_W 0 | IUc_W 0	unchanged
+IU_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	IU_X 1 | IUc_X 1	IU_X 1 | IUc_X 1	?	unchanged
+LP_C	LP_C 1 1	LP_C 1 1	LP_C 1 1	LP_C 1 1	LP_C 1 1	LP_C 1 1	unchanged
+LP_I	ERR:error[VITA-E3009]	LP_I 1 1	LP_I 1 1	ERR:sorry: "inside" expressions not supported yet	ERR:error: Malformed statement	LP_I 1 1	loud->value POST=oracle
+LP_N	LP_N 0 1	LP_N 0 1	LP_N 0 1	ERR:sorry: "inside" expressions not supported yet	ERR:error: Malformed statement	LP_N 0 1	unchanged
+LP_Q	LP_Q 1 1	LP_Q 1 1	LP_Q 1 1	LP_Q 1 1	LP_Q 1 1	LP_Q 1 1	unchanged
+LP_W	LP_W 0 1	LP_W 1 1	LP_W 1 1	LP_W 1 1	LP_W 1 1	LP_W 1 1	value->value POST=oracle
+LP_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	LP_X x 1	LP_X x 1	?	unchanged
+LT_C	LT_C 0001	LT_C 0001	LT_C 0001	LT_C 0001	LT_C 0001	LT_C 0001	unchanged
+LT_I	ERR:error[VITA-E3009]	LT_I 0001	LT_I 0001	ERR:sorry: "inside" expressions not supported yet	LT_I 0001	LT_I 0001	loud->value POST=oracle
+LT_N	LT_N 0000	LT_N 0000	LT_N 0000	ERR:sorry: "inside" expressions not supported yet	LT_N 0000	LT_N 0000	unchanged
+LT_Q	LT_Q 0001	LT_Q 0001	LT_Q 0001	LT_Q 0001	LT_Q 0001	LT_Q 0001	unchanged
+LT_W	LT_W 0000	LT_W 0001	LT_W 0001	LT_W 0001	LT_W 0001	LT_W 0001	value->value POST=oracle
+LT_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	LT_X 000x	LT_X 000x	?	unchanged
+LW_C	LW_C 00000000000000001	LW_C 00000000000000001	LW_C 00000000000000001	LW_C 00000000000000001	LW_C 00000000000000001	LW_C 00000000000000001	unchanged
+LW_I	LW_I 0000000000000000X	LW_I 00000000000000001	LW_I 00000000000000001	ERR:sorry: "inside" expressions not supported yet	LW_I 00000000000000001	LW_I 00000000000000001	value->value POST=oracle
+LW_N	LW_N 00000000000000000	LW_N 00000000000000000	LW_N 00000000000000000	ERR:sorry: "inside" expressions not supported yet	LW_N 00000000000000000	LW_N 00000000000000000	unchanged
+LW_Q	ERR:error[VITA-E3009]	LW_Q 00000000000000001	LW_Q 00000000000000001	LW_Q 00000000000000001	LW_Q 00000000000000001	LW_Q 00000000000000001	loud->value POST=oracle
+LW_W	ERR:error[VITA-E3009]	LW_W 00000000000000001	LW_W 00000000000000001	LW_W 00000000000000001	LW_W 00000000000000001	LW_W 00000000000000001	loud->value POST=oracle
+LW_X	ERR:error[VITA-E3009]	LW_X 0000000000000000X	LW_X 0000000000000000X	LW_X 0000000000000000X	LW_X 0000000000000000X	?	loud->value POST=oracle
+NW1	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error: A hierarchical reference (`t.u.v') is not a	ERR:error: A hierarchical reference (`u.v') is not all	ERR:%Error: NW1.sv:3:20: Can't find definition of 'u' 	unchanged
+NW2	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error: ==? operator may only have INTEGRAL operand	ERR:rc1	ERR:%Error: Internal Error: NW2.sv:4:39: ../V3Number.c	unchanged
+OT_C	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	unchanged
+OT_I	ERR:error[VITA-E3009]	OT_P 00000000000000001	OT_P 00000000000000001	ERR:sorry: "inside" expressions not supported yet	OT_P 00000000000000001	OT_P 00000000000000001	loud->value POST=oracle
+OT_N	OT_P 00000000000000000	OT_P 00000000000000000	OT_P 00000000000000000	ERR:sorry: "inside" expressions not supported yet	OT_P 00000000000000000	OT_P 00000000000000000	unchanged
+OT_Q	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	unchanged
+OT_W	OT_P 00000000000000000	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	OT_P 00000000000000001	value->value POST=oracle
+OT_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	OT_P 0000000000000000X	OT_P 0000000000000000X	?	unchanged
+OV_C	OV_P 1 1	OV_P 1 1	OV_P 1 1	OV_P 1 1	OV_P 1 32	OV_P 1 1	unchanged
+OV_I	ERR:error[VITA-E3009]	OV_P 1 1	OV_P 1 1	ERR:sorry: "inside" expressions not supported yet	OV_P 1 32	OV_P 1 1	loud->value oracle-split
+OV_N	OV_P 0 1	OV_P 0 1	OV_P 0 1	ERR:sorry: "inside" expressions not supported yet	OV_P 0 32	OV_P 00000000000000000000000000000000 32	unchanged
+OV_Q	OV_P 1 1	OV_P 1 1	OV_P 1 1	OV_P 1 1	OV_P 1 32	OV_P 1 1	unchanged
+OV_W	OV_P 0 1	OV_P 1 1	OV_P 1 1	OV_P 1 1	OV_P 1 32	OV_P 1 1	value->value oracle-split
+OV_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	OV_P x 1	OV_P x 32	?	unchanged
+PC_C	PC_C item	PC_C item	PC_C item	PC_C item	PC_C item	PC_C item	unchanged
+PC_I	PC_I item	PC_I item	PC_I item	ERR:sorry: "inside" expressions not supported yet	PC_I item	PC_I item	unchanged
+PC_N	PC_N default	PC_N default	PC_N default	ERR:sorry: "inside" expressions not supported yet	PC_N default	PC_N default	unchanged
+PC_Q	PC_Q item	PC_Q item	PC_Q item	PC_Q item	PC_Q item	PC_Q item	unchanged
+PC_W	PC_W item	PC_W item	PC_W item	PC_W item	PC_W item	PC_W item	unchanged
+PC_X	PC_X default	PC_X default	PC_X default	PC_X default	PC_X default	?	unchanged
+PK_C	PK_C 1	PK_C 1	PK_C 1	PK_C 1	PK_C 1	PK_C 1	unchanged
+PK_I	ERR:error[VITA-E3009]	PK_I 1	PK_I 1	ERR:sorry: "inside" expressions not supported yet	PK_I 1	PK_I 1	loud->value POST=oracle
+PK_N	PK_N 0	PK_N 0	PK_N 0	ERR:sorry: "inside" expressions not supported yet	PK_N 0	PK_N 0	unchanged
+PK_Q	PK_Q 1	PK_Q 1	PK_Q 1	PK_Q 1	PK_Q 1	PK_Q 1	unchanged
+PK_W	PK_W 0	PK_W 1	PK_W 1	PK_W 1	PK_W 1	PK_W 1	value->value POST=oracle
+PK_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	PK_X x	PK_X x	?	unchanged
+PS_C	PS_C 00101	PS_C 00101	PS_C 00101	PS_C 00101	PS_C 00101	PS_C 00101	unchanged
+PS_I	PS_I 1	PS_I 00101	PS_I 00101	ERR:sorry: "inside" expressions not supported yet	PS_I 00101	PS_I 00101	value->value POST=oracle
+PS_N	PS_N 01	PS_N 01	PS_N 01	ERR:sorry: "inside" expressions not supported yet	PS_N 01	PS_N 01	unchanged
+PS_Q	PS_Q 00101	PS_Q 00101	PS_Q 00101	PS_Q 00101	PS_Q 00101	PS_Q 00101	unchanged
+PS_W	PS_W 01	PS_W 00101	PS_W 00101	PS_W 00101	PS_W 00101	PS_W 00101	value->value POST=oracle
+PS_X	PS_X 1	PS_X 1	PS_X 1	PS_X x	PS_X x	?	unchanged
+RB_C	RB_C 2	RB_C 2	RB_C 2	RB_C 2	RB_C 2	RB_C 2	unchanged
+RB_I	RB_I 1	RB_I 2	RB_I 2	ERR:sorry: "inside" expressions not supported yet	RB_I 2	RB_I 2	value->value POST=oracle
+RB_N	RB_N 1	RB_N 1	RB_N 1	ERR:sorry: "inside" expressions not supported yet	RB_N 1	RB_N 1	unchanged
+RB_Q	RB_Q 2	RB_Q 2	RB_Q 2	RB_Q 2	RB_Q 2	RB_Q 2	unchanged
+RB_W	RB_W 1	RB_W 2	RB_W 2	RB_W 2	RB_W 2	RB_W 2	value->value POST=oracle
+RB_X	RB_X 1	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	RB_X 1	RB_X x	?	value->loud oracle-split
+RP_C	RP_C 00000011	RP_C 00000011	RP_C 00000011	RP_C 00000011	RP_C 00000011	RP_C 00000011	unchanged
+RP_I	RP_I 00000000	RP_I 00000011	RP_I 00000011	ERR:sorry: "inside" expressions not supported yet	RP_I 00000011	RP_I 00000011	value->value POST=oracle
+RP_N	RP_N 00000001	RP_N 00000001	RP_N 00000001	ERR:sorry: "inside" expressions not supported yet	RP_N 00000001	RP_N 00000001	unchanged
+RP_Q	RP_Q 00000011	RP_Q 00000011	RP_Q 00000011	RP_Q 00000011	RP_Q 00000011	RP_Q 00000011	unchanged
+RP_W	RP_W 00000001	RP_W 00000011	RP_W 00000011	RP_W 00000011	RP_W 00000011	RP_W 00000011	value->value POST=oracle
+RP_X	RP_X 00000000	RP_X 00000000	RP_X 00000000	ERR:error: Concatenation repeat may not be undefined (	ERR:error: Concatenation repeat may not be undefined (	?	unchanged
+SC_C	SC_C 00000001	SC_C 00000001	SC_C 00000001	SC_C 00000001	SC_C 00000001	SC_C 00000001	unchanged
+SC_I	ERR:error[VITA-E3009]	SC_I 00000001	SC_I 00000001	ERR:sorry: "inside" expressions not supported yet	SC_I 00000001	SC_I 00000001	loud->value POST=oracle
+SC_N	SC_N 00000000	SC_N 00000000	SC_N 00000000	ERR:sorry: "inside" expressions not supported yet	SC_N 00000000	SC_N 00000000	unchanged
+SC_Q	SC_Q 00000001	SC_Q 00000001	SC_Q 00000001	SC_Q 00000001	SC_Q 00000001	SC_Q 00000001	unchanged
+SC_W	SC_W 00000000	SC_W 00000001	SC_W 00000001	SC_W 00000001	SC_W 00000001	SC_W 00000001	value->value POST=oracle
+SC_X	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	ERR:error[VITA-E3009]	SC_X 0000000x	SC_X 0000000x	?	unchanged
+SR1	ERR:error[VITA-E3009]	SR1 1	SR1 1	SR1 1	SR1 1	SR1 1	loud->value POST=oracle
+SR2	SR2 0	SR2 1	SR2 1	SR2 1	SR2 1	SR2 0	value->value oracle-split
+XD1	XD1 x	XD1 x	XD1 x	XD1 1	XD1 x	ERR:%Error: XD1.sv:3:12: left side of bit range isn't 	unchanged

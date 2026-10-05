@@ -1,0 +1,31 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__step0__h__c02f_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/step0/h/c02f_ci.sv
+roadmap_row: §3.b case-inside
+set: step0/h
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | step0/h/out_c02f_ci/vl.out | 418 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/step0/h/c02f_ci.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 15ps; walltime 0.000 s; speed 312.500 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | step0/h/out_c02f_ci/sv.out | 97 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+sv2v.v:26: $finish called at 15 (1s)
+rc=0
+=== end

@@ -1,0 +1,26 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__fx__F10
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/fx/F10.sv
+roadmap_row: §2 🆕 S
+set: fx
+oracles_present: verilator
+vita_tags: fx-out,post-dbg-r1,post2dbg,postrel,PRE,fx-preout,r4new,r4post3,r4pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): post3×1 (s580/r4/cmp3_post4.txt)
+alias: ident/F10 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 3
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./F10.vl.txt | 120 bytes
+frame 1 inlined 1 task 1 pkg 1 cont-frame 1 cont-inlined 02
+frame 0 inlined 0 task 0 pkg 0 cont-frame 0 cont-inlined 01
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./obj_F10.err | 0 bytes
+
+=== block 3 | vita [PRE] | ./F10.pre.txt | 189 bytes
+frame x inlined x task x pkg x cont-frame x cont-inlined xx
+frame 0 inlined 0 task 0 pkg 0 cont-frame 0 cont-inlined xx
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== end

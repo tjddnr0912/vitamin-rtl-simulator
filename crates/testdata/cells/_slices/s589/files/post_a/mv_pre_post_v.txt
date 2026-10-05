@@ -1,0 +1,119 @@
+('loud', 'same') 177
+('noora', 'same') 2
+('ok', 'same') 127
+('split', 'same') 4
+('wrong', 'ok') 111
+('wrong', 'same') 60
+('wrong', 'wrong') 1
+wrong->ok	a/cl4_scoped_nest	P=1000 v=1000	P=232 v=232	P=232 v=232	P=232 v=232
+wrong->ok	a/r1_flip_wide	P=1000	P=8	P=8	P=8
+wrong->ok	a/r1_flip_wide_rt	v=1000	v=8	v=8	v=8
+wrong->ok	g_c/a_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/a_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/a_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/a_fml_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_frloc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_frloc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/a_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/a_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/iimp_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iimp_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iimp_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/iwc_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iwc_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iwc_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/s_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/s_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/s_fml_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_frloc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_frloc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_frloc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/s_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/s_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/w_fn_imp	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_fn_q	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_par_imp	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_par_q	B=8	B=4	B=4	B=4
+wrong->ok	g_c2/n_pkgimp	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c2/n_twolevel_g	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/b_bits2_rt_par	v=8	v=4	v=4	v=4
+wrong->ok	g_c4/imp_two_pkgs	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/pb_bits	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pi_rpar	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/pt_task	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pt_task_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pw_wide	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c4/simp_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c4/simp_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c4/simp_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c4/swc_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c4/swc_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c4/swc_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_fml_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_fml_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_loc_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_loc_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_ret_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_ret_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in_fml	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_fml_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_fml_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_loc_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_loc_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_ret_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_ret_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c7/ty_bits_fn	P=232 b=8	P=8 b=4	P=8 b=4	P=8 b=4
+wrong->ok	g_c7/ty_bits_par	P=232 b=8	P=8 b=4	P=8 b=4	P=8 b=4
+wrong->ok	g_c7/ty_sgn_fn	P=15 P2=15 b=8	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+wrong->ok	g_c7/ty_sgn_par	P=15 P2=15 b=8	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+wrong->ok	k/m9_body_cast	v=-21	v=-1	v=-1	v=-1
+wrong->ok	k/m9_body_imp	v=0000007f	v=00000003	v=00000003	v=00000003
+wrong->ok	k/m9_hdr_nest	P=235 v=235	P=3 v=3	P=3 v=3	P=3 v=3
+wrong->wrong	g_c5/rv558_ovr	P=255 b=32	P=15 b=32	P=15 b=4	P=15 b=4

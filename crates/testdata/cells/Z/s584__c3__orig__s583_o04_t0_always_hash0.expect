@@ -1,0 +1,97 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__c3__orig__s583_o04_t0_always_hash0
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/c3/orig/s583_o04_t0_always_hash0.sv
+roadmap_row: §2 🆕 Z
+set: c3/orig
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE,PROTO/POSTA,PROTO/POSTB,PROTO/PRE,PROTO/R4f,PROTO/R5,PROTO/R5h,PROTO/R5hp,PROTO/R5hps,PROTO/R5hpss,PROTO/R5i,PROTO/R5s,PROTO/R7,PROTO/R7p,PROTO/R7ps,PROTO/R7pss,unrecorded(s3b)/PRE,unrecorded(s3dbg)/PRE,unrecorded(s3dbg2)/PRE,unrecorded(s3rel)/PRE,unrecorded(s3relb)/PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: c3/orig = copy set re-run for the prototype scoring
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PROTO/POSTA: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/POSTB: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/PRE: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R4f: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5h: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hp: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hpss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5i: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5s: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7p: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7ps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7pss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+blocks: 29
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./s583_o04_t0_always_hash0.out | 851 bytes
+##### s583_o04_t0_always_hash0.sv
+=== iverilog
+compile rc=0 msgs: s583_o04_t0_always_hash0.sv:5: warning: System task ($display) cannot be synthesized in an always_comb process.
+s583_o04_t0_always_hash0.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+eval t=0 r=01
+s583_o04_t0_always_hash0.sv:12: $finish called at 2 (1s)
+=== verilator
+compile rc=0
+run rc=0
+eval t=0 r=00
+[0] %Error: s583_o04_t0_always_hash0.sv:6: Assertion failed in top: unique case, but none matched for '2'h0'
+- s583_o04_t0_always_hash0.sv:12: Verilog $finish
+eval t=2 r=01
+=== vita (native=interp=vm)
+rc=0
+eval t=0 r=xx
+s583_o04_t0_always_hash0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+eval t=0 r=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+=== block 2 | vita [A] | r2run/r1a/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes
+=== vita (native=interp=vm)
+rc=0
+eval t=0 r=xx
+s583_o04_t0_always_hash0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+eval t=0 r=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+=== block 3 | vita [POST2] | r2run/post2/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 4 | vita [POST2] | r3run/post2/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 5 | vita [POST3] | r3run/post3/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 6 | vita [POST3] | r4run/post3/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 7 | vita [POST4] | r4run/post4/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 8 | vita [PRE] | r2run/pre/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 9 | vita [PRE] | r3run/pre/c3_orig__s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 10 | vita [PROTO/POSTA] | r2/POSTA/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 11 | vita [PROTO/POSTB] | r2/POSTB/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 12 | vita [PROTO/PRE] | r2/PRE/s583_o04_t0_always_hash0.out | 274 bytes
+=== vita (interp=vm)
+rc=0
+eval t=0 r=xx
+s583_o04_t0_always_hash0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+eval t=0 r=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+=== block 13 | vita [PROTO/PRE] | r3/PRE/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 14 | vita [PROTO/R4f] | r2/R4f/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 15 | vita [PROTO/R5] | r2/R5/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 16 | vita [PROTO/R5h] | r2/R5h/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 17 | vita [PROTO/R5hp] | r2/R5hp/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 18 | vita [PROTO/R5hp] | r3/R5hp/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 19 | vita [PROTO/R5hps] | r2/R5hps/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 20 | vita [PROTO/R5hps] | r3/R5hps/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 21 | vita [PROTO/R5hpss] | r2/R5hpss/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 22 | vita [PROTO/R5i] | r2/R5i/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 23 | vita [PROTO/R5s] | r2/R5s/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 24 | vita [PROTO/R7] | r2/R7/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 25 | vita [PROTO/R7p] | r2/R7p/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 26 | vita [PROTO/R7p] | r3/R7p/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 27 | vita [PROTO/R7ps] | r2/R7ps/s583_o04_t0_always_hash0.out | 274 bytes | identical to block 12
+=== block 28 | vita [PROTO/R7ps] | r3/R7ps/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== block 29 | vita [PROTO/R7pss] | r2/R7pss/s583_o04_t0_always_hash0.out | 281 bytes | identical to block 2
+=== end

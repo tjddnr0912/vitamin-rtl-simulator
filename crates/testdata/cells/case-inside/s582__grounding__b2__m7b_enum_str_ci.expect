@@ -1,0 +1,73 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m7b_enum_str_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m7b_enum_str_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog,verilator
+vita_tags: POST,POST2,POST3
+verdict: accept = verilator (sv2v n/a)
+verdict_source: s582/post/CENSUS.md:23
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b2__m7b_enum_str_ci/iv.out | 1769 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:6: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:8: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:8: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:11: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:11: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:11: error: Incomprehensible case expression.
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m7b_enum_str_ci/vl.out | 449 bytes
+s m=1
+s2 m=0
+f=R_F m=1
+f=I_F m=0
+f=S_F m=2
+f=B_F m=2
+f=U_F m=3
+f=J_F m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m7b_enum_str_ci.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 303.030 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | vita [POST] | post/census/grounding__b2__m7b_enum_str_ci/post.out | 242 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s m=1
+s2 m=0
+f=R_F m=1
+f=I_F m=0
+f=S_F m=2
+f=B_F m=2
+f=U_F m=3
+f=J_F m=3
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 4 | vita [POST] | post2/cmp/grounding__b2__m7b_enum_str_ci.sv/post.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 5 | vita [POST] | post2/cmp/grounding__b2__m7b_enum_str_ci.sv/post.out | 115 bytes
+s m=1
+s2 m=0
+f=R_F m=1
+f=I_F m=0
+f=S_F m=2
+f=B_F m=2
+f=U_F m=3
+f=J_F m=3
+simulation ended (Finish) at time 10
+rc=0
+=== block 6 | vita [POST2] | post2/cmp/grounding__b2__m7b_enum_str_ci.sv/post2.err | 127 bytes | identical to block 4
+=== block 7 | vita [POST2] | post2/cmp/grounding__b2__m7b_enum_str_ci.sv/post2.out | 115 bytes | identical to block 5
+=== block 8 | vita [POST2] | post3/cmp/grounding__b2__m7b_enum_str_ci.sv/post2.err | 127 bytes | identical to block 4
+=== block 9 | vita [POST2] | post3/cmp/grounding__b2__m7b_enum_str_ci.sv/post2.out | 115 bytes | identical to block 5
+=== block 10 | vita [POST3] | post3/cmp/grounding__b2__m7b_enum_str_ci.sv/post3.err | 127 bytes | identical to block 4
+=== block 11 | vita [POST3] | post3/cmp/grounding__b2__m7b_enum_str_ci.sv/post3.out | 115 bytes | identical to block 5
+=== end

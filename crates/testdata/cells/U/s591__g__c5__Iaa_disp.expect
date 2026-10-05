@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c5__Iaa_disp
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c5/Iaa_disp.sv
+roadmap_row: §2 🆕 U
+set: g/c5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: correct->loud(oracle loud: ivl,s2v)
+verdict_source: s591/impl/moves_ground.txt:76
+notes: class PRE vs posta (POST_a), IMPL.md:14
+alias: impl/dump/9fa21933275af481 (byte-identical source) verdict: correct->loud(oracle loud: ivl,s2v) verdict_source: s591/impl/moves_ground.txt:76
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Iaa_disp.ivl | 90 bytes
+Iaa_disp.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | impl/dump/9fa21933275af481.ivl | 98 bytes
+9fa21933275af481.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Iaa_disp.vl | 229 bytes
+aa P=3
+- Iaa_disp.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | impl/dump/9fa21933275af481.vl | 238 bytes
+aa P=3
+- 9fa21933275af481.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./Iaa_disp.s2v | 185 bytes
+rc=1
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package
+=== block 6 | vita [DEV1] | ./Iaa_disp.dev1 | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Iaa_disp.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 7 | vita [DEV2] | impl/dump/9fa21933275af481.dev2 | 241 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+9fa21933275af481.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [DEV3] | ./Iaa_disp.dev3 | 233 bytes | identical to block 6
+=== block 9 | vita [DEV3] | impl/dump/9fa21933275af481.dev3 | 241 bytes | identical to block 7
+=== block 10 | vita [POSTA] | ./Iaa_disp.posta | 233 bytes | identical to block 6
+=== block 11 | vita [POSTB] | ./Iaa_disp.postb | 233 bytes | identical to block 6
+=== block 12 | vita [POSTB] | impl/dump/9fa21933275af481.postb | 241 bytes | identical to block 7
+=== block 13 | vita [PRE] | ./Iaa_disp.pre | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+aa P=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 14 | vita [PRE] | ./Iaa_disp.pre.route | 0 bytes
+
+=== block 15 | vita [PROTO1] | ./Iaa_disp.post1 | 233 bytes | identical to block 6
+=== block 16 | vita [PROTO2] | ./Iaa_disp.post2 | 233 bytes | identical to block 6
+=== end

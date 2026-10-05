@@ -1,0 +1,94 @@
+c/Ewe_val: silent->loud(oracle loud: ivl,s2v)
+    pre : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32
+    post: !VITA-E3009 `E1` has already been imported into this scope (explicit import from package `pk`) and is  | rc=1
+c/Iaa_cmp: correct->loud(oracle loud: ivl,s2v)
+    pre : cmp gt=0 eq3=1
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_gcs: correct->loud(oracle loud: ivl,s2v)
+    pre : gcs three
+    post: !VITA-E3010 generate-case scrutinee is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iaa_gif: correct->loud(oracle loud: ivl,s2v)
+    pre : gif small
+    post: !VITA-E3010 generate-if condition is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iaa_ovr: silent->loud(oracle loud: ivl,s2v)
+    pre : ovr top.u P=3 b=32 | port sub2 b=1 | ~VITA-W3057
+    post: !VITA-E3009 the override of parameter `P` is not a constant, so the declared default would be used ins | ~VITA-W3056 | ~VITA-W3057 | rc=1
+c/Iaa_pcs: correct->loud(oracle loud: ivl,s2v)
+    pre : pcs three
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_sel: silent->loud(oracle loud: ivl,s2v)
+    pre : sel s0=1 s64=x lo=3
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_val: correct->loud(oracle loud: ivl,s2v)
+    pre : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+    post: !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determined expressions fold; | !VITA-E3009 parameter `KW` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3009 parameter `K`
+c/Iaa_wid: correct->loud(oracle loud: ivl,s2v)
+    pre : wid b=4
+    post: !VITA-E3009 undefined name `P` is not allowed in a constant range bound [in top] | rc=1
+c/Iab_cmp: correct->loud(oracle loud: ivl,s2v)
+    pre : cmp gt=1 eq3=0
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_gcs: loud->loud(changed text)
+    pre : !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+    post: !VITA-E3010 generate-case scrutinee is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iab_gif: correct->loud(oracle loud: ivl,s2v)
+    pre : gif big
+    post: !VITA-E3010 generate-if condition is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iab_ovr: silent->loud(oracle loud: ivl,s2v)
+    pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+    post: !VITA-E3009 the override of parameter `P` is not a constant, so the declared default would be used ins | ~VITA-W3056 | ~VITA-W3057 | rc=1
+c/Iab_pcs: correct->loud(oracle loud: ivl,s2v)
+    pre : pcs wide
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_sel: correct->loud(oracle loud: ivl,s2v)
+    pre : sel s0=1 s64=1 lo=9
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_val: correct->loud(oracle loud: ivl,s2v)
+    pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determined expressions fold; | !VITA-E3009 parameter `KW` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3009 parameter `K`
+c/Iab_wid: correct->loud(oracle loud: ivl,s2v)
+    pre : wid b=10
+    post: !VITA-E3009 undefined name `P` is not allowed in a constant range bound [in top] | rc=1
+c/Icu_val: silent->correct(=ivl,s2v,vl)
+    pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+c/Ihd_val: silent->correct(=ivl,s2v)
+    pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+c/Inw_gcs: correct->loud
+    pre : gcs three
+    post: !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+c/Inw_gif: value->value(pre=vl post=ivl,s2v)
+    pre : gif small
+    post: gif big
+c/Inw_wid: value->value(pre=vl post=ivl,s2v)
+    pre : wid b=4
+    post: wid b=10
+c3/X3: silent->correct(=ivl,s2v,vl)
+    pre : W=10000000000000007 bits_v=6 eq=1
+    post: W=10000000000000007 bits_v=8 eq=1
+c4/IAi: value->value(pre=vl post=ivl,s2v)
+    pre : gif top.u[0].e small | gif top.u[1].e small
+    post: gif top.u[0].t big | gif top.u[1].t big
+c5/IFnw: silent->correct(=ivl,s2v)
+    pre : ifnw top.x P=18446744073709551625 bv=4 b=65
+    post: ifnw top.x P=18446744073709551625 bv=10 b=65
+c5/Iaa_disp: correct->loud(oracle loud: ivl,s2v)
+    pre : aa P=3
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c5/Iev: silent->correct(=ivl,s2v)
+    pre : ev W=18446744073709551625 b=8
+    post: ev W=5 b=8
+c5/Ivw: correct->loud(oracle loud: ivl,s2v)
+    pre : vw W=18446744073709551625
+    post: !VITA-E3010 undeclared net/variable `top.W` [in top] | rc=1
+c6/Ppnn_ref: silent->loud(oracle loud: ivl,s2v)
+    pre : ppnn Z=5
+    post: !VITA-E3009 package parameter `Z` value is not a foldable constant [in pc] | rc=1
+c6/Ppnw_ref: silent->loud(oracle loud: ivl,s2v)
+    pre : ppnw Z=18446744073709551625
+    post: !VITA-E3009 package parameter `Z` value is not a foldable constant [in pc] | rc=1
+row/q1g: silent->loud
+    pre : @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | @ hit3
+    post: !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+COUNTS {'same': 240, 'silent->loud': 7, 'correct->loud': 15, 'loud->loud': 1, 'silent->correct': 5, 'value->value': 3} total 271

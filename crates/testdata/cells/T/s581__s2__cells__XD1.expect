@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__s2__cells__XD1
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/s2/cells/XD1.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: s2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST2,POST3,POST,PRE
+verdict: unchanged
+verdict_source: s581/S2_matrix.tsv:175
+alias: lens_diff3/s2c/cells/XD1 (byte-identical source) verdict: unchanged verdict_source: s581/S2_matrix.tsv:175
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./XD1.iv.txt | 12 bytes
+XD1 1
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./XD1.vl.txt | 100 bytes
+%Error: XD1.sv:3:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./XD1.vlb | 329 bytes
+%Error: XD1.sv:3:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 't'
+    3 |   logic a [4'bx : 0];
+      |            ^~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./XD1.sv.txt | 12 bytes
+XD1 x
+
+rc=0
+=== block 5 | vita [POST] | ./XD1.post.txt | 79 bytes
+XD1 x
+simulation ended (Quiescent) at time 1
+errors=0 warnings=0 notes=0
+
+rc=0
+=== block 6 | vita [POST2] | ./XD1.p2.txt | 79 bytes | identical to block 5
+=== block 7 | vita [POST3] | ./XD1.p3.txt | 79 bytes | identical to block 5
+=== block 8 | vita [POST3b] | lens_diff3/s2c/cells/XD1.post3b.txt | 79 bytes | identical to block 5
+=== block 9 | vita [PRE] | ./XD1.pre.txt | 79 bytes | identical to block 5
+=== end

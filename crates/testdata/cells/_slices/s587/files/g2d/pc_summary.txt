@@ -1,0 +1,28 @@
+k_cons_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported constraint expression form (B2: relational/arithmetic/logi
+k_cons_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported constraint expression form (B2: relational/arithmetic/logi
+k_cons_if_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported constraint expression form (B2: relational/arithmetic/logi
+k_cons_if_N            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported constraint expression form (B2: relational/arithmetic/logi
+k_dhi_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dhi_case_N           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dhi_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dhi_if_N             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dlo_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dlo_case_N           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dlo_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dlo_if_N             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` bound must be constant
+k_dwt_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` weight must be constant
+k_dwt_case_N           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` weight must be constant
+k_dwt_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` weight must be constant
+k_dwt_if_N             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a `dist` weight must be constant
+k_evlsb_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constan
+k_evlsb_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constan
+k_evlsb_if_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constan
+k_evlsb_if_N           rc=0   W4031=0 sites=f:frame:0              out=[ev at 1 ] 
+k_evlvl_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a level (non-edge) event control on a select with a variable index is 
+k_evlvl_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a level (non-edge) event control on a select with a variable index is 
+k_evlvl_if_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a level (non-edge) event control on a select with a variable index is 
+k_evlvl_if_N           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a level (non-edge) event control on a select of a dynamic-storage hand
+k_inoff_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupporte
+k_inoff_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupporte
+k_inoff_if_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupporte
+k_inoff_if_N           rc=0   W4031=0 sites=f:frame:0              out=[m=ef ] 

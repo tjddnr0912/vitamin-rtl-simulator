@@ -1,0 +1,77 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__ac2_psel_x
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/ac2_psel_x.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/PLAN.md:42
+alias: post_a/cells/a/ac2_psel_x (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/a/ac2_psel_x (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./ac2_psel_x.ivl | 214 bytes
+ac2_psel_x.sv:11: error: Indexed part select width must be an integral constants greater than zero.
+ac2_psel_x.sv:11:      : This width expression violates that rule: q::h('sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./ac2_psel_x.vl | 106 bytes
+%Error: Internal Error: ac2_psel_x.sv:11:31: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./ac2_psel_x.s2v | 219 bytes
+ac2_psel_x.s2v.v:14: error: Indexed part select width must be an integral constants greater than zero.
+ac2_psel_x.s2v.v:14:      : This width expression violates that rule: q_h('sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [P1d] | ./ac2_psel_x.p4 | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+o=00000000
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [P1d] | ./ac2_psel_x.p4nb | 179 bytes | identical to block 4
+=== block 6 | vita [POST-a] | post_a/cells/a/ac2_psel_x.post | 370 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+ac2_psel_x.sv:3:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 7 | vita [POST-a] | r2/diff/impl/a/ac2_psel_x.post | 370 bytes | identical to block 6
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/ac2_psel_x.spost | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+ac2_psel_x.sv:3:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 9 | vita [POST-b] | post_a/cells/a/ac2_psel_x.pb | 370 bytes | identical to block 6
+=== block 10 | vita [POST-b] | post_a/cells/a/ac2_psel_x.postb | 370 bytes | identical to block 6
+=== block 11 | vita [POST-b] | r2/diff/impl/a/ac2_psel_x.pb | 370 bytes | identical to block 6
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/ac2_psel_x.spostb | 398 bytes | identical to block 8
+=== block 13 | vita [POST-c] | post_a/cells/a/ac2_psel_x.postc | 370 bytes | identical to block 6
+=== block 14 | vita [POST-c] | r2/diff/impl/a/ac2_psel_x.pc | 370 bytes | identical to block 6
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/ac2_psel_x.spostc | 398 bytes | identical to block 8
+=== block 16 | vita [PRE] | ./ac2_psel_x.pre | 370 bytes | identical to block 6
+=== block 17 | vita [S2] | post_a/cells/a/ac2_psel_x.s2 | 370 bytes | identical to block 6
+=== block 18 | vita [S2-sep] | post_a/cells/a/ac2_psel_x.ss2 | 398 bytes | identical to block 8
+=== block 19 | vita [S3] | post_a/cells/a/ac2_psel_x.s3 | 370 bytes | identical to block 6
+=== block 20 | vita [S4] | post_a/cells/a/ac2_psel_x.s4 | 370 bytes | identical to block 6
+=== block 21 | vita [S5] | post_a/cells/a/ac2_psel_x.s5 | 370 bytes | identical to block 6
+=== block 22 | vita [S5-sep] | post_a/cells/a/ac2_psel_x.ss5 | 398 bytes | identical to block 8
+=== block 23 | vita [W0] | post_a/cells/a/ac2_psel_x.w0 | 370 bytes | identical to block 6
+=== end

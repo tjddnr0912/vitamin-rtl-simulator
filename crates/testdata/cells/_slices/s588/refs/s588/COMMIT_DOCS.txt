@@ -1,0 +1,103 @@
+docs: record §4.5.588 — 🆕 AE not built: every cut descends, BLOCKED on row 15, 🆕 AC's sinks, a 4-state result channel and two enum lines; 🆕 AD is §5.2 row 1
+
+§4.5.588 took §2 🆕 AE (§5.2 row 1) and built nothing: grounding, plan
+and the implementer's step 0 refuted every shape, so this commit is its
+record. No code changed.
+
+- The bug: the constant interpreter reads a never-assigned 4-state
+  variable as 0 where IEEE 1800-2017 §6.8 gives x — a return variable
+  (`const_fn.rs:1507` `or_insert(0)`) or a local declared without a
+  value (`:1335`). Its env is `BTreeMap<String, i64>` and its result
+  `Option<i64>`, so an x-bearing result reaches every binder as a
+  value, and a fully known result computed from the 0 is wrong too
+  (m19 `repeat (fd(2))`, `fd` testing `t == 4'd0`: PRE `n=1`, iverilog
+  and sv2v `n=2`, vita's own run time 2).
+- Mechanism (PRE e1e7e571, HEAD 2f2d3f2d): the env has four value reads
+  (`const_fn.rs` :908, :1213, :1518, :1582) and no x plane; no binder
+  can tell 2-state from 4-state (`ParamDecl` keeps no var kind, §2 row
+  15); `const_wide.rs` `fold_region` has no call arm. A logging probe
+  found no such read in the suite or the 11 corpus workloads.
+- Three shapes, each measured to descend:
+  - D, decline an x-bearing result (the row's literal fix): 13 correct
+    cells go loud (2-state binders' x->0, `& 4'b0000`, `int'()`,
+    `$clog2`, generate-if truth) and s01 goes loud -> silent through
+    🆕 AC's sinks.
+  - F, re-run in a 4-state mode and keep only a fully known result:
+    breaks a cancellation with a still-collapsed x-bearing call. p01
+    `localparam int Q = fd(2) - fx1(2);` PRE `Q=0` = iverilog `Q=0`,
+    F `Q=1` (by construction); the corrected value escapes through a
+    parameter (`R = P - fx1(2)`), so no opt-in contains it.
+  - AE-rt, a read of a never-assigned 4-state variable sends the
+    statement `repeat` count (`repeat_unroll_count`) to the run-time
+    loop, which runs an x count 0 times. It would move 8 cells
+    silent -> correct (m19, p06, p15, p16, p19 to `n=2`; p07, p13, p14
+    to `n=0` by hand-IEEE §12.7.2). Step 0 stopped it before code: the
+    parser records `enum bit [N]` as 4-state `Logic`
+    (`typedefs.rs:351`; `functask.rs:201` `ret_two_state` false), so
+    the seed takes those locals and returns, and vita's run time
+    misreads them. e01 (local) `n=1` -> `n=2` and e05 (return)
+    `n=2` -> `n=0` on the hand-spelled POST, where iverilog and
+    verilator agree with PRE. The docs step measured a third: d11, a
+    base-less enum return beside a never-assigned `logic [3:0]` local,
+    folds `n=2` (= iverilog, verilator) and runs `n=0`.
+- ROADMAP §2 start-order:
+  - 🆕 AE is BLOCKED on row 15's 2-state identity, 🆕 AC's sinks
+    refusing an x-valued call and a 4-state result channel from the
+    interpreter to module-scope folds; the `repeat` cut also waits on
+    the two "Size cast" enum lines. The row records the fix shape (an x
+    plane each binder converts, refuses or holds), the three shapes
+    and a rule for later rows: a lane opened from loud to a value
+    declines a run that reads a never-assigned 4-state variable (an
+    over-seed stays loud, never silent).
+  - 🆕 AD carries the rule (l22: its prepass fix would read AE's 0) and
+    is §5.2 row 1; 🆕 AB, U, V, W and S's retry follow the renumbering.
+- ROADMAP §2 recorded defects:
+  - "Size cast": the `typedef enum bit [7:0]` line cites d01rt / d05rt
+    (run time `n=2` / `n=0`, iverilog and verilator `n=1` / `n=2`) and
+    AE's cut. New line: a function returning a base-less enum reads
+    its never-assigned return variable as x at run time (d07rt `n=0`,
+    iverilog and verilator `n=2`; e07's constant fold is right; the
+    run-time site is not found).
+  - "Constant domain", new: a select write into a local whose
+    initializer did not fold reads 0 for the other bits (`:1582`; a41
+    PRE `P=0`, iverilog, verilator and sv2v `P=2`; declining there makes
+    the p03 twins loud, so close upward). New: a continuous-assign or
+    net-declaration delay folds AE's 0 (p05b, p08b, p10); the run-time
+    lane shares the enum prerequisites (d12 folded delay 1 = iverilog
+    and verilator, d12rt run time 2), and routing there must count the
+    routed assign as delayed in `demote_runtime_delay_on_resolved_nets`.
+    Deleted `integer x; g = x + 1;` (= 🆕 AE's x2i).
+  - These three finds lie on AE's fix path (its interpreter line, its
+    consumer lanes, the run-time lane its cut routes to), so they are
+    §2 lines, not PROBE_CATALOG rows.
+- ROADMAP §3.b: `const-fn-case`, `const-fn-systask` and
+  `unique-const-fn` are BLOCKED on 🆕 AD only and carry the rule;
+  `unique-if-chain`'s note follows.
+- ROADMAP §5.2: 🆕 AE leaves the table. New order:
+  - row 1 🆕 AD (①)
+  - row 2 🆕 AB (①)
+  - row 3 `const-fn-case` (②), after row 1, its arm declining a run
+    that reads a never-assigned 4-state variable
+  - rows 4–6 🆕 U, V, W
+  - row 7 🆕 T then S (a)
+  - row 8 the two "Size cast" enum lines (①), which unblock only AE's
+    `repeat` cut, so they follow rows 4–7
+  - row 9 the new-design census
+  - row 10 hygiene
+  The order prose and every `§5.2 row N` cite in docs/ follow.
+- Summary recounted by line census: §2 start-order 33/9/24 → 33/8/25,
+  §2 recorded 201/104/97 → 203/105/98; total open 464 → 466,
+  startable 273 → 273, blocked 191 → 193; `next` is §2 start-order
+  1, 2, 4–7, §2 recorded 8, §3.b 3, study/03 9.
+- REMAINING_WORK §D: the x-seed line becomes the 4-state result channel
+  (blocks 🆕 AE; the rows that carry the rule do not wait on it); a new
+  enum-identity line (blocks AE's `repeat` cut and the delay line);
+  row 15's line adds 🆕 AE; the `unique-const-fn` note and the row
+  cites follow.
+
+Review: none (no code).
+
+Out of scope: none beyond the three §2 lines above.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

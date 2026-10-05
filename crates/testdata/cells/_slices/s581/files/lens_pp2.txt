@@ -1,0 +1,33 @@
+A1D.sv     POST2!=PRE | POST: A1D top.g[0] i=18446744073709551625 K=9 ; A1D top.g[1] i=18446744073709551625 K=9 ; rc=0 | POST2: A1D top.g[0] i=0 K=0 ; A1D top.g[1] i=1 K=1 ; rc=0
+A1L.sv     POST2=PRE | POST: A1L def top.g[0].g_def 99 ; A1L def top.g[1].g_def 99 ; rc=0 | POST2: A1L def top.g[0].g_def 99 ; A1L a top.g[1].g_a 1 ; rc=0
+A1S.sv     POST2=PRE | POST: A1S def top.g[0].g_def 99 ; A1S def top.g[1].g_def 99 ; rc=0 | POST2: A1S zero top.g[0].g_zero 1 ; A1S one top.g[1].g_one 2 ; rc=0
+A2S.sv     POST2=PRE | POST: A2S def top.g[0].g_def 99 ; A2S def top.g[1].g_def 99 ; rc=0 | POST2: A2S zero top.g[0].g_zero 1 ; A2S one top.g[1].g_one 2 ; rc=0
+A3S.sv     POST2=PRE | POST: A3S def top.b.g[0].g_def 99 ; A3S def top.b.g[1].g_def 99 ; rc=0 | POST2: A3S zero top.b.g[0].g_zero 1 ; A3S one top.b.g[1].g_one 2 ; rc=0
+B2D.sv     POST2!=PRE | POST: B2D E1=18446744073709551616 K=0 ; rc=0 | POST2: B2D E1=1 K=1 ; rc=0
+B2E.sv     POST2=PRE | POST: B2E def 99 ; rc=0 | POST2: B2E a 1 ; rc=0
+B3X.sv     POST2=PRE | POST: B3X def top.g[0].g_def 99 ; B3X def top.g[1].g_def 99 ; rc=0 | POST2: B3X def top.g[0].g_def 99 ; B3X a top.g[1].g_a 1 ; rc=0
+B4P.sv     POST2=PRE | POST: B4P def top.g[0].g_def 99 ; B4P def top.g[1].g_def 99 ; rc=0 | POST2: B4P def top.g[0].g_def 99 ; B4P odd top.g[1].g_odd 1 ; rc=0
+D1.sv      POST2=PRE | POST: D1.sv:1:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.gb[0].g_ ; D1.sv:4:65: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.gb[0].g ; rc=1 | POST2: D1 def 99 ; rc=0
+D2.sv      POST2=PRE | POST: D2.sv:1:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.gb[0].g_ ; D2.sv:4:65: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.gb[0].g ; rc=1 | POST2: D2 def 99 ; rc=0
+D4.sv      POST2=PRE | POST: D4 a 1 ; rc=0 | POST2: D4 def 99 ; rc=0
+D5.sv      POST2=PRE | POST: D5 o=1 ; rc=0 | POST2: D5 o=99 ; rc=0
+G11.sv     POST2=PRE | POST: G11.sv:1:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: G11 1 ; rc=0
+G12.sv     POST2=PRE | POST: G12.sv:2:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: G12 1 ; rc=0
+G13.sv     POST2=PRE | POST: G13.sv:2:21: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: G13 32 ; rc=0
+G5.sv      POST2=PRE | POST: G5.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or a ; rc=1 | POST2: G5 1 ; rc=0
+G6.sv      POST2=PRE | POST: G6.sv:2:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or a ; rc=1 | POST2: G6 4 ; rc=0
+G9.sv      POST2=PRE | POST: G9.sv:2:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or a ; rc=1 | POST2: G9 1 ; rc=0
+MD1.sv     POST2=PRE | POST: MD1.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: MD1 1 ; rc=0
+Sxc.sv     POST2=PRE | POST: Sxc.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; Sxc.sv:3:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 size x ; @rt 00000000000000000000000000000011 ; rc=0
+Sxe.sv     POST2=PRE | POST: Sxe.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; Sxe.sv:3:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 size x ; @rt 0 ; rc=0
+Sxf.sv     POST2=PRE | POST: Sxf.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 v=1 ; rc=0
+Sxg.sv     POST2=PRE | POST: Sxg.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 v=1 ; rc=0
+Sxj.sv     POST2=PRE | POST: Sxj.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 v=1 ; rc=0
+Sxk.sv     POST2=PRE | POST: Sxk.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @bits 1 v=1 ; rc=0
+Sy1.sv     POST2=PRE | POST: Sy1.sv:1:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @P 32 00000000000000000000000000000001 ; rc=0
+Sy2.sv     POST2=PRE | POST: Sy2.sv:1:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @port 1 1 ; rc=0
+Sy3.sv     POST2=PRE | POST: Sy3.sv:1:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @wire 1 1 ; rc=0
+Sy4.sv     POST2=PRE | POST: Sy4.sv:1:28: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; Sy4.sv:1:92: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.t_t` [ ; Sy4.sv:1:92: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, ; rc=1 | POST2: Sy4.sv:1:92: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.t_t` [ ; Sy4.sv:1:92: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, ; rc=1
+Sy5.sv     POST2=PRE | POST: Sy5.sv:1:39: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @func 1 1 ; rc=0
+Sy6.sv     POST2=PRE | POST: Sy6.sv:1:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  ; rc=1 | POST2: @udim 8 ; rc=0
+files 410 POST!=POST2 32

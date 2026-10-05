@@ -1,0 +1,33 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__vx_twins_noci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/vx_twins_noci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: iverilog
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 2
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b3/out_vx_twins_noci/iv.out | 413 bytes
+A pc  u8 vs 8'sh80 +16'sh7777   m=1
+B pc  s8 vs 8'sh80 +32'd12345   m=1
+C cz  u4 vs 4'sb1?10 +8'h55     m=1
+C weq u4 ==? 4'sb1?10           m=1
+D weq u8=0E ==? 4'sb1?10        m=1
+E weq u8=FE ==? 4'sb1?10        m=0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/vx_twins_noci.sv:13: $finish called at 10 (1s)
+rc=0
+=== block 2 | vita [PRE] | grounding/b3/out_vx_twins_noci/vita.out | 385 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+A pc  u8 vs 8'sh80 +16'sh7777   m=1
+B pc  s8 vs 8'sh80 +32'd12345   m=1
+C cz  u4 vs 4'sb1?10 +8'h55     m=1
+C weq u4 ==? 4'sb1?10           m=1
+D weq u8=0E ==? 4'sb1?10        m=1
+E weq u8=FE ==? 4'sb1?10        m=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

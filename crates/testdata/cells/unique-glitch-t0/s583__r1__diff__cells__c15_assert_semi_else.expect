@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c15_assert_semi_else
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c15_assert_semi_else.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE
+verdict: agree (verilator binds else to the assert too)
+verdict_source: s583/r1/diff/REPORT.md:65
+alias: r1/diff/w/c15_assert_semi_else/c15_assert_semi_else (byte-identical source) verdict: agree (verilator binds else to the assert too) verdict_source: s583/r1/diff/REPORT.md:65
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+POST] verilator 5.052 (version captured in slice) | ./c15_assert_semi_else.out | 1764 bytes
+##### c15_assert_semi_else
+=== verilator compile rc=0 run rc=0
+[1] %Error: c15_assert_semi_else.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+[4] %Error: c15_assert_semi_else.sv:11: Assertion failed in top: 'unique if' statement violated
+t=4 u-assert-else-unique y=0
+- c15_assert_semi_else.sv:13: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+c15_assert_semi_else.sv:9:41: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: a deferred assertion's action holds a statement other than a print, a file print, $finish or $stop; it executes inline (evaluate-when-reached), not deferred [in top]
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+c15_assert_semi_else.sv:11:64: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 u-assert-else-unique y=0
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+c15_assert_semi_else.sv:9:41: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: a deferred assertion's action holds a statement other than a print, a file print, $finish or $stop; it executes inline (evaluate-when-reached), not deferred [in top]
+c15_assert_semi_else.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+c15_assert_semi_else.sv:11:64: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 u-assert-else-unique y=0
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+=== end

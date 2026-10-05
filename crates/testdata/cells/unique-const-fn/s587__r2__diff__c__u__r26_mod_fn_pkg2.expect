@@ -1,0 +1,32 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__c__u__r26_mod_fn_pkg2
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/c/u/r26_mod_fn_pkg2.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/c/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: pre-existing
+verdict_source: s587/r2/diff/REPORT.md:44
+notes: class word nearest `r26` (line starts with it)
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r26_mod_fn_pkg2.ivl | 102 bytes
+r26_mod_fn_pkg2.sv:4: syntax error
+r26_mod_fn_pkg2.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r26_mod_fn_pkg2.vl | 385 bytes
+%Warning-WIDTHTRUNC: r26_mod_fn_pkg2.sv:12:5: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.
+P=5 B=4 bv=6
+- r26_mod_fn_pkg2.sv:17: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 14.706 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r26_mod_fn_pkg2.build | 475 bytes
+%Warning-WIDTHTRUNC: r26_mod_fn_pkg2.sv:12:5: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.
+                                            : ... note: In instance 'top'
+   12 |     return a;
+      |     ^~~~~~
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+=== end

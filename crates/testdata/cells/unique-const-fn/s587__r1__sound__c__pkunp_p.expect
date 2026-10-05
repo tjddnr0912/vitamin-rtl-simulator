@@ -1,0 +1,29 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__sound__c__pkunp_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/sound/c/pkunp_p.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/sound/c
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,PRE,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/sound/REPORT.md:34; oracle files present but all 0 bytes
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./pkunp_p.ivlerr | 0 bytes
+
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_pkunp_p.build | 0 bytes | identical to block 1
+=== block 3 | vita [PRE] | ./pkunp_p.pre.txt | 267 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pkunp_p.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `q.h(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+=== block 4 | vita [S7] | ./pkunp_p.s7 | 272 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pkunp_p.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `q.h(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [S8] | ./pkunp_p.s8 | 272 bytes | identical to block 4
+=== end

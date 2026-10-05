@@ -1,0 +1,95 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r4__sound__newcells__r4f_mutual_same_wave
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r4/sound/newcells/r4f_mutual_same_wave.sv
+roadmap_row: §2 🆕 AB
+set: r4/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE3,POSTD,POSTE
+verdict: Every POSTE event at t>0 above is in neither oracle. Controls: r4e (later-wave net read as an argument: Kahn orders it) and r4f (two uncertified assigns in one wave) give POSTE == POSTD.
+verdict_source: s590/r4/sound/REPORT.md:16
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE3+POSTD+POSTE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r4/sound/out/r4f_mutual_same_wave.out | 1639 bytes
+##### r4f_mutual_same_wave
+=== iverilog run rc=0
+h1 t=0 v2=z
+h2 t=0 v1=1
+r4f_mutual_same_wave.sv:10: $finish called at 3 (1s)
+final v1=1 v2=1
+
+=== verilator run rc=0
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=0 v1=1
+h1 t=0 v2=1
+- r4f_mutual_same_wave.sv:10: Verilog $finish
+final v1=1 v2=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 3ps; walltime 0.000 s; speed 52.632 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h2 t=0 v1=z
+h1 t=0 v2=x
+h2 t=0 v1=x
+h1 t=0 v2=x
+h2 t=0 v1=x
+h1 t=0 v2=x
+h2 t=0 v1=x
+h1 t=0 v2=x
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+final v1=1 v2=1
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h2 t=0 v1=z
+h1 t=0 v2=x
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+final v1=1 v2=1
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h2 t=0 v1=z
+h1 t=0 v2=x
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=0 v1=1
+h1 t=0 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+h2 t=3 v1=1
+h1 t=3 v2=1
+final v1=1 v2=1
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+
+--- r4f_mutual_same_wave PRE3==POSTD:000 PRE3==POSTE:000 POSTD==POSTE:111 split=-
+=== end

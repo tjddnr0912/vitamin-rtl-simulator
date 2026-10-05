@@ -1,0 +1,9 @@
+module top;
+  function automatic int f(input int a);
+    f = 7;
+    unique if (a == 1) f = 10;
+  endfunction
+  typedef logic [f(2):0] t_t;
+  t_t v;
+  initial begin #1 $display("b=%0d", $bits(v)); $finish; end
+endmodule

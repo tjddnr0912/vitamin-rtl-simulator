@@ -1,0 +1,21 @@
+== C6
+  PRE: L=8 K=8
+  POST: L=8 K=8
+  IVL: L=0 K=8
+  VL: L=x K=8
+  S2V: L=x K=8
+== C8
+  PRE: C8.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the `+` operation has no constant-fold arm [in t]
+  PRE: errors=1 warnings=1 notes=0
+  PRE: rc=1
+  POST: L=2 K=2
+  IVL: L=0 K=2
+  VL: L=x K=2
+  S2V: L=x K=2
+== C9
+  PRE: vb=4
+  POST: vb=5
+  IVL: vb=1
+  VL: %Error: C9.sv:5:45: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+  VL: %Error: Exiting due to 1 error(s)
+  S2V: vb=x

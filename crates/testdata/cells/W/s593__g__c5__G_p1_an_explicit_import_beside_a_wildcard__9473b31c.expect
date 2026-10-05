@@ -1,0 +1,50 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__G_p1_an_explicit_import_beside_a_wildcard__9473b31c
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/G_p1_an_explicit_import_beside_a_wildcard__9473b31c.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: PRE=iv=s2v
+verdict_source: s593/g/c5.p5.summ:197
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/generate_case_and_wildcard_prerequisites__p1_an_explicit_import_beside_a_wildcard_one__28545_1 (byte-identical source) verdict: PRE=iv=s2v verdict_source: s593/g/c5.p5.summ:197
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.ivl | 143 bytes
+W=10000000000000007 D=10000000000000008 bits=65 hi=1
+G_p1_an_explicit_import_beside_a_wildcard__9473b31c.sv:10: $finish called at 1 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.vl | 438 bytes
+%Warning-SELRANGE: G_p1_an_explicit_import_beside_a_wildcard__9473b31c.sv:9:59: Selection index out of range: 64:64 outside 31:0
+W=00000005 D=00000000000000006 bits=32 hi=1
+- G_p1_an_explicit_import_beside_a_wildcard__9473b31c.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ns; walltime 0.000 s; speed 66.667 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.s2v | 144 bytes
+W=10000000000000007 D=10000000000000008 bits=65 hi=1
+G_p1_an_explicit_import_beside_a_wildcard__9473b31c.s2v.v:7: $finish called at 1 (1s)
+rc=0
+=== block 4 | vita [post1] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post1 | 122 bytes
+W=10000000000000007 D=10000000000000008 bits=65 hi=1
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post2 | 122 bytes | identical to block 4
+=== block 7 | vita [post2] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post3] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post3 | 122 bytes | identical to block 4
+=== block 9 | vita [post3] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post3.route | 0 bytes | identical to block 5
+=== block 10 | vita [post5] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post5 | 122 bytes | identical to block 4
+=== block 11 | vita [post5] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.post5.route | 0 bytes | identical to block 5
+=== block 12 | vita [pre] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.pre | 122 bytes | identical to block 4
+=== block 13 | vita [pre] | ./G_p1_an_explicit_import_beside_a_wildcard__9473b31c.pre.route | 0 bytes | identical to block 5
+=== end

@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__n__n06t
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/n/n06t.sv
+roadmap_row: §2 🆕 U
+set: r2/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,POSTA,POSTB,POSTB_SEP,PRE
+verdict: pre=val[ivl,s2v,vl] posta=LOUD[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:78
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/dump/b3c41670f1123646 (byte-identical source) verdict: pre=val[ivl,s2v,vl] posta=LOUD[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=- verdict_source: s591/r2/lens_delta.txt:78
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r2/dump/b3c41670f1123646.ivl | 68 bytes
+n06 P=3 b=3
+b3c41670f1123646.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./n06t.ivl | 56 bytes
+n06 P=3 b=3
+n06t.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r2/dump/b3c41670f1123646.vl | 243 bytes
+n06 P=3 b=3
+- b3c41670f1123646.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.041 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./n06t.vl | 231 bytes
+n06 P=3 b=3
+- n06t.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | r2/dump/b3c41670f1123646.s2v | 71 bytes
+n06 P=3 b=3
+b3c41670f1123646.s2v.v:11: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./n06t.s2v | 59 bytes
+n06 P=3 b=3
+n06t.s2v.v:11: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV3] | ./n06t.dev3 | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n06 P=3 b=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV3] | ./n06t.dev3.route | 0 bytes
+
+=== block 9 | vita [POSTA] | ./n06t.posta | 356 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n06t.sv:3:38: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `P` is not allowed in a constant range bound [in top.u]
+n06t.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.u.P` [in top.u]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 10 | vita [POSTB] | ./n06t.postb | 182 bytes | identical to block 7
+=== block 11 | vita [POSTB] | ./n06t.postb.route | 0 bytes | identical to block 8
+=== block 12 | vita [PRE] | ./n06t.pre | 182 bytes | identical to block 7
+=== block 13 | vita [PRE] | ./n06t.pre.route | 0 bytes | identical to block 8
+=== end

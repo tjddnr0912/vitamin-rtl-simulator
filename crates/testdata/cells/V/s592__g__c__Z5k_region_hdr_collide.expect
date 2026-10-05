@@ -1,0 +1,60 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__Z5k_region_hdr_collide
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/Z5k_region_hdr_collide.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Z5k_region_hdr_collide.iv.txt | 160 bytes
+Z5k_region_hdr_collide.sv:3: error: 'K' has already been declared in this scope.
+Z5k_region_hdr_collide.sv:1:      : It was declared here as a parameter.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Z5k_region_hdr_collide.vl.txt | 117 bytes
+%Error: Z5k_region_hdr_collide.sv:3:16: Duplicate declaration of signal: 'K'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Z5k_region_hdr_collide.vlb.txt | 418 bytes
+%Error: Z5k_region_hdr_collide.sv:3:16: Duplicate declaration of signal: 'K'
+    3 |     localparam K = 5;
+      |                ^
+        Z5k_region_hdr_collide.sv:1:24: ... Location of original declaration
+    1 | module top #(parameter K = 3) ();
+      |                        ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Z5k_region_hdr_collide.sv.txt | 69 bytes
+@K=3
+Z5k_region_hdr_collide.sv2v.v:6: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_a] | ./Z5k_region_hdr_collide.post.txt | 664 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z5k_region_hdr_collide.sv:3:16: error[VITA-E3009] E-ELAB-UNSUPPORTED: duplicate declaration of parameter `K`: this `localparam` repeats the `parameter` already declared in this scope — a `generate … endgenerate` region with no block label is TRANSPARENT — its declarations belong to the enclosing module scope (IEEE 1800-2017 §27.2/§27.3), so a name is declared there once. Rename one of them [in top]
+Z5k_region_hdr_collide.sv:1:24: note[VITA-E3009] E-ELAB-UNSUPPORTED: the first declaration of that name is here [in top]
+errors=1 warnings=1 notes=1
+
+rc=1
+=== block 6 | vita [post_b] | ./Z5k_region_hdr_collide.post_b.txt | 664 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./Z5k_region_hdr_collide.post_c.txt | 664 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./Z5k_region_hdr_collide.post_d.txt | 664 bytes | identical to block 5
+=== block 9 | vita [postd] | ./Z5k_region_hdr_collide.postd.txt | 664 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./Z5k_region_hdr_collide.postd2.txt | 664 bytes | identical to block 5
+=== block 11 | vita [postd3] | ./Z5k_region_hdr_collide.postd3.txt | 664 bytes | identical to block 5
+=== block 12 | vita [postd4] | ./Z5k_region_hdr_collide.postd4.txt | 664 bytes | identical to block 5
+=== block 13 | vita [pre] | ./Z5k_region_hdr_collide.pre.txt | 664 bytes | identical to block 5
+=== end

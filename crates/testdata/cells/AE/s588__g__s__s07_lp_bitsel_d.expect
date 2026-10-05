@@ -1,0 +1,32 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__s__s07_lp_bitsel_d
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/s/s07_lp_bitsel_d.sv
+roadmap_row: §2 🆕 AE
+set: g/s
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: F: keep; D: silent->loud (2)
+verdict_source: s588/GROUNDING.md:295
+notes: GROUNDING Q4 A lane row naming s07 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./s07_lp_bitsel_d.ivl | 56 bytes
+P=x
+s07_lp_bitsel_d.sv:9: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./s07_lp_bitsel_d.vl | 109 bytes
+%Error: Internal Error: s07_lp_bitsel_d.sv:8:26: ../V3Number.cpp:1063: toUInt with 4-state 3'bxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./s07_lp_bitsel_d.s2v | 60 bytes
+P=x
+s07_lp_bitsel_d.s2v.v:17: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./s07_lp_bitsel_d.PRE | 278 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s07_lp_bitsel_d.sv:8:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [PROBE-m] | ./s07_lp_bitsel_d.PROBE | 278 bytes | identical to block 4
+=== end

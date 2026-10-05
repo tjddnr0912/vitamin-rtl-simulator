@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__blk__b2
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/blk/b2.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: blk
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: BLOCKER found on POST3, closed in POST3b by the fallback
+verdict_source: s581/DELTA_R2.md:40
+notes: oracle values quoted at s581/DELTA_R2.md:47
+blocks: 0
+=== end

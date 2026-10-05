@@ -1,0 +1,555 @@
+a_lc_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=1']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+a_lc_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=1']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+a_li_combfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['a_li_combfirst.sv:4: syntax error', 'a_li_combfirst.sv:4: Syntax in assignment statement l-value.', 'a_li_combfirst.sv:4: syntax error', 'a_li_combfirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+a_li_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['a_li_initfirst.sv:12: syntax error', 'a_li_initfirst.sv:12: Syntax in assignment statement l-value.', 'a_li_initfirst.sv:12: syntax error', 'a_li_initfirst.sv:12: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+a_pc_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+a_pc_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+a_uc_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+a_uc_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+a_ui_combfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['a_ui_combfirst.sv:5: syntax error', 'a_ui_combfirst.sv:5: Syntax in assignment statement l-value.', 'a_ui_combfirst.sv:5: syntax error', 'a_ui_combfirst.sv:5: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+a_ui_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['a_ui_initfirst.sv:13: syntax error', 'a_ui_initfirst.sv:13: Syntax in assignment statement l-value.', 'a_ui_initfirst.sv:13: syntax error', 'a_ui_initfirst.sv:13: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_lc_v_d1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=1']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+b_lc_v_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=1']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+b_li_v_d1_leaffirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_li_v_d1_leaffirst.sv:3: syntax error', 'b_li_v_d1_leaffirst.sv:3: Syntax in assignment statement l-value.', 'b_li_v_d1_leaffirst.sv:3: syntax error', 'b_li_v_d1_leaffirst.sv:3: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+b_li_v_d1_tbfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_li_v_d1_tbfirst.sv:15: syntax error', 'b_li_v_d1_tbfirst.sv:15: Syntax in assignment statement l-value.', 'b_li_v_d1_tbfirst.sv:15: syntax error', 'b_li_v_d1_tbfirst.sv:15: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+b_pc_v_d1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_pc_v_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d2_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d2_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d3_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_v_d3_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d2_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d2_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d3_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_uc_w_d3_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1', 't=3 y=0']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d1_leaffirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d1_leaffirst.sv:4: syntax error', 'b_ui_v_d1_leaffirst.sv:4: Syntax in assignment statement l-value.', 'b_ui_v_d1_leaffirst.sv:4: syntax error', 'b_ui_v_d1_leaffirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d1_tbfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d1_tbfirst.sv:16: syntax error', 'b_ui_v_d1_tbfirst.sv:16: Syntax in assignment statement l-value.', 'b_ui_v_d1_tbfirst.sv:16: syntax error', 'b_ui_v_d1_tbfirst.sv:16: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d2_leaffirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d2_leaffirst.sv:4: syntax error', 'b_ui_v_d2_leaffirst.sv:4: Syntax in assignment statement l-value.', 'b_ui_v_d2_leaffirst.sv:4: syntax error', 'b_ui_v_d2_leaffirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d2_tbfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d2_tbfirst.sv:19: syntax error', 'b_ui_v_d2_tbfirst.sv:19: Syntax in assignment statement l-value.', 'b_ui_v_d2_tbfirst.sv:19: syntax error', 'b_ui_v_d2_tbfirst.sv:19: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d3_leaffirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d3_leaffirst.sv:4: syntax error', 'b_ui_v_d3_leaffirst.sv:4: Syntax in assignment statement l-value.', 'b_ui_v_d3_leaffirst.sv:4: syntax error', 'b_ui_v_d3_leaffirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+b_ui_v_d3_tbfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['b_ui_v_d3_tbfirst.sv:22: syntax error', 'b_ui_v_d3_tbfirst.sv:22: Syntax in assignment statement l-value.', 'b_ui_v_d3_tbfirst.sv:22: syntax error', 'b_ui_v_d3_tbfirst.sv:22: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+q_assert_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1']
+    vals vl: ['t=1 y=1']
+    vals PRE: ['t=1 y=1']
+q_assert_hier iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1']
+    vals vl: ['t=1 y=1']
+    vals PRE: ['t=1 y=1']
+q_assert_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1']
+    vals vl: ['t=1 y=1']
+    vals PRE: ['t=1 y=1']
+q_assert_noviol_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=1 y=1']
+    vals vl: ['t=1 y=1']
+    vals PRE: ['t=1 y=1']
+q_chain3_A_Bb_Bc iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=0
+    vals iv: ['q_chain3_A_Bb_Bc.sv:8: warning: System task ($display) cannot be synthesized in', 'q_chain3_A_Bb_Bc.sv:5: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain3_A_Bc_Bb iv=0 vl=0 PRE=1 R1=1 R2=1 R2r=0 R3=0 R3f=1 R4=0 R4f=1 R4t=0
+    vals iv: ['q_chain3_A_Bc_Bb.sv:8: warning: System task ($display) cannot be synthesized in', 'q_chain3_A_Bc_Bb.sv:5: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain3_Bb_A_Bc iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=0
+    vals iv: ['q_chain3_Bb_A_Bc.sv:6: warning: System task ($display) cannot be synthesized in', 'q_chain3_Bb_A_Bc.sv:4: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain3_Bb_Bc_A iv=1 vl=0 PRE=0 R1=0 R2=0 R2r=1 R3=1 R3f=0 R4=1 R4f=0 R4t=0
+    vals iv: ['q_chain3_Bb_Bc_A.sv:5: warning: System task ($display) cannot be synthesized in', 'q_chain3_Bb_Bc_A.sv:4: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain3_Bc_A_Bb iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=0
+    vals iv: ['q_chain3_Bc_A_Bb.sv:6: warning: System task ($display) cannot be synthesized in', 'q_chain3_Bc_A_Bb.sv:4: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain3_Bc_Bb_A iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=0
+    vals iv: ['q_chain3_Bc_Bb_A.sv:5: warning: System task ($display) cannot be synthesized in', 'q_chain3_Bc_Bb_A.sv:4: warning: System task ($display) cannot be synthesized in', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain_A_B_I iv=1 vl=0 PRE=2 R1=1 R2=1 R2r=0 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: ['q_chain_A_B_I.sv:5: warning: System task ($display) cannot be synthesized in an', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain_B_A_I iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=1 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['q_chain_B_A_I.sv:4: warning: System task ($display) cannot be synthesized in an', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain_I_A_B iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=0 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: ['q_chain_I_A_B.sv:11: warning: System task ($display) cannot be synthesized in an', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chain_I_B_A iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=1 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['q_chain_I_B_A.sv:10: warning: System task ($display) cannot be synthesized in an', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chaind_A_B iv=0 vl=0 PRE=1 R1=1 R2=1 R2r=0 R3=0 R3f=1 R4=0 R4f=1 R4t=0
+    vals iv: ['q_chaind_A_B.sv:5: warning: System task ($display) cannot be synthesized in an a', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_chaind_B_A iv=1 vl=0 PRE=0 R1=0 R2=0 R2r=1 R3=1 R3f=0 R4=1 R4f=0 R4t=0
+    vals iv: ['q_chaind_B_A.sv:4: warning: System task ($display) cannot be synthesized in an a', 't=6 y=3']
+    vals vl: ['t=6 y=3']
+    vals PRE: ['t=6 y=3']
+q_const_comb_first iv=0 vl=0 PRE=0 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+    vals vl: ['i0 y=11', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals PRE: ['i0 y=11', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R1: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R2: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R2r: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R3: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+    vals R3f: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+    vals R4: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R4f: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R4t: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+q_const_init_first iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0* R3f=0* R4=0 R4f=0 R4t=0
+    vals iv: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+    vals vl: ['i0 y=11', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals PRE: ['i0 y=xx', 'i1 y=11', 'i2 y=11', 'i3 y=11']
+    vals R3: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+    vals R3f: ['i0 y=xx', 'i1 y=xx', 'i2 y=11', 'i3 y=11']
+q_const_latch_first iv=0 vl=0 PRE=0 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['q_const_latch_first.sv:3: error: always_latch process has no event control.', 'Elaboration failed']
+    vals vl: ['i0 y=10', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals PRE: ['i0 y=10', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R1: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R2: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R2r: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R3: ['i0 y=xx', 'i1 y=xx', 'i2 y=10', 'i3 y=10']
+    vals R3f: ['i0 y=xx', 'i1 y=xx', 'i2 y=10', 'i3 y=10']
+    vals R4: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R4f: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+    vals R4t: ['i0 y=xx', 'i1 y=10', 'i2 y=10', 'i3 y=10']
+q_constuc_comb iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_edge_comb_init_w iv=0 vl=0 PRE=0 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['WAIT0 released t=0', 'NEG t=0', 'POS t=0', 't=1 y=1 neg=1 pos=1 any=1']
+    vals R1: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2r: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4t: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_edge_hier iv=0 vl=0 PRE=0 R1=0 R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['NEG t=0', 'WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=1 pos=1 any=2']
+    vals R2: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2r: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4t: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_edge_init_comb_w iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_edge_latch_comb_init iv=0 vl=0 PRE=0 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['NEG t=0', 'WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=1 pos=1 any=2']
+    vals R1: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2r: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4t: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_edge_w_comb_init iv=0 vl=0 PRE=0 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['NEG t=0', 'WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=1 pos=1 any=2']
+    vals R1: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R2r: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R3f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4f: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals R4t: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_edge_w_init_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals vl: ['WAIT0 released t=0', 'POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+    vals PRE: ['POS t=0', 't=1 y=1 neg=0 pos=1 any=1']
+q_gen_comb_first iv=0 vl=0 PRE=2 R1=- R2=0 R2r=- R3=0 R3f=- R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_gen_init_first iv=0 vl=0 PRE=0 R1=- R2=- R2r=- R3=- R3f=- R4=- R4f=- R4t=-
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_hchain iv=0 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_read2_comb_w_r iv=0 vl=0 PRE=1 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals vl: ['x0 y=01', 'x1 y=01', 'x2 y=01']
+    vals PRE: ['x0 y=00', 'x1 y=01', 'x2 y=01']
+    vals R1: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R2: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R2r: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R3: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R3f: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R4: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R4f: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals R4t: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+q_read2_r_w_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals vl: ['x0 y=01', 'x1 y=01', 'x2 y=01']
+    vals PRE: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+q_read2_w_r_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+    vals vl: ['x0 y=01', 'x1 y=01', 'x2 y=01']
+    vals PRE: ['x0 y=xx', 'x1 y=01', 'x2 y=01']
+q_read_comb_init iv=0 vl=0 PRE=1 R1=0* R2=0* R2r=0* R3=0* R3f=0* R4=0* R4f=0* R4t=0*
+    vals iv: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals vl: ['r0 y=00', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals PRE: ['r0 y=00', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R1: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R2: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R2r: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R3: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R3f: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R4: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R4f: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals R4t: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+q_read_hier iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals vl: ['r0 y=00', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals PRE: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+q_read_init_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals vl: ['r0 y=00', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+    vals PRE: ['r0 y=xx', 'r1 y=01', 'r2 y=01', 'r3 y=01']
+q_self_atwait_alw_init iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['GOT t=0 a=1', 't=1 n=1']
+    vals vl: ['t=1 n=0']
+    vals PRE: ['GOT t=0 a=1', 't=1 n=1']
+q_self_atwait_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['GOT t=0 b=1', 't=1 n=1 b=1']
+    vals vl: ['t=1 n=0 b=1']
+    vals PRE: ['GOT t=0 b=1', 't=1 n=1 b=1']
+q_self_atwait_comb_first iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['GOT t=0 b=1', 't=1 n=1 b=1']
+    vals vl: ['t=1 n=0 b=1']
+    vals PRE: ['GOT t=0 b=1', 't=1 n=1 b=1']
+q_self_atwait_init_alw iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['GOT t=0 a=1', 't=1 n=1']
+    vals vl: ['t=1 n=0']
+    vals PRE: ['t=1 n=0']
+q_self_clkgen iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=22 n=2 clk=0']
+    vals vl: ['t=22 n=2 clk=0']
+    vals PRE: ['t=22 n=2 clk=0']
+q_self_clkgen_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=22 n=2 clk=0']
+    vals vl: ['t=22 n=2 clk=0']
+    vals PRE: ['t=22 n=2 clk=0']
+q_src_alwayshash0_combfirst iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_alwayshash0_srcfirst iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_alwayswr_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_alwayswr_srcfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_ca_comb_ca_init iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_ca_init_ca_comb iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_caop_init_comb iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_declinit_comb iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_hash00_combfirst iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_hash00_srcfirst iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_hash0_combfirst iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_hash0_srcfirst iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_nba_combfirst iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+q_src_nba_srcfirst iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_a00s_repro_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=3 y=1']
+    vals vl: ['t=3 y=1']
+    vals PRE: ['t=3 y=1']
+s583_a00t_repro_trace iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=3 y=1']
+    vals vl: ['t=3 y=1']
+    vals PRE: ['t=3 y=1']
+s583_a01_comb_hash0_glitch iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=6 y=1 done']
+    vals vl: ['t=6 y=1 done']
+    vals PRE: ['t=6 y=1 done']
+s583_a04_latch_hash0_glitch iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=6 y=1 done']
+    vals vl: ['t=6 y=1 done']
+    vals PRE: ['t=6 y=1 done']
+s583_a08_comb_chain iv=0 vl=0 PRE=1 R1=1 R2=1 R2r=0 R3=0 R3f=1 R4=0 R4f=1 R4t=0
+    vals iv: ['t=6 y=3 done']
+    vals vl: ['t=6 y=3 done']
+    vals PRE: ['t=6 y=3 done']
+s583_a08b_comb_chain_rev iv=1 vl=0 PRE=0 R1=0 R2=0 R2r=1 R3=1 R3f=0 R4=1 R4f=0 R4t=0
+    vals iv: ['t=6 y=3 done']
+    vals vl: ['t=6 y=3 done']
+    vals PRE: ['t=6 y=3 done']
+s583_a09_comb_persist iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['t=6 y=1 done']
+    vals vl: ['t=6 y=1 done']
+    vals PRE: ['t=6 y=1 done']
+s583_a14_comb_t0_nba_init iv=1 vl=0 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_a15_comb_t0_hash0_init iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o01_t0_hash0hash0 iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o02_t0_hash0x3 iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o03_t0_hash0_then_nba iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o04_t0_always_hash0 iv=0 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=0 R3f=0 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o05_t0_assign iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o06_t0_initial_display iv=1 vl=1 PRE=1 R1=1 R2=1 R2r=1 R3=1 R3f=1 R4=1 R4f=1 R4t=1
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+s583_o07_three_combs iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['s583_o07_three_combs.sv:4: warning: System task ($display) cannot be synthesized', 's583_o07_three_combs.sv:3: warning: System task ($display) cannot be synthesized']
+    vals vl: []
+    vals PRE: []
+s583_r01_order iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['monitor t=0 r=01 q=0', 'A-after-write t=5', 'A-after-#0 t=5', 'after-NBA q=1 t=5', 'monitor t=5 r=00 q=1', 'strobe t=5 r=00']
+    vals vl: ['after-NBA q=0 t=0', 'monitor t=0 r=01 q=0', 'A-after-write t=5', 'monitor t=5 r=00 q=0', 'A-after-#0 t=5', 'after-NBA q=1 t=5', 'monitor t=5 r=00 q=1', 'strobe t=5 r=00']
+    vals PRE: ['monitor t=0 r=01 q=0', 'A-after-write t=5', 'A-after-#0 t=5', 'after-NBA q=1 t=5', 'monitor t=5 r=00 q=1', 'strobe t=5 r=00']
+s583_v01_comb_const_t0_read iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0* R3f=0* R4=0 R4f=0 R4t=0
+    vals iv: ['init#0 t=0 y=xx z=x', 'init#0#0 t=0 y=11 z=1']
+    vals vl: ['init#0 t=0 y=11 z=1', 'init#0#0 t=0 y=11 z=1']
+    vals PRE: ['init#0 t=0 y=11 z=1', 'init#0#0 t=0 y=11 z=1']
+    vals R3: ['init#0 t=0 y=xx z=x', 'init#0#0 t=0 y=11 z=1']
+    vals R3f: ['init#0 t=0 y=xx z=x', 'init#0#0 t=0 y=11 z=1']
+s583_v02_comb_const_initial_first iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0* R3f=0* R4=0 R4f=0 R4t=0
+    vals iv: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=11']
+    vals vl: ['init#0 t=0 y=11', 'init#0#0 t=0 y=11']
+    vals PRE: ['init#0 t=0 y=11', 'init#0#0 t=0 y=11']
+    vals R3: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=11']
+    vals R3f: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=11']
+s583_v03_latch_t0 iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0* R3f=0* R4=0 R4f=0 R4t=0
+    vals iv: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=10']
+    vals vl: ['init#0 t=0 y=10', 'init#0#0 t=0 y=10']
+    vals PRE: ['init#0 t=0 y=10', 'init#0#0 t=0 y=10']
+    vals R3: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=10']
+    vals R3f: ['init#0 t=0 y=xx', 'init#0#0 t=0 y=10']
+s583_v04_selftimed_always_order iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: []
+    vals vl: []
+    vals PRE: []
+sa_li_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sa_li_combfirst.sv:4: syntax error', 'sa_li_combfirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+sa_li_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sa_li_initfirst.sv:12: syntax error', 'sa_li_initfirst.sv:12: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+sa_ui_combfirst iv=0 vl=0 PRE=1 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sa_ui_combfirst.sv:5: syntax error', 'sa_ui_combfirst.sv:5: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+sa_ui_initfirst iv=0 vl=0 PRE=0 R1=0 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sa_ui_initfirst.sv:13: syntax error', 'sa_ui_initfirst.sv:13: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+sb_li_v_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sb_li_v_d1_tbfirst.sv:15: syntax error', 'sb_li_v_d1_tbfirst.sv:15: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=1']
+    vals PRE: ['t=1 y=1', 't=3 y=1']
+sb_ui_v_d1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sb_ui_v_d1_leaffirst.sv:4: syntax error', 'sb_ui_v_d1_leaffirst.sv:4: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+sb_ui_v_d1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sb_ui_v_d1_tbfirst.sv:16: syntax error', 'sb_ui_v_d1_tbfirst.sv:16: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+sb_ui_v_d2_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['sb_ui_v_d2_tbfirst.sv:19: syntax error', 'sb_ui_v_d2_tbfirst.sv:19: Syntax in assignment statement l-value.']
+    vals vl: ['t=1 y=1', 't=3 y=0']
+    vals PRE: ['t=1 y=1', 't=3 y=0']
+tb1_leaffirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['I0 t=0 s=xx u.s=xx', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']
+    vals vl: ['I0 t=0 s=00 u.s=00', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']
+    vals PRE: ['I0 t=0 s=xx u.s=xx', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']
+tb1_samemod_assign iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['I0 t=0 s=xx w=xx', 'I1 t=0 s=01 w=01', 'I2 t=0 s=01 w=01', 't=1 y=1']
+    vals vl: ['I0 t=0 s=00 w=00', 'I1 t=0 s=01 w=01', 'I2 t=0 s=01 w=01', 't=1 y=1']
+    vals PRE: ['I0 t=0 s=xx w=xx', 'I1 t=0 s=01 w=01', 'I2 t=0 s=01 w=01', 't=1 y=1']
+tb1_tbfirst iv=0 vl=0 PRE=1 R1=1 R2=0 R2r=0 R3=0 R3f=0 R4=0 R4f=0 R4t=0
+    vals iv: ['I0 t=0 s=xx u.s=xx', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']
+    vals vl: ['I0 t=0 s=00 u.s=00', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']
+    vals PRE: ['I0 t=0 s=xx u.s=xx', 'I1 t=0 s=01 u.s=01', 'I2 t=0 s=01 u.s=01', 't=1 y=1']

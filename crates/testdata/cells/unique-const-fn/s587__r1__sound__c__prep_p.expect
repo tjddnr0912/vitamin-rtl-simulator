@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__sound__c__prep_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/sound/c/prep_p.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/sound/c
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE,PRE-sep,POST-c,S7,S8
+verdict: silent-wrong
+verdict_source: s587/r1/sound/REPORT.md:44
+notes: class word nearest `prep` on that line
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./prep_p.ivlerr | 0 bytes
+
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_prep_p.build | 528 bytes
+%Warning-WIDTHEXPAND: prep_p.sv:7:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 7 bits.
+                                    : ... note: In instance 'top'
+    7 |   initial begin y = {f(2){1'b1}}; $display("y=%h", y); #1 $finish; end
+      |                   ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 3 | vita [PRE] | ./prep_p.pre.txt | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+y=0000007f
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 4 | vita [S7] | ./prep_p.s7 | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+y=0000007f
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S8] | ./prep_p.s8 | 179 bytes | identical to block 4
+=== end

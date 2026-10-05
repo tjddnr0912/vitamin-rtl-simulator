@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x2__x2k_range_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x2/x2k_range_p.sv
+roadmap_row: §3.b unique-const-fn
+set: x2
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S8
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./x2k_range_p.ivl | 163 bytes
+x2k_range_p.sv:5: error: Dimensions must be constant.
+x2k_range_p.sv:5       : This MSB expression violates the rule: fx('sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_x2k_range_p.build | 342 bytes
+%Error: x2k_range_p.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                           : ... note: In instance 'top'
+    5 |   logic [fx(2):0] v;
+      |          ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./x2k_range_p.vl | 147 bytes
+%Error: x2k_range_p.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 4 | vita [S8] | ./x2k_range_p.s8 | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+b=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== end

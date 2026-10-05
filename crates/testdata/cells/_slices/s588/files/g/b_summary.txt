@@ -1,0 +1,395 @@
+== b01_add
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b02_sub
+  PRE  : P=1111 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b03_mul0
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b04_div
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b05_mod
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b06_and0
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== b07_and3
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=00xx |  | rc=0
+  vl   : P=00xx |  | rc=0
+  s2v  : P=00xx |  | rc=0
+== b08_orF
+  PRE  : P=1111 |  | rc=0
+  ivl  : P=1111 |  | rc=0
+  vl   : P=1111 |  | rc=0
+  s2v  : P=1111 |  | rc=0
+== b09_or3
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=xx11 |  | rc=0
+  vl   : P=xx11 |  | rc=0
+  s2v  : P=xx11 |  | rc=0
+== b10_xor0
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b11_not
+  PRE  : P=1111 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b12_neg
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b13_pow
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b14_xnor
+  PRE  : P=1111 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b15_shl1
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxx0 |  | rc=0
+  vl   : P=xxx0 |  | rc=0
+  s2v  : P=xxx0 |  | rc=0
+== b16_shr4
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== b17_shl_by_x
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b18_ashr
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0xxx |  | rc=0
+  vl   : P=0xxx |  | rc=0
+  s2v  : P=0xxx |  | rc=0
+== b19_shl4
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== b20_tern_cond
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=00xx |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=00xx |  | rc=0
+== b21_tern_same
+  PRE  : P=0101 |  | rc=0
+  ivl  : P=0101 |  | rc=0
+  vl   : P=0101 |  | rc=0
+  s2v  : P=0101 |  | rc=0
+== b22_tern_arm
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b23_concat
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xx01 |  | rc=0
+  vl   : P=xx01 |  | rc=0
+  s2v  : P=xx01 |  | rc=0
+== b24_concat_whole
+  PRE  : P=0100 |  | rc=0
+  ivl  : P=01xx |  | rc=0
+  vl   : P=01xx |  | rc=0
+  s2v  : P=01xx |  | rc=0
+== b25_repl
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b26_bitsel
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=000x |  | rc=0
+  vl   : P=000x |  | rc=0
+  s2v  : P=000x |  | rc=0
+== b27_partsel
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=00xx |  | rc=0
+  vl   : P=00xx |  | rc=0
+  s2v  : P=00xx |  | rc=0
+== b28_index_by_x
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0000 |  | rc=0
+  vl   : | %Error: Internal Error: b28_index_by_x.sv:8:20: ../V3Number.cpp:1063: toUInt with 4-state 2'bxx | build_rc=1
+  s2v  : P=0000 |  | rc=0
+== b29_sizecast
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b30_primcast_int
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0000 |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b31_unsigned
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b32_clog2
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b33_bits
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0100 |  | rc=0
+  vl   : P=0100 |  | rc=0
+  s2v  : P=0100 |  | rc=0
+== b34_self_inc
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b35_sub_self
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b36_xor_self
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b40_redand
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b41_redor
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b42_redxor
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b43_land0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=0 |  | rc=0
+== b44_land1
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b45_lorl
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b46_lor0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=0 |  | rc=0
+  s2v  : P=x |  | rc=0
+== b47_lnot
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b48_lt
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b49_eq_self
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b50_eq0
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b51_ne0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b52_ceq_self
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b53_ceq_x
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b54_cne0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b55_ge0
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b56_redand_masked
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=0 |  | rc=0
+  s2v  : P=0 |  | rc=0
+== b57_redor_masked
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b58_wildeq
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== b59_inside
+  PRE  : P=1 |  | rc=0
+  ivl  : | b59_inside.sv:8: sorry: "inside" expressions not supported yet. | rc=1
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b60_if_eq1
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b61_if_eq0
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b62_if_t
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b63_if_not
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b64_if_ceqx
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0001 |  | rc=0
+  vl   : P=0001 |  | rc=0
+  s2v  : P=0001 |  | rc=0
+== b65_if_ne0
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b66_for_bound
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== b67_while_t
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : | %Error: b67_while_t.sv:9:30: Expecting expression to be constant, but can't determine constant for FUNCREF 'f' | build_rc=1
+  s2v  : P=0000 |  | rc=0
+== b68_while_lt
+  PRE  : P=0101 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : | %Error: b68_while_lt.sv:10:30: Expecting expression to be constant, but can't determine constant for FUNCREF ' | build_rc=1
+  s2v  : P=0000 |  | rc=0
+== b69_repeat_t
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : | %Error: b69_repeat_t.sv:9:30: Expecting expression to be constant, but can't determine constant for FUNCREF 'f | build_rc=1
+  s2v  : P=0000 |  | rc=0
+== b70_return_x
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== b71_if_ceq_self
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : P=0001 |  | rc=0
+  s2v  : P=0001 |  | rc=0
+== b72_loop_overwrite
+  PRE  : P=1111 |  | rc=0
+  ivl  : P=1111 |  | rc=0
+  vl   : P=1111 |  | rc=0
+  s2v  : P=1111 |  | rc=0
+== b73_if_land
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== b74_if_lor
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : P=0001 |  | rc=0
+  s2v  : P=0001 |  | rc=0
+== b80_int_add
+  PRE  : P=1 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== b81_int_or3
+  PRE  : P=3 |  | rc=0
+  ivl  : P=3 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== b82_int_and0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=0 |  | rc=0
+  s2v  : P=0 |  | rc=0
+== b83_int_concat
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== b84_int_eq0
+  PRE  : P=1 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== b85_int_shl1
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== b86_int_not
+  PRE  : P=-1 |  | rc=0
+  ivl  : P=-16 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== b87_int_tern
+  PRE  : P=2 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=2 |  | rc=0
+  s2v  : P=X |  | rc=0

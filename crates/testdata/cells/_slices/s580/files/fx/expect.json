@@ -1,0 +1,391 @@
+{
+ "F01": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v;\n  initial begin\n    v = 4'b1100; $display(\"a %b\", v inside {4'b1100});\n    v = 4'b1100; $display(\"b %b\", v inside {4'b1?00});\n    v = 4'b1000; $display(\"c %b\", v inside {4'b1?00});\n    v = 4'b0100; $display(\"d %b\", v inside {4'b1?00});\n    v = 4'b1100; $display(\"e %b\", v inside {4'b0000, 4'b1?00});\n    v = 4'b0101; $display(\"f %b\", v inside {[4'd1:4'd7]});\n    v = 4'b1100; if (v inside {4'b1?00}) $display(\"g then\"); else $display(\"g else\");\n    v = 4'b1100; $display(\"h %b\", v ==? 4'b1?00);\n    v = 4'bx100; $display(\"i %b\", v inside {4'b1?00});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "a 1",
+   "b 1",
+   "c 1",
+   "d 0",
+   "e 1",
+   "f 1",
+   "g then",
+   "h 1",
+   "i x"
+  ],
+  "pre": [
+   "a 1",
+   "b x",
+   "c x",
+   "d 0",
+   "e x",
+   "f 1",
+   "g else",
+   "h 1",
+   "i x"
+  ]
+ },
+ "F02": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v;\n  initial begin\n    v = 4'b1100; $display(\"x-digit %b\", v inside {4'b1x00});\n    v = 4'b1100; $display(\"z-digit %b\", v inside {4'b1z00});\n    v = 4'b0100; $display(\"msb-q %b\", v inside {4'b?100});\n    v = 4'b1100; $display(\"msb-x %b\", v inside {4'bx100});\n    v = 4'b0100; $display(\"msb-z %b\", v inside {4'bz100});\n    v = 4'b1101; $display(\"lsb-q %b\", v inside {4'b110?});\n    v = 4'b1010; $display(\"all-q %b\", v inside {4'b????});\n    v = 4'b1100; $display(\"hex-q %b\", v inside {4'h?});\n    v = 4'b1100; $display(\"dec-x %b\", v inside {4'dx});\n    v = 4'b1100; $display(\"oct-q %b\", v inside {4'o1?});\n    v = 4'b0110; $display(\"narrow-hit %b\", v inside {3'b1?0});\n    v = 4'b1100; $display(\"narrow-ext-compared %b\", v inside {3'b1?0});\n    v = 4'b1100; $display(\"wide-zero-hi %b\", v inside {6'b001?00});\n    v = 4'b1100; $display(\"wide-one-hi %b\", v inside {6'b101?00});\n    v = 4'b1100; $display(\"wide-wild-hi %b\", v inside {6'b??1?00});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "x-digit 1",
+   "z-digit 1",
+   "msb-q 1",
+   "msb-x 1",
+   "msb-z 1",
+   "lsb-q 1",
+   "all-q 1",
+   "hex-q 1",
+   "dec-x 1",
+   "oct-q 1",
+   "narrow-hit 1",
+   "narrow-ext-compared 0",
+   "wide-zero-hi 1",
+   "wide-one-hi 0",
+   "wide-wild-hi 1"
+  ],
+  "pre": [
+   "x-digit x",
+   "z-digit x",
+   "msb-q x",
+   "msb-x x",
+   "msb-z x",
+   "lsb-q x",
+   "all-q x",
+   "hex-q x",
+   "dec-x x",
+   "oct-q x",
+   "narrow-hit x",
+   "narrow-ext-compared 0",
+   "wide-zero-hi x",
+   "wide-one-hi 0",
+   "wide-wild-hi x"
+  ]
+ },
+ "F03": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [32:0] u33; logic [63:0] u64; logic [64:0] u65; logic [127:0] u128; logic [7:0] u8;\n  initial begin\n    u33 = 33'b011111111111111111111111111111110; $display(\"w33-hit %b\", u33 inside {33'b?1111111111111111111111111111111?});\n    u33 = 33'b111111111111111111111111111111101; $display(\"w33-miss %b\", u33 inside {33'b?1111111111111111111111111111111?});\n    u33 = 33'b1011; $display(\"w33-narrow-el %b\", u33 inside {4'b1?11});\n    u64 = 64'b0111111111111111111111111111111111111111111111111111111111111110; $display(\"w64-hit %b\", u64 inside {64'b?11111111111111111111111111111111111111111111111111111111111111?});\n    u64 = 64'b1111111111111111111111111111111111111111111111111111111111111101; $display(\"w64-miss %b\", u64 inside {64'b?11111111111111111111111111111111111111111111111111111111111111?});\n    u64 = 64'b1011; $display(\"w64-narrow-el %b\", u64 inside {4'b1?11});\n    u65 = 65'b01111111111111111111111111111111111111111111111111111111111111110; $display(\"w65-hit %b\", u65 inside {65'b?111111111111111111111111111111111111111111111111111111111111111?});\n    u65 = 65'b11111111111111111111111111111111111111111111111111111111111111101; $display(\"w65-miss %b\", u65 inside {65'b?111111111111111111111111111111111111111111111111111111111111111?});\n    u65 = 65'b1011; $display(\"w65-narrow-el %b\", u65 inside {4'b1?11});\n    u128 = 128'b01111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110; $display(\"w128-hit %b\", u128 inside {128'b?111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111?});\n    u128 = 128'b11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101; $display(\"w128-miss %b\", u128 inside {128'b?111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111?});\n    u128 = 128'b1011; $display(\"w128-narrow-el %b\", u128 inside {4'b1?11});\n    u8 = 8'b0000_0100; $display(\"sized-x-msb-zero-ext %b\", u8 inside {4'bx100});\n    u8 = 8'b1000_0100; $display(\"sized-x-msb-high-compared %b\", u8 inside {4'bx100});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "w33-hit 1",
+   "w33-miss 0",
+   "w33-narrow-el 1",
+   "w64-hit 1",
+   "w64-miss 0",
+   "w64-narrow-el 1",
+   "w65-hit 1",
+   "w65-miss 0",
+   "w65-narrow-el 1",
+   "w128-hit 1",
+   "w128-miss 0",
+   "w128-narrow-el 1",
+   "sized-x-msb-zero-ext 1",
+   "sized-x-msb-high-compared 0"
+  ],
+  "pre": [
+   "w33-hit x",
+   "w33-miss 0",
+   "w33-narrow-el x",
+   "w64-hit x",
+   "w64-miss 0",
+   "w64-narrow-el x",
+   "w65-hit x",
+   "w65-miss 0",
+   "w65-narrow-el x",
+   "w128-hit x",
+   "w128-miss 0",
+   "w128-narrow-el x",
+   "sized-x-msb-zero-ext x",
+   "sized-x-msb-high-compared 0"
+  ]
+ },
+ "F04": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic signed [7:0] s8; logic [7:0] u8; logic signed [3:0] s4; integer i32;\n  function automatic logic signed [7:0] g8(); return -8'sd4; endfunction\n  function automatic logic signed [3:0] g4(); return -4'sd4; endfunction\n  initial begin\n    s8 = -8'sd4;      $display(\"ss-narrow-pat-msb1 %b\", s8 inside {4'sb1?00});\n    s8 = -8'sd4;      $display(\"ss-narrow-pat-msbq %b\", s8 inside {4'sb?100});\n    s8 = 8'sb01010100; $display(\"ss-narrow-pat-msbq-pos %b\", s8 inside {4'sb?100});\n    s8 = -8'sd4;      $display(\"ss-narrow-pat-msbx %b\", s8 inside {4'sbx100});\n    s8 = 8'sb01010100; $display(\"ss-narrow-pat-msbz %b\", s8 inside {4'sbz100});\n    s8 = 8'sb00001100; $display(\"ss-narrow-pat-ext-ones %b\", s8 inside {4'sb1?00});\n    s4 = -4'sd4;      $display(\"ss-narrow-lhs-sext %b\", s4 inside {8'sb11111?00});\n    s4 = -4'sd4;      $display(\"ss-narrow-lhs-zero-pat %b\", s4 inside {8'sb00001?00});\n    s4 = -4'sd4;      $display(\"ss-narrow-lhs-wild-msb %b\", s4 inside {8'sb?1111100});\n    i32 = -4;         $display(\"ss-integer %b\", i32 inside {4'sb1?00});\n    s8 = -8'sd4;      $display(\"su-pattern-unsigned %b\", s8 inside {4'b1?00});\n    s4 = -4'sd4;      $display(\"su-wide-unsigned-pat %b\", s4 inside {8'b11111?00});\n    u8 = 8'b11111100; $display(\"us-lhs-unsigned %b\", u8 inside {4'sb1?00});\n    s8 = 8'sb00001100; $display(\"su-zero-ext-hit %b\", s8 inside {4'b1?00});\n    $display(\"call-lhs %b\", g8() inside {4'sb1?00});\n    $display(\"call-lhs-narrow %b\", g4() inside {8'sb1111_1?00});\n    s8 = -8'sd4;      $display(\"select-lhs-unsigned %b\", s8[3:0] inside {8'sb1111_1?00});\n    s8 = -8'sd4;      $display(\"signed-select-lhs %b\", $signed(s8[3:0]) inside {8'sb1111_1?00});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "ss-narrow-pat-msb1 1",
+   "ss-narrow-pat-msbq 1",
+   "ss-narrow-pat-msbq-pos 1",
+   "ss-narrow-pat-msbx 1",
+   "ss-narrow-pat-msbz 1",
+   "ss-narrow-pat-ext-ones 0",
+   "ss-narrow-lhs-sext 1",
+   "ss-narrow-lhs-zero-pat 0",
+   "ss-narrow-lhs-wild-msb 1",
+   "ss-integer 1",
+   "su-pattern-unsigned 0",
+   "su-wide-unsigned-pat 0",
+   "us-lhs-unsigned 0",
+   "su-zero-ext-hit 1",
+   "call-lhs 1",
+   "call-lhs-narrow 1",
+   "select-lhs-unsigned 0",
+   "signed-select-lhs 1"
+  ],
+  "pre": [
+   "ss-narrow-pat-msb1 x",
+   "ss-narrow-pat-msbq x",
+   "ss-narrow-pat-msbq-pos x",
+   "ss-narrow-pat-msbx x",
+   "ss-narrow-pat-msbz x",
+   "ss-narrow-pat-ext-ones 0",
+   "ss-narrow-lhs-sext x",
+   "ss-narrow-lhs-zero-pat 0",
+   "ss-narrow-lhs-wild-msb x",
+   "ss-integer x",
+   "su-pattern-unsigned 0",
+   "su-wide-unsigned-pat 0",
+   "us-lhs-unsigned 0",
+   "su-zero-ext-hit x",
+   "call-lhs x",
+   "call-lhs-narrow x",
+   "select-lhs-unsigned 0",
+   "signed-select-lhs x"
+  ]
+ },
+ "F05": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v;\n  initial begin\n    v = 4'b1x00; $display(\"lhs-x-at-wild %b\", v inside {4'b1?00});\n    v = 4'b1z00; $display(\"lhs-z-at-wild %b\", v inside {4'b1?00});\n    v = 4'bx100; $display(\"lhs-x-compared %b\", v inside {4'b1?00});\n    v = 4'bz100; $display(\"lhs-z-compared %b\", v inside {4'b1?00});\n    v = 4'bx100; $display(\"lhs-x-under-msb-wild %b\", v inside {4'b?100});\n    v = 4'b1x00; $display(\"lhs-x-under-x-digit %b\", v inside {4'b1x00});\n    v = 4'bxxxx; $display(\"lhs-all-x-all-wild %b\", v inside {4'b????});\n    v = 4'bzzzz; $display(\"lhs-all-z-all-z %b\", v inside {4'bzzzz});\n    v = 4'bx110; $display(\"lhs-x-definite-miss %b\", v inside {4'b0?00});\n    v = 4'bx100; $display(\"lhs-x-plain-element %b\", v inside {4'b0100});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "lhs-x-at-wild 1",
+   "lhs-z-at-wild 1",
+   "lhs-x-compared x",
+   "lhs-z-compared x",
+   "lhs-x-under-msb-wild 1",
+   "lhs-x-under-x-digit 1",
+   "lhs-all-x-all-wild 1",
+   "lhs-all-z-all-z 1",
+   "lhs-x-definite-miss 0",
+   "lhs-x-plain-element x"
+  ],
+  "pre": [
+   "lhs-x-at-wild x",
+   "lhs-z-at-wild x",
+   "lhs-x-compared x",
+   "lhs-z-compared x",
+   "lhs-x-under-msb-wild x",
+   "lhs-x-under-x-digit x",
+   "lhs-all-x-all-wild x",
+   "lhs-all-z-all-z x",
+   "lhs-x-definite-miss 0",
+   "lhs-x-plain-element x"
+  ]
+ },
+ "F06": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v;\n  initial begin\n    v = 4'b0101; $display(\"wild-then-range %b\", v inside {4'b1?00, [4'd1:4'd7]});\n    v = 4'b1000; $display(\"range-then-wild %b\", v inside {[4'd1:4'd7], 4'b1?00});\n    v = 4'b0011; $display(\"neither %b\", v inside {[4'd1:4'd2], 4'b1?00});\n    v = 4'b1100; $display(\"not-hit %b\", !(v inside {4'b1?00}));\n    v = 4'b0100; $display(\"not-miss %b\", !(v inside {4'b1?00}));\n    v = 4'b0110; $display(\"third-element %b\", v inside {4'b0000, 4'b0001, 4'b01?0});\n    v = 4'b0111; $display(\"all-miss %b\", v inside {4'b01?0, 4'b0000});\n    v = 4'bx100; $display(\"miss-or-x %b\", v inside {4'b0000, 4'b1?00});\n    v = 4'bx100; $display(\"one-or-x %b\", v inside {4'b?100, 4'b1?00});\n    v = 4'bx100; $display(\"x-or-miss %b\", v inside {4'b1?00, 4'b0110});\n    v = 4'bx100; $display(\"not-x %b\", !(v inside {4'b1?00}));\n    v = 4'b1100; $display(\"fill-x-element %b\", v inside {4'b0000, 'x});\n    v = 4'b1100; $display(\"concat-of-insides %b\", {v inside {4'b1?00}, v inside {4'b0?00}});\n    v = 4'b0100; $display(\"arith %0d\", (v inside {4'b0?00}) + 2'd1);\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "wild-then-range 1",
+   "range-then-wild 1",
+   "neither 0",
+   "not-hit 0",
+   "not-miss 1",
+   "third-element 1",
+   "all-miss 0",
+   "miss-or-x x",
+   "one-or-x 1",
+   "x-or-miss x",
+   "not-x x",
+   "fill-x-element 1",
+   "concat-of-insides 10",
+   "arith 2"
+  ],
+  "pre": [
+   "wild-then-range 1",
+   "range-then-wild x",
+   "neither 0",
+   "not-hit x",
+   "not-miss 1",
+   "third-element x",
+   "all-miss 0",
+   "miss-or-x x",
+   "one-or-x x",
+   "x-or-miss x",
+   "not-x x",
+   "fill-x-element x",
+   "concat-of-insides x0",
+   "arith x"
+  ]
+ },
+ "F07": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v; logic [35:0] w;\n  initial begin\n    v = 4'b1100; $display(\"unsized-known-msb %b\", v inside {'b1?00});\n    v = 4'b0011; $display(\"unsized-x-msb-hit %b\", v inside {'bx1});\n    v = 4'b0010; $display(\"unsized-x-msb-miss %b\", v inside {'bx1});\n    v = 4'b1100; $display(\"unsized-q %b\", v inside {'b?});\n    v = 4'b1100; $display(\"unsized-hex-q %b\", v inside {'h?});\n    w = 36'hF_0000_0001; $display(\"unsized-x-msb-wide-lhs %b\", w inside {'bx1});\n    w = 36'hF_0000_0001; $display(\"unsized-known-msb-wide-lhs %b\", w inside {'b1x1});\n    v = 4'b1010; $display(\"fill-x %b\", v inside {'x});\n    v = 4'b1010; $display(\"fill-z %b\", v inside {'z});\n    v = 4'b0000; $display(\"fill-x-second %b\", v inside {4'b0001, 'x});\n    v = 4'b0111; $display(\"fill-1-miss %b\", v inside {'1});\n    v = 4'b1111; $display(\"fill-1-hit %b\", v inside {'1});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "unsized-known-msb 1",
+   "unsized-x-msb-hit 1",
+   "unsized-x-msb-miss 0",
+   "unsized-q 1",
+   "unsized-hex-q 1",
+   "unsized-x-msb-wide-lhs 1",
+   "unsized-known-msb-wide-lhs 0",
+   "fill-x 1",
+   "fill-z 1",
+   "fill-x-second 1",
+   "fill-1-miss 0",
+   "fill-1-hit 1"
+  ],
+  "pre": [
+   "unsized-known-msb x",
+   "unsized-x-msb-hit x",
+   "unsized-x-msb-miss 0",
+   "unsized-q x",
+   "unsized-hex-q x",
+   "unsized-x-msb-wide-lhs 0",
+   "unsized-known-msb-wide-lhs 0",
+   "fill-x x",
+   "fill-z x",
+   "fill-x-second x",
+   "fill-1-miss 0",
+   "fill-1-hit 1"
+  ]
+ },
+ "F08": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v; integer n;\n  initial begin\n    v = 4'b1100;\n    if (v inside {4'b1?00}) $display(\"if then\"); else $display(\"if else\");\n    $display(\"ternary %h\", (v inside {4'b1?00}) ? 8'd1 : 8'd2);\n    case (1'b1) (v inside {4'b1?00}): $display(\"case item\"); default: $display(\"case default\"); endcase\n    assert (v inside {4'b1?00}) $display(\"assert pass\"); else $display(\"assert fail\");\n    v = 4'b1000; while (v inside {4'b1?00}) v = v + 4'd1; $display(\"while %b\", v);\n    n = 0; for (v = 4'b1000; v inside {4'b1?0?}; v = v + 4'd1) n = n + 1; $display(\"for %0d\", n);\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "if then",
+   "ternary 01",
+   "case item",
+   "assert pass",
+   "while 1001",
+   "for 2"
+  ],
+  "pre": [
+   "if else",
+   "ternary 0X",
+   "case default",
+   "assert fail",
+   "while 1000",
+   "for 0"
+  ]
+ },
+ "F08b": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v;\n  initial begin\n    v = 4'b0000;\n    fork begin wait (v inside {4'b1?00}); $display(\"wait woke %0t\", $time); end join_none\n    #1 v = 4'b1000;\n    #2 $display(\"wait end\");\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "wait woke 1",
+   "wait end"
+  ],
+  "pre": [
+   "wait end"
+  ]
+ },
+ "F09": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v; logic m; logic [3:0] r;\n  wire w1; wire [7:0] w8; wire [3:0] y;\n  assign w1 = v inside {4'b1?00};\n  assign w8 = v inside {4'b1?00};\n  assign y = (v inside {4'b1?00}) ? 4'd1 : 4'd2;\n  always_comb m = v inside {4'b1?00};\n  always @* r = (v inside {4'b1?00}) ? 4'd7 : 4'd3;\n  initial begin\n    v = 4'b1100; #1 $display(\"cont %b %b %h comb %b star %0d\", w1, w8, y, m, r);\n    v = 4'b0100; #1 $display(\"cont %b %b %h comb %b star %0d\", w1, w8, y, m, r);\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "cont 1 00000001 1 comb 1 star 7",
+   "cont 0 00000000 2 comb 0 star 3"
+  ],
+  "pre": [
+   "cont x 0000000x X comb x star X",
+   "cont 0 00000000 2 comb 0 star 3"
+  ]
+ },
+ "F10": {
+  "src": "`timescale 1ns/1ns\npackage p; function automatic logic pf(input logic [3:0] a); return a inside {4'b1?00}; endfunction endpackage\nmodule t;\n  logic [3:0] v; logic r; wire wf; wire [7:0] w8;\n  function automatic logic fa(input logic [3:0] a); return a inside {4'b1?00}; endfunction\n  function logic fs(input logic [3:0] a); fs = a inside {4'b1?00}; endfunction\n  function logic fsx(input logic [3:0] a); fsx = a inside {4'b1?00, 'x}; endfunction\n  task automatic tk(input logic [3:0] a, output logic o); o = a inside {4'b1?00}; endtask\n  assign wf = fa(v);\n  assign w8 = fsx(v) + fs(v);\n  initial begin\n    v = 4'b1100; tk(v, r); #1\n    $display(\"frame %b inlined %b task %b pkg %b cont-frame %b cont-inlined %h\", fa(v), fs(v), r, p::pf(v), wf, w8);\n    v = 4'b0110; tk(v, r); #1\n    $display(\"frame %b inlined %b task %b pkg %b cont-frame %b cont-inlined %h\", fa(v), fs(v), r, p::pf(v), wf, w8);\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "frame 1 inlined 1 task 1 pkg 1 cont-frame 1 cont-inlined 02",
+   "frame 0 inlined 0 task 0 pkg 0 cont-frame 0 cont-inlined 01"
+  ],
+  "pre": [
+   "frame x inlined x task x pkg x cont-frame x cont-inlined xx",
+   "frame 0 inlined 0 task 0 pkg 0 cont-frame 0 cont-inlined xx"
+  ]
+ },
+ "F10b": {
+  "src": "`timescale 1ns/1ns\nclass K; function logic m(input logic [3:0] a); return a inside {4'b1?00}; endfunction endclass\nmodule t;\n  logic [3:0] q [$];\n  initial begin\n    K k; k = new;\n    q.push_back(4'b1100);\n    $display(\"method %b queue-elem %b\", k.m(4'b1000), q[0] inside {4'b1?00});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "method 1 queue-elem 1"
+  ],
+  "pre": [
+   "method x queue-elem x"
+  ]
+ },
+ "F11": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v; logic clk = 0;\n  always #1 clk = ~clk;\n  assert property (@(posedge clk) v inside {4'b1?00}) else $display(\"property fail %0t\", $time);\n  initial begin v = 4'b1100; #6 $display(\"property end\"); $finish; end\nendmodule\n",
+  "exp": [
+   "property end"
+  ],
+  "pre": [
+   "property fail 1",
+   "property fail 3",
+   "property fail 5",
+   "property end"
+  ]
+ },
+ "F12": {
+  "src": "`timescale 1ns/1ns\nmodule m #(parameter logic P = 1'b0) (); initial $display(\"override %b\", P); endmodule\nmodule t;\n  localparam logic [3:0] PV = 4'b1100;\n  localparam logic L1 = (4'b1100 inside {4'b1?00});\n  localparam L2 = (4'b1000 inside {4'b1?00});\n  localparam L4 = PV inside {4'b0?00};\n  logic [(4'b1100 inside {4'b1?00}) : 0] wb;\n  m #(.P(4'b1100 inside {4'b1?00})) u();\n  if (PV inside {4'b1?00}) begin : g initial $display(\"gen-if then\"); end\n  else begin : g2 initial $display(\"gen-if else\"); end\n  for (genvar i = 0; i < 2; i++) begin : gl\n    if ((PV + i) inside {4'b110?}) begin : h initial $display(\"gen-for %0d in\", i); end\n    else begin : k initial $display(\"gen-for %0d out\", i); end\n  end\n  initial begin #1 $display(\"params %b %b %b bits %0d\", L1, L2, L4, $bits(wb)); $finish; end\nendmodule\n",
+  "exp": [
+   "gen-if then",
+   "gen-for 0 in",
+   "gen-for 1 in",
+   "override 1",
+   "params 1 1 0 bits 2"
+  ],
+  "pre": []
+ },
+ "F14": {
+  "src": "`timescale 1ns/1ns\nclass C; rand bit [3:0] x; constraint c { x inside {4'd3, 4'd5, [4'd10:4'd12]}; } endclass\nclass H; int a; endclass\nmodule t;\n  logic [3:0] v, e; bit [3:0] be; string s; real r; logic signed [7:0] s8;\n  localparam logic [3:0] PV = 4'd12;\n  localparam LQ = PV inside {4'd12, 4'd3};\n  localparam string MODE = \"B\";\n  wire w = v inside {4'd1, e, [4'd8:4'd9]};\n  if (PV inside {4'd12}) begin : g initial $display(\"gen %b\", LQ); end\n  if (MODE inside {\"A\", \"B\"}) begin : gs initial $display(\"gen-string\"); end\n  function automatic logic f(input logic [3:0] a); return a inside {4'd2, 4'd4}; endfunction\n  initial begin\n    C o; H h, h2; int ok, okall, inset;\n    o = new; h = new; h2 = h;\n    v = 4'd4; e = 4'd9; be = 4'd4; s = \"ab\"; r = 1.5; s8 = -8'sd4;\n    #1 $display(\"plain %b var %b cont %b fn %b str %b real %b neg %b not-range %b\",\n                v inside {4'd4}, v inside {e, be}, w, f(v), s inside {\"ab\", \"cd\"},\n                r inside {1.5, [2.0:3.0]}, s8 inside {-8'sd4, 8'sd3}, !(v inside {[0:3]}));\n    $display(\"fill-1-0 %b handle %b %b\", v inside {'1, '0}, h inside {null, h2}, h2 inside {null});\n    okall = 1; inset = 1;\n    for (int i = 0; i < 20; i++) begin\n      ok = o.randomize(); okall = okall & ok;\n      inset = inset & (o.x == 3 || o.x == 5 || (o.x >= 10 && o.x <= 12));\n    end\n    $display(\"constraint ok %0d in-set %0d\", okall, inset);\n    ok = o.randomize() with { x inside {4'd11}; }; $display(\"with ok %0d x %0d\", ok, o.x);\n    case (1'b1) (v inside {4'd4, 4'd5}): $display(\"case item\"); default: $display(\"case default\"); endcase\n    #1 $finish;\n  end\nendmodule\n",
+  "exp": [
+   "gen 1",
+   "gen-string",
+   "plain 1 var 1 cont 0 fn 1 str 1 real 1 neg 1 not-range 1",
+   "fill-1-0 0 handle 1 0",
+   "constraint ok 1 in-set 1",
+   "with ok 1 x 11",
+   "case item"
+  ],
+  "pre": [
+   "gen 1",
+   "gen-string",
+   "plain 1 var 1 cont 0 fn 1 str 1 real 1 neg 1 not-range 1",
+   "fill-1-0 0 handle 1 0",
+   "constraint ok 1 in-set 1",
+   "with ok 1 x 11",
+   "case item"
+  ]
+ },
+ "F15": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic [3:0] v, e;\n  function automatic logic [3:0] cf(); return 4'b1?00; endfunction\n  initial begin\n    v = 4'b1100; e = 4'b1x00; $display(\"var-x-element %b\", v inside {e});\n    v = 4'b1000; e = 4'b1z00; $display(\"var-z-element %b\", v inside {e});\n    v = 4'b1100; e = 4'bxxxx; $display(\"var-all-x-element %b\", v inside {e});\n    v = 4'b1100; e = 4'b1100; $display(\"var-known-element %b\", v inside {e});\n    v = 4'b0100; e = 4'b1x00; $display(\"var-x-element-miss %b\", v inside {e});\n    v = 4'b1100; $display(\"call-element %b\", v inside {cf()});\n    v = 4'b1100; $display(\"div-by-zero-element %b\", v inside {4'd1 / 4'd0});\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "var-x-element x",
+   "var-z-element x",
+   "var-all-x-element x",
+   "var-known-element 1",
+   "var-x-element-miss 0",
+   "call-element x",
+   "div-by-zero-element x"
+  ],
+  "pre": [
+   "var-x-element x",
+   "var-z-element x",
+   "var-all-x-element x",
+   "var-known-element 1",
+   "var-x-element-miss 0",
+   "call-element x",
+   "div-by-zero-element x"
+  ]
+ },
+ "F16": {
+  "src": "`timescale 1ns/1ns\nmodule t;\n  logic signed [7:0] s8; logic signed [3:0] s4; integer i32; logic [35:0] w;\n  initial begin\n    s8 = -8'sd4;       $display(\"weq-narrow-pat-msb1 %b\", s8 ==? 4'sb1?00);\n    s8 = -8'sd4;       $display(\"weq-narrow-pat-msbq %b\", s8 ==? 4'sb?100);\n    s8 = 8'sb01010100; $display(\"weq-narrow-pat-msbq-pos %b\", s8 ==? 4'sb?100);\n    s8 = -8'sd4;       $display(\"weq-narrow-pat-known %b\", s8 ==? 4'sb1100);\n    s4 = -4'sd4;       $display(\"weq-narrow-lhs-sext %b\", s4 ==? 8'sb11111?00);\n    s4 = -4'sd4;       $display(\"weq-narrow-lhs-zero-pat %b\", s4 ==? 8'sb00001?00);\n    s8 = 8'sb00001100; $display(\"weq-narrow-pat-ext-ones %b\", s8 ==? 4'sb1?00);\n    i32 = -4;          $display(\"weq-integer %b\", i32 ==? 4'sb1?00);\n    s8 = -8'sd4;       $display(\"weq-ne %b\", s8 !=? 4'sb1?00);\n    w = 36'hF_0000_0001; $display(\"weq-unsized-x-msb-wide %b\", w ==? 'bx1);\n    s8 = -8'sd4;       $display(\"weq-same-width %b\", s8 ==? 8'sb11111?00);\n    s4 = -4'sd4;       $display(\"weq-unsigned-pat %b\", s4 ==? 8'b11111?00);\n    $finish;\n  end\nendmodule\n",
+  "exp": [
+   "weq-narrow-pat-msb1 1",
+   "weq-narrow-pat-msbq 1",
+   "weq-narrow-pat-msbq-pos 1",
+   "weq-narrow-pat-known 1",
+   "weq-narrow-lhs-sext 1",
+   "weq-narrow-lhs-zero-pat 0",
+   "weq-narrow-pat-ext-ones 0",
+   "weq-integer 1",
+   "weq-ne 0",
+   "weq-unsized-x-msb-wide 1",
+   "weq-same-width 1",
+   "weq-unsigned-pat 0"
+  ],
+  "pre": [
+   "weq-narrow-pat-msb1 0",
+   "weq-narrow-pat-msbq 0",
+   "weq-narrow-pat-msbq-pos 0",
+   "weq-narrow-pat-known 0",
+   "weq-narrow-lhs-sext 0",
+   "weq-narrow-lhs-zero-pat 1",
+   "weq-narrow-pat-ext-ones 1",
+   "weq-integer 0",
+   "weq-ne 1",
+   "weq-unsized-x-msb-wide 0",
+   "weq-same-width 1",
+   "weq-unsigned-pat 0"
+  ]
+ }
+}

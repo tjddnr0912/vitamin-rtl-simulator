@@ -1,0 +1,26 @@
+module child;
+  function void g(input logic x, input logic z);
+    logic [1:0] r; r = 0;
+    unique if (x) r = 1; else if (z) r = 2;
+  endfunction
+endmodule
+module dut(input logic a, input logic b, output logic [1:0] y);
+  child c();
+  function logic [1:0] f(input logic x, input logic z);
+    c.g(x, z);
+    return {x, z};
+  endfunction
+  assign y = f(a, b);
+endmodule
+module top;
+  logic a, b; logic [1:0] y;
+  dut u(.a(a), .b(b), .y(y));
+  initial begin
+    a = 0; b = 1;
+    #1 $display("t=%0t y=%0d", $time, y);
+    #1 b = 0;
+    #1 $display("t=%0t y=%0d", $time, y);
+    #1 $finish;
+  end
+  initial #100 $finish;
+endmodule

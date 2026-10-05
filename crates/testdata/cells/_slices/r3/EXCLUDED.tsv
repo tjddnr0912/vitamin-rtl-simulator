@@ -1,0 +1,3 @@
+category	path_or_glob	count	bytes	reason
+build	r3/obj_*	312	9053840	verilator obj dirs / iverilog compiled images (build artefacts)
+build	r3/*.vvp	2	4075	verilator obj dirs / iverilog compiled images (build artefacts)

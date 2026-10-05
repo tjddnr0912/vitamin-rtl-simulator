@@ -1,0 +1,118 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c5__dif_c05_long50
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c5/dif_c05_long50.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c5
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: gained verilator lines | residue verilator lines | POST2 W4031 lines PRE and verilator lack
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6 | s585/g/cmp3_final.txt:8
+notes: runs: dif_c05_long50 g__dif_c05_long50
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/dif_c05_long50.out | 2773 bytes
+##### dif_c05_long50
+=== verilator compile rc=0 run rc=0
+[2] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[2] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[4] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[4] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[5] %Error: dif_c05_long50.sv:3: Assertion failed in top.fl: 'unique if' statement violated
+t=5 fl(50)=-1
+[5] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[5] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+t=6 fl(3)=3
+[6] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[6] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+t=7 prio50 done y2=0
+[7] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[7] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+- dif_c05_long50.sv:11: Verilog $finish
+[8] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[8] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+=== iverilog compile rc=44
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 fl(50)=-1
+t=6 fl(3)=3
+t=7 prio50 done y2=0
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=5 fl(50)=-1
+t=6 fl(3)=3
+dif_c05_long50.sv:9:25: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 prio50 done y2=0
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+simulation ended (Finish) at time 8
+errors=0 warnings=5 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__dif_c05_long50.out | 2776 bytes
+##### g__dif_c05_long50
+=== verilator compile rc=0 run rc=0
+[2] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[2] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[4] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[4] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[5] %Error: dif_c05_long50.sv:3: Assertion failed in top.fl: 'unique if' statement violated
+t=5 fl(50)=-1
+[5] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[5] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+t=6 fl(3)=3
+[6] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[6] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+t=7 prio50 done y2=0
+[7] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[7] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+- dif_c05_long50.sv:11: Verilog $finish
+[8] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+[8] %Error: dif_c05_long50.sv:4: Assertion failed in top: 'unique if' statement violated
+=== iverilog compile rc=44
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+dif_c05_long50.sv:3: syntax error
+dif_c05_long50.sv:3: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 fl(50)=-1
+t=6 fl(3)=3
+t=7 prio50 done y2=0
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=5 fl(50)=-1
+t=6 fl(3)=3
+dif_c05_long50.sv:9:25: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 prio50 done y2=0
+dif_c05_long50.sv:4:28: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+simulation ended (Finish) at time 8
+errors=0 warnings=5 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/dif_c05_long50.out | 2773 bytes | identical to block 1
+=== end

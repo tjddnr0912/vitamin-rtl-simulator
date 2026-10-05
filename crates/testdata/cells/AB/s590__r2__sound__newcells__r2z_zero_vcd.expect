@@ -1,0 +1,113 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__sound__newcells__r2z_zero_vcd
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/sound/newcells/r2z_zero_vcd.sv
+roadmap_row: §2 🆕 AB
+set: r2/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: Q2: r2z VCD md5 d8cdc765… identical PRE2/POSTA/POSTC x3; pure_4000, s_chain_1000 within 3%.
+verdict_source: s590/r2/sound/REPORT.md:22
+notes: verdict_class = verbatim excerpt of the source line; 53 byte-identical output copies listed as alias
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 3
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/sound/out/r2z_zero_vcd.out | 1261 bytes
+##### r2z_zero_vcd
+=== iverilog run rc=0
+VCD info: dumpfile z.vcd opened for output.
+r2z_zero_vcd.sv:8: $finish called at 10 (1s)
+
+=== verilator run rc=0
+-Info: r2z_zero_vcd.sv:8: $dumpvar ignored, as Verilated without --trace
+- r2z_zero_vcd.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 833.335 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE2 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTA (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+--- r2z_zero_vcd PRE2==POSTA:111 PRE2==POSTC:111 POSTA==POSTC:111 split=-
+=== block 2 | combined [iverilog+verilator|PRE3+POSTC+POSTD] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/sound/out/r2z_zero_vcd.out | 1259 bytes
+##### r2z_zero_vcd
+=== iverilog run rc=0
+VCD info: dumpfile z.vcd opened for output.
+r2z_zero_vcd.sv:8: $finish called at 10 (1s)
+
+=== verilator run rc=0
+-Info: r2z_zero_vcd.sv:8: $dumpvar ignored, as Verilated without --trace
+- r2z_zero_vcd.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 1.111 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+--- r2z_zero_vcd PRE3==POSTC:111 PRE3==POSTD:111 POSTC==POSTD:111 split=-
+=== block 3 | vita [PRE3+POSTD+POSTE] | r4/sound/out/r2z_zero_vcd.out | 830 bytes
+##### r2z_zero_vcd
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+VCD z.vcd md5=d8cdc765b105e8d6483de2ee19619da5
+--- r2z_zero_vcd PRE3==POSTD:111 PRE3==POSTE:111 POSTD==POSTE:111 split=-
+=== end

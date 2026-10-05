@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__a__a04_d10_untyped_px
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/a/a04_d10_untyped_px.sv
+roadmap_row: §2 🆕 AE
+set: g/a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-a
+verdict: silent-wrong
+verdict_source: s588/GROUNDING.md:130
+notes: GROUNDING Q3 "PRE class" column
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-a: md5 2249f265256c275bcf5f3eda7b0d10f0 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./a04_d10_untyped_px.ivl | 122 bytes
+a04_d10_untyped_px.sv:5: error: Unable to evaluate parameter PX value: top.fx(32'sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./a04_d10_untyped_px.vl | 244 bytes
+PX=xxxx bx=4
+- a04_d10_untyped_px.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 43.478 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./a04_d10_untyped_px.s2v | 125 bytes
+a04_d10_untyped_px.s2v.v:7: error: Unable to evaluate parameter PX value: top.fx(32'sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [PRE] | ./a04_d10_untyped_px.PRE | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+PX=0000 bx=4
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-a] | ./a04_d10_untyped_px.PROBE | 181 bytes | identical to block 4
+=== end

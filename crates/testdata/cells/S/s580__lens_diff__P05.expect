@@ -1,0 +1,423 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P05
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P05.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s580/lens_diff/REPORT.md:54 without a class phrase; R4 cmp3_post4 bucket(s): both×17,post3×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 81
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P05.iv.txt | 135 bytes
+P05.sv:20: syntax error
+P05.sv:20: error: Invalid module item.
+P05.sv:21: sorry: unpacked array parameters are not supported yet.
+rc=3
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P05_K1.iv.txt | 135 bytes | identical to block 1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./P05_K2.iv.txt | 135 bytes | identical to block 1
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./P05_K3.iv.txt | 135 bytes | identical to block 1
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./P05_K4.iv.txt | 607 bytes
+P05.sv:20: syntax error
+P05.sv:20: error: Invalid module item.
+P05.sv:21: sorry: unpacked array parameters are not supported yet.
+P05.sv:34: syntax error
+P05.sv:34: error: Invalid module item.
+P05.sv:35: syntax error
+P05.sv:35: error: Invalid module item.
+P05.sv:35: syntax error
+P05.sv:35: error: Invalid module item.
+P05.sv:35: syntax error
+P05.sv:51: error: Invalid module item.
+P05.sv:51: syntax error
+P05.sv:51: error: Invalid module instantiation
+P05.sv:51: error: Invalid module instantiation
+P05.sv:54: error: Invalid module item.
+P05.sv:81: syntax error
+P05.sv:81: error: Malformed statement
+rc=17
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./P05_K5.iv.txt | 273 bytes
+P05.sv:20: syntax error
+P05.sv:20: error: Invalid module item.
+P05.sv:21: sorry: unpacked array parameters are not supported yet.
+P05.sv:39: sorry: let declarations (LP) are not currently supported.
+P05.sv:40: sorry: let declarations (LU) are not currently supported.
+rc=5
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./P05_K7.iv.txt | 198 bytes
+P05.sv:20: syntax error
+P05.sv:20: error: Invalid module item.
+P05.sv:21: sorry: unpacked array parameters are not supported yet.
+P05.sv:43: syntax error
+P05.sv:43: error: Invalid module item.
+rc=5
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./P05_K8.iv.txt | 202 bytes
+P05.sv:20: syntax error
+P05.sv:20: error: Invalid module item.
+P05.sv:21: sorry: unpacked array parameters are not supported yet.
+P05.sv:46: sorry: unpacked array parameters are not supported yet.
+rc=4
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./P05_K9.iv.txt | 135 bytes | identical to block 1
+=== block 10 | vita [POST] | ./P05.post.txt | 265 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 11 | vita [POST] | ./P05.postq.txt | 1136 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=4 warnings=1 notes=0
+rc=1
+=== block 12 | vita [POST] | ./P05_K1.post.txt | 283 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K1a 0
+K1b 0
+K1c 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 13 | vita [POST] | ./P05_K1.postq.txt | 1388 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:72:53: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 14 | vita [POST] | ./P05_K2.post.txt | 245 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:15:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 15 | vita [POST] | ./P05_K2.postq.txt | 1249 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:15:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in t]
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 16 | vita [POST] | ./P05_K3.post.txt | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PP` value is not a foldable constant [in p]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 17 | vita [POST] | ./P05_K3.postq.txt | 1237 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PP` value is not a foldable constant [in p]
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 18 | vita [POST] | ./P05_K4.post.txt | 885 bytes
+P05.sv:35:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+P05.sv:35:43: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+P05.sv:35:62: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+P05.sv:81:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found '#'
+P05.sv:81:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '#'
+P05.sv:81:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found ')'
+P05.sv:81:27: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '::'
+errors=7 warnings=0 notes=0
+rc=1
+=== block 19 | vita [POST] | ./P05_K4.postq.txt | 885 bytes | identical to block 18
+=== block 20 | vita [POST] | ./P05_K5.post.txt | 277 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K5a 1
+K5b 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 21 | vita [POST] | ./P05_K5.postq.txt | 1136 bytes | identical to block 11
+=== block 22 | vita [POST] | ./P05_K7.post.txt | 282 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:43:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `CX` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 23 | vita [POST] | ./P05_K7.postq.txt | 1537 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:43:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `CX` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:87:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=6 warnings=1 notes=0
+rc=1
+=== block 24 | vita [POST] | ./P05_K8.post.txt | 270 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K8 x
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 25 | vita [POST] | ./P05_K8.postq.txt | 1387 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:90:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 26 | vita [POST] | ./P05_K9.post.txt | 298 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:49:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `QX` value is not a constant: the `/` operation divides by zero, which is `x` and not a constant [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 27 | vita [POST] | ./P05_K9.postq.txt | 1302 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P05.sv:49:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `QX` value is not a constant: the `/` operation divides by zero, which is `x` and not a constant [in t]
+P05.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+P05.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 28 | vita [POST] | r2/lens/diff_P05.post.txt | 265 bytes
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 29 | vita [POST] | r2/lens/diff_P05.postq.txt | 1136 bytes | identical to block 11
+=== block 30 | vita [POST] | r2/lens/diff_P05_K1.post.txt | 283 bytes
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K1a 0
+K1b 0
+K1c 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 31 | vita [POST] | r2/lens/diff_P05_K1.postq.txt | 1388 bytes | identical to block 13
+=== block 32 | vita [POST] | r2/lens/diff_P05_K2.post.txt | 245 bytes | identical to block 14
+=== block 33 | vita [POST] | r2/lens/diff_P05_K2.postq.txt | 1249 bytes | identical to block 15
+=== block 34 | vita [POST] | r2/lens/diff_P05_K3.post.txt | 233 bytes | identical to block 16
+=== block 35 | vita [POST] | r2/lens/diff_P05_K3.postq.txt | 1237 bytes | identical to block 17
+=== block 36 | vita [POST] | r2/lens/diff_P05_K4.post.txt | 885 bytes | identical to block 18
+=== block 37 | vita [POST] | r2/lens/diff_P05_K4.postq.txt | 885 bytes | identical to block 18
+=== block 38 | vita [POST] | r2/lens/diff_P05_K5.post.txt | 277 bytes
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K5a 1
+K5b 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 39 | vita [POST] | r2/lens/diff_P05_K5.postq.txt | 1136 bytes | identical to block 11
+=== block 40 | vita [POST] | r2/lens/diff_P05_K7.post.txt | 282 bytes | identical to block 22
+=== block 41 | vita [POST] | r2/lens/diff_P05_K7.postq.txt | 1537 bytes | identical to block 23
+=== block 42 | vita [POST] | r2/lens/diff_P05_K8.post.txt | 270 bytes
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K8 x
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 43 | vita [POST] | r2/lens/diff_P05_K8.postq.txt | 1387 bytes | identical to block 25
+=== block 44 | vita [POST] | r2/lens/diff_P05_K9.post.txt | 298 bytes | identical to block 26
+=== block 45 | vita [POST] | r2/lens/diff_P05_K9.postq.txt | 1302 bytes | identical to block 27
+=== block 46 | vita [POST2] | r2/lens/diff_P05.post2.txt | 265 bytes | identical to block 28
+=== block 47 | vita [POST2] | r2/lens/diff_P05.post2q.txt | 1136 bytes | identical to block 11
+=== block 48 | vita [POST2] | r2/lens/diff_P05_K1.post2.txt | 283 bytes | identical to block 30
+=== block 49 | vita [POST2] | r2/lens/diff_P05_K1.post2q.txt | 1388 bytes | identical to block 13
+=== block 50 | vita [POST2] | r2/lens/diff_P05_K2.post2.txt | 245 bytes | identical to block 14
+=== block 51 | vita [POST2] | r2/lens/diff_P05_K2.post2q.txt | 1249 bytes | identical to block 15
+=== block 52 | vita [POST2] | r2/lens/diff_P05_K3.post2.txt | 233 bytes | identical to block 16
+=== block 53 | vita [POST2] | r2/lens/diff_P05_K3.post2q.txt | 1237 bytes | identical to block 17
+=== block 54 | vita [POST2] | r2/lens/diff_P05_K4.post2.txt | 885 bytes | identical to block 18
+=== block 55 | vita [POST2] | r2/lens/diff_P05_K4.post2q.txt | 885 bytes | identical to block 18
+=== block 56 | vita [POST2] | r2/lens/diff_P05_K5.post2.txt | 277 bytes
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K5a 1
+K5b 1
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 57 | vita [POST2] | r2/lens/diff_P05_K5.post2q.txt | 1136 bytes | identical to block 11
+=== block 58 | vita [POST2] | r2/lens/diff_P05_K7.post2.txt | 282 bytes | identical to block 22
+=== block 59 | vita [POST2] | r2/lens/diff_P05_K7.post2q.txt | 1537 bytes | identical to block 23
+=== block 60 | vita [POST2] | r2/lens/diff_P05_K8.post2.txt | 270 bytes | identical to block 42
+=== block 61 | vita [POST2] | r2/lens/diff_P05_K8.post2q.txt | 1387 bytes | identical to block 25
+=== block 62 | vita [POST2] | r2/lens/diff_P05_K9.post2.txt | 298 bytes | identical to block 26
+=== block 63 | vita [POST2] | r2/lens/diff_P05_K9.post2q.txt | 1302 bytes | identical to block 27
+=== block 64 | vita [PRE] | ./P05.pre.txt | 265 bytes | identical to block 10
+=== block 65 | vita [PRE] | ./P05.preq.txt | 1136 bytes | identical to block 11
+=== block 66 | vita [PRE] | ./P05_K1.pre.txt | 283 bytes | identical to block 12
+=== block 67 | vita [PRE] | ./P05_K1.preq.txt | 1388 bytes | identical to block 13
+=== block 68 | vita [PRE] | ./P05_K2.pre.txt | 245 bytes | identical to block 14
+=== block 69 | vita [PRE] | ./P05_K2.preq.txt | 1249 bytes | identical to block 15
+=== block 70 | vita [PRE] | ./P05_K3.pre.txt | 233 bytes | identical to block 16
+=== block 71 | vita [PRE] | ./P05_K3.preq.txt | 1237 bytes | identical to block 17
+=== block 72 | vita [PRE] | ./P05_K4.pre.txt | 885 bytes | identical to block 18
+=== block 73 | vita [PRE] | ./P05_K4.preq.txt | 885 bytes | identical to block 18
+=== block 74 | vita [PRE] | ./P05_K5.pre.txt | 277 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z01 1
+Z02 1
+Z03 1
+Z04 1
+Z05 1
+Z06 1
+Z07 1
+Z08 1
+Z09 1
+Z10 0
+Z11 1
+Z13 1
+Z14 0
+K5a x
+K5b 0
+Z12_0 0
+Z12_1 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 75 | vita [PRE] | ./P05_K5.preq.txt | 1136 bytes | identical to block 11
+=== block 76 | vita [PRE] | ./P05_K7.pre.txt | 282 bytes | identical to block 22
+=== block 77 | vita [PRE] | ./P05_K7.preq.txt | 1537 bytes | identical to block 23
+=== block 78 | vita [PRE] | ./P05_K8.pre.txt | 270 bytes | identical to block 24
+=== block 79 | vita [PRE] | ./P05_K8.preq.txt | 1387 bytes | identical to block 25
+=== block 80 | vita [PRE] | ./P05_K9.pre.txt | 298 bytes | identical to block 26
+=== block 81 | vita [PRE] | ./P05_K9.preq.txt | 1302 bytes | identical to block 27
+=== end

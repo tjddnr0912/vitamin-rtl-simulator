@@ -1,0 +1,116 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__d__d09_unique
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/d/d09_unique.sv
+roadmap_row: §3.b case-inside
+set: lens_diff/d
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST/default,POST/interp,POST/native,POST/staged,POST/vm,POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/default: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/interp: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/native: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/staged: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/vm: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 24
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/d/out_d09_unique/iv.out | 3483 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:11: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:11: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:15: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:15: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:15: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:19: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:19: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:19: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22: error: Incomprehensible case expression.
+rc=18
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/d/out_d09_unique/vl.out | 303 bytes
+[0] %Error: d09_unique.sv:7: Assertion failed in top: unique case, but none matched for '32'h00000007'
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7: Verilog $stop
+Aborting...
+rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | lens_diff/d/out_d09_unique/sv.out | 122 bytes
+U1ci m=0
+U1pl m=0
+P1ci m=0
+P1pl m=0
+U0ci m=0
+U0pl m=0
+UDci m=9
+UOci m=1
+UOpl m=1
+sv2v.v:57: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [POST] | lens_diff/d/out_d09_unique/post.out | 1296 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+U1ci m=0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:9:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+U1pl m=0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:11:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+P1ci m=0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+P1pl m=0
+U0ci m=0
+U0pl m=0
+UDci m=9
+UOci m=1
+UOpl m=1
+simulation ended (Finish) at time 0
+errors=0 warnings=4 notes=0
+rc=0
+=== block 5 | vita [POST] | lens_diff/r2/rescore/post_d09_unique.sv/out.txt | 1296 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/lens_diff__d__d09_unique.sv/post.err | 1174 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:9:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:11:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+errors=0 warnings=4 notes=0
+=== block 7 | vita [POST] | post2/cmp/lens_diff__d__d09_unique.sv/post.out | 122 bytes
+U1ci m=0
+U1pl m=0
+P1ci m=0
+P1pl m=0
+U0ci m=0
+U0pl m=0
+UDci m=9
+UOci m=1
+UOpl m=1
+simulation ended (Finish) at time 0
+rc=0
+=== block 8 | vita [POST/default] | lens_diff/be/d09_unique/default/out.txt | 1296 bytes | identical to block 4
+=== block 9 | vita [POST/interp] | lens_diff/be/d09_unique/interp/out.txt | 1296 bytes | identical to block 4
+=== block 10 | vita [POST/native] | lens_diff/be/d09_unique/native/out.txt | 1296 bytes | identical to block 4
+=== block 11 | vita [POST/staged] | lens_diff/be/d09_unique/staged/c.txt | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 12 | vita [POST/staged] | lens_diff/be/d09_unique/staged/e.txt | 28 bytes | identical to block 11
+=== block 13 | vita [POST/staged] | lens_diff/be/d09_unique/staged/out.txt | 1296 bytes | identical to block 4
+=== block 14 | vita [POST/vm] | lens_diff/be/d09_unique/vm/out.txt | 1296 bytes | identical to block 4
+=== block 15 | vita [POST2] | lens_diff/r2/rescore/post2_d09_unique.sv/out.txt | 1296 bytes | identical to block 4
+=== block 16 | vita [POST2] | lens_diff/r3/rescore/p2_d09_unique.sv/out.txt | 1296 bytes | identical to block 4
+=== block 17 | vita [POST2] | post2/cmp/lens_diff__d__d09_unique.sv/post2.err | 1174 bytes | identical to block 6
+=== block 18 | vita [POST2] | post2/cmp/lens_diff__d__d09_unique.sv/post2.out | 122 bytes | identical to block 7
+=== block 19 | vita [POST2] | post3/cmp/lens_diff__d__d09_unique.sv/post2.err | 1174 bytes | identical to block 6
+=== block 20 | vita [POST2] | post3/cmp/lens_diff__d__d09_unique.sv/post2.out | 122 bytes | identical to block 7
+=== block 21 | vita [POST3] | lens_diff/r3/rescore/p3_d09_unique.sv/out.txt | 1296 bytes | identical to block 4
+=== block 22 | vita [POST3] | post3/cmp/lens_diff__d__d09_unique.sv/post3.err | 1174 bytes | identical to block 6
+=== block 23 | vita [POST3] | post3/cmp/lens_diff__d__d09_unique.sv/post3.out | 122 bytes | identical to block 7
+=== block 24 | vita [PRE] | lens_diff/d/out_d09_unique/pre.out | 857 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22:42: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d09_unique.sv:22:42: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+errors=1 warnings=1 notes=0
+rc=1
+=== end

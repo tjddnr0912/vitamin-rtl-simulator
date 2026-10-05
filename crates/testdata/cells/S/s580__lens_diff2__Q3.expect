@@ -1,0 +1,607 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff2__Q3
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff2/Q3.sv
+roadmap_row: §2 🆕 S
+set: lens_diff2
+oracles_present: iverilog
+vita_tags: POST,POST2,PRE
+verdict: correct->loud candidate
+verdict_source: s580/lens_diff2/REPORT.md:44
+notes: R4 cmp3_post4 bucket(s): pre×24,both×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 55
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Q3.iv.txt | 304 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Q3_ADT.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+ADT 4
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./Q3_FBODY.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+LFB 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./Q3_FNRX.iv.txt | 168 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+FNRX 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./Q3_GA.iv.txt | 170 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+GA first
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./Q3_GFOR.iv.txt | 164 bytes
+Q3.sv:65: error: Generate "loop" conditional expression cannot have undefined bits. given ((i)<(((4'bx100)w(4'b1z00))+('sd2))).
+1 error(s) during elaboration.
+rc=1
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./Q3_PSEL.iv.txt | 168 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PSEL x
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./Q3_RBB.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+RBB 2
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./Q3_RBT.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+RBT 4
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 10 | oracle iverilog 13.0 (version captured in slice) | ./Q3_REPX.iv.txt | 135 bytes
+Q3.sv:55: error: Concatenation repeat may not be undefined (32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).
+1 error(s) during elaboration.
+rc=1
+=== block 11 | oracle iverilog 13.0 (version captured in slice) | ./Q3_STX.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+STX 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 12 | oracle iverilog 13.0 (version captured in slice) | ./Q3_TDX.iv.txt | 167 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+TDX 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 13 | oracle iverilog 13.0 (version captured in slice) | ./Q3_XBEFORE.iv.txt | 168 bytes
+G1 then
+GS then
+GC1 one
+GL lab1
+GB one
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+Q3.sv:76: $finish called at 3 (1s)
+rc=0
+=== block 14 | vita [POST] | ./Q3.post.txt | 1022 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+errors=2 warnings=2 notes=0
+rc=1
+=== block 15 | vita [POST] | ./Q3.postq.txt | 1022 bytes | identical to block 14
+=== block 16 | vita [POST] | ./Q3_ADT.post.txt | 593 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+errors=2 warnings=2 notes=0
+rc=1
+=== block 17 | vita [POST] | ./Q3_FBODY.post.txt | 727 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LFB` value is not a constant: `fb(…)` has no constant-fold arm [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+errors=3 warnings=2 notes=0
+rc=1
+=== block 18 | vita [POST] | ./Q3_FNRX.post.txt | 593 bytes | identical to block 16
+=== block 19 | vita [POST] | ./Q3_GA.post.txt | 593 bytes | identical to block 16
+=== block 20 | vita [POST] | ./Q3_GFOR.post.txt | 730 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:65:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: 4'bx100 has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+errors=3 warnings=2 notes=0
+rc=1
+=== block 21 | vita [POST] | ./Q3_PSEL.post.txt | 593 bytes | identical to block 16
+=== block 22 | vita [POST] | ./Q3_RBB.post.txt | 730 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:37:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+errors=3 warnings=2 notes=0
+rc=1
+=== block 23 | vita [POST] | ./Q3_RBT.post.txt | 593 bytes | identical to block 16
+=== block 24 | vita [POST] | ./Q3_REPX.post.txt | 593 bytes | identical to block 16
+=== block 25 | vita [POST] | ./Q3_STX.post.txt | 223 bytes
+Q3.sv:52:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'struct'
+Q3.sv:52:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '}'
+errors=2 warnings=0 notes=0
+rc=1
+=== block 26 | vita [POST] | ./Q3_TDX.post.txt | 593 bytes | identical to block 16
+=== block 27 | vita [POST] | ./Q3_XBEFORE.post.txt | 593 bytes | identical to block 16
+=== block 28 | vita [POST2] | ./Q3.post2.txt | 289 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 29 | vita [POST2] | ./Q3.post2q.txt | 289 bytes | identical to block 28
+=== block 30 | vita [POST2] | ./Q3_ADT.post2.txt | 295 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+ADT 4
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 31 | vita [POST2] | ./Q3_FBODY.post2.txt | 266 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LFB` value is not a constant: `fb(…)` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 32 | vita [POST2] | ./Q3_FNRX.post2.txt | 400 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 33 | vita [POST2] | ./Q3_GA.post2.txt | 298 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+GA first
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 34 | vita [POST2] | ./Q3_GFOR.post2.txt | 269 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:65:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: 4'bx100 has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 35 | vita [POST2] | ./Q3_PSEL.post2.txt | 296 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+PSEL 1
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 36 | vita [POST2] | ./Q3_RBB.post2.txt | 295 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+RBB 2
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 37 | vita [POST2] | ./Q3_RBT.post2.txt | 295 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+RBT 4
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 38 | vita [POST2] | ./Q3_REPX.post2.txt | 296 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G1 then
+GS then
+GC1 one
+GL lab1
+REPX 0
+OV1 1 1
+OVS 1 1
+OV0 0 1
+PK1 1
+PK0 0
+LF1 1
+LF0 0
+LT1 1
+LG 0
+RB1 4
+RB0 2
+RBS 4
+AD1 4
+ADS 4
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 39 | vita [POST2] | ./Q3_STX.post2.txt | 223 bytes | identical to block 25
+=== block 40 | vita [POST2] | ./Q3_TDX.post2.txt | 400 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 41 | vita [POST2] | ./Q3_XBEFORE.post2.txt | 397 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Q3.sv:46:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 42 | vita [PRE] | ./Q3.pre.txt | 3683 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+errors=11 warnings=3 notes=0
+rc=1
+=== block 43 | vita [PRE] | ./Q3.preq.txt | 1022 bytes | identical to block 14
+=== block 44 | vita [PRE] | ./Q3_ADT.pre.txt | 1967 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u1]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+errors=11 warnings=3 notes=0
+rc=1
+=== block 45 | vita [PRE] | ./Q3_FBODY.pre.txt | 2101 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LFB` value is not a constant: `fb(…)` has no constant-fold arm [in t]
+Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u1]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+errors=12 warnings=3 notes=0
+rc=1
+=== block 46 | vita [PRE] | ./Q3_FNRX.pre.txt | 1967 bytes | identical to block 44
+=== block 47 | vita [PRE] | ./Q3_GA.pre.txt | 1967 bytes | identical to block 44
+=== block 48 | vita [PRE] | ./Q3_GFOR.pre.txt | 2104 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:65:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: 4'bx100 has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u1]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+errors=12 warnings=3 notes=0
+rc=1
+=== block 49 | vita [PRE] | ./Q3_PSEL.pre.txt | 1967 bytes | identical to block 44
+=== block 50 | vita [PRE] | ./Q3_RBB.pre.txt | 2104 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:37:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in t]
+Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u1]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+errors=12 warnings=3 notes=0
+rc=1
+=== block 51 | vita [PRE] | ./Q3_RBT.pre.txt | 1967 bytes | identical to block 44
+=== block 52 | vita [PRE] | ./Q3_REPX.pre.txt | 1967 bytes | identical to block 44
+=== block 53 | vita [PRE] | ./Q3_STX.pre.txt | 223 bytes | identical to block 25
+=== block 54 | vita [PRE] | ./Q3_TDX.pre.txt | 1967 bytes | identical to block 44
+=== block 55 | vita [PRE] | ./Q3_XBEFORE.pre.txt | 1967 bytes | identical to block 44
+=== end

@@ -1,0 +1,60 @@
+== R3a
+         iv: L0
+         sv: L0
+         vl: L0
+      postd: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: L0
+== R3b
+         iv: same
+         sv: same
+         vl: same
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: same
+== R3c
+         iv: f=11
+         sv: ERR:R3c.sv2v.v:21: error: No function named `g.b.f' found in this context (rc1)
+         vl: ERR:%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbb(rc1)
+      postd: ERR:VITA-E3009:unsupported hierarchical function call `g.b.f` (th(rc1)
+        pre: ERR:VITA-E3009:unsupported hierarchical function call `g.b.f` (th(rc1)
+== R3d
+         iv: bits=4
+         sv: bits=4
+         vl: ERR:%Error: R3d.sv:15:46: Can't find definition of 'b'(rc1)
+      postd: bits=4
+        pre: bits=4
+== R3e
+         iv: ERR:R3e.sv:7: sorry: concurrent_assertion_item not supported. Try -gno-ass(rc2)
+         sv: NONE
+         vl: a_fail 1 | a_fail 3
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: a_fail 1 | a_fail 3
+== R3h
+         iv: bits=4
+         sv: bits=4
+         vl: ERR:%Error: R3h.sv:14:48: Can't find definition of 'b'(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3009:$bits of hierarchical `g.b.u.d`: not a net or para(rc1)
+== R3m
+         iv: bits=4
+         sv: bits=4
+         vl: ERR:%Error: R3m.sv:14:46: Can't find definition of 'b'(rc1)
+      postd: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: bits=4
+== R3n
+         iv: ERR:R3n.sv:11: error: Unable to bind wire/reg/memory `g.a.Q' in `top'(rc1)
+         sv: Qa=20
+         vl: Qa=20
+      postd: ERR:VITA-E3010:undeclared hierarchical name `g.a.Q` (no such cros(rc1)
+        pre: Qa=20
+== R3q
+         iv: ERR:R3q.sv:4: error: Unable to bind parameter `K' in `top.g'(rc2)
+         sv: ERR:R3q.sv2v.v:7: error: Unable to bind parameter `Nope' in `top.g.k'(rc2)
+         vl: ERR:%Error: R3q.sv:5:21: Can't find definition of variable: 'Nope'(rc1)
+      postd: bits=4
+        pre: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+== R3q2
+         iv: bits=4
+         sv: ERR:R3q2.sv2v.v:8: error: Unable to bind parameter `Nope' in `top.g.k'(rc2)
+         vl: ERR:%Error: R3q2.sv:6:21: Can't find definition of variable: 'Nope'(rc1)
+      postd: bits=4
+        pre: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)

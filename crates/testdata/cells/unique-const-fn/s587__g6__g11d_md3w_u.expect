@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g6__g11d_md3w_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g6/g11d_md3w_u.sv
+roadmap_row: §3.b unique-const-fn
+set: g6
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,PRE-sep,S3,S4,S8,PRE
+verdict: Residue (not opted in by P2, measured)
+verdict_source: s587/IMPL.md:31
+notes: IMPL step-1 G6 lane list (lane g11d)
+alias: r1/diff/g6r/g11d_md3w_u (byte-identical source) verdict: Residue (not opted in by P2, measured) verdict_source: s587/IMPL.md:31
+alias: r2/diff/re/g6r/g11d_md3w_u (byte-identical source) verdict: Residue (not opted in by P2, measured) verdict_source: s587/IMPL.md:31
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./g11d_md3w_u.ivl | 94 bytes
+g11d_md3w_u.sv:4: syntax error
+g11d_md3w_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./g11d_md3w_u.vl | 259 bytes
+m=0123456789abcdef0000000076543210
+- g11d_md3w_u.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 30.303 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_g11d_md3w_u.build | 0 bytes
+
+=== block 4 | vita [MECH] | ./g11d_md3w_u.mech | 577 bytes
+g11d_md3w_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+g11d_md3w_u.sv:7:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: nested lvalue select (v1: single-level) [in top]
+errors=1 warnings=1 notes=1
+rc=1
+=== block 5 | vita [PRE] | ./g11d_md3w_u.vita | 577 bytes | identical to block 4
+=== block 6 | vita [S3] | ./g11d_md3w_u.s3 | 577 bytes | identical to block 4
+=== block 7 | vita [S4] | ./g11d_md3w_u.s4 | 540 bytes
+g11d_md3w_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+m=0123456789abcdef0000000076543210
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=1
+rc=0
+=== block 8 | vita [S8] | ./g11d_md3w_u.s8 | 540 bytes | identical to block 7
+=== end

@@ -1,0 +1,195 @@
+category	path_or_glob	count	bytes	reason
+binary	./*.bak	1	33849224	Mach-O/ELF executable
+binary	post/*vita	1	7304736	Mach-O/ELF executable
+binary	post2/*vita	1	7304736	Mach-O/ELF executable
+binary	post3/*vita	1	7304736	Mach-O/ELF executable
+binary	post4/*vita	1	7304736	Mach-O/ELF executable
+binary	pre/*vita	1	7304752	Mach-O/ELF executable
+binary	r2/*.bak	1	33850616	Mach-O/ELF executable
+binary	r3/*.bak	1	33851128	Mach-O/ELF executable
+binary	r4/*.bak	1	33848648	Mach-O/ELF executable
+binary	sv2v/sv2v-macOS/*sv2v	1	8731824	Mach-O/ELF executable
+build-artefact	sv2v/*.zip	1	1813927	object/archive/build artefact
+build-dir	census/c/obj_*/	885	26665381	verilator build tree
+build-dir	census/e/obj_*/	1300	38915270	verilator build tree
+build-dir	census/obj_*/	100	3000644	verilator build tree
+build-dir	census/z/obj_*/	180	5275890	verilator build tree
+build-dir	fx/obj_*/	224	6580295	verilator build tree
+build-dir	lens_diff/obj_*/	85	2440952	verilator build tree
+build-dir	lens_diff2/*.obj/	148	4471775	verilator build tree
+build-dir	lens_diff3/*.obj/	25	761390	verilator build tree
+build-dir	lens_snd/probes/obj_*/	255	7575937	verilator build tree
+build-dir	lens_snd/target*/	4114	1367184177	cargo target / pycache
+build-dir	lens_snd2/probes/*.obj/	50	1511300	verilator build tree
+build-dir	lens_snd2/target*/	4178	1387518715	cargo target / pycache
+build-dir	lens_snd3/p/*.obj/	30	819854	verilator build tree
+build-dir	lens_snd3/target*/	4065	1364870767	cargo target / pycache
+build-dir	probes/obj_*/	25	765882	verilator build tree
+build-dir	r2/fx2/obj_*/	148	4421952	verilator build tree
+build-dir	r2/obj_*/	48	1412631	verilator build tree
+build-dir	r2/r26/obj_*/	2100	63062938	verilator build tree
+build-or-corpus-log	./*.log	4	5401	cargo build / corpus log, md5 note
+build-or-corpus-log	./*.md5	1	33	cargo build / corpus log, md5 note
+build-or-corpus-log	./*.rc	1	2	cargo build / corpus log, md5 note
+build-or-corpus-log	./*.wall	1	4	cargo build / corpus log, md5 note
+build-or-corpus-log	post/*.log	1	571	cargo build / corpus log, md5 note
+build-or-corpus-log	post2/*.log	1	365	cargo build / corpus log, md5 note
+build-or-corpus-log	post3/*.log	1	365	cargo build / corpus log, md5 note
+build-or-corpus-log	post4/*.log	1	365	cargo build / corpus log, md5 note
+build-or-corpus-log	pre/*.log	1	1535	cargo build / corpus log, md5 note
+build-or-corpus-log	pre/*.rc	1	2	cargo build / corpus log, md5 note
+build-or-corpus-log	r2/*.log	3	4083	cargo/corpus log or md5 note
+build-or-corpus-log	r2/*.md5	1	33	cargo/corpus log or md5 note
+build-or-corpus-log	r2/*.rc	2	4	cargo/corpus log or md5 note
+build-or-corpus-log	r2/*.wall	1	4	cargo/corpus log or md5 note
+build-or-corpus-log	r3/*.log	1	1620	corpus log or md5 note
+build-or-corpus-log	r3/*.md5	1	33	corpus log or md5 note
+build-or-corpus-log	r3/*.rc	1	2	corpus log or md5 note
+build-or-corpus-log	r3/*.wall	1	4	corpus log or md5 note
+build-or-corpus-log	r4/*.log	1	1620	corpus log or md5 note
+build-or-corpus-log	r4/*.md5	1	33	corpus log or md5 note
+build-or-corpus-log	r4/*.rc	1	2	corpus log or md5 note
+build-or-corpus-log	r4/*.wall	1	4	corpus log or md5 note
+empty-marker	census/e/*.nov	1	0	zero-byte marker file
+example-aux	irtest/*.hex	2	13856	memory image of an examples/ design (no oracle)
+example-vcd	ident/*.vcd	4	4688	VCD of an examples/ design run (no oracle)
+gate-log	gate/*.done	2	10	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/*.log	4	714932	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/*.rc	4	8	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/*.sh	4	2360	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/*.wall	4	10	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run1/*.done	1	5	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run1/*.log	3	715140	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run1/*.rc	3	8	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run1/*.wall	3	9	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run2/*.done	1	5	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run2/*.log	3	713067	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run2/*.rc	3	6	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run2/*.wall	3	9	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run3/*.done	1	5	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run3/*.log	3	714449	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run3/*.rc	3	8	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run3/*.wall	3	9	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run4/*.done	2	10	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run4/*.log	4	1503243	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run4/*.rc	4	8	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run4/*.wall	4	13	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run5/*.done	2	10	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run5/*.log	4	1503303	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run5/*.rc	4	8	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run5/*.wall	4	13	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run6_clippyfail/*.done	2	10	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run6_clippyfail/*.log	5	1506102	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run6_clippyfail/*.rc	5	12	fmt/clippy/nextest gate logs and scripts
+gate-log	gate/run6_clippyfail/*.wall	5	15	fmt/clippy/nextest gate logs and scripts
+lens-harness	lens_snd/*.log	2	27722	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd/*.rc	1	12	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.apply	2	499	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.done	1	5	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.log	2	11057	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.py	1	1105	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.rc	2	8	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd2/*.sh	1	835	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd3/*.end	1	11	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd3/*.log	1	8060	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd3/*.py	1	1156	lens mutation logs / mutation scripts / join helper
+lens-harness	lens_snd3/*.rc	1	4	lens mutation logs / mutation scripts / join helper
+no-oracle-output	census/c/{C28b.sv} (SV + its outputs)	4	584	SV with no oracle output and no doc quote
+no-oracle-output	census/e/{Q.sv} (SV + its outputs)	3	5431	SV with no oracle output and no doc quote
+no-oracle-output	fx/{F06.sv,F06n.sv,F07.sv,F07n.sv,F15.sv,F16.sv,F18.sv,Ffill.sv,G2.sv,G2q.sv,L1.sv,L2.sv,L3.sv,L4.sv,L5.sv,L6.sv,L7.sv,L8.sv} (SV + its outputs)	114	33770	SV with no oracle output and no doc quote
+no-oracle-output	ident/{F06.sv,F07.sv,F15.sv,F16.sv,I02.sv,I03.sv,I04.sv,I05.sv,I06.sv,I10.sv,I11.sv,I12.sv,I13.sv} (SV + its outputs)	76	20756	SV with no oracle output and no doc quote
+no-oracle-output	irtest/{N01.sv} (SV + its outputs)	7	1706	SV with no oracle output and no doc quote
+no-oracle-output	lens_snd/s8/{T8.sv} (SV + its outputs)	10	985	SV with no oracle output and no doc quote
+no-oracle-output	probes/{var_el.sv} (SV + its outputs)	2	1021	SV with no oracle output and no doc quote
+no-oracle-output	r2/{OR1.sv,OR2.sv,SL1.sv,SL1q.sv} (SV + its outputs)	7	4134	SV with no oracle output and no doc quote
+no-oracle-output	r2/fx2/{H02q.sv,H05.sv,H05w.sv} (SV + its outputs)	15	3083	SV with no oracle output and no doc quote
+no-oracle-output	r2/r26/{X1.sv,X2.sv} (SV + its outputs)	6	3343	SV with no oracle output and no doc quote
+no-oracle-output	r3/irc/* (234 SV files + their outputs)	702	57848	SV with no oracle output and no doc quote
+no-oracle-output	r4/fx/{H07C.sv,I12.sv,K02.sv,K02q.sv,K07.sv} (SV + its outputs)	9	8879	SV with no oracle output and no doc quote
+no-oracle-output	r4/rt/{hand_snd.sv,lens_diff2_Q1.sv,lens_diff2_Q3.sv,lens_diff2_Q5.sv,lens_diff2_Q8.sv,lens_diff2_Q9.sv,lens_diff3_P1.sv,lens_diff_P03.sv,lens_diff_P06.sv,lens_diff_P06v.sv,lens_diff_P07.sv,lens_diff_P08b.sv,lens_diff_P10b.sv,lens_diff_P10c.sv,lens_snd2_probes_P10.sv,lens_snd2_probes_P2.sv,lens_snd2_probes_P5.sv,lens_snd3_p_p3.sv,lens_snd3_p_p6.sv,lens_snd_probes_P1.sv,lens_snd_probes_P2a.sv,lens_snd_probes_P2b.sv,lens_snd_probes_P2c.sv,lens_snd_probes_P4a.sv,lens_snd_probes_P5.sv,lens_snd_probes_P7.sv} (SV + its outputs)	26	29513	SV with no oracle output and no doc quote
+repo-copy	lens_snd/src/	1412	28115763	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/src/	1412	28137851	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd3/src/	1412	28140274	listed in repocopies.txt/wtlist.txt
+run-log	census/*.log	2	0	census batch run log/rc
+run-log	census/*.rc	2	4	census batch run log/rc
+run-log	r2/r26/*.log	1	0	batch log
+rust-source-or-patch	fx/*.rs	1	0	saved Rust source / patch
+rust-source-or-patch	lens_diff2/src/*.rs	9	655931	saved Rust source / patch
+rust-source-or-patch	lens_diff3/src/*.rs	1	58159	saved Rust source / patch
+rust-source-or-patch	lens_snd2/orig/*.rs	2	112080	saved Rust source / patch
+rust-source-or-patch	lens_snd3/*.rs	5	356367	saved Rust source / patch
+rust-source-or-patch	r4/*.main.rs	6	411071	saved Rust source / patch
+scratch-output	fx/*.txt	2	103	unnamed scratch output (no cell named)
+script	census/*.py	2	1627	helper script (not generator/runner)
+script	census/*.sh	1	470	helper script (not generator/runner)
+script	lens_diff/*.py	1	858	helper script
+script	lens_diff2/*.py	2	4672	helper script
+script	lens_diff3/*.py	1	2272	helper script
+script	r2/*.py	3	4061	vita-vs-vita comparison script (not a cell runner)
+script	r4/*.py	3	4884	helper script; run-time twin stripper (vita-only)
+slice-doc-verdict-source	./*.md	1	86709	slice report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff/*.md	1	7658	lens report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff2/*.md	1	8373	lens report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff3/*.md	1	4699	lens report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd/*.md	1	6633	slice report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd2/*.md	1	6023	slice report (verdict_source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd3/*.md	1	3335	slice report (verdict_source of CELLS.tsv; not a cell file)
+test-log	./*.txt	1	13662	test executable output (teeth)
+test-log	r2/*.bak.txt	1	9326	test executable output (teeth)
+test-log	r2/*.txt	1	20015	test executable output (teeth)
+test-log	r3/*.txt	2	27079	test executable output (teeth)
+test-log	r4/*.txt	2	19211	test executable output (teeth)
+tool	sv2v/sv2v-macOS/*.md	2	18466	sv2v release files (tool, not a cell)
+tool	sv2v/sv2v-macOS/*LICENSE	1	1553	sv2v release files (tool, not a cell)
+tool	sv2v/sv2v-macOS/*NOTICE	1	63443	sv2v release files (tool, not a cell)
+vita-staged	ident/*.post.velab	25	28867	vita staged artefact
+vita-staged	ident/*.post.vu	25	71823	vita staged artefact
+vita-staged	ident/*.post2.velab	25	28867	vita staged artefact
+vita-staged	ident/*.post2.vu	25	71823	vita staged artefact
+vita-staged	ident/*.post3.velab	25	28861	vita staged artefact
+vita-staged	ident/*.post3.vu	25	71823	vita staged artefact
+vita-staged	ident/*.post4.velab	24	28279	vita staged artefact
+vita-staged	ident/*.post4.vu	25	71823	vita staged artefact
+vita-staged	ident/*.pre.velab	10	11174	vita staged artefact
+vita-staged	ident/*.pre.vu	11	32001	vita staged artefact
+vita-staged	irtest/*.post.velab	1	1623	vita staged artefact
+vita-staged	irtest/*.post.vu	1	4238	vita staged artefact
+vita-staged	irtest/*.pre.velab	2	2116	vita staged artefact
+vita-staged	irtest/*.pre.vu	2	4957	vita staged artefact
+vita-staged	lens_diff/st/*.velab	1	3663	vita staged artefact
+vita-staged	lens_diff/st/*.vu	2	18430	vita staged artefact
+vita-staged	lens_snd/s8/*.velab	2	826	vita staged artefact
+vita-staged	lens_snd/s8/*.vu	2	1330	vita staged artefact
+vita-staged	r3/irc/*.post2.velab	228	100202	vita staged artefact
+vita-staged	r3/irc/*.post2.vu	234	172867	vita staged artefact
+vita-staged	r3/irc/*.post3.velab	228	100136	vita staged artefact
+vita-staged	r3/irc/*.post3.vu	234	172867	vita staged artefact
+vita-staged	r3/irc/*.post4.velab	228	100136	vita staged artefact
+vita-staged	r3/irc/*.post4.vu	228	167807	vita staged artefact
+vvp-image	census/*.sv2v.vvp	5	48904	iverilog compiled image
+vvp-image	census/*.vvp	4	27085	iverilog compiled image
+vvp-image	census/c/*.sv2v.vvp	28	45864	iverilog compiled image
+vvp-image	census/c/*.vvp	1	1333	iverilog compiled image
+vvp-image	census/cq/*.vvp	10	14433	iverilog compiled image
+vvp-image	census/e/*.sv2v.vvp	48	73670	iverilog compiled image
+vvp-image	census/e/*.vvp	2	11040	iverilog compiled image
+vvp-image	census/z/*.dvvp	1	1377	iverilog compiled image
+vvp-image	census/z/*.sv2v.vvp	6	14873	iverilog compiled image
+vvp-image	fx/*.vvp	13	52174	iverilog compiled image
+vvp-image	lens_diff/*.sv2v.vvp	2	12679	iverilog compiled image
+vvp-image	lens_diff/*.vvp	14	102675	iverilog compiled image
+vvp-image	lens_diff2/*.svvp	4	32406	iverilog compiled image
+vvp-image	lens_diff2/*.vvp	30	163082	iverilog compiled image
+vvp-image	lens_diff3/*.svvp	61	165827	iverilog compiled image
+vvp-image	lens_diff3/*.vvp	63	161476	iverilog compiled image
+vvp-image	lens_snd/probes/*.iv.out	8	27505	iverilog compiled image
+vvp-image	lens_snd/probes/*.ivd.out	8	18621	iverilog compiled image
+vvp-image	lens_snd2/probes/*.iv.out	9	37831	iverilog compiled image
+vvp-image	lens_snd2/probes/*.ivd.out	11	36524	iverilog compiled image
+vvp-image	lens_snd3/p/*.svvp	30	74679	iverilog compiled image
+vvp-image	lens_snd3/p/*.vvp	32	92817	iverilog compiled image
+vvp-image	probes/*.vvp	2	7977	iverilog compiled image
+vvp-image	r2/*.vvp	5	12132	iverilog compiled image
+vvp-image	r2/fx2/*.vvp	9	24566	iverilog compiled image
+vvp-image	r2/r26/*.vvp	86	110746	iverilog compiled image
+vvp-image	r4/fx/*.vvp	2	7274	iverilog compiled image

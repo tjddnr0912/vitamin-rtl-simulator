@@ -1,0 +1,172 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P07
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P07.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog,sv2v
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: F1 correct->silent-wrong instances
+verdict_source: s580/lens_diff/REPORT.md:20
+notes: R4 cmp3_post4 bucket(s): both×5,post3×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 20
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P07.iv.txt | 103 bytes
+L20 0
+L21 0
+L22 0
+AB 4
+R20 0
+K1a 1
+K1c 1
+G20 else
+PV1 1x00
+P07.sv:27: $finish called at 1000 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P07_l.iv.txt | 143 bytes
+P07.sv:21: sorry: let declarations (LU) are not currently supported.
+P07.sv:22: sorry: let declarations (LP) are not currently supported.
+rc=2
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./P07a.sv2v.err | 0 bytes
+
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./P07l.sv2v.err | 55 bytes
+P07.sv:21:3: Parse error: missing expected `endmodule`
+=== block 5 | vita [POST] | ./P07.post.txt | 230 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L20 1
+L21 1
+L22 1
+AB 8
+R20 0
+K1a 0
+K1c 0
+G20 then
+PV1 1000
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [POST] | ./P07.postq.txt | 383 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P07.sv:35:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 7 | vita [POST] | ./P07_l.post.txt | 248 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L20 1
+L21 1
+L22 1
+AB 8
+R20 0
+K1a 0
+K1c 0
+K5a 1
+K5b 0
+K5c 1
+G20 then
+PV1 1000
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [POST] | ./P07_l.postq.txt | 383 bytes | identical to block 6
+=== block 9 | vita [POST] | r2/lens/diff_P07.post.txt | 230 bytes
+L20 1
+L21 1
+L22 1
+AB 8
+R20 0
+K1a 0
+K1c 0
+G20 then
+PV1 1000
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 10 | vita [POST] | r2/lens/diff_P07.postq.txt | 383 bytes | identical to block 6
+=== block 11 | vita [POST] | r2/lens/diff_P07_l.post.txt | 248 bytes
+L20 1
+L21 1
+L22 1
+AB 8
+R20 0
+K1a 0
+K1c 0
+K5a 1
+K5b 0
+K5c 1
+G20 then
+PV1 1000
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [POST] | r2/lens/diff_P07_l.postq.txt | 383 bytes | identical to block 6
+=== block 13 | vita [POST2] | r2/lens/diff_P07.post2.txt | 230 bytes
+L20 0
+L21 0
+L22 0
+AB 4
+R20 0
+K1a 0
+K1c 0
+G20 else
+PV1 1000
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 14 | vita [POST2] | r2/lens/diff_P07.post2q.txt | 383 bytes | identical to block 6
+=== block 15 | vita [POST2] | r2/lens/diff_P07_l.post2.txt | 248 bytes
+L20 0
+L21 0
+L22 0
+AB 4
+R20 0
+K1a 0
+K1c 0
+K5a 1
+K5b 1
+K5c 1
+G20 else
+PV1 1000
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 16 | vita [POST2] | r2/lens/diff_P07_l.post2q.txt | 383 bytes | identical to block 6
+=== block 17 | vita [PRE] | ./P07.pre.txt | 230 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L20 0
+L21 0
+L22 0
+AB 4
+R20 0
+K1a 0
+K1c 0
+G20 else
+PV1 1000
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 18 | vita [PRE] | ./P07.preq.txt | 383 bytes | identical to block 6
+=== block 19 | vita [PRE] | ./P07_l.pre.txt | 248 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L20 0
+L21 0
+L22 0
+AB 4
+R20 0
+K1a 0
+K1c 0
+K5a x
+K5b 0
+K5c 0
+G20 else
+PV1 1000
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 20 | vita [PRE] | ./P07_l.preq.txt | 383 bytes | identical to block 6
+=== end

@@ -1,0 +1,34 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__u__r14_export
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/u/r14_export.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:31
+alias: r2/diff/a/lanes/r14_export (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-c-jit: md5 f1cd245ccf95b589f4e8c123ec824a24 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r14_export.ivl | 92 bytes
+r14_export.sv:4: syntax error
+r14_export.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r14_export.vl | 228 bytes
+P=3
+- r14_export.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 41.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r14_export.build | 0 bytes
+
+=== block 4 | vita [POST-c-jit] | r2/diff/a/lanes/r14_export.jit | 352 bytes
+r14_export.sv:9:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found '::'
+r14_export.sv:9:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after instantiation, found '::'
+r14_export.sv:9:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '::'
+errors=3 warnings=0 notes=0
+rc=1
+=== end

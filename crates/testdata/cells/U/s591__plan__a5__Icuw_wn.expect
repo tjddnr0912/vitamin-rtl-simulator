@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a5__Icuw_wn
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a5/Icuw_wn.sv
+roadmap_row: §2 🆕 U
+set: plan/a5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: silent->loud
+verdict_source: s591/impl/moves_audit.txt:31
+notes: class PRE vs posta (POST_a), IMPL.md:14
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Icuw_wn.ivl | 65 bytes
+cuwwn P=3 K=3 b=32
+Icuw_wn.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Icuw_wn.vl | 240 bytes
+cuwwn P=3 K=3 b=32
+- Icuw_wn.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.692 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Icuw_wn.s2v | 68 bytes
+cuwwn P=3 K=3 b=32
+Icuw_wn.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Icuw_wn.dev3 | 631 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Icuw_wn.sv:6:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: undefined name `P` is not a constant [in top]
+Icuw_wn.sv:7:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+Icuw_wn.sv:7:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+Icuw_wn.sv:7:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, array views, and self-determined expressions fold; v7) [in top]
+errors=4 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./Icuw_wn.posta | 631 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./Icuw_wn.postb | 631 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./Icuw_wn.pre | 208 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+cuwwn P=18446744073709551625 K=9 b=65
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [PRE] | ./Icuw_wn.pre.route | 0 bytes
+
+=== block 9 | vita [PROTO2] | ./Icuw_wn.post2 | 631 bytes | identical to block 4
+=== end

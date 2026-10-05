@@ -1,0 +1,87 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__ctl
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/ctl.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG3,POST2,POST3,POST3/default,POST3/interp,POST3/native,POST3/staged,POST3/vm,PRE
+verdict: byte-identical to POST2 (= sv2v = verilator)
+verdict_source: s582/post3/DELTA.md:22
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG3: md5 159907e8a9b77d85a93b90c2f89bf7e3 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/default: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/interp: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/native: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/staged: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/vm: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | tests/sv/out/ctl/iv5.out | 462 bytes
+../../ctl.sv:4: syntax error
+../../ctl.sv:4: error: Invalid module instantiation
+../../ctl.sv:7: syntax error
+../../ctl.sv:9: syntax error
+../../ctl.sv:9: error: Incomprehensible case expression.
+../../ctl.sv:9: syntax error
+../../ctl.sv:9: Syntax in assignment statement l-value.
+../../ctl.sv:9: error: Incomprehensible case expression.
+../../ctl.sv:10: syntax error
+../../ctl.sv:10: error: Malformed statement
+../../ctl.sv:7: error: Incomprehensible for loop.
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/ctl/vl.out | 415 bytes
+v=1000 m=1 k=1
+v=0010 m=2 k=1
+v=0110 m=0 k=0
+v=1100 m=1 k=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/ctl.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/ctl/sv.out | 101 bytes
+v=1000 m=1 k=1
+v=0010 m=2 k=1
+v=0110 m=0 k=0
+v=1100 m=1 k=1
+sv2v.v:24: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [DBG3] | tests/sv/out/ctl/post.out | 129 bytes
+v=1000 m=1 k=1
+v=0010 m=2 k=1
+v=0110 m=0 k=0
+v=1100 m=1 k=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST2] | post3/cmp/tests__sv__ctl.sv/post2.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 6 | vita [POST2] | post3/cmp/tests__sv__ctl.sv/post2.out | 101 bytes
+v=1000 m=1 k=1
+v=0010 m=2 k=1
+v=0110 m=0 k=0
+v=1100 m=1 k=1
+simulation ended (Finish) at time 0
+rc=0
+=== block 7 | vita [POST3] | post3/cmp/tests__sv__ctl.sv/post3.err | 28 bytes | identical to block 5
+=== block 8 | vita [POST3] | post3/cmp/tests__sv__ctl.sv/post3.out | 101 bytes | identical to block 6
+=== block 9 | vita [POST3/default] | post3/be/ctl.sv.default | 96 bytes
+v=1000 m=1 k=1
+v=0010 m=2 k=1
+v=0110 m=0 k=0
+v=1100 m=1 k=1
+simulation ended (Finish) at time 0
+=== block 10 | vita [POST3/interp] | post3/be/ctl.sv.interp | 96 bytes | identical to block 9
+=== block 11 | vita [POST3/native] | post3/be/ctl.sv.native | 96 bytes | identical to block 9
+=== block 12 | vita [POST3/staged] | post3/be/ctl.sv.staged | 96 bytes | identical to block 9
+=== block 13 | vita [POST3/vm] | post3/be/ctl.sv.vm | 96 bytes | identical to block 9
+=== block 14 | vita [PRE] | tests/sv/out/ctl/pre.out | 1310 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/ctl.sv:9:39: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/ctl.sv:9:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/ctl.sv:9:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/ctl.sv:9:39: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+errors=3 warnings=1 notes=0
+rc=1
+=== end

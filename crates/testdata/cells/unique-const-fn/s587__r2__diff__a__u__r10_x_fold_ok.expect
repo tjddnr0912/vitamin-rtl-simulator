@@ -1,0 +1,46 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__u__r10_x_fold_ok
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/u/r10_x_fold_ok.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:28
+alias: r2/diff/a/lanes/r10_x_fold_ok (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-c-jit: md5 f1cd245ccf95b589f4e8c123ec824a24 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r10_x_fold_ok.ivl | 286 bytes
+r10_x_fold_ok.sv:5: syntax error
+r10_x_fold_ok.sv:5: Syntax in assignment statement l-value.
+r10_x_fold_ok.sv:9: syntax error
+r10_x_fold_ok.sv:9: Syntax in assignment statement l-value.
+r10_x_fold_ok.sv:14: syntax error
+r10_x_fold_ok.sv:14: Syntax in assignment statement l-value.
+rc=6
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r10_x_fold_ok.vl | 389 bytes
+%Warning-WIDTHTRUNC: r10_x_fold_ok.sv:4:47: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'i' generates 32 bits.
+S1=0010 S2=0000 S3=5
+- r10_x_fold_ok.sv:20: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 55.556 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r10_x_fold_ok.build | 545 bytes
+%Warning-WIDTHTRUNC: r10_x_fold_ok.sv:4:47: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'i' generates 32 bits.
+                                          : ... note: In instance 'top'
+    4 |     for (int i = 0; i < 4; i++) if (i == a) t = i;
+      |                                               ^
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+=== block 4 | vita [POST-c-jit] | r2/diff/a/lanes/r10_x_fold_ok.jit | 581 bytes
+S1=0010 S2=0000 S3=5
+simulation ended (Finish) at time 1
+r10_x_fold_ok.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+JITBODY templates_compiled=0 refused=0 activations=0
+errors=0 warnings=1 notes=1
+rc=0
+=== end

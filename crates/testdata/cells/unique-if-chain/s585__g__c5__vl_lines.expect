@@ -1,0 +1,361 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c5__vl_lines
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c5/vl_lines.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c5
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2,JIT1,NODEF1,PRE-NODEF,JIT2,NODEF2
+verdict: gained verilator lines | residue verilator lines | POST2 W4031 lines PRE and verilator lack | unique-if-chain | ARMED
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6 | s585/g/cmp3_final.txt:8 | s585/DOCS_ROWS.md:22 | s585/p/PINS.txt:57
+notes: runs: g__vl_lines vl_lines
+alias: lanes/n/vl_lines (byte-identical source) verdict: unique-if-chain verdict_source: s585/DOCS_ROWS.md:22
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+vita_binary: NODEF2: md5 f97f67cf3a0daeea5a19c81925570a42 commit unrecorded
+vita_binary: PRE-NODEF: md5 265594a76745b101a6e1eaf8fc15fe9e commit 75f255d4
+blocks: 9
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/vl_lines.out | 7414 bytes
+##### vl_lines
+=== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: vl_lines.sv:27:26: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:27:50: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:33: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:57: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:81: Expression side effect may be mishandled run rc=0
+[1] %Error: vl_lines.sv:7: Assertion failed in top: 'unique if' statement violated
+t=1 multiline done
+[2] %Error: vl_lines.sv:11: Assertion failed in top: 'unique if' statement violated
+t=2 split else-unique-if done
+[3] %Error: vl_lines.sv:14: Assertion failed in top: 'unique if' statement violated
+t=3 split else-unique0-if done
+[4] %Error: vl_lines.sv:17: Assertion failed in top: 'unique if' statement violated
+t=4 split middle-unique chain3 done
+[5] %Error: vl_lines.sv:21: Assertion failed in top: 'unique if' statement violated
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+[7] %Error: vl_lines.sv:27: Assertion failed in top: 'unique if' statement violated
+t=7 side-effect n=2
+t=8 side-effect match n=5 r=2
+t=9 matched-then inner-miss done
+- vl_lines.sv:33: Verilog $finish
+=== iverilog compile rc=51
+vl_lines.sv:7: syntax error
+vl_lines.sv:7: Syntax in assignment statement l-value.
+vl_lines.sv:8: syntax error
+vl_lines.sv:8: Syntax in assignment statement l-value.
+vl_lines.sv:9: syntax error
+vl_lines.sv:9: Syntax in assignment statement l-value.
+vl_lines.sv:11: syntax error
+vl_lines.sv:11: Syntax in assignment statement l-value.
+=== vita PRE native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+=== vita PRE interp [BACKEND SPLIT]
+rc=0
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=2 notes=0
+=== vita PRE vm [BACKEND SPLIT]
+rc=0
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=2 notes=0
+=== vita POST native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=8 notes=0
+=== vita POST interp [BACKEND SPLIT]
+rc=0
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=7 notes=0
+=== vita POST vm [BACKEND SPLIT]
+rc=0
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=7 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__vl_lines.out | 6571 bytes
+##### g__vl_lines
+=== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: vl_lines.sv:27:26: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:27:50: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:33: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:57: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:81: Expression side effect may be mishandled run rc=0
+[1] %Error: vl_lines.sv:7: Assertion failed in top: 'unique if' statement violated
+t=1 multiline done
+[2] %Error: vl_lines.sv:11: Assertion failed in top: 'unique if' statement violated
+t=2 split else-unique-if done
+[3] %Error: vl_lines.sv:14: Assertion failed in top: 'unique if' statement violated
+t=3 split else-unique0-if done
+[4] %Error: vl_lines.sv:17: Assertion failed in top: 'unique if' statement violated
+t=4 split middle-unique chain3 done
+[5] %Error: vl_lines.sv:21: Assertion failed in top: 'unique if' statement violated
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+[7] %Error: vl_lines.sv:27: Assertion failed in top: 'unique if' statement violated
+t=7 side-effect n=2
+t=8 side-effect match n=5 r=2
+t=9 matched-then inner-miss done
+- vl_lines.sv:33: Verilog $finish
+=== iverilog compile rc=51
+vl_lines.sv:7: syntax error
+vl_lines.sv:7: Syntax in assignment statement l-value.
+vl_lines.sv:8: syntax error
+vl_lines.sv:8: Syntax in assignment statement l-value.
+vl_lines.sv:9: syntax error
+vl_lines.sv:9: Syntax in assignment statement l-value.
+vl_lines.sv:11: syntax error
+vl_lines.sv:11: Syntax in assignment statement l-value.
+=== vita PRE native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+=== vita PRE interp [BACKEND SPLIT]
+rc=0
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=2 notes=0
+=== vita PRE vm [BACKEND SPLIT]
+rc=0
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=2 notes=0
+=== vita POST native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=6 notes=0
+=== vita POST interp [BACKEND SPLIT]
+rc=0
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=5 notes=0
+=== vita POST vm [BACKEND SPLIT]
+rc=0
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=5 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/vl_lines.out | 7414 bytes | identical to block 1
+=== block 4 | vita [JIT2] | r2/sound/lanes/vl_lines.jit | 1163 bytes
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+JITBODY templates_compiled=1 refused=0 activations=1
+simulation ended (Finish) at time 10
+errors=0 warnings=6 notes=0
+=== block 5 | vita [NODEF2] | r2/sound/lanes/vl_lines.nod | 292 bytes
+fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b), and this build carries no other executor — the `oracle` backends are compiled out [at time 0]
+simulation ended (Finish) at time 0
+errors=1 warnings=1 notes=0
+=== block 6 | vita [POST] | r1/sound/jit/vl_lines.def | 1392 bytes
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=8 notes=0
+=== block 7 | vita [POST2] | r2/sound/lanes/vl_lines.def | 1110 bytes
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=6 notes=0
+=== block 8 | vita [PRE] | r1/sound/jit/vl_lines.predef | 688 bytes
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+=== block 9 | vita [PRE-NODEF] | r1/sound/jit/vl_lines.prenod | 292 bytes | identical to block 5
+=== end

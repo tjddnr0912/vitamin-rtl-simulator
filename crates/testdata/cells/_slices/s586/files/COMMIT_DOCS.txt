@@ -1,0 +1,24 @@
+docs: record §4.5.586 — `unique-overlap-note` closed by VITA-I2021; `unique-const-fn` is §5.2 row 1
+
+- ROADMAP §3.b: `unique-overlap-note` deleted.
+- ROADMAP §5.2: row 1 removed and the rows below move up one
+  (`unique-const-fn` row 1, 🆕 AB row 2, 🆕 U–W rows 3–5, 🆕 T then S (a)
+  row 6, the new-design census row 7, hygiene row 8); the order prose and
+  every `§5.2 row N` cite follow (§2 🆕 S's retry, U, V, W, AB; §3.b
+  `unique-const-fn`).
+- ROADMAP §8: the non-goal reads "`unique` / `unique0` multiple-match
+  checking (`VITA-I2021` announces it, once per parse)"; `priority` is
+  dropped, IEEE gives it no multiple-match rule.
+- Summary recounted by line census: §3.b 128/111/17 → 127/110/17; total
+  open 459 → 458, startable 272 → 271, blocked 187; `next` §2 2–6, §3.b 1,
+  study/03 7.
+- REMAINING_WORK §D: the §5.2 row cites of 🆕 AB, `unique-const-fn`, 🆕 U,
+  V and W follow the renumbering.
+- preview 13: the code count 68 → 71, twice.
+- PROBE_CATALOG: `priority0` accepted on `if` / `case` (both oracles
+  reject it); `priority0` refused as an identifier (both accept it); a
+  design-unit lifetime (`program automatic`, `module automatic`) refused
+  E2002 (both run it).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

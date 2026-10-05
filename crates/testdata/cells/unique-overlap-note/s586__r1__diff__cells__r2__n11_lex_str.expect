@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__r2__n11_lex_str
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/r2/n11_lex_str.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells/r2
+oracles_present: iverilog
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: r1/diff/v2/n11_lex_str r3/lex_str
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 22
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/v2/n11_lex_str/iv.cout | 101 bytes
+n11_lex_str.sv:4: error: Missing closing quote for string.
+n11_lex_str.sv:5: syntax error
+I give up.
+=== block 2 | vita [POST] | r1/diff/v2/n11_lex_str/post.cerr | 115 bytes
+n11_lex_str.sv:4:35: error[VITA-E1013] E-PP-BAD-DIRECTIVE: unterminated string literal
+errors=1 warnings=0 notes=0
+=== block 3 | vita [POST] | r1/diff/v2/n11_lex_str/post.crc | 2 bytes
+1
+=== block 4 | vita [POST] | r1/diff/v2/n11_lex_str/post.err | 115 bytes | identical to block 2
+=== block 5 | vita [POST] | r1/diff/v2/n11_lex_str/post.out | 0 bytes
+
+=== block 6 | vita [POST] | r1/diff/v2/n11_lex_str/post.rc | 2 bytes | identical to block 3
+=== block 7 | vita [POST2] | r1/diff/v2/n11_lex_str/post2.cerr | 115 bytes | identical to block 2
+=== block 8 | vita [POST2] | r1/diff/v2/n11_lex_str/post2.crc | 2 bytes | identical to block 3
+=== block 9 | vita [POST2] | r1/diff/v2/n11_lex_str/post2.err | 115 bytes | identical to block 2
+=== block 10 | vita [POST2] | r1/diff/v2/n11_lex_str/post2.out | 0 bytes | identical to block 5
+=== block 11 | vita [POST2] | r1/diff/v2/n11_lex_str/post2.rc | 2 bytes | identical to block 3
+=== block 12 | vita [POST2] | r3/lex_str.post2.err | 115 bytes | identical to block 2
+=== block 13 | vita [POST2] | r3/lex_str.post2.out | 0 bytes | identical to block 5
+=== block 14 | vita [POST2] | r3/lex_str.post2.rc | 2 bytes | identical to block 3
+=== block 15 | vita [PRE] | r1/diff/v2/n11_lex_str/pre.cerr | 115 bytes | identical to block 2
+=== block 16 | vita [PRE] | r1/diff/v2/n11_lex_str/pre.crc | 2 bytes | identical to block 3
+=== block 17 | vita [PRE] | r1/diff/v2/n11_lex_str/pre.err | 115 bytes | identical to block 2
+=== block 18 | vita [PRE] | r1/diff/v2/n11_lex_str/pre.out | 0 bytes | identical to block 5
+=== block 19 | vita [PRE] | r1/diff/v2/n11_lex_str/pre.rc | 2 bytes | identical to block 3
+=== block 20 | vita [PRE] | r3/lex_str.pre.err | 115 bytes | identical to block 2
+=== block 21 | vita [PRE] | r3/lex_str.pre.out | 0 bytes | identical to block 5
+=== block 22 | vita [PRE] | r3/lex_str.pre.rc | 2 bytes | identical to block 3
+=== end

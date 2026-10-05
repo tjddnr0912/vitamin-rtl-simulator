@@ -1,0 +1,63 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__gen__c13b_unique_overlap_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/gen/c13b_unique_overlap_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/gen
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: accept = sv2v
+verdict_source: s582/post/CENSUS.md:48
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__gen__c13b_unique_overlap_ci/iv.out | 1246 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:6: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:6: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:12: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:12: error: Incomprehensible case expression.
+rc=6
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/gen/out_c13b_unique_overlap_ci/vl.out | 331 bytes
+[0] %Error: c13b_unique_overlap_ci.sv:5: Assertion failed in top: unique case, but multiple matches found for '4'h5'
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:5: Verilog $stop
+Aborting...
+rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | grounding/gen/out_c13b_unique_overlap_ci/sv.out | 64 bytes
+v=0101 m=1
+v=0001 m=1
+sv2v.v:22: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [POST] | post/census/grounding__gen__c13b_unique_overlap_ci/post.out | 191 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=0101 m=1
+v=0001 m=1
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | post2/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 6 | vita [POST] | post2/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post.out | 64 bytes
+v=0101 m=1
+v=0001 m=1
+simulation ended (Finish) at time 10
+rc=0
+=== block 7 | vita [POST2] | post2/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post2.err | 127 bytes | identical to block 5
+=== block 8 | vita [POST2] | post2/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post2.out | 64 bytes | identical to block 6
+=== block 9 | vita [POST2] | post3/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post2.err | 127 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post2.out | 64 bytes | identical to block 6
+=== block 11 | vita [POST3] | post3/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post3.err | 127 bytes | identical to block 5
+=== block 12 | vita [POST3] | post3/cmp/grounding__gen__c13b_unique_overlap_ci.sv/post3.out | 64 bytes | identical to block 6
+=== block 13 | vita [PRE] | grounding/gen/out_c13b_unique_overlap_ci/vita.out | 1286 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:5:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.inside` [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:5:12: error[VITA-E3009] E-ELAB-UNSUPPORTED: part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order) [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:11:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.inside` [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:11:12: error[VITA-E3009] E-ELAB-UNSUPPORTED: part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order) [in top]
+errors=4 warnings=1 notes=0
+rc=1
+=== end

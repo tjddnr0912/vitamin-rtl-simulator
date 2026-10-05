@@ -1,0 +1,118 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__v05
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/v05.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG1,POST,POST2,POST3,PRE,unrecorded/c.log,unrecorded/default,unrecorded/e.log,unrecorded/interp,unrecorded/native,unrecorded/oneshot,unrecorded/r.log,unrecorded/staged,unrecorded/vm
+verdict: accept = sv2v = verilator
+verdict_source: s582/post/CENSUS.md:117
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG1: md5 2674c193c5cdb62f66e0a380149d04a7 commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 18
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/tests__sv__v05/iv.out | 1817 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12: error: Incomprehensible case expression.
+rc=10
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/v05/vl.out | 499 bytes
+a v=1100 m=1
+a v=1000 m=1
+a v=1111 m=0
+a v=0101 m=3
+a v=0110 m=3
+a v=0011 m=0
+b w=0c m=1
+b w=1c m=0
+b w=08 m=1
+b w=01 m=2
+b w=11 m=0
+b w=f8 m=0
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:18: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/v05/sv.out | 185 bytes
+a v=1100 m=1
+a v=1000 m=1
+a v=1111 m=0
+a v=0101 m=3
+a v=0110 m=3
+a v=0011 m=0
+b w=0c m=1
+b w=1c m=0
+b w=08 m=1
+b w=01 m=2
+b w=11 m=0
+b w=f8 m=0
+sv2v.v:52: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [DBG1] | tests/sv/out/v05/post.out | 213 bytes
+a v=1100 m=1
+a v=1000 m=1
+a v=1111 m=0
+a v=0101 m=3
+a v=0110 m=3
+a v=0011 m=0
+b w=0c m=1
+b w=1c m=0
+b w=08 m=1
+b w=01 m=2
+b w=11 m=0
+b w=f8 m=0
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST] | lens_diff/r2/rescore/post_v05.sv/out.txt | 213 bytes | identical to block 4
+=== block 6 | vita [POST] | post/census/tests__sv__v05/post.out | 213 bytes | identical to block 4
+=== block 7 | vita [POST] | post2/cmp/tests__sv__v05.sv/post.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 8 | vita [POST] | post2/cmp/tests__sv__v05.sv/post.out | 185 bytes
+a v=1100 m=1
+a v=1000 m=1
+a v=1111 m=0
+a v=0101 m=3
+a v=0110 m=3
+a v=0011 m=0
+b w=0c m=1
+b w=1c m=0
+b w=08 m=1
+b w=01 m=2
+b w=11 m=0
+b w=f8 m=0
+simulation ended (Finish) at time 0
+rc=0
+=== block 9 | vita [POST2] | lens_diff/r2/rescore/post2_v05.sv/out.txt | 213 bytes | identical to block 4
+=== block 10 | vita [POST2] | lens_diff/r3/rescore/p2_v05.sv/out.txt | 213 bytes | identical to block 4
+=== block 11 | vita [POST2] | post2/cmp/tests__sv__v05.sv/post2.err | 28 bytes | identical to block 7
+=== block 12 | vita [POST2] | post2/cmp/tests__sv__v05.sv/post2.out | 185 bytes | identical to block 8
+=== block 13 | vita [POST2] | post3/cmp/tests__sv__v05.sv/post2.err | 28 bytes | identical to block 7
+=== block 14 | vita [POST2] | post3/cmp/tests__sv__v05.sv/post2.out | 185 bytes | identical to block 8
+=== block 15 | vita [POST3] | lens_diff/r3/rescore/p3_v05.sv/out.txt | 213 bytes | identical to block 4
+=== block 16 | vita [POST3] | post3/cmp/tests__sv__v05.sv/post3.err | 28 bytes | identical to block 7
+=== block 17 | vita [POST3] | post3/cmp/tests__sv__v05.sv/post3.out | 185 bytes | identical to block 8
+=== block 18 | vita [PRE] | tests/sv/out/v05/pre.out | 2601 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7:56: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12:37: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '8'b0000_1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '8'b0000_1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:7:56: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/v05.sv:12:37: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+errors=6 warnings=2 notes=0
+rc=1
+=== end

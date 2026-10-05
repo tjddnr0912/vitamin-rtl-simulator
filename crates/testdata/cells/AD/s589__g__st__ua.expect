@@ -1,0 +1,30 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__g__st__ua
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/g/st/ua.sv
+roadmap_row: §2 🆕 AD
+set: g/st
+oracles_present: verilator
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+aux: s589__g__st__ua.aux/g/st/ub.sv (origin s589/g/st/ub.sv)
+blocks: 1
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./vlo.err | 1362 bytes
+%Warning-WIDTHTRUNC: ua.sv:2:51: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+                               : ... note: In instance 'top'
+    2 | function automatic logic [f(2):0] h(input int x); return x; endfunction
+      |                                                   ^~~~~~
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: ub_ctl.sv:2:18: Operator VAR 'P' expects 32 bits on the Initial value, but Initial value's FUNCREF 'h' generates 4 bits.
+                                    : ... note: In instance 'top'
+    2 |   localparam int P = h(1000);
+      |                  ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: ub_ctl.sv:4:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+                                    : ... note: In instance 'top'
+    4 |   initial begin v = h(1000); $display("v=%0d P=%0d", v, P); #1 $finish; end
+      |                   ^
+=== end

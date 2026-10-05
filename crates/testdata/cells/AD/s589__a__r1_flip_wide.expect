@@ -1,0 +1,89 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__r1_flip_wide
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/r1_flip_wide.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: wrong->ok
+verdict_source: s589/IMPL.md:21
+notes: class word nearest `r1_flip_wide` on that line; listed in post_a/s5_ok.txt:2 (S5 vs PRE: wrong->ok, s589/IMPL.md:28)
+alias: post_a/cells/a/r1_flip_wide (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:21
+alias: r2/diff/impl/a/r1_flip_wide (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:21
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r1_flip_wide.ivl | 53 bytes
+P=8
+r1_flip_wide.sv:8: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r1_flip_wide.vl | 229 bytes
+P=8
+- r1_flip_wide.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 30.303 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./r1_flip_wide.s2v | 57 bytes
+P=8
+r1_flip_wide.s2v.v:18: $finish called at 1 (1s)
+rc=0
+=== block 4 | vita [P1d] | ./r1_flip_wide.p4 | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=8
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [P1d] | ./r1_flip_wide.p4nb | 172 bytes | identical to block 4
+=== block 6 | vita [POST-a] | post_a/cells/a/r1_flip_wide.post | 172 bytes | identical to block 4
+=== block 7 | vita [POST-a] | r2/diff/impl/a/r1_flip_wide.post | 172 bytes | identical to block 4
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/r1_flip_wide.spost | 228 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+P=8
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 9 | vita [POST-b] | post_a/cells/a/r1_flip_wide.pb | 172 bytes | identical to block 4
+=== block 10 | vita [POST-b] | post_a/cells/a/r1_flip_wide.postb | 172 bytes | identical to block 4
+=== block 11 | vita [POST-b] | r2/diff/impl/a/r1_flip_wide.pb | 172 bytes | identical to block 4
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/r1_flip_wide.spostb | 228 bytes | identical to block 8
+=== block 13 | vita [POST-c] | post_a/cells/a/r1_flip_wide.postc | 172 bytes | identical to block 4
+=== block 14 | vita [POST-c] | r2/diff/impl/a/r1_flip_wide.pc | 172 bytes | identical to block 4
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/r1_flip_wide.spostc | 228 bytes | identical to block 8
+=== block 16 | vita [PRE] | ./r1_flip_wide.pre | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=1000
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 17 | vita [S2] | post_a/cells/a/r1_flip_wide.s2 | 175 bytes | identical to block 16
+=== block 18 | vita [S2-sep] | post_a/cells/a/r1_flip_wide.ss2 | 231 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+P=1000
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 19 | vita [S3] | post_a/cells/a/r1_flip_wide.s3 | 172 bytes | identical to block 4
+=== block 20 | vita [S4] | post_a/cells/a/r1_flip_wide.s4 | 172 bytes | identical to block 4
+=== block 21 | vita [S5] | post_a/cells/a/r1_flip_wide.s5 | 172 bytes | identical to block 4
+=== block 22 | vita [S5-sep] | post_a/cells/a/r1_flip_wide.ss5 | 228 bytes | identical to block 8
+=== block 23 | vita [W0] | post_a/cells/a/r1_flip_wide.w0 | 175 bytes | identical to block 16
+=== end

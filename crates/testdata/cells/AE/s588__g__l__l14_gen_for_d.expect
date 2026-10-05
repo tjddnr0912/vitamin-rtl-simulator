@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__l__l14_gen_for_d
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/l/l14_gen_for_d.sv
+roadmap_row: §2 🆕 AE
+set: g/l
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-a
+verdict: F: keep; D: silent->loud (3); s03 silent->correct
+verdict_source: s588/GROUNDING.md:291
+notes: GROUNDING Q4 A lane row naming l14 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-a: md5 2249f265256c275bcf5f3eda7b0d10f0 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./l14_gen_for_d.ivl | 154 bytes
+l14_gen_for_d.sv:7: error: Generate "loop" conditional expression cannot have undefined bits. given ((i)<(fx('sd2))).
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./l14_gen_for_d.vl | 231 bytes
+done
+- l14_gen_for_d.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 90.909 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./l14_gen_for_d.s2v | 164 bytes
+l14_gen_for_d.s2v.v:14: error: Generate "loop" conditional expression cannot have undefined bits. given ((_gv_i_1)<(fx('sd2))).
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [PRE] | ./l14_gen_for_d.PRE | 283 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+l14_gen_for_d.sv:7:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: `fx(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [PROBE-a] | ./l14_gen_for_d.PROBE | 283 bytes | identical to block 4
+=== end

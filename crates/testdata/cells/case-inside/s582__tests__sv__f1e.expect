@@ -1,0 +1,64 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__f1e
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/f1e.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG2,POST,POST2,POST2/vcmp.log,POST2/velab.log,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG2: md5 a773c0b4ceb321470aed4d0fc9c0d7bb commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/vcmp.log: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/velab.log: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | tests/sv/out/f1e/iv.out | 55 bytes
+A m1=1
+../../f1e.sv:10: $finish called at 0 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/f1e/vl.out | 362 bytes
+A m1=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f1e.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/f1e/sv.out | 48 bytes
+A m1=1
+sv2v.v:15: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [DBG2] | tests/sv/out/f1e/post.out | 458 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f1e.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [POST] | post2/cmp/tests__sv__f1e.sv/post.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 6 | vita [POST] | post2/cmp/tests__sv__f1e.sv/post.out | 48 bytes
+A m1=0
+simulation ended (Finish) at time 0
+rc=0
+=== block 7 | vita [POST2] | post2/cmp/tests__sv__f1e.sv/post2.err | 453 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f1e.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in t]
+errors=1 warnings=0 notes=0
+=== block 8 | vita [POST2] | post2/cmp/tests__sv__f1e.sv/post2.out | 5 bytes
+rc=1
+=== block 9 | vita [POST2] | post3/cmp/tests__sv__f1e.sv/post2.err | 453 bytes | identical to block 7
+=== block 10 | vita [POST2] | post3/cmp/tests__sv__f1e.sv/post2.out | 5 bytes | identical to block 8
+=== block 11 | vita [POST2/vcmp.log] | post2/be/f1e.sv.vcmp.log | 28 bytes | identical to block 5
+=== block 12 | vita [POST2/velab.log] | post2/be/f1e.sv.velab.log | 453 bytes | identical to block 7
+=== block 13 | vita [POST3] | post3/cmp/tests__sv__f1e.sv/post3.err | 502 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f1e.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f1e.sv:5); IEEE 1800-2017 reserves `inside` [in t]
+errors=1 warnings=0 notes=0
+=== block 14 | vita [POST3] | post3/cmp/tests__sv__f1e.sv/post3.out | 5 bytes | identical to block 8
+=== block 15 | vita [PRE] | post3/cmp/tests__sv__f1e.sv/pre.out | 76 bytes
+A m1=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 16 | vita [PRE] | tests/sv/out/f1e/pre.out | 76 bytes | identical to block 15
+=== end

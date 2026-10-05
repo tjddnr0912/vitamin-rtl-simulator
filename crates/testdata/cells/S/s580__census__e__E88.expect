@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__census__e__E88
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/census/e/E88.sv
+roadmap_row: §2 🆕 S
+set: census/e
+oracles_present: doc-quote
+vita_tags: post-dbg-r1,post2dbg,postrel
+verdict: residue, recorded, not fixed (silent-wrong remains)
+verdict_source: s580/REPORT.md:317
+notes: oracle values quoted at s580/REPORT.md:71; matrix row(s) s580/REPORT.md:266; R4 cmp3_post4 bucket(s): both×1 (s580/r4/cmp3_post4.txt)
+blocks: 0
+=== end

@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r1__diff__cells__D11_ieee_top2
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r1/diff/cells/D11_ieee_top2.sv
+roadmap_row: §2 🆕 U
+set: r1/diff/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POSTA,POSTB,POSTB_SEP,PRE,POSTA_SEP
+verdict: pre=val[ivl,s2v] posta=val[ivl,s2v] postb=val[ivl,s2v] = oracle_loud=vl
+verdict_source: s591/r2/lens_delta.txt:41
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/dc/D11_ieee_top2 (byte-identical source) verdict: pre=val[ivl,s2v] posta=val[ivl,s2v] postb=val[ivl,s2v] = oracle_loud=vl verdict_source: s591/r2/lens_delta.txt:41
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./D11_ieee_top2.ivl | 70 bytes
+d11 myteeth=1 F=1
+D11_ieee_top2.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./D11_ieee_top2.vl | 180 bytes
+%Error-ENUMVALUE: D11_ieee_top2.sv:7:27: Implicit conversion to enum 'enum{}q::teeth_t' from 'enum{}p::bool_t' (IEEE 1800-2023 6.19.3)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./D11_ieee_top2.s2v | 73 bytes
+d11 myteeth=1 F=1
+D11_ieee_top2.s2v.v:9: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | r2/dc/D11_ieee_top2.dev3 | 188 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+d11 myteeth=1 F=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POSTA] | ./D11_ieee_top2.post | 188 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./D11_ieee_top2.postb | 188 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./D11_ieee_top2.pre | 188 bytes | identical to block 4
+=== end

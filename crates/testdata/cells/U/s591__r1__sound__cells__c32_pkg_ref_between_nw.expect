@@ -1,0 +1,117 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r1__sound__cells__c32_pkg_ref_between_nw
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r1/sound/cells/c32_pkg_ref_between_nw.sv
+roadmap_row: §2 🆕 U
+set: r1/sound/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,POSTA
+verdict: pre=val[-] posta=LOUD[-] postb=val[-] MOVED oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:26
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/dump/5351e2805100ce68 (byte-identical source) verdict: pre=val[-] posta=LOUD[-] postb=val[-] MOVED oracle_loud=- verdict_source: s591/r2/lens_delta.txt:26
+alias: r2/sc/c32_pkg_ref_between_nw (byte-identical source) verdict: pre=val[-] posta=LOUD[-] postb=val[-] MOVED oracle_loud=- verdict_source: s591/r2/lens_delta.txt:26
+alias: r2/sound/cells/r1/c32_pkg_ref_between_nw (byte-identical source) verdict: package arm's per-import state returns c07 `pr A=3 B=5`, c32 `pnw A=3 B=9`, D24 `d24 Z=3 Y=5` to PRE (round 1 had them loud; oracles B=3, Y=3), pinned KNOWN-WRONG; a bare generate-region `if` as the separating item was unpinned (mutant N1 survived the workspace suite; c47 pinned). verdict_source: s591/COMMIT_SLICE.txt:131
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: POSTB_ST: md5 unrecorded commit unrecorded
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/sound/cells/w_c32_pkg_ref_between_nw/ivl.out | 48 bytes
+pnw A=3 B=3
+t.sv:11: $finish called at 100 (1s)
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r2/dump/5351e2805100ce68.ivl | 68 bytes
+pnw A=3 B=3
+5351e2805100ce68.sv:11: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r2/sc/c32_pkg_ref_between_nw.ivl | 74 bytes
+pnw A=3 B=3
+c32_pkg_ref_between_nw.sv:11: $finish called at 100 (1s)
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | r2/sound/cells/r1/w_c32_pkg_ref_between_nw/ivl.out | 69 bytes
+pnw A=3 B=3
+c32_pkg_ref_between_nw.sv:11: $finish called at 100 (1s)
+=== block 5 | oracle verilator 5.052 (version captured in slice) | ./c32_pkg_ref_between_nw.vl | 2815 bytes
+VL rc=0: c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp|c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp|c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp|
+=== block 6 | oracle verilator 5.052 (version captured in slice) | r1/sound/cells/w_c32_pkg_ref_between_nw/vl/vl.out | 4634 bytes
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.033 MB sources in 5 modules, into 0.029 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 15.520 s (elab=0.000, cvt=0.003, bld=15.510); cpu 0.009 s on 1 threads; allocated 10.188 MB
+pnw A=3 B=3
+- t.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.692 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 7 | oracle verilator 5.052 (version captured in slice) | r2/dump/5351e2805100ce68.vl | 243 bytes
+pnw A=3 B=3
+- 5351e2805100ce68.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.273 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 8 | oracle verilator 5.052 (version captured in slice) | r2/sc/c32_pkg_ref_between_nw.vl | 249 bytes
+pnw A=3 B=3
+- c32_pkg_ref_between_nw.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 6.667 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 9 | oracle sv2v 0.0.13 (version captured in slice) | r1/sound/cells/w_c32_pkg_ref_between_nw/s2v.out | 48 bytes
+pnw A=3 B=3
+s2v.v:8: $finish called at 100 (1s)
+=== block 10 | oracle sv2v 0.0.13 (version captured in slice) | r2/dump/5351e2805100ce68.s2v | 70 bytes
+pnw A=3 B=3
+5351e2805100ce68.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 11 | oracle sv2v 0.0.13 (version captured in slice) | r2/sc/c32_pkg_ref_between_nw.s2v | 76 bytes
+pnw A=3 B=3
+c32_pkg_ref_between_nw.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 12 | combined [iverilog+sv2v|PRE+POSTA] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./c32_pkg_ref_between_nw.res | 508 bytes
+PRE rc=0: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|pnw A=3 B=9|errors=0 warnings=1 notes=0|
+POST rc=1: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in pc]|errors=1 warnings=1 notes=0|
+IVL rc=0: pnw A=3 B=3|t.sv:11: $finish called at 100 (1s)|
+S2V rc=0: pnw A=3 B=3|s2v.v:8: $finish called at 100 (1s)|
+=== block 13 | combined [iverilog+sv2v|PRE+POSTA+POSTB+POSTB_ST] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | r2/sound/cells/r1/c32_pkg_ref_between_nw.res | 244 bytes
+pre rc=0: pnw A=3 B=9|
+post_a rc=1: error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in pc]|
+post_b rc=0: pnw A=3 B=9|
+post_b-staged 0/0/0: pnw A=3 B=9|
+IVL rc=0: pnw A=3 B=3|
+S2V rc=0: pnw A=3 B=3|
+=== block 14 | vita [DEV3] | r2/dump/5351e2805100ce68.dev3 | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pnw A=3 B=9
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 15 | vita [DEV3] | r2/dump/5351e2805100ce68.dev3.route | 0 bytes
+
+=== block 16 | vita [POSTA] | r1/sound/cells/w_c32_pkg_ref_between_nw/POST.out | 228 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in pc]
+errors=1 warnings=1 notes=0
+=== block 17 | vita [POSTA] | r2/sc/c32_pkg_ref_between_nw.posta | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `B` value is not a foldable constant [in pc]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 18 | vita [POSTB] | r2/dump/5351e2805100ce68.postb | 182 bytes | identical to block 14
+=== block 19 | vita [POSTB] | r2/dump/5351e2805100ce68.postb.route | 0 bytes | identical to block 15
+=== block 20 | vita [POSTB] | r2/sound/cells/r1/w_c32_pkg_ref_between_nw/post_b.out | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pnw A=3 B=9
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+=== block 21 | vita [PRE] | r1/sound/cells/w_c32_pkg_ref_between_nw/PRE.out | 177 bytes | identical to block 20
+=== block 22 | vita [PRE] | r2/dump/5351e2805100ce68.pre | 182 bytes | identical to block 14
+=== block 23 | vita [PRE] | r2/dump/5351e2805100ce68.pre.route | 0 bytes | identical to block 15
+=== end

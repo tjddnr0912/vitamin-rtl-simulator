@@ -1,0 +1,79 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__sound__c__c13_impfn_expl
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/sound/c/c13_impfn_expl.sv
+roadmap_row: §2 🆕 AD
+set: r1/sound/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-b,POST-c,PRE,POST-a-sep,POST-b-sep,POST-c-sep
+verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12)
+verdict_source: s589/r1/sound/REPORT.md:55
+notes: findings table row naming `c13`
+alias: r1/sound/c/st/c13_impfn_expl (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+alias: r2/sound/k/c13_impfn_expl (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_b/lens/sound/c13_impfn_expl (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+alias: post_b/lens/sound_st/c13_impfn_expl (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./c13_impfn_expl.ivl | 63 bytes
+v=15 b=4
+c13_impfn_expl.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | post_b/lens/sound_st/c13_impfn_expl.vl | 383 bytes
+%Warning-WIDTHEXPAND: c13_impfn_expl.sv:13:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+v=15 b=4
+- c13_impfn_expl.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./c13_impfn_expl.vl | 383 bytes
+%Warning-WIDTHEXPAND: c13_impfn_expl.sv:13:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+v=15 b=4
+- c13_impfn_expl.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 4.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./c13_impfn_expl.s2v | 66 bytes
+v=15 b=4
+c13_impfn_expl.s2v.v:19: $finish called at 100 (1s)
+rc=0
+=== block 5 | vita [POST-a] | ./c13_impfn_expl.post | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=1023 b=10
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [POST-a-sep] | ./c13_impfn_expl.sposta | 238 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=1023 b=10
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [POST-b] | ./c13_impfn_expl.postb | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=15 b=4
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [POST-b-sep] | ./c13_impfn_expl.spostb | 235 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=15 b=4
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 9 | vita [POST-c] | ./c13_impfn_expl.postc | 179 bytes | identical to block 7
+=== block 10 | vita [POST-c-sep] | ./c13_impfn_expl.spostc | 235 bytes | identical to block 8
+=== block 11 | vita [PRE] | ./c13_impfn_expl.pre | 179 bytes | identical to block 7
+=== end

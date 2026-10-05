@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__a__cells__Diw_st
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/a/cells/Diw_st.sv
+roadmap_row: §2 🆕 AI
+set: a/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3r,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3r: md5 ca572e0c4873c3903ceb48545e4d814b commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Diw_st.ivl | 74 bytes
+Diw_st.sv:6: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Diw_st.vl | 400 bytes
+%Warning-WIDTHEXPAND: Diw_st.sv:2:41: Operator VAR 'P' expects 128 bits on the Initial value, but Initial value's CONST '8'hfc' generates 8 bits.
+P=fffffffffffffffffffffffffffffffc
+- Diw_st.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ns; walltime 0.000 s; speed 3.077 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Diw_st.s2v | 83 bytes
+P=000000000000000000000000000000fc
+Diw_st.s2v.v:13: $finish called at 40 (1s)
+rc=0
+=== block 4 | vita [d1] | ./Diw_st.d1 | 105 bytes
+P=fffffffffffffffffffffffffffffffc
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./Diw_st.d3 | 105 bytes | identical to block 4
+=== block 6 | vita [p3r] | ./Diw_st.p3r | 105 bytes | identical to block 4
+=== block 7 | vita [p3r] | ./Diw_st.p3r.route | 0 bytes
+
+=== block 8 | vita [pa] | ./Diw_st.pa | 105 bytes | identical to block 4
+=== block 9 | vita [pb] | ./Diw_st.pb | 105 bytes | identical to block 4
+=== block 10 | vita [pre] | ./Diw_st.pre | 105 bytes
+P=0000000000000000fffffffffffffffc
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [pre] | ./Diw_st.pre.route | 0 bytes | identical to block 7
+=== block 12 | vita [pre594] | ./Diw_st.pre594 | 105 bytes | identical to block 10
+=== end

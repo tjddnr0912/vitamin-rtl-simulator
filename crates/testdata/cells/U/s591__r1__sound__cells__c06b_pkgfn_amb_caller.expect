@@ -1,0 +1,76 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r1__sound__cells__c06b_pkgfn_amb_caller
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r1/sound/cells/c06b_pkgfn_amb_caller.sv
+roadmap_row: §2 🆕 U
+set: r1/sound/cells
+oracles_present: iverilog,sv2v
+vita_tags: PRE,POSTA
+verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=ivl,s2v
+verdict_source: s591/r2/lens_delta.txt:7
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/sc/c06b_pkgfn_amb_caller (byte-identical source) verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=ivl,s2v verdict_source: s591/r2/lens_delta.txt:7
+alias: r2/sound/cells/r1/c06b_pkgfn_amb_caller (byte-identical source) verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=ivl,s2v verdict_source: s591/r2/lens_delta.txt:7
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: POSTB_ST: md5 unrecorded commit unrecorded
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/sound/cells/w_c06b_pkgfn_amb_caller/ivl.out | 78 bytes
+t.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r2/sc/c06b_pkgfn_amb_caller.ivl | 103 bytes
+c06b_pkgfn_amb_caller.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r2/sound/cells/r1/w_c06b_pkgfn_amb_caller/ivl.out | 98 bytes
+c06b_pkgfn_amb_caller.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+=== block 4 | oracle verilator 5.052 (version captured in slice) | r2/sc/c06b_pkgfn_amb_caller.vl | 248 bytes
+pfc f=3 K=3
+- c06b_pkgfn_amb_caller.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 6.250 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | r1/sound/cells/w_c06b_pkgfn_amb_caller/s2v.out | 180 bytes
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | r2/sc/c06b_pkgfn_amb_caller.s2v | 112 bytes
+rc=1
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+=== block 7 | combined [iverilog+sv2v|PRE+POSTA] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./c06b_pkgfn_amb_caller.res | 1493 bytes
+PRE rc=1: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|t.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|t.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+POST rc=1: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|t.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|t.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+IVL rc=1: t.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|
+S2V rc=1: sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|CallStack (from HasCallStack):|  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package|
+=== block 8 | combined [iverilog+sv2v|PRE+POSTA+POSTB+POSTB_ST] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | r2/sound/cells/r1/c06b_pkgfn_amb_caller.res | 2401 bytes
+pre rc=1: c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+post_a rc=1: c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+post_b rc=1: c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+post_b-staged 0/1/-: c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]|c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]|
+IVL rc=1: c06b_pkgfn_amb_caller.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|
+S2V rc=1: sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+=== block 9 | vita [DEV3] | r2/sc/c06b_pkgfn_amb_caller.dev3 | 668 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]
+c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 10 | vita [POSTA] | r1/sound/cells/w_c06b_pkgfn_amb_caller/POST.out | 623 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]
+t.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]
+errors=2 warnings=1 notes=0
+=== block 11 | vita [POSTA] | r2/sc/c06b_pkgfn_amb_caller.posta | 668 bytes | identical to block 9
+=== block 12 | vita [POSTA] | r2/sound/cells/r1/w_c06b_pkgfn_amb_caller/post_a.out | 663 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c06b_pkgfn_amb_caller.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: `pc.f(…)` has no constant-fold arm [in top]
+c06b_pkgfn_amb_caller.sv:11:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::f(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `f` by its bare name instead [in top]
+errors=2 warnings=1 notes=0
+=== block 13 | vita [POSTB] | r2/sc/c06b_pkgfn_amb_caller.postb | 668 bytes | identical to block 9
+=== block 14 | vita [POSTB] | r2/sound/cells/r1/w_c06b_pkgfn_amb_caller/post_b.out | 663 bytes | identical to block 12
+=== block 15 | vita [PRE] | r1/sound/cells/w_c06b_pkgfn_amb_caller/PRE.out | 623 bytes | identical to block 10
+=== block 16 | vita [PRE] | r2/sc/c06b_pkgfn_amb_caller.pre | 668 bytes | identical to block 9
+=== block 17 | vita [PRE] | r2/sound/cells/r1/w_c06b_pkgfn_amb_caller/pre.out | 663 bytes | identical to block 12
+=== end

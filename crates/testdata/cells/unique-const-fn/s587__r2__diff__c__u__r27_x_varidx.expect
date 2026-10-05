@@ -1,0 +1,28 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__c__u__r27_x_varidx
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/c/u/r27_x_varidx.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/c/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:45
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r27_x_varidx.ivl | 187 bytes
+r27_x_varidx.sv:4: syntax error
+r27_x_varidx.sv:4: Syntax in assignment statement l-value.
+r27_x_varidx.sv:9: syntax error
+r27_x_varidx.sv:9: Syntax in assignment statement l-value.
+rc=4
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r27_x_varidx.vl | 241 bytes
+V=000x X=000x
+- r27_x_varidx.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 100.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r27_x_varidx.build | 0 bytes
+
+=== end

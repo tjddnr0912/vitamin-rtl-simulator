@@ -1,0 +1,220 @@
+=== e_barr_case_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  IVL : s=7|rc=0|
+  VL  : s=7|rc=0|
+=== e_barr_if_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: s=7|rc=0|
+  IVL : e_barr_if_M.sv:4: syntax error|e_barr_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : s=7|rc=0|
+=== e_case2_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|ci=match|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|ci=match|rc=0|
+  IVL : WARNING: e_case2_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 1  Scope: top.f|ci=match|rc=0|
+  VL  : %Warning-SIDEEFFECT: e_case2_case_M.sv:7:36: Expression side effect may be mishandled|%Warning-SIDEEFFECT: e_case2_case_M.sv:7:66: Expression side effect may be mishandled|%Warning-SIDEEFFECT: e_case2_case_M.sv:7:40: Expression side effect may be mishandled|[1] %Error: e_case2_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|[1] %Error: e_case2_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|ci=match|[1] %Error: e_case2_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|rc=0|
+=== e_case2_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|ci=match|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|ci=match|rc=0|
+  IVL : e_case2_if_M.sv:4: syntax error|e_case2_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : %Warning-SIDEEFFECT: e_case2_if_M.sv:7:36: Expression side effect may be mishandled|%Warning-SIDEEFFECT: e_case2_if_M.sv:7:66: Expression side effect may be mishandled|%Warning-SIDEEFFECT: e_case2_if_M.sv:7:40: Expression side effect may be mishandled|[1] %Error: e_case2_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|[1] %Error: e_case2_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|ci=match|[1] %Error: e_case2_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|rc=0|
+=== e_cg_case_M
+  PRE : VITA-E3009 non-constant coverage bin value (follow-on) [in top]|rc=1|
+  POST: VITA-E3009 non-constant coverage bin value (follow-on) [in top]|rc=1|
+  IVL : e_cg_case_M.sv:7: syntax error|e_cg_case_M.sv:7: error: Invalid module item.|e_cg_case_M.sv:8: syntax error|e_cg_case_M.sv:8: error: Invalid module item.|e_cg_case_M.sv:8: syntax error|e_cg_case_M.sv:10: error: Invalid module item.|rc=6|
+  VL  : %Error: e_cg_case_M.sv:8:30: Non-constant expression in bin range; values must be constants|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_cg_if_M
+  PRE : VITA-E3009 non-constant coverage bin value (follow-on) [in top]|rc=1|
+  POST: cov=100.0|rc=0|
+  IVL : e_cg_if_M.sv:4: syntax error|e_cg_if_M.sv:4: Syntax in assignment statement l-value.|e_cg_if_M.sv:7: syntax error|e_cg_if_M.sv:7: error: Invalid module item.|e_cg_if_M.sv:8: syntax error|e_cg_if_M.sv:8: error: Invalid module item.|e_cg_if_M.sv:8: syntax error|e_cg_if_M.sv:10: error: Invalid module item.|rc=8|
+  VL  : %Error: e_cg_if_M.sv:8:30: Non-constant expression in bin range; values must be constants|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_cons_case_M
+  PRE : VITA-E3009 a class-handle declaration initializer is outside the N7 MVP (assign `new`/`null` in a pr|VITA-E3010 undeclared net/variable `top.c` [in top]|VITA-E3009 `new` (class object allocation) is only valid as the rhs of an assignment to a class hand|VITA-E3010 undeclared hierarchical name `c.x` (no such cross-instance net or parameter)|VITA-E3009 unsupported hierarchical task call `c.randomize` (the callee must be a framed task reache|VITA-E3009 unsupported constraint expression form (B2: relational/arithmetic/logical over rand field|rc=1|
+  POST: VITA-E3009 a class-handle declaration initializer is outside the N7 MVP (assign `new`/`null` in a pr|VITA-E3010 undeclared net/variable `top.c` [in top]|VITA-E3009 `new` (class object allocation) is only valid as the rhs of an assignment to a class hand|VITA-E3010 undeclared hierarchical name `c.x` (no such cross-instance net or parameter)|VITA-E3009 unsupported hierarchical task call `c.randomize` (the callee must be a framed task reache|VITA-E3009 unsupported constraint expression form (B2: relational/arithmetic/logical over rand field|rc=1|
+  IVL : e_cons_case_M.sv:8: sorry: Constraint declarations not supported.|rc=1|
+  VL  : VlRProcess::open: execvp(z3): No such file or directory|[1] %Error: e_cons_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|%Warning: Unable to communicate with SAT solver, please check its installation or specify a different one in V| ... Tried: $ z3 --in|x=0|rc=0|
+=== e_cons_if_M
+  PRE : VITA-E3009 a class-handle declaration initializer is outside the N7 MVP (assign `new`/`null` in a pr|VITA-E3010 undeclared net/variable `top.c` [in top]|VITA-E3009 `new` (class object allocation) is only valid as the rhs of an assignment to a class hand|VITA-E3010 undeclared hierarchical name `c.x` (no such cross-instance net or parameter)|VITA-E3009 unsupported hierarchical task call `c.randomize` (the callee must be a framed task reache|VITA-E3009 unsupported constraint expression form (B2: relational/arithmetic/logical over rand field|rc=1|
+  POST: VITA-E3009 a class-handle declaration initializer is outside the N7 MVP (assign `new`/`null` in a pr|VITA-E3010 undeclared net/variable `top.c` [in top]|VITA-E3009 `new` (class object allocation) is only valid as the rhs of an assignment to a class hand|VITA-E3010 undeclared hierarchical name `c.x` (no such cross-instance net or parameter)|VITA-E3009 unsupported hierarchical task call `c.randomize` (the callee must be a framed task reache|VITA-E3009 unsupported constraint expression form (B2: relational/arithmetic/logical over rand field|rc=1|
+  IVL : e_cons_if_M.sv:4: syntax error|e_cons_if_M.sv:4: Syntax in assignment statement l-value.|e_cons_if_M.sv:8: sorry: Constraint declarations not supported.|rc=3|
+  VL  : VlRProcess::open: execvp(z3): No such file or directory|[1] %Error: e_cons_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|%Warning: Unable to communicate with SAT solver, please check its installation or specify a different one in V| ... Tried: $ z3 --in|x=0|rc=0|
+=== e_fform_case_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  IVL : b=8|rc=0|
+  VL  : b=8|rc=0|
+=== e_fform_if_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: b=8|rc=0|
+  IVL : e_fform_if_M.sv:4: syntax error|e_fform_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : b=8|rc=0|
+=== e_fret_case_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  IVL : b=8|rc=0|
+  VL  : b=8|rc=0|
+=== e_fret_if_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: b=8|rc=0|
+  IVL : e_fret_if_M.sv:4: syntax error|e_fret_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : b=8|rc=0|
+=== e_frpt_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|g=7|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|g=7|rc=0|
+  IVL : WARNING: e_frpt_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 1  Scope: top.f|g=7|rc=0|
+  VL  : [1] %Error: e_frpt_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|g=7|rc=0|
+=== e_frpt_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|g=7|rc=0|
+  POST: g=7|rc=0|
+  IVL : e_frpt_if_M.sv:4: syntax error|e_frpt_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_frpt_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|g=7|rc=0|
+=== e_irpt_case_M
+  PRE : VITA-E3009 a runtime (non-constant) `repeat(n)` count in an intra-assignment event control is unsupp|rc=1|
+  POST: VITA-E3009 a runtime (non-constant) `repeat(n)` count in an intra-assignment event control is unsupp|rc=1|
+  IVL : WARNING: e_irpt_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 0  Scope: top.f|x=5 t=13|rc=0|
+  VL  : %Error-UNSUPPORTED: e_irpt_case_M.sv:8:21: Unsupported: repeat event control|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_irpt_if_M
+  PRE : VITA-E3009 a runtime (non-constant) `repeat(n)` count in an intra-assignment event control is unsupp|rc=1|
+  POST: x=5 t=13|rc=0|
+  IVL : e_irpt_if_M.sv:4: syntax error|e_irpt_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : %Error-UNSUPPORTED: e_irpt_if_M.sv:8:21: Unsupported: repeat event control|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_ktrp2_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|n=7|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|n=7|rc=0|
+  IVL : WARNING: e_ktrp2_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 1  Scope: top.f|n=7|rc=0|
+  VL  : [1] %Error: e_ktrp2_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|n=7|rc=0|
+=== e_ktrp2_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|n=7|rc=0|
+  POST: n=7|rc=0|
+  IVL : e_ktrp2_if_M.sv:4: syntax error|e_ktrp2_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_ktrp2_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|n=7|rc=0|
+=== e_ktrpt_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  IVL : WARNING: e_ktrpt_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 0  Scope: top.f|t=13|rc=0|
+  VL  : [0] %Error: e_ktrpt_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|t=13|rc=0|
+=== e_ktrpt_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  POST: t=13|rc=0|
+  IVL : e_ktrpt_if_M.sv:4: syntax error|e_ktrpt_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [0] %Error: e_ktrpt_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|t=13|rc=0|
+=== e_nrpt_case_M
+  PRE : VITA-E3009 a runtime (non-constant) `repeat(n)` count in a non-blocking intra-assignment event contr|rc=1|
+  POST: VITA-E3009 a runtime (non-constant) `repeat(n)` count in a non-blocking intra-assignment event contr|rc=1|
+  IVL : WARNING: e_nrpt_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 0  Scope: top.f|x=5|rc=0|
+  VL  : %Error-UNSUPPORTED: e_nrpt_case_M.sv:8:22: Unsupported: repeat event control|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_nrpt_if_M
+  PRE : VITA-E3009 a runtime (non-constant) `repeat(n)` count in a non-blocking intra-assignment event contr|rc=1|
+  POST: x=5|rc=0|
+  IVL : e_nrpt_if_M.sv:4: syntax error|e_nrpt_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : %Error-UNSUPPORTED: e_nrpt_if_M.sv:8:22: Unsupported: repeat event control|%Error: Exiting due to 1 error(s)|build_rc=1|
+=== e_pswr_case_M
+  PRE : pw=1|rc=0|
+  POST: pw=1|rc=0|
+  IVL : pw=7f|rc=0|
+  VL  : pw=7f|rc=0|
+=== e_pswr_if_M
+  PRE : pw=1|rc=0|
+  POST: pw=7f|rc=0|
+  IVL : e_pswr_if_M.sv:4: syntax error|e_pswr_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : pw=7f|rc=0|
+=== e_psww_case_M
+  PRE : pw=00000001|rc=0|
+  POST: pw=00000001|rc=0|
+  IVL : pw=0000007f|rc=0|
+  VL  : pw=0000007f|rc=0|
+=== e_psww_if_M
+  PRE : pw=00000001|rc=0|
+  POST: pw=0000007f|rc=0|
+  IVL : e_psww_if_M.sv:4: syntax error|e_psww_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : pw=0000007f|rc=0|
+=== e_qhigh_case_M
+  PRE : VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  IVL : ERROR: e_qhigh_case_M.sv:7: $high has too many arguments.|rc=1|
+  VL  : [1] %Error: e_qhigh_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|h=3|rc=0|
+=== e_qhigh_if_M
+  PRE : VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: h=3|rc=0|
+  IVL : e_qhigh_if_M.sv:4: syntax error|e_qhigh_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_qhigh_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|h=3|rc=0|
+=== e_qleft_case_M
+  PRE : VITA-E3009 a whole unpacked array has no value in this context (v1: arrays are copied by array assig|VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: VITA-E3009 a whole unpacked array has no value in this context (v1: arrays are copied by array assig|VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  IVL : ERROR: e_qleft_case_M.sv:7: $left expects an array and optionally an integer.|rc=1|
+  VL  : [1] %Error: e_qleft_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|l=0|rc=0|
+=== e_qleft_if_M
+  PRE : VITA-E3009 a whole unpacked array has no value in this context (v1: arrays are copied by array assig|VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: l=0|rc=0|
+  IVL : e_qleft_if_M.sv:4: syntax error|e_qleft_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_qleft_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|l=0|rc=0|
+=== e_qsizp_case_M
+  PRE : VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  IVL : ERROR: e_qsizp_case_M.sv:7: $size argument must be a dynamic array, queue or string, given a vpiReg.|ERROR: e_qsizp_case_M.sv:7: $size has too many arguments.|rc=1|
+  VL  : [1] %Error: e_qsizp_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|s=4|rc=0|
+=== e_qsizp_if_M
+  PRE : VITA-E3009 unsupported system function in expression [in top]|rc=1|
+  POST: s=4|rc=0|
+  IVL : e_qsizp_if_M.sv:4: syntax error|e_qsizp_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_qsizp_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|s=4|rc=0|
+=== e_sel2_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|m=00000000a0000000|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|m=00000000a0000000|rc=0|
+  IVL : WARNING: e_sel2_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 1  Scope: top.f|m=00000000a0000000|rc=0|
+  VL  : [1] %Error: e_sel2_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|m=00000000a0000000|rc=0|
+=== e_sel2_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|m=00000000a0000000|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 1]|m=00000000a0000000|rc=0|
+  IVL : e_sel2_if_M.sv:4: syntax error|e_sel2_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_sel2_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|m=00000000a0000000|rc=0|
+=== e_sel3_case_M
+  PRE : VITA-E3009 variable indexed part-select on a multi-dim packed array is unsupported (iverilog 13.0 al|rc=1|
+  POST: VITA-E3009 variable indexed part-select on a multi-dim packed array is unsupported (iverilog 13.0 al|rc=1|
+  IVL : e_sel3_case_M.sv:7: assert: elab_expr.cc:6122: failed assertion prefix_indices.size()+1 == net->sig()->packed_|sh: line 1: 33463 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/fo|     33464 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/f|rc=134|
+  VL  : [1] %Error: e_sel3_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|m=78|rc=0|
+=== e_sel3_if_M
+  PRE : VITA-E3009 variable indexed part-select on a multi-dim packed array is unsupported (iverilog 13.0 al|rc=1|
+  POST: m=78|rc=0|
+  IVL : e_sel3_if_M.sv:4: syntax error|e_sel3_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [1] %Error: e_sel3_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|m=78|rc=0|
+=== e_stm_case_M
+  PRE : VITA-E2002 expected struct member width must be a named integer type or a constant-literal range in |rc=1|
+  POST: VITA-E2002 expected struct member width must be a named integer type or a constant-literal range in |rc=1|
+  IVL : b=9|rc=0|
+  VL  : b=9|rc=0|
+=== e_stm_if_M
+  PRE : VITA-E2002 expected struct member width must be a named integer type or a constant-literal range in |rc=1|
+  POST: VITA-E2002 expected struct member width must be a named integer type or a constant-literal range in |rc=1|
+  IVL : e_stm_if_M.sv:4: syntax error|e_stm_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : b=9|rc=0|
+=== e_td_case_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  IVL : b=8|rc=0|
+  VL  : b=8|rc=0|
+=== e_td_if_M
+  PRE : VITA-E3009 a function call that does not fold to a constant is not allowed in a constant range bound|rc=1|
+  POST: b=8|rc=0|
+  IVL : e_td_if_M.sv:4: syntax error|e_td_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : b=8|rc=0|
+=== e_trpt_case_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  POST: VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  IVL : WARNING: e_trpt_case_M.sv:4: value is unhandled for priority or unique case statement|         Time: 0  Scope: top.f|t=13|rc=0|
+  VL  : [0] %Error: e_trpt_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'|t=13|rc=0|
+=== e_trpt_if_M
+  PRE : VITA-W4031 value is unhandled for priority or unique case statement [in top.f] [at time 0]|t=13|rc=0|
+  POST: t=13|rc=0|
+  IVL : e_trpt_if_M.sv:4: syntax error|e_trpt_if_M.sv:4: Syntax in assignment statement l-value.|rc=2|
+  VL  : [0] %Error: e_trpt_if_M.sv:4: Assertion failed in top.f: 'unique if' statement violated|t=13|rc=0|
+=== e_pswr_case_N
+  PRE : pw=1|rc=0|
+  POST: pw=1|rc=0|
+  IVL : pw=3ff|rc=0|
+  VL  : pw=3ff|rc=0|
+=== e_psww_case_N
+  PRE : pw=00000001|rc=0|
+  POST: pw=00000001|rc=0|
+  IVL : pw=000003ff|rc=0|
+  VL  : pw=000003ff|rc=0|

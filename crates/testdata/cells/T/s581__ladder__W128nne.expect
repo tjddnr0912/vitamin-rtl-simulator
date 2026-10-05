@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__ladder__W128nne
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/ladder/W128nne.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: ladder
+oracles_present: sv2v,doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); oracle values quoted at s581/ladder/ladder.txt:5
+blocks: 0
+=== end

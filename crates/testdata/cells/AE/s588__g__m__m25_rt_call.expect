@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__m__m25_rt_call
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/m/m25_rt_call.sv
+roadmap_row: §2 🆕 AE
+set: g/m
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: keep (vita's run time is already right: r=2 — the interpreter contradicts vita's own engine)
+verdict_source: s588/GROUNDING.md:320
+notes: GROUNDING Q4 B "F" column
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./m25_rt_call.ivl | 57 bytes
+r=2
+done
+m25_rt_call.sv:8: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./m25_rt_call.vl | 234 bytes
+r=1
+done
+- m25_rt_call.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 111.111 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./m25_rt_call.s2v | 61 bytes
+r=2
+done
+m25_rt_call.s2v.v:19: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./m25_rt_call.PRE | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r=2
+done
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-m] | ./m25_rt_call.PROBE | 177 bytes | identical to block 4
+=== end

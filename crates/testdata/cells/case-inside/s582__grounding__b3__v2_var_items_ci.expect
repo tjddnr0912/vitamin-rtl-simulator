@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__v2_var_items_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/v2_var_items_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3
+verdict: refused (clause 4 width) — oracles agree (over-refusal)
+verdict_source: s582/post/CENSUS.md:30
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b3__v2_var_items_ci/iv.out | 988 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7: error: Incomprehensible case expression.
+rc=5
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_v2_var_items_ci/vl.out | 448 bytes
+v=0 m=0
+v=1 m=0
+v=2 m=0
+v=3 m=1
+v=4 m=0
+v=5 m=2
+v=6 m=0
+v=7 m=3
+v=8 m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 769.232 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b3/out_v2_var_items_ci/sv.out | 114 bytes
+v=0 m=0
+v=1 m=0
+v=2 m=0
+v=3 m=1
+v=4 m=0
+v=5 m=2
+v=6 m=0
+v=7 m=3
+v=8 m=3
+sv2v.v:28: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [POST] | post/census/grounding__b3__v2_var_items_ci/post.out | 552 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7:50: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: an operator narrower than the widest operand of the case: the sizing rules give different answers here and the reference tools disagree (IEEE 1800-2017 §12.5.4) [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POST] | post2/cmp/grounding__b3__v2_var_items_ci.sv/post.err | 547 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/v2_var_items_ci.sv:7:50: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: an operator narrower than the widest operand of the case: the sizing rules give different answers here and the reference tools disagree (IEEE 1800-2017 §12.5.4) [in top]
+errors=1 warnings=1 notes=0
+=== block 6 | vita [POST] | post2/cmp/grounding__b3__v2_var_items_ci.sv/post.out | 5 bytes
+rc=1
+=== block 7 | vita [POST2] | post2/cmp/grounding__b3__v2_var_items_ci.sv/post2.err | 547 bytes | identical to block 5
+=== block 8 | vita [POST2] | post2/cmp/grounding__b3__v2_var_items_ci.sv/post2.out | 5 bytes | identical to block 6
+=== block 9 | vita [POST2] | post3/cmp/grounding__b3__v2_var_items_ci.sv/post2.err | 547 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/grounding__b3__v2_var_items_ci.sv/post2.out | 5 bytes | identical to block 6
+=== block 11 | vita [POST3] | post3/cmp/grounding__b3__v2_var_items_ci.sv/post3.err | 547 bytes | identical to block 5
+=== block 12 | vita [POST3] | post3/cmp/grounding__b3__v2_var_items_ci.sv/post3.out | 5 bytes | identical to block 6
+=== end

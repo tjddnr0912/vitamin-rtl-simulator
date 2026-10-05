@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__diff__c__b1__nest3
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/diff/c/b1/nest3.sv
+roadmap_row: §2 🆕 AD
+set: r1/diff/c/b1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-a-sep,PRE,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r1/diff/REPORT.md:54
+alias: r2/diff/c/b1/nest3 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r3/diff/c/b1/nest3 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_b/lens/diff_b1/nest3 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/r2/r2_diff_b1/nest3 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 21
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./nest3.ivl | 53 bytes
+P=8 v=255
+nest3.sv:12: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./nest3.vl | 229 bytes
+P=8 v=255
+- nest3.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 71.429 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./nest3.s2v | 56 bytes
+P=8 v=255
+nest3.s2v.v:25: $finish called at 1 (1s)
+rc=0
+=== block 4 | vita [POST-a] | ./nest3.post | 411 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+nest3.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `p.f(…)` has no constant-fold arm [in top]
+nest3.sv:5:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in top]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POST-a-sep] | ./nest3.posts | 439 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+nest3.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `p.f(…)` has no constant-fold arm [in top]
+nest3.sv:5:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in top]
+errors=2 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST-b] | post_b/lens/diff_b1/nest3.pb | 411 bytes | identical to block 4
+=== block 7 | vita [POST-b] | post_b/lens/diff_b1/nest3.postb | 411 bytes | identical to block 4
+=== block 8 | vita [POST-b] | post_c/r2/r2_diff_b1/nest3.postb | 411 bytes | identical to block 4
+=== block 9 | vita [POST-b] | r2/diff/c/b1/nest3.pb | 411 bytes | identical to block 4
+=== block 10 | vita [POST-b] | r3/diff/c/b1/nest3.pb | 411 bytes | identical to block 4
+=== block 11 | vita [POST-b-sep] | post_b/lens/diff_b1/nest3.spostb | 439 bytes | identical to block 5
+=== block 12 | vita [POST-b-sep] | post_c/r2/r2_diff_b1/nest3.spostb | 439 bytes | identical to block 5
+=== block 13 | vita [POST-b-sep] | r2/diff/c/b1/nest3.pbs | 439 bytes | identical to block 5
+=== block 14 | vita [POST-b-sep] | r3/diff/c/b1/nest3.pbs | 439 bytes | identical to block 5
+=== block 15 | vita [POST-c] | post_b/lens/diff_b1/nest3.postc | 411 bytes | identical to block 4
+=== block 16 | vita [POST-c] | post_c/r2/r2_diff_b1/nest3.postc | 411 bytes | identical to block 4
+=== block 17 | vita [POST-c] | r3/diff/c/b1/nest3.pc | 411 bytes | identical to block 4
+=== block 18 | vita [POST-c-sep] | post_b/lens/diff_b1/nest3.spostc | 439 bytes | identical to block 5
+=== block 19 | vita [POST-c-sep] | post_c/r2/r2_diff_b1/nest3.spostc | 439 bytes | identical to block 5
+=== block 20 | vita [POST-c-sep] | r3/diff/c/b1/nest3.pcs | 439 bytes | identical to block 5
+=== block 21 | vita [PRE] | ./nest3.pre | 411 bytes | identical to block 4
+=== end

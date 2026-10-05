@@ -1,0 +1,107 @@
+cells=167 moved=106 post_split=4
+ab/k1_ca_display: call:->oracle
+ab/k2b_ca_assert_clean: rep:->oracle
+ab/n_ca_objf2_tbL_H: rep:neither->neither
+ab/n_ca_objf2case_tbL: rep:neither->neither
+ab/q1caf_case_tbF: rep:->oracle
+ab/q1caf_case_tbL: rep:->oracle
+ab/q6a_fn_vfn_noformal_H: rep:neither->neither
+ab/q6a_fn_vfn_noformal_case: rep:->oracle
+ab/t0f_ca_case: rep:->oracle
+ab/t0f_ca_if: rep:neither->neither
+ab/t2t_c_fg_this_H: rep:neither->neither
+ab/u20_c_fnew_member_H: rep:neither->neither
+ab/u23_ctor_cls_task_H: rep:neither->neither
+ab/u8_c_ft_this_nowrite_H: rep:neither->neither
+c1/a2_declinit: call:->oracle val:neither->neither
+c1/a3d_stayx_def: val:neither->neither
+c1/a5_mixed: call:->oracle val:neither->neither
+c1/a6_portconst: call:->oracle val:PRE=VL->neither
+c1/a7_portdecl: call:->oracle val:PRE=VL->neither
+c1/b1_cachain: call:->oracle
+c1/b2_globalread: call:neither->neither
+c1/c1_delay: call:neither->neither [POST SPLIT]
+c1/d1_multica: call:neither->neither
+c1/e2_random_const: val:neither->neither
+c1/f1_generate: call:neither->neither rep:IV->VL
+c1/g1_iface: call:->oracle rep:->oracle
+c1/h1_force: call:neither->neither
+c1/j2_unique_declinit: rep:->oracle
+c1/j3_unique_halfx: rep:->oracle
+c1/k1_error_x: rep:->oracle
+c1/k2_fatal_x: rep:->oracle val:->oracle
+c2/b1p_plain_then_call: rep:IV->VL
+c2/b1r_cachain_fwd: call:->oracle
+c2/b1u_cachain_unique: rep:->oracle
+c2/b1uf_cachain_unique_fwd: rep:->oracle
+c2/m1_objdisp: call:neither->neither
+c2/r1_nested_callee: rep:->oracle
+c2/s1_hier_call: rep:->oracle
+c2/v12_vec_unique: rep:->oracle
+c2/v4_bitsel_unique: rep:IV->VL
+c2/v6_op_unique: rep:IV->VL
+c2/x1_portexpr_call: rep:->oracle
+c3/a13_child_initial: rep:->oracle
+c3/a8_constret: val:PRE=VL->neither
+c4/r2_priority: rep:->oracle
+c4/r3_assert_nested: rep:->oracle
+c4/r4_info_warning: rep:->oracle
+c4/s2_netdecl_call: rep:->oracle
+c4/s3_lhs_index_call: call:neither->neither val:neither->neither
+c4/s4_md_call: call:neither->neither
+c4/s5_two_level_hier: rep:->oracle
+c4/s6_initial_reads_then_waits: rep:->oracle
+c5/k4_fatal_stayx: rep:->oracle
+c5/k5_finish_in_fn: rep:->oracle val:->oracle
+c5/s8_two_inst: call:neither->neither
+c6/aac1_decl_comb: call:->oracle
+c6/aac2_consumer_first: call:->oracle
+c6/aac3_noinitial: rep:->oracle
+c6/aac4_initial_written_comb: call:->oracle
+c6/f2_gen_whole: rep:->oracle
+c6/g2_iface_port: rep:->oracle
+c6/h2_force_t0: call:neither->neither
+c6/t2_pkg_import_call: rep:->oracle
+c6/u30_auto_fn: rep:->oracle
+c7/k7_fatal_t0: call:->oracle
+c7/k7_finish_t0: call:->oracle
+c7/k7_stop_t0: call:->oracle
+c8/m3_class_counter: rep:neither->neither
+c8/m4_class_display: val:neither->neither
+c8/n4e_xret_effectful: val:neither->neither
+c8/p3e_posedge_effectful: call:->oracle evt:neither->neither
+c8/v14_vcd_effectful: call:->oracle
+new/q1_fork_t0: call:->oracle val:->oracle
+new/q2_fork_join_t0: call:->oracle val:->oracle
+new/q3_copy_held_logic: call:->oracle val:neither->neither
+new/q4_exempt_mem: call:->oracle val:->oracle
+new/q5_exempt_mem_unique: rep:->oracle
+new/q6_copy_held_logic_x: call:->oracle
+new/q7_delay_held_i0: call:neither->neither [POST SPLIT]
+new/q8_clkgen_gate_assert: rep:->oracle
+new/q9_delay_closure_i0: call:->oracle
+plc1/pl_t1_iv_xcall_spelling: call:neither->neither rep:->oracle
+plc1/pl_t2a_order_port_impure: call:->oracle val:PRE=VL->neither
+plc1/pl_t3_const_vs_written: call:neither->neither val:neither->neither
+plc2/pl_p1_random_fn: val:neither->neither
+plc3/pl_e2_decl_edge: call:->oracle evt:PRE=VL->neither val:PRE=VL->neither
+plc3/pl_e3_partial_x: val:neither->neither
+plc3/pl_e4_port_tbfirst: call:neither->neither rep:->oracle evt:->oracle val:VL->IV
+plc3/pl_e5_batch_vs_release: call:->oracle
+plc3/pl_e6_clkgen_first: rep:->oracle
+plc3/pl_e7_comb_before_initial: rep:->oracle
+plc4/pl_d1_declinit_overwrite: call:->oracle
+plc4/pl_d2_declinit_unique: rep:->oracle
+plc4/pl_d3_declinit_unique_port: rep:->oracle
+plc4/pl_d4_declinit_unique_stay: rep:->oracle
+plc5/pl_x1_xdrop_definite_before: val:->oracle
+plc5/pl_x2_hold_window_z: call:->oracle
+plc5/pl_x3_tristate_bus: call:neither->neither
+plc6/pl_x2b_hold_window_z_edges: call:->oracle
+plc6/pl_x2c_hold_window_x_var: call:->oracle
+plc6/pl_x2d_hold_window_casez: call:->oracle evt:->oracle
+plw/a6_portconst: call:->oracle val:PRE=VL->neither
+plw/u20_c_fnew_member: rep:neither->neither
+plw/u20b: call:neither->neither rep:neither->neither
+plw/u20d: call:neither->neither rep:neither->neither val:neither->neither
+plw/v6_op_unique: rep:IV->VL

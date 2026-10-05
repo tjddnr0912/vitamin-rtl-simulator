@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r2__soundness__cells__Fa
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r2/soundness/cells/Fa.sv
+roadmap_row: §2 🆕 AI
+set: r2/soundness/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: Fa 0 = PRE
+verdict_source: s594/r2/soundness/REPORT.md:3
+notes: oracle raw lines quoted at s594/r2/soundness/cells/newcells.out:1; named at s594/r2/soundness/REPORT.md:3
+blocks: 0
+=== end

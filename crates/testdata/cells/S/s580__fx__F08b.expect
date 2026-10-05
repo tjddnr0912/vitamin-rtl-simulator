@@ -1,0 +1,24 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__fx__F08b
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/fx/F08b.sv
+roadmap_row: §2 🆕 S
+set: fx
+oracles_present: verilator
+vita_tags: fx-out,post-dbg-r1,post2dbg,postrel,PRE,fx-preout,r4new,r4post3,r4pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): post3×1 (s580/r4/cmp3_post4.txt)
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 3
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./F08b.vl.txt | 21 bytes
+wait woke 1
+wait end
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./obj_F08b.err | 0 bytes
+
+=== block 3 | vita [PRE] | ./F08b.pre.txt | 78 bytes
+wait end
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+rc=0
+=== end

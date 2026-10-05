@@ -1,0 +1,1209 @@
+# §4.5.585 pin sources (narrowing c2). 'expect POST-c2 = POST-cand' for armed lanes, '= PRE' for opted-out function bodies.
+# Raw tool output from S/s585/g/out/<cell>.out; cells in S/s585/g/w/<cell>/<cell>.sv (H spellings beside the plain ones in S/s585/p, S/s585/g/c3, c7).
+
+######## ARMED (expect POST-c2 = POST-cand)
+#### m_if_unique
+== verilator compile rc=0 run rc=0
+[1] %Error: m_if_unique.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 if1 done
+[2] %Error: m_if_unique.sv:7: Assertion failed in top: 'unique if' statement violated
+t=2 chain2 done
+[3] %Error: m_if_unique.sv:9: Assertion failed in top: 'unique if' statement violated
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+[6] %Error: m_if_unique.sv:15: Assertion failed in top: 'unique if' statement violated
+t=6 nested-in-then done
+[7] %Error: m_if_unique.sv:17: Assertion failed in top: 'unique if' statement violated
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+- m_if_unique.sv:23: Verilog $finish
+== iverilog compile rc=50
+
+== vita PRE (native=interp=vm)
+rc=0
+m_if_unique.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+m_if_unique.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 7]
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+m_if_unique.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 if1 done
+m_if_unique.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 chain2 done
+m_if_unique.sv:9:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+m_if_unique.sv:15:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 6]
+t=6 nested-in-then done
+m_if_unique.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 7]
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+errors=0 warnings=6 notes=0
+#### vl_lines
+== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: vl_lines.sv:27:26: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:27:50: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:33: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:57: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: vl_lines.sv:29:81: Expression side effect may be mishandled run rc=0
+[1] %Error: vl_lines.sv:7: Assertion failed in top: 'unique if' statement violated
+t=1 multiline done
+[2] %Error: vl_lines.sv:11: Assertion failed in top: 'unique if' statement violated
+t=2 split else-unique-if done
+[3] %Error: vl_lines.sv:14: Assertion failed in top: 'unique if' statement violated
+t=3 split else-unique0-if done
+[4] %Error: vl_lines.sv:17: Assertion failed in top: 'unique if' statement violated
+t=4 split middle-unique chain3 done
+[5] %Error: vl_lines.sv:21: Assertion failed in top: 'unique if' statement violated
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+[7] %Error: vl_lines.sv:27: Assertion failed in top: 'unique if' statement violated
+t=7 side-effect n=2
+t=8 side-effect match n=5 r=2
+t=9 matched-then inner-miss done
+- vl_lines.sv:33: Verilog $finish
+== iverilog compile rc=51
+
+== vita PRE native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+== vita POST native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 multiline done
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 split else-unique-if done
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 split else-unique0-if done
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 split middle-unique chain3 done
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 5]
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 7]
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+errors=0 warnings=8 notes=0
+#### b01_nested_qual
+== verilator compile rc=0 run rc=0
+[1] %Error: b01_nested_qual.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 else-unique0-if done
+[2] %Error: b01_nested_qual.sv:7: Assertion failed in top: 'unique if' statement violated
+t=2 else-unique-if done
+[3] %Error: b01_nested_qual.sv:9: Assertion failed in top: 'unique if' statement violated
+t=3 else-priority-if done
+[4] %Error: b01_nested_qual.sv:11: Assertion failed in top: 'unique if' statement violated
+t=4 u0-else-unique-if done
+t=5 else-labeled-if done
+[6] %Error: b01_nested_qual.sv:15: Assertion failed in top: 'unique if' statement violated
+t=6 chain3-dup done
+- b01_nested_qual.sv:17: Verilog $finish
+== iverilog compile rc=26
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 else-unique0-if done
+b01_nested_qual.sv:7:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 else-unique-if done
+b01_nested_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 else-priority-if done
+b01_nested_qual.sv:11:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 u0-else-unique-if done
+t=5 else-labeled-if done
+t=6 chain3-dup done
+simulation ended (Finish) at time 7
+errors=0 warnings=4 notes=0
+== vita POST (native=interp=vm)
+rc=0
+b01_nested_qual.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 else-unique0-if done
+b01_nested_qual.sv:7:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 else-unique-if done
+b01_nested_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 else-priority-if done
+b01_nested_qual.sv:11:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 u0-else-unique-if done
+t=5 else-labeled-if done
+b01_nested_qual.sv:15:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 6]
+t=6 chain3-dup done
+simulation ended (Finish) at time 7
+errors=0 warnings=6 notes=0
+#### lt_P
+== verilator compile rc=0 run rc=0
+[1] %Error: lt_P.sv:9: Assertion failed in top.st: 'unique if' statement violated
+t=1 static task done
+[2] %Error: lt_P.sv:2: Assertion failed in pk.pt: 'unique if' statement violated
+t=2 pkg task done
+[3] %Error: lt_P.sv:5: Assertion failed in $unit.K.m: 'unique if' statement violated
+t=3 class task done
+[4] %Error: lt_P.sv:16: Assertion failed in top: 'unique if' statement violated
+t=4 fork child done
+- lt_P.sv:17: Verilog $finish
+[5] %Error: lt_P.sv:19: Assertion failed in top: 'unique if' statement violated
+== iverilog compile rc=20
+lt_P.sv:5: error: Malformed statement
+lt_P.sv:5: error: Malformed statement
+== vita PRE (native=interp=vm)
+rc=0
+t=1 static task done
+t=2 pkg task done
+t=3 class task done
+t=4 fork child done
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+lt_P.sv:9:78: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.st] [at time 1]
+t=1 static task done
+lt_P.sv:2:78: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.pt] [at time 2]
+t=2 pkg task done
+lt_P.sv:5:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.K.m] [at time 3]
+t=3 class task done
+lt_P.sv:16:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 fork child done
+lt_P.sv:19:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 5]
+simulation ended (Finish) at time 5
+errors=0 warnings=6 notes=0
+#### b02_frame_lanes
+== verilator compile rc=0 run rc=0
+[1] %Error: b02_frame_lanes.sv:7: Assertion failed in top.fchain: 'unique if' statement violated
+t=1 fchain done
+[2] %Error: b02_frame_lanes.sv:13: Assertion failed in top.fsingle: 'unique if' statement violated
+t=2 fsingle done
+[3] %Error: b02_frame_lanes.sv:18: Assertion failed in top.tchain: 'unique if' statement violated
+t=3 tchain done
+[4] %Error: b02_frame_lanes.sv:22: Assertion failed in top.tsingle: 'unique if' statement violated
+t=4 tsingle done
+- b02_frame_lanes.sv:29: Verilog $finish
+== iverilog compile rc=12
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fsingle] [at time 2]
+t=2 fsingle done
+b02_frame_lanes.sv:18:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.tchain] [at time 3]
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+#### b03
+== verilator compile rc=0 run rc=0
+eval t=0 ab=10
+eval t=2 ab=00
+[2] %Error: b03.sv:6: Assertion failed in top: 'unique if' statement violated
+eval t=3 ab=00
+[3] %Error: b03.sv:6: Assertion failed in top: 'unique if' statement violated
+- b03.sv:13: Verilog $finish
+eval t=4 ab=00
+[4] %Error: b03.sv:6: Assertion failed in top: 'unique if' statement violated
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+eval t=0 ab=10
+eval t=0 ab=10
+eval t=2 ab=00
+eval t=2 ab=01
+eval t=3 ab=00
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+eval t=0 ab=10
+eval t=0 ab=10
+eval t=2 ab=00
+b03.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+eval t=2 ab=01
+eval t=3 ab=00
+b03.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+#### m_void_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: m_void_rt.sv:4: Assertion failed in top.fv: 'unique if' statement violated
+t=1 q=7
+- m_void_rt.sv:7: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+m_void_rt_H.sv:4:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fv] [at time 1]
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+m_void_rt.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fv] [at time 1]
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### ifc_vfn_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: ifc_vfn_rt.sv:4: Assertion failed in top.i.fv: 'unique if' statement violated
+t=1 q=7
+- ifc_vfn_rt.sv:9: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+ifc_vfn_rt_H.sv:4:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.i.fv] [at time 1]
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+ifc_vfn_rt.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.i.fv] [at time 1]
+t=1 q=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### pkg_vfn3_imp_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: pkg_vfn3_imp_rt.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+t=1
+[3] %Error: pkg_vfn3_imp_rt.sv:8: Assertion failed in pk.t: 'unique if' statement violated
+t=3
+- pkg_vfn3_imp_rt.sv:13: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1
+t=3
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+pkg_vfn3_imp_rt_H.sv:4:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fv] [at time 1]
+t=1
+pkg_vfn3_imp_rt_H.sv:8:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.t] [at time 3]
+t=3
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+pkg_vfn3_imp_rt.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.fv] [at time 1]
+t=1
+pkg_vfn3_imp_rt.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.t] [at time 3]
+t=3
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+#### n_comb_vfn_tbL
+== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[2] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[3] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+- n_comb_vfn_tbL.sv:16: Verilog $finish
+[4] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[4] %Error: n_comb_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+n_comb_vfn_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.fv] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=2 notes=0
+#### n_latch_vfn_tbL
+== verilator compile rc=0 msgs: %Warning-NOLATCH: n_latch_vfn_tbL.sv:6:3: No latches detected in always_latch block run rc=0
+t=1 y=2
+[2] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[2] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[3] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+- n_latch_vfn_tbL.sv:16: Verilog $finish
+[4] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+[4] %Error: n_latch_vfn_tbL.sv:4: Assertion failed in top.u.fv: 'unique if' statement violated
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+n_latch_vfn_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.fv] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=2 notes=0
+#### cls_task_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: cls_task_rt.sv:5: Assertion failed in $unit.C.t: 'unique if' statement violated
+t=1 r=7
+- cls_task_rt.sv:10: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+cls_task_rt_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.t] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+cls_task_rt.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.t] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### dif_c01_assert_else_if
+== verilator compile rc=0 run rc=0
+t=1 u-assert-fail-elseif y=0
+t=2 u-assert-pass y=0
+t=3 u-assume-fail-elseif y=0
+t=4 u-assert-passact-fail-elseif y=0
+t=5 p-assert-fail-elseif y=0
+t=6 u-assert-fail-elseif-c1 y=2
+- dif_c01_assert_else_if.sv:17: Verilog $finish
+== iverilog compile rc=26
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 u-assert-fail-elseif y=0
+t=2 u-assert-pass y=0
+t=3 u-assume-fail-elseif y=0
+t=4 u-assert-passact-fail-elseif y=0
+t=5 p-assert-fail-elseif y=0
+t=6 u-assert-fail-elseif-c1 y=2
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 u-assert-fail-elseif y=0
+t=2 u-assert-pass y=0
+t=3 u-assume-fail-elseif y=0
+t=4 u-assert-passact-fail-elseif y=0
+t=5 p-assert-fail-elseif y=0
+t=6 u-assert-fail-elseif-c1 y=2
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+#### dif_c02_attr_else_if
+== verilator compile rc=0 run rc=0
+[1] %Error: dif_c02_attr_else_if.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 attr-elseif done
+[2] %Error: dif_c02_attr_else_if.sv:7: Assertion failed in top: 'unique if' statement violated
+t=2 attr-after-unique done
+- dif_c02_attr_else_if.sv:9: Verilog $finish
+== iverilog compile rc=8
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 attr-elseif done
+t=2 attr-after-unique done
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+dif_c02_attr_else_if.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 attr-elseif done
+dif_c02_attr_else_if.sv:7:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 attr-after-unique done
+simulation ended (Finish) at time 3
+errors=0 warnings=3 notes=0
+#### dif_c15_assert_semi_else
+== verilator compile rc=0 run rc=0
+[1] %Error: dif_c15_assert_semi_else.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+[4] %Error: dif_c15_assert_semi_else.sv:11: Assertion failed in top: 'unique if' statement violated
+t=4 u-assert-else-unique y=0
+- dif_c15_assert_semi_else.sv:13: Verilog $finish
+== iverilog compile rc=14
+dif_c15_assert_semi_else.sv:5: error: Malformed statement
+== vita PRE (native=interp=vm)
+rc=0
+dif_c15_assert_semi_else.sv:9:41: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: a deferred assertion's action holds a statement other than a print, a file print, $finish or $stop; it executes inline (evaluate-when-reached), not deferred [in top]
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+dif_c15_assert_semi_else.sv:11:64: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 u-assert-else-unique y=0
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+dif_c15_assert_semi_else.sv:9:41: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: a deferred assertion's action holds a statement other than a print, a file print, $finish or $stop; it executes inline (evaluate-when-reached), not deferred [in top]
+dif_c15_assert_semi_else.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 u-semi-else y=0
+t=2 plain-semi-else y=0
+t=3 u-deferred-else y=2
+dif_c15_assert_semi_else.sv:11:64: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 u-assert-else-unique y=0
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+#### dif_c19_assertoff_else_forms
+== verilator compile rc=0 run rc=0
+[1] %Error: dif_c19_assertoff_else_forms.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 chain-under-assertoff
+[2] %Error: dif_c19_assertoff_else_forms.sv:7: Assertion failed in top: 'unique if' statement violated
+t=2 lone-under-assertoff
+t=3 else-case-inside y=0
+t=4 else-do-while i=2
+t=5 else-for
+- dif_c19_assertoff_else_forms.sv:15: Verilog $finish
+== iverilog compile rc=26
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 chain-under-assertoff
+dif_c19_assertoff_else_forms.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 lone-under-assertoff
+t=3 else-case-inside y=0
+t=4 else-do-while i=2
+t=5 else-for
+simulation ended (Finish) at time 6
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+dif_c19_assertoff_else_forms.sv:5:27: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 chain-under-assertoff
+dif_c19_assertoff_else_forms.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 lone-under-assertoff
+t=3 else-case-inside y=0
+t=4 else-do-while i=2
+t=5 else-for
+simulation ended (Finish) at time 6
+errors=0 warnings=3 notes=0
+#### f1c2_qual
+== verilator compile rc=0 run rc=0
+[1] %Error: f1c2_qual.sv:5: Assertion failed in top: 'unique if' statement violated
+t=1 C1 n=0
+[2] %Error: f1c2_qual.sv:7: Assertion failed in top: 'unique if' statement violated
+t=2 C2 n=0
+[3] %Error: f1c2_qual.sv:9: Assertion failed in top: 'unique if' statement violated
+t=3 C3 n=0
+[4] %Error: f1c2_qual.sv:11: Assertion failed in top: 'unique if' statement violated
+t=4 C4 n=0
+t=5 C5 n=0
+[6] %Error: f1c2_qual.sv:17: Assertion failed in top: 'unique if' statement violated
+t=6 C6 n=0
+[7] %Error: f1c2_qual.sv:19: Assertion failed in top: 'unique if' statement violated
+t=7 C7 n=0
+[8] %Error: f1c2_qual.sv:21: Assertion failed in top: 'unique if' statement violated
+t=8 C8 n=0
+[9] %Error: f1c2_qual.sv:23: Assertion failed in top: 'unique if' statement violated
+t=9 C9 n=0
+t=10 C10 n=0
+t=11 C11 n=0
+t=12 C12 n=9
+== vita PRE (native=interp=vm)
+rc=0
+t=1 C1 n=0
+t=2 C2 n=0
+f1c2_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 C3 n=0
+t=4 C4 n=0
+t=5 C5 n=0
+f1c2_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 6]
+t=6 C6 n=0
+t=7 C7 n=0
+t=8 C8 n=0
+t=9 C9 n=0
+t=10 C10 n=0
+t=11 C11 n=0
+t=12 C12 n=9
+t=13 C13 n=9
+simulation ended (Finish) at time 14
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+f1c2_qual.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 1]
+t=1 C1 n=0
+f1c2_qual.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 2]
+t=2 C2 n=0
+f1c2_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 3]
+t=3 C3 n=0
+f1c2_qual.sv:11:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 4]
+t=4 C4 n=0
+t=5 C5 n=0
+f1c2_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 6]
+t=6 C6 n=0
+f1c2_qual.sv:19:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 7]
+t=7 C7 n=0
+f1c2_qual.sv:21:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 8]
+t=8 C8 n=0
+f1c2_qual.sv:23:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 9]
+t=9 C9 n=0
+t=10 C10 n=0
+f1c2_qual.sv:27:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 11]
+#### f1b_enders
+== verilator compile rc=0 msgs: %Warning-WAITCONST: f1b_enders.sv:16:40: Wait statement condition is constant run rc=0
+t=1 B1 n=0
+t=2 B2 n=0
+t=3 B3 n=0
+t=5 B4 n=0
+t=6 B5 n=0
+t=7 B6 n=0
+t=8 B7 n=0
+t=12 B8 n=0
+t=13 B9 n=0
+- f1b_enders.sv:24: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 B1 n=0
+t=2 B2 n=0
+t=3 B3 n=0
+t=5 B4 n=0
+t=6 B5 n=0
+t=7 B6 n=0
+t=8 B7 n=0
+t=12 B8 n=0
+t=13 B9 n=0
+simulation ended (Finish) at time 14
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 B1 n=0
+t=2 B2 n=0
+t=3 B3 n=0
+t=5 B4 n=0
+t=6 B5 n=0
+t=7 B6 n=0
+t=8 B7 n=0
+t=12 B8 n=0
+t=13 B9 n=0
+simulation ended (Finish) at time 14
+errors=0 warnings=1 notes=0
+
+######## OPTED OUT (expect POST-c2 = PRE)
+#### cls_fn_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: cls_fn_rt.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+t=1 f0=7
+- cls_fn_rt.sv:10: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 f0=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+cls_fn_rt_H.sv:4:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 1]
+t=1 f0=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+cls_fn_rt.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 1]
+t=1 f0=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### cls_vfn_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: cls_vfn_rt.sv:5: Assertion failed in $unit.C.m: 'unique if' statement violated
+t=1 r=7
+- cls_vfn_rt.sv:10: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+cls_vfn_rt_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.m] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+cls_vfn_rt.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.m] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### cls_ctor_rt
+== verilator compile rc=0 run rc=0
+[1] %Error: cls_ctor_rt.sv:5: Assertion failed in $unit.C.new: 'unique if' statement violated
+t=1 r=7
+- cls_ctor_rt.sv:10: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+cls_ctor_rt_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.new] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+cls_ctor_rt.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.new] [at time 1]
+t=1 r=7
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### dif_c21_ctor_ifc_fn
+== verilator compile rc=0 run rc=0
+[1] %Error: dif_c21_ctor_ifc_fn.sv:5: Assertion failed in top.i.f: 'unique if' statement violated
+t=1 ifc fn v=0
+[2] %Error: dif_c21_ctor_ifc_fn.sv:12: Assertion failed in $unit.K.new: 'unique if' statement violated
+t=2 ctor
+- dif_c21_ctor_ifc_fn.sv:20: Verilog $finish
+== iverilog compile rc=8
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 ifc fn v=0
+t=2 ctor
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 ifc fn v=0
+dif_c21_ctor_ifc_fn.sv:12:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.K.new] [at time 2]
+t=2 ctor
+simulation ended (Finish) at time 3
+errors=0 warnings=2 notes=0
+#### s4_ctor_initial
+== verilator compile rc=0 run rc=0
+[0] %Error: s4_ctor_initial.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+- s4_ctor_initial.sv:11: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+s4_ctor_initial_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+== vita POST (native=interp=vm)
+rc=0
+s4_ctor_initial.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=0
+#### n_ca_objf2_tbL
+== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[2] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[3] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+- n_ca_objf2_tbL.sv:20: Verilog $finish
+[4] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[4] %Error: n_ca_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+t=1 y=2
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 3]
+t=3 y=0
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 3]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 4]
+n_ca_objf2_tbL_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=12 notes=0
+== vita POST (native=interp=vm)
+rc=0
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 0]
+t=1 y=2
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 2]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 3]
+t=3 y=0
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 3]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 4]
+n_ca_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.f] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=12 notes=0
+#### t2t_c_fg_this
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+[2] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+[3] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+- t2t_c_fg_this.sv:23: Verilog $finish
+[4] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+[4] %Error: t2t_c_fg_this.sv:4: Assertion failed in $unit.C.g: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=0
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 0]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 0]
+t=1 y=1
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 3]
+t=3 y=0
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 3]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 4]
+t2t_c_fg_this_H.sv:4:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=10 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 0]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 0]
+t=1 y=1
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 2]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 3]
+t=3 y=0
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 3]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 4]
+t2t_c_fg_this.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.C.g] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=10 notes=0
+#### u20_c_fnew_member
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+[2] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+t=3 y=0
+[3] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+[3] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+- u20_c_fnew_member.sv:27: Verilog $finish
+[4] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+[4] %Error: u20_c_fnew_member.sv:5: Assertion failed in $unit.D.new: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=0
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+t=1 y=1
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+t=1 y=1
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 3]
+t=3 y=0
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 3]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 4]
+u20_c_fnew_member_H.sv:5:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=12 notes=0
+== vita POST (native=interp=vm)
+rc=0
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (write ignored) [at time 0]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 0]
+t=1 y=1
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 2]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 3]
+t=3 y=0
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 3]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 4]
+u20_c_fnew_member.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.D.new] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=12 notes=0
+#### n_ca_mf_tbL
+== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+[2] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+[3] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+- n_ca_mf_tbL.sv:17: Verilog $finish
+[4] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+[4] %Error: n_ca_mf_tbL.sv:4: Assertion failed in top.u.f: 'unique if' statement violated
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+#### l08_P
+== verilator compile rc=0 run rc=0
+P0=0 P1=1
+- l08_P.sv:8: Verilog $finish
+== iverilog compile rc=4
+
+== vita PRE (native=interp=vm)
+rc=0
+P0=0 P1=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=0
+P0=0 P1=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+
+######## CLOSURE REFUSALS (PRE = POST, pin code + location + rc)
+#### t1s_m_fg
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+- t1s_m_fg.sv:20: Verilog $finish
+[4] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: t1s_m_fg.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=1
+t1s_m_fg.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=1
+t1s_m_fg_H.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=1
+t1s_m_fg.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+#### u1s_m_fg_nowrite
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+- u1s_m_fg_nowrite.sv:19: Verilog $finish
+[4] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: u1s_m_fg_nowrite.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=1
+u1s_m_fg_nowrite.sv:13:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=1
+u1s_m_fg_nowrite_H.sv:13:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=1
+u1s_m_fg_nowrite.sv:13:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+#### t13k_m_fork_task
+== verilator compile rc=0 run rc=1
+%Error-DIDNOTCONVERGE: Active region did not converge after '--converge-limit' of 10000 tries
+Aborting...
+== vita PRE (native=interp=vm)
+rc=1
+t13k_m_fork_task.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a timing/suspend/fork control (#delay, @, wait, fork), which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=1
+t13k_m_fork_task_H.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a timing/suspend/fork control (#delay, @, wait, fork), which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=1
+t13k_m_fork_task.sv:14:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a timing/suspend/fork control (#delay, @, wait, fork), which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+#### v1n_unit_vg_from_cls
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[2] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[3] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+- v1n_unit_vg_from_cls.sv:22: Verilog $finish
+[4] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[4] %Error: v1n_unit_vg_from_cls.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=1
+v1n_unit_vg_from_cls.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$C$f]
+errors=1 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=1
+v1n_unit_vg_from_cls_H.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$C$f]
+errors=1 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=1
+v1n_unit_vg_from_cls.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$C$f]
+errors=1 warnings=1 notes=0
+#### u22_ctor_unit_vg
+== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[2] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[3] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+- u22_ctor_unit_vg.sv:31: Verilog $finish
+[4] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+[4] %Error: u22_ctor_unit_vg.sv:2: Assertion failed in $unit.g: 'unique if' statement violated
+== vita PRE (native=interp=vm)
+rc=1
+u22_ctor_unit_vg.sv:8:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$D$new]
+errors=1 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=1
+u22_ctor_unit_vg_H.sv:8:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$D$new]
+errors=1 warnings=1 notes=0
+== vita POST (native=interp=vm)
+rc=1
+u22_ctor_unit_vg.sv:8:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared task `g` [in $class$D$new]
+errors=1 warnings=1 notes=0
+
+######## SPLITS INHERITED (vita's side)
+#### aa1_chain
+== verilator compile rc=0 run rc=0
+t=6 y=3 done
+- aa1_chain.sv:11: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 0]
+aa1_chain_H.sv:5:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 0]
+aa1_chain.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top] [at time 5]
+t=6 y=3 done
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+#### s1s_selftimed_first
+== verilator compile rc=0 run rc=0
+[1] %Error: s1s_selftimed_first.sv:5: Assertion failed in top.chk: 'unique if' statement violated
+- s1s_selftimed_first.sv:8: Verilog $finish
+== vita PRE (native=interp=vm)
+rc=0
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+== vita PRE-H (native=interp=vm)
+rc=0
+s1s_selftimed_first_H.sv:5:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 0]
+s1s_selftimed_first_H.sv:5:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 1]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+s1s_selftimed_first.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 0]
+s1s_selftimed_first.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 1]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+#### s1s_case
+== verilator compile rc=0 run rc=0
+[1] %Error: s1s_case.sv:5: Assertion failed in top.chk: unique case, but none matched for '2'h0'
+- s1s_case.sv:8: Verilog $finish
+== iverilog compile rc=0 msgs: s1s_case.sv:5: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+WARNING: s1s_case.sv:5: value is unhandled for priority or unique case statement
+         Time: 0  Scope: top.chk
+WARNING: s1s_case.sv:5: value is unhandled for priority or unique case statement
+         Time: 1  Scope: top.chk
+s1s_case.sv:8: $finish called at 2 (1s)
+== vita PRE (native=interp=vm)
+rc=0
+s1s_case.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 0]
+s1s_case.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.chk] [at time 1]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+
+######## PRE-EXISTING ROOT (🆕 AB)
+#### k1_ca_display
+== verilator compile rc=0 run rc=0
+f t=0 x=0 z=1
+t=1 y=1
+f t=1 x=0 z=1
+f t=1 x=0 z=1
+f t=2 x=0 z=0
+f t=2 x=0 z=0
+t=3 y=0
+f t=3 x=0 z=0
+f t=3 x=0 z=0
+- k1_ca_display.sv:16: Verilog $finish
+f t=4 x=0 z=0
+f t=4 x=0 z=0
+== iverilog compile rc=0 run rc=0
+f t=0 x=0 z=1
+t=1 y=1
+f t=2 x=0 z=0
+t=3 y=0
+k1_ca_display.sv:16: $finish called at 4 (1s)
+== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=x z=x
+f t=0 x=0 z=1
+t=1 y=1
+f t=2 x=0 z=0
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+#### k2b_ca_assert_clean
+== verilator compile rc=0 run rc=0
+t=1 y=1
+t=3 y=1
+- k2b_ca_assert_clean.sv:16: Verilog $finish
+== iverilog compile rc=0 run rc=0
+t=1 y=1
+t=3 y=1
+k2b_ca_assert_clean.sv:16: $finish called at 4 (1s)
+== vita PRE (native=interp=vm)
+rc=1
+k2b_ca_assert_clean.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+t=3 y=1
+simulation ended (Finish) at time 4
+errors=1 warnings=1 notes=0
+#### q1caf_case_tbL
+== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+[2] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+t=3 y=0
+[3] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+[3] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+- q1caf_case_tbL.sv:16: Verilog $finish
+[4] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+[4] %Error: q1caf_case_tbL.sv:4: Assertion failed in top.u.f: unique case, but none matched for '2'h0'
+== iverilog compile rc=0 msgs: q1caf_case_tbL.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+t=1 y=2
+WARNING: q1caf_case_tbL.sv:4: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top.u.f
+t=3 y=0
+q1caf_case_tbL.sv:16: $finish called at 4 (1s)
+== vita PRE (native=interp=vm)
+rc=0
+q1caf_case_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.f] [at time 0]
+t=1 y=2
+q1caf_case_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+== vita POST (native=interp=vm)
+rc=0
+q1caf_case_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.f] [at time 0]
+t=1 y=2
+q1caf_case_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+#### t0f_ca_if
+== verilator compile rc=0 run rc=0
+[1] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+[1] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+[2] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+t=2 y1=0 y2=0 y3=0
+[2] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+[2] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+- t0f_ca_if.sv:12: Verilog $finish
+[3] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+[3] %Error: t0f_ca_if.sv:5: Assertion failed in top.f: 'unique if' statement violated
+== iverilog compile rc=2
+
+== vita PRE (native=interp=vm)
+rc=0
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 0]
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 1]
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 2]
+t=2 y1=0 y2=x y3=0
+simulation ended (Finish) at time 3
+errors=0 warnings=4 notes=0
+== vita POST (native=interp=vm)
+rc=0
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 0]
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 1]
+t0f_ca_if.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: … [in top.f] [at time 2]
+t=2 y1=0 y2=x y3=0
+simulation ended (Finish) at time 3
+errors=0 warnings=4 notes=0

@@ -1,0 +1,59 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__differential__c__D15_ternary_sign
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/differential/c/D15_ternary_sign.sv
+roadmap_row: §2 🆕 AI
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre594,stgpa,stgpb
+verdict: unrecorded
+verdict_source: unrecorded
+alias: i/r2/lens/diff_c/D15_ternary_sign (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./D15_ternary_sign.ivl | 163 bytes
+D15_ternary_sign.sv:2: sorry: unpacked array parameters are not supported yet.
+D15_ternary_sign.sv:3: sorry: unpacked array parameters are not supported yet.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./D15_ternary_sign.vl | 256 bytes
+R: L1=252 B1=8 L2=1 L3=0
+- D15_ternary_sign.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 833.331 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./D15_ternary_sign.s2v | 83 bytes
+R: L1=252 B1=8 L2=0 L3=0
+D15_ternary_sign.s2v.v:10: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [d3] | i/r2/lens/diff_c/D15_ternary_sign.d3 | 194 bytes
+R: L1=252 B1=8 L2=1 L3=0
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [pa] | i/r2/lens/diff_c/D15_ternary_sign.pa | 194 bytes | identical to block 4
+=== block 6 | vita [pa] | ./D15_ternary_sign.post | 194 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R: L1=252 B1=8 L2=1 L3=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [pb] | i/r2/lens/diff_c/D15_ternary_sign.pb | 194 bytes | identical to block 4
+=== block 8 | vita [pb] | ./D15_ternary_sign.postb | 194 bytes | identical to block 6
+=== block 9 | vita [pre594] | i/r2/lens/diff_c/D15_ternary_sign.pre594 | 202 bytes
+R: L1=4294967292 B1=32 L2=1 L3=1
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 10 | vita [pre594] | ./D15_ternary_sign.pre | 202 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R: L1=4294967292 B1=32 L2=1 L3=1
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

@@ -1,0 +1,21 @@
+DI05m                        IEEE:UP LOUD->OK  SVVL:DOWN LOUD->WRONG   | iv=outer | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=outer
+DL01                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=bits=4 | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=bits=4
+DL03                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=Q=10 | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=Q=10
+DL06                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=bits=4 | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=bits=4
+DL08                         IEEE:UP LOUD->OK  SVVL:UP LOUD->OK   | iv=bits=4 | post_b=ERR:VITA-E3010:`N` is used before it is declared in this gen | postd2=bits=4
+DL11                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=w=9 bits=4 | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=w=9 bits=4
+DM07                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=L1 | L2 | post_b=ERR:VITA-E3010:`S` is used before it is declared in this gen | postd2=L1 | L2
+DM07b                        IEEE:UP LOUD->OK  SVVL:n/a   | iv=L1 | L501 | post_b=ERR:VITA-E3010:`S` is used before it is declared in this gen | postd2=L1 | L501
+DM08                         IEEE:UP LOUD->OK  SVVL:n/a   | iv=L0 | L1 | post_b=ERR:VITA-E3010:`S` is used before it is declared in this gen | postd2=L0 | L1
+DM09                         IEEE:UP LOUD->OK  SVVL:DOWN LOUD->WRONG   | iv=then | post_b=ERR:VITA-E3010:`S` is used before it is declared in this gen | postd2=then
+DM10                         IEEE:UP LOUD->OK  SVVL:DOWN LOUD->WRONG   | iv=outer | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=outer
+DX03                         IEEE:UP LOUD->OK  SVVL:DOWN LOUD->WRONG   | iv=top.u1.g.b outer | top.u2.g.b outer | post_b=ERR:VITA-E3010:`K` is used before it is declared in this gen | postd2=top.u1.g.b outer | top.u2.g.b outer
+
+== post_b -> postd2 under IEEE (40 cells)
+    28 same                   
+    12 UP LOUD->OK            DI05m DL01 DL03 DL06 DL08 DL11 DM07 DM07b DM08 DM09 DM10 DX03
+== post_b -> postd2 under SVVL (40 cells)
+    28 same                   
+     7 n/a                    DL01 DL03 DL06 DL11 DM07 DM07b DM08
+     4 DOWN LOUD->WRONG       DI05m DM09 DM10 DX03
+     1 UP LOUD->OK            DL08

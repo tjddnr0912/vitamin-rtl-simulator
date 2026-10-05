@@ -1,0 +1,57 @@
+##### c1_assert_if.sv
+=== vita (native=interp=vm)
+rc=0
+t=1 A1 done
+t=2 c-branch
+t=3 A3 done
+t=4 A4 done
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+##### c6_assert_default.sv
+=== vita (native=interp=vm)
+rc=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c6_assert_default.sv:4:53: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top] [at time 1]
+t=1 done
+simulation ended (Finish) at time 2
+errors=1 warnings=1 notes=0
+##### c5_attr.sv
+=== vita (native=interp=vm)
+rc=0
+t=1 done
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+##### c2a_fv_in_cf.sv
+=== vita (native=interp=vm)
+rc=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c2a_fv_in_cf.sv:9:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c2a_fv_in_cf.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses a call to a subroutine with an output/inout formal, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported). A FUNCTION body is entered from the expression that calls it, so it has no call statement of its own to carry the callee's copy-out; the same call in a `task` body, or in a module process, does work. [in top]
+errors=2 warnings=1 notes=0
+##### c2b_fv_in_cf.sv
+=== vita (native=interp=vm)
+rc=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c2b_fv_in_cf.sv:9:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c2b_fv_in_cf.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses a call to a subroutine with an output/inout formal, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported). A FUNCTION body is entered from the expression that calls it, so it has no call statement of its own to carry the callee's copy-out; the same call in a `task` body, or in a module process, does work. [in top]
+errors=2 warnings=1 notes=0
+##### c2c_fv_in_cf.sv
+=== vita (native=interp=vm)
+rc=0
+P=4
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+##### c3p_class_fn.sv
+=== vita (native=interp=vm)
+rc=0
+t=2 r=0
+t=3 m-z
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+##### c3h_class_fn.sv
+=== vita (native=interp=vm)
+rc=0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c3h_class_fn.sv:4:56: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.C.m] [at time 1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c3h_class_fn.sv:8:33: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.C.f] [at time 2]
+t=2 r=0
+t=3 m-z
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/r1/sound/cells/c3h_class_fn.sv:12:54: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.mv] [at time 4]
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0

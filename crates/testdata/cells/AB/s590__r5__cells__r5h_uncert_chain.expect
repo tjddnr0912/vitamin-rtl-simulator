@@ -1,0 +1,98 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r5__cells__r5h_uncert_chain
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r5/cells/r5h_uncert_chain.sv
+roadmap_row: §2 🆕 AB
+set: r5/cells
+oracles_present: verilator,iverilog
+vita_tags: PRE,POST_UNREC,PRE3,POSTE,POSTD,PRE3_SEP,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: new pin r5h `an_uncertified_held_chain_runs_each_link_in_its_own_wave_only` (4-link reverse-declared $random chain: post_e 8 calls at t0, post_d 20, PRE3 28, both oracles 4); no existing pin moved (t0_call_cont_assign_hold + unique_if_chain 48/48 before the new pin).
+verdict_source: s590/IMPL.md:153
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: POST_UNREC: md5 unrecorded commit unrecorded
+blocks: 1
+=== block 1 | combined [verilator+iverilog|PRE+POST_UNREC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r5/out_cells/r5h_uncert_chain.out | 1096 bytes
+##### r5h_uncert_chain
+=== verilator compile rc=0 run rc=0
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+t1 w3=0
+- r5h_uncert_chain.sv:11: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+t1 w3=0
+r5h_uncert_chain.sv:11: $finish called at 1 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+g t=0 x=z
+g t=0 x=z
+g t=0 x=z
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=x
+g t=0 x=0
+g t=0 x=x
+g t=0 x=x
+g t=0 x=1
+g t=0 x=0
+g t=0 x=x
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=0 x=1
+g t=0 x=0
+g t=1 x=1
+g t=1 x=0
+g t=1 x=1
+g t=1 x=0
+t1 w3=0
+g t=1 x=1
+g t=1 x=0
+g t=1 x=1
+g t=1 x=0
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+g t=0 x=0
+g t=0 x=0
+g t=0 x=1
+g t=0 x=1
+g t=0 x=0
+g t=0 x=0
+g t=0 x=1
+g t=0 x=1
+g t=1 x=1
+g t=1 x=0
+g t=1 x=1
+g t=1 x=0
+t1 w3=0
+g t=1 x=1
+g t=1 x=0
+g t=1 x=1
+g t=1 x=0
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== end

@@ -1,0 +1,21 @@
+### Ev12
+  pre594 : R: L=4294967292 M=0 K=0 vb=4
+  pa : R: L=252 M=1 K=1 vb=5
+  pb : R: L=252 M=1 K=1 vb=5
+  ivl : R: L=252 M=1 K=1 vb=5
+  s2v : R: L=252 M=1 K=1 vb=5
+  vl : R: L=252 M=1 K=1 vb=5
+### Mcmp_RAE_gi
+  pre594 : R: GI=else
+  pa : R: GI=else
+  pb : R: GI=else
+  ivl : R: GI=else
+  s2v : R: GI=else
+  vl : R: GI=then
+### Mcmp_RAE_int
+  pre594 : R: L=0
+  pa : R: L=0
+  pb : R: L=0
+  ivl : R: L=0
+  s2v : R: L=X
+  vl : R: L=X

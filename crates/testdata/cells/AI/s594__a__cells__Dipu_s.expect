@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__a__cells__Dipu_s
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/a/cells/Dipu_s.sv
+roadmap_row: §2 🆕 AI
+set: a/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3r,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3r: md5 ca572e0c4873c3903ceb48545e4d814b commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Dipu_s.ivl | 74 bytes
+Dipu_s.sv:6: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Dipu_s.vl | 234 bytes
+P=-4 lt0=1 B=8
+- Dipu_s.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ns; walltime 0.000 s; speed 1.667 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Dipu_s.s2v | 64 bytes
+P=252 lt0=0 B=8
+Dipu_s.s2v.v:12: $finish called at 40 (1s)
+rc=0
+=== block 4 | vita [d1] | ./Dipu_s.d1 | 85 bytes
+P=-4 lt0=1 B=8
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./Dipu_s.d3 | 85 bytes | identical to block 4
+=== block 6 | vita [p3r] | ./Dipu_s.p3r | 85 bytes | identical to block 4
+=== block 7 | vita [p3r] | ./Dipu_s.p3r.route | 0 bytes
+
+=== block 8 | vita [pa] | ./Dipu_s.pa | 85 bytes | identical to block 4
+=== block 9 | vita [pb] | ./Dipu_s.pb | 85 bytes | identical to block 4
+=== block 10 | vita [pre] | ./Dipu_s.pre | 85 bytes | identical to block 4
+=== block 11 | vita [pre] | ./Dipu_s.pre.route | 0 bytes | identical to block 7
+=== block 12 | vita [pre594] | ./Dipu_s.pre594 | 85 bytes | identical to block 4
+=== end

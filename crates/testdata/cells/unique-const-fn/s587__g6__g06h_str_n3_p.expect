@@ -1,0 +1,43 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g6__g06h_str_n3_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g6/g06h_str_n3_p.sv
+roadmap_row: §3.b unique-const-fn
+set: g6
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,PRE-sep,S3,S4,S8,PRE
+verdict: KEEP (PRE fp == oracle)
+verdict_source: s587/IMPL.md:15
+notes: IMPL step-1 G6 lane list (lane g06h)
+alias: r1/diff/g6r/g06h_str_n3_p (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:15
+alias: r2/diff/re/g6r/g06h_str_n3_p (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:15
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./g06h_str_n3_p.ivl | 55 bytes
+s6=z
+g06h_str_n3_p.sv:7: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./g06h_str_n3_p.vl | 231 bytes
+s6=z
+- g06h_str_n3_p.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 76.923 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_g06h_str_n3_p.build | 0 bytes
+
+=== block 4 | vita [MECH] | ./g06h_str_n3_p.mech | 173 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s6=z
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PRE] | ./g06h_str_n3_p.vita | 173 bytes | identical to block 4
+=== block 6 | vita [S3] | ./g06h_str_n3_p.s3 | 173 bytes | identical to block 4
+=== block 7 | vita [S4] | ./g06h_str_n3_p.s4 | 173 bytes | identical to block 4
+=== block 8 | vita [S8] | ./g06h_str_n3_p.s8 | 173 bytes | identical to block 4
+=== end

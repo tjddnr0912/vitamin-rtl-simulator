@@ -1,0 +1,62 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__DL01
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/DL01.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre,pre_st,post_b_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_lens_diff_pre.out:10
+notes: named at s592/r1/differential/REPORT.md:11; named at s592/COMMIT_DOCS.txt:30; named at s592/IMPL.md:213
+alias: g/lens/diff/DL01 (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_diff_pre.out:10
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./DL01.iv.txt | 52 bytes
+@bits=4
+DL01.sv:12: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./DL01.vl.txt | 92 bytes
+%Error: DL01.sv:11:46: Can't find definition of 'b'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./DL01.vlb.txt | 350 bytes
+%Error: DL01.sv:11:46: Can't find definition of 'b'
+                     : ... note: In instance 'top'
+   11 |   initial #1 $display("@bits=%0d", $bits(g.b.w));
+      |                                              ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./DL01.sv.txt | 56 bytes
+@bits=4
+DL01.sv2v.v:17: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./DL01.post.txt | 451 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+DL01.sv:4:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 9:24), so vita's elaboration passes choose different branches here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate if [in top.g]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_b] | r1/differential/det1/DL01.post.txt | 451 bytes | identical to block 5
+=== block 7 | vita [post_c] | g/lens/diff/DL01.post_c.txt | 178 bytes
+@bits=4
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 8 | vita [post_d] | ./DL01.postd.txt | 178 bytes | identical to block 7
+=== block 9 | vita [postd2] | g/lens/diff/DL01.postd2.txt | 178 bytes | identical to block 7
+=== block 10 | vita [postd3] | g/lens/diff/DL01.postd3.txt | 178 bytes | identical to block 7
+=== block 11 | vita [postd4] | g/lens/diff/DL01.postd4.txt | 178 bytes | identical to block 7
+=== block 12 | vita [pre] | ./DL01.pre.txt | 178 bytes | identical to block 7
+=== end

@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c03_side_eff
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c03_side_eff.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE,PRE(H-spelling)
+verdict: unrecorded
+verdict_source: unrecorded
+notes: aux: r1/diff/cells/c03_side_eff_H.sv
+alias: r1/diff/w/c03_side_eff/c03_side_eff (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+aux: s583__r1__diff__cells__c03_side_eff.aux/r1/diff/cells/c03_side_eff_H.sv (origin s583/r1/diff/cells/c03_side_eff_H.sv)
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: PRE(H-spelling): unresolved (no row in the slice META binaries table)
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+PRE(H-spelling)+POST] verilator 5.052 (version captured in slice) | ./c03_side_eff.out | 2713 bytes
+##### c03_side_eff
+=== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: c03_side_eff.sv:6:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: c03_side_eff.sv:6:43: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: c03_side_eff.sv:6:67: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: c03_side_eff.sv:8:26: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: c03_side_eff.sv:8:50: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: c03_side_eff.sv:8:74: Expression side effect may be mishandled run rc=0
+  eval c3
+  eval c2
+  eval c1
+[1] %Error: c03_side_eff.sv:6: Assertion failed in top: 'unique if' statement violated
+t=1 miss n=3
+  eval c3
+  eval c2
+  eval c1
+  eval c1
+  eval c2
+t=2 hit2 n=5 y=2
+t=3 incdec i=2
+- c03_side_eff.sv:12: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+c03_side_eff.sv:10:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found '++'
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '=='
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '=='
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '=='
+c03_side_eff.sv:10:36: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'else'
+errors=5 warnings=0 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+c03_side_eff_H.sv:10:13: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found '++'
+c03_side_eff_H.sv:10:16: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '=='
+c03_side_eff_H.sv:10:16: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '=='
+c03_side_eff_H.sv:10:16: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '=='
+c03_side_eff_H.sv:10:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'else'
+errors=5 warnings=0 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+c03_side_eff.sv:10:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found '++'
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '=='
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '=='
+c03_side_eff.sv:10:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '=='
+c03_side_eff.sv:10:36: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'else'
+errors=5 warnings=0 notes=0
+--- PRE==POST (all backends): True
+--- staged vcmp=1 velab=3 vrun=3 W4031+stdout==one-shot: False
+rc=3
+error[VITA-E8005]: cannot read 'c03_side_eff.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== end

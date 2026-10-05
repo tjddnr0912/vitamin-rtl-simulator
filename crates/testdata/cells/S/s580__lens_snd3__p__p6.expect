@@ -1,0 +1,254 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd3__p__p6
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd3/p/p6.sv
+roadmap_row: §2 🆕 S
+set: lens_snd3
+oracles_present: iverilog,sv2v
+vita_tags: POST2,POST3-interp,POST3,POST3-vm,PRE
+verdict: R3-A BLOCKING (new in round 3; created by the R3-3 narrowing of round-2 C)
+verdict_source: s580/lens_snd3/REPORT.md:6
+notes: R4 cmp3_post4 bucket(s): both×5,pre×6 (s580/r4/cmp3_post4.txt)
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: POST3-interp: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: POST3-vm: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 70
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./p6_J1.iv.txt | 193 bytes
+J1 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./p6_J2.iv.txt | 193 bytes
+J2 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./p6_J3.iv.txt | 193 bytes
+J3 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./p6_J4.iv.txt | 193 bytes
+J4 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./p6_J5.iv.txt | 193 bytes
+J5 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./p6_J6.iv.txt | 193 bytes
+J6 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./p6_J7.iv.txt | 206 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:41: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./p6_J8.iv.txt | 193 bytes
+J8 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./p6_J9.iv.txt | 196 bytes
+J9 default
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 10 | oracle iverilog 13.0 (version captured in slice) | ./p6_JV.iv.txt | 195 bytes
+V1 1
+V2 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:2: $finish called at 100 (1s)
+rc=0
+=== block 11 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J1.sv.txt | 200 bytes
+J1 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J1.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J2.sv.txt | 200 bytes
+J2 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J2.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 13 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J3.sv.txt | 200 bytes
+J3 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J3.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 14 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J4.sv.txt | 200 bytes
+J4 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J4.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 15 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J5.sv.txt | 200 bytes
+J5 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J5.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 16 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J6.sv.txt | 200 bytes
+J6 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J6.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 17 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J7.sv.txt | 200 bytes
+J7 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J7.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 18 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J8.sv.txt | 200 bytes
+J8 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J8.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 19 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_J9.sv.txt | 203 bytes
+J9 default
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_J9.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 20 | oracle sv2v 0.0.13 (version captured in slice) | ./p6_JV.sv.txt | 202 bytes
+V1 1
+V2 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6_JV.sv2v.v:3: $finish called at 100 (1s)
+rc=0
+=== block 21 | vita [POST2] | ./p6_J1.p2.txt | 539 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:5:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 22 | vita [POST2] | ./p6_J2.p2.txt | 540 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:11:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 23 | vita [POST2] | ./p6_J3.p2.txt | 540 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:17:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 24 | vita [POST2] | ./p6_J4.p2.txt | 540 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:23:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 25 | vita [POST2] | ./p6_J5.p2.txt | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J5 item
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 26 | vita [POST2] | ./p6_J6.p2.txt | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J6 item
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 27 | vita [POST2] | ./p6_J7.p2.txt | 540 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:41:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 28 | vita [POST2] | ./p6_J8.p2.txt | 541 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:47:11: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 29 | vita [POST2] | ./p6_J9.p2.txt | 540 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:53:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 30 | vita [POST2] | ./p6_JV.p2.txt | 180 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+V1 1
+V2 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 31 | vita [POST3] | ./p6_J1.p3native.txt | 498 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:5:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern is not a single literal has no constant value [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 32 | vita [POST3] | ./p6_J2.p3native.txt | 499 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:11:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern is not a single literal has no constant value [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 33 | vita [POST3] | ./p6_J3.p3native.txt | 499 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:17:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern is not a single literal has no constant value [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 34 | vita [POST3] | ./p6_J4.p3native.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J4 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 35 | vita [POST3] | ./p6_J5.p3native.txt | 178 bytes | identical to block 25
+=== block 36 | vita [POST3] | ./p6_J6.p3native.txt | 178 bytes | identical to block 26
+=== block 37 | vita [POST3] | ./p6_J7.p3native.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J7 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 38 | vita [POST3] | ./p6_J8.p3native.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J8 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 39 | vita [POST3] | ./p6_J9.p3native.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J9 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 40 | vita [POST3] | ./p6_JV.p3native.txt | 180 bytes | identical to block 30
+=== block 41 | vita [POST3-interp] | ./p6_J1.p3interp.txt | 498 bytes | identical to block 31
+=== block 42 | vita [POST3-interp] | ./p6_J2.p3interp.txt | 499 bytes | identical to block 32
+=== block 43 | vita [POST3-interp] | ./p6_J3.p3interp.txt | 499 bytes | identical to block 33
+=== block 44 | vita [POST3-interp] | ./p6_J4.p3interp.txt | 181 bytes | identical to block 34
+=== block 45 | vita [POST3-interp] | ./p6_J5.p3interp.txt | 178 bytes | identical to block 25
+=== block 46 | vita [POST3-interp] | ./p6_J6.p3interp.txt | 178 bytes | identical to block 26
+=== block 47 | vita [POST3-interp] | ./p6_J7.p3interp.txt | 181 bytes | identical to block 37
+=== block 48 | vita [POST3-interp] | ./p6_J8.p3interp.txt | 181 bytes | identical to block 38
+=== block 49 | vita [POST3-interp] | ./p6_J9.p3interp.txt | 181 bytes | identical to block 39
+=== block 50 | vita [POST3-interp] | ./p6_JV.p3interp.txt | 180 bytes | identical to block 30
+=== block 51 | vita [POST3-vm] | ./p6_J1.p3vm.txt | 498 bytes | identical to block 31
+=== block 52 | vita [POST3-vm] | ./p6_J2.p3vm.txt | 499 bytes | identical to block 32
+=== block 53 | vita [POST3-vm] | ./p6_J3.p3vm.txt | 499 bytes | identical to block 33
+=== block 54 | vita [POST3-vm] | ./p6_J4.p3vm.txt | 181 bytes | identical to block 34
+=== block 55 | vita [POST3-vm] | ./p6_J5.p3vm.txt | 178 bytes | identical to block 25
+=== block 56 | vita [POST3-vm] | ./p6_J6.p3vm.txt | 178 bytes | identical to block 26
+=== block 57 | vita [POST3-vm] | ./p6_J7.p3vm.txt | 181 bytes | identical to block 37
+=== block 58 | vita [POST3-vm] | ./p6_J8.p3vm.txt | 181 bytes | identical to block 38
+=== block 59 | vita [POST3-vm] | ./p6_J9.p3vm.txt | 181 bytes | identical to block 39
+=== block 60 | vita [POST3-vm] | ./p6_JV.p3vm.txt | 180 bytes | identical to block 30
+=== block 61 | vita [PRE] | ./p6_J1.pre.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J1 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 62 | vita [PRE] | ./p6_J2.pre.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J2 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 63 | vita [PRE] | ./p6_J3.pre.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J3 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 64 | vita [PRE] | ./p6_J4.pre.txt | 181 bytes | identical to block 34
+=== block 65 | vita [PRE] | ./p6_J5.pre.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J5 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 66 | vita [PRE] | ./p6_J6.pre.txt | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+J6 default
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 67 | vita [PRE] | ./p6_J7.pre.txt | 181 bytes | identical to block 37
+=== block 68 | vita [PRE] | ./p6_J8.pre.txt | 181 bytes | identical to block 38
+=== block 69 | vita [PRE] | ./p6_J9.pre.txt | 181 bytes | identical to block 39
+=== block 70 | vita [PRE] | ./p6_JV.pre.txt | 407 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p6.sv:58:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PV` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== end

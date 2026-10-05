@@ -1,0 +1,44 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c09p_fvoid_const
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c09p_fvoid_const.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE,PRE(H-spelling)
+verdict: unrecorded
+verdict_source: unrecorded
+alias: r1/diff/w/c09p_fvoid_const/c09p_fvoid_const (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: PRE(H-spelling): unresolved (no row in the slice META binaries table)
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+PRE(H-spelling)+POST] verilator 5.052 (version captured in slice) | ./c09p_fvoid_const.out | 2824 bytes
+##### c09p_fvoid_const
+=== verilator compile rc=1
+%Error: c09p_fvoid_const.sv:9:22: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                                : ... note: In instance 'top'
+        c09p_fvoid_const.sv:6:5: ... Location of non-constant TASKREF 'g': Unknown node type, perhaps missing visitor in SimulateVisitor
+        c09p_fvoid_const.sv:9:22: ... Called from 'f()' with parameters:
+           a = ?32?h3
+    9 |   localparam int P = f(3);
+      |                      ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== vita PRE (native=interp=vm)
+rc=1
+c09p_fvoid_const.sv:9:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+c09p_fvoid_const.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a call to a subroutine with an output/inout formal, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported). A FUNCTION body is entered from the expression that calls it, so it has no call statement of its own to carry the callee's copy-out; the same call in a `task` body, or in a module process, does work. [in top]
+errors=2 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+c09_fvoid_const_H.sv:9:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+c09_fvoid_const_H.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a call to a subroutine with an output/inout formal, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported). A FUNCTION body is entered from the expression that calls it, so it has no call statement of its own to carry the callee's copy-out; the same call in a `task` body, or in a module process, does work. [in top]
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+c09p_fvoid_const.sv:9:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+c09p_fvoid_const.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses a call to a subroutine with an output/inout formal, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported). A FUNCTION body is entered from the expression that calls it, so it has no call statement of its own to carry the callee's copy-out; the same call in a `task` body, or in a module process, does work. [in top]
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== end

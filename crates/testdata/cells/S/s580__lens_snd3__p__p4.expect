@@ -1,0 +1,203 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd3__p__p4
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd3/p/p4.sv
+roadmap_row: §2 🆕 S
+set: lens_snd3
+oracles_present: iverilog
+vita_tags: POST2,POST3-interp,POST3,POST3-vm,PRE
+verdict: T3 CLEAN
+verdict_source: s580/lens_snd3/REPORT.md:25
+notes: R4 cmp3_post4 bucket(s): both×2,post3×8 (s580/r4/cmp3_post4.txt)
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: POST3-interp: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: POST3-vm: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 54
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./p4_K1.iv.txt | 191 bytes
+K1 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./p4_K2.iv.txt | 243 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:22: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+rc=1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./p4_K3.iv.txt | 243 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:25: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+rc=1
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./p4_K4.iv.txt | 191 bytes
+K4 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./p4_K5.iv.txt | 243 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:31: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+rc=1
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./p4_K6.iv.txt | 206 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:34: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./p4_K7.iv.txt | 206 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:37: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./p4_K8.iv.txt | 191 bytes
+K8 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./p4_K9.iv.txt | 191 bytes
+K9 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 10 | vita [POST2] | ./p4_K1.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K1 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 11 | vita [POST2] | ./p4_K2.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K2 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [POST2] | ./p4_K3.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K3 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 13 | vita [POST2] | ./p4_K4.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K4 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 14 | vita [POST2] | ./p4_K5.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K5 0
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 15 | vita [POST2] | ./p4_K6.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K6 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 16 | vita [POST2] | ./p4_K7.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K7 0
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 17 | vita [POST2] | ./p4_K8.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K8 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 18 | vita [POST2] | ./p4_K9.p2.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K9 1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 19 | vita [POST3] | ./p4_K1.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 20 | vita [POST3] | ./p4_K2.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 21 | vita [POST3] | ./p4_K3.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 22 | vita [POST3] | ./p4_K4.p3native.txt | 175 bytes | identical to block 13
+=== block 23 | vita [POST3] | ./p4_K5.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 24 | vita [POST3] | ./p4_K6.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 25 | vita [POST3] | ./p4_K7.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:37:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 26 | vita [POST3] | ./p4_K8.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 27 | vita [POST3] | ./p4_K9.p3native.txt | 484 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:43:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 28 | vita [POST3-interp] | ./p4_K1.p3interp.txt | 484 bytes | identical to block 19
+=== block 29 | vita [POST3-interp] | ./p4_K2.p3interp.txt | 484 bytes | identical to block 20
+=== block 30 | vita [POST3-interp] | ./p4_K3.p3interp.txt | 484 bytes | identical to block 21
+=== block 31 | vita [POST3-interp] | ./p4_K4.p3interp.txt | 175 bytes | identical to block 13
+=== block 32 | vita [POST3-interp] | ./p4_K5.p3interp.txt | 484 bytes | identical to block 23
+=== block 33 | vita [POST3-interp] | ./p4_K6.p3interp.txt | 484 bytes | identical to block 24
+=== block 34 | vita [POST3-interp] | ./p4_K7.p3interp.txt | 484 bytes | identical to block 25
+=== block 35 | vita [POST3-interp] | ./p4_K8.p3interp.txt | 484 bytes | identical to block 26
+=== block 36 | vita [POST3-interp] | ./p4_K9.p3interp.txt | 484 bytes | identical to block 27
+=== block 37 | vita [POST3-vm] | ./p4_K1.p3vm.txt | 484 bytes | identical to block 19
+=== block 38 | vita [POST3-vm] | ./p4_K2.p3vm.txt | 484 bytes | identical to block 20
+=== block 39 | vita [POST3-vm] | ./p4_K3.p3vm.txt | 484 bytes | identical to block 21
+=== block 40 | vita [POST3-vm] | ./p4_K4.p3vm.txt | 175 bytes | identical to block 13
+=== block 41 | vita [POST3-vm] | ./p4_K5.p3vm.txt | 484 bytes | identical to block 23
+=== block 42 | vita [POST3-vm] | ./p4_K6.p3vm.txt | 484 bytes | identical to block 24
+=== block 43 | vita [POST3-vm] | ./p4_K7.p3vm.txt | 484 bytes | identical to block 25
+=== block 44 | vita [POST3-vm] | ./p4_K8.p3vm.txt | 484 bytes | identical to block 26
+=== block 45 | vita [POST3-vm] | ./p4_K9.p3vm.txt | 484 bytes | identical to block 27
+=== block 46 | vita [PRE] | ./p4_K1.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 47 | vita [PRE] | ./p4_K2.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 48 | vita [PRE] | ./p4_K3.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 49 | vita [PRE] | ./p4_K4.pre.txt | 175 bytes | identical to block 13
+=== block 50 | vita [PRE] | ./p4_K5.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 51 | vita [PRE] | ./p4_K6.pre.txt | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K6 x
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 52 | vita [PRE] | ./p4_K7.pre.txt | 175 bytes | identical to block 16
+=== block 53 | vita [PRE] | ./p4_K8.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 54 | vita [PRE] | ./p4_K9.pre.txt | 446 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd3/p/p4.sv:43:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== end

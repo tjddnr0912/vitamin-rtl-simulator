@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a5__Iaa_kae
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a5/Iaa_kae.sv
+roadmap_row: §2 🆕 U
+set: plan/a5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: silent->loud(oracle loud: ivl,s2v)
+verdict_source: s591/impl/moves_audit.txt:22
+notes: class PRE vs posta (POST_a), IMPL.md:14
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Iaa_kae.ivl | 89 bytes
+Iaa_kae.sv:6: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Iaa_kae.vl | 513 bytes
+%Warning-WIDTHEXPAND: Iaa_kae.sv:11:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+%Warning-WIDTHTRUNC: Iaa_kae.sv:12:26: Operator FUNCREF 'fae' expects 32 bits on the Function Argument, but Function Argument's VARREF 'N' generates 65 bits.
+ae top.u6 W=x
+- Iaa_kae.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 4.762 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Iaa_kae.s2v | 185 bytes
+rc=1
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package
+=== block 4 | vita [DEV3] | ./Iaa_kae.dev3 | 273 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Iaa_kae.sv:6:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KW` value is not a constant: undefined name `P` is not a constant [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./Iaa_kae.posta | 273 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./Iaa_kae.postb | 273 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./Iaa_kae.pre | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+ae top.u6 W=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [PRE] | ./Iaa_kae.pre.route | 16 bytes
+sae fae frame 0
+=== block 9 | vita [PROTO2] | ./Iaa_kae.post2 | 273 bytes | identical to block 4
+=== end

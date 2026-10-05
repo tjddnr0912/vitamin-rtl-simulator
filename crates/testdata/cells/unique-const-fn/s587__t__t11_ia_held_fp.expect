@@ -1,0 +1,27 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t11_ia_held_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t11_ia_held_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t11_ia_held_fp.ivl | 86 bytes
+top.u[0] b=4 p=a
+top.u[1] b=4 p=5
+t11_ia_held_fp.sv:14: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t11_ia_held_fp.vl | 262 bytes
+top.u[0] b=4 p=a
+top.u[1] b=4 p=5
+- t11_ia_held_fp.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 29.412 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t11_ia_held_fp.build | 0 bytes
+
+=== end

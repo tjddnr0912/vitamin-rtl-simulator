@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x1__gen_fn_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x1/gen_fn_u.sv
+roadmap_row: §3.b unique-const-fn
+set: x1
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S5,S6,S7,S8
+verdict: WRONG -> excluded
+verdict_source: s587/IMPL.md:136
+notes: IMPL X1(c) census; class is the plain twin on PRE vs both oracles
+alias: post_c/lanes2_work/x1_gen_fn_u/gen_fn_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S5: md5 9a5525108f2cf61ee3ce0279ba55bd5f commit unrecorded
+vita_binary: S6: md5 8a62233bbe50d76b03c2c28c63e17ae2 commit unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./gen_fn_u.ivl | 88 bytes
+gen_fn_u.sv:4: syntax error
+gen_fn_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./gen_fn_u.vl | 256 bytes
+%Error: gen_fn_u.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: gen_fn_u.sv:8:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_gen_fn_u.build | 825 bytes
+%Error: gen_fn_u.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                        : ... note: In instance 'top'
+    7 |     function automatic int f(input int a); return 3; endfunction
+      |                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: gen_fn_u.sv:8:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                        : ... note: In instance 'top'
+        gen_fn_u.sv:7:28: ... Location of non-constant FUNC 'f': Constant function called under generate
+        gen_fn_u.sv:8:24: ... Called from 'f()' with parameters:
+           a = ?32?h2
+    8 |     localparam int P = f(2);
+      |                        ^
+%Error: Exiting due to 2 error(s)
+=== block 4 | vita [S5] | ./gen_fn_u.s5 | 968 bytes
+gen_fn_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+gen_fn_u.sv:8:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top.g]
+gen_fn_u.sv:9:12: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top.g]
+gen_fn_u.sv:10:16: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].P` [in top.g]
+errors=3 warnings=1 notes=1
+rc=1
+=== block 5 | vita [S6] | ./gen_fn_u.s6 | 968 bytes | identical to block 4
+=== block 6 | vita [S7] | ./gen_fn_u.s7 | 968 bytes | identical to block 4
+=== block 7 | vita [S8] | ./gen_fn_u.s8 | 968 bytes | identical to block 4
+=== end

@@ -1,0 +1,87 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__r1__diff__r3c__t3d_counts_after_t0
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/r1/diff/r3c/t3d_counts_after_t0.sv
+roadmap_row: §2 🆕 Z
+set: r1/diff/r3c
+oracles_present: iverilog,verilator
+vita_tags: POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+blocks: 2
+=== block 1 | combined [iverilog+verilator+PRE+POST3+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./t3d_counts_after_t0.out | 1393 bytes
+##### t3d_counts_after_t0
+=== iverilog
+compile rc=0 msgs: t3d_counts_after_t0.sv:6: warning: System task ($display) cannot be synthesized in an always_comb process.
+t3d_counts_after_t0.sv:5: warning: System task ($display) cannot be synthesized in an always_comb process.
+t3d_counts_after_t0.sv:4: warning: System task ($display) cannot be synthesized in an always_comb process.
+run rc=0
+Y t=0 m=xx
+M t=0 p=xx
+P t=0 src=01
+M t=0 p=01
+Y t=0 m=01
+P t=5 src=10
+M t=5 p=10
+Y t=5 m=10
+P t=10 src=11
+M t=10 p=11
+Y t=10 m=11
+t3d_counts_after_t0.sv:7: $finish called at 11 (1s)
+=== verilator
+compile rc=0
+run rc=0
+P t=0 src=01
+M t=0 p=01
+Y t=0 m=01
+P t=5 src=10
+M t=5 p=10
+Y t=5 m=10
+P t=5 src=10
+M t=5 p=10
+Y t=5 m=10
+P t=10 src=11
+M t=10 p=11
+Y t=10 m=11
+P t=10 src=11
+M t=10 p=11
+Y t=10 m=11
+- t3d_counts_after_t0.sv:7: Verilog $finish
+P t=11 src=11
+M t=11 p=11
+Y t=11 m=11
+P t=11 src=11
+M t=11 p=11
+Y t=11 m=11
+=== vita[pre-native pre-interp pre-vm post3-native post3-interp post3-vm]
+rc=0
+P t=0 src=01
+M t=0 p=01
+Y t=0 m=01
+P t=5 src=10
+M t=5 p=10
+Y t=5 m=10
+P t=10 src=11
+M t=10 p=11
+Y t=10 m=11
+simulation ended (Finish) at time 11
+errors=0 warnings=1 notes=0
+=== vita[post2-native post2-interp post2-vm]
+rc=0
+P t=0 src=01
+Y t=0 m=xx
+M t=0 p=01
+Y t=0 m=01
+P t=5 src=10
+M t=5 p=10
+Y t=5 m=10
+P t=10 src=11
+M t=10 p=11
+Y t=10 m=11
+simulation ended (Finish) at time 11
+errors=0 warnings=1 notes=0
+=== block 2 | combined [iverilog+verilator+PRE+POST3+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./t3d_counts_after_t0.out3 | 1393 bytes | identical to block 1
+=== end

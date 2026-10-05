@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__r2__n04_typedef_func
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/r2/n04_typedef_func.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells/r2
+oracles_present: iverilog
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: r1/diff/v2/n04_typedef_func
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/v2/n04_typedef_func/iv.cout | 40 bytes
+No top level modules, and no -s option.
+=== block 2 | vita [POST] | r1/diff/v2/n04_typedef_func/post.cerr | 446 bytes
+n04_typedef_func.sv:3:3: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: no design units found in source
+errors=1 warnings=0 notes=1
+=== block 3 | vita [POST] | r1/diff/v2/n04_typedef_func/post.crc | 2 bytes
+1
+=== block 4 | vita [POST] | r1/diff/v2/n04_typedef_func/post.err | 446 bytes | identical to block 2
+=== block 5 | vita [POST] | r1/diff/v2/n04_typedef_func/post.out | 0 bytes
+
+=== block 6 | vita [POST] | r1/diff/v2/n04_typedef_func/post.rc | 2 bytes | identical to block 3
+=== block 7 | vita [POST2] | r1/diff/v2/n04_typedef_func/post2.cerr | 104 bytes
+error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: no design units found in source
+errors=1 warnings=0 notes=0
+=== block 8 | vita [POST2] | r1/diff/v2/n04_typedef_func/post2.crc | 2 bytes | identical to block 3
+=== block 9 | vita [POST2] | r1/diff/v2/n04_typedef_func/post2.err | 104 bytes | identical to block 7
+=== block 10 | vita [POST2] | r1/diff/v2/n04_typedef_func/post2.out | 0 bytes | identical to block 5
+=== block 11 | vita [POST2] | r1/diff/v2/n04_typedef_func/post2.rc | 2 bytes | identical to block 3
+=== block 12 | vita [PRE] | r1/diff/v2/n04_typedef_func/pre.cerr | 104 bytes | identical to block 7
+=== block 13 | vita [PRE] | r1/diff/v2/n04_typedef_func/pre.crc | 2 bytes | identical to block 3
+=== block 14 | vita [PRE] | r1/diff/v2/n04_typedef_func/pre.err | 104 bytes | identical to block 7
+=== block 15 | vita [PRE] | r1/diff/v2/n04_typedef_func/pre.out | 0 bytes | identical to block 5
+=== block 16 | vita [PRE] | r1/diff/v2/n04_typedef_func/pre.rc | 2 bytes | identical to block 3
+=== end

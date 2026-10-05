@@ -1,0 +1,163 @@
+category	path_or_glob	count	bytes	reason
+binary	g/post1/*	1	7371072	built binary (Mach-O/ELF)
+binary	g/post1/sep/*	4	29484224	built binary (Mach-O/ELF)
+binary	g/post2/*	1	7371088	built binary (Mach-O/ELF)
+binary	g/post2/sep/*	4	29484288	built binary (Mach-O/ELF)
+binary	g/post3/*	1	7387600	built binary (Mach-O/ELF)
+binary	g/post4/*	1	7387600	built binary (Mach-O/ELF)
+binary	g/st/vlo/*	1	314192	built binary (Mach-O/ELF)
+binary	g/st/vlo/*.o	4	357600	built binary (Mach-O/ELF)
+binary	post_a/*	1	7404336	built binary (Mach-O/ELF)
+binary	post_a/s1/*	1	7371168	built binary (Mach-O/ELF)
+binary	post_a/s1/sep/*	4	29484608	built binary (Mach-O/ELF)
+binary	post_a/s2/*	1	7387744	built binary (Mach-O/ELF)
+binary	post_a/s2/sep/*	4	29550976	built binary (Mach-O/ELF)
+binary	post_a/s3/*	1	7404304	built binary (Mach-O/ELF)
+binary	post_a/s3/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	post_a/s4/*	1	7404304	built binary (Mach-O/ELF)
+binary	post_a/s4/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	post_a/s5/*	1	7404304	built binary (Mach-O/ELF)
+binary	post_a/s5/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	post_a/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	post_a/v1/*	1	7404336	built binary (Mach-O/ELF)
+binary	post_a/v3/*	1	7404320	built binary (Mach-O/ELF)
+binary	post_a/w0/*	1	7338016	built binary (Mach-O/ELF)
+binary	post_b/*	1	7404336	built binary (Mach-O/ELF)
+binary	post_b/s/*	1	7404304	built binary (Mach-O/ELF)
+binary	post_b/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	post_c/*	1	7404336	built binary (Mach-O/ELF)
+binary	post_c/s/*	1	7404304	built binary (Mach-O/ELF)
+binary	post_c/sep/*	4	29617216	built binary (Mach-O/ELF)
+binary	pre/*	1	7338016	built binary (Mach-O/ELF)
+binary	pre/sep/*	4	29352000	built binary (Mach-O/ELF)
+build-object	g/st/vlo/*.a	1	36216	verilator obj dir
+build-object	g/st/vlo/*.cpp	8	23824	verilator obj dir
+build-object	g/st/vlo/*.d	5	3804	verilator obj dir
+build-object	g/st/vlo/*.dat	1	2573	verilator obj dir
+build-object	g/st/vlo/*.h	5	7674	verilator obj dir
+build-object	g/st/vlo/*.mk	2	3574	verilator obj dir
+doc-draft	docs_probe/*.md	4	472829	ROADMAP/CHANGELOG/PROBE_CATALOG/REMAINING_WORK/archive copies
+doc-draft	g/*.md	1	2718058	ROADMAP/CHANGELOG/PROBE_CATALOG/REMAINING_WORK/archive copies
+duplicate-table	post_a/sweep/*.tsv	1	217576	byte-identical to g/sweep/map.tsv (md5 4b8e9f421af96b6a04a9ebbe11278a99)
+iverilog-image	g/st/*.vvp	1	2105	iverilog compiled image
+iverilog-image	g/st2/*.vvp	1	4304	iverilog compiled image
+iverilog-image	post_a/st2/*.vvp	1	4304	iverilog compiled image
+log	*.log	1	1621	gate / corpus log
+log	*.rc	1	2	gate / corpus log
+log	a/*	2	22	timestamp marker
+log	g/*.log	13	1625643	build/gate/harness run log or exit-code marker
+log	g/*.rc	6	12	build/gate/harness run log or exit-code marker
+log	g/sweep/*.log	1	0	build/gate/harness run log or exit-code marker
+log	g/sweep/*.rc	1	5	build/gate/harness run log or exit-code marker
+log	gate/*.log	2	812466	gate / corpus log
+log	gate/*.rc	2	4	gate / corpus log
+log	post_a/*.log	18	1461895	build/gate/harness run log or exit-code marker
+log	post_a/*.rc	6	12	build/gate/harness run log or exit-code marker
+log	post_a/v1/*.log	1	605	build/gate/harness run log or exit-code marker
+log	post_a/v3/*.log	1	605	build/gate/harness run log or exit-code marker
+log	post_b/*.log	8	725302	build/gate/harness run log or exit-code marker
+log	post_b/*.rc	2	4	build/gate/harness run log or exit-code marker
+log	post_c/*.log	8	729619	build/gate/harness run log or exit-code marker
+log	post_c/*.rc	1	2	build/gate/harness run log or exit-code marker
+mutation	post_a/mut/*	1	5	mutation battery files (*/mut/)
+mutation	post_a/mut/*.apply	10	111	mutation battery files (*/mut/)
+mutation	post_a/mut/*.cells	10	1847	mutation battery files (*/mut/)
+mutation	post_a/mut/*.log	12	70189	mutation battery files (*/mut/)
+mutation	post_a/mut/*.out	1	0	mutation battery files (*/mut/)
+mutation	post_a/mut/*.py	1	5037	mutation battery files (*/mut/)
+mutation	post_a/mut/*.rc	10	38	mutation battery files (*/mut/)
+mutation	post_a/mut/*.sh	1	1621	mutation battery files (*/mut/)
+mutation	post_a/mut/*.txt	1	1925	mutation battery files (*/mut/)
+mutation	post_a/mut/orig/*.rs	3	214708	mutation battery files (*/mut/)
+mutation	post_b/mut/*.log	6	31912	mutation battery files (*/mut/)
+mutation	post_b/mut/*.py	2	1473	mutation battery files (*/mut/)
+mutation	post_b/mut/orig/*.rs	1	16363	mutation battery files (*/mut/)
+mutation	post_c/mut/*.log	2	12171	mutation battery files (*/mut/)
+mutation	post_c/mut/*.md5	1	33	mutation battery files (*/mut/)
+mutation	post_c/mut/orig/*.rs	2	67313	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.diff	3	346	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.log	11	2439388	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.md5	4	132	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.orig	1	15162	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.out	1	0	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.rc	13	29	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.sh	1	2144	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.txt	1	1048	mutation battery files (*/mut/)
+mutation	r1/sound/mut/*.wall	4	15	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.diff	4	501	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.log	11	36430	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.md5	5	165	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.orig	1	16363	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.out	1	0	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.rc	12	35	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.sh	1	2334	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.txt	2	0	mutation battery files (*/mut/)
+mutation	r2/sound/mut/*.wall	5	12	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.diff	2	206	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.log	8	828947	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.md5	3	99	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.orig	2	123530	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.out	1	0	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.rc	9	23	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.sh	1	2050	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.txt	2	0	mutation battery files (*/mut/)
+mutation	r3/sound/mut/*.wall	3	9	mutation battery files (*/mut/)
+no-oracle-output	docs_probe/* (6 vita-only .sv + their outputs)	6	1666	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	docs_probe/x1/*.postc	40	8141	vita-only outputs of s587/x1 cells (no .sv in s589)
+no-oracle-output	docs_probe/x1/*.pre	40	8161	vita-only outputs of s587/x1 cells (no .sv in s589)
+no-oracle-output	g/st/* (1 vita-only .sv + their outputs)	1	137	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	g/sweep/c/* (5684 vita-only .sv + their outputs)	28420	29755703	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	g/sweep/c/*.vcd	12	11264	VCD written by vita-only sweep cells ($dumpfile name, no owner stem)
+no-oracle-output	post_a/sweep/* (5684 vita-only .sv + their outputs)	39788	38267179	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	post_a/sweep/*.vcd	12	11264	VCD written by vita-only sweep cells ($dumpfile name, no owner stem)
+no-oracle-output	post_c/two/* (4 vita-only .sv + their outputs)	4	1046	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	r2/diff/c/n/* (2 vita-only .sv + their outputs)	2	534	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	r2/sound/c/two/* (2 vita-only .sv + their outputs)	14	8052	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	r3/diff/c/n/* (2 vita-only .sv + their outputs)	2	534	vita-only cells: no oracle output anywhere (SPEC cell rule)
+other	g/sweep/*.txt	1	831899	sweep source path list (20173 candidate paths from s580-s588; map.tsv keeps the 5756 kept)
+perf-ab	post_a/ab/*	1	5	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.log	9	13518	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.md5	9	297	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.out	1	0	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.py	1	1474	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.rc	9	18	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/ab/*.sh	1	741	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/abv/*.log	4	9463	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/abv/*.sh	1	505	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/abv/*.txt	7	5824	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/abv/o/*.json	1	77956	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+perf-ab	post_a/abv/o/*.jsonl	1	137	elaboration A/B timing runs (ibex corpus; logs, md5, obs json)
+rust-patch	g/*.diff	2	64576	probe diff
+rust-patch	post_a/*.diff	1	72186	saved patch/diff of the Rust source
+rust-patch	post_a/v1/orig/*.rs	2	137417	saved Rust source
+rust-patch	post_b/*.diff	1	81219	saved patch/diff of the Rust source
+rust-patch	post_b/*.rs	1	7360	saved Rust source
+rust-patch	post_c/*.diff	2	185501	saved patch/diff of the Rust source
+rust-patch	post_c/*.rs	1	2093	saved Rust source
+script	docs_probe/*.py	1	2297	helper script (not a generator/runner of a kept set)
+script	g/*.py	3	6743	helper script (not a generator/runner of a kept set)
+script	g/*.sh	2	801	helper script (not a generator/runner of a kept set)
+script	post_a/*.py	7	24810	helper script (not a generator/runner of a kept set)
+script	post_a/*.sh	3	1007	helper script (not a generator/runner of a kept set)
+script	post_a/fu/*.py	1	3519	helper script (not a generator/runner of a kept set)
+script	post_b/*.sh	2	787	helper script (not a generator/runner of a kept set)
+script	post_c/*.sh	1	922	helper script (not a generator/runner of a kept set)
+script	post_c/two/*.sh	1	995	helper script (not a generator/runner of a kept set)
+script	r1/diff/*.sh	1	625	helper script (not a generator/runner of a kept set)
+script	r2/diff/*.sh	6	5592	helper script (not a generator/runner of a kept set)
+script	r3/diff/*.sh	6	5760	helper script (not a generator/runner of a kept set)
+slice-record-doc	*.md	4	74819	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	*.txt	2	11787	commit message draft (verdict source; not a cell file)
+slice-record-doc	r1/diff/*.md	1	5179	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	r1/sound/*.md	1	8347	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	r2/diff/*.md	1	4951	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	r2/sound/*.md	1	6668	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	r3/diff/*.md	1	4186	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	r3/sound/*.md	1	5146	slice record / report doc (verdict source; not a cell file)
+vita-staged-artefact	g/st/*.velab	1	561	vita staged artefact
+vita-staged-artefact	g/st/*.vu	1	821	vita staged artefact
+vita-staged-artefact	g/st/wl/*.toml	1	339	vita staged library
+vita-staged-artefact	g/st/wl/units/*.vu	1	492	vita staged library
+vita-staged-artefact	g/st2/*.velab	1	1393	staged artefact / compiled image
+vita-staged-artefact	g/st2/wl/*.toml	1	567	vita staged library
+vita-staged-artefact	g/st2/wl/units/*.vu	2	2050	vita staged library

@@ -1,0 +1,7 @@
+`timescale 1ns/1ns
+module t;
+  localparam logic signed [7:0] AS [0:1] = '{-8'sd4, 8'sd2};
+  logic [((AS[0] + 8'd0) == 8'hFC) + 3:0] v;
+  initial #1 $display("vb=%0d", $bits(v));
+  initial #5 $finish;
+endmodule

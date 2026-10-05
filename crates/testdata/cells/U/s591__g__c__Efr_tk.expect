@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c__Efr_tk
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c/Efr_tk.sv
+roadmap_row: §2 🆕 U
+set: g/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: [PRE=some]
+verdict_source: s591/g/c.summ:11
+notes: grounding PRE-vs-oracles tag; not a POST mover (absent from impl/moves_ground.txt)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Efr_tk.ivl | 67 bytes
+tk r=3
+post 2.500000
+Efr_tk.sv:13: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Efr_tk.vl | 242 bytes
+tk r=1
+post 2.500000
+- Efr_tk.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 6.250 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Efr_tk.s2v | 60 bytes
+rc=1
+Efr_tk.sv:5:5: Parse error: missing expected `endtask`
+=== block 4 | vita [DEV3] | ./Efr_tk.dev3 | 191 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+tk r=1
+post 2.500000
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./Efr_tk.dev3.route | 14 bytes
+top t frame 1
+=== block 6 | vita [POSTA] | ./Efr_tk.posta | 191 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./Efr_tk.posta.route | 14 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./Efr_tk.postb | 191 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./Efr_tk.postb.route | 14 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./Efr_tk.pre | 191 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./Efr_tk.pre.route | 14 bytes | identical to block 5
+=== block 12 | vita [PROTO1] | ./Efr_tk.post1 | 191 bytes | identical to block 4
+=== block 13 | vita [PROTO1] | ./Efr_tk.post1.route | 14 bytes | identical to block 5
+=== block 14 | vita [PROTO2] | ./Efr_tk.post2 | 191 bytes | identical to block 4
+=== block 15 | vita [PROTO2] | ./Efr_tk.post2.route | 14 bytes | identical to block 5
+=== end

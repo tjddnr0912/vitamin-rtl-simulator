@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__S6_gc
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/S6_gc.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE=iv=s2v
+verdict_source: s593/a/p3.summ:595
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./S6_gc.ivl | 50 bytes
+GC=def
+S6_gc.sv:8: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./S6_gc.vl | 152 bytes
+%Error: S6_gc.sv:5:12: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./S6_gc.s2v | 53 bytes
+GC=def
+S6_gc.s2v.v:14: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./S6_gc.cut | 76 bytes
+GC=def
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./S6_gc.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./S6_gc.pre | 76 bytes | identical to block 4
+=== block 7 | vita [pre] | ./S6_gc.pre.route | 0 bytes | identical to block 5
+=== end

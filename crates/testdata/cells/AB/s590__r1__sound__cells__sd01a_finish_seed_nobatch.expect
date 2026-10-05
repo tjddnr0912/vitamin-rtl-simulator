@@ -1,0 +1,233 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__sound__cells__sd01a_finish_seed_nobatch
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/sound/cells/sd01a_finish_seed_nobatch.sv
+roadmap_row: §2 🆕 AB
+set: r1/sound/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTB,PRE2_SEP,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: sd01a ($finish in exempt f1 -> F4004, no processes): iverilog `f2 t=0 x=0` + `$finish called at 0` · verilator `f2 t=0 x=0` · PRE2 all backends `f2 t=0 x=x`,`f2 t=0 x=0` (native end Quiescent, interp/vm Error) · POST native `f2 t=0 x=0` Error | POST interp/vm
+verdict_source: s590/r1/sound/REPORT.md:13
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 4
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/sound/out/sd01a_finish_seed_nobatch.out | 3466 bytes
+##### sd01a_finish_seed_nobatch
+=== iverilog run rc=0
+f2 t=0 x=0
+sd01a_finish_seed_nobatch.sv:4: $finish called at 0 (1s)
+=== verilator run rc=0
+f2 t=0 x=0
+=== PRE2 native [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Quiescent) at time 0
+errors=1 warnings=1 notes=0
+=== PRE2 interp [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== PRE2 vm [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POST native [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POST interp [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POST vm [BACKEND SPLIT]
+rc=1
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+--- PRE2==POST per backend: native=False interp=False vm=False
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/sound/out/sd01a_finish_seed_nobatch.out | 4960 bytes
+##### sd01a_finish_seed_nobatch
+=== iverilog run rc=0
+f2 t=0 x=0
+sd01a_finish_seed_nobatch.sv:4: $finish called at 0 (1s)
+
+=== verilator run rc=0
+- sd01a_finish_seed_nobatch.sv:4: Verilog $finish
+f2 t=0 x=0
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE2 native [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Quiescent) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE2 interp [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE2 vm [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTA native [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTA interp [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTA vm [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTC (native=interp=vm)
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+--- sd01a_finish_seed_nobatch PRE2==POSTA:000 PRE2==POSTC:000 POSTA==POSTC:011 split=PRE2,POSTA
+=== block 3 | combined [iverilog+verilator|PRE3+POSTC+POSTD] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/sound/out/sd01a_finish_seed_nobatch.out | 3683 bytes
+##### sd01a_finish_seed_nobatch
+=== iverilog run rc=0
+f2 t=0 x=0
+sd01a_finish_seed_nobatch.sv:4: $finish called at 0 (1s)
+
+=== verilator run rc=0
+- sd01a_finish_seed_nobatch.sv:4: Verilog $finish
+f2 t=0 x=0
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 native [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Quiescent) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE3 interp [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE3 vm [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTC (native=interp=vm)
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+--- sd01a_finish_seed_nobatch PRE3==POSTC:000 PRE3==POSTD:000 POSTC==POSTD:111 split=PRE3
+=== block 4 | vita [PRE3+POSTD+POSTE] | r4/sound/out/sd01a_finish_seed_nobatch.out | 3327 bytes
+##### sd01a_finish_seed_nobatch
+=== PRE3 native [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Quiescent) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE3 interp [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== PRE3 vm [BACKEND SPLIT]
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+f2 t=0 x=x
+f2 t=0 x=0
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+=== POSTE (native=interp=vm)
+rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sd01a_finish_seed_nobatch.sv:4:62: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f1] [at time 0]
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+
+--- sd01a_finish_seed_nobatch PRE3==POSTD:000 PRE3==POSTE:000 POSTD==POSTE:111 split=PRE3
+=== end

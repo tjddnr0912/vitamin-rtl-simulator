@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__probes2__n09q
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/probes2/n09q.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: probes2
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: self-contradiction
+verdict_source: s581/REPORT.md:18
+notes: oracle values quoted at s581/REPORT.md:18
+blocks: 0
+=== end

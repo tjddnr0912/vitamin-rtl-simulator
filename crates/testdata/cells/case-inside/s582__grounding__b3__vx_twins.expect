@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__vx_twins
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/vx_twins.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_vx_twins/vl.out | 909 bytes
+A ci  u8 vs 8'sh80 +16'sh7777   m=0
+A pc  u8 vs 8'sh80 +16'sh7777   m=0
+A op  u8 in {8'sh80,16'sh7777}  m=1
+B ci  s8 vs 8'sh80 +32'd12345   m=0
+B pc  s8 vs 8'sh80 +32'd12345   m=0
+B op  s8 in {8'sh80,32'd12345}  m=1
+C ci  u4 vs 4'sb1?10 +8'h55     m=0
+C cz  u4 vs 4'sb1?10 +8'h55     m=0
+C op  u4 in {4'sb1?10,8'h55}    m=1
+C weq u4 ==? 4'sb1?10           m=1
+D ci  u8=0E vs 4'sb1?10         m=0
+D weq u8=0E ==? 4'sb1?10        m=1
+D op  u8=0E in {4'sb1?10}       m=1
+E ci  u8=FE vs 4'sb1?10         m=1
+E weq u8=FE ==? 4'sb1?10        m=0
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/vx_twins.sv:22: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 270.270 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b3/out_vx_twins/sv.out | 582 bytes
+A ci  u8 vs 8'sh80 +16'sh7777   m=1
+A pc  u8 vs 8'sh80 +16'sh7777   m=1
+A op  u8 in {8'sh80,16'sh7777}  m=1
+B ci  s8 vs 8'sh80 +32'd12345   m=1
+B pc  s8 vs 8'sh80 +32'd12345   m=1
+B op  s8 in {8'sh80,32'd12345}  m=1
+C ci  u4 vs 4'sb1?10 +8'h55     m=1
+C cz  u4 vs 4'sb1?10 +8'h55     m=1
+C op  u4 in {4'sb1?10,8'h55}    m=1
+C weq u4 ==? 4'sb1?10           m=1
+D ci  u8=0E vs 4'sb1?10         m=1
+D weq u8=0E ==? 4'sb1?10        m=1
+D op  u8=0E in {4'sb1?10}       m=1
+E ci  u8=FE vs 4'sb1?10         m=0
+E weq u8=FE ==? 4'sb1?10        m=0
+sv2v.v:76: $finish called at 10 (1s)
+rc=0
+=== end

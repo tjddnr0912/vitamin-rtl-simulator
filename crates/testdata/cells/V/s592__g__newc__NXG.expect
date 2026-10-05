@@ -1,0 +1,70 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__newc__NXG
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/newc/NXG.sv
+roadmap_row: §2 🆕 V
+set: g/newc
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_c,post_d,post_d_st,pre
+verdict: IEEE:UP WRONG->LOUD  SVVL:n/a
+verdict_source: s592/r3_x_newc_pre.out:13
+notes: named at s592/IMPL.md:283
+alias: g/c3/NXG (byte-identical source) verdict: IEEE:UP WRONG->LOUD  SVVL:n/a verdict_source: s592/r3_x_newc_pre.out:13
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./NXG.iv.txt | 44 bytes
+@b
+NXG.sv:8: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./NXG.vl.txt | 140 bytes
+%Error: NXG.sv:4:27: syntax error, unexpected generate
+%Error: NXG.sv:9:1: syntax error, unexpected endmodule
+%Error: Cannot continue
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./NXG.vlb.txt | 488 bytes
+%Error: NXG.sv:4:27: syntax error, unexpected generate
+    4 |     if (K == 2) begin : x generate initial #1 $display("@a"); endgenerate end
+      |                           ^~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: NXG.sv:9:1: syntax error, unexpected endmodule
+    9 | endmodule
+      | ^~~~~~~~~
+%Error: Cannot continue
+        ... This fatal error may be caused by the earlier error(s); resolve those first.
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./NXG.sv.txt | 49 bytes
+@a
+NXG.sv2v.v:17: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./NXG.post_b.txt | 450 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+NXG.sv:4:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 6:24), so vita's elaboration passes choose different branches here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate if [in top.g]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_c] | ./NXG.post_c.txt | 172 bytes
+@b
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 7 | vita [post_d] | ./NXG.post_d.txt | 413 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+NXG.sv:4:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 6:24), so vita's elaboration passes choose different branches here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference [in top.g]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 8 | vita [pre] | ./NXG.pre.txt | 172 bytes
+@a
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== end

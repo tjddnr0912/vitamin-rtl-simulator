@@ -1,0 +1,116 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__p__k2_ca_assert
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/p/k2_ca_assert.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: p
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g__k2_ca_assert k2_ca_assert
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/k2_ca_assert.out | 1040 bytes
+##### k2_ca_assert
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+t=3 y=0
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+- k2_ca_assert.sv:16: Verilog $finish
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+=== iverilog compile rc=0 run rc=0
+t=1 y=1
+ERROR: k2_ca_assert.sv:3: 
+       Time: 2  Scope: top.u.f
+t=3 y=0
+k2_ca_assert.sv:16: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=2 warnings=1 notes=0
+=== block 2 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/k2_ca_assert.out | 1536 bytes
+##### k2_ca_assert
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+t=3 y=0
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+- k2_ca_assert.sv:16: Verilog $finish
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+=== iverilog compile rc=0 run rc=0
+t=1 y=1
+ERROR: k2_ca_assert.sv:3: 
+       Time: 2  Scope: top.u.f
+t=3 y=0
+k2_ca_assert.sv:16: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=1 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=1 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__k2_ca_assert.out | 1539 bytes
+##### g__k2_ca_assert
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[2] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+t=3 y=0
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[3] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+- k2_ca_assert.sv:16: Verilog $finish
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+[4] %Error: k2_ca_assert.sv:3: Assertion failed in top.u.f: 'assert' failed.
+=== iverilog compile rc=0 run rc=0
+t=1 y=1
+ERROR: k2_ca_assert.sv:3: 
+       Time: 2  Scope: top.u.f
+t=3 y=0
+k2_ca_assert.sv:16: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 0]
+t=1 y=1
+k2_ca_assert.sv:3:5: error[VITA-E4003] E-RUN-USER-ERROR: Assertion failed [in top.u.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=1 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=1 W4031/E4003+stdout==one-shot: True
+=== end

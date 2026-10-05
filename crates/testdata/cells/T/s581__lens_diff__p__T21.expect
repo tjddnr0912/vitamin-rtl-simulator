@@ -1,0 +1,111 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__T21
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/T21.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./T21.iv.txt | 111 bytes
+@A hit
+@B hit
+@C hit
+@E def
+@F hit
+@G hit
+@H hit
+@K def
+@L hit
+@M def
+@N hit
+@O hit
+@Q def
+@R hit
+@S def
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./T21.vl.txt | 324 bytes
+%Error: T21.sv:10:13: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T21.sv:10:25: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T21.sv:11:13: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./T21.vlb.txt | 1785 bytes
+%Error: T21.sv:10:13: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   10 |   case (1) (4'b1x00 === 4'b1x00): begin : l initial $display("@L hit"); end default: begin : ld initial $display("@L def"); end endcase
+      |             ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: T21.sv:10:25: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   10 |   case (1) (4'b1x00 === 4'b1x00): begin : l initial $display("@L hit"); end default: begin : ld initial $display("@L def"); end endcase
+      |                         ^~~~~~~
+%Error: T21.sv:11:13: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   11 |   case (0) (4'b1x00 == 4'b1x00): begin : m initial $display("@M hit"); end default: begin : md initial $display("@M def"); end endcase
+      |             ^~~~~~~
+%Error: T21.sv:11:24: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   11 |   case (0) (4'b1x00 == 4'b1x00): begin : m initial $display("@M hit"); end default: begin : md initial $display("@M def"); end endcase
+      |                        ^~~~~~~
+%Error: T21.sv:12:13: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+   12 |   case (1) (1'bx || 1'b1): begin : n initial $display("@N hit"); end default: begin : nd initial $display("@N def"); end endcase
+      |             ^~~~
+%Error: Exiting due to 5 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./T21.sv.txt | 197 bytes
+T21.sv:2:26: Warning: Number literal 4294967296 exceeds 32 bits; truncating to 0.
+T21.sv:3:26: Warning: Number literal 'h100000000 exceeds 32 bits; truncating to 'h0.
+sv2v: Negative exponent
+
+rc=1
+=== block 5 | vita [POST] | ./T21.post.txt | 277 bytes
+@A hit
+@B hit
+@C hit
+@E def
+@F hit
+@G hit
+@H hit
+@K def
+@L hit
+@M def
+@N hit
+@O hit
+@Q def
+@R hit
+@S def
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [POST-T] | ./T21.pt.txt | 277 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./T21.pre.txt | 277 bytes
+@A hit
+@B hit
+@C def
+@E def
+@F hit
+@G hit
+@H hit
+@K def
+@L hit
+@M def
+@N hit
+@O hit
+@Q def
+@R hit
+@S def
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== end

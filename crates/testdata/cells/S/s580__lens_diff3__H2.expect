@@ -1,0 +1,308 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff3__H2
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff3/H2.sv
+roadmap_row: §2 🆕 S
+set: lens_diff3
+oracles_present: iverilog,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: Q1: CLEAN on values
+verdict_source: s580/lens_diff3/REPORT.md:32
+notes: R4 cmp3_post4 bucket(s): both×3,post3×9 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 66
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./H2_R01.iv.txt | 47 bytes
+R01 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./H2_R02.iv.txt | 47 bytes
+R02 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./H2_R03.iv.txt | 47 bytes
+R03 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./H2_R04.iv.txt | 47 bytes
+R04 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./H2_R05.iv.txt | 47 bytes
+R05 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./H2_R06.iv.txt | 47 bytes
+R06 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./H2_R07.iv.txt | 47 bytes
+R07 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./H2_R08.iv.txt | 47 bytes
+R08 0
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./H2_R09.iv.txt | 47 bytes
+R09 0
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 10 | oracle iverilog 13.0 (version captured in slice) | ./H2_R10.iv.txt | 47 bytes
+R10 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 11 | oracle iverilog 13.0 (version captured in slice) | ./H2_R11.iv.txt | 47 bytes
+R11 1
+H2.sv:46: $finish called at 2 (1s)
+
+rc=0
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R01.sv.txt | 55 bytes
+R01 1
+H2_R01.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 13 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R02.sv.txt | 55 bytes
+R02 1
+H2_R02.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 14 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R03.sv.txt | 55 bytes
+R03 1
+H2_R03.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 15 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R04.sv.txt | 55 bytes
+R04 1
+H2_R04.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 16 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R05.sv.txt | 55 bytes
+R05 1
+H2_R05.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 17 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R06.sv.txt | 109 bytes
+H2_R06.sv2v.v:37: error: Variable uL.st does not have a field named: a.
+1 error(s) during elaboration.
+
+rc=1
+=== block 18 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R07.sv.txt | 55 bytes
+R07 1
+H2_R07.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 19 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R08.sv.txt | 55 bytes
+R08 0
+H2_R08.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 20 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R09.sv.txt | 55 bytes
+R09 0
+H2_R09.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 21 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R10.sv.txt | 55 bytes
+R10 1
+H2_R10.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 22 | oracle sv2v 0.0.13 (version captured in slice) | ./H2_R11.sv.txt | 55 bytes
+R11 1
+H2_R11.sv2v.v:39: $finish called at 2 (1s)
+
+rc=0
+=== block 23 | vita [POST] | ./H2_R01.post.txt | 175 bytes
+R01 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 24 | vita [POST] | ./H2_R02.post.txt | 175 bytes
+R02 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 25 | vita [POST] | ./H2_R03.post.txt | 175 bytes
+R03 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 26 | vita [POST] | ./H2_R04.post.txt | 175 bytes
+R04 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 27 | vita [POST] | ./H2_R05.post.txt | 175 bytes
+R05 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 28 | vita [POST] | ./H2_R06.post.txt | 476 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+H2.sv:29:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `uL.st.a` (no such cross-instance net or parameter)
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 29 | vita [POST] | ./H2_R07.post.txt | 341 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 30 | vita [POST] | ./H2_R08.post.txt | 175 bytes
+R08 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 31 | vita [POST] | ./H2_R09.post.txt | 175 bytes
+R09 0
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 32 | vita [POST] | ./H2_R10.post.txt | 341 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:41:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 33 | vita [POST] | ./H2_R11.post.txt | 341 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 34 | vita [POST2] | ./H2_R01.post2.txt | 175 bytes | identical to block 23
+=== block 35 | vita [POST2] | ./H2_R02.post2.txt | 175 bytes | identical to block 24
+=== block 36 | vita [POST2] | ./H2_R03.post2.txt | 175 bytes | identical to block 25
+=== block 37 | vita [POST2] | ./H2_R04.post2.txt | 175 bytes | identical to block 26
+=== block 38 | vita [POST2] | ./H2_R05.post2.txt | 175 bytes | identical to block 27
+=== block 39 | vita [POST2] | ./H2_R06.post2.txt | 268 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:29:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `uL.st.a` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 40 | vita [POST2] | ./H2_R07.post2.txt | 175 bytes
+R07 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 41 | vita [POST2] | ./H2_R08.post2.txt | 175 bytes | identical to block 30
+=== block 42 | vita [POST2] | ./H2_R09.post2.txt | 175 bytes | identical to block 31
+=== block 43 | vita [POST2] | ./H2_R10.post2.txt | 175 bytes
+R10 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 44 | vita [POST2] | ./H2_R11.post2.txt | 175 bytes
+R11 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 45 | vita [POST3] | ./H2_R01.post3.txt | 175 bytes
+R01 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 46 | vita [POST3] | ./H2_R02.post3.txt | 175 bytes
+R02 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 47 | vita [POST3] | ./H2_R03.post3.txt | 175 bytes
+R03 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 48 | vita [POST3] | ./H2_R04.post3.txt | 175 bytes
+R04 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 49 | vita [POST3] | ./H2_R05.post3.txt | 175 bytes
+R05 1
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 50 | vita [POST3] | ./H2_R06.post3.txt | 476 bytes | identical to block 28
+=== block 51 | vita [POST3] | ./H2_R07.post3.txt | 341 bytes | identical to block 29
+=== block 52 | vita [POST3] | ./H2_R08.post3.txt | 175 bytes | identical to block 30
+=== block 53 | vita [POST3] | ./H2_R09.post3.txt | 175 bytes | identical to block 31
+=== block 54 | vita [POST3] | ./H2_R10.post3.txt | 341 bytes | identical to block 32
+=== block 55 | vita [POST3] | ./H2_R11.post3.txt | 341 bytes | identical to block 33
+=== block 56 | vita [PRE] | ./H2_R01.pre.txt | 175 bytes | identical to block 23
+=== block 57 | vita [PRE] | ./H2_R02.pre.txt | 175 bytes | identical to block 24
+=== block 58 | vita [PRE] | ./H2_R03.pre.txt | 175 bytes | identical to block 25
+=== block 59 | vita [PRE] | ./H2_R04.pre.txt | 175 bytes | identical to block 26
+=== block 60 | vita [PRE] | ./H2_R05.pre.txt | 175 bytes | identical to block 27
+=== block 61 | vita [PRE] | ./H2_R06.pre.txt | 438 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+H2.sv:29:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `uL.st.a` (no such cross-instance net or parameter)
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 62 | vita [PRE] | ./H2_R07.pre.txt | 303 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 63 | vita [PRE] | ./H2_R08.pre.txt | 175 bytes | identical to block 30
+=== block 64 | vita [PRE] | ./H2_R09.pre.txt | 175 bytes | identical to block 31
+=== block 65 | vita [PRE] | ./H2_R10.pre.txt | 303 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:41:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 66 | vita [PRE] | ./H2_R11.pre.txt | 303 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+H2.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== end

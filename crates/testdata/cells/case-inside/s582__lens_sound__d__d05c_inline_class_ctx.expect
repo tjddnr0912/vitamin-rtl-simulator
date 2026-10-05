@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d05c_inline_class_ctx
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d05c_inline_class_ctx.sv
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: verilator
+vita_tags: POST,POST2,POST3
+verdict: over-refusal, loud
+verdict_source: s582/lens_sound/REPORT.md:24
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+blocks: 14
+=== block 1 | oracle verilator 5.052 (version captured in slice) | lens_sound/d/out_d05c_inline_class_ctx/vl.out | 440 bytes
+t1 y1=10 y2=11
+t2 y1=20 y2=21
+t3 y1=20 y2=21
+meth=1
+meth2=2
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:26: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 4ps; walltime 0.000 s; speed 74.074 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | vita [POST] | lens_sound/d/out_d05c_inline_class_ctx/post.out | 1094 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:15:13: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a call in an item, or a case expression that cannot be evaluated exactly once here (IEEE 1800-2017 §12.5.4) [in $class$C$meth]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `top.y1` (declare it wire/logic) [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `top.y2` (declare it wire/logic) [in top]
+errors=3 warnings=1 notes=0
+rc=1
+=== block 3 | vita [POST] | lens_sound/r2/rerun/d05c_inline_class_ctx.post | 1094 bytes | identical to block 2
+=== block 4 | vita [POST] | post2/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post.err | 1089 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:15:13: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a call in an item, or a case expression that cannot be evaluated exactly once here (IEEE 1800-2017 §12.5.4) [in $class$C$meth]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `top.y1` (declare it wire/logic) [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d05c_inline_class_ctx.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `top.y2` (declare it wire/logic) [in top]
+errors=3 warnings=1 notes=0
+=== block 5 | vita [POST] | post2/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post.out | 5 bytes
+rc=1
+=== block 6 | vita [POST2] | lens_sound/r2/rerun/d05c_inline_class_ctx.post2 | 1094 bytes | identical to block 2
+=== block 7 | vita [POST2] | lens_sound/r3/rerun/d05c_inline_class_ctx.post2 | 1094 bytes | identical to block 2
+=== block 8 | vita [POST2] | post2/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post2.err | 1089 bytes | identical to block 4
+=== block 9 | vita [POST2] | post2/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post2.out | 5 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post2.err | 1089 bytes | identical to block 4
+=== block 11 | vita [POST2] | post3/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post2.out | 5 bytes | identical to block 5
+=== block 12 | vita [POST3] | lens_sound/r3/rerun/d05c_inline_class_ctx.post3 | 1094 bytes | identical to block 2
+=== block 13 | vita [POST3] | post3/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post3.err | 1089 bytes | identical to block 4
+=== block 14 | vita [POST3] | post3/cmp/lens_sound__d__d05c_inline_class_ctx.sv/post3.out | 5 bytes | identical to block 5
+=== end

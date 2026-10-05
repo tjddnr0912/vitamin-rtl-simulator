@@ -1,0 +1,61 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__c14__lb1_star_then_reader
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/c14/lb1_star_then_reader.sv
+roadmap_row: §2 🆕 Z
+set: c14
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE,PROTO/POSTA,PROTO/POSTB,PROTO/R5hpss,unrecorded(s3b)/PRE,unrecorded(s3dbg2)/PRE,unrecorded(s3rel)/PRE,unrecorded(s3relb)/PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PROTO/POSTA: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/POSTB: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hpss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+blocks: 12
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./lb1_star_then_reader.out | 300 bytes
+##### lb1_star_then_reader.sv
+=== iverilog
+compile rc=0
+run rc=0
+r t=0 w=01 v=01 y=01
+F v=01 y=01
+=== verilator
+compile rc=0
+run rc=0
+r t=0 w=01 v=01 y=01
+F v=01 y=01
+=== vita (native=interp=vm)
+rc=0
+r t=0 w=01 v=xx y=01
+F v=01 y=01
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+=== block 2 | vita [A] | r2run/r1a/c14__lb1_star_then_reader.out | 133 bytes
+=== vita (native=interp=vm)
+rc=0
+r t=0 w=01 v=xx y=01
+F v=01 y=01
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+=== block 3 | vita [POST2] | r2run/post2/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 4 | vita [POST2] | r3run/post2/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 5 | vita [POST3] | r3run/post3/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 6 | vita [POST3] | r4run/post3/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 7 | vita [POST4] | r4run/post4/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 8 | vita [PRE] | r2run/pre/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 9 | vita [PRE] | r3run/pre/c14__lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 10 | vita [PROTO/POSTA] | r2/POSTA/lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== block 11 | vita [PROTO/POSTB] | r2/POSTB/lb1_star_then_reader.out | 133 bytes
+=== vita (native=interp=vm)
+rc=0
+r t=0 w=01 v=01 y=01
+F v=01 y=01
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+=== block 12 | vita [PROTO/R5hpss] | c14/proto/R5hpss/lb1_star_then_reader.out | 133 bytes | identical to block 2
+=== end

@@ -1,0 +1,50 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Ex_pac
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Ex_pac.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: same(wrong)
+verdict_source: s591/plan/a1.cls:51
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Ex_pac.ivl | 64 bytes
+pac top r=00011111
+Ex_pac.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Ex_pac.vl | 373 bytes
+%Warning-WIDTHEXPAND: Ex_pac.sv:4:16: Operator ASSIGNW expects 8 bits on the Assign RHS, but Assign RHS's REPLICATE generates 5 bits.
+pac top r=00011111
+- Ex_pac.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Ex_pac.s2v | 68 bytes
+pac top r=00011111
+Ex_pac.s2v.v:14: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Ex_pac.dev3 | 189 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pac top r=00000000
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./Ex_pac.dev3.route | 15 bytes
+top fc frame 1
+=== block 6 | vita [POSTA] | ./Ex_pac.posta | 189 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./Ex_pac.posta.route | 15 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./Ex_pac.postb | 189 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./Ex_pac.postb.route | 15 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./Ex_pac.pre | 189 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./Ex_pac.pre.route | 15 bytes | identical to block 5
+=== block 12 | vita [PROTO2] | ./Ex_pac.post2 | 189 bytes | identical to block 4
+=== block 13 | vita [PROTO2] | ./Ex_pac.post2.route | 15 bytes | identical to block 5
+=== end

@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t1_params
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t1_params.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8,T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+alias: post_c/lanes2_work/t_t1_params/t1_params (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./t1_params.vl | 282 bytes
+A=7 B=7 C=3 D=8 E=3 F=7 G=7
+H=7 bH=4 I=3 J=7 N=10 L=7
+W=7
+- t1_params.sv:60: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 166.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_t1_params.build | 0 bytes
+
+=== block 3 | vita [S7] | ./t1_params.s7 | 561 bytes
+t1_params.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+A=7 B=7 C=3 D=8 E=3 F=7 G=7
+H=7 bH=4 I=3 J=7 N=10 L=7
+W=7
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+rc=0
+=== block 4 | vita [S8] | ./t1_params.s8 | 561 bytes | identical to block 3
+=== end

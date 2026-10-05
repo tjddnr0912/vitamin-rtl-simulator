@@ -1,0 +1,86 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__rc1_selfhdr
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/rc1_selfhdr.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/PLAN.md:52
+alias: post_a/cells/a/rc1_selfhdr (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/a/rc1_selfhdr (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./rc1_selfhdr.ivl | 603 bytes
+rc1_selfhdr.sv:2: assert: elab_expr.cc:2927: failed assertion def
+sh: line 1: 40116 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2282f6a1e" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg282f6a1e" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli282f6a1e"
+     40117 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh282f6a1e" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./rc1_selfhdr.vl | 245 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing --assert -Wno-fatal --Mdir vl_rc1_selfhdr -o sim rc1_selfhdr.sv
+build_rc=139
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./rc1_selfhdr.s2v | 247 bytes
+rc1_selfhdr.s2v.v:2: error: No function named `f' found in this context (top).
+rc1_selfhdr.s2v.v:2: error: Dimensions must be constant.
+rc1_selfhdr.s2v.v:2       : This MSB expression violates the rule: f('sd2)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [P1d] | ./rc1_selfhdr.p4 | 262 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 8: 40110 Abort trap: 6           $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 5 | vita [P1d] | ./rc1_selfhdr.p4nb | 283 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 9: 40111 Abort trap: 6           VITA_PROTO_OFF=ibody $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 6 | vita [POST-a] | post_a/cells/a/rc1_selfhdr.post | 275 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+rc1_selfhdr.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `q.f(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 7 | vita [POST-a] | r2/diff/impl/a/rc1_selfhdr.post | 275 bytes | identical to block 6
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/rc1_selfhdr.spost | 303 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc1_selfhdr.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `q.f(…)` has no constant-fold arm [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 9 | vita [POST-b] | post_a/cells/a/rc1_selfhdr.pb | 275 bytes | identical to block 6
+=== block 10 | vita [POST-b] | post_a/cells/a/rc1_selfhdr.postb | 275 bytes | identical to block 6
+=== block 11 | vita [POST-b] | r2/diff/impl/a/rc1_selfhdr.pb | 275 bytes | identical to block 6
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/rc1_selfhdr.spostb | 303 bytes | identical to block 8
+=== block 13 | vita [POST-c] | post_a/cells/a/rc1_selfhdr.postc | 275 bytes | identical to block 6
+=== block 14 | vita [POST-c] | r2/diff/impl/a/rc1_selfhdr.pc | 275 bytes | identical to block 6
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/rc1_selfhdr.spostc | 303 bytes | identical to block 8
+=== block 16 | vita [PRE] | ./rc1_selfhdr.pre | 275 bytes | identical to block 6
+=== block 17 | vita [S2] | post_a/cells/a/rc1_selfhdr.s2 | 275 bytes | identical to block 6
+=== block 18 | vita [S2-sep] | post_a/cells/a/rc1_selfhdr.ss2 | 303 bytes | identical to block 8
+=== block 19 | vita [S3] | post_a/cells/a/rc1_selfhdr.s3 | 275 bytes | identical to block 6
+=== block 20 | vita [S4] | post_a/cells/a/rc1_selfhdr.s4 | 275 bytes | identical to block 6
+=== block 21 | vita [S5] | post_a/cells/a/rc1_selfhdr.s5 | 275 bytes | identical to block 6
+=== block 22 | vita [S5-sep] | post_a/cells/a/rc1_selfhdr.ss5 | 303 bytes | identical to block 8
+=== block 23 | vita [W0] | post_a/cells/a/rc1_selfhdr.w0 | 275 bytes | identical to block 6
+=== end

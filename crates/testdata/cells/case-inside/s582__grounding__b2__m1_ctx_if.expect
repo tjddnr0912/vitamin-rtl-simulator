@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m1_ctx_if
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m1_ctx_if.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: verilator,sv2v
+vita_tags: PRE
+verdict: agree; PRE `inside` op sizes each pair right
+verdict_source: s582/grounding/REPORT.md:106
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 4
+=== block 1 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m1_ctx_if/vl.out | 879 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:7:24: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:10:21: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:12:21: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+%Error: Exiting due to 3 error(s)
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m1_ctx_if/vl_build.log | 1827 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:7:24: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                      : ... note: In instance 'top'
+    7 |     m = (v8 inside {a4 + b4}); $display("p3 v8 in {a4+b4} = %0d", m);
+      |                        ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:10:21: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                       : ... note: In instance 'top'
+   10 |     m = (v8 inside {~a4}); $display("p5 F7 in {~a4} = %0d", m);
+      |                     ^
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m1_ctx_if.sv:12:21: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                       : ... note: In instance 'top'
+   12 |     m = (v8 inside {~a4}); $display("p6 07 in {~a4} = %0d", m);
+      |                     ^
+%Error: Exiting due to 3 error(s)
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m1_ctx_if/sv.out | 175 bytes
+p1 (a+b) in {9'h100} = 1
+p2 (a+b) == 9'h100 = 1
+p3 v8 in {a4+b4} = 1
+p4 v8 in {[a4+b4:FF]} = 1
+p5 F7 in {~a4} = 1
+p6 07 in {~a4} = 0
+sv2v.v:30: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [PRE] | grounding/b2/out_m1_ctx_if/vita.out | 302 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+p1 (a+b) in {9'h100} = 1
+p2 (a+b) == 9'h100 = 1
+p3 v8 in {a4+b4} = 1
+p4 v8 in {[a4+b4:FF]} = 1
+p5 F7 in {~a4} = 1
+p6 07 in {~a4} = 0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c20_hier_unit_timed
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c20_hier_unit_timed.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE,PRE(H-spelling)
+verdict: agree
+verdict_source: s583/r1/diff/REPORT.md:70
+notes: aux: r1/diff/cells/c20_hier_unit_timed_H.sv
+alias: r1/diff/w/c20_hier_unit_timed/c20_hier_unit_timed (byte-identical source) verdict: agree verdict_source: s583/r1/diff/REPORT.md:70
+aux: s583__r1__diff__cells__c20_hier_unit_timed.aux/r1/diff/cells/c20_hier_unit_timed_H.sv (origin s583/r1/diff/cells/c20_hier_unit_timed_H.sv)
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: PRE(H-spelling): unresolved (no row in the slice META binaries table)
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+PRE(H-spelling)+POST] verilator 5.052 (version captured in slice) | ./c20_hier_unit_timed.out | 2512 bytes
+##### c20_hier_unit_timed
+=== verilator compile rc=0 run rc=0
+[1] %Error: c20_hier_unit_timed.sv:8: Assertion failed in top.u.t: 'unique if' statement violated
+t=1 hier task
+t=2 hier task hit y=2
+[3] %Error: c20_hier_unit_timed.sv:3: Assertion failed in $unit.ut: 'unique if' statement violated
+t=3 unit task
+[4] %Error: c20_hier_unit_timed.sv:11: Assertion failed in top.u.tt: 'unique if' statement violated
+t=4 timed miss
+[6] %Error: c20_hier_unit_timed.sv:19: Assertion failed in top.gb[0].gb[0].gt: 'unique if' statement violated
+t=8 timed hit y=2
+- c20_hier_unit_timed.sv:29: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 hier task
+t=2 hier task hit y=2
+t=3 unit task
+t=4 timed miss
+t=8 timed hit y=2
+simulation ended (Finish) at time 9
+errors=0 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=0
+c20_hier_unit_timed_H.sv:8:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.t] [at time 1]
+t=1 hier task
+t=2 hier task hit y=2
+c20_hier_unit_timed_H.sv:3:29: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.ut] [at time 3]
+t=3 unit task
+c20_hier_unit_timed_H.sv:11:34: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.tt] [at time 4]
+t=4 timed miss
+c20_hier_unit_timed_H.sv:19:37: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gb[0].gt] [at time 6]
+t=8 timed hit y=2
+simulation ended (Finish) at time 9
+errors=0 warnings=5 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+c20_hier_unit_timed.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.t] [at time 1]
+t=1 hier task
+t=2 hier task hit y=2
+c20_hier_unit_timed.sv:3:10: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.ut] [at time 3]
+t=3 unit task
+c20_hier_unit_timed.sv:11:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.tt] [at time 4]
+t=4 timed miss
+c20_hier_unit_timed.sv:19:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gb[0].gt] [at time 6]
+t=8 timed hit y=2
+simulation ended (Finish) at time 9
+errors=0 warnings=5 notes=0
+--- PRE==POST (all backends): False
+--- staged vcmp=0 velab=0 vrun=0 W4031+stdout==one-shot: True
+=== end

@@ -1,0 +1,54 @@
+TOTAL {'variants': 170, 'cells': 1747, 'variants_identical': 136, 'cells_identical': 1249, 'variants_changed': 34, 'cells_changed': 288}
+### POST2->POST3
+lens_diff/P08.sv - | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 2} | H01:0->- H02:1->- H03:0->- H04:0->- H05:1->- Q01:1->- Q02:1->- W01:1->- W02:1->- W03:1->- W04:0->- W05:1->- W06:1->- W07:1->- W08:1->-
+lens_diff/P08.sv -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 2} | H01:0->- H02:1->- H03:0->- H04:0->- H05:1->- L01:1->- L02:0->- L09:1->- L20:0->- Q01:1->- Q02:1->- W01:1->- W02:1->- W03:1->- W04:0->- W05:1->- W06:1->- W07:1->- W08:1->-
+lens_diff/P09.sv - | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 4} | A1:0->- A2:1->- P1:0->- P2:1->- P3:1->- P4:1->-
+lens_diff/P09.sv -DNOP | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 2} | A1:0->- A2:1->- P3:1->- P4:1->-
+lens_diff/P09.sv -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 5} | A1:0->- A2:1->- P1:0->- P2:1->- P3:1->- P4:1->-
+lens_diff/P09.sv -DNOP -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 3} | A1:0->- A2:1->- P3:1->- P4:1->-
+lens_diff2/Q1.sv - | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1
+lens_diff2/Q1.sv -DIV | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1
+lens_diff2/Q2.sv - | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q2.sv -DCONSTS | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q2.sv -DIV | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q2.sv -DCONSTS -DIV | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q3.sv -DXBEFORE | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | AD1:-->4 ADS:-->4 G1:-->then GB:-->one GC1:-->one GL:-->lab1 GS:-->then LF0:-->0 LF1:-->1 LG:-->0 LT1:-->1 OV0:-->0 1 OV1:-->1 1 OVS:-->1 1 PK0:-->0 PK1:-->1 RB0:-->2 RB1:-->4 RBS:-->4
+lens_diff2/Q3.sv -DXBEFORE -DIV | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | AD1:-->4 ADS:-->4 G1:-->then GB:-->one GC1:-->one GL:-->lab1 GS:-->then LF0:-->0 LF1:-->1 LG:-->0 LT1:-->1 OV0:-->0 1 OV1:-->1 1 OVS:-->1 1 PK0:-->0 PK1:-->1 RB0:-->2 RB1:-->4 RBS:-->4
+lens_diff2/Q4.sv - | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 39} | H01:0->- H02:1->- H03:0->- H04:1->- H05:1->- H06:0->- H07:1->- H08:0->- H09:1->- H10:1->- H14:1->- H15:0->- H16:0->- H17:1->- H18:1->- H19:1->- H20:1->- H21:0->- H22:1->- H23:x->- H24:0->- H25:1->- H26:x->- H27:1->- H28:x->- H29:1->- H30:0->- H31:1->- H32:0->- H33:0->- H34:1->- H35:1->- H36:1->- H37:1->- H38:1->- H39:1->- UP1:0->- UP2:1->-
+lens_diff2/Q4.sv -DSTM | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3010': 3}->{'VITA-W1017': 1, 'VITA-E3009': 42, 'VITA-E3010': 3} | 
+lens_diff2/Q4.sv -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 40} | H01:0->- H02:1->- H03:0->- H04:1->- H05:1->- H06:0->- H07:1->- H08:0->- H09:1->- H10:1->- H14:1->- H15:0->- H16:0->- H17:1->- H18:1->- H19:1->- H20:1->- H21:0->- H22:1->- H23:x->- H24:0->- H25:1->- H26:x->- H27:1->- H28:x->- H29:1->- H30:0->- H31:1->- H32:0->- H33:0->- H34:1->- H35:1->- H36:1->- H37:1->- H38:1->- H39:1->- UP1:0->- UP2:1->-
+lens_diff2/Q4.sv -DSTM -DIV | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3010': 3}->{'VITA-W1017': 1, 'VITA-E3009': 43, 'VITA-E3010': 3} | 
+lens_diff2/Q6.sv -DXB | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | XB:-->one
+lens_diff2/Q6.sv -DXI | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | XI:-->one
+lens_diff2/Q6.sv -DPSEE -DPSEL -DREPE -DREPX -DSTR -DXB -DXE -DXI | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 2}->{'VITA-W1017': 1} | G0:-->1 G1:-->0 G2:-->1 PSEE:-->1 PSEL:-->1 REPE:-->0 REPX:-->0 XB:-->one XE:-->one XI:-->one
+lens_diff2/Q6.sv -DXB -DIV | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | XB:-->one
+lens_diff2/Q6.sv -DXI -DIV | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 1}->{'VITA-W1017': 1} | XI:-->one
+lens_diff2/Q6.sv -DPSEE -DPSEL -DREPE -DREPX -DSTR -DXB -DXE -DXI -DIV | rc 1->0 | {'VITA-W1017': 1, 'VITA-E3010': 2}->{'VITA-W1017': 1} | G0:-->1 G1:-->0 G2:-->1 PSEE:-->1 PSEL:-->1 REPE:-->0 REPX:-->0 XB:-->one XE:-->one XI:-->one
+lens_diff2/Q7.sv - | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | Z1:0->1 Z3:0->1 Z4:0->1
+lens_diff2/Q7.sv -DIV | rc 0->0 | {'VITA-W1017': 1}->{'VITA-W1017': 1} | Z1:0->1 Z3:0->1 Z4:0->1
+lens_diff2/Q8.sv - | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 5} | IU2:0->- IU3:1->- IU4:1->- IU5:0->- IU6:1->- K1:0->- K2:1->- K3:0->- K4:1->- K5:0->- K6:1->- K7:1->-
+lens_diff2/Q8.sv -DIU | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3009': 1}->{'VITA-W1017': 1, 'VITA-E3009': 6} | 
+lens_diff2/Q8.sv -DRR | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 6} | IU2:0->- IU3:1->- IU4:1->- IU5:0->- IU6:1->- K1:0->- K2:1->- K3:0->- K4:1->- K5:0->- K6:1->- K7:1->- RR1:0->-
+lens_diff2/Q8.sv -DIU -DRR | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3009': 1}->{'VITA-W1017': 1, 'VITA-E3009': 7} | 
+lens_diff2/Q8.sv -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 5} | IU2:0->- IU3:1->- IU4:1->- IU5:0->- IU6:1->- K1:0->- K2:1->- K3:0->- K4:1->- K5:0->- K6:1->- K7:1->-
+lens_diff2/Q8.sv -DIU -DIV | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3009': 1}->{'VITA-W1017': 1, 'VITA-E3009': 6} | 
+lens_diff2/Q8.sv -DRR -DIV | rc 0->1 | {'VITA-W1017': 1}->{'VITA-W1017': 1, 'VITA-E3009': 6} | IU2:0->- IU3:1->- IU4:1->- IU5:0->- IU6:1->- K1:0->- K2:1->- K3:0->- K4:1->- K5:0->- K6:1->- K7:1->- RR1:0->-
+lens_diff2/Q8.sv -DIU -DRR -DIV | rc 1->1 | {'VITA-W1017': 1, 'VITA-E3009': 1}->{'VITA-W1017': 1, 'VITA-E3009': 7} | 
+### POST(value)->POST3 differs
+lens_diff/P03.sv - | rc 0->0 | L09:0->1 L10:0->1 L12:0->1 L14:0->1 G09:else->then
+lens_diff/P03.sv -DIV | rc 0->0 | L09:0->1 L10:0->1 L12:0->1 L14:0->1 G09:else->then
+lens_diff/P05.sv -DK5 | rc 0->0 | K5b:0->1
+lens_diff/P05g.sv -DK5 | rc 0->0 | K5b:0->1
+lens_diff/P07.sv - | rc 0->0 | L20:1->0 L21:1->0 L22:1->0 AB:8->4 G20:then->else
+lens_diff/P07.sv -DARR | rc 0->0 | L20:1->0 L21:1->0 L22:1->0 AB:8->4 G20:then->else
+lens_diff/P07.sv -DLETT | rc 0->0 | L20:1->0 L21:1->0 L22:1->0 AB:8->4 K5b:0->1 G20:then->else
+lens_diff/P07.sv -DARR -DLETT | rc 0->0 | L20:1->0 L21:1->0 L22:1->0 AB:8->4 K5b:0->1 G20:then->else
+lens_diff/P08b.sv -DIV | rc 0->0 | L01:0->1 L02:1->0 L20:1->0 L09:0->1
+lens_diff/P10b.sv - | rc 0->0 | L30:0->1 L31:0->1 OV:8->2
+lens_diff/P10b.sv -DIV | rc 0->0 | L30:0->1 L31:0->1 OV:8->2
+lens_diff/P10c.sv - | rc 0->0 | OV:8->2
+lens_diff/P10c.sv -DIV | rc 0->0 | OV:8->2
+lens_diff2/Q2.sv - | rc 0->0 | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q2.sv -DIV | rc 0->0 | R41:0->1 R42:0->1 R43:0->1 R44:0->1 R46:0->1 R47:0->1 R48:1->0 R49:0->1 R52:0->1
+lens_diff2/Q7.sv - | rc 0->0 | Z1:0->1 Z3:0->1 Z4:0->1
+lens_diff2/Q7.sv -DIV | rc 0->0 | Z1:0->1 Z3:0->1 Z4:0->1

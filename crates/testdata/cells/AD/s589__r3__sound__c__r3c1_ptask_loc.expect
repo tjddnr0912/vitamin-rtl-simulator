@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r3__sound__c__r3c1_ptask_loc
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r3/sound/c/r3c1_ptask_loc.sv
+roadmap_row: §2 🆕 AD
+set: r3/sound/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-b,POST-c,PRE,POST-c-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r3/sound/REPORT.md:29
+alias: r3/sound/k/r3c1_ptask_loc (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r3c1_ptask_loc.ivl | 59 bytes
+v=15
+r3c1_ptask_loc.sv:12: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r3c1_ptask_loc.vl | 377 bytes
+%Warning-WIDTHEXPAND: r3c1_ptask_loc.sv:4:60: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 4 bits.
+v=15
+- r3c1_ptask_loc.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.128 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./r3c1_ptask_loc.s2v | 62 bytes
+v=15
+r3c1_ptask_loc.s2v.v:22: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POST-b] | ./r3c1_ptask_loc.postb | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=15
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-c] | ./r3c1_ptask_loc.postc | 175 bytes | identical to block 4
+=== block 6 | vita [POST-c-sep] | ./r3c1_ptask_loc.spostc | 231 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=15
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [PRE] | ./r3c1_ptask_loc.pre | 176 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=255
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== end

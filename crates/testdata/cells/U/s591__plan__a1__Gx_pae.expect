@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Gx_pae
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Gx_pae.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: same(loud)
+verdict_source: s591/plan/a1.cls:224
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Gx_pae.ivl | 79 bytes
+pae top.g[0] W=x
+pae top.g[1] W=x
+Gx_pae.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Gx_pae.vl | 254 bytes
+%Error: Gx_pae.sv:3:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: Gx_pae.sv:4:28: Expecting expression to be constant, but can't determine constant for FUNCREF 'fae'
+%Error: Exiting due to 2 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Gx_pae.s2v | 83 bytes
+pae top.g[0] W=x
+pae top.g[1] W=x
+Gx_pae.s2v.v:17: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Gx_pae.dev3 | 666 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Gx_pae.sv:4:28: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top.g[0]]
+Gx_pae.sv:4:28: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top.g[1]]
+Gx_pae.sv:5:16: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].W` [in top.g[0]]
+Gx_pae.sv:5:16: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[1].W` [in top.g[1]]
+errors=4 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./Gx_pae.posta | 666 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./Gx_pae.postb | 666 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./Gx_pae.pre | 666 bytes | identical to block 4
+=== block 8 | vita [PROTO2] | ./Gx_pae.post2 | 666 bytes | identical to block 4
+=== end

@@ -1,0 +1,81 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__nc4_ovr
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/nc4_ovr.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/PLAN.md:66
+alias: post_a/cells/a/nc4_ovr (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/a/nc4_ovr (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./nc4_ovr.ivl | 48 bytes
+P=2
+nc4_ovr.sv:8: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./nc4_ovr.vl | 224 bytes
+P=2
+- nc4_ovr.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 58.824 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./nc4_ovr.s2v | 52 bytes
+P=2
+nc4_ovr.s2v.v:17: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [P1d] | ./nc4_ovr.p4 | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=2
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [P1d] | ./nc4_ovr.p4nb | 172 bytes | identical to block 4
+=== block 6 | vita [POST-a] | post_a/cells/a/nc4_ovr.post | 468 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+nc4_ovr.sv:6:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in top]
+nc4_ovr.sv:7:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.u]
+errors=1 warnings=2 notes=0
+rc=1
+=== block 7 | vita [POST-a] | r2/diff/impl/a/nc4_ovr.post | 468 bytes | identical to block 6
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/nc4_ovr.spost | 496 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+nc4_ovr.sv:6:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in top]
+nc4_ovr.sv:7:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.u]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 9 | vita [POST-b] | post_a/cells/a/nc4_ovr.pb | 468 bytes | identical to block 6
+=== block 10 | vita [POST-b] | post_a/cells/a/nc4_ovr.postb | 468 bytes | identical to block 6
+=== block 11 | vita [POST-b] | r2/diff/impl/a/nc4_ovr.pb | 468 bytes | identical to block 6
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/nc4_ovr.spostb | 496 bytes | identical to block 8
+=== block 13 | vita [POST-c] | post_a/cells/a/nc4_ovr.postc | 468 bytes | identical to block 6
+=== block 14 | vita [POST-c] | r2/diff/impl/a/nc4_ovr.pc | 468 bytes | identical to block 6
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/nc4_ovr.spostc | 496 bytes | identical to block 8
+=== block 16 | vita [PRE] | ./nc4_ovr.pre | 468 bytes | identical to block 6
+=== block 17 | vita [S2] | post_a/cells/a/nc4_ovr.s2 | 468 bytes | identical to block 6
+=== block 18 | vita [S2-sep] | post_a/cells/a/nc4_ovr.ss2 | 496 bytes | identical to block 8
+=== block 19 | vita [S3] | post_a/cells/a/nc4_ovr.s3 | 468 bytes | identical to block 6
+=== block 20 | vita [S4] | post_a/cells/a/nc4_ovr.s4 | 468 bytes | identical to block 6
+=== block 21 | vita [S5] | post_a/cells/a/nc4_ovr.s5 | 468 bytes | identical to block 6
+=== block 22 | vita [S5-sep] | post_a/cells/a/nc4_ovr.ss5 | 496 bytes | identical to block 8
+=== block 23 | vita [W0] | post_a/cells/a/nc4_ovr.w0 | 468 bytes | identical to block 6
+=== end

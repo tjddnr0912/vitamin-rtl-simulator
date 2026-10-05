@@ -1,0 +1,84 @@
+e_barr_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_barr_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_barr_if_M            rc=0   W4031=0 sites=f:frame:0              out=[s=7 ] 
+e_barr_if_N            rc=0   W4031=0 sites=f:frame:0              out=[s=10 ] 
+e_case2_case_M         rc=0   W4031=1 sites=f:frame:1              out=[ci=match ] 
+e_case2_case_N         rc=0   W4031=1 sites=f:frame:1              out=[] 
+e_case2_if_M           rc=0   W4031=1 sites=f:frame:1              out=[ci=match ] 
+e_case2_if_N           rc=0   W4031=1 sites=f:frame:1              out=[] 
+e_cg_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: non-constant coverage bin value (follow-on) [in top]
+e_cg_case_N            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: non-constant coverage bin value (follow-on) [in top]
+e_cg_if_M              rc=0   W4031=0 sites=f:frame:0              out=[cov=100.0 ] 
+e_cg_if_N              rc=0   W4031=0 sites=f:frame:0              out=[cov=0.0 ] 
+e_cons_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a class-handle declaration initializer is outside the N7 MVP (assign `
+e_cons_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a class-handle declaration initializer is outside the N7 MVP (assign `
+e_cons_if_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a class-handle declaration initializer is outside the N7 MVP (assign `
+e_cons_if_N            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a class-handle declaration initializer is outside the N7 MVP (assign `
+e_fform_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_fform_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_fform_if_M           rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[b=8 ] 
+e_fform_if_N           rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[b=11 ] 
+e_fret_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_fret_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_fret_if_M            rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[b=8 ] 
+e_fret_if_N            rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[b=11 ] 
+e_frpt_case_M          rc=0   W4031=1 sites=f:frame:1,g:frame:1    out=[g=7 ] 
+e_frpt_case_N          rc=0   W4031=0 sites=f:frame:1,g:frame:1    out=[g=10 ] 
+e_frpt_if_M            rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[g=7 ] 
+e_frpt_if_N            rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[g=10 ] 
+e_irpt_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a runtime (non-constant) `repeat(n)` count in an intra-assignment even
+e_irpt_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a runtime (non-constant) `repeat(n)` count in an intra-assignment even
+e_irpt_if_M            rc=0   W4031=0 sites=f:frame:0              out=[x=5 t=13 ] 
+e_irpt_if_N            rc=0   W4031=0 sites=f:frame:0              out=[x=5 t=19 ] 
+e_ktrp2_case_M         rc=0   W4031=1 sites=f:frame:1,w:frame:1    out=[n=7 ] 
+e_ktrp2_case_N         rc=0   W4031=0 sites=f:frame:1,w:frame:1    out=[n=10 ] 
+e_ktrp2_if_M           rc=0   W4031=0 sites=f:frame:0,w:frame:1    out=[n=7 ] 
+e_ktrp2_if_N           rc=0   W4031=0 sites=f:frame:0,w:frame:1    out=[n=10 ] 
+e_ktrpt_case_M         rc=0   W4031=1 sites=f:frame:1,w:frame:1    out=[t=13 ] 
+e_ktrpt_case_N         rc=0   W4031=0 sites=f:frame:1,w:frame:1    out=[t=19 ] 
+e_ktrpt_if_M           rc=0   W4031=0 sites=f:frame:0,w:frame:1    out=[t=13 ] 
+e_ktrpt_if_N           rc=0   W4031=0 sites=f:frame:0,w:frame:1    out=[t=19 ] 
+e_nrpt_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a runtime (non-constant) `repeat(n)` count in a non-blocking intra-ass
+e_nrpt_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a runtime (non-constant) `repeat(n)` count in a non-blocking intra-ass
+e_nrpt_if_M            rc=0   W4031=0 sites=f:frame:0              out=[x=5 ] 
+e_nrpt_if_N            rc=0   W4031=0 sites=f:frame:0              out=[x=5 ] 
+e_pswr_case_M          rc=0   W4031=0 sites=f:frame:1              out=[pw=1 ] 
+e_pswr_case_N          rc=0   W4031=0 sites=f:frame:1              out=[pw=1 ] 
+e_pswr_if_M            rc=0   W4031=0 sites=f:frame:1              out=[pw=7f ] 
+e_pswr_if_N            rc=0   W4031=0 sites=f:frame:1              out=[pw=3ff ] 
+e_psww_case_M          rc=0   W4031=0 sites=f:frame:1              out=[pw=00000001 ] 
+e_psww_case_N          rc=0   W4031=0 sites=f:frame:1              out=[pw=00000001 ] 
+e_psww_if_M            rc=0   W4031=0 sites=f:frame:1              out=[pw=0000007f ] 
+e_psww_if_N            rc=0   W4031=0 sites=f:frame:1              out=[pw=000003ff ] 
+e_qhigh_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported system function in expression [in top]
+e_qhigh_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported system function in expression [in top]
+e_qhigh_if_M           rc=0   W4031=0 sites=f:frame:0              out=[h=3 ] 
+e_qhigh_if_N           rc=0   W4031=0 sites=f:frame:0              out=[h=x ] 
+e_qleft_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are co
+e_qleft_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are co
+e_qleft_if_M           rc=0   W4031=0 sites=f:frame:0              out=[l=0 ] 
+e_qleft_if_N           rc=0   W4031=0 sites=f:frame:0              out=[l=x ] 
+e_qsizp_case_M         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported system function in expression [in top]
+e_qsizp_case_N         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: unsupported system function in expression [in top]
+e_qsizp_if_M           rc=0   W4031=0 sites=f:frame:0              out=[s=4 ] 
+e_qsizp_if_N           rc=0   W4031=0 sites=f:frame:0              out=[s=x ] 
+e_sel2_case_M          rc=0   W4031=3 sites=f:frame:1              out=[m=00000000a0000000 ] 
+e_sel2_case_N          rc=0   W4031=0 sites=f:frame:1              out=[m=00000a0000000000 ] 
+e_sel2_if_M            rc=0   W4031=3 sites=f:frame:1              out=[m=00000000a0000000 ] 
+e_sel2_if_N            rc=0   W4031=0 sites=f:frame:1              out=[m=00000a0000000000 ] 
+e_sel3_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupporte
+e_sel3_case_N          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupporte
+e_sel3_if_M            rc=0   W4031=0 sites=f:frame:0              out=[m=78 ] 
+e_sel3_if_N            rc=0   W4031=0 sites=f:frame:0              out=[m=45 ] 
+e_stm_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constan
+e_stm_case_N           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constan
+e_stm_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constan
+e_stm_if_N             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constan
+e_td_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_td_case_N            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+e_td_if_M              rc=0   W4031=0 sites=f:frame:0              out=[b=8 ] 
+e_td_if_N              rc=0   W4031=0 sites=f:frame:0              out=[b=11 ] 
+e_trpt_case_M          rc=0   W4031=1 sites=f:frame:1              out=[t=13 ] 
+e_trpt_case_N          rc=0   W4031=0 sites=f:frame:1              out=[t=19 ] 
+e_trpt_if_M            rc=0   W4031=0 sites=f:frame:0              out=[t=13 ] 
+e_trpt_if_N            rc=0   W4031=0 sites=f:frame:0              out=[t=19 ] 

@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__post_b__k2__k12d_imp_body_explicit
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/post_b/k2/k12d_imp_body_explicit.sv
+roadmap_row: §2 🆕 AD
+set: post_b/k2
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-b,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./k12d_imp_body_explicit.ivl | 66 bytes
+v=7
+k12d_imp_body_explicit.sv:16: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./k12d_imp_body_explicit.vl | 391 bytes
+%Warning-WIDTHEXPAND: k12d_imp_body_explicit.sv:4:40: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's REPLICATE generates 3 bits.
+v=7
+- k12d_imp_body_explicit.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.692 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./k12d_imp_body_explicit.s2v | 69 bytes
+v=7
+k12d_imp_body_explicit.s2v.v:25: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POST-b] | ./k12d_imp_body_explicit.postb | 255 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+k12d_imp_body_explicit.sv:9:40: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared function `g` [in top.$func$h]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [PRE] | ./k12d_imp_body_explicit.pre | 255 bytes | identical to block 4
+=== end

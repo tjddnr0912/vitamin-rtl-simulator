@@ -1,0 +1,17 @@
+| cell | PRE | POST | POST2 | iverilog (lens: default gen / -g2005; t/f1*: -g2005) | sv2v → iverilog | verilator 5.052 |
+|---|---|---|---|---|---|---|
+| grounding/b2/m6_casez_inside.sv | E2002×2 (rc=1) | E2002×1 (rc=1) | E2002×2 (rc=1) | ERR: m6_casez_inside.sv:3: syntax error; ERR: m6_casez_inside.sv:3: error: Incomprehensibl… (rc=2) | ERR: sv2v: m6_casez_inside.sv:3:23: Parse error: cannot use inside with cas; CallStack (fr… (rc=1) | ERR: %Error: m6_casez_inside.sv:3:27: Illegal to have inside on a casex/cas (rc=9) |
+| grounding/b2/m9_inside_ident.sv | m=0 | m=0 | E3009 name `inside` declared ×1 | ERR: m9_inside_ident.sv:2: syntax error; ERR: m9_inside_ident.sv:1: error: Syntax error in… (rc=7) | — | ERR: %Error: m9_inside_ident.sv:2:15: syntax error, unexpected inside; ERR: %Error: m9_ins… (rc=9) |
+| lens_diff/d/d01_ident.v | A m1=1 B m2=1 C m3=1 | A m1=0 B m2=0 C m3=0 | E3009 name `inside` declared ×3 | A m1=1 B m2=1 C m3=1 | — | A m1=1 B m2=1 C m3=1 |
+| lens_diff/d/d02_ident_loud.v | D m1=1 E m2=1 | E2002×2 (rc=1) | D m1=1 E m2=1 | D m1=1 E m2=1 | — | D m1=1 E m2=1 |
+| lens_diff/d/d03_bk.sv | A m1=1 B m2=1 C m3=1 | A m1=0 B m2=0 C m3=0 | E3009 name `inside` declared ×3 | A m1=1 B m2=1 C m3=1 | A m1=1 B m2=1 C m3=1 | A m1=1 B m2=1 C m3=1 |
+| lens_diff/d/d21_ident2.v | G m2=1; F m1=1 | E2002×1 (rc=1) | E3009 name `inside` declared ×1 | G m2=1; F m1=1 | — | G m2=1; F m1=1 |
+| lens_sound/d/d03_v2005_inside_ident.v | A x=2 vs inside[1:0] m=1; B x=6 vs inside+0 m=1 | A x=2 vs inside[1:0] m=0; B x=6 vs inside+0 m=0 | E3009 name `inside` declared ×2 | A x=2 vs inside[1:0] m=1; B x=6 vs inside+0 m=1 | — | — |
+| lens_sound/d/d10_casez_inside_ident.v | F casez x=2 vs inside[1:0] m=1 | E2002×1 (rc=1) | F casez x=2 vs inside[1:0] m=1 | F casez x=2 vs inside[1:0] m=1 | — | — |
+| tests/sv/f1a.sv | A m1=1 B m2=1 C m3=1 | A m1=0 B m2=0 C m3=0 | E3009 name `inside` declared ×3 | A m1=1 B m2=1 C m3=1 | ERR: f1a.sv:4:26: Parse error: unexpected token 'inside' (KW_inside) (rc=1) | ERR: %Error: f1a.sv:4:26: syntax error, unexpected inside; ERR: %Error: f1a.sv:6:5: syntax… (rc=9) |
+| tests/sv/f1b.sv | D m1=1 E m2=1 | E2002×2 (rc=1) | D m1=1 E m2=1 | D m1=1 E m2=1 | ERR: f1b.sv:4:16: Parse error: unexpected token 'inside' (KW_inside) (rc=1) | ERR: %Error: f1b.sv:4:16: syntax error, unexpected inside; ERR: %Error: f1b.sv:6:5: syntax… (rc=9) |
+| tests/sv/f1c.sv | F m1=1 m2=1 | E2002×2 (rc=1) | F m1=1 m2=1 | F m1=1 m2=1 | ERR: f1c.sv:4:16: Parse error: unexpected token 'inside' (KW_inside) (rc=1) | ERR: %Error: f1c.sv:4:16: syntax error, unexpected inside; ERR: %Error: f1c.sv:6:5: syntax… (rc=9) |
+| tests/sv/f1d.sv | G m2=1 | G m2=0 | E3009 name `inside` declared ×1 | G m2=1 | ERR: f1d.sv:5:18: Parse error: unexpected token 'inside' (KW_inside) (rc=1) | ERR: %Error: f1d.sv:5:18: syntax error, unexpected inside; ERR: %Error: f1d.sv:5:41: synta… (rc=9) |
+| tests/sv/f1e.sv | A m1=1 | A m1=0 | E3009 name `inside` declared ×1 | A m1=1 | A m1=1 | A m1=1 |
+| tests/sv/p01x.sv | E2002×2 (rc=1) | E2002×1 (rc=1) | E2002×2 (rc=1) | — | ERR: sv2v: p01x.sv:6:21: Parse error: cannot use inside with casex; CallStack (from HasCal… (rc=1) | ERR: %Error: p01x.sv:6:25: Illegal to have inside on a casex/casez (rc=9) |
+| tests/sv/p01z.sv | E2002×2 (rc=1) | E2002×1 (rc=1) | E2002×2 (rc=1) | — | ERR: sv2v: p01z.sv:6:21: Parse error: cannot use inside with casez; CallStack (from HasCal… (rc=1) | ERR: %Error: p01z.sv:6:25: Illegal to have inside on a casex/casez (rc=9) |

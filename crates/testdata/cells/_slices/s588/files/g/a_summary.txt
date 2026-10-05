@@ -1,0 +1,200 @@
+== a01_x2a_ret4
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a01_x2a_ret4.sv:5: error: Unable to evaluate parameter P value: top.fx(32'sd2) | rc=1
+  vl   : P=xxxx |  | rc=0
+  s2v  : | a01_x2a_ret4.s2v.v:7: error: Unable to evaluate parameter P value: top.fx(32'sd2) | rc=1
+== a02_ret4_never
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a02_ret4_never.sv:6: error: Unable to evaluate parameter P value: top.fx(32'sd2) | rc=1
+  vl   : P=xxxx |  | rc=0
+  s2v  : | a02_ret4_never.s2v.v:7: error: Unable to evaluate parameter P value: top.fx(32'sd2) | rc=1
+== a03_x2b_retint
+  PRE  : P=0 |  | rc=0
+  ivl  : | a03_x2b_retint.sv:5: error: Unable to evaluate parameter P value: top.fi(32'sd2) | rc=1
+  vl   : P=0 |  | rc=0
+  s2v  : | a03_x2b_retint.s2v.v:7: error: Unable to evaluate parameter P value: top.fi(32'sd2) | rc=1
+== a04_d10_untyped_px
+  PRE  : PX=0000 bx=4 |  | rc=0
+  ivl  : | a04_d10_untyped_px.sv:5: error: Unable to evaluate parameter PX value: top.fx(32'sd2) | rc=1
+  vl   : PX=xxxx bx=4 |  | rc=0
+  s2v  : | a04_d10_untyped_px.s2v.v:7: error: Unable to evaluate parameter PX value: top.fx(32'sd2) | rc=1
+== a05_d10_untyped_pi
+  PRE  : PI=0 bi=32 |  | rc=0
+  ivl  : | a05_d10_untyped_pi.sv:5: error: Unable to evaluate parameter PI value: top.fi(32'sd2) | rc=1
+  vl   : PI=x bi=32 |  | rc=0
+  s2v  : | a05_d10_untyped_pi.s2v.v:7: error: Unable to evaluate parameter PI value: top.fi(32'sd2) | rc=1
+== a06_d10_ps_ctl
+  PRE  : PS=-3 bs=6 neg=1 |  | rc=0
+  ivl  : PS=-3 bs=6 neg=1 |  | rc=0
+  vl   : PS=-3 bs=6 neg=1 |  | rc=0
+  s2v  : PS=-3 bs=6 neg=1 |  | rc=0
+== a07_x2c_local4
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a08_x2i_integer
+  PRE  : P=0 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== a09_x2l_bitwrite
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxx1 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== a10_x2d_rangewrite
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xx11 |  | rc=0
+  vl   : P=xx11 |  | rc=0
+  s2v  : P=xx11 |  | rc=0
+== a11_ipwrite
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=xx11 |  | rc=0
+  vl   : P=xx11 |  | rc=0
+  s2v  : P=xx11 |  | rc=0
+== a12_ret_bitwrite
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=xx1x |  | rc=0
+  vl   : P=xx1x |  | rc=0
+  s2v  : P=xx1x |  | rc=0
+== a13_ret_allbits
+  PRE  : P=11100100 |  | rc=0
+  ivl  : P=11100100 |  | rc=0
+  vl   : P=11100100 |  | rc=0
+  s2v  : P=11100100 |  | rc=0
+== a14_x2k_bound
+  PRE  : b=1 |  | rc=0
+  ivl  : | a14_x2k_bound.sv:5: error: Dimensions must be constant. | rc=1
+  vl   : | %Error: a14_x2k_bound.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : | a14_x2k_bound.s2v.v:7: error: Dimensions must be constant. | rc=1
+== a15_x2j_bitlocal
+  PRE  : P=7 |  | rc=0
+  ivl  : P=7 |  | rc=0
+  vl   : P=7 |  | rc=0
+  s2v  : P=x |  | rc=0
+== a16_intlocal
+  PRE  : P=5 |  | rc=0
+  ivl  : P=5 |  | rc=0
+  vl   : P=5 |  | rc=0
+  s2v  : P=x |  | rc=0
+== a17_byte_short_long
+  PRE  : P=3 |  | rc=0
+  ivl  : P=3 |  | rc=0
+  vl   : P=3 |  | rc=0
+  s2v  : P=x |  | rc=0
+== a18_time_local
+  PRE  : P=0000000000000000 |  | rc=0
+  ivl  : P=xxxxxxxxxxxxxxxx |  | rc=0
+  vl   : P=xxxxxxxxxxxxxxxx |  | rc=0
+  s2v  : P=xxxxxxxxxxxxxxxx |  | rc=0
+== a19_reg_local
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a20_signed_local
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a21_implicit_ret
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a21_implicit_ret.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=xxxx |  | rc=0
+  s2v  : | a21_implicit_ret.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a22_integer_ret
+  PRE  : P=0 |  | rc=0
+  ivl  : | a22_integer_ret.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=x |  | rc=0
+  s2v  : | a22_integer_ret.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a23_else_only
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a23_else_only.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=xxxx |  | rc=0
+  s2v  : | a23_else_only.s2v.v:9: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a24_arg_2state_formal
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== a25_arg_4state_formal
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a26_ret_2state_type
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== a27_2state_local_from_x
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a28_x2m_order
+  PRE  : Q=7 P=0000 |  | rc=0
+  ivl  : | a28_x2m_order.sv:10: error: Unable to evaluate parameter P value: top.g(32'sd3) | rc=1
+  vl   : Q=7 P=xxxx |  | rc=0
+  s2v  : | a28_x2m_order.s2v.v:16: error: Unable to evaluate parameter P value: top.g(32'sd3) | rc=1
+== a29_x2g_sibling_int
+  PRE  : P=7 |  | rc=0
+  ivl  : | a29_x2g_sibling_int.sv:9: error: Unable to evaluate parameter P value: bool<32>((32'sd7)+(<select=top.g(32'sd3 | rc=1
+  vl   : P=x |  | rc=0
+  s2v  : | a29_x2g_sibling_int.s2v.v:15: error: Unable to evaluate parameter P value: (32'sd7)+(<select=top.g(32'sd3)[(0) | rc=1
+== a30_x2f_callee
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a30_x2f_callee.sv:9: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=xxxx |  | rc=0
+  s2v  : | a30_x2f_callee.s2v.v:15: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a31_ret_int_from_xret
+  PRE  : P=0 |  | rc=0
+  ivl  : | a31_ret_int_from_xret.sv:5: error: Unable to evaluate parameter P value: bool<32>(<select=top.g(32'sd3)[(0)+:3 | rc=1
+  vl   : P=X |  | rc=0
+  s2v  : | a31_ret_int_from_xret.s2v.v:7: error: Unable to evaluate parameter P value: <select+=top.g(32'sd3)[(0)+:32] ex | rc=1
+== a32_local_int_lp_xlocal
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== a33_bitlp_xlocal
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== a34_blocklocal
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a35_loopvar_decl
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0011 |  | rc=0
+  vl   : P=0011 |  | rc=0
+  s2v  : P=0011 |  | rc=0
+== a36_struct_local
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a37_wide_ret70
+  PRE  : P=000000000000000000 |  | rc=0
+  ivl  : | a37_wide_ret70.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=xxxxxxxxxxxxxxxxxx |  | rc=0
+  s2v  : | a37_wide_ret70.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a38_ret64
+  PRE  : P=0000000000000000 |  | rc=0
+  ivl  : | a38_ret64.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=xxxxxxxxxxxxxxxx |  | rc=0
+  s2v  : | a38_ret64.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a39_init_local_ctl
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0011 |  | rc=0
+  vl   : P=0011 |  | rc=0
+  s2v  : P=0011 |  | rc=0
+== a40_assigned_before_read_ctl
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0011 |  | rc=0
+  vl   : P=0011 |  | rc=0
+  s2v  : P=0011 |  | rc=0

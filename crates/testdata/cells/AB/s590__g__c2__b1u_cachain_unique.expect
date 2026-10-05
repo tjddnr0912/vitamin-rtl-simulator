@@ -1,0 +1,82 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__g__c2__b1u_cachain_unique
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/g/c2/b1u_cachain_unique.sv
+roadmap_row: §2 🆕 AB
+set: g/c2
+oracles_present: verilator,iverilog,sv2v
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,P1,P2,P3,P4_MODE_A,P4_MODE_B,P4_MODE_C,P5_SIDE,P5,POSTDEV,P6,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: rep:->oracle
+verdict_source: s590/fin/axscan_fin.txt:35
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P1: md5 9110afe64059dca4da785a6099ac97f8 commit 303703f9
+vita_binary: P2: md5 dd968f69042f73e4e78a7c7e1395a057 commit 303703f9
+vita_binary: P3: md5 6cecfd4586bbe8a2d6f81be6c48f9036 commit 303703f9
+vita_binary: P4_MODE_A: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P4_MODE_B: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P4_MODE_C: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P5: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 11
+=== block 1 | combined [verilator+iverilog+sv2v|PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) sv2v 0.0.13 (version at preservation) | g/out_c2/b1u_cachain_unique.out | 996 bytes
+##### b1u_cachain_unique
+=== verilator compile rc=0 run rc=0
+t=1 y=01 z=01
+- b1u_cachain_unique.sv:15: Verilog $finish
+=== iverilog compile rc=0 msgs: b1u_cachain_unique.sv:8: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+t=1 y=01 z=01
+b1u_cachain_unique.sv:15: $finish called at 2 (1s)
+=== sv2v->iverilog run rc=0
+t=1 y=01 z=01
+s2v.v:30: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+b1u_cachain_unique.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+b1u_cachain_unique.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.g] [at time 0]
+t=1 y=01 z=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== block 2 | vita [PRE+P1] | g/p1_c2/b1u_cachain_unique.out | 1283 bytes
+##### b1u_cachain_unique
+=== vita PRE (native=interp=vm)
+rc=0
+b1u_cachain_unique.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+b1u_cachain_unique.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.g] [at time 0]
+t=1 y=01 z=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+b1u_cachain_unique.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+b1u_cachain_unique.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.g] [at time 0]
+t=1 y=01 z=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+--- PRE==POST (all backends): True
+=== block 3 | vita [PRE+P2] | g/p2_c2/b1u_cachain_unique.out | 1132 bytes
+##### b1u_cachain_unique
+=== vita PRE (native=interp=vm)
+rc=0
+b1u_cachain_unique.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+b1u_cachain_unique.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.g] [at time 0]
+t=1 y=01 z=01
+simulation ended (Finish) at time 2
+errors=0 warnings=2 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+b1u_cachain_unique.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+t=1 y=01 z=01
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+--- PRE==POST (all backends): False
+=== block 4 | vita [PRE+P3] | g/p3_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 5 | vita [PRE+P4_MODE_A] | g/p4a_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 6 | vita [PRE+P4_MODE_B] | g/p4b_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 7 | vita [PRE+P4_MODE_C] | g/p4c_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 8 | vita [PRE+P5] | g/p5a_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 9 | vita [PRE+P5_SIDE] | g/p5_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 10 | vita [PRE+P6] | p6/p6_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== block 11 | vita [PRE+POSTDEV] | p6/dev_c2/b1u_cachain_unique.out | 1132 bytes | identical to block 3
+=== end

@@ -1,0 +1,74 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__q8_matches
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/q8_matches.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b3/out_q8_matches/iv.out | 2240 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2: error: Syntax error in typedef clause.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:3: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:3: error: Invalid module instantiation
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5: error: Malformed statement
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8: error: Incomprehensible case expression.
+rc=12
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_q8_matches/vl.out | 1613 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2:26: Unsupported: void (for tagged unions)
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5:9: Unsupported: tagged union
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:6:5: Unsupported: case matches (for tagged union)
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:7:7: Unsupported: tagged union
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:7: Unsupported: tagged pattern
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:20: Unsupported: pattern variable
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:28: Can't find definition of variable: 'n'
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_q8_matches/vl_build.log | 2206 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2:26: Unsupported: void (for tagged unions)
+    2 |   typedef union tagged { void Invalid; int Valid; } VInt;
+      |                          ^~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5:9: Unsupported: tagged union
+    5 |     x = tagged Valid 5;
+      |         ^~~~~~
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:6:5: Unsupported: case matches (for tagged union)
+    6 |     case (x) matches
+      |     ^~~~
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:7:7: Unsupported: tagged union
+    7 |       tagged Invalid: m = 0;
+      |       ^~~~~~
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:7: Unsupported: tagged pattern
+    8 |       tagged Valid .n: m = n;
+      |       ^~~~~~
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:20: Unsupported: pattern variable
+    8 |       tagged Valid .n: m = n;
+      |                    ^
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:28: Can't find definition of variable: 'n'
+    8 |       tagged Valid .n: m = n;
+      |                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 7 error(s)
+=== block 4 | vita [PRE] | grounding/b3/out_q8_matches/vita.out | 2382 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected `packed` after `union` (unpacked union unsupported in v1), found identifier 'tagged'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:2:51: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '}'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:3:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found ';'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5:16: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found identifier 'Valid'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:5:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '5'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:7:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found identifier 'tagged'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found identifier 'Invalid'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found identifier 'Valid'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/q8_matches.sv:8:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found ':'
+errors=9 warnings=0 notes=0
+rc=1
+=== end

@@ -1,0 +1,98 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd__probes__P1
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd/probes/P1.sv
+roadmap_row: §2 🆕 S
+set: lens_snd
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: FINDING F1 (BLOCKING, new-in-slice)
+verdict_source: s580/lens_snd/REPORT.md:24
+notes: R4 cmp3_post4 bucket(s): pre×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P1.ivd.txt | 1061 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:22: warning: Extra digits given for sized binary constant.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:22: warning: Numeric constant truncated to 4 bits.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:32: warning: Extra digits given for sized binary constant.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:32: warning: Numeric constant truncated to 4 bits.
+L2=1 L4=1 L6=1 L10=1
+Q2=1 Q4=1 Q6=1 Q10=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:33: $finish called at 2 (1s)
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./P1.vl.txt | 644 bytes
+      |                                                                                         ^~~~~~~~
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:32:128: Too many digits for 4 bit number: '4'b1?000'
+   32 |     $display("Q2=%b Q4=%b Q6=%b Q10=%b", (4'd15 + 4'd1) ==? 5'b1?000, (~4'b0000) ==? 5'b1111?, (A + 4'd1) ==? 5'b1?000, u8 ==? 4'b1?000);
+      |                                                                                                                                ^~~~~~~~
+%Error: Exiting due to 4 error(s)
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./P1.vlb.txt | 1711 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:11:30: Too many digits for 4 bit number: '4'b1?000'
+   11 |   localparam L9 = U8 inside {4'b1?000};                
+      |                              ^~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:22:27: Too many digits for 4 bit number: '4'b1?000'
+   22 |   localparam L10 = U8 ==? 4'b1?000;                    
+      |                           ^~~~~~~~
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:29:89: Too many digits for 4 bit number: '4'b1?000'
+   29 |              (A + 4'd1) inside {5'b1?000}, (4'b1000 << 1) inside {5'b1?000}, u8 inside {4'b1?000});
+      |                                                                                         ^~~~~~~~
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:32:128: Too many digits for 4 bit number: '4'b1?000'
+   32 |     $display("Q2=%b Q4=%b Q6=%b Q10=%b", (4'd15 + 4'd1) ==? 5'b1?000, (~4'b0000) ==? 5'b1111?, (A + 4'd1) ==? 5'b1?000, u8 ==? 4'b1?000);
+      |                                                                                                                                ^~~~~~~~
+%Error: Exiting due to 4 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./P1.iv.txt | 303 bytes
+L1=1 L3=1 L5=1 L7=1 L8=1 L9=1 bits(rb)=2
+R1=1 R3=1 R5=1 R7=1 R9=1
+L2=1 L4=1 L6=1 L10=1
+Q2=1 Q4=1 Q6=1 Q10=1
+G1 then
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv2v.v:33: $finish called at 2 (1s)
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./P1.sv2v.err | 933 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:11:30: Warning: Number literal 4'b1?000 exceeds 4 bits; truncating to 4'bz000.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:22:27: Warning: Number literal 4'b1?000 exceeds 4 bits; truncating to 4'bz000.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:29:89: Warning: Number literal 4'b1?000 exceeds 4 bits; truncating to 4'bz000.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:32:128: Warning: Number literal 4'b1?000 exceeds 4 bits; truncating to 4'bz000.
+=== block 6 | vita [POST] | ./P1.post.txt | 284 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L1=0 L3=0 L5=0 L7=0 L8=1 L9=1 bits(rb)=1
+R1=1 R3=1 R5=1 R7=1 R9=1
+L2=0 L4=0 L6=0 L10=1
+Q2=1 Q4=1 Q6=1 Q10=1
+G1 else
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST] | r2/lens/snd_P1.post.txt | 284 bytes
+L1=0 L3=0 L5=0 L7=0 L8=1 L9=1 bits(rb)=1
+R1=1 R3=1 R5=1 R7=1 R9=1
+L2=0 L4=0 L6=0 L10=1
+Q2=1 Q4=1 Q6=1 Q10=1
+G1 else
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [POST2] | r2/lens/snd_P1.post2.txt | 284 bytes
+L1=1 L3=1 L5=1 L7=1 L8=1 L9=1 bits(rb)=2
+R1=1 R3=1 R5=1 R7=1 R9=1
+L2=1 L4=1 L6=1 L10=1
+Q2=1 Q4=1 Q6=1 Q10=1
+G1 then
+simulation ended (Finish) at time 2
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [PRE] | ./P1.pre.txt | 2091 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:6:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:7:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L3` value is not a constant: 5'b1111? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:8:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L5` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:9:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L7` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:10:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L8` value is not a constant: 4'b0?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:11:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L9` value is not a constant: 4'b1?000 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd/probes/P1.sv:13:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+errors=7 warnings=1 notes=0
+rc=1
+=== end

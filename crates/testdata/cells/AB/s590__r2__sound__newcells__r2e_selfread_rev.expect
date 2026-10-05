@@ -1,0 +1,179 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__sound__newcells__r2e_selfread_rev
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/sound/newcells/r2e_selfread_rev.sv
+roadmap_row: §2 🆕 AB
+set: r2/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: F2 MINOR, new instance (test teeth). MK1 and MKA survive --workspace 9119/9119; each puts back a call on a held net's declared default: MK1 r2e `gv t=0 v=z0`; MKA r2c `g3 t=0 x=z`. Pin r2e, r2c.
+verdict_source: s590/r2/sound/REPORT.md:11
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 3
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/sound/out/r2e_selfread_rev.out | 1365 bytes
+##### r2e_selfread_rev
+=== iverilog run rc=0
+gv t=0 v=zx
+f t=0 x=x
+gv t=0 v=x0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+r2e_selfread_rev.sv:12: $finish called at 10 (1s)
+
+=== verilator run rc=0
+f t=0 x=0
+gv t=0 v=00
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+- r2e_selfread_rev.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 625.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE2 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+gv t=0 v=zz
+f t=0 x=z
+gv t=0 v=zx
+f t=0 x=x
+gv t=0 v=xx
+f t=0 x=x
+gv t=0 v=x0
+f t=0 x=0
+gv t=0 v=00
+f t=0 x=0
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTA (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+--- r2e_selfread_rev PRE2==POSTA:000 PRE2==POSTC:000 POSTA==POSTC:111 split=-
+=== block 2 | combined [iverilog+verilator|PRE3+POSTC+POSTD] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/sound/out/r2e_selfread_rev.out | 1365 bytes
+##### r2e_selfread_rev
+=== iverilog run rc=0
+gv t=0 v=zx
+f t=0 x=x
+gv t=0 v=x0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+r2e_selfread_rev.sv:12: $finish called at 10 (1s)
+
+=== verilator run rc=0
+f t=0 x=0
+gv t=0 v=00
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+- r2e_selfread_rev.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 555.557 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+gv t=0 v=zz
+f t=0 x=z
+gv t=0 v=zx
+f t=0 x=x
+gv t=0 v=xx
+f t=0 x=x
+gv t=0 v=x0
+f t=0 x=0
+gv t=0 v=00
+f t=0 x=0
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+--- r2e_selfread_rev PRE3==POSTC:000 PRE3==POSTD:000 POSTC==POSTD:111 split=-
+=== block 3 | vita [PRE3+POSTD+POSTE] | r4/sound/out/r2e_selfread_rev.out | 913 bytes
+##### r2e_selfread_rev
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+gv t=0 v=zz
+f t=0 x=z
+gv t=0 v=zx
+f t=0 x=x
+gv t=0 v=xx
+f t=0 x=x
+gv t=0 v=x0
+f t=0 x=0
+gv t=0 v=00
+f t=0 x=0
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+gv t=0 v=00
+t1 v=00 yy=00
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+
+--- r2e_selfread_rev PRE3==POSTD:000 PRE3==POSTE:000 POSTD==POSTE:111 split=-
+=== end

@@ -1,0 +1,22 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_snd3__p__kb__kb
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_snd3/p/kb/kb.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_snd3/p/kb
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: oracle values quoted at s581/lens_snd3/REPORT.md:56
+alias: lens_snd3/p/kb/mutb-K1/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/mutb-K2/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/mutb-K3/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/post3b-K1/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/post3b-K2/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/post3b-K3/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/pre-K1/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/pre-K2/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/kb/pre-K3/kb (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+blocks: 0
+=== end

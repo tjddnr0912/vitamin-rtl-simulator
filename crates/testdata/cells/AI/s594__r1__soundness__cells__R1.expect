@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__soundness__cells__R1
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/soundness/cells/R1.sv
+roadmap_row: §2 🆕 AI
+set: r1/soundness/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: hole unreachable
+verdict_source: s594/r1/soundness/REPORT.md:11
+notes: oracle raw lines quoted at s594/r1/soundness/cells/erbatch.out:16; named at s594/COMMIT_DOCS.txt:66
+alias: r2/soundness/cells/R1 (byte-identical source) verdict: hole unreachable verdict_source: s594/r1/soundness/REPORT.md:11
+alias: i/r2/lens/sound/R1 (byte-identical source) verdict: hole unreachable verdict_source: s594/r1/soundness/REPORT.md:11
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | i/r2/lens/sound/R1.ivl | 92 bytes
+R1.sv:5: warning: Choosing typ expression.
+L=0 K=0
+R1.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | i/r2/lens/sound/R1.vl | 600 bytes
+%Warning-MINTYPMAXDLY: R1.sv:5:54: Unsupported: minimum/typical/maximum delay expressions. Using the typical delay
+%Warning-WIDTHEXPAND: R1.sv:5:18: Operator VAR 'L' expects 32 bits on the Initial value, but Initial value's EQ generates 1 bits.
+%Warning-WIDTHEXPAND: R1.sv:6:18: Operator VAR 'K' expects 32 bits on the Initial value, but Initial value's EQ generates 1 bits.
+L=X K=X
+- R1.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | i/r2/lens/sound/R1.s2v | 99 bytes
+R1.s2v.v:9: warning: Choosing typ expression.
+L=X K=X
+R1.s2v.v:13: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [d3] | i/r2/lens/sound/R1.d3 | 273 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R1.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: this sub-expression has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [pa] | i/r2/lens/sound/R1.pa | 273 bytes | identical to block 4
+=== block 6 | vita [pb] | i/r2/lens/sound/R1.pb | 273 bytes | identical to block 4
+=== block 7 | vita [pre] | i/r2/lens/sound/R1.pre | 273 bytes | identical to block 4
+=== block 8 | vita [pre594] | i/r2/lens/sound/R1.pre594 | 273 bytes | identical to block 4
+=== end

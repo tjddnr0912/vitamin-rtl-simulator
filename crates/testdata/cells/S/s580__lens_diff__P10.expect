@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P10
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P10.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog,sv2v
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); R4 cmp3_post4 bucket(s): both×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P10.iv.txt | 97 bytes
+L30 1
+L31 1
+R30 1
+R31 1
+R32 1
+R33 1
+G30 1
+G31 1
+OV 2
+P10.sv:20: $finish called at 1000 (1s)
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./P10.sv2v.err | 0 bytes
+
+=== block 3 | vita [POST] | ./P10.post.txt | 218 bytes
+P10.sv:18:50: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a constant generate-array index (decimal literal or literal-valued localparam) in a hierarchical reference, found '.'
+errors=1 warnings=0 notes=0
+rc=1
+=== block 4 | vita [POST] | ./P10.postq.txt | 218 bytes | identical to block 3
+=== block 5 | vita [POST] | r2/lens/diff_P10.post.txt | 218 bytes | identical to block 3
+=== block 6 | vita [POST] | r2/lens/diff_P10.postq.txt | 218 bytes | identical to block 3
+=== block 7 | vita [POST2] | r2/lens/diff_P10.post2.txt | 218 bytes | identical to block 3
+=== block 8 | vita [POST2] | r2/lens/diff_P10.post2q.txt | 218 bytes | identical to block 3
+=== block 9 | vita [PRE] | ./P10.pre.txt | 218 bytes | identical to block 3
+=== block 10 | vita [PRE] | ./P10.preq.txt | 218 bytes | identical to block 3
+=== end

@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q4t7_clstask_t0_case
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q4t7_clstask_t0_case.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: q4t7_clstask_t0_case s__q4t7_clstask_t0_case
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [iverilog,PRE] iverilog 13.0 (version captured in slice) | r1/sound/out/q4t7_clstask_t0_case.out | 881 bytes
+##### q4t7_clstask_t0_case
+=== iverilog compile rc=0 msgs: q4t7_clstask_t0_case.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+WARNING: q4t7_clstask_t0_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: $unit::K.t
+WARNING: q4t7_clstask_t0_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: $unit::K.t
+q4t7_clstask_t0_case.sv:14: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/s__q4t7_clstask_t0_case.out | 1687 bytes
+##### s__q4t7_clstask_t0_case
+=== verilator compile rc=0 run rc=0 [run by r3]
+[0] %Error: q4t7_clstask_t0_case.sv:4: Assertion failed in $unit.K.t: unique case, but none matched for '1'h1'
+- q4t7_clstask_t0_case.sv:14: Verilog $finish
+=== iverilog compile rc=0 msgs: q4t7_clstask_t0_case.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+WARNING: q4t7_clstask_t0_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: $unit::K.t
+WARNING: q4t7_clstask_t0_case.sv:4: value is unhandled for priority or unique case statement
+         Time: 0  Scope: $unit::K.t
+q4t7_clstask_t0_case.sv:14: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+q4t7_clstask_t0_case.sv:4:19: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.K.t] [at time 0]
+simulation ended (Finish) at time 2
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

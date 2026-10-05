@@ -1,0 +1,754 @@
+category	path_or_glob	count	bytes	reason
+binary	plan/w/**	10	1354872	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_a/jit/**	1	9280736	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_a/nodef/**	1	7204448	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_a/sep/**	4	29683392	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_a/vita	1	7420880	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_b/jit/**	1	9297264	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_b/nodef/**	1	7220976	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_b/sep/**	4	29683456	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_b/vita	1	7420880	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_c/jit/**	1	9297264	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_c/nodef/**	1	7220976	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_c/sep/**	4	29683456	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_c/vita	1	7420880	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_d/jit/**	1	9313808	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_d/nodef/**	1	7237568	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_d/sep/**	4	29815616	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_d/vita	1	7453936	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_dev/vita	1	7354560	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_dev2/vita	1	7420880	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_dev3/vita	1	7420880	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_e/jit/**	1	9330384	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_e/nodef/**	1	7254144	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_e/sep/**	4	29881984	Mach-O/ELF executable (vita, Vtop, ...)
+binary	post_e/vita	1	7470512	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre/sep/**	4	29352000	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre/vita	1	7338016	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre2/sep/**	4	29617216	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre2/vita	1	7404336	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre3/sep/**	4	29683392	Mach-O/ELF executable (vita, Vtop, ...)
+binary	pre3/vita	1	7420864	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe/vita	1	7338016	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe2/vita	1	7354544	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe3/vita	1	7354544	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe4/vita	1	7354656	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe5/vita	1	7371200	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe5_jit/vita	1	9231056	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe5_nodef/vita	1	7154784	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe6/vita	1	7371200	Mach-O/ELF executable (vita, Vtop, ...)
+binary	probe_r2/vita	1	7437488	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r3/dev1/**	1	7453936	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r3/dev2/**	1	7453936	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r3/probe/**	1	7453936	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r3/probe2/**	1	7470448	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r4/varA/**	1	7453936	Mach-O/ELF executable (vita, Vtop, ...)
+binary	r5/dev/**	1	7470512	Mach-O/ELF executable (vita, Vtop, ...)
+build-artifact	docs_probe/z0.vvp	1	2126	compiled image / verilator build tree / vita staged artefact
+build-artifact	fin/w/**	654	749234	compiled image / verilator build tree / vita staged artefact
+build-artifact	g/dbg/**	2	4453	compiled image / verilator build tree / vita staged artefact
+build-artifact	g/iv/**	22	39965	compiled image / verilator build tree / vita staged artefact
+build-artifact	g/w/**	8	19329	compiled image / verilator build tree / vita staged artefact
+build-artifact	plan/w/**	48	195830	compiled image / verilator build tree / vita staged artefact
+build-artifact	plan/w2/**	4	9575	compiled image / verilator build tree / vita staged artefact
+build-artifact	r1/diff/**	47	104363	compiled image / verilator build tree / vita staged artefact
+build-artifact	r2/diff/**	168	280314	compiled image / verilator build tree / vita staged artefact
+build-artifact	r2/fin/**	808	915184	compiled image / verilator build tree / vita staged artefact
+build-artifact	r2/sound/**	24	61320	iverilog compiled image (a.out)
+build-artifact	r3/diff/**	167	218006	compiled image / verilator build tree / vita staged artefact
+build-artifact	r3/fin/**	808	915184	compiled image / verilator build tree / vita staged artefact
+build-artifact	r3/k06/**	1	3332	compiled image / verilator build tree / vita staged artefact
+build-artifact	r3/sound/**	30	77907	iverilog compiled image (a.out)
+build-artifact	r4/diff/**	181	244447	compiled image / verilator build tree / vita staged artefact
+build-artifact	r4/fin/**	888	1016220	compiled image / verilator build tree / vita staged artefact
+build-artifact	r4/sound/**	7	21428	iverilog compiled image (a.out)
+build-artifact	r5/movers/**	10	30180	compiled image / verilator build tree / vita staged artefact
+build-artifact	r6/fin/**	944	1080020	compiled image / verilator build tree / vita staged artefact
+build-dir	g/dbg/vobj/**	33	801322	build-or-thirdparty-dirname:vobj
+build-dir	g/dbg/vobj2/**	33	802485	build-or-thirdparty-dirname:vobj2
+build-dir	g/w/q7_delay_held_i0/obj/**	25	766606	build-or-thirdparty-dirname:obj
+build-dir	g/w/q8_clkgen_gate_assert/obj/**	25	758325	build-or-thirdparty-dirname:obj
+build-dir	g/w/q9_delay_closure_i0/obj/**	25	769572	build-or-thirdparty-dirname:obj
+build-dir	g/w/r5h_uncert_chain/obj/**	25	758007	build-or-thirdparty-dirname:obj
+build-dir	g/w/sd07r_two_level_rev/obj/**	25	753681	build-or-thirdparty-dirname:obj
+build-dir	plan/w/obj_u20d/**	33	809954	build-or-thirdparty-dirname:obj_u20d
+build-dir	r1/diff/w/d01_clk_gate/obj/**	25	760841	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d02_rst/obj/**	25	783884	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d03_comb_input/obj/**	25	751798	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d04_nba_input/obj/**	25	751790	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d05_hash0_input/obj/**	25	759340	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d06_finish_in_f/obj/**	25	749494	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d07_finish_in_initial/obj/**	25	749339	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d08_strobe_monitor/obj/**	28	765014	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d09_cycle/obj/**	25	760857	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d10_port_in/obj/**	25	752876	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d11_port_out/obj/**	25	749921	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d12_tri_md/obj/**	25	772998	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d13_strength/obj/**	25	763354	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d14_force/obj/**	25	777656	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d15_vcd/obj/**	25	758743	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d17_star_comb/obj/**	25	750379	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d18_gen_chain/obj/**	25	766685	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d19_delay_chain/obj/**	25	775978	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/d21_dbg_cpu/obj/**	25	767892	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e01_tri_md/obj/**	25	763931	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e02_vec_chain/obj/**	25	759355	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e03_const_in_init_read/obj/**	25	752413	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e04_const_in_events/obj/**	25	775998	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e04b_const_in_edges/obj/**	25	775191	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e07_supply/obj/**	25	749954	build-or-thirdparty-dirname:obj
+build-dir	r1/diff/w/e08_cfg_tie/obj/**	25	756748	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d01_clk_gate/obj/**	25	760841	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d02_rst/obj/**	25	783884	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d03_comb_input/obj/**	25	751798	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d04_nba_input/obj/**	25	751790	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d05_hash0_input/obj/**	25	759340	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d06_finish_in_f/obj/**	25	749494	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d07_finish_in_initial/obj/**	25	749339	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d08_strobe_monitor/obj/**	28	765014	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d09_cycle/obj/**	25	760857	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d10_port_in/obj/**	25	752876	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d11_port_out/obj/**	25	749921	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d12_tri_md/obj/**	25	772998	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d13_strength/obj/**	25	763354	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d14_force/obj/**	25	777656	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d15_vcd/obj/**	25	758743	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d17_star_comb/obj/**	25	750379	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d18_gen_chain/obj/**	25	766685	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d19_delay_chain/obj/**	25	775978	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/d21_dbg_cpu/obj/**	25	767892	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e01_tri_md/obj/**	25	763931	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e02_vec_chain/obj/**	25	759355	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e03_const_in_init_read/obj/**	25	752413	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e04_const_in_events/obj/**	25	775998	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e04b_const_in_edges/obj/**	25	775191	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e07_supply/obj/**	25	749954	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/e08_cfg_tie/obj/**	25	756748	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k01_cycle_tails/obj/**	25	776138	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k02_chain_and_cycle/obj/**	25	777540	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k03_kahn_net_indeg/obj/**	25	781187	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k04_closure_nonheld/obj/**	25	763917	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k05_release_vs_source/obj/**	25	765766	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k06_fatal_wave2/obj/**	25	769814	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k07_finish_in_cycle/obj/**	25	772999	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k08_zsens_ring/obj/**	25	762428	build-or-thirdparty-dirname:obj
+build-dir	r2/diff/w/k09_func_reads_global/obj/**	25	762551	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f01_force_held_after_t0/obj/**	25	787854	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f02_force_input_of_held/obj/**	25	779680	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f03_force_t0_release_later/obj/**	25	780568	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f04_held_then_clocked/obj/**	25	755783	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f05_md_group_after_t0/obj/**	25	763011	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f06_held_delayed_after_t0/obj/**	25	768217	build-or-thirdparty-dirname:obj
+build-dir	r3/diff/w/f07_rchain_random_probe/obj/**	25	765555	build-or-thirdparty-dirname:obj
+build-dir	r4/diff/w/g01_hu_body_read_later_wave/obj/**	25	776022	build-or-thirdparty-dirname:obj
+build-dir	r4/diff/w/g02_hu_md_across_waves/obj/**	25	773447	build-or-thirdparty-dirname:obj
+build-dir	r4/diff/w/g03_hu_in_cycle/obj/**	25	769676	build-or-thirdparty-dirname:obj
+build-dir	r4/diff/w/g05_hu_self_read/obj/**	25	766385	build-or-thirdparty-dirname:obj
+build-dir	r4/diff/w/g06/obj/**	25	776730	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_d19_delay_chain/obj/**	25	775979	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_e01_tri_md/obj/**	25	763932	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_f06_held_delayed_after_t0/obj/**	25	768218	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_f07_rchain_random_probe/obj/**	25	765556	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_pl_x3_tristate_bus/obj/**	25	759580	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_r2a_md2_rev/obj/**	25	755920	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_r2b_md_mixed_rev/obj/**	25	755971	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_r3e_held_lanes_vcd/obj/**	25	768356	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_u20b/obj/**	33	803670	build-or-thirdparty-dirname:obj
+build-dir	r5/movers/w_u20d/obj/**	33	809743	build-or-thirdparty-dirname:obj
+corpus-run-outputs	fin/corpus_post/**	22	27281	corpus-run-outputs
+corpus-run-outputs	fin/corpus_pre2/**	22	27281	corpus-run-outputs
+corpus-run-outputs	g/corpus_p2/**	22	27281	corpus-run-outputs
+corpus-run-outputs	g/corpus_p3/**	22	27281	corpus-run-outputs
+corpus-run-outputs	g/corpus_p5/**	22	27281	corpus-run-outputs
+corpus-run-outputs	g/corpus_p5s/**	22	27281	corpus-run-outputs
+corpus-run-outputs	g/corpus_pre/**	22	27281	corpus-run-outputs
+corpus-run-outputs	p6/corpus_p6/**	22	27281	corpus-run-outputs
+corpus-run-outputs	r2/corpus_postb/**	22	27281	corpus-run-outputs
+corpus-run-outputs	r3/corpus_postc/**	22	27281	corpus-run-outputs
+corpus-run-outputs	r4/corpus_postd/**	22	27281	corpus-run-outputs
+corpus-run-outputs	r4/corpus_pre3/**	22	27281	corpus-run-outputs
+corpus-run-outputs	r6/corpus_poste/**	22	27281	corpus-run-outputs
+debug-scratch	plan/w2/**	1	0	debug scratch outputs without a cell
+doc	COMMIT_DOCS.txt	1	3258	slice record (commit message; quoted as verdict source, not copied)
+doc	COMMIT_SLICE.txt	1	10728	slice record (commit message; quoted as verdict source, not copied)
+doc	GROUNDING.md	1	13061	slice record / doc (quoted as verdict source, not copied)
+doc	IMPL.md	1	33339	slice record / doc (quoted as verdict source, not copied)
+doc	LENS_BRIEF.md	1	3141	slice record / doc (quoted as verdict source, not copied)
+doc	PLAN.md	1	18621	slice record / doc (quoted as verdict source, not copied)
+doc-draft	docs/006_limitations.md	1	79378	doc drafts / Rust drafts
+doc-draft	docs/CHANGELOG.md	1	319201	doc drafts / Rust drafts
+doc-draft	docs/PROBE_CATALOG.md	1	63040	doc drafts / Rust drafts
+doc-draft	docs/REMAINING_WORK.before.md	1	8504	doc drafts / Rust drafts
+doc-draft	docs/ROADMAP.before.md	1	99266	doc drafts / Rust drafts
+doc-draft	docs/census.py	1	1333	doc drafts / Rust drafts
+identity-probe-scratch	r2/iw/**	221	141656	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r2/pw/**	221	113059	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r3/iw_dev1/**	248	298667	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r3/iw_hufinal/**	248	298667	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r3/iw_ownwave/**	248	298667	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r3/iw_perwave/**	248	298667	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r5/iw_dev_vs_poste/**	263	305259	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r5/iw_vspostd/**	263	305259	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+identity-probe-scratch	r5/iw_vsprobe/**	263	305259	vita-only binary identity workdirs (cell copies + x.vcd overwritten per binary x backend; producing binary unrecorded)
+log	build1.log	1	4012	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build1.rc	1	2	exit-code / marker file
+log	build2.log	1	423	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build2.rc	1	2	exit-code / marker file
+log	build3.log	1	423	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build3.rc	1	2	exit-code / marker file
+log	build4.log	1	423	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build4.rc	1	2	exit-code / marker file
+log	build5.log	1	423	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build5.rc	1	2	exit-code / marker file
+log	build_jit.log	1	1628	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build_jit.rc	1	2	exit-code / marker file
+log	build_nodef.log	1	423	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build_nodef.rc	1	2	exit-code / marker file
+log	build_p6.log	1	2835	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	build_p6.rc	1	2	exit-code / marker file
+log	clippy.log	1	4786	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	clippy.rc	1	2	exit-code / marker file
+log	clippy2.log	1	615	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	clippy2.rc	1	2	exit-code / marker file
+log	corpus_main.log	1	1620	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	corpus_main.rc	1	2	exit-code / marker file
+log	fin/clippy_jit.log	1	2253	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/clippy_nodef.log	1	2160	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/corpus.rc	1	5	exit-code / marker file
+log	fin/corpus_post.log	1	575	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/corpus_pre2.log	1	575	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/crun_post.log	1	1763	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/crun_post.rc	1	2	exit-code / marker file
+log	fin/nt_nodef.log	1	18617	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/run_fin.log	1	5	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fin/run_fin.rc	1	2	exit-code / marker file
+log	final_doc.log	1	3351	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	final_doc.rc	1	2	exit-code / marker file
+log	final_gate.log	1	808671	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	final_gate.rc	1	5	exit-code / marker file
+log	final_gate_nt.rc	1	2	exit-code / marker file
+log	flip_final.log	1	823008	flip-run gate outputs / process listings
+log	flip_final.rc	1	13	exit-code / marker file
+log	flip_post.log	1	819660	flip-run gate outputs / process listings
+log	flip_post.out	1	172	flip-run gate outputs / process listings
+log	flip_post.rc	1	13	exit-code / marker file
+log	flip_post_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_postb.log	1	820030	flip-run gate outputs / process listings
+log	flip_postb.out	1	172	flip-run gate outputs / process listings
+log	flip_postb.rc	1	13	exit-code / marker file
+log	flip_postb_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_postc.log	1	820030	flip-run gate outputs / process listings
+log	flip_postc.out	1	172	flip-run gate outputs / process listings
+log	flip_postc.rc	1	13	exit-code / marker file
+log	flip_postc_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_postd.log	1	823006	flip-run gate outputs / process listings
+log	flip_postd.out	1	172	flip-run gate outputs / process listings
+log	flip_postd.rc	1	13	exit-code / marker file
+log	flip_postd_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_poste.log	1	823123	flip-run gate outputs / process listings
+log	flip_poste.out	1	172	flip-run gate outputs / process listings
+log	flip_poste.rc	1	13	exit-code / marker file
+log	flip_poste_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_pre2.log	1	822314	flip-run gate outputs / process listings
+log	flip_pre2.out	1	175	flip-run gate outputs / process listings
+log	flip_pre2.rc	1	13	exit-code / marker file
+log	flip_pre2_fails.txt	1	875	flip-run gate outputs / process listings
+log	flip_pre3.log	1	825090	flip-run gate outputs / process listings
+log	flip_pre3.out	1	176	flip-run gate outputs / process listings
+log	flip_pre3.rc	1	13	exit-code / marker file
+log	flip_pre3_fails.txt	1	875	flip-run gate outputs / process listings
+log	fmt.log	1	587	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fmt.rc	1	2	exit-code / marker file
+log	fmt2.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	fmt2.rc	1	2	exit-code / marker file
+log	g/ab_pre.log	1	30548	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c1_pre.log	1	20067	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c2_pre.log	1	19038	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c3_pre.log	1	6281	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c4_pre.log	1	8094	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c5_pre.log	1	5686	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c6_pre.log	1	8153	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c7_pre.log	1	2180	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c8_pre.log	1	2340	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/c8b_pre.log	1	1086	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/corpus_p2.log	1	579	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/corpus_p3.log	1	576	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/corpus_p5s.log	1	576	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/corpus_pre.log	1	577	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_ab.log	1	32594	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_c1.log	1	17342	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_c2.log	1	19827	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_c3.log	1	6775	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p1_c4.log	1	7433	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_ab.log	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_c1.log	1	17331	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_c2.log	1	19513	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_c3.log	1	6614	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p2_c5.log	1	5948	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_ab.log	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c1.log	1	17331	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c2.log	1	19114	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c3.log	1	6614	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c5.log	1	5457	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c6.log	1	9929	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p3_c8b.log	1	988	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_ab.log	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_c1.log	1	17331	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_c2.log	1	19114	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_c3.log	1	6614	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4a_c5.log	1	5457	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_ab.log	1	32382	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_c1.log	1	17084	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_c2.log	1	18975	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_c3.log	1	6134	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4b_c5.log	1	5455	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_ab.log	1	32382	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_c1.log	1	17331	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_c2.log	1	19110	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_c3.log	1	6612	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p4c_c5.log	1	5455	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_ab.log	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c1.log	1	17330	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c2.log	1	19124	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c3.log	1	6612	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c5.log	1	5455	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c6.log	1	12341	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c7.log	1	2263	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c8.log	1	1615	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5_c8b.log	1	1078	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_aa.log	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_ab.log	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_c1.log	1	17331	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_c2.log	1	19114	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_c3.log	1	6614	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_c4.log	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	g/p5a_c5.log	1	5457	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate/doc.log	1	2571	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate/doc.rc	1	2	exit-code / marker file
+log	gate/nt.log	1	812199	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate/nt.rc	1	2	exit-code / marker file
+log	gate_p2.log	1	809375	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate_p2.rc	1	4	exit-code / marker file
+log	gate_p3.log	1	803676	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate_p3.rc	1	4	exit-code / marker file
+log	gate_p5.log	1	802351	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate_p5.rc	1	2	exit-code / marker file
+log	gate_p6.log	1	806652	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	gate_p6.rc	1	4	exit-code / marker file
+log	mut/battery3.rc	1	2	exit-code / marker file
+log	mut/battery_narrow.rc	1	2	exit-code / marker file
+log	p6/corpus_count_p6.log	1	919	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/corpus_p6.log	1	576	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/corpus_p6.rc	1	2	exit-code / marker file
+log	p6/crun.log	1	1764	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/crun.rc	1	2	exit-code / marker file
+log	p6/log_aa.txt	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_ab.txt	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c1.txt	1	17329	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c2.txt	1	19124	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c3.txt	1	6611	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c4.txt	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c5.txt	1	5455	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c6.txt	1	9929	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c7.txt	1	2263	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_c8.txt	1	2603	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_new.txt	1	5039	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc1.txt	1	2782	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc2.txt	1	8158	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc3.txt	1	4485	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc4.txt	1	4429	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc5.txt	1	1159	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plc6.txt	1	1099	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/log_plw.txt	1	6458	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_aa.txt	1	12343	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_ab.txt	1	32580	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c1.txt	1	17329	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c2.txt	1	19124	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c3.txt	1	6611	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c4.txt	1	7279	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c5.txt	1	5455	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c6.txt	1	9929	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c7.txt	1	2263	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_c8.txt	1	2603	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_new.txt	1	2889	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc1.txt	1	2782	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc2.txt	1	8158	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc3.txt	1	4485	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc4.txt	1	4429	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc5.txt	1	1159	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plc6.txt	1	1099	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logd_plw.txt	1	6458	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc1.txt	1	4682	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc2.txt	1	16918	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc3.txt	1	6853	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc4.txt	1	5828	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc5.txt	1	1981	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plc6.txt	1	1926	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logf_plw.txt	1	10182	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_new.txt	1	2889	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc1.txt	1	2782	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc2.txt	1	8158	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc3.txt	1	4496	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc4.txt	1	4429	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc5.txt	1	1170	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plc6.txt	1	1133	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/logr_plw.txt	1	6518	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	p6/run_dev.rc	1	2	exit-code / marker file
+log	p6/run_p6.rc	1	2	exit-code / marker file
+log	p6/run_ref.rc	1	2	exit-code / marker file
+log	plan/audit.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	plan/audit.rc	1	2	exit-code / marker file
+log	plan/log_c1.txt	1	4682	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	plan/log_c2.txt	1	16341	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	plan/log_c3.txt	1	6864	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	postbuild.log	1	1682	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	postbuild.rc	1	2	exit-code / marker file
+log	pre2_build.log	1	4280	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	pre2_build.rc	1	2	exit-code / marker file
+log	pre3_build.log	1	4296	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	pre3_build.rc	1	2	exit-code / marker file
+log	quick1.log	1	6810	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r1/diff/**	3	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r1/diff/**	2	4	exit-code / marker file
+log	r1/sound/**	7	26329	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r1/sound/**	1	2	exit-code / marker file
+log	r2/build.log	1	1498	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/build.rc	1	2	exit-code / marker file
+log	r2/clippy.log	1	431	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/clippy.rc	1	2	exit-code / marker file
+log	r2/corpus_postb.log	1	575	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/crun.log	1	1763	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/diff/**	1	3196	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/diff/**	3	6	exit-code / marker file
+log	r2/doc.log	1	2757	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/fin/**	1	5	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/fin/**	1	2	exit-code / marker file
+log	r2/fmt.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/fmt.rc	1	2	exit-code / marker file
+log	r2/full.log	1	809223	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/gates.rc	1	5	exit-code / marker file
+log	r2/probe_gate.log	1	808671	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/quick.log	1	5089	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/quick2.log	1	5209	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/sc_cli.log	1	719900	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/sc_cli.rc	1	2	exit-code / marker file
+log	r2/sc_se.log	1	64884	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/sc_se.rc	1	2	exit-code / marker file
+log	r2/sound/**	11	1987472	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r2/sound/**	4	17	exit-code / marker file
+log	r2/sound/**	2	2785	flip-run gate outputs / process listings
+log	r3/all.rc	1	5	exit-code / marker file
+log	r3/build.log	1	1139	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/build.rc	1	2	exit-code / marker file
+log	r3/clippy.log	1	431	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/clippy.rc	1	2	exit-code / marker file
+log	r3/clippy_jit.log	1	258	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/clippy_jit.rc	1	2	exit-code / marker file
+log	r3/clippy_nodef.log	1	430	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/clippy_nodef.rc	1	2	exit-code / marker file
+log	r3/corpus_postc.log	1	575	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/crun.log	1	1763	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/diff/**	1	5006	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/diff/**	5	10	exit-code / marker file
+log	r3/diff/**	1	1704	runner smoke output
+log	r3/doc.log	1	2757	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/doc.rc	1	2	exit-code / marker file
+log	r3/fin/**	1	5	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/fin/**	1	2	exit-code / marker file
+log	r3/fmt.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/fmt.rc	1	2	exit-code / marker file
+log	r3/full.log	1	809223	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/full.rc	1	2	exit-code / marker file
+log	r3/nt_nodef.log	1	18617	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/nt_nodef.rc	1	2	exit-code / marker file
+log	r3/quick.log	1	5612	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/sound/**	8	69301	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r3/sound/**	4	17	exit-code / marker file
+log	r4/all.rc	1	5	exit-code / marker file
+log	r4/build.log	1	1498	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/build.rc	1	2	exit-code / marker file
+log	r4/clippy.log	1	615	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/clippy.rc	1	2	exit-code / marker file
+log	r4/clippy_jit.log	1	442	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/clippy_jit.rc	1	2	exit-code / marker file
+log	r4/clippy_nodef.log	1	614	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/clippy_nodef.rc	1	2	exit-code / marker file
+log	r4/corpus_postd.log	1	577	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/corpus_pre3.log	1	577	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/crun.log	1	1763	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/diff/**	2	9413	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/diff/**	3	6	exit-code / marker file
+log	r4/diff/**	1	242	runner smoke output
+log	r4/doc.log	1	2571	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/doc.rc	1	2	exit-code / marker file
+log	r4/fin/**	1	5	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/fin/**	1	2	exit-code / marker file
+log	r4/fmt.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/fmt.rc	1	2	exit-code / marker file
+log	r4/full.log	1	812393	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/full.rc	1	2	exit-code / marker file
+log	r4/leak_rerun.log	1	750	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/nt_nodef.log	1	18616	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/nt_nodef.rc	1	2	exit-code / marker file
+log	r4/sc_cli.log	1	722876	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/sc_cli.rc	1	2	exit-code / marker file
+log	r4/sc_se.log	1	64884	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/sc_se.rc	1	2	exit-code / marker file
+log	r4/sound/**	8	831783	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r4/sound/**	3	12	exit-code / marker file
+log	r5/quick.log	1	5428	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r5/quick2.log	1	3555	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/all.rc	1	5	exit-code / marker file
+log	r6/build.log	1	1498	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/build.rc	1	2	exit-code / marker file
+log	r6/clippy.log	1	431	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/clippy.rc	1	2	exit-code / marker file
+log	r6/clippy_jit.log	1	258	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/clippy_jit.rc	1	2	exit-code / marker file
+log	r6/clippy_nodef.log	1	430	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/clippy_nodef.rc	1	2	exit-code / marker file
+log	r6/corpus_poste.log	1	575	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/crun.log	1	1763	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/doc.log	1	2571	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/doc.rc	1	2	exit-code / marker file
+log	r6/fin/**	1	5	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/fin/**	1	2	exit-code / marker file
+log	r6/fmt.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/fmt.rc	1	2	exit-code / marker file
+log	r6/full.log	1	812316	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/full.rc	1	2	exit-code / marker file
+log	r6/nt_nodef.log	1	18616	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/nt_nodef.rc	1	2	exit-code / marker file
+log	r6/sc_cli.log	1	722993	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/sc_cli.rc	1	2	exit-code / marker file
+log	r6/sc_se.log	1	64884	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r6/sc_se.rc	1	2	exit-code / marker file
+log	r7.rc	1	5	exit-code / marker file
+log	r7/clippy.log	1	431	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r7/clippy.rc	1	2	exit-code / marker file
+log	r7/fmt.log	1	0	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r7/fmt.rc	1	2	exit-code / marker file
+log	r7/sc_cli.log	1	722876	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r7/sc_cli.rc	1	2	exit-code / marker file
+log	r7/sc_se.log	1	64884	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	r7/sc_se.rc	1	2	exit-code / marker file
+log	scoped.rc	1	5	exit-code / marker file
+log	scoped2.rc	1	5	exit-code / marker file
+log	scoped2_cli.log	1	719532	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	scoped2_cli.rc	1	2	exit-code / marker file
+log	scoped2_se.log	1	65068	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	scoped2_se.rc	1	2	exit-code / marker file
+log	scoped_cli.log	1	715008	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	scoped_cli.rc	1	2	exit-code / marker file
+log	scoped_se.log	1	65922	cargo/gate/corpus/runner stdout logs (runner logs duplicate the per-cell .out files)
+log	scoped_se.rc	1	2	exit-code / marker file
+mutation	mut/K1_cli.log	1	9166	mutation battery files and mutant outputs
+mutation	mut/K2_cli.log	1	6657	mutation battery files and mutant outputs
+mutation	mut/M10_cli.log	1	6877	mutation battery files and mutant outputs
+mutation	mut/M10n_cli.log	1	6877	mutation battery files and mutant outputs
+mutation	mut/M11_cli.log	1	8677	mutation battery files and mutant outputs
+mutation	mut/M12_cli.log	1	7158	mutation battery files and mutant outputs
+mutation	mut/M12_se.log	1	1311	mutation battery files and mutant outputs
+mutation	mut/M13_cli.log	1	12047	mutation battery files and mutant outputs
+mutation	mut/M13n_cli.log	1	12047	mutation battery files and mutant outputs
+mutation	mut/M14_cli.log	1	45937	mutation battery files and mutant outputs
+mutation	mut/M14n_cli.log	1	47048	mutation battery files and mutant outputs
+mutation	mut/M15_cli.log	1	8794	mutation battery files and mutant outputs
+mutation	mut/M15n_cli.log	1	8794	mutation battery files and mutant outputs
+mutation	mut/M16_cli.log	1	8546	mutation battery files and mutant outputs
+mutation	mut/M1_cli.log	1	40443	mutation battery files and mutant outputs
+mutation	mut/M2_cli.log	1	6867	mutation battery files and mutant outputs
+mutation	mut/M3_cli.log	1	6972	mutation battery files and mutant outputs
+mutation	mut/M4_cli.log	1	8599	mutation battery files and mutant outputs
+mutation	mut/M5_cli.log	1	11082	mutation battery files and mutant outputs
+mutation	mut/M6_cli.log	1	39447	mutation battery files and mutant outputs
+mutation	mut/M7_cli.log	1	12431	mutation battery files and mutant outputs
+mutation	mut/M8_cli.log	1	6646	mutation battery files and mutant outputs
+mutation	mut/M9_cli.log	1	7126	mutation battery files and mutant outputs
+mutation	mut/M9n_cli.log	1	6846	mutation battery files and mutant outputs
+mutation	mut/MK1_cli.log	1	6633	mutation battery files and mutant outputs
+mutation	mut/MKA_cli.log	1	6686	mutation battery files and mutant outputs
+mutation	mut/MOW_cli.log	1	7060	mutation battery files and mutant outputs
+mutation	mut/MS1_cli.log	1	6561	mutation battery files and mutant outputs
+mutation	mut/MS2_cli.log	1	6640	mutation battery files and mutant outputs
+mutation	mut/MS3_cli.log	1	6513	mutation battery files and mutant outputs
+mutation	mut/battery.py	1	6968	mutation battery files and mutant outputs
+mutation	mut/battery2.out	1	0	mutation battery files and mutant outputs
+mutation	mut/battery2.py	1	7260	mutation battery files and mutant outputs
+mutation	mut/battery3.out	1	0	mutation battery files and mutant outputs
+mutation	mut/battery3.py	1	7260	mutation battery files and mutant outputs
+mutation	mut/battery4.out	1	0	mutation battery files and mutant outputs
+mutation	mut/battery4.py	1	7635	mutation battery files and mutant outputs
+mutation	mut/battery5.out	1	0	mutation battery files and mutant outputs
+mutation	mut/battery5.py	1	7880	mutation battery files and mutant outputs
+mutation	mut/battery_narrow.out	1	0	mutation battery files and mutant outputs
+mutation	mut/results_narrow.txt	1	8108	mutation battery files and mutant outputs
+mutation	mut/results_narrow_r2.txt	1	9518	mutation battery files and mutant outputs
+mutation	mut/results_narrow_r3.txt	1	9528	mutation battery files and mutant outputs
+mutation	mut/results_narrow_r4.txt	1	10193	mutation battery files and mutant outputs
+mutation	mut/results_narrow_r5.txt	1	10562	mutation battery files and mutant outputs
+mutation	mut/status_before.txt	1	380	mutation battery files and mutant outputs
+mutation	r1/sound/**	1	1691	mutation battery result
+mutation	r2/sound/**	150	100102	mutation battery files and mutant outputs
+mutation	r3/sound/**	234	131092	mutation battery files and mutant outputs
+mutation	r4/sound/**	212	109774	mutation battery files and mutant outputs
+no-oracle-output	docs_probe/z0.sv	1	336	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	fin/f_aa/**	8	31795	vita-only output of a no-oracle sv
+no-oracle-output	g/aa/**	8	3197	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	g/dbg/**	4	1948	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	g/iv/**	20	4652	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	g/p1_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p2_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p3_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p4a_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p4b_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p4c_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p5_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	g/p5a_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	p6/dev_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	p6/p6_aa/**	8	12335	vita-only output of a no-oracle sv
+no-oracle-output	r1/diff/**	11	296163	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r1/sound/**	5	468061	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r2/cells/**	1	421	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	r2/dbg/**	3	754	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	r2/diff/**	36	7754282	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r2/fin/**	9	39311	vita-only output of a no-oracle sv
+no-oracle-output	r2/out_cells/**	1	372	vita-only output of a no-oracle sv
+no-oracle-output	r2/perf/**	31	1981464	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r2/sound/**	11	372190	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r3/diff/**	63	11184950	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r3/fin/**	9	39311	vita-only output of a no-oracle sv
+no-oracle-output	r4/diff/**	1	823	authored sv with no oracle output captured anywhere in s590
+no-oracle-output	r4/diff/**	6	1098474	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r4/fin/**	9	39311	vita-only output of a no-oracle sv
+no-oracle-output	r4/perfd/**	36	7754282	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r5/perf/**	8	995589	generated perf/cost design: vita timing only, no oracle run
+no-oracle-output	r6/fin/**	9	39311	vita-only output of a no-oracle sv
+perf-output	r1/diff/**	6	41557	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r1/sound/**	4	1926	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r2/diff/**	1	5954	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r2/perf/**	2	4706	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r3/diff/**	3	13284	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r4/corpus_time.txt	1	1372	perf/corpus timing tables
+perf-output	r4/diff/**	1	1286	perf/cost timing tables and vita runs of no-oracle perf designs
+perf-output	r4/perf_batch.sh	1	660	perf/corpus timing tables
+perf-output	r4/perf_cost_mine.txt	1	4445	perf/corpus timing tables
+perf-output	r4/perf_diffr2.txt	1	3663	perf/corpus timing tables
+perf-output	r6/perf_batch.sh	1	660	perf/corpus timing tables
+perf-output	r6/perf_hu_WRONG_postd.txt	1	904	perf/corpus timing tables
+perf-output	r6/perf_hu_poste.txt	1	2166	perf/corpus timing tables
+runner-workdir-copy	fin/w/**	513	216903	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	g/w/**	174	73526	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r1/diff/**	40	18399	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r2/diff/**	108	51150	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r2/fin/**	639	268419	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r2/sound/**	383	151852	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r3/diff/**	129	60837	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r3/fin/**	639	268419	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r3/sound/**	395	154311	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r4/diff/**	142	69217	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r4/fin/**	702	299067	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r4/sound/**	419	180017	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r5/movers/**	10	4809	byte copy (md5) of a manifested/kept cell made by a runner
+runner-workdir-copy	r6/fin/**	744	317334	byte copy (md5) of a manifested/kept cell made by a runner
+rust-source-or-patch	draft/effect_free.rs	1	3124	Rust source copy, patch or diff
+rust-source-or-patch	draft/t0_core.rs	1	10718	Rust source copy, patch or diff
+rust-source-or-patch	draft/t0_hold.rs	1	15897	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_final.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_post.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_postb.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_postc.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_postd.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_poste.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_pre2.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	lib_rs_pre3.bak	1	69747	Rust source copy, patch or diff
+rust-source-or-patch	mut/snap/**	5	314584	Rust source copy, patch or diff
+rust-source-or-patch	post_a/wt.diff	1	86377	Rust source copy, patch or diff
+rust-source-or-patch	post_b/wt.diff	1	98054	Rust source copy, patch or diff
+rust-source-or-patch	post_c/wt.diff	1	98021	Rust source copy, patch or diff
+rust-source-or-patch	post_d/wt.diff	1	109222	Rust source copy, patch or diff
+rust-source-or-patch	post_d/wt_final.diff	1	36137	Rust source copy, patch or diff
+rust-source-or-patch	post_e/wt.diff	1	112803	Rust source copy, patch or diff
+rust-source-or-patch	pre_rebase_wt.diff	1	30981	Rust source copy, patch or diff
+rust-source-or-patch	probe/P1.patch	1	9118	Rust source copy, patch or diff
+rust-source-or-patch	probe2/P2.patch	1	16647	Rust source copy, patch or diff
+rust-source-or-patch	probe3/P3.patch	1	19253	Rust source copy, patch or diff
+rust-source-or-patch	probe3/mod.rs.p3	1	36686	Rust source copy, patch or diff
+rust-source-or-patch	probe3/run.rs.p3	1	90037	Rust source copy, patch or diff
+rust-source-or-patch	probe3/scan_arm.rs.p3	1	98234	Rust source copy, patch or diff
+rust-source-or-patch	probe4/P4.patch	1	22719	Rust source copy, patch or diff
+rust-source-or-patch	probe5/P5.patch	1	28737	Rust source copy, patch or diff
+rust-source-or-patch	probe5/P5_final.patch	1	28737	Rust source copy, patch or diff
+rust-source-or-patch	probe6/P6.patch	1	31450	Rust source copy, patch or diff
+rust-source-or-patch	r1/sound/**	2	48593	Rust source copy, patch or diff
+rust-source-or-patch	r2/sound/**	1	20276	Rust source copy, patch or diff
+rust-source-or-patch	r2/t0_hold_before_dbg.rs	1	20290	Rust source copy, patch or diff
+rust-source-or-patch	r3/native_run_postc.rs	1	92459	Rust source copy, patch or diff
+rust-source-or-patch	r3/pre_rebase3.diff	1	31958	Rust source copy, patch or diff
+rust-source-or-patch	r3/scan_arm_postc.rs	1	93272	Rust source copy, patch or diff
+rust-source-or-patch	r3/sched_mod_postc.rs	1	36550	Rust source copy, patch or diff
+rust-source-or-patch	r3/sound/**	4	297841	Rust source copy, patch or diff
+rust-source-or-patch	r3/sound/**	6	14836	token-diff extracts of Rust source (r3 soundness Q1)
+rust-source-or-patch	r3/t0_hold_dev1.rs	1	22814	Rust source copy, patch or diff
+rust-source-or-patch	r3/t0_hold_postc.rs	1	20276	Rust source copy, patch or diff
+rust-source-or-patch	r3/t0hold_pre_rebase.rs	1	20276	Rust source copy, patch or diff
+rust-source-or-patch	r3/t0test_pre_rebase.rs	1	43515	Rust source copy, patch or diff
+rust-source-or-patch	r4/native_run_postd.rs	1	93285	Rust source copy, patch or diff
+rust-source-or-patch	r4/scan_arm_postd.rs	1	95065	Rust source copy, patch or diff
+rust-source-or-patch	r4/sound/**	2	121280	Rust source copy, patch or diff
+rust-source-or-patch	r4/t0_hold_postd.rs	1	24265	Rust source copy, patch or diff
+rust-source-or-patch	t0_call_cont_assign_hold.rs	1	37025	Rust source copy, patch or diff
+rust-source-or-patch	t0_hold.rs	1	16361	Rust source copy, patch or diff
+rust-source-or-patch	t0_hold_post_a.rs	1	16361	Rust source copy, patch or diff
+rust-source-or-patch	t0_hold_r2.rs	1	20205	Rust source copy, patch or diff
+script	fin/cmpfin.py	1	1946	helper script (not a cell runner/generator kept by the SPEC)
+script	flip.py	1	492	helper script (not a cell runner/generator kept by the SPEC)
+script	g/corpus.py	1	1670	helper script (not a cell runner/generator kept by the SPEC)
+script	g/corpus_count.py	1	668	helper script (not a cell runner/generator kept by the SPEC)
+script	g/dbg/**	2	1627	helper script (not a cell runner/generator kept by the SPEC)
+script	g/summ.py	1	2259	helper script (not a cell runner/generator kept by the SPEC)
+script	g/summ3.py	1	1063	helper script (not a cell runner/generator kept by the SPEC)
+script	p6/axscan.py	1	4355	helper script (not a cell runner/generator kept by the SPEC)
+script	p6/cmp56.py	1	1176	helper script (not a cell runner/generator kept by the SPEC)
+script	p6/cmp_dev.py	1	1006	helper script (not a cell runner/generator kept by the SPEC)
+script	p6/cmp_p5p6.py	1	1026	helper script (not a cell runner/generator kept by the SPEC)
+script	p6/show.py	1	1013	helper script (not a cell runner/generator kept by the SPEC)
+script	plan/scan.py	1	3131	helper script (not a cell runner/generator kept by the SPEC)
+script	r1/diff/**	2	2015	helper script (not a cell runner/generator kept by the SPEC)
+script	r1/sound/**	2	3956	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/allcells.sh	1	1081	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/diff/**	2	6814	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/fin/**	1	2362	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/ident.py	1	1208	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/perf/**	2	3478	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/probe_run.py	1	1011	helper script (not a cell runner/generator kept by the SPEC)
+script	r2/sound/**	7	12047	helper script (not a cell runner/generator kept by the SPEC)
+script	r3/corpus_time.py	1	2135	helper script (not a cell runner/generator kept by the SPEC)
+script	r3/diff/**	3	10784	helper script (not a cell runner/generator kept by the SPEC)
+script	r3/fin/**	1	2362	helper script (not a cell runner/generator kept by the SPEC)
+script	r3/ident2.py	1	1589	helper script (not a cell runner/generator kept by the SPEC)
+script	r3/sound/**	6	8768	helper script (not a cell runner/generator kept by the SPEC)
+script	r4/corpus_batch.sh	1	556	helper script (not a cell runner/generator kept by the SPEC)
+script	r4/diff/**	2	5301	helper script (not a cell runner/generator kept by the SPEC)
+script	r4/fin/**	1	2980	helper script (not a cell runner/generator kept by the SPEC)
+script	r4/perf.py	1	1940	helper script (not a cell runner/generator kept by the SPEC)
+script	r4/sound/**	4	7013	helper script (not a cell runner/generator kept by the SPEC)
+script	r5/ident3.py	1	1741	helper script (not a cell runner/generator kept by the SPEC)
+script	r6/fin/**	1	3744	helper script (not a cell runner/generator kept by the SPEC)
+script	run_flip.sh	1	709	helper script (not a cell runner/generator kept by the SPEC)
+third-party	bench/**	6804	238754095	build-or-thirdparty-dirname:bench (cloned corpus RTL)
+vcd-unattributed	r5/movers/**	1	427	VCD named by the design's own $dumpfile; last writer among the runner's binaries/oracles not recorded
+vita-obs-unattributed	r2/diff/**	2	1886	observability run json; producing binary/cell not recorded in a runner

@@ -1,0 +1,102 @@
+docs: record §4.5.594 — 🆕 AI reverted whole after two rounds: 🆕 AE's 0 reaches a newly sized region through a nested root and through a constant name; BLOCKED on 🆕 AE
+
+§4.5.594 was reverted whole and nothing of the attempt lands, so this
+commit is its record. Oracles: iverilog 13.0 -g2012, verilator 5.052
+--binary --timing, sv2v 0.0.13 -> iverilog.
+
+- Bug (§2 🆕 AI): a signed constant in a constant region whose width
+  the walk cannot give folds sign-extended into an unsigned region.
+  Ev12, `logic signed [7:0] X = -4; int N = 2;` with `X + {N{1'b0}}`:
+  `L=4294967292 M=0 K=0 vb=4`, where iverilog, sv2v and verilator print
+  `L=252 M=1 K=1 vb=5`. Beside an unpacked-array-parameter element
+  (Eu7–Eu9): `L=0 GI=else GC=def vb=4`, sv2v and verilator
+  `1 then item 5`.
+- Mechanism: `const_fn_width.rs` `const_self_width` sizes a
+  `K::Replicate` count with the literal-only `const_eval_u32`, while the
+  value path folds the same count with `fold_count`. A whole
+  constant-array element has no width arm, and `const_signed_env` /
+  `const_expr_signed` read it unsigned. The region's width is then
+  unknown, `eval_const_env_at` turns masking off, and the signed
+  neighbour stays sign-extended in an unsigned region.
+- The attempt sized the count by `fold_count` through the scope resolver
+  and a whole element by its declared width and sign. One region rule
+  guarded it: one entry per evaluation, and a region holding a user
+  call, like the constant-function interpreter as a whole, kept PRE's
+  leaf rules (🆕 AE's never-assigned 0, 🆕 AC's declined calls). Over
+  3082 cells: WRONG->OK 295, LOUD->OK 20, correct->other 0, and 8
+  WRONG->WRONG' (residue V below). §4.5.580's 666 variants: 0 movers.
+  Corpus and examples .vu / .velab byte-identical; elaboration time
+  within ±3%.
+- Two consecutive BLOCKING rounds on one axis, each 🆕 AE's 0 entering
+  a newly sized region (`fl` reads a never-assigned local). A root
+  returning through another door, so the attempt was reverted whole
+  (LOOPROMPT §4, ER §3.6):
+  1. Round 1 (soundness): a nested region root re-decided the rule
+     under a call-bearing root. C1
+     `localparam int L = fl(0) + ((X + {N{1'b0}}) == 8'hFC)` PRE `L=0`
+     = iverilog, cut `L=1`. C2, a generate-if over the same sum, PRE
+     `else` = iverilog = sv2v, cut `then`. C8 PRE E3009, cut `L=2`
+     (iverilog `L=0`).
+  2. Round 2 (both lenses), after every nested root inherited an open
+     PRE region: the 0 is stored in a constant first and named from a
+     call-free region. Nq_launder `localparam Q = fl(0);` with
+     `if ((X + {N{1'b0}}) == (Q + 8'd252))`, and Apg
+     `localparam logic [7:0] A = fl(0);` with
+     `if ((A + (X + {N{1'b0}})) == 8'hFC)`: PRE `GI=else` = iverilog =
+     sv2v, cut `GI=then`. No structural "contains a call" rule can see
+     a call one declaration away.
+- Retry shape: re-derive the sizing (ER §3.6) once 🆕 AE lands, or
+  before it with a mark on a constant whose fold read a never-assigned
+  4-state variable (§4.5.588's never-assigned-read taint; an over-seed
+  only narrows here), a region that holds a call or names a marked
+  constant keeping PRE's leaf rules.
+- ROADMAP §2 start-order:
+  - 🆕 AI is BLOCKED on 🆕 AE. The row records the mechanism, the cut
+    and its gain, the two doors with their cells and the retry shape;
+    its `None`-arm census now points at the "Constant domain" lines
+    below.
+  - 🆕 W stays BLOCKED on 🆕 AI. 🆕 S's retry line follows the
+    renumbering. 🆕 AE now holds 🆕 AI (C1, Nq_launder, Apg), and
+    through it 🆕 W.
+- ROADMAP §2 recorded defects, residues that stand whatever the retry:
+  - New "Size cast" line E1: a constant array typed by a type parameter
+    keeps the default type's sign per instance
+    (`sub #(.T(logic [7:0])) u2` over a signed default: `t.u2 L=1`,
+    verilator `t.u2 L=0`; iverilog refuses unpacked array parameters).
+  - New "Constant domain" lines. R1: a call count has no width
+    (Rfn_t_s `L=0 GI=else vb=4`, 3 oracles `L=1 then vb=5`; BLOCKED on
+    a call arm in `fold_count`, §4.5.371 ⓸). R3: `S.len()` has no self
+    width (Oslen_o_s `L=0`, iverilog and verilator `L=1`). R4: a 65-bit
+    signed neighbour beside a name count (K_w65 `L=0`, 3 oracles
+    `L=1`).
+  - Cited on existing lines. The generate-`case` line gains D21
+    (`GC=def`, 3 oracles `GC=fc`). The unreadable-override-leaf line
+    gains residue V: an untyped `localparam` twin (Adiv_lv
+    `L=4294967295 B=32`, 3 oracles `L=84 B=8`), because the
+    declared-width value lane has no replication or element arm. The
+    package-body constant-domain line gains Pkf_cntE (`L=0`, 3 oracles
+    `L=1`): the count arm resolved `PN` through the calling module
+    (Pkf_cnt `L=1` -> `L=0`).
+- ROADMAP §5.2: 🆕 AI's row leaves the queue. New order: 6 🆕 W with
+  🆕 S (a)'s i64 half (after 🆕 AI, BLOCKED on 🆕 AE), 7 🆕 T then
+  🆕 S (a)'s wide half, 8 the "Size cast" enum lines, 9 the new-design
+  census, 10 hygiene. The order prose and every `§5.2 row N` cite in
+  docs/ follow.
+- Summary recounted by line census: §2 start-order 37/8/29 ->
+  37/7/30, §2 recorded 208/108/100 -> 212/111/101; total open
+  477 -> 481, startable 276 -> 278, blocked 201 -> 203. `next` is now
+  §2 1, 3, 4, 6, 7 and 2, 8; §3.b 5; study/03 9.
+- REMAINING_WORK §D: the 🆕 AI line records the revert and waits on the
+  4-state result channel, which now also blocks 🆕 AI. Row cites
+  follow.
+- PROBE_CATALOG, three new rows:
+  - a signed operand of a real-valued delay reads unsigned (Cpt_X
+    `#(X * 1ns)` fires at 252; iverilog and verilator never fire);
+  - an operator-tree override onto a typed parameter binds the
+    unlimited fold (Kot_L `#(.P(X + 2'b00))` onto `logic [15:0] P`
+    `P=65532`, Koi_L `P=-4`; 3 oracles `P=252`);
+  - oracle note: iverilog fires a constant-driver continuous assign
+    whose delay holds a call at t=0 (p1–p6 `w=1 t=0`).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

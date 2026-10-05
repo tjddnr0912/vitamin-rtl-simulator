@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p5__iso_FNRX
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p5/iso_FNRX.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./iso_FNRX.ivl | 52 bytes
+FNRX 1
+iso_FNRX.sv:4: $finish called at 3 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./iso_FNRX.vl | 144 bytes
+%Error: iso_FNRX.sv:3:50: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./iso_FNRX.s2v | 55 bytes
+FNRX x
+iso_FNRX.s2v.v:9: $finish called at 3 (1s)
+rc=0
+=== block 4 | vita [cut] | ./iso_FNRX.cut | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+FNRX 1
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [cut] | ./iso_FNRX.cut.route | 13 bytes
+t fr frame 1
+=== block 6 | vita [pre] | ./iso_FNRX.pre | 175 bytes | identical to block 4
+=== block 7 | vita [pre] | ./iso_FNRX.pre.route | 13 bytes | identical to block 5
+=== end

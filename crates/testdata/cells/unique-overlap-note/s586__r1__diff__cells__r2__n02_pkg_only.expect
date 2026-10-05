@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__r2__n02_pkg_only
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/r2/n02_pkg_only.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells/r2
+oracles_present: iverilog
+vita_tags: POST,POST2,PRE
+verdict: R2-2 same root class as N1, non-blocking
+verdict_source: s586/r1/diff/REPORT.md:29
+notes: runs: r1/diff/v2/n02_pkg_only r3/pkg_only
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 22
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/v2/n02_pkg_only/iv.cout | 40 bytes
+No top level modules, and no -s option.
+=== block 2 | vita [POST] | r1/diff/v2/n02_pkg_only/post.cerr | 465 bytes
+n02_pkg_only.sv:3:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=1
+=== block 3 | vita [POST] | r1/diff/v2/n02_pkg_only/post.crc | 2 bytes
+0
+=== block 4 | vita [POST] | r1/diff/v2/n02_pkg_only/post.err | 530 bytes
+n02_pkg_only.sv:3:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: no top module to elaborate
+errors=1 warnings=1 notes=1
+=== block 5 | vita [POST] | r1/diff/v2/n02_pkg_only/post.out | 0 bytes
+
+=== block 6 | vita [POST] | r1/diff/v2/n02_pkg_only/post.rc | 2 bytes
+1
+=== block 7 | vita [POST2] | r1/diff/v2/n02_pkg_only/post2.cerr | 465 bytes | identical to block 2
+=== block 8 | vita [POST2] | r1/diff/v2/n02_pkg_only/post2.crc | 2 bytes | identical to block 3
+=== block 9 | vita [POST2] | r1/diff/v2/n02_pkg_only/post2.err | 530 bytes | identical to block 4
+=== block 10 | vita [POST2] | r1/diff/v2/n02_pkg_only/post2.out | 0 bytes | identical to block 5
+=== block 11 | vita [POST2] | r1/diff/v2/n02_pkg_only/post2.rc | 2 bytes | identical to block 6
+=== block 12 | vita [POST2] | r3/pkg_only.post2.err | 530 bytes | identical to block 4
+=== block 13 | vita [POST2] | r3/pkg_only.post2.out | 0 bytes | identical to block 5
+=== block 14 | vita [POST2] | r3/pkg_only.post2.rc | 2 bytes | identical to block 6
+=== block 15 | vita [PRE] | r1/diff/v2/n02_pkg_only/pre.cerr | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 16 | vita [PRE] | r1/diff/v2/n02_pkg_only/pre.crc | 2 bytes | identical to block 3
+=== block 17 | vita [PRE] | r1/diff/v2/n02_pkg_only/pre.err | 192 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: no top module to elaborate
+errors=1 warnings=1 notes=0
+=== block 18 | vita [PRE] | r1/diff/v2/n02_pkg_only/pre.out | 0 bytes | identical to block 5
+=== block 19 | vita [PRE] | r1/diff/v2/n02_pkg_only/pre.rc | 2 bytes | identical to block 6
+=== block 20 | vita [PRE] | r3/pkg_only.pre.err | 192 bytes | identical to block 17
+=== block 21 | vita [PRE] | r3/pkg_only.pre.out | 0 bytes | identical to block 5
+=== block 22 | vita [PRE] | r3/pkg_only.pre.rc | 2 bytes | identical to block 6
+=== end

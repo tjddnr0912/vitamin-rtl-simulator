@@ -1,0 +1,24 @@
+== Ap
+  PRE: A=0 L=1
+  post_a: A=0 L=1
+  IVL: A=x L=0
+  VL: A=x L=X
+  S2V: A=x L=X
+  post_b: A=0 L=1 
+  post_b staged: errors=0 warnings=0 notes=0 A=0 L=1 
+== Apg
+  PRE: GI=else
+  post_a: GI=then
+  IVL: GI=else
+  VL: GI=then
+  S2V: GI=else
+  post_b: GI=then 
+  post_b staged: errors=0 warnings=0 notes=0 GI=then 
+== Apl
+  PRE: A=0 L=1
+  post_a: A=0 L=1
+  IVL: A=x L=0
+  VL: A=x L=X
+  S2V: A=x L=X
+  post_b: A=0 L=1 
+  post_b staged: errors=0 warnings=0 notes=0 A=0 L=1 

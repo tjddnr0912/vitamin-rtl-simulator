@@ -1,0 +1,23 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__sound__cells__c2a_fv_in_cf
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/sound/cells/c2a_fv_in_cf.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: verilator
+vita_tags: unrecorded
+verdict: NON-BLOCKING
+verdict_source: s583/r1/sound/REPORT.md:44
+notes: verilator/vita sections in aggregate r1/sound/cells/post.out,r1/sound/cells/pre.out,r1/sound/cells/vl.out
+blocks: 1
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./vlc_c2a_fv_in_cf.log | 607 bytes
+%Error: c2a_fv_in_cf.sv:9:26: Expecting expression to be constant, but can't determine constant for FUNCREF 'cf'
+                            : ... note: In instance 'top'
+        c2a_fv_in_cf.sv:6:5: ... Location of non-constant TASKREF 'fv': Unknown node type, perhaps missing visitor in SimulateVisitor
+        c2a_fv_in_cf.sv:9:26: ... Called from 'cf()' with parameters:
+           n = ?32?h3
+    9 |   localparam integer P = cf(3);
+      |                          ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== end

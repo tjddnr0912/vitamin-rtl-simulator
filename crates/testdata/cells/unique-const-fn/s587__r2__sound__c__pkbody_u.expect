@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__sound__c__pkbody_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/sound/c/pkbody_u.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/sound/c
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/sound/REPORT.md:30; oracle only quoted in a doc (s587/r2/sound/REPORT.md:30)
+blocks: 0
+=== end

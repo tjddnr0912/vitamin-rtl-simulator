@@ -1,0 +1,205 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__q5_sidefx
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/q5_sidefx.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator,sv2v
+vita_tags: PRE,POST2,POST,JIT2
+verdict: gained verilator lines | POST2 W4031 lines PRE and verilator lack
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:8
+notes: extra source; runs: d__q5_sidefx q5_sidefx
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [sv2v,verilator,PRE,POST] verilator 5.052 (version captured in slice) sv2v 0.0.13 (version captured in slice) | r1/diff/out/q5_sidefx.out | 4384 bytes
+q5_sidefx | vl:1@q5_sidefx.sv:8,4@q5_sidefx.sv:14 | PRE:- rc=0 | POST:W4031:1@q5_sidefx.sv:8:15,W4031:3@q5_sidefx.sv:12:17,W4031:4@q5_sidefx.sv:14:15 rc=0 | P==P:False BACKEND-SPLIT
+##### q5_sidefx
+=== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: q5_sidefx.sv:8:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:8:42: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:8:65: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:42: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:65: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:14:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:14:47: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:16:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:16:42: Expression side effect may be mishandled run rc=0
+[1] %Error: q5_sidefx.sv:8: Assertion failed in top: 'unique if' statement violated
+t=1 miss n=1 1 1
+t=2 hit2 n=3 3 2
+t=3 prio miss n=4 4 2
+[4] %Error: q5_sidefx.sv:14: Assertion failed in top: 'unique if' statement violated
+t=4 incr i=0
+t=5 else n=7 7 2
+- q5_sidefx.sv:18: Verilog $finish
+=== sv2v->iverilog run rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+s2v.v:66: $finish called at 6 (1s)
+=== vita PRE native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=2 notes=0
+=== vita PRE interp [BACKEND SPLIT]
+rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita PRE vm [BACKEND SPLIT]
+rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=5 notes=0
+=== vita POST interp [BACKEND SPLIT]
+rc=0
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+=== vita POST vm [BACKEND SPLIT]
+rc=0
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [sv2v,verilator,PRE,POST2] verilator 5.052 (version captured in slice) sv2v 0.0.13 (version captured in slice) | g/out3/d__q5_sidefx.out | 4350 bytes
+##### d__q5_sidefx
+=== verilator compile rc=0 msgs: %Warning-SIDEEFFECT: q5_sidefx.sv:8:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:8:42: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:8:65: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:42: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:10:65: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:14:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:14:47: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:16:19: Expression side effect may be mishandled
+%Warning-SIDEEFFECT: q5_sidefx.sv:16:42: Expression side effect may be mishandled run rc=0
+[1] %Error: q5_sidefx.sv:8: Assertion failed in top: 'unique if' statement violated
+t=1 miss n=1 1 1
+t=2 hit2 n=3 3 2
+t=3 prio miss n=4 4 2
+[4] %Error: q5_sidefx.sv:14: Assertion failed in top: 'unique if' statement violated
+t=4 incr i=0
+t=5 else n=7 7 2
+- q5_sidefx.sv:18: Verilog $finish
+=== sv2v->iverilog run rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+s2v.v:66: $finish called at 6 (1s)
+=== vita PRE native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=2 notes=0
+=== vita PRE interp [BACKEND SPLIT]
+rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita PRE vm [BACKEND SPLIT]
+rc=0
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+t=3 prio miss n=3 3 1
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=5 notes=0
+=== vita POST interp [BACKEND SPLIT]
+rc=0
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+=== vita POST vm [BACKEND SPLIT]
+rc=0
+q5_sidefx.sv:8:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 miss n=1 1 1
+t=2 hit2 n=2 2 1
+q5_sidefx.sv:12:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 prio miss n=3 3 1
+q5_sidefx.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 incr i=0
+t=5 else n=5 5 1
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

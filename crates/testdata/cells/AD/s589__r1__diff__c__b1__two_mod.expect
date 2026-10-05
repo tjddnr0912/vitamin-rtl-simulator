@@ -1,0 +1,74 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__diff__c__b1__two_mod
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/diff/c/b1/two_mod.sv
+roadmap_row: §2 🆕 AD
+set: r1/diff/c/b1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-a-sep,PRE,PRE-sep
+verdict: wrong->ok
+verdict_source: s589/IMPL.md:176
+notes: class word nearest `two_mod` on that line
+alias: r2/diff/c/b1/two_mod (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:176
+alias: r3/diff/c/b1/two_mod (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:176
+alias: post_b/lens/diff_b1/two_mod (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:176
+alias: post_c/r2/r2_diff_b1/two_mod (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:176
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 21
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./two_mod.ivl | 57 bytes
+a=255 b=255
+two_mod.sv:10: $finish called at 3 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./two_mod.vl | 234 bytes
+a=255 b=255
+- two_mod.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 3ps; walltime 0.000 s; speed 200.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./two_mod.s2v | 60 bytes
+a=255 b=255
+two_mod.s2v.v:37: $finish called at 3 (1s)
+rc=0
+=== block 4 | vita [POST-a] | ./two_mod.post | 180 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+a=255 b=255
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-a-sep] | ./two_mod.posts | 236 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+a=255 b=255
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST-b] | post_b/lens/diff_b1/two_mod.pb | 180 bytes | identical to block 4
+=== block 7 | vita [POST-b] | post_b/lens/diff_b1/two_mod.postb | 180 bytes | identical to block 4
+=== block 8 | vita [POST-b] | post_c/r2/r2_diff_b1/two_mod.postb | 180 bytes | identical to block 4
+=== block 9 | vita [POST-b] | r2/diff/c/b1/two_mod.pb | 180 bytes | identical to block 4
+=== block 10 | vita [POST-b] | r3/diff/c/b1/two_mod.pb | 180 bytes | identical to block 4
+=== block 11 | vita [POST-b-sep] | post_b/lens/diff_b1/two_mod.spostb | 236 bytes | identical to block 5
+=== block 12 | vita [POST-b-sep] | post_c/r2/r2_diff_b1/two_mod.spostb | 236 bytes | identical to block 5
+=== block 13 | vita [POST-b-sep] | r2/diff/c/b1/two_mod.pbs | 236 bytes | identical to block 5
+=== block 14 | vita [POST-b-sep] | r3/diff/c/b1/two_mod.pbs | 236 bytes | identical to block 5
+=== block 15 | vita [POST-c] | post_b/lens/diff_b1/two_mod.postc | 180 bytes | identical to block 4
+=== block 16 | vita [POST-c] | post_c/r2/r2_diff_b1/two_mod.postc | 180 bytes | identical to block 4
+=== block 17 | vita [POST-c] | r3/diff/c/b1/two_mod.pc | 180 bytes | identical to block 4
+=== block 18 | vita [POST-c-sep] | post_b/lens/diff_b1/two_mod.spostc | 236 bytes | identical to block 5
+=== block 19 | vita [POST-c-sep] | post_c/r2/r2_diff_b1/two_mod.spostc | 236 bytes | identical to block 5
+=== block 20 | vita [POST-c-sep] | r3/diff/c/b1/two_mod.pcs | 236 bytes | identical to block 5
+=== block 21 | vita [PRE] | ./two_mod.pre | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+a=15 b=65535
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== end

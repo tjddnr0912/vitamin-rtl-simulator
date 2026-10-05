@@ -1,0 +1,56 @@
+### D03_gen_shadow_m
+  pre594 : R: L=1
+  pa : R: L=1
+  pb : R: L=1
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1
+### D04_genvar_count_m
+  pre594 : R: g=16 L=1 | R: g=4 L=1
+  pa : R: g=16 L=1 | R: g=4 L=0
+  pb : R: g=16 L=1 | R: g=4 L=0
+  ivl : R: g=16 L=1 | R: g=4 L=0
+  s2v : R: g=16 L=1 | R: g=4 L=0
+  vl : R: g=16 L=1 | R: g=4 L=0
+### D05_defparam_m
+  pre594 : R: N=16 L=1
+  pa : R: N=16 L=1
+  pb : R: N=16 L=1
+  ivl : R: N=16 L=1
+  s2v : R: N=16 L=1
+  vl : R: N=16 L=1
+### D06_lpchain_ovr_m
+  pre594 : R: M=8 L=1
+  pa : R: M=8 L=1
+  pb : R: M=8 L=1
+  ivl : R: M=8 L=1
+  s2v : R: M=8 L=1
+  vl : R: M=8 L=1
+### D06b_lpchain_ovr4_m
+  pre594 : R: M=2 L=1
+  pa : R: M=2 L=0
+  pb : R: M=2 L=0
+  ivl : R: M=2 L=0
+  s2v : R: M=2 L=0
+  vl : R: M=2 L=0
+### D08a_pkg_count_m
+  pre594 : R: L1=1 L2=1
+  pa : R: L1=1 L2=1
+  pb : R: L1=1 L2=1
+  ivl : R: L1=1 L2=1
+  s2v : R: L1=1 L2=1
+  vl : R: L1=1 L2=1
+### D09_count_spellings_m
+  pre594 : R: L1=1 L2=256 B2=32 L3=1 L4=16 B4=32
+  pa : R: L1=1 L2=0 B2=8 L3=0 L4=0 B4=4
+  pb : R: L1=1 L2=0 B2=8 L3=0 L4=0 B4=4
+  ivl : R: L1=1 L2=256 B2=9 L3=0 L4=16 B4=5
+  s2v : R: L1=1 L2=256 B2=8 L3=0 L4=16 B4=4
+  vl : R: L1=1 L2=0 B2=8 L3=0 L4=0 B4=4
+### D35_iface_count_m
+  pre594 : R: L=1
+  pa : R: L=1
+  pb : R: L=1
+  ivl : R: L=1
+  s2v : R: L=1
+  vl : R: L=1

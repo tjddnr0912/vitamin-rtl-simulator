@@ -1,0 +1,14 @@
+designs=1 variants=22 moved(PRE!=POST3b)=10
+  D04: n=22 moved=10
+== MOVED rows: id | exp | PRE | POST3b | iverilog | sv2v
+K02_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+K02_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+K03_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+K03_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+K04_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+K04_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+K05_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+K05_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+K09_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+K09_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+== NOT moved, POST3b differs from an agreeing oracle pair (pre-existing candidates)

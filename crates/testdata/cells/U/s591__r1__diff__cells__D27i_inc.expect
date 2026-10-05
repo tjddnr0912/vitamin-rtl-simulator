@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r1__diff__cells__D27i_inc
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r1/diff/cells/D27i_inc.sv
+roadmap_row: §2 🆕 U
+set: r1/diff/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POSTA,POSTB,POSTB_SEP,PRE,POSTA_SEP
+verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:57
+notes: lens delta row PRE/posta/postb (whitespace collapsed); aux: D27inc.svh
+alias: r2/dc/D27i_inc (byte-identical source) verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=- verdict_source: s591/r2/lens_delta.txt:57
+aux: s591__r1__diff__cells__D27i_inc.aux/r1/diff/cells/D27inc.svh (origin s591/r1/diff/cells/D27inc.svh)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./D27i_inc.ivl | 61 bytes
+d27i v=0 E1=7
+D27i_inc.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./D27i_inc.vl | 236 bytes
+d27i v=0 E1=7
+- D27i_inc.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 6.667 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r2/dc/D27i_inc.vl | 236 bytes
+d27i v=0 E1=7
+- D27i_inc.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.564 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./D27i_inc.s2v | 64 bytes
+d27i v=0 E1=7
+D27i_inc.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 5 | vita [DEV3] | r2/dc/D27i_inc.dev3 | 234 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+D27i_inc.sv:5:11: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.E0` [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 6 | vita [POSTA] | ./D27i_inc.post | 234 bytes | identical to block 5
+=== block 7 | vita [POSTB] | ./D27i_inc.postb | 234 bytes | identical to block 5
+=== block 8 | vita [PRE] | ./D27i_inc.pre | 234 bytes | identical to block 5
+=== end

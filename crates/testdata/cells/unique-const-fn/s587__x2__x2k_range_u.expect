@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x2__x2k_range_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x2/x2k_range_u.sv
+roadmap_row: §3.b unique-const-fn
+set: x2
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S8
+verdict: unrecorded
+verdict_source: unrecorded
+alias: post_c/lanes2_work/x2_x2k_range_u/x2k_range_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./x2k_range_u.ivl | 94 bytes
+x2k_range_u.sv:3: syntax error
+x2k_range_u.sv:3: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_x2k_range_u.build | 342 bytes
+%Error: x2k_range_u.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                           : ... note: In instance 'top'
+    5 |   logic [fx(2):0] v;
+      |          ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./x2k_range_u.vl | 147 bytes
+%Error: x2k_range_u.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 4 | vita [S8] | ./x2k_range_u.s8 | 708 bytes
+x2k_range_u.sv:3:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+x2k_range_u.sv:5:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+errors=1 warnings=1 notes=1
+rc=1
+=== end

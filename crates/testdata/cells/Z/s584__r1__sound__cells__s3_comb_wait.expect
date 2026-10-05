@@ -1,0 +1,8045 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__r1__sound__cells__s3_comb_wait
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/r1/sound/cells/s3_comb_wait.sv
+roadmap_row: §2 🆕 Z
+set: r1/sound/cells
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE
+verdict: F1a fixed
+verdict_source: s584/r1/sound/REPORT.md:45
+notes: oracle_verilator vl.out is 624410641 B (raw verilator capture); parent decides
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/sound/w/s3_comb_wait/iv.out | 24 bytes
+iv compile rc=1
+iv rc=1
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r1/sound/w/s3_comb_wait/iv_c.txt | 1023 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3: error: a wait statement is not allowed in an always_comb, always_ff or always_latch process.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3: error: there must be no event controls or blocking delays in an always_comb process.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3: warning: System task ($display) cannot be synthesized in an always_comb process.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3: warning: System task ($display) cannot be synthesized in an always_comb process.
+Elaboration failed
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r1/sound/w/s3_comb_wait/vl.out | 131123 bytes | TRUNCATED at preservation: first 65536 and last 65536 of 624410641 bytes kept (original md5 75427aa9b52e2f2563a792f9836b49ab)
+vl compile rc=0
+C t=0 a=0 n=1
+D t=7 n=1
+C t=7 a=1 n=2
+D t=7 n=2
+C t=7 a=1 n=3
+D t=7 n=3
+C t=7 a=1 n=4
+D t=7 n=4
+C t=7 a=1 n=5
+D t=7 n=5
+C t=7 a=1 n=6
+D t=7 n=6
+C t=7 a=1 n=7
+D t=7 n=7
+C t=7 a=1 n=8
+D t=7 n=8
+C t=7 a=1 n=9
+D t=7 n=9
+C t=7 a=1 n=10
+D t=7 n=10
+C t=7 a=1 n=11
+D t=7 n=11
+C t=7 a=1 n=12
+D t=7 n=12
+C t=7 a=1 n=13
+D t=7 n=13
+C t=7 a=1 n=14
+D t=7 n=14
+C t=7 a=1 n=15
+D t=7 n=15
+C t=7 a=1 n=16
+D t=7 n=16
+C t=7 a=1 n=17
+D t=7 n=17
+C t=7 a=1 n=18
+D t=7 n=18
+C t=7 a=1 n=19
+D t=7 n=19
+C t=7 a=1 n=20
+D t=7 n=20
+C t=7 a=1 n=21
+D t=7 n=21
+C t=7 a=1 n=22
+D t=7 n=22
+C t=7 a=1 n=23
+D t=7 n=23
+C t=7 a=1 n=24
+D t=7 n=24
+C t=7 a=1 n=25
+D t=7 n=25
+C t=7 a=1 n=26
+D t=7 n=26
+C t=7 a=1 n=27
+D t=7 n=27
+C t=7 a=1 n=28
+D t=7 n=28
+C t=7 a=1 n=29
+D t=7 n=29
+C t=7 a=1 n=30
+D t=7 n=30
+C t=7 a=1 n=31
+D t=7 n=31
+C t=7 a=1 n=32
+D t=7 n=32
+C t=7 a=1 n=33
+D t=7 n=33
+C t=7 a=1 n=34
+D t=7 n=34
+C t=7 a=1 n=35
+D t=7 n=35
+C t=7 a=1 n=36
+D t=7 n=36
+C t=7 a=1 n=37
+D t=7 n=37
+C t=7 a=1 n=38
+D t=7 n=38
+C t=7 a=1 n=39
+D t=7 n=39
+C t=7 a=1 n=40
+D t=7 n=40
+C t=7 a=1 n=41
+D t=7 n=41
+C t=7 a=1 n=42
+D t=7 n=42
+C t=7 a=1 n=43
+D t=7 n=43
+C t=7 a=1 n=44
+D t=7 n=44
+C t=7 a=1 n=45
+D t=7 n=45
+C t=7 a=1 n=46
+D t=7 n=46
+C t=7 a=1 n=47
+D t=7 n=47
+C t=7 a=1 n=48
+D t=7 n=48
+C t=7 a=1 n=49
+D t=7 n=49
+C t=7 a=1 n=50
+D t=7 n=50
+C t=7 a=1 n=51
+D t=7 n=51
+C t=7 a=1 n=52
+D t=7 n=52
+C t=7 a=1 n=53
+D t=7 n=53
+C t=7 a=1 n=54
+D t=7 n=54
+C t=7 a=1 n=55
+D t=7 n=55
+C t=7 a=1 n=56
+D t=7 n=56
+C t=7 a=1 n=57
+D t=7 n=57
+C t=7 a=1 n=58
+D t=7 n=58
+C t=7 a=1 n=59
+D t=7 n=59
+C t=7 a=1 n=60
+D t=7 n=60
+C t=7 a=1 n=61
+D t=7 n=61
+C t=7 a=1 n=62
+D t=7 n=62
+C t=7 a=1 n=63
+D t=7 n=63
+C t=7 a=1 n=64
+D t=7 n=64
+C t=7 a=1 n=65
+D t=7 n=65
+C t=7 a=1 n=66
+D t=7 n=66
+C t=7 a=1 n=67
+D t=7 n=67
+C t=7 a=1 n=68
+D t=7 n=68
+C t=7 a=1 n=69
+D t=7 n=69
+C t=7 a=1 n=70
+D t=7 n=70
+C t=7 a=1 n=71
+D t=7 n=71
+C t=7 a=1 n=72
+D t=7 n=72
+C t=7 a=1 n=73
+D t=7 n=73
+C t=7 a=1 n=74
+D t=7 n=74
+C t=7 a=1 n=75
+D t=7 n=75
+C t=7 a=1 n=76
+D t=7 n=76
+C t=7 a=1 n=77
+D t=7 n=77
+C t=7 a=1 n=78
+D t=7 n=78
+C t=7 a=1 n=79
+D t=7 n=79
+C t=7 a=1 n=80
+D t=7 n=80
+C t=7 a=1 n=81
+D t=7 n=81
+C t=7 a=1 n=82
+D t=7 n=82
+C t=7 a=1 n=83
+D t=7 n=83
+C t=7 a=1 n=84
+D t=7 n=84
+C t=7 a=1 n=85
+D t=7 n=85
+C t=7 a=1 n=86
+D t=7 n=86
+C t=7 a=1 n=87
+D t=7 n=87
+C t=7 a=1 n=88
+D t=7 n=88
+C t=7 a=1 n=89
+D t=7 n=89
+C t=7 a=1 n=90
+D t=7 n=90
+C t=7 a=1 n=91
+D t=7 n=91
+C t=7 a=1 n=92
+D t=7 n=92
+C t=7 a=1 n=93
+D t=7 n=93
+C t=7 a=1 n=94
+D t=7 n=94
+C t=7 a=1 n=95
+D t=7 n=95
+C t=7 a=1 n=96
+D t=7 n=96
+C t=7 a=1 n=97
+D t=7 n=97
+C t=7 a=1 n=98
+D t=7 n=98
+C t=7 a=1 n=99
+D t=7 n=99
+C t=7 a=1 n=100
+D t=7 n=100
+C t=7 a=1 n=101
+D t=7 n=101
+C t=7 a=1 n=102
+D t=7 n=102
+C t=7 a=1 n=103
+D t=7 n=103
+C t=7 a=1 n=104
+D t=7 n=104
+C t=7 a=1 n=105
+D t=7 n=105
+C t=7 a=1 n=106
+D t=7 n=106
+C t=7 a=1 n=107
+D t=7 n=107
+C t=7 a=1 n=108
+D t=7 n=108
+C t=7 a=1 n=109
+D t=7 n=109
+C t=7 a=1 n=110
+D t=7 n=110
+C t=7 a=1 n=111
+D t=7 n=111
+C t=7 a=1 n=112
+D t=7 n=112
+C t=7 a=1 n=113
+D t=7 n=113
+C t=7 a=1 n=114
+D t=7 n=114
+C t=7 a=1 n=115
+D t=7 n=115
+C t=7 a=1 n=116
+D t=7 n=116
+C t=7 a=1 n=117
+D t=7 n=117
+C t=7 a=1 n=118
+D t=7 n=118
+C t=7 a=1 n=119
+D t=7 n=119
+C t=7 a=1 n=120
+D t=7 n=120
+C t=7 a=1 n=121
+D t=7 n=121
+C t=7 a=1 n=122
+D t=7 n=122
+C t=7 a=1 n=123
+D t=7 n=123
+C t=7 a=1 n=124
+D t=7 n=124
+C t=7 a=1 n=125
+D t=7 n=125
+C t=7 a=1 n=126
+D t=7 n=126
+C t=7 a=1 n=127
+D t=7 n=127
+C t=7 a=1 n=128
+D t=7 n=128
+C t=7 a=1 n=129
+D t=7 n=129
+C t=7 a=1 n=130
+D t=7 n=130
+C t=7 a=1 n=131
+D t=7 n=131
+C t=7 a=1 n=132
+D t=7 n=132
+C t=7 a=1 n=133
+D t=7 n=133
+C t=7 a=1 n=134
+D t=7 n=134
+C t=7 a=1 n=135
+D t=7 n=135
+C t=7 a=1 n=136
+D t=7 n=136
+C t=7 a=1 n=137
+D t=7 n=137
+C t=7 a=1 n=138
+D t=7 n=138
+C t=7 a=1 n=139
+D t=7 n=139
+C t=7 a=1 n=140
+D t=7 n=140
+C t=7 a=1 n=141
+D t=7 n=141
+C t=7 a=1 n=142
+D t=7 n=142
+C t=7 a=1 n=143
+D t=7 n=143
+C t=7 a=1 n=144
+D t=7 n=144
+C t=7 a=1 n=145
+D t=7 n=145
+C t=7 a=1 n=146
+D t=7 n=146
+C t=7 a=1 n=147
+D t=7 n=147
+C t=7 a=1 n=148
+D t=7 n=148
+C t=7 a=1 n=149
+D t=7 n=149
+C t=7 a=1 n=150
+D t=7 n=150
+C t=7 a=1 n=151
+D t=7 n=151
+C t=7 a=1 n=152
+D t=7 n=152
+C t=7 a=1 n=153
+D t=7 n=153
+C t=7 a=1 n=154
+D t=7 n=154
+C t=7 a=1 n=155
+D t=7 n=155
+C t=7 a=1 n=156
+D t=7 n=156
+C t=7 a=1 n=157
+D t=7 n=157
+C t=7 a=1 n=158
+D t=7 n=158
+C t=7 a=1 n=159
+D t=7 n=159
+C t=7 a=1 n=160
+D t=7 n=160
+C t=7 a=1 n=161
+D t=7 n=161
+C t=7 a=1 n=162
+D t=7 n=162
+C t=7 a=1 n=163
+D t=7 n=163
+C t=7 a=1 n=164
+D t=7 n=164
+C t=7 a=1 n=165
+D t=7 n=165
+C t=7 a=1 n=166
+D t=7 n=166
+C t=7 a=1 n=167
+D t=7 n=167
+C t=7 a=1 n=168
+D t=7 n=168
+C t=7 a=1 n=169
+D t=7 n=169
+C t=7 a=1 n=170
+D t=7 n=170
+C t=7 a=1 n=171
+D t=7 n=171
+C t=7 a=1 n=172
+D t=7 n=172
+C t=7 a=1 n=173
+D t=7 n=173
+C t=7 a=1 n=174
+D t=7 n=174
+C t=7 a=1 n=175
+D t=7 n=175
+C t=7 a=1 n=176
+D t=7 n=176
+C t=7 a=1 n=177
+D t=7 n=177
+C t=7 a=1 n=178
+D t=7 n=178
+C t=7 a=1 n=179
+D t=7 n=179
+C t=7 a=1 n=180
+D t=7 n=180
+C t=7 a=1 n=181
+D t=7 n=181
+C t=7 a=1 n=182
+D t=7 n=182
+C t=7 a=1 n=183
+D t=7 n=183
+C t=7 a=1 n=184
+D t=7 n=184
+C t=7 a=1 n=185
+D t=7 n=185
+C t=7 a=1 n=186
+D t=7 n=186
+C t=7 a=1 n=187
+D t=7 n=187
+C t=7 a=1 n=188
+D t=7 n=188
+C t=7 a=1 n=189
+D t=7 n=189
+C t=7 a=1 n=190
+D t=7 n=190
+C t=7 a=1 n=191
+D t=7 n=191
+C t=7 a=1 n=192
+D t=7 n=192
+C t=7 a=1 n=193
+D t=7 n=193
+C t=7 a=1 n=194
+D t=7 n=194
+C t=7 a=1 n=195
+D t=7 n=195
+C t=7 a=1 n=196
+D t=7 n=196
+C t=7 a=1 n=197
+D t=7 n=197
+C t=7 a=1 n=198
+D t=7 n=198
+C t=7 a=1 n=199
+D t=7 n=199
+C t=7 a=1 n=200
+D t=7 n=200
+C t=7 a=1 n=201
+D t=7 n=201
+C t=7 a=1 n=202
+D t=7 n=202
+C t=7 a=1 n=203
+D t=7 n=203
+C t=7 a=1 n=204
+D t=7 n=204
+C t=7 a=1 n=205
+D t=7 n=205
+C t=7 a=1 n=206
+D t=7 n=206
+C t=7 a=1 n=207
+D t=7 n=207
+C t=7 a=1 n=208
+D t=7 n=208
+C t=7 a=1 n=209
+D t=7 n=209
+C t=7 a=1 n=210
+D t=7 n=210
+C t=7 a=1 n=211
+D t=7 n=211
+C t=7 a=1 n=212
+D t=7 n=212
+C t=7 a=1 n=213
+D t=7 n=213
+C t=7 a=1 n=214
+D t=7 n=214
+C t=7 a=1 n=215
+D t=7 n=215
+C t=7 a=1 n=216
+D t=7 n=216
+C t=7 a=1 n=217
+D t=7 n=217
+C t=7 a=1 n=218
+D t=7 n=218
+C t=7 a=1 n=219
+D t=7 n=219
+C t=7 a=1 n=220
+D t=7 n=220
+C t=7 a=1 n=221
+D t=7 n=221
+C t=7 a=1 n=222
+D t=7 n=222
+C t=7 a=1 n=223
+D t=7 n=223
+C t=7 a=1 n=224
+D t=7 n=224
+C t=7 a=1 n=225
+D t=7 n=225
+C t=7 a=1 n=226
+D t=7 n=226
+C t=7 a=1 n=227
+D t=7 n=227
+C t=7 a=1 n=228
+D t=7 n=228
+C t=7 a=1 n=229
+D t=7 n=229
+C t=7 a=1 n=230
+D t=7 n=230
+C t=7 a=1 n=231
+D t=7 n=231
+C t=7 a=1 n=232
+D t=7 n=232
+C t=7 a=1 n=233
+D t=7 n=233
+C t=7 a=1 n=234
+D t=7 n=234
+C t=7 a=1 n=235
+D t=7 n=235
+C t=7 a=1 n=236
+D t=7 n=236
+C t=7 a=1 n=237
+D t=7 n=237
+C t=7 a=1 n=238
+D t=7 n=238
+C t=7 a=1 n=239
+D t=7 n=239
+C t=7 a=1 n=240
+D t=7 n=240
+C t=7 a=1 n=241
+D t=7 n=241
+C t=7 a=1 n=242
+D t=7 n=242
+C t=7 a=1 n=243
+D t=7 n=243
+C t=7 a=1 n=244
+D t=7 n=244
+C t=7 a=1 n=245
+D t=7 n=245
+C t=7 a=1 n=246
+D t=7 n=246
+C t=7 a=1 n=247
+D t=7 n=247
+C t=7 a=1 n=248
+D t=7 n=248
+C t=7 a=1 n=249
+D t=7 n=249
+C t=7 a=1 n=250
+D t=7 n=250
+C t=7 a=1 n=251
+D t=7 n=251
+C t=7 a=1 n=252
+D t=7 n=252
+C t=7 a=1 n=253
+D t=7 n=253
+C t=7 a=1 n=254
+D t=7 n=254
+C t=7 a=1 n=255
+D t=7 n=255
+C t=7 a=1 n=256
+D t=7 n=256
+C t=7 a=1 n=257
+D t=7 n=257
+C t=7 a=1 n=258
+D t=7 n=258
+C t=7 a=1 n=259
+D t=7 n=259
+C t=7 a=1 n=260
+D t=7 n=260
+C t=7 a=1 n=261
+D t=7 n=261
+C t=7 a=1 n=262
+D t=7 n=262
+C t=7 a=1 n=263
+D t=7 n=263
+C t=7 a=1 n=264
+D t=7 n=264
+C t=7 a=1 n=265
+D t=7 n=265
+C t=7 a=1 n=266
+D t=7 n=266
+C t=7 a=1 n=267
+D t=7 n=267
+C t=7 a=1 n=268
+D t=7 n=268
+C t=7 a=1 n=269
+D t=7 n=269
+C t=7 a=1 n=270
+D t=7 n=270
+C t=7 a=1 n=271
+D t=7 n=271
+C t=7 a=1 n=272
+D t=7 n=272
+C t=7 a=1 n=273
+D t=7 n=273
+C t=7 a=1 n=274
+D t=7 n=274
+C t=7 a=1 n=275
+D t=7 n=275
+C t=7 a=1 n=276
+D t=7 n=276
+C t=7 a=1 n=277
+D t=7 n=277
+C t=7 a=1 n=278
+D t=7 n=278
+C t=7 a=1 n=279
+D t=7 n=279
+C t=7 a=1 n=280
+D t=7 n=280
+C t=7 a=1 n=281
+D t=7 n=281
+C t=7 a=1 n=282
+D t=7 n=282
+C t=7 a=1 n=283
+D t=7 n=283
+C t=7 a=1 n=284
+D t=7 n=284
+C t=7 a=1 n=285
+D t=7 n=285
+C t=7 a=1 n=286
+D t=7 n=286
+C t=7 a=1 n=287
+D t=7 n=287
+C t=7 a=1 n=288
+D t=7 n=288
+C t=7 a=1 n=289
+D t=7 n=289
+C t=7 a=1 n=290
+D t=7 n=290
+C t=7 a=1 n=291
+D t=7 n=291
+C t=7 a=1 n=292
+D t=7 n=292
+C t=7 a=1 n=293
+D t=7 n=293
+C t=7 a=1 n=294
+D t=7 n=294
+C t=7 a=1 n=295
+D t=7 n=295
+C t=7 a=1 n=296
+D t=7 n=296
+C t=7 a=1 n=297
+D t=7 n=297
+C t=7 a=1 n=298
+D t=7 n=298
+C t=7 a=1 n=299
+D t=7 n=299
+C t=7 a=1 n=300
+D t=7 n=300
+C t=7 a=1 n=301
+D t=7 n=301
+C t=7 a=1 n=302
+D t=7 n=302
+C t=7 a=1 n=303
+D t=7 n=303
+C t=7 a=1 n=304
+D t=7 n=304
+C t=7 a=1 n=305
+D t=7 n=305
+C t=7 a=1 n=306
+D t=7 n=306
+C t=7 a=1 n=307
+D t=7 n=307
+C t=7 a=1 n=308
+D t=7 n=308
+C t=7 a=1 n=309
+D t=7 n=309
+C t=7 a=1 n=310
+D t=7 n=310
+C t=7 a=1 n=311
+D t=7 n=311
+C t=7 a=1 n=312
+D t=7 n=312
+C t=7 a=1 n=313
+D t=7 n=313
+C t=7 a=1 n=314
+D t=7 n=314
+C t=7 a=1 n=315
+D t=7 n=315
+C t=7 a=1 n=316
+D t=7 n=316
+C t=7 a=1 n=317
+D t=7 n=317
+C t=7 a=1 n=318
+D t=7 n=318
+C t=7 a=1 n=319
+D t=7 n=319
+C t=7 a=1 n=320
+D t=7 n=320
+C t=7 a=1 n=321
+D t=7 n=321
+C t=7 a=1 n=322
+D t=7 n=322
+C t=7 a=1 n=323
+D t=7 n=323
+C t=7 a=1 n=324
+D t=7 n=324
+C t=7 a=1 n=325
+D t=7 n=325
+C t=7 a=1 n=326
+D t=7 n=326
+C t=7 a=1 n=327
+D t=7 n=327
+C t=7 a=1 n=328
+D t=7 n=328
+C t=7 a=1 n=329
+D t=7 n=329
+C t=7 a=1 n=330
+D t=7 n=330
+C t=7 a=1 n=331
+D t=7 n=331
+C t=7 a=1 n=332
+D t=7 n=332
+C t=7 a=1 n=333
+D t=7 n=333
+C t=7 a=1 n=334
+D t=7 n=334
+C t=7 a=1 n=335
+D t=7 n=335
+C t=7 a=1 n=336
+D t=7 n=336
+C t=7 a=1 n=337
+D t=7 n=337
+C t=7 a=1 n=338
+D t=7 n=338
+C t=7 a=1 n=339
+D t=7 n=339
+C t=7 a=1 n=340
+D t=7 n=340
+C t=7 a=1 n=341
+D t=7 n=341
+C t=7 a=1 n=342
+D t=7 n=342
+C t=7 a=1 n=343
+D t=7 n=343
+C t=7 a=1 n=344
+D t=7 n=344
+C t=7 a=1 n=345
+D t=7 n=345
+C t=7 a=1 n=346
+D t=7 n=346
+C t=7 a=1 n=347
+D t=7 n=347
+C t=7 a=1 n=348
+D t=7 n=348
+C t=7 a=1 n=349
+D t=7 n=349
+C t=7 a=1 n=350
+D t=7 n=350
+C t=7 a=1 n=351
+D t=7 n=351
+C t=7 a=1 n=352
+D t=7 n=352
+C t=7 a=1 n=353
+D t=7 n=353
+C t=7 a=1 n=354
+D t=7 n=354
+C t=7 a=1 n=355
+D t=7 n=355
+C t=7 a=1 n=356
+D t=7 n=356
+C t=7 a=1 n=357
+D t=7 n=357
+C t=7 a=1 n=358
+D t=7 n=358
+C t=7 a=1 n=359
+D t=7 n=359
+C t=7 a=1 n=360
+D t=7 n=360
+C t=7 a=1 n=361
+D t=7 n=361
+C t=7 a=1 n=362
+D t=7 n=362
+C t=7 a=1 n=363
+D t=7 n=363
+C t=7 a=1 n=364
+D t=7 n=364
+C t=7 a=1 n=365
+D t=7 n=365
+C t=7 a=1 n=366
+D t=7 n=366
+C t=7 a=1 n=367
+D t=7 n=367
+C t=7 a=1 n=368
+D t=7 n=368
+C t=7 a=1 n=369
+D t=7 n=369
+C t=7 a=1 n=370
+D t=7 n=370
+C t=7 a=1 n=371
+D t=7 n=371
+C t=7 a=1 n=372
+D t=7 n=372
+C t=7 a=1 n=373
+D t=7 n=373
+C t=7 a=1 n=374
+D t=7 n=374
+C t=7 a=1 n=375
+D t=7 n=375
+C t=7 a=1 n=376
+D t=7 n=376
+C t=7 a=1 n=377
+D t=7 n=377
+C t=7 a=1 n=378
+D t=7 n=378
+C t=7 a=1 n=379
+D t=7 n=379
+C t=7 a=1 n=380
+D t=7 n=380
+C t=7 a=1 n=381
+D t=7 n=381
+C t=7 a=1 n=382
+D t=7 n=382
+C t=7 a=1 n=383
+D t=7 n=383
+C t=7 a=1 n=384
+D t=7 n=384
+C t=7 a=1 n=385
+D t=7 n=385
+C t=7 a=1 n=386
+D t=7 n=386
+C t=7 a=1 n=387
+D t=7 n=387
+C t=7 a=1 n=388
+D t=7 n=388
+C t=7 a=1 n=389
+D t=7 n=389
+C t=7 a=1 n=390
+D t=7 n=390
+C t=7 a=1 n=391
+D t=7 n=391
+C t=7 a=1 n=392
+D t=7 n=392
+C t=7 a=1 n=393
+D t=7 n=393
+C t=7 a=1 n=394
+D t=7 n=394
+C t=7 a=1 n=395
+D t=7 n=395
+C t=7 a=1 n=396
+D t=7 n=396
+C t=7 a=1 n=397
+D t=7 n=397
+C t=7 a=1 n=398
+D t=7 n=398
+C t=7 a=1 n=399
+D t=7 n=399
+C t=7 a=1 n=400
+D t=7 n=400
+C t=7 a=1 n=401
+D t=7 n=401
+C t=7 a=1 n=402
+D t=7 n=402
+C t=7 a=1 n=403
+D t=7 n=403
+C t=7 a=1 n=404
+D t=7 n=404
+C t=7 a=1 n=405
+D t=7 n=405
+C t=7 a=1 n=406
+D t=7 n=406
+C t=7 a=1 n=407
+D t=7 n=407
+C t=7 a=1 n=408
+D t=7 n=408
+C t=7 a=1 n=409
+D t=7 n=409
+C t=7 a=1 n=410
+D t=7 n=410
+C t=7 a=1 n=411
+D t=7 n=411
+C t=7 a=1 n=412
+D t=7 n=412
+C t=7 a=1 n=413
+D t=7 n=413
+C t=7 a=1 n=414
+D t=7 n=414
+C t=7 a=1 n=415
+D t=7 n=415
+C t=7 a=1 n=416
+D t=7 n=416
+C t=7 a=1 n=417
+D t=7 n=417
+C t=7 a=1 n=418
+D t=7 n=418
+C t=7 a=1 n=419
+D t=7 n=419
+C t=7 a=1 n=420
+D t=7 n=420
+C t=7 a=1 n=421
+D t=7 n=421
+C t=7 a=1 n=422
+D t=7 n=422
+C t=7 a=1 n=423
+D t=7 n=423
+C t=7 a=1 n=424
+D t=7 n=424
+C t=7 a=1 n=425
+D t=7 n=425
+C t=7 a=1 n=426
+D t=7 n=426
+C t=7 a=1 n=427
+D t=7 n=427
+C t=7 a=1 n=428
+D t=7 n=428
+C t=7 a=1 n=429
+D t=7 n=429
+C t=7 a=1 n=430
+D t=7 n=430
+C t=7 a=1 n=431
+D t=7 n=431
+C t=7 a=1 n=432
+D t=7 n=432
+C t=7 a=1 n=433
+D t=7 n=433
+C t=7 a=1 n=434
+D t=7 n=434
+C t=7 a=1 n=435
+D t=7 n=435
+C t=7 a=1 n=436
+D t=7 n=436
+C t=7 a=1 n=437
+D t=7 n=437
+C t=7 a=1 n=438
+D t=7 n=438
+C t=7 a=1 n=439
+D t=7 n=439
+C t=7 a=1 n=440
+D t=7 n=440
+C t=7 a=1 n=441
+D t=7 n=441
+C t=7 a=1 n=442
+D t=7 n=442
+C t=7 a=1 n=443
+D t=7 n=443
+C t=7 a=1 n=444
+D t=7 n=444
+C t=7 a=1 n=445
+D t=7 n=445
+C t=7 a=1 n=446
+D t=7 n=446
+C t=7 a=1 n=447
+D t=7 n=447
+C t=7 a=1 n=448
+D t=7 n=448
+C t=7 a=1 n=449
+D t=7 n=449
+C t=7 a=1 n=450
+D t=7 n=450
+C t=7 a=1 n=451
+D t=7 n=451
+C t=7 a=1 n=452
+D t=7 n=452
+C t=7 a=1 n=453
+D t=7 n=453
+C t=7 a=1 n=454
+D t=7 n=454
+C t=7 a=1 n=455
+D t=7 n=455
+C t=7 a=1 n=456
+D t=7 n=456
+C t=7 a=1 n=457
+D t=7 n=457
+C t=7 a=1 n=458
+D t=7 n=458
+C t=7 a=1 n=459
+D t=7 n=459
+C t=7 a=1 n=460
+D t=7 n=460
+C t=7 a=1 n=461
+D t=7 n=461
+C t=7 a=1 n=462
+D t=7 n=462
+C t=7 a=1 n=463
+D t=7 n=463
+C t=7 a=1 n=464
+D t=7 n=464
+C t=7 a=1 n=465
+D t=7 n=465
+C t=7 a=1 n=466
+D t=7 n=466
+C t=7 a=1 n=467
+D t=7 n=467
+C t=7 a=1 n=468
+D t=7 n=468
+C t=7 a=1 n=469
+D t=7 n=469
+C t=7 a=1 n=470
+D t=7 n=470
+C t=7 a=1 n=471
+D t=7 n=471
+C t=7 a=1 n=472
+D t=7 n=472
+C t=7 a=1 n=473
+D t=7 n=473
+C t=7 a=1 n=474
+D t=7 n=474
+C t=7 a=1 n=475
+D t=7 n=475
+C t=7 a=1 n=476
+D t=7 n=476
+C t=7 a=1 n=477
+D t=7 n=477
+C t=7 a=1 n=478
+D t=7 n=478
+C t=7 a=1 n=479
+D t=7 n=479
+C t=7 a=1 n=480
+D t=7 n=480
+C t=7 a=1 n=481
+D t=7 n=481
+C t=7 a=1 n=482
+D t=7 n=482
+C t=7 a=1 n=483
+D t=7 n=483
+C t=7 a=1 n=484
+D t=7 n=484
+C t=7 a=1 n=485
+D t=7 n=485
+C t=7 a=1 n=486
+D t=7 n=486
+C t=7 a=1 n=487
+D t=7 n=487
+C t=7 a=1 n=488
+D t=7 n=488
+C t=7 a=1 n=489
+D t=7 n=489
+C t=7 a=1 n=490
+D t=7 n=490
+C t=7 a=1 n=491
+D t=7 n=491
+C t=7 a=1 n=492
+D t=7 n=492
+C t=7 a=1 n=493
+D t=7 n=493
+C t=7 a=1 n=494
+D t=7 n=494
+C t=7 a=1 n=495
+D t=7 n=495
+C t=7 a=1 n=496
+D t=7 n=496
+C t=7 a=1 n=497
+D t=7 n=497
+C t=7 a=1 n=498
+D t=7 n=498
+C t=7 a=1 n=499
+D t=7 n=499
+C t=7 a=1 n=500
+D t=7 n=500
+C t=7 a=1 n=501
+D t=7 n=501
+C t=7 a=1 n=502
+D t=7 n=502
+C t=7 a=1 n=503
+D t=7 n=503
+C t=7 a=1 n=504
+D t=7 n=504
+C t=7 a=1 n=505
+D t=7 n=505
+C t=7 a=1 n=506
+D t=7 n=506
+C t=7 a=1 n=507
+D t=7 n=507
+C t=7 a=1 n=508
+D t=7 n=508
+C t=7 a=1 n=509
+D t=7 n=509
+C t=7 a=1 n=510
+D t=7 n=510
+C t=7 a=1 n=511
+D t=7 n=511
+C t=7 a=1 n=512
+D t=7 n=512
+C t=7 a=1 n=513
+D t=7 n=513
+C t=7 a=1 n=514
+D t=7 n=514
+C t=7 a=1 n=515
+D t=7 n=515
+C t=7 a=1 n=516
+D t=7 n=516
+C t=7 a=1 n=517
+D t=7 n=517
+C t=7 a=1 n=518
+D t=7 n=518
+C t=7 a=1 n=519
+D t=7 n=519
+C t=7 a=1 n=520
+D t=7 n=520
+C t=7 a=1 n=521
+D t=7 n=521
+C t=7 a=1 n=522
+D t=7 n=522
+C t=7 a=1 n=523
+D t=7 n=523
+C t=7 a=1 n=524
+D t=7 n=524
+C t=7 a=1 n=525
+D t=7 n=525
+C t=7 a=1 n=526
+D t=7 n=526
+C t=7 a=1 n=527
+D t=7 n=527
+C t=7 a=1 n=528
+D t=7 n=528
+C t=7 a=1 n=529
+D t=7 n=529
+C t=7 a=1 n=530
+D t=7 n=530
+C t=7 a=1 n=531
+D t=7 n=531
+C t=7 a=1 n=532
+D t=7 n=532
+C t=7 a=1 n=533
+D t=7 n=533
+C t=7 a=1 n=534
+D t=7 n=534
+C t=7 a=1 n=535
+D t=7 n=535
+C t=7 a=1 n=536
+D t=7 n=536
+C t=7 a=1 n=537
+D t=7 n=537
+C t=7 a=1 n=538
+D t=7 n=538
+C t=7 a=1 n=539
+D t=7 n=539
+C t=7 a=1 n=540
+D t=7 n=540
+C t=7 a=1 n=541
+D t=7 n=541
+C t=7 a=1 n=542
+D t=7 n=542
+C t=7 a=1 n=543
+D t=7 n=543
+C t=7 a=1 n=544
+D t=7 n=544
+C t=7 a=1 n=545
+D t=7 n=545
+C t=7 a=1 n=546
+D t=7 n=546
+C t=7 a=1 n=547
+D t=7 n=547
+C t=7 a=1 n=548
+D t=7 n=548
+C t=7 a=1 n=549
+D t=7 n=549
+C t=7 a=1 n=550
+D t=7 n=550
+C t=7 a=1 n=551
+D t=7 n=551
+C t=7 a=1 n=552
+D t=7 n=552
+C t=7 a=1 n=553
+D t=7 n=553
+C t=7 a=1 n=554
+D t=7 n=554
+C t=7 a=1 n=555
+D t=7 n=555
+C t=7 a=1 n=556
+D t=7 n=556
+C t=7 a=1 n=557
+D t=7 n=557
+C t=7 a=1 n=558
+D t=7 n=558
+C t=7 a=1 n=559
+D t=7 n=559
+C t=7 a=1 n=560
+D t=7 n=560
+C t=7 a=1 n=561
+D t=7 n=561
+C t=7 a=1 n=562
+D t=7 n=562
+C t=7 a=1 n=563
+D t=7 n=563
+C t=7 a=1 n=564
+D t=7 n=564
+C t=7 a=1 n=565
+D t=7 n=565
+C t=7 a=1 n=566
+D t=7 n=566
+C t=7 a=1 n=567
+D t=7 n=567
+C t=7 a=1 n=568
+D t=7 n=568
+C t=7 a=1 n=569
+D t=7 n=569
+C t=7 a=1 n=570
+D t=7 n=570
+C t=7 a=1 n=571
+D t=7 n=571
+C t=7 a=1 n=572
+D t=7 n=572
+C t=7 a=1 n=573
+D t=7 n=573
+C t=7 a=1 n=574
+D t=7 n=574
+C t=7 a=1 n=575
+D t=7 n=575
+C t=7 a=1 n=576
+D t=7 n=576
+C t=7 a=1 n=577
+D t=7 n=577
+C t=7 a=1 n=578
+D t=7 n=578
+C t=7 a=1 n=579
+D t=7 n=579
+C t=7 a=1 n=580
+D t=7 n=580
+C t=7 a=1 n=581
+D t=7 n=581
+C t=7 a=1 n=582
+D t=7 n=582
+C t=7 a=1 n=583
+D t=7 n=583
+C t=7 a=1 n=584
+D t=7 n=584
+C t=7 a=1 n=585
+D t=7 n=585
+C t=7 a=1 n=586
+D t=7 n=586
+C t=7 a=1 n=587
+D t=7 n=587
+C t=7 a=1 n=588
+D t=7 n=588
+C t=7 a=1 n=589
+D t=7 n=589
+C t=7 a=1 n=590
+D t=7 n=590
+C t=7 a=1 n=591
+D t=7 n=591
+C t=7 a=1 n=592
+D t=7 n=592
+C t=7 a=1 n=593
+D t=7 n=593
+C t=7 a=1 n=594
+D t=7 n=594
+C t=7 a=1 n=595
+D t=7 n=595
+C t=7 a=1 n=596
+D t=7 n=596
+C t=7 a=1 n=597
+D t=7 n=597
+C t=7 a=1 n=598
+D t=7 n=598
+C t=7 a=1 n=599
+D t=7 n=599
+C t=7 a=1 n=600
+D t=7 n=600
+C t=7 a=1 n=601
+D t=7 n=601
+C t=7 a=1 n=602
+D t=7 n=602
+C t=7 a=1 n=603
+D t=7 n=603
+C t=7 a=1 n=604
+D t=7 n=604
+C t=7 a=1 n=605
+D t=7 n=605
+C t=7 a=1 n=606
+D t=7 n=606
+C t=7 a=1 n=607
+D t=7 n=607
+C t=7 a=1 n=608
+D t=7 n=608
+C t=7 a=1 n=609
+D t=7 n=609
+C t=7 a=1 n=610
+D t=7 n=610
+C t=7 a=1 n=611
+D t=7 n=611
+C t=7 a=1 n=612
+D t=7 n=612
+C t=7 a=1 n=613
+D t=7 n=613
+C t=7 a=1 n=614
+D t=7 n=614
+C t=7 a=1 n=615
+D t=7 n=615
+C t=7 a=1 n=616
+D t=7 n=616
+C t=7 a=1 n=617
+D t=7 n=617
+C t=7 a=1 n=618
+D t=7 n=618
+C t=7 a=1 n=619
+D t=7 n=619
+C t=7 a=1 n=620
+D t=7 n=620
+C t=7 a=1 n=621
+D t=7 n=621
+C t=7 a=1 n=622
+D t=7 n=622
+C t=7 a=1 n=623
+D t=7 n=623
+C t=7 a=1 n=624
+D t=7 n=624
+C t=7 a=1 n=625
+D t=7 n=625
+C t=7 a=1 n=626
+D t=7 n=626
+C t=7 a=1 n=627
+D t=7 n=627
+C t=7 a=1 n=628
+D t=7 n=628
+C t=7 a=1 n=629
+D t=7 n=629
+C t=7 a=1 n=630
+D t=7 n=630
+C t=7 a=1 n=631
+D t=7 n=631
+C t=7 a=1 n=632
+D t=7 n=632
+C t=7 a=1 n=633
+D t=7 n=633
+C t=7 a=1 n=634
+D t=7 n=634
+C t=7 a=1 n=635
+D t=7 n=635
+C t=7 a=1 n=636
+D t=7 n=636
+C t=7 a=1 n=637
+D t=7 n=637
+C t=7 a=1 n=638
+D t=7 n=638
+C t=7 a=1 n=639
+D t=7 n=639
+C t=7 a=1 n=640
+D t=7 n=640
+C t=7 a=1 n=641
+D t=7 n=641
+C t=7 a=1 n=642
+D t=7 n=642
+C t=7 a=1 n=643
+D t=7 n=643
+C t=7 a=1 n=644
+D t=7 n=644
+C t=7 a=1 n=645
+D t=7 n=645
+C t=7 a=1 n=646
+D t=7 n=646
+C t=7 a=1 n=647
+D t=7 n=647
+C t=7 a=1 n=648
+D t=7 n=648
+C t=7 a=1 n=649
+D t=7 n=649
+C t=7 a=1 n=650
+D t=7 n=650
+C t=7 a=1 n=651
+D t=7 n=651
+C t=7 a=1 n=652
+D t=7 n=652
+C t=7 a=1 n=653
+D t=7 n=653
+C t=7 a=1 n=654
+D t=7 n=654
+C t=7 a=1 n=655
+D t=7 n=655
+C t=7 a=1 n=656
+D t=7 n=656
+C t=7 a=1 n=657
+D t=7 n=657
+C t=7 a=1 n=658
+D t=7 n=658
+C t=7 a=1 n=659
+D t=7 n=659
+C t=7 a=1 n=660
+D t=7 n=660
+C t=7 a=1 n=661
+D t=7 n=661
+C t=7 a=1 n=662
+D t=7 n=662
+C t=7 a=1 n=663
+D t=7 n=663
+C t=7 a=1 n=664
+D t=7 n=664
+C t=7 a=1 n=665
+D t=7 n=665
+C t=7 a=1 n=666
+D t=7 n=666
+C t=7 a=1 n=667
+D t=7 n=667
+C t=7 a=1 n=668
+D t=7 n=668
+C t=7 a=1 n=669
+D t=7 n=669
+C t=7 a=1 n=670
+D t=7 n=670
+C t=7 a=1 n=671
+D t=7 n=671
+C t=7 a=1 n=672
+D t=7 n=672
+C t=7 a=1 n=673
+D t=7 n=673
+C t=7 a=1 n=674
+D t=7 n=674
+C t=7 a=1 n=675
+D t=7 n=675
+C t=7 a=1 n=676
+D t=7 n=676
+C t=7 a=1 n=677
+D t=7 n=677
+C t=7 a=1 n=678
+D t=7 n=678
+C t=7 a=1 n=679
+D t=7 n=679
+C t=7 a=1 n=680
+D t=7 n=680
+C t=7 a=1 n=681
+D t=7 n=681
+C t=7 a=1 n=682
+D t=7 n=682
+C t=7 a=1 n=683
+D t=7 n=683
+C t=7 a=1 n=684
+D t=7 n=684
+C t=7 a=1 n=685
+D t=7 n=685
+C t=7 a=1 n=686
+D t=7 n=686
+C t=7 a=1 n=687
+D t=7 n=687
+C t=7 a=1 n=688
+D t=7 n=688
+C t=7 a=1 n=689
+D t=7 n=689
+C t=7 a=1 n=690
+D t=7 n=690
+C t=7 a=1 n=691
+D t=7 n=691
+C t=7 a=1 n=692
+D t=7 n=692
+C t=7 a=1 n=693
+D t=7 n=693
+C t=7 a=1 n=694
+D t=7 n=694
+C t=7 a=1 n=695
+D t=7 n=695
+C t=7 a=1 n=696
+D t=7 n=696
+C t=7 a=1 n=697
+D t=7 n=697
+C t=7 a=1 n=698
+D t=7 n=698
+C t=7 a=1 n=699
+D t=7 n=699
+C t=7 a=1 n=700
+D t=7 n=700
+C t=7 a=1 n=701
+D t=7 n=701
+C t=7 a=1 n=702
+D t=7 n=702
+C t=7 a=1 n=703
+D t=7 n=703
+C t=7 a=1 n=704
+D t=7 n=704
+C t=7 a=1 n=705
+D t=7 n=705
+C t=7 a=1 n=706
+D t=7 n=706
+C t=7 a=1 n=707
+D t=7 n=707
+C t=7 a=1 n=708
+D t=7 n=708
+C t=7 a=1 n=709
+D t=7 n=709
+C t=7 a=1 n=710
+D t=7 n=710
+C t=7 a=1 n=711
+D t=7 n=711
+C t=7 a=1 n=712
+D t=7 n=712
+C t=7 a=1 n=713
+D t=7 n=713
+C t=7 a=1 n=714
+D t=7 n=714
+C t=7 a=1 n=715
+D t=7 n=715
+C t=7 a=1 n=716
+D t=7 n=716
+C t=7 a=1 n=717
+D t=7 n=717
+C t=7 a=1 n=718
+D t=7 n=718
+C t=7 a=1 n=719
+D t=7 n=719
+C t=7 a=1 n=720
+D t=7 n=720
+C t=7 a=1 n=721
+D t=7 n=721
+C t=7 a=1 n=722
+D t=7 n=722
+C t=7 a=1 n=723
+D t=7 n=723
+C t=7 a=1 n=724
+D t=7 n=724
+C t=7 a=1 n=725
+D t=7 n=725
+C t=7 a=1 n=726
+D t=7 n=726
+C t=7 a=1 n=727
+D t=7 n=727
+C t=7 a=1 n=728
+D t=7 n=728
+C t=7 a=1 n=729
+D t=7 n=729
+C t=7 a=1 n=730
+D t=7 n=730
+C t=7 a=1 n=731
+D t=7 n=731
+C t=7 a=1 n=732
+D t=7 n=732
+C t=7 a=1 n=733
+D t=7 n=733
+C t=7 a=1 n=734
+D t=7 n=734
+C t=7 a=1 n=735
+D t=7 n=735
+C t=7 a=1 n=736
+D t=7 n=736
+C t=7 a=1 n=737
+D t=7 n=737
+C t=7 a=1 n=738
+D t=7 n=738
+C t=7 a=1 n=739
+D t=7 n=739
+C t=7 a=1 n=740
+D t=7 n=740
+C t=7 a=1 n=741
+D t=7 n=741
+C t=7 a=1 n=742
+D t=7 n=742
+C t=7 a=1 n=743
+D t=7 n=743
+C t=7 a=1 n=744
+D t=7 n=744
+C t=7 a=1 n=745
+D t=7 n=745
+C t=7 a=1 n=746
+D t=7 n=746
+C t=7 a=1 n=747
+D t=7 n=747
+C t=7 a=1 n=748
+D t=7 n=748
+C t=7 a=1 n=749
+D t=7 n=749
+C t=7 a=1 n=750
+D t=7 n=750
+C t=7 a=1 n=751
+D t=7 n=751
+C t=7 a=1 n=752
+D t=7 n=752
+C t=7 a=1 n=753
+D t=7 n=753
+C t=7 a=1 n=754
+D t=7 n=754
+C t=7 a=1 n=755
+D t=7 n=755
+C t=7 a=1 n=756
+D t=7 n=756
+C t=7 a=1 n=757
+D t=7 n=757
+C t=7 a=1 n=758
+D t=7 n=758
+C t=7 a=1 n=759
+D t=7 n=759
+C t=7 a=1 n=760
+D t=7 n=760
+C t=7 a=1 n=761
+D t=7 n=761
+C t=7 a=1 n=762
+D t=7 n=762
+C t=7 a=1 n=763
+D t=7 n=763
+C t=7 a=1 n=764
+D t=7 n=764
+C t=7 a=1 n=765
+D t=7 n=765
+C t=7 a=1 n=766
+D t=7 n=766
+C t=7 a=1 n=767
+D t=7 n=767
+C t=7 a=1 n=768
+D t=7 n=768
+C t=7 a=1 n=769
+D t=7 n=769
+C t=7 a=1 n=770
+D t=7 n=770
+C t=7 a=1 n=771
+D t=7 n=771
+C t=7 a=1 n=772
+D t=7 n=772
+C t=7 a=1 n=773
+D t=7 n=773
+C t=7 a=1 n=774
+D t=7 n=774
+C t=7 a=1 n=775
+D t=7 n=775
+C t=7 a=1 n=776
+D t=7 n=776
+C t=7 a=1 n=777
+D t=7 n=777
+C t=7 a=1 n=778
+D t=7 n=778
+C t=7 a=1 n=779
+D t=7 n=779
+C t=7 a=1 n=780
+D t=7 n=780
+C t=7 a=1 n=781
+D t=7 n=781
+C t=7 a=1 n=782
+D t=7 n=782
+C t=7 a=1 n=783
+D t=7 n=783
+C t=7 a=1 n=784
+D t=7 n=784
+C t=7 a=1 n=785
+D t=7 n=785
+C t=7 a=1 n=786
+D t=7 n=786
+C t=7 a=1 n=787
+D t=7 n=787
+C t=7 a=1 n=788
+D t=7 n=788
+C t=7 a=1 n=789
+D t=7 n=789
+C t=7 a=1 n=790
+D t=7 n=790
+C t=7 a=1 n=791
+D t=7 n=791
+C t=7 a=1 n=792
+D t=7 n=792
+C t=7 a=1 n=793
+D t=7 n=793
+C t=7 a=1 n=794
+D t=7 n=794
+C t=7 a=1 n=795
+D t=7 n=795
+C t=7 a=1 n=796
+D t=7 n=796
+C t=7 a=1 n=797
+D t=7 n=797
+C t=7 a=1 n=798
+D t=7 n=798
+C t=7 a=1 n=799
+D t=7 n=799
+C t=7 a=1 n=800
+D t=7 n=800
+C t=7 a=1 n=801
+D t=7 n=801
+C t=7 a=1 n=802
+D t=7 n=802
+C t=7 a=1 n=803
+D t=7 n=803
+C t=7 a=1 n=804
+D t=7 n=804
+C t=7 a=1 n=805
+D t=7 n=805
+C t=7 a=1 n=806
+D t=7 n=806
+C t=7 a=1 n=807
+D t=7 n=807
+C t=7 a=1 n=808
+D t=7 n=808
+C t=7 a=1 n=809
+D t=7 n=809
+C t=7 a=1 n=810
+D t=7 n=810
+C t=7 a=1 n=811
+D t=7 n=811
+C t=7 a=1 n=812
+D t=7 n=812
+C t=7 a=1 n=813
+D t=7 n=813
+C t=7 a=1 n=814
+D t=7 n=814
+C t=7 a=1 n=815
+D t=7 n=815
+C t=7 a=1 n=816
+D t=7 n=816
+C t=7 a=1 n=817
+D t=7 n=817
+C t=7 a=1 n=818
+D t=7 n=818
+C t=7 a=1 n=819
+D t=7 n=819
+C t=7 a=1 n=820
+D t=7 n=820
+C t=7 a=1 n=821
+D t=7 n=821
+C t=7 a=1 n=822
+D t=7 n=822
+C t=7 a=1 n=823
+D t=7 n=823
+C t=7 a=1 n=824
+D t=7 n=824
+C t=7 a=1 n=825
+D t=7 n=825
+C t=7 a=1 n=826
+D t=7 n=826
+C t=7 a=1 n=827
+D t=7 n=827
+C t=7 a=1 n=828
+D t=7 n=828
+C t=7 a=1 n=829
+D t=7 n=829
+C t=7 a=1 n=830
+D t=7 n=830
+C t=7 a=1 n=831
+D t=7 n=831
+C t=7 a=1 n=832
+D t=7 n=832
+C t=7 a=1 n=833
+D t=7 n=833
+C t=7 a=1 n=834
+D t=7 n=834
+C t=7 a=1 n=835
+D t=7 n=835
+C t=7 a=1 n=836
+D t=7 n=836
+C t=7 a=1 n=837
+D t=7 n=837
+C t=7 a=1 n=838
+D t=7 n=838
+C t=7 a=1 n=839
+D t=7 n=839
+C t=7 a=1 n=840
+D t=7 n=840
+C t=7 a=1 n=841
+D t=7 n=841
+C t=7 a=1 n=842
+D t=7 n=842
+C t=7 a=1 n=843
+D t=7 n=843
+C t=7 a=1 n=844
+D t=7 n=844
+C t=7 a=1 n=845
+D t=7 n=845
+C t=7 a=1 n=846
+D t=7 n=846
+C t=7 a=1 n=847
+D t=7 n=847
+C t=7 a=1 n=848
+D t=7 n=848
+C t=7 a=1 n=849
+D t=7 n=849
+C t=7 a=1 n=850
+D t=7 n=850
+C t=7 a=1 n=851
+D t=7 n=851
+C t=7 a=1 n=852
+D t=7 n=852
+C t=7 a=1 n=853
+D t=7 n=853
+C t=7 a=1 n=854
+D t=7 n=854
+C t=7 a=1 n=855
+D t=7 n=855
+C t=7 a=1 n=856
+D t=7 n=856
+C t=7 a=1 n=857
+D t=7 n=857
+C t=7 a=1 n=858
+D t=7 n=858
+C t=7 a=1 n=859
+D t=7 n=859
+C t=7 a=1 n=860
+D t=7 n=860
+C t=7 a=1 n=861
+D t=7 n=861
+C t=7 a=1 n=862
+D t=7 n=862
+C t=7 a=1 n=863
+D t=7 n=863
+C t=7 a=1 n=864
+D t=7 n=864
+C t=7 a=1 n=865
+D t=7 n=865
+C t=7 a=1 n=866
+D t=7 n=866
+C t=7 a=1 n=867
+D t=7 n=867
+C t=7 a=1 n=868
+D t=7 n=868
+C t=7 a=1 n=869
+D t=7 n=869
+C t=7 a=1 n=870
+D t=7 n=870
+C t=7 a=1 n=871
+D t=7 n=871
+C t=7 a=1 n=872
+D t=7 n=872
+C t=7 a=1 n=873
+D t=7 n=873
+C t=7 a=1 n=874
+D t=7 n=874
+C t=7 a=1 n=875
+D t=7 n=875
+C t=7 a=1 n=876
+D t=7 n=876
+C t=7 a=1 n=877
+D t=7 n=877
+C t=7 a=1 n=878
+D t=7 n=878
+C t=7 a=1 n=879
+D t=7 n=879
+C t=7 a=1 n=880
+D t=7 n=880
+C t=7 a=1 n=881
+D t=7 n=881
+C t=7 a=1 n=882
+D t=7 n=882
+C t=7 a=1 n=883
+D t=7 n=883
+C t=7 a=1 n=884
+D t=7 n=884
+C t=7 a=1 n=885
+D t=7 n=885
+C t=7 a=1 n=886
+D t=7 n=886
+C t=7 a=1 n=887
+D t=7 n=887
+C t=7 a=1 n=888
+D t=7 n=888
+C t=7 a=1 n=889
+D t=7 n=889
+C t=7 a=1 n=890
+D t=7 n=890
+C t=7 a=1 n=891
+D t=7 n=891
+C t=7 a=1 n=892
+D t=7 n=892
+C t=7 a=1 n=893
+D t=7 n=893
+C t=7 a=1 n=894
+D t=7 n=894
+C t=7 a=1 n=895
+D t=7 n=895
+C t=7 a=1 n=896
+D t=7 n=896
+C t=7 a=1 n=897
+D t=7 n=897
+C t=7 a=1 n=898
+D t=7 n=898
+C t=7 a=1 n=899
+D t=7 n=899
+C t=7 a=1 n=900
+D t=7 n=900
+C t=7 a=1 n=901
+D t=7 n=901
+C t=7 a=1 n=902
+D t=7 n=902
+C t=7 a=1 n=903
+D t=7 n=903
+C t=7 a=1 n=904
+D t=7 n=904
+C t=7 a=1 n=905
+D t=7 n=905
+C t=7 a=1 n=906
+D t=7 n=906
+C t=7 a=1 n=907
+D t=7 n=907
+C t=7 a=1 n=908
+D t=7 n=908
+C t=7 a=1 n=909
+D t=7 n=909
+C t=7 a=1 n=910
+D t=7 n=910
+C t=7 a=1 n=911
+D t=7 n=911
+C t=7 a=1 n=912
+D t=7 n=912
+C t=7 a=1 n=913
+D t=7 n=913
+C t=7 a=1 n=914
+D t=7 n=914
+C t=7 a=1 n=915
+D t=7 n=915
+C t=7 a=1 n=916
+D t=7 n=916
+C t=7 a=1 n=917
+D t=7 n=917
+C t=7 a=1 n=918
+D t=7 n=918
+C t=7 a=1 n=919
+D t=7 n=919
+C t=7 a=1 n=920
+D t=7 n=920
+C t=7 a=1 n=921
+D t=7 n=921
+C t=7 a=1 n=922
+D t=7 n=922
+C t=7 a=1 n=923
+D t=7 n=923
+C t=7 a=1 n=924
+D t=7 n=924
+C t=7 a=1 n=925
+D t=7 n=925
+C t=7 a=1 n=926
+D t=7 n=926
+C t=7 a=1 n=927
+D t=7 n=927
+C t=7 a=1 n=928
+D t=7 n=928
+C t=7 a=1 n=929
+D t=7 n=929
+C t=7 a=1 n=930
+D t=7 n=930
+C t=7 a=1 n=931
+D t=7 n=931
+C t=7 a=1 n=932
+D t=7 n=932
+C t=7 a=1 n=933
+D t=7 n=933
+C t=7 a=1 n=934
+D t=7 n=934
+C t=7 a=1 n=935
+D t=7 n=935
+C t=7 a=1 n=936
+D t=7 n=936
+C t=7 a=1 n=937
+D t=7 n=937
+C t=7 a=1 n=938
+D t=7 n=938
+C t=7 a=1 n=939
+D t=7 n=939
+C t=7 a=1 n=940
+D t=7 n=940
+C t=7 a=1 n=941
+D t=7 n=941
+C t=7 a=1 n=942
+D t=7 n=942
+C t=7 a=1 n=943
+D t=7 n=943
+C t=7 a=1 n=944
+D t=7 n=944
+C t=7 a=1 n=945
+D t=7 n=945
+C t=7 a=1 n=946
+D t=7 n=946
+C t=7 a=1 n=947
+D t=7 n=947
+C t=7 a=1 n=948
+D t=7 n=948
+C t=7 a=1 n=949
+D t=7 n=949
+C t=7 a=1 n=950
+D t=7 n=950
+C t=7 a=1 n=951
+D t=7 n=951
+C t=7 a=1 n=952
+D t=7 n=952
+C t=7 a=1 n=953
+D t=7 n=953
+C t=7 a=1 n=954
+D t=7 n=954
+C t=7 a=1 n=955
+D t=7 n=955
+C t=7 a=1 n=956
+D t=7 n=956
+C t=7 a=1 n=957
+D t=7 n=957
+C t=7 a=1 n=958
+D t=7 n=958
+C t=7 a=1 n=959
+D t=7 n=959
+C t=7 a=1 n=960
+D t=7 n=960
+C t=7 a=1 n=961
+D t=7 n=961
+C t=7 a=1 n=962
+D t=7 n=962
+C t=7 a=1 n=963
+D t=7 n=963
+C t=7 a=1 n=964
+D t=7 n=964
+C t=7 a=1 n=965
+D t=7 n=965
+C t=7 a=1 n=966
+D t=7 n=966
+C t=7 a=1 n=967
+D t=7 n=967
+C t=7 a=1 n=968
+D t=7 n=968
+C t=7 a=1 n=969
+D t=7 n=969
+C t=7 a=1 n=970
+D t=7 n=970
+C t=7 a=1 n=971
+D t=7 n=971
+C t=7 a=1 n=972
+D t=7 n=972
+C t=7 a=1 n=973
+D t=7 n=973
+C t=7 a=1 n=974
+D t=7 n=974
+C t=7 a=1 n=975
+D t=7 n=975
+C t=7 a=1 n=976
+D t=7 n=976
+C t=7 a=1 n=977
+D t=7 n=977
+C t=7 a=1 n=978
+D t=7 n=978
+C t=7 a=1 n=979
+D t=7 n=979
+C t=7 a=1 n=980
+D t=7 n=980
+C t=7 a=1 n=981
+D t=7 n=981
+C t=7 a=1 n=982
+D t=7 n=982
+C t=7 a=1 n=983
+D t=7 n=983
+C t=7 a=1 n=984
+D t=7 n=984
+C t=7 a=1 n=985
+D t=7 n=985
+C t=7 a=1 n=986
+D t=7 n=986
+C t=7 a=1 n=987
+D t=7 n=987
+C t=7 a=1 n=988
+D t=7 n=988
+C t=7 a=1 n=989
+D t=7 n=989
+C t=7 a=1 n=990
+D t=7 n=990
+C t=7 a=1 n=991
+D t=7 n=991
+C t=7 a=1 n=992
+D t=7 n=992
+C t=7 a=1 n=993
+D t=7 n=993
+C t=7 a=1 n=994
+D t=7 n=994
+C t=7 a=1 n=995
+D t=7 n=995
+C t=7 a=1 n=996
+D t=7 n=996
+C t=7 a=1 n=997
+D t=7 n=997
+C t=7 a=1 n=998
+D t=7 n=998
+C t=7 a=1 n=999
+D t=7 n=999
+C t=7 a=1 n=1000
+D t=7 n=1000
+C t=7 a=1 n=1001
+D t=7 n=1001
+C t=7 a=1 n=1002
+D t=7 n=1002
+C t=7 a=1 n=1003
+D t=7 n=1003
+C t=7 a=1 n=1004
+D t=7 n=1004
+C t=7 a=1 n=1005
+D t=7 n=1005
+C t=7 a=1 n=1006
+D t=7 n=1006
+C t=7 a=1 n=1007
+D t=7 n=1007
+C t=7 a=1 n=1008
+D t=7 n=1008
+C t=7 a=1 n=1009
+D t=7 n=1009
+C t=7 a=1 n=1010
+D t=7 n=1010
+C t=7 a=1 n=1011
+D t=7 n=1011
+C t=7 a=1 n=1012
+D t=7 n=1012
+C t=7 a=1 n=1013
+D t=7 n=1013
+C t=7 a=1 n=1014
+D t=7 n=1014
+C t=7 a=1 n=1015
+D t=7 n=1015
+C t=7 a=1 n=1016
+D t=7 n=1016
+C t=7 a=1 n=1017
+D t=7 n=1017
+C t=7 a=1 n=1018
+D t=7 n=1018
+C t=7 a=1 n=1019
+D t=7 n=1019
+C t=7 a=1 n=1020
+D t=7 n=1020
+C t=7 a=1 n=1021
+D t=7 n=1021
+C t=7 a=1 n=1022
+D t=7 n=1022
+C t=7 a=1 n=1023
+D t=7 n=1023
+C t=7 a=1 n=1024
+D t=7 n=1024
+C t=7 a=1 n=1025
+D t=7 n=1025
+C t=7 a=1 n=1026
+D t=7 n=1026
+C t=7 a=1 n=1027
+D t=7 n=1027
+C t=7 a=1 n=1028
+D t=7 n=1028
+C t=7 a=1 n=1029
+D t=7 n=1029
+C t=7 a=1 n=1030
+D t=7 n=1030
+C t=7 a=1 n=1031
+D t=7 n=1031
+C t=7 a=1 n=1032
+D t=7 n=1032
+C t=7 a=1 n=1033
+D t=7 n=1033
+C t=7 a=1 n=1034
+D t=7 n=1034
+C t=7 a=1 n=1035
+D t=7 n=1035
+C t=7 a=1 n=1036
+D t=7 n=1036
+C t=7 a=1 n=1037
+D t=7 n=1037
+C t=7 a=1 n=1038
+D t=7 n=1038
+C t=7 a=1 n=1039
+D t=7 n=1039
+C t=7 a=1 n=1040
+D t=7 n=1040
+C t=7 a=1 n=1041
+D t=7 n=1041
+C t=7 a=1 n=1042
+D t=7 n=1042
+C t=7 a=1 n=1043
+D t=7 n=1043
+C t=7 a=1 n=1044
+D t=7 n=1044
+C t=7 a=1 n=1045
+D t=7 n=1045
+C t=7 a=1 n=1046
+D t=7 n=1046
+C t=7 a=1 n=1047
+D t=7 n=1047
+C t=7 a=1 n=1048
+D t=7 n=1048
+C t=7 a=1 n=1049
+D t=7 n=1049
+C t=7 a=1 n=1050
+D t=7 n=1050
+C t=7 a=1 n=1051
+D t=7 n=1051
+C t=7 a=1 n=1052
+D t=7 n=1052
+C t=7 a=1 n=1053
+D t=7 n=1053
+C t=7 a=1 n=1054
+D t=7 n=1054
+C t=7 a=1 n=1055
+D t=7 n=1055
+C t=7 a=1 n=1056
+D t=7 n=1056
+C t=7 a=1 n=1057
+D t=7 n=1057
+C t=7 a=1 n=1058
+D t=7 n=1058
+C t=7 a=1 n=1059
+D t=7 n=1059
+C t=7 a=1 n=1060
+D t=7 n=1060
+C t=7 a=1 n=1061
+D t=7 n=1061
+C t=7 a=1 n=1062
+D t=7 n=1062
+C t=7 a=1 n=1063
+D t=7 n=1063
+C t=7 a=1 n=1064
+D t=7 n=1064
+C t=7 a=1 n=1065
+D t=7 n=1065
+C t=7 a=1 n=1066
+D t=7 n=1066
+C t=7 a=1 n=1067
+D t=7 n=1067
+C t=7 a=1 n=1068
+D t=7 n=1068
+C t=7 a=1 n=1069
+D t=7 n=1069
+C t=7 a=1 n=1070
+D t=7 n=1070
+C t=7 a=1 n=1071
+D t=7 n=1071
+C t=7 a=1 n=1072
+D t=7 n=1072
+C t=7 a=1 n=1073
+D t=7 n=1073
+C t=7 a=1 n=1074
+D t=7 n=1074
+C t=7 a=1 n=1075
+D t=7 n=1075
+C t=7 a=1 n=1076
+D t=7 n=1076
+C t=7 a=1 n=1077
+D t=7 n=1077
+C t=7 a=1 n=1078
+D t=7 n=1078
+C t=7 a=1 n=1079
+D t=7 n=1079
+C t=7 a=1 n=1080
+D t=7 n=1080
+C t=7 a=1 n=1081
+D t=7 n=1081
+C t=7 a=1 n=1082
+D t=7 n=1082
+C t=7 a=1 n=1083
+D t=7 n=1083
+C t=7 a=1 n=1084
+D t=7 n=1084
+C t=7 a=1 n=1085
+D t=7 n=1085
+C t=7 a=1 n=1086
+D t=7 n=1086
+C t=7 a=1 n=1087
+D t=7 n=1087
+C t=7 a=1 n=1088
+D t=7 n=1088
+C t=7 a=1 n=1089
+D t=7 n=1089
+C t=7 a=1 n=1090
+D t=7 n=1090
+C t=7 a=1 n=1091
+D t=7 n=1091
+C t=7 a=1 n=1092
+D t=7 n=1092
+C t=7 a=1 n=1093
+D t=7 n=1093
+C t=7 a=1 n=1094
+D t=7 n=1094
+C t=7 a=1 n=1095
+D t=7 n=1095
+C t=7 a=1 n=1096
+D t=7 n=1096
+C t=7 a=1 n=1097
+D t=7 n=1097
+C t=7 a=1 n=1098
+D t=7 n=1098
+C t=7 a=1 n=1099
+D t=7 n=1099
+C t=7 a=1 n=1100
+D t=7 n=1100
+C t=7 a=1 n=1101
+D t=7 n=1101
+C t=7 a=1 n=1102
+D t=7 n=1102
+C t=7 a=1 n=1103
+D t=7 n=1103
+C t=7 a=1 n=1104
+D t=7 n=1104
+C t=7 a=1 n=1105
+D t=7 n=1105
+C t=7 a=1 n=1106
+D t=7 n=1106
+C t=7 a=1 n=1107
+D t=7 n=1107
+C t=7 a=1 n=1108
+D t=7 n=1108
+C t=7 a=1 n=1109
+D t=7 n=1109
+C t=7 a=1 n=1110
+D t=7 n=1110
+C t=7 a=1 n=1111
+D t=7 n=1111
+C t=7 a=1 n=1112
+D t=7 n=1112
+C t=7 a=1 n=1113
+D t=7 n=1113
+C t=7 a=1 n=1114
+D t=7 n=1114
+C t=7 a=1 n=1115
+D t=7 n=1115
+C t=7 a=1 n=1116
+D t=7 n=1116
+C t=7 a=1 n=1117
+D t=7 n=1117
+C t=7 a=1 n=1118
+D t=7 n=1118
+C t=7 a=1 n=1119
+D t=7 n=1119
+C t=7 a=1 n=1120
+D t=7 n=1120
+C t=7 a=1 n=1121
+D t=7 n=1121
+C t=7 a=1 n=1122
+D t=7 n=1122
+C t=7 a=1 n=1123
+D t=7 n=1123
+C t=7 a=1 n=1124
+D t=7 n=1124
+C t=7 a=1 n=1125
+D t=7 n=1125
+C t=7 a=1 n=1126
+D t=7 n=1126
+C t=7 a=1 n=1127
+D t=7 n=1127
+C t=7 a=1 n=1128
+D t=7 n=1128
+C t=7 a=1 n=1129
+D t=7 n=1129
+C t=7 a=1 n=1130
+D t=7 n=1130
+C t=7 a=1 n=1131
+D t=7 n=1131
+C t=7 a=1 n=1132
+D t=7 n=1132
+C t=7 a=1 n=1133
+D t=7 n=1133
+C t=7 a=1 n=1134
+D t=7 n=1134
+C t=7 a=1 n=1135
+D t=7 n=1135
+C t=7 a=1 n=1136
+D t=7 n=1136
+C t=7 a=1 n=1137
+D t=7 n=1137
+C t=7 a=1 n=1138
+D t=7 n=1138
+C t=7 a=1 n=1139
+D t=7 n=1139
+C t=7 a=1 n=1140
+D t=7 n=1140
+C t=7 a=1 n=1141
+D t=7 n=1141
+C t=7 a=1 n=1142
+D t=7 n=1142
+C t=7 a=1 n=1143
+D t=7 n=1143
+C t=7 a=1 n=1144
+D t=7 n=1144
+C t=7 a=1 n=1145
+D t=7 n=1145
+C t=7 a=1 n=1146
+D t=7 n=1146
+C t=7 a=1 n=1147
+D t=7 n=1147
+C t=7 a=1 n=1148
+D t=7 n=1148
+C t=7 a=1 n=1149
+D t=7 n=1149
+C t=7 a=1 n=1150
+D t=7 n=1150
+C t=7 a=1 n=1151
+D t=7 n=1151
+C t=7 a=1 n=1152
+D t=7 n=1152
+C t=7 a=1 n=1153
+D t=7 n=1153
+C t=7 a=1 n=1154
+D t=7 n=1154
+C t=7 a=1 n=1155
+D t=7 n=1155
+C t=7 a=1 n=1156
+D t=7 n=1156
+C t=7 a=1 n=1157
+D t=7 n=1157
+C t=7 a=1 n=1158
+D t=7 n=1158
+C t=7 a=1 n=1159
+D t=7 n=1159
+C t=7 a=1 n=1160
+D t=7 n=1160
+C t=7 a=1 n=1161
+D t=7 n=1161
+C t=7 a=1 n=1162
+D t=7 n=1162
+C t=7 a=1 n=1163
+D t=7 n=1163
+C t=7 a=1 n=1164
+D t=7 n=1164
+C t=7 a=1 n=1165
+D t=7 n=1165
+C t=7 a=1 n=1166
+D t=7 n=1166
+C t=7 a=1 n=1167
+D t=7 n=1167
+C t=7 a=1 n=1168
+D t=7 n=1168
+C t=7 a=1 n=1169
+D t=7 n=1169
+C t=7 a=1 n=1170
+D t=7 n=1170
+C t=7 a=1 n=1171
+D t=7 n=1171
+C t=7 a=1 n=1172
+D t=7 n=1172
+C t=7 a=1 n=1173
+D t=7 n=1173
+C t=7 a=1 n=1174
+D t=7 n=1174
+C t=7 a=1 n=1175
+D t=7 n=1175
+C t=7 a=1 n=1176
+D t=7 n=1176
+C t=7 a=1 n=1177
+D t=7 n=1177
+C t=7 a=1 n=1178
+D t=7 n=1178
+C t=7 a=1 n=1179
+D t=7 n=1179
+C t=7 a=1 n=1180
+D t=7 n=1180
+C t=7 a=1 n=1181
+D t=7 n=1181
+C t=7 a=1 n=1182
+D t=7 n=1182
+C t=7 a=1 n=1183
+D t=7 n=1183
+C t=7 a=1 n=1184
+D t=7 n=1184
+C t=7 a=1 n=1185
+D t=7 n=1185
+C t=7 a=1 n=1186
+D t=7 n=1186
+C t=7 a=1 n=1187
+D t=7 n=1187
+C t=7 a=1 n=1188
+D t=7 n=1188
+C t=7 a=1 n=1189
+D t=7 n=1189
+C t=7 a=1 n=1190
+D t=7 n=1190
+C t=7 a=1 n=1191
+D t=7 n=1191
+C t=7 a=1 n=1192
+D t=7 n=1192
+C t=7 a=1 n=1193
+D t=7 n=1193
+C t=7 a=1 n=1194
+D t=7 n=1194
+C t=7 a=1 n=1195
+D t=7 n=1195
+C t=7 a=1 n=1196
+D t=7 n=1196
+C t=7 a=1 n=1197
+D t=7 n=1197
+C t=7 a=1 n=1198
+D t=7 n=1198
+C t=7 a=1 n=1199
+D t=7 n=1199
+C t=7 a=1 n=1200
+D t=7 n=1200
+C t=7 a=1 n=1201
+D t=7 n=1201
+C t=7 a=1 n=1202
+D t=7 n=1202
+C t=7 a=1 n=1203
+D t=7 n=1203
+C t=7 a=1 n=1204
+D t=7 n=1204
+C t=7 a=1 n=1205
+D t=7 n=1205
+C t=7 a=1 n=1206
+D t=7 n=1206
+C t=7 a=1 n=1207
+D t=7 n=1207
+C t=7 a=1 n=1208
+D t=7 n=1208
+C t=7 a=1 n=1209
+D t=7 n=1209
+C t=7 a=1 n=1210
+D t=7 n=1210
+C t=7 a=1 n=1211
+D t=7 n=1211
+C t=7 a=1 n=1212
+D t=7 n=1212
+C t=7 a=1 n=1213
+D t=7 n=1213
+C t=7 a=1 n=1214
+D t=7 n=1214
+C t=7 a=1 n=1215
+D t=7 n=1215
+C t=7 a=1 n=1216
+D t=7 n=1216
+C t=7 a=1 n=1217
+D t=7 n=1217
+C t=7 a=1 n=1218
+D t=7 n=1218
+C t=7 a=1 n=1219
+D t=7 n=1219
+C t=7 a=1 n=1220
+D t=7 n=1220
+C t=7 a=1 n=1221
+D t=7 n=1221
+C t=7 a=1 n=1222
+D t=7 n=1222
+C t=7 a=1 n=1223
+D t=7 n=1223
+C t=7 a=1 n=1224
+D t=7 n=1224
+C t=7 a=1 n=1225
+D t=7 n=1225
+C t=7 a=1 n=1226
+D t=7 n=1226
+C t=7 a=1 n=1227
+D t=7 n=1227
+C t=7 a=1 n=1228
+D t=7 n=1228
+C t=7 a=1 n=1229
+D t=7 n=1229
+C t=7 a=1 n=1230
+D t=7 n=1230
+C t=7 a=1 n=1231
+D t=7 n=1231
+C t=7 a=1 n=1232
+D t=7 n=1232
+C t=7 a=1 n=1233
+D t=7 n=1233
+C t=7 a=1 n=1234
+D t=7 n=1234
+C t=7 a=1 n=1235
+D t=7 n=1235
+C t=7 a=1 n=1236
+D t=7 n=1236
+C t=7 a=1 n=1237
+D t=7 n=1237
+C t=7 a=1 n=1238
+D t=7 n=1238
+C t=7 a=1 n=1239
+D t=7 n=1239
+C t=7 a=1 n=1240
+D t=7 n=1240
+C t=7 a=1 n=1241
+D t=7 n=1241
+C t=7 a=1 n=1242
+D t=7 n=1242
+C t=7 a=1 n=1243
+D t=7 n=1243
+C t=7 a=1 n=1244
+D t=7 n=1244
+C t=7 a=1 n=1245
+D t=7 n=1245
+C t=7 a=1 n=1246
+D t=7 n=1246
+C t=7 a=1 n=1247
+D t=7 n=1247
+C t=7 a=1 n=1248
+D t=7 n=1248
+C t=7 a=1 n=1249
+D t=7 n=1249
+C t=7 a=1 n=1250
+D t=7 n=1250
+C t=7 a=1 n=1251
+D t=7 n=1251
+C t=7 a=1 n=1252
+D t=7 n=1252
+C t=7 a=1 n=1253
+D t=7 n=1253
+C t=7 a=1 n=1254
+D t=7 n=1254
+C t=7 a=1 n=1255
+D t=7 n=1255
+C t=7 a=1 n=1256
+D t=7 n=1256
+C t=7 a=1 n=1257
+D t=7 n=1257
+C t=7 a=1 n=1258
+D t=7 n=1258
+C t=7 a=1 n=1259
+D t=7 n=1259
+C t=7 a=1 n=1260
+D t=7 n=1260
+C t=7 a=1 n=1261
+D t=7 n=1261
+C t=7 a=1 n=1262
+D t=7 n=1262
+C t=7 a=1 n=1263
+D t=7 n=1263
+C t=7 a=1 n=1264
+D t=7 n=1264
+C t=7 a=1 n=1265
+D t=7 n=1265
+C t=7 a=1 n=1266
+D t=7 n=1266
+C t=7 a=1 n=1267
+D t=7 n=1267
+C t=7 a=1 n=1268
+D t=7 n=1268
+C t=7 a=1 n=1269
+D t=7 n=1269
+C t=7 a=1 n=1270
+D t=7 n=1270
+C t=7 a=1 n=1271
+D t=7 n=1271
+C t=7 a=1 n=1272
+D t=7 n=1272
+C t=7 a=1 n=1273
+D t=7 n=1273
+C t=7 a=1 n=1274
+D t=7 n=1274
+C t=7 a=1 n=1275
+D t=7 n=1275
+C t=7 a=1 n=1276
+D t=7 n=1276
+C t=7 a=1 n=1277
+D t=7 n=1277
+C t=7 a=1 n=1278
+D t=7 n=1278
+C t=7 a=1 n=1279
+D t=7 n=1279
+C t=7 a=1 n=1280
+D t=7 n=1280
+C t=7 a=1 n=1281
+D t=7 n=1281
+C t=7 a=1 n=1282
+D t=7 n=1282
+C t=7 a=1 n=1283
+D t=7 n=1283
+C t=7 a=1 n=1284
+D t=7 n=1284
+C t=7 a=1 n=1285
+D t=7 n=1285
+C t=7 a=1 n=1286
+D t=7 n=1286
+C t=7 a=1 n=1287
+D t=7 n=1287
+C t=7 a=1 n=1288
+D t=7 n=1288
+C t=7 a=1 n=1289
+D t=7 n=1289
+C t=7 a=1 n=1290
+D t=7 n=1290
+C t=7 a=1 n=1291
+D t=7 n=1291
+C t=7 a=1 n=1292
+D t=7 n=1292
+C t=7 a=1 n=1293
+D t=7 n=1293
+C t=7 a=1 n=1294
+D t=7 n=1294
+C t=7 a=1 n=1295
+D t=7 n=1295
+C t=7 a=1 n=1296
+D t=7 n=1296
+C t=7 a=1 n=1297
+D t=7 n=1297
+C t=7 a=1 n=1298
+D t=7 n=1298
+C t=7 a=1 n=1299
+D t=7 n=1299
+C t=7 a=1 n=1300
+D t=7 n=1300
+C t=7 a=1 n=1301
+D t=7 n=1301
+C t=7 a=1 n=1302
+D t=7 n=1302
+C t=7 a=1 n=1303
+D t=7 n=1303
+C t=7 a=1 n=1304
+D t=7 n=1304
+C t=7 a=1 n=1305
+D t=7 n=1305
+C t=7 a=1 n=1306
+D t=7 n=1306
+C t=7 a=1 n=1307
+D t=7 n=1307
+C t=7 a=1 n=1308
+D t=7 n=1308
+C t=7 a=1 n=1309
+D t=7 n=1309
+C t=7 a=1 n=1310
+D t=7 n=1310
+C t=7 a=1 n=1311
+D t=7 n=1311
+C t=7 a=1 n=1312
+D t=7 n=1312
+C t=7 a=1 n=1313
+D t=7 n=1313
+C t=7 a=1 n=1314
+D t=7 n=1314
+C t=7 a=1 n=1315
+D t=7 n=1315
+C t=7 a=1 n=1316
+D t=7 n=1316
+C t=7 a=1 n=1317
+D t=7 n=1317
+C t=7 a=1 n=1318
+D t=7 n=1318
+C t=7 a=1 n=1319
+D t=7 n=1319
+C t=7 a=1 n=1320
+D t=7 n=1320
+C t=7 a=1 n=1321
+D t=7 n=1321
+C t=7 a=1 n=1322
+D t=7 n=1322
+C t=7 a=1 n=1323
+D t=7 n=1323
+C t=7 a=1 n=1324
+D t=7 n=1324
+C t=7 a=1 n=1325
+D t=7 n=1325
+C t=7 a=1 n=1326
+D t=7 n=1326
+C t=7 a=1 n=1327
+D t=7 n=1327
+C t=7 a=1 n=1328
+D t=7 n=1328
+C t=7 a=1 n=1329
+D t=7 n=1329
+C t=7 a=1 n=1330
+D t=7 n=1330
+C t=7 a=1 n=1331
+D t=7 n=1331
+C t=7 a=1 n=1332
+D t=7 n=1332
+C t=7 a=1 n=1333
+D t=7 n=1333
+C t=7 a=1 n=1334
+D t=7 n=1334
+C t=7 a=1 n=1335
+D t=7 n=1335
+C t=7 a=1 n=1336
+D t=7 n=1336
+C t=7 a=1 n=1337
+D t=7 n=1337
+C t=7 a=1 n=1338
+D t=7 n=1338
+C t=7 a=1 n=1339
+D t=7 n=1339
+C t=7 a=1 n=1340
+D t=7 n=1340
+C t=7 a=1 n=1341
+D t=7 n=1341
+C t=7 a=1 n=1342
+D t=7 n=1342
+C t=7 a=1 n=1343
+D t=7 n=1343
+C t=7 a=1 n=1344
+D t=7 n=1344
+C t=7 a=1 n=1345
+D t=7 n=1345
+C t=7 a=1 n=1346
+D t=7 n=1346
+C t=7 a=1 n=1347
+D t=7 n=1347
+C t=7 a=1 n=1348
+D t=7 n=1348
+C t=7 a=1 n=1349
+D t=7 n=1349
+C t=7 a=1 n=1350
+D t=7 n=1350
+C t=7 a=1 n=1351
+D t=7 n=1351
+C t=7 a=1 n=1352
+D t=7 n=1352
+C t=7 a=1 n=1353
+D t=7 n=1353
+C t=7 a=1 n=1354
+D t=7 n=1354
+C t=7 a=1 n=1355
+D t=7 n=1355
+C t=7 a=1 n=1356
+D t=7 n=1356
+C t=7 a=1 n=1357
+D t=7 n=1357
+C t=7 a=1 n=1358
+D t=7 n=1358
+C t=7 a=1 n=1359
+D t=7 n=1359
+C t=7 a=1 n=1360
+D t=7 n=1360
+C t=7 a=1 n=1361
+D t=7 n=1361
+C t=7 a=1 n=1362
+D t=7 n=1362
+C t=7 a=1 n=1363
+D t=7 n=1363
+C t=7 a=1 n=1364
+D t=7 n=1364
+C t=7 a=1 n=1365
+D t=7 n=1365
+C t=7 a=1 n=1366
+D t=7 n=1366
+C t=7 a=1 n=1367
+D t=7 n=1367
+C t=7 a=1 n=1368
+D t=7 n=1368
+C t=7 a=1 n=1369
+D t=7 n=1369
+C t=7 a=1 n=1370
+D t=7 n=1370
+C t=7 a=1 n=1371
+D t=7 n=1371
+C t=7 a=1 n=1372
+D t=7 n=1372
+C t=7 a=1 n=1373
+D t=7 n=1373
+C t=7 a=1 n=1374
+D t=7 n=1374
+C t=7 a=1 n=1375
+D t=7 n=1375
+C t=7 a=1 n=1376
+D t=7 n=1376
+C t=7 a=1 n=1377
+D t=7 n=1377
+C t=7 a=1 n=1378
+D t=7 n=1378
+C t=7 a=1 n=1379
+D t=7 n=1379
+C t=7 a=1 n=1380
+D t=7 n=1380
+C t=7 a=1 n=1381
+D t=7 n=1381
+C t=7 a=1 n=1382
+D t=7 n=1382
+C t=7 a=1 n=1383
+D t=7 n=1383
+C t=7 a=1 n=1384
+D t=7 n=1384
+C t=7 a=1 n=1385
+D t=7 n=1385
+C t=7 a=1 n=1386
+D t=7 n=1386
+C t=7 a=1 n=1387
+D t=7 n=1387
+C t=7 a=1 n=1388
+D t=7 n=1388
+C t=7 a=1 n=1389
+D t=7 n=1389
+C t=7 a=1 n=1390
+D t=7 n=1390
+C t=7 a=1 n=1391
+D t=7 n=1391
+C t=7 a=1 n=1392
+D t=7 n=1392
+C t=7 a=1 n=1393
+D t=7 n=1393
+C t=7 a=1 n=1394
+D t=7 n=1394
+C t=7 a=1 n=1395
+D t=7 n=1395
+C t=7 a=1 n=1396
+D t=7 n=1396
+C t=7 a=1 n=1397
+D t=7 n=1397
+C t=7 a=1 n=1398
+D t=7 n=1398
+C t=7 a=1 n=1399
+D t=7 n=1399
+C t=7 a=1 n=1400
+D t=7 n=1400
+C t=7 a=1 n=1401
+D t=7 n=1401
+C t=7 a=1 n=1402
+D t=7 n=1402
+C t=7 a=1 n=1403
+D t=7 n=1403
+C t=7 a=1 n=1404
+D t=7 n=1404
+C t=7 a=1 n=1405
+D t=7 n=1405
+C t=7 a=1 n=1406
+D t=7 n=1406
+C t=7 a=1 n=1407
+D t=7 n=1407
+C t=7 a=1 n=1408
+D t=7 n=1408
+C t=7 a=1 n=1409
+D t=7 n=1409
+C t=7 a=1 n=1410
+D t=7 n=1410
+C t=7 a=1 n=1411
+D t=7 n=1411
+C t=7 a=1 n=1412
+D t=7 n=1412
+C t=7 a=1 n=1413
+D t=7 n=1413
+C t=7 a=1 n=1414
+D t=7 n=1414
+C t=7 a=1 n=1415
+D t=7 n=1415
+C t=7 a=1 n=1416
+D t=7 n=1416
+C t=7 a=1 n=1417
+D t=7 n=1417
+C t=7 a=1 n=1418
+D t=7 n=1418
+C t=7 a=1 n=1419
+D t=7 n=1419
+C t=7 a=1 n=1420
+D t=7 n=1420
+C t=7 a=1 n=1421
+D t=7 n=1421
+C t=7 a=1 n=1422
+D t=7 n=1422
+C t=7 a=1 n=1423
+D t=7 n=1423
+C t=7 a=1 n=1424
+D t=7 n=1424
+C t=7 a=1 n=1425
+D t=7 n=1425
+C t=7 a=1 n=1426
+D t=7 n=1426
+C t=7 a=1 n=1427
+D t=7 n=1427
+C t=7 a=1 n=1428
+D t=7 n=1428
+C t=7 a=1 n=1429
+D t=7 n=1429
+C t=7 a=1 n=1430
+D t=7 n=1430
+C t=7 a=1 n=1431
+D t=7 n=1431
+C t=7 a=1 n=1432
+D t=7 n=1432
+C t=7 a=1 n=1433
+D t=7 n=1433
+C t=7 a=1 n=1434
+D t=7 n=1434
+C t=7 a=1 n=1435
+D t=7 n=1435
+C t=7 a=1 n=1436
+D t=7 n=1436
+C t=7 a=1 n=1437
+D t=7 n=1437
+C t=7 a=1 n=1438
+D t=7 n=1438
+C t=7 a=1 n=1439
+D t=7 n=1439
+C t=7 a=1 n=1440
+D t=7 n=1440
+C t=7 a=1 n=1441
+D t=7 n=1441
+C t=7 a=1 n=1442
+D t=7 n=1442
+C t=7 a=1 n=1443
+D t=7 n=1443
+C t=7 a=1 n=1444
+D t=7 n=1444
+C t=7 a=1 n=1445
+D t=7 n=1445
+C t=7 a=1 n=1446
+D t=7 n=1446
+C t=7 a=1 n=1447
+D t=7 n=1447
+C t=7 a=1 n=1448
+D t=7 n=1448
+C t=7 a=1 n=1449
+D t=7 n=1449
+C t=7 a=1 n=1450
+D t=7 n=1450
+C t=7 a=1 n=1451
+D t=7 n=1451
+C t=7 a=1 n=1452
+D t=7 n=1452
+C t=7 a=1 n=1453
+D t=7 n=1453
+C t=7 a=1 n=1454
+D t=7 n=1454
+C t=7 a=1 n=1455
+D t=7 n=1455
+C t=7 a=1 n=1456
+D t=7 n=1456
+C t=7 a=1 n=1457
+D t=7 n=1457
+C t=7 a=1 n=1458
+D t=7 n=1458
+C t=7 a=1 n=1459
+D t=7 n=1459
+C t=7 a=1 n=1460
+D t=7 n=1460
+C t=7 a=1 n=1461
+D t=7 n=1461
+C t=7 a=1 n=1462
+D t=7 n=1462
+C t=7 a=1 n=1463
+D t=7 n=1463
+C t=7 a=1 n=1464
+D t=7 n=1464
+C t=7 a=1 n=1465
+D t=7 n=1465
+C t=7 a=1 n=1466
+D t=7 n=1466
+C t=7 a=1 n=1467
+D t=7 n=1467
+C t=7 a=1 n=1468
+D t=7 n=1468
+C t=7 a=1 n=1469
+D t=7 n=1469
+C t=7 a=1 n=1470
+D t=7 n=1470
+C t=7 a=1 n=1471
+D t=7 n=1471
+C t=7 a=1 n=1472
+D t=7 n=1472
+C t=7 a=1 n=1473
+D t=7 n=1473
+C t=7 a=1 n=1474
+D t=7 n=1474
+C t=7 a=1 n=1475
+D t=7 n=1475
+C t=7 a=1 n=1476
+D t=7 n=1476
+C t=7 a=1 n=1477
+D t=7 n=1477
+C t=7 a=1 n=1478
+D t=7 n=1478
+C t=7 a=1 n=1479
+D t=7 n=1479
+C t=7 a=1 n=1480
+D t=7 n=1480
+C t=7 a=1 n=1481
+D t=7 n=1481
+C t=7 a=1 n=1482
+D t=7 n=1482
+C t=7 a=1 n=1483
+D t=7 n=1483
+C t=7 a=1 n=1484
+D t=7 n=1484
+C t=7 a=1 n=1485
+D t=7 n=1485
+C t=7 a=1 n=1486
+D t=7 n=1486
+C t=7 a=1 n=1487
+D t=7 n=1487
+C t=7 a=1 n=1488
+D t=7 n=1488
+C t=7 a=1 n=1489
+D t=7 n=1489
+C t=7 a=1 n=1490
+D t=7 n=1490
+C t=7 a=1 n=1491
+D t=7 n=1491
+C t=7 a=1 n=1492
+D t=7 n=1492
+C t=7 a=1 n=1493
+D t=7 n=1493
+C t=7 a=1 n=1494
+D t=7 n=1494
+C t=7 a=1 n=1495
+D t=7 n=1495
+C t=7 a=1 n=1496
+D t=7 n=1496
+C t=7 a=1 n=1497
+D t=7 n=1497
+C t=7 a=1 n=1498
+D t=7 n=1498
+C t=7 a=1 n=1499
+D t=7 n=1499
+C t=7 a=1 n=1500
+D t=7 n=1500
+C t=7 a=1 n=1501
+D t=7 n=1501
+C t=7 a=1 n=1502
+D t=7 n=1502
+C t=7 a=1 n=1503
+D t=7 n=1503
+C t=7 a=1 n=1504
+D t=7 n=1504
+C t=7 a=1 n=1505
+D t=7 n=1505
+C t=7 a=1 n=1506
+D t=7 n=1506
+C t=7 a=1 n=1507
+D t=7 n=1507
+C t=7 a=1 n=1508
+D t=7 n=1508
+C t=7 a=1 n=1509
+D t=7 n=1509
+C t=7 a=1 n=1510
+D t=7 n=1510
+C t=7 a=1 n=1511
+D t=7 n=1511
+C t=7 a=1 n=1512
+D t=7 n=1512
+C t=7 a=1 n=1513
+D t=7 n=1513
+C t=7 a=1 n=1514
+D t=7 n=1514
+C t=7 a=1 n=1515
+D t=7 n=1515
+C t=7 a=1 n=1516
+D t=7 n=1516
+C t=7 a=1 n=1517
+D t=7 n=1517
+C t=7 a=1 n=1518
+D t=7 n=1518
+C t=7 a=1 n=1519
+D t=7 n=1519
+C t=7 a=1 n=1520
+D t=7 n=1520
+C t=7 a=1 n=1521
+D t=7 n=1521
+C t=7 a=1 n=1522
+D t=7 n=1522
+C t=7 a=1 n=1523
+D t=7 n=1523
+C t=7 a=1 n=1524
+D t=7 n=1524
+C t=7 a=1 n=1525
+D t=7 n=1525
+C t=7 a=1 n=1526
+D t=7 n=1526
+C t=7 a=1 n=1527
+D t=7 n=1527
+C t=7 a=1 n=1528
+D t=7 n=1528
+C t=7 a=1 n=1529
+D t=7 n=1529
+C t=7 a=1 n=1530
+D t=7 n=1530
+C t=7 a=1 n=1531
+D t=7 n=1531
+C t=7 a=1 n=1532
+D t=7 n=1532
+C t=7 a=1 n=1533
+D t=7 n=1533
+C t=7 a=1 n=1534
+D t=7 n=1534
+C t=7 a=1 n=1535
+D t=7 n=1535
+C t=7 a=1 n=1536
+D t=7 n=1536
+C t=7 a=1 n=1537
+D t=7 n=1537
+C t=7 a=1 n=1538
+D t=7 n=1538
+C t=7 a=1 n=1539
+D t=7 n=1539
+C t=7 a=1 n=1540
+D t=7 n=1540
+C t=7 a=1 n=1541
+D t=7 n=1541
+C t=7 a=1 n=1542
+D t=7 n=1542
+C t=7 a=1 n=1543
+D t=7 n=1543
+C t=7 a=1 n=1544
+D t=7 n=1544
+C t=7 a=1 n=1545
+D t=7 n=1545
+C t=7 a=1 n=1546
+D t=7 n=1546
+C t=7 a=1 n=1547
+D t=7 n=1547
+C t=7 a=1 n=1548
+D t=7 n=1548
+C t=7 a=1 n=1549
+D t=7 n=1549
+C t=7 a=1 n=1550
+D t=7 n=1550
+C t=7 a=1 n=1551
+D t=7 n=1551
+C t=7 a=1 n=1552
+D t=7 n=1552
+C t=7 a=1 n=1553
+D t=7 n=1553
+C t=7 a=1 n=1554
+D t=7 n=1554
+C t=7 a=1 n=1555
+D t=7 n=1555
+C t=7 a=1 n=1556
+D t=7 n=1556
+C t=7 a=1 n=1557
+D t=7 n=1557
+C t=7 a=1 n=1558
+D t=7 n=1558
+C t=7 a=1 n=1559
+D t=7 n=1559
+C t=7 a=1 n=1560
+D t=7 n=1560
+C t=7 a=1 n=1561
+D t=7 n=1561
+C t=7 a=1 n=1562
+D t=7 n=1562
+C t=7 a=1 n=1563
+D t=7 n=1563
+C t=7 a=1 n=1564
+D t=7 n=1564
+C t=7 a=1 n=1565
+D t=7 n=1565
+C t=7 a=1 n=1566
+D t=7 n=1566
+C t=7 a=1 n=1567
+D t=7 n=1567
+C t=7 a=1 n=1568
+D t=7 n=1568
+C t=7 a=1 n=1569
+D t=7 n=1569
+C t=7 a=1 n=1570
+D t=7 n=1570
+C t=7 a=1 n=1571
+D t=7 n=1571
+C t=7 a=1 n=1572
+D t=7 n=1572
+C t=7 a=1 n=1573
+D t=7 n=1573
+C t=7 a=1 n=1574
+D t=7 n=1574
+C t=7 a=1 n=1575
+D t=7 n=1575
+C t=7 a=1 n=1576
+D t=7 n=1576
+C t=7 a=1 n=1577
+D t=7 n=1577
+C t=7 a=1 n=1578
+D t=7 n=1578
+C t=7 a=1 n=1579
+D t=7 n=1579
+C t=7 a=1 n=1580
+D t=7 n=1580
+C t=7 a=1 n=1581
+D t=7 n=1581
+C t=7 a=1 n=1582
+D t=7 n=1582
+C t=7 a=1 n=1583
+D t=7 n=1583
+C t=7 a=1 n=1584
+D t=7 n=1584
+C t=7 a=1 n=1585
+D t=7 n=1585
+C t=7 a=1 n=1586
+D t=7 n=1586
+C t=7 a=1 n=1587
+D t=7 n=1587
+C t=7 a=1 n=1588
+D t=7 n=1588
+C t=7 a=1 n=1589
+D t=7 n=1589
+C t=7 a=1 n=1590
+D t=7 n=1590
+C t=7 a=1 n=1591
+D t=7 n=1591
+C t=7 a=1 n=1592
+D t=7 n=1592
+C t=7 a=1 n=1593
+D t=7 n=1593
+C t=7 a=1 n=1594
+D t=7 n=1594
+C t=7 a=1 n=1595
+D t=7 n=1595
+C t=7 a=1 n=1596
+D t=7 n=1596
+C t=7 a=1 n=1597
+D t=7 n=1597
+C t=7 a=1 n=1598
+D t=7 n=1598
+C t=7 a=1 n=1599
+D t=7 n=1599
+C t=7 a=1 n=1600
+D t=7 n=1600
+C t=7 a=1 n=1601
+D t=7 n=1601
+C t=7 a=1 n=1602
+D t=7 n=1602
+C t=7 a=1 n=1603
+D t=7 n=1603
+C t=7 a=1 n=1604
+D t=7 n=1604
+C t=7 a=1 n=1605
+D t=7 n=1605
+C t=7 a=1 n=1606
+D t=7 n=1606
+C t=7 a=1 n=1607
+D t=7 n=1607
+C t=7 a=1 n=1608
+D t=7 n=1608
+C t=7 a=1 n=1609
+D t=7 n=1609
+C t=7 a=1 n=1610
+D t=7 n=1610
+C t=7 a=1 n=1611
+D t=7 n=1611
+C t=7 a=1 n=1612
+D t=7 n=1612
+C t=7 a=1 n=1613
+D t=7 n=1613
+C t=7 a=1 n=1614
+D t=7 n=1614
+C t=7 a=1 n=1615
+D t=7 n=1615
+C t=7 a=1 n=1616
+D t=7 n=1616
+C t=7 a=1 n=1617
+D t=7 n=1617
+C t=7 a=1 n=1618
+D t=7 n=1618
+C t=7 a=1 n=1619
+D t=7 n=1619
+C t=7 a=1 n=1620
+D t=7 n=1620
+C t=7 a=1 n=1621
+D t=7 n=1621
+C t=7 a=1 n=1622
+D t=7 n=1622
+C t=7 a=1 n=1623
+D t=7 n=1623
+C t=7 a=1 n=1624
+D t=7 n=1624
+C t=7 a=1 n=1625
+D t=7 n=1625
+C t=7 a=1 n=1626
+D t=7 n=1626
+C t=7 a=1 n=1627
+D t=7 n=1627
+C t=7 a=1 n=1628
+D t=7 n=1628
+C t=7 a=1 n=1629
+D t=7 n=1629
+C t=7 a=1 n=1630
+D t=7 n=1630
+C t=7 a=1 n=1631
+D t=7 n=1631
+C t=7 a=1 n=1632
+D t=7 n=1632
+C t=7 a=1 n=1633
+D t=7 n=1633
+C t=7 a=1 n=1634
+D t=7 n=1634
+C t=7 a=1 n=1635
+D t=7 n=1635
+C t=7 a=1 n=1636
+D t=7 n=1636
+C t=7 a=1 n=1637
+D t=7 n=1637
+C t=7 a=1 n=1638
+D t=7 n=1638
+C t=7 a=1 n=1639
+D t=7 n=1639
+C t=7 a=1 n=1640
+D t=7 n=1640
+C t=7 a=1 n=1641
+D t=7 n=1641
+C t=7 a=1 n=1642
+D t=7 n=1642
+C t=7 a=1 n=1643
+D t=7 n=1643
+C t=7 a=1 n=1644
+D t=7 n=1644
+C t=7 a=1 n=1645
+D t=7 n=1645
+C t=7 a=1 n=1646
+D t=7 n=1646
+C t=7 a=1 n=1647
+D t=7 n=1647
+C t=7 a=1 n=1648
+D t=7 n=1648
+C t=7 a=1 n=1649
+D t=7 n=1649
+C t=7 a=1 n=1650
+D t=7 n=1650
+C t=7 a=1 n=1651
+D t=7 n=1651
+C t=7 a=1 n=1652
+D t=7 n=1652
+C t=7 a=1 n=1653
+D t=7 n=1653
+C t=7 a=1 n=1654
+D t=7 n=1654
+C t=7 a=1 n=1655
+D t=7 n=1655
+C t=7 a=1 n=1656
+D t=7 n=1656
+C t=7 a=1 n=1657
+D t=7 n=1657
+C t=7 a=1 n=1658
+D t=7 n=1658
+C t=7 a=1 n=1659
+D t=7 n=1659
+C t=7 a=1 n=1660
+D t=7 n=1660
+C t=7 a=1 n=1661
+D t=7 n=1661
+C t=7 a=1 n=1662
+D t=7 n=1662
+C t=7 a=1 n=1663
+D t=7 n=1663
+C t=7 a=1 n=1664
+D t=7 n=1664
+C t=7 a=1 n=1665
+D t=7 n=1665
+C t=7 a=1 n=1666
+D t=7 n=1666
+C t=7 a=1 n=1667
+D t=7 n=1667
+C t=7 a=1 n=1668
+D t=7 n=1668
+C t=7 a=1 n=1669
+D t=7 n=1669
+C t=7 a=1 n=1670
+D t=7 n=1670
+C t=7 a=1 n=1671
+D t=7 n=1671
+C t=7 a=1 n=1672
+D t=7 n=1672
+C t=7 a=1 n=1673
+D t=7 n=1673
+C t=7 a=1 n=1674
+D t=7 n=1674
+C t=7 a=1 n=1675
+D t=7 n=1675
+C t=7 a=1 n=1676
+D t=7 n=1676
+C t=7 a=1 n=1677
+D t=7 n=1677
+C t=7 a=1 n=1678
+D t=7 n=1678
+C t=7 a=1 n=1679
+D t=7 n=1679
+C t=7 a=1 n=1680
+D t=7 n=1680
+C t=7 a=1 n=1681
+D t=7 n=1681
+C t=7 a=1 n=1682
+D t=7 n=1682
+C t=7 a=1 n=1683
+D t=7 n=1683
+C t=7 a=1 n=1684
+D t=7 n=1684
+C t=7 a=1 n=1685
+D t=7 n=1685
+C t=7 a=1 n=1686
+D t=7 n=1686
+C t=7 a=1 n=1687
+D t=7 n=1687
+C t=7 a=1 n=1688
+D t=7 n=1688
+C t=7 a=1 n=1689
+D t=7 n=1689
+C t=7 a=1 n=1690
+D t=7 n=1690
+C t=7 a=1 n=1691
+D t=7 n=1691
+C t=7 a=1 n=1692
+D t=7 n=1692
+C t=7 a=1 n=1693
+D t=7 n=1693
+C t=7 a=1 n=1694
+D t=7 n=1694
+C t=7 a=1 n=1695
+D t=7 n=1695
+C t=7 a=1 n=1696
+D t=7 n=1696
+C t=7 a=1 n=1697
+D t=7 n=1697
+C t=7 a=1 n=1698
+D t=7 n=1698
+C t=7 a=1 n=1699
+D t=7 n=1699
+C t=7 a=1 n=1700
+D t=7 n=1700
+C t=7 a=1 n=1701
+D t=7 n=1701
+C t=7 a=1 n=1702
+D t=7 n=1702
+C t=7 a=1 n=1703
+D t=7 n=1703
+C t=7 a=1 n=1704
+D t=7 n=1704
+C t=7 a=1 n=1705
+D t=7 n=1705
+C t=7 a=1 n=1706
+D t=7 n=1706
+C t=7 a=1 n=1707
+D t=7 n=1707
+C t=7 a=1 n=1708
+D t=7 n=1708
+C t=7 a=1 n=1709
+D t=7 n=1709
+C t=7 a=1 n=1710
+D t=7 n=1710
+C t=7 a=1 n=1711
+D t=7 n=1711
+C t=7 a=1 n=1712
+D t=7 n=1712
+C t=7 a=1 n=1713
+D t=7 n=1713
+C t=7 a=1 n=1714
+D t=7 n=1714
+C t=7 a=1 n=1715
+D t=7 n=1715
+C t=7 a=1 n=1716
+D t=7 n=1716
+C t=7 a=1 n=1717
+D t=7 n=1717
+C t=7 a=1 n=1718
+D t=7 n=1718
+C t=7 a=1 n=1719
+D t=7 n=1719
+C t=7 a=1 n=1720
+D t=7 n=1720
+C t=7 a=1 n=1721
+D t=7 n=1721
+C t=7 a=1 n=1722
+D t=7 n=1722
+C t=7 a=1 n=1723
+D t=7 n=1723
+C t=7 a=1 n=1724
+D t=7 n=1724
+C t=7 a=1 n=1725
+D t=7 n=1725
+C t=7 a=1 n=1726
+D t=7 n=1726
+C t=7 a=1 n=1727
+D t=7 n=1727
+C t=7 a=1 n=1728
+D t=7 n=1728
+C t=7 a=1 n=1729
+D t=7 n=1729
+C t=7 a=1 n=1730
+D t=7 n=1730
+C t=7 a=1 n=1731
+D t=7 n=1731
+C t=7 a=1 n=1732
+D t=7 n=1732
+C t=7 a=1 n=1733
+D t=7 n=1733
+C t=7 a=1 n=1734
+D t=7 n=1734
+C t=7 a=1 n=1735
+D t=7 n=1735
+C t=7 a=1 n=1736
+D t=7 n=1736
+C t=7 a=1 n=1737
+D t=7 n=1737
+C t=7 a=1 n=1738
+D t=7 n=1738
+C t=7 a=1 n=1739
+D t=7 n=1739
+C t=7 a=1 n=1740
+D t=7 n=1740
+C t=7 a=1 n=1741
+D t=7 n=1741
+C t=7 a=1 n=1742
+D t=7 n=1742
+C t=7 a=1 n=1743
+D t=7 n=1743
+C t=7 a=1 n=1744
+D t=7 n=1744
+C t=7 a=1 n=1745
+D t=7 n=1745
+C t=7 a=1 n=1746
+D t=7 n=1746
+C t=7 a=1 n=1747
+D t=7 n=1747
+C t=7 a=1 n=1748
+D t=7 n=1748
+C t=7 a=1 n=1749
+D t=7 n=1749
+C t=7 a=1 n=1750
+D t=7 n=1750
+C t=7 a=1 n=1751
+D t=7 n=1751
+C t=7 a=1 n=1752
+D t=7 n=1752
+C t=7 a=1 n=1753
+D t=7 n=1753
+C t=7 a=1 n=1754
+D t=7 n=1754
+C t=7 a=1 n=1755
+D t=7 n=1755
+C t=7 a=1 n=1756
+D t=7 n=1756
+C t=7 a=1 n=1757
+D t=7 n=1757
+C t=7 a=1 n=1758
+D t=7 n=1758
+C t=7 a=1 n=1759
+D t=7 n=1759
+C t=7 a=1 n=1760
+D t=7 n=1760
+C t=7 a=1 n=1761
+D t=7 n=1761
+C t=7 a=1 n=1762
+D t=7 n=1762
+C t=7 a=1 n=1763
+D t=7 n=1763
+C t=7 a=1 n=1764
+D t=7 n=1764
+C t=7 a=1 n=1765
+D t=7 n=1765
+C t=7 a=1 n=1766
+D t=7 n=1766
+C t=7 a=1 n=1767
+D t=7 n=1767
+C t=7 a=1 n=1768
+D t=7 n=1768
+C t=7 a=1 n=1769
+D t=7 n=1769
+C t=7 a=1 n=1770
+D t=7 n=1770
+C t=7 a=1 n=1771
+D t=7 n=1771
+C t=7 a=1 n=1772
+D t=7 n=1772
+C t=7 a=1 n=1773
+D t=7 n=1773
+C t=7 a=1 n=1774
+D t=7 n=1774
+C t=7 a=1 n=1775
+D t=7 n=1775
+C t=7 a=1 n=1776
+D t=7 n=1776
+C t=7 a=1 n=1777
+D t=7 n=1777
+C t=7 a=1 n=1778
+D t=7 n=1778
+C t=7 a=1 n=1779
+D t=7 n=1779
+C t=7 a=1 n=1780
+D t=7 n=1780
+C t=7 a=1 n=1781
+D t=7 n=1781
+C t=7 a=1 n=1782
+D t=7 n=1782
+C t=7 a=1 n=1783
+D t=7 n=1783
+C t=7 a=1 n=1784
+D t=7 n=1784
+C t=7 a=1 n=1785
+D t=7 n=1785
+C t=7 a=1 n=1786
+D t=7 n=1786
+C t=7 a=1 n=1787
+D t=7 n=1787
+C t=7 a=1 n=1788
+D t=7 n=1788
+C t=7 a=1 n=1789
+D t=7 n=1789
+C t=7 a=1 n=1790
+D t=7 n=1790
+C t=7 a=1 n=1791
+D t=7 n=1791
+C t=7 a=1 n=1792
+D t=7 n=1792
+C t=7 a=1 n=1793
+D t=7 n=1793
+C t=7 a=1 n=1794
+D t=7 n=1794
+C t=7 a=1 n=1795
+D t=7 n=1795
+C t=7 a=1 n=1796
+D t=7 n=1796
+C t=7 a=1 n=1797
+D t=7 n=1797
+C t=7 a=1 n=1798
+D t=7 n=1798
+C t=7 a=1 n=1799
+D t=7 n=1799
+C t=7 a=1 n=1800
+D t=7 n=1800
+C t=7 a=1 n=1801
+D t=7 n=1801
+C t=7 a=1 n=1802
+D t=7 n=1802
+C t=7 a=1 n=1803
+D t=7 n=1803
+C t=7 a=1 n=1804
+D t=7 n=1804
+C t=7 a=1 n=1805
+D t=7 n=1805
+C t=7 a=1 n=1806
+D t=7 n=1806
+C t=7 a=1 n=1807
+D t=7 n=1807
+C t=7 a=1 n=1808
+D t=7 n=1808
+C t=7 a=1 n=1809
+D t=7 n=1809
+C t=7 a=1 n=1810
+D t=7 n=1810
+C t=7 a=1 n=1811
+D t=7 n=1811
+C t=7 a=1 n=1812
+D t=7 n=1812
+C t=7 a=1 n=1813
+D t=7 n=1813
+C t=7 a=1 n=1814
+D t=7 n=1814
+C t=7 a=1 n=1815
+D t=7 n=1815
+C t=7 a=1 n=1816
+D t=7 n=1816
+C t=7 a=1 n=1817
+D t=7 n=1817
+C t=7 a=1 n=1818
+D t=7 n=1818
+C t=7 a=1 n=1819
+D t=7 n=1819
+C t=7 a=1 n=1820
+D t=7 n=1820
+C t=7 a=1 n=1821
+D t=7 n=1821
+C t=7 a=1 n=1822
+D t=7 n=1822
+C t=7 a=1 n=1823
+D t=7 n=1823
+C t=7 a=1 n=1824
+D t=7 n=1824
+C t=7 a=1 n=1825
+D t=7 n=1825
+C t=7 a=1 n=1826
+D t=7 n=1826
+C t=7 a=1 n=1827
+D t=7 n=1827
+C t=7 a=1 n=1828
+D t=7 n=1828
+C t=7 a=1 n=1829
+D t=7 n=1829
+C t=7 a=1 n=1830
+D t=7 n=1830
+C t=7 a=1 n=1831
+D t=7 n=1831
+C t=7 a=1 n=1832
+D t=7 n=1832
+C t=7 a=1 n=1833
+D t=7 n=1833
+C t=7 a=1 n=1834
+D t=7 n=1834
+C t=7 a=1 n=1835
+D t=7 n=1835
+C t=7 a=1 n=1836
+D t=7 n=1836
+C t=7 a=1 n=1837
+D t=7 n=1837
+C t=7 a=1 n=1838
+D t=7 n=1838
+C t=7 a=1 n=1839
+D t=7 n=1839
+C t=7 a=1 n=1840
+D t=7 n=1840
+C t=7 a=1 n=1841
+D t=7 n=1841
+C t=7 a=1 n=1842
+D t=7 n=1842
+C t=7 a=1 n=1843
+D t=7 n=1843
+C t=7 a=1 n=1844
+D t=7 n=1844
+C t=7 a=1 n=1845
+D t=7 n=1845
+C t=7 a=1 n=1846
+D t=7 n=1846
+C t=7 a=1 n=1847
+D t=7 n=1847
+C t=7 a=1 n=1848
+D t=7 n=1848
+C t=7 a=1 n=1849
+D t=7 n=1849
+C t=7 a=1 n=1850
+D t=7 n=1850
+C t=7 a=1 n=1851
+D t=7 n=1851
+C t=7 a=1 n=1852
+D t=7 n=1852
+C t=7 a=1 n=1853
+D t=7 n=1853
+C t=7 a=1 n=1854
+D t=7 n=1854
+C t=7 a=1 n=1855
+D t=7 n=1855
+C t=7 a=1 n=1856
+D t=7 n=1856
+C t=7 a=1 n=1857
+D t=7 n=1857
+C t=7 a=1 n=1858
+D t=7 n=1858
+C t=7 a=1 n=1859
+D t=7 n=1859
+C t=7 a=1 n=1860
+D t=7 n=1860
+C t=7 a=1 n=1861
+D t=7 n=1861
+C t=7 a=1 n=1862
+D t=7 n=1862
+C t=7 a=1 n=1863
+D t=7 n=1863
+C t=7 a=1 n=1864
+D t=7 n=1864
+C t=7 a=1 n=1865
+D t=7 n=1865
+C t=7 a=1 n=1866
+D t=7 n=1866
+C t=7 a=1 n=1867
+D t=7 n=1867
+C t=7 a=1 n=1868
+D t=7 n=1868
+C t=7 a=1 n=1869
+D t=7 n=1869
+C t=7 a=1 n=1870
+D t=7 n=1870
+C t=7 a=1 n=1871
+D t=7 n=1871
+C t=7 a=1 n=1872
+D t=7 n=1872
+C t=7 a=1 n=1873
+D t=7 n=1873
+C t=7 a=1 n=1874
+D t=7 n=1874
+C t=7 a=1 n=1875
+D t=7 n=1875
+C t=7 a=1 n=1876
+D t=7 n=1876
+C t=7 a=1 n=1877
+D t=7 n=1877
+C t=7 a=1 n=1878
+D t=7 n=1878
+C t=7 a=1 n=1879
+D t=7 n=1879
+C t=7 a=1 n=1880
+D t=7 n=1880
+C t=7 a=1 n=1881
+D t=7 n=1881
+C t=7 a=1 n=1882
+D t=7 n=1882
+C t=7 a=1 n=1883
+D t=7 n=1883
+C t=7 a=1 n=1884
+D t=7 n=1884
+C t=7 a=1 n=1885
+D t=7 n=1885
+C t=7 a=1 n=1886
+D t=7 n=1886
+C t=7 a=1 n=1887
+D t=7 n=1887
+C t=7 a=1 n=1888
+D t=7 n=1888
+C t=7 a=1 n=1889
+D t=7 n=1889
+C t=7 a=1 n=1890
+D t=7 n=1890
+C t=7 a=1 n=1891
+D t=7 n=1891
+C t=7 a=1 n=1892
+D t=7 n=1892
+C t=7 a=1 n=1893
+D t=7 n=1893
+C t=7 a=1 n=1894
+D t=7 n=1894
+C t=7 a=1 n=1895
+D t=7 n=1895
+C t=7 a=1 n=1896
+D t=7 n=1896
+C t=7 a=1 n=1897
+D t=7 n=1897
+C t=7 a=1 n=1898
+D t=7 n=1898
+C t=7 a=1 n=1899
+D t=7 n=1899
+C t=7 a=1 n=1900
+D t=7 n=1900
+C t=7 a=1 n=1901
+D t=7 n=1901
+C t=7 a=1 n=1902
+D t=7 n=1902
+C t=7 a=1 n=1903
+D t=7 n=1903
+C t=7 a=1 n=1904
+D t=7 n=1904
+C t=7 a=1 n=1905
+D t=7 n=1905
+C t=7 a=1 n=1906
+D t=7 n=1906
+C t=7 a=1 n=1907
+D t=7 n=1907
+C t=7 a=1 n=1908
+D t=7 n=1908
+C t=7 a=1 n=1909
+D t=7 n=1909
+C t=7 a=1 n=1910
+D t=7 n=1910
+C t=7 a=1 n=1911
+D t=7 n=1911
+C t=7 a=1 n=1912
+D t=7 n=1912
+C t=7 a=1 n=1913
+D t=7 n=1913
+C t=7 a=1 n=1914
+D t=7 n=1914
+C t=7 a=1 n=1915
+D t=7 n=1915
+C t=7 a=1 n=1916
+D t=7 n=1916
+C t=7 a=1 n=1917
+D t=7 n=1917
+C t=7 a=1 n=1918
+D t=7 n=1918
+C t=7 a=1 n=1919
+D t=7 n=1919
+C t=7 a=1 n=1920
+D t=7 n=1920
+C t=7 a=1 n=1921
+D t=7 n=1921
+C t=7 a=1 n=1922
+D t=7 n=1922
+C t=7 a=1 n=1923
+D t=7 n=1923
+C t=7 a=1 n=1924
+D t=7 n=1924
+C t=7 a=1 n=1925
+D t=7 n=1925
+C t=7 a=1 n=1926
+D t=7 n=1926
+C t=7 a=1 n=1927
+D t=7 n=1927
+C t=7 a=1 n=1928
+D t=7 n=1928
+C t=7 a=1 n=1929
+D t=7 n=1929
+C t=7 a=1 n=1930
+D t=7 n=1930
+C t=7 a=1 n=1931
+D t=7 n=1931
+C t=7 a=1 n=1932
+D t=7 n=1932
+C t=7 a=1 n=1933
+D t=7 n=1933
+C t=7 a=1 n=1934
+D t=7 n=1934
+C t=7 a=1 n=1935
+D t=7 n=1935
+C t=7 a=1 n=1936
+D t=7 n=1936
+C t=7 a=1 n=1937
+D t=7 n=1937
+C t=7 a=1 n=1938
+D t=7 n=1938
+C t=7 a=1 n=1939
+D t=7 n=1939
+C t=7 a=1 n=1940
+D t=7 n=1940
+C t=7 a=1 n=1941
+D t=7 n=1941
+C t=7 a=1 n=1942
+D t=7 n=1942
+C t=7 a=1 n=1943
+D t=7 n=1943
+C t=7 a=1 n=1944
+D t=7 n=1944
+C t=7 a=1 n=1945
+D t=7 n=1945
+C t=7 a=1 n=1946
+D t=7 n=1946
+C t=7 a=1 n=1947
+D t=7 n=1947
+C t=7 a=1 n=1948
+D t=7 n=1948
+C t=7 a=1 n=1949
+D t=7 n=1949
+C t=7 a=1 n=1950
+D t=7 n=1950
+C t=7 a=1 n=1951
+D t=7 n=1951
+C t=7 a=1 n=1952
+D t=7 n=1952
+C t=7 a=1 n=1953
+D t=7 n=1953
+C t=7 a=1 n=1954
+D t=7 n=1954
+C t=7 a=1 n=1955
+D t=7 n=1955
+C t=7 a=1 n=1956
+D t=7 n=1956
+C t=7 a=1 n=1957
+D t=7 n=1957
+C t=7 a=1 n=1958
+D t=7 n=1958
+C t=7 a=1 n=1959
+D t=7 n=1959
+C t=7 a=1 n=1960
+D t=7 n=1960
+C t=7 a=1 n=1961
+D t=7 n=1961
+C t=7 a=1 n=1962
+D t=7 n=1962
+C t=7 a=1 n=1963
+D t=7 n=1963
+C t=7 a=1 n=1964
+D t=7 n=1964
+C t=7 a=1 n=1965
+D t=7 n=1965
+C t=7 a=1 n=1966
+D t=7 n=1966
+C t=7 a=1 n=1967
+D t=7 n=1967
+C t=7 a=1 n=1968
+D t=7 n=1968
+C t=7 a=1 n=1969
+D t=7 n=1969
+C t=7 a=1 n=1970
+D t=7 n=1970
+C t=7 a=1 n=1971
+D t=7 n=1971
+C t=7 a=1 n=1972
+D t=7 n=1972
+C t=7 a=1 n=1973
+D t=7 n=1973
+C t=7 a=1 n=1974
+D t=7 n=1974
+C t=7 a=1 n=1975
+D t=7 n=1975
+C t=7 a=1 n=1976
+D t=7 n=1976
+C t=7 a=1 n=1977
+D t=7 n=1977
+C t=7 a=1 n=1978
+D t=7 n=1978
+C t=7 a=1 n=1979
+D t=7 n=1979
+C t=7 a=1 n=1980
+D t=7 n=1980
+C t=7 a=1 n=1981
+D t=7 n=1981
+C t=7 a=1 n=1982
+D t=7 n=1982
+C t=7 a=1 n=1983
+D t=7 n=1983
+C t=7 a=1 n=1984
+D t=7 n=1984
+C t=7 a=1 n=1985
+D t=7 n=1985
+C t=7 a=1 n=1986
+D t=7 n=1986
+C t=7 a=1 n=1987
+D t=7 n=1987
+C t=7 a=1 n=1988
+D t=7 n=1988
+C t=7 a=1 n=1989
+D t=7 n=1989
+C t=7 a=1 n=1990
+D t=7 n=1990
+C t=7 a=1 n=1991
+D t=7 n=1991
+C t=7 a=1 n=1992
+D t=7 n=1992
+C t=7 a=1 n=1993
+D t=7 n=1993
+C t=7 a=1 n=1994
+D t=7 n=1994
+C t=7 a=1 n=1995
+D t=7 n=1995
+C t=7 a=1 n=1996
+D t=7 n=1996
+C t=7 a=1 n=1997
+D t=7 n=1997
+C t=7 a=1 n=1998
+D t=7 n=1998
+C t=7 a=1 n=1999
+D t=7 n=1999
+C t=7 a=1 n=2000
+D t=7 n=2000
+C t=7 a=1 n=2001
+D t=7 n=2001
+C t=7 a=1 n=2002
+D t=7 n=2002
+C t=7 a=1 n=2003
+D t=7 n=2003
+C t=7 a=1 n=2004
+D t=7 n=2004
+C t=7 a=1 n=2005
+D t=7 n=2005
+C t=7 a=1 n=2006
+D t=7 n=2006
+C t=7 a=1 n=2007
+D t=7 n=2007
+C t=7 a=1 n=2008
+D t=7 n=2008
+C t=7 a=1 n=2009
+D t=7 n=2009
+C t=7 a=1 n=2010
+D t=7 n=2010
+C t=7 a=1 n=2011
+D t=7 n=2011
+C t=7 a=1 n=2012
+D t=7 n=2012
+C t=7 a=1 n=2013
+D t=7 n=2013
+C t=7 a=1 n=2014
+D t=7 n=2014
+C t=7 a=1 n=2015
+D t=7 n=2015
+C t=7 a=1 n=2016
+D t=7 n=2016
+C t=7 a=1 n=2017
+D t=7 n=2017
+C t=7 a=1 n=2018
+D t=7 n=2018
+C t=7 a=1 n=2019
+D t=7 n=2019
+C t=7 a=1 n=2020
+D t=7 n=2020
+C t=7 a=1 n=2021
+D t=7 n=2021
+C t=7 a=1 n=2022
+D t=7 n=2022
+C t=7 a=1 n=2023
+D t=7 n=2023
+C t=7 a=1 n=2024
+D t=7 n=2024
+C t=7 a=1 n=2025
+D t=7 n=2025
+C t=7 a=1 n=2026
+D t=7 n=2026
+C t=7 a=1 n=2027
+D t=7 n=2027
+C t=7 a=1 n=2028
+D t=7 n=2028
+C t=7 a=1 n=2029
+D t=7 n=2029
+C t=7 a=1 n=2030
+D t=7 n=2030
+C t=7 a=1 n=2031
+D t=7 n=2031
+C t=7 a=1 n=2032
+D t=7 n=2032
+C t=7 a=1 n=2033
+D t=7 n=2033
+C t=7 a=1 n=2034
+D t=7 n=2034
+C t=7 a=1 n=2035
+D t=7 n=2035
+C t=7 a=1 n=2036
+D t=7 n=2036
+C t=7 a=1 n=2037
+D t=7 n=2037
+C t=7 a=1 n=2038
+D t=7 n=2038
+C t=7 a=1 n=2039
+D t=7 n=2039
+C t=7 a=1 n=2040
+D t=7 n=2040
+C t=7 a=1 n=2041
+D t=7 n=2041
+C t=7 a=1 n=2042
+D t=7 n=2042
+C t=7 a=1 n=2043
+D t=7 n=2043
+C t=7 a=1 n=2044
+D t=7 n=2044
+C t=7 a=1 n=2045
+D t=7 n=2045
+C t=7 a=1 n=2046
+D t=7 n=2046
+C t=7 a=1 n=2047
+D t=7 n=2047
+C t=7 a=1 n=2048
+D t=7 n=2048
+C t=7 a=1 n=2049
+D t=7 n=2049
+C t=7 a=1 n=2050
+D t=7 n=2050
+C t=7 a=1 n=2051
+D t=7 n=2051
+C t=7 a=1 n=2052
+D t=7 n=2052
+C t=7 a=1 n=2053
+D t=7 n=2053
+C t=7 a=1 n=2054
+D t=7 n=2054
+C t=7 a=1 n=2055
+D t=7 n=2055
+C t=7 a=1 n=2056
+D t=7 n=2056
+C t=7 a=1 n=2057
+D t=7 n=2057
+C t=7 a=1 n=2058
+D t=7 n=2058
+C t=7 a=1 n=2059
+D t=7 n=2059
+C t=7 a=1 n=2060
+D t=7 n=2060
+C t=7 a=1 n=2061
+D t=7 n=2061
+C t=7 a=1 n=2062
+D t=7 n=2062
+C t=7 a=1 n=2063
+D t=7 n=2063
+C t=7 a=1 n=2064
+D t=7 n=2064
+C t=7 a=1 n=2065
+D t=7 n=2065
+C t=7 a=1 n=2066
+D t=7 n=2066
+C t=7 a=1 n=2067
+D t=7 n=2067
+C t=7 a=1 n=2068
+D t=7 n=2068
+C t=7 a=1 n=2069
+D t=7 n=2069
+C t=7 a=1 n=2070
+D t=7 n=2070
+C t=7 a=1 n=2071
+D t=7 n=2071
+C t=7 a=1 n=2072
+D t=7 n=2072
+C t=7 a=1 n=2073
+D t=7 n=2073
+C t=7 a=1 n=2074
+D t=7 n=2074
+C t=7 a=1 n=2075
+D t=7 n=2075
+C t=7 a=1 n=2076
+D t=7 n=2076
+C t=7 a=1 n=2077
+D t=7 n=2077
+C t=7 a=1 n=2078
+D t=7 n=2078
+C t=7 a=1 n=2079
+D t=7 n=2079
+C t=7 a=1 n=2080
+D t=7 n=2080
+C t=7 a=1 n=2081
+D t=7 n=2081
+C t=7 a=1 n=2082
+D t=7 n=2082
+C t=7 a=1 n=2083
+D t=7 n=2083
+C t=7 a=1 n=2084
+D t=7 n=2084
+C t=7 a=1 n=2085
+D t=7 n=2085
+C t=7 a=1 n=2086
+D t=7 n=2086
+C t=7 a=1 n=2087
+D t=7 n=2087
+C t=7 a=1 n=2088
+D t=7 n=2088
+C t=7 a=1 n=2089
+D t=7 n=2089
+C t=7 a=1 n=2090
+D t=7 n=2090
+C t=7 a=1 n=2091
+D t=7 n=2091
+C t=7 a=1 n=2092
+D t=7 n=2092
+C t=7 a=1 n=2093
+D t=7 n=2093
+C t=7 a=1 n=2094
+D t=7 n=2094
+C t=7 a=1 n=2095
+D t=7 n=2095
+C t=7 a=1 n=2096
+D t=7 n=2096
+C t=7 a=1 n=2097
+D t=7 n=2097
+C t=7 a=1 n=2098
+D t=7 n=2098
+C t=7 a=1 n=2099
+D t=7 n=2099
+C t=7 a=1 n=2100
+D t=7 n=2100
+C t=7 a=1 n=2101
+D t=7 n=2101
+C t=7 a=1 n=2102
+D t=7 n=2102
+C t=7 a=1 n=2103
+D t=7 n=2103
+C t=7 a=1 n=2104
+D t=7 n=2104
+C t=7 a=1 n=2105
+D t=7 n=2105
+C t=7 a=1 n=2106
+D t=7 n=2106
+C t=7 a=1 n=2107
+D t=7 n=2107
+C t=7 a=1 n=2108
+D t=7 n=2108
+C t=7 a=1 n=2109
+D t=7 n=2109
+C t=7 a=1 n=2110
+D t=7 n=2110
+C t=7 a=1 n=2111
+D t=7 n=2111
+C t=7 a=1 n=2112
+D t=7 n=2112
+C t=7 a=1 n=2113
+D t=7 n=2113
+C t=7 a=1 n=2114
+D t=7 n=2114
+C t=7 a=1 n=2115
+D t=7 n=2115
+C t=7 a=1 n=2116
+D t=7 n=2116
+C t=7 a=1 n=2117
+D t=7 n=2117
+C t=7 a=1 n=2118
+D t=7 n=2118
+C t=7 a=1 n=2119
+D t=7 n=2119
+C t=7 a=1 n=2120
+D t=7 n=2120
+C t=7 a=1 n=2121
+D t=7 n=2121
+C t=7 a=1 n=2122
+D t=7 n=2122
+C t=7 a=1 n=2123
+D t=7 n=2123
+C t=7 a=1 n=2124
+D t=7 n=2124
+C t=7 a=1 n=2125
+D t=7 n=2125
+C t=7 a=1 n=2126
+D t=7 n=2126
+C t=7 a=1 n=2127
+D t=7 n=2127
+C t=7 a=1 n=2128
+D t=7 n=2128
+C t=7 a=1 n=2129
+D t=7 n=2129
+C t=7 a=1 n=2130
+D t=7 n=2130
+C t=7 a=1 n=2131
+D t=7 n=2131
+C t=7 a=1 n=2132
+D t=7 n=2132
+C t=7 a=1 n=2133
+D t=7 n=2133
+C t=7 a=1 n=2134
+D t=7 n=2134
+C t=7 a=1 n=2135
+D t=7 n=2135
+C t=7 a=1 n=2136
+D t=7 n=2136
+C t=7 a=1 n=2137
+D t=7 n=2137
+C t=7 a=1 n=2138
+D t=7 n=2138
+C t=7 a=1 n=2139
+D t=7 n=2139
+C t=7 a=1 n=2140
+D t=7 n=2140
+C t=7 a=1 n=2141
+D t=7 n=2141
+C t=7 a=1 n=2142
+D t=7 n=2142
+C t=7 a=1 n=2143
+D t=7 n=2143
+C t=7 a=1 n=2144
+D t=7 n=2144
+C t=7 a=1 n=2145
+D t=7 n=2145
+C t=7 a=1 n=2146
+D t=7 n=2146
+C t=7 a=1 n=2147
+D t=7 n=2147
+C t=7 a=1 n=2148
+D t=7 n=2148
+C t=7 a=1 n=2149
+D t=7 n=2149
+C t=7 a=1 n=2150
+D t=7 n=2150
+C t=7 a=1 n=2151
+D t=7 n=2151
+C t=7 a=1 n=2152
+D t=7 n=2152
+C t=7 a=1 n=2153
+D t=7 n=2153
+C t=7 a=1 n=2154
+D t=7 n=2154
+C t=7 a=1 n=2155
+D t=7 n=2155
+C t=7 a=1 n=2156
+D t=7 n=2156
+C t=7 a=1 n=2157
+D t=7 n=2157
+C t=7 a=1 n=2158
+D t=7 n=2158
+C t=7 a=1 n=2159
+D t=7 n=2159
+C t=7 a=1 n=2160
+D t=7 n=2160
+C t=7 a=1 n=2161
+D t=7 n=2161
+C t=7 a=1 n=2162
+D t=7 n=2162
+C t=7 a=1 n=2163
+D t=7 n=2163
+C t=7 a=1 n=2164
+D t=7 n=2164
+C t=7 a=1 n=2165
+D t=7 n=2165
+C t=7 a=1 n=2166
+D t=7 n=2166
+C t=7 a=1 n=2167
+D t=7 n=2167
+C t=7 a=1 n=2168
+D t=7 n=2168
+C t=7 a=1 n=2169
+D t=7 n=2169
+C t=7 a=1 n=2170
+D t=7 n=2170
+C t=7 a=1 n=2171
+D t=7 n=2171
+C t=7 a=1 n=2172
+D t=7 n=2172
+C t=7 a=1 n=2173
+D t=7 n=2173
+C t=7 a=1 n=2174
+D t=7 n=2174
+C t=7 a=1 n=2175
+D t=7 n=2175
+C t=7 a=1 n=2176
+D t=7 n=2176
+C t=7 a=1 n=2177
+D t=7 n=2177
+C t=7 a=1 n=2178
+D t=7 n=2178
+C t=7 a=1 n=2179
+D t=7 n=2179
+C t=7 a=1 n=2180
+D t=7 n=2180
+C t=7 a=1 n=2181
+D t=7 n=2181
+C t=7 a=1 n=2182
+D t=7 n=2182
+C t=7 a=1 n=2183
+D t=7 n=2183
+C t=7 a=1 n=2184
+D t=7 n=2184
+C t=7 a=1 n=2185
+D t=7 n=2185
+C t=7 a=1 n=2186
+D t=7 n=2186
+C t=7 a=1 n=2187
+D t=7 n=2187
+C t=7 a=1 n=2188
+D t=7 n=2188
+C t=7 a=1 n=2189
+D t=7 n=2189
+C t=7 a=1 n=2190
+D t=7 n=2190
+C t=7 a=1 n=2191
+D t=7 n=2191
+C t=7 a=1 n=2192
+D t=7 n=2192
+C t=7 a=1 n=2193
+D t=7 n=2193
+C t=7 a=1 n=2194
+D t=7 n=2194
+C t=7 a=1 n=2195
+D t=7 n=2195
+C t=7 a=1 n=2196
+D t=7 n=2196
+C t=7 a=1 n=2197
+D t=7 n=2197
+C t=7 a=1 n=2198
+D t=7 n=2198
+C t=7 a=1 n=2199
+D t=7 n=2199
+C t=7 a=1 n=2200
+D t=7 n=2200
+C t=7 a=1 n=2201
+D t=7 n=2201
+C t=7 a=1 n=2202
+D t=7 n=2202
+C t=7 a=1 n=2203
+D t=7 n=2203
+C t=7 a=1 n=2204
+D t=7 n=2204
+C t=7 a=1 n=2205
+D t=7 n=2205
+C t=7 a=1 n=2206
+D t=7 n=2206
+C t=7 a=1 n=2207
+D t=7 n=2207
+C t=7 a=1 n=2208
+D t=7 n=2208
+C t=7 a=1 n=2209
+D t=7 n=2209
+C t=7 a=1 n=2210
+D t=7 n=2210
+C t=7 a=1 n=2211
+D t=7 n=2211
+C t=7 a=1 n=2212
+D t=7 n=2212
+C t=7 a=1 n=2213
+D t=7 n=2213
+C t=7 a=1 n=2214
+D t=7 n=2214
+C t=7 a=1 n=2215
+D t=7 n=2215
+C t=7 a=1 n=2216
+D t=7 n=2216
+C t=7 a=1 n=2217
+D t=7 n=2217
+C t=7 a=1 n=2218
+D t=7 n=2218
+C t=7 a=1 n=2219
+D t=7 n=2219
+C t=7 a=1 n=2220
+D t=7 n=2220
+C t=7 a=1 n=2221
+D t=7 n=2221
+C t=7 a=1 n=2222
+D t=7 n=2222
+C t=7 a=1 n=2223
+D t=7 n=2223
+C t=7 a=1 n=2224
+D t=7 n=2224
+C t=7 a=1 n=2225
+D t=7 n=2225
+C t=7 a=1 n=2226
+D t=7 n=2226
+C t=7 a=1 n=2227
+D t=7 n=2227
+C t=7 a=1 n=2228
+D t=7 n=2228
+C t=7 a=1 n=2229
+D t=7 n=2229
+C t=7 a=1 n=2230
+D t=7 n=2230
+C t=7 a=1 n=2231
+D t=7 n=2231
+C t=7 a=1 n=2232
+D t=7 n=2232
+C t=7 a=1 n=2233
+D t=7 n=2233
+C t=7 a=1 n=2234
+D t=7 n=2234
+C t=7 a=1 n=2235
+D t=7 n=2235
+C t=7 a=1 n=2236
+D t=7 n=2236
+C t=7 a=1 n=2237
+D t=7 n=2237
+C t=7 a=1 n=2238
+D t=7 n=2238
+C t=7 a=1 n=2239
+D t=7 n=2239
+C t=7 a=1 n=2240
+D t=7 n=2240
+C t=7 a=1 n=2241
+D t=7 n=2241
+C t=7 a=1 n=2242
+D t=7 n=2242
+C t=7 a=1 n=2243
+D t=7 n=2243
+C t=7 a=1 n=2244
+D t=7 n=2244
+C t=7 a=1 n=2245
+D t=7 n=2245
+C t=7 a=1 n=2246
+D t=7 n=2246
+C t=7 a=1 n=2247
+D t=7 n=2247
+C t=7 a=1 n=2248
+D t=7 n=2248
+C t=7 a=1 n=2249
+D t=7 n=2249
+C t=7 a=1 n=2250
+D t=7 n=2250
+C t=7 a=1 n=2251
+D t=7 n=2251
+C t=7 a=1 n=2252
+D t=7 n=2252
+C t=7 a=1 n=2253
+D t=7 n=2253
+C t=7 a=1 n=2254
+D t=7 n=2254
+C t=7 a=1 n=2255
+D t=7 n=2255
+C t=7 a=1 n=2256
+D t=7 n=2256
+C t=7 a=1 n=2257
+D t=7 n=2257
+C t=7 a=1 n=2258
+D t=7 n
+[... 624279569 bytes omitted at preservation ...]
+014929
+C t=7 a=1 n=17014930
+D t=7 n=17014930
+C t=7 a=1 n=17014931
+D t=7 n=17014931
+C t=7 a=1 n=17014932
+D t=7 n=17014932
+C t=7 a=1 n=17014933
+D t=7 n=17014933
+C t=7 a=1 n=17014934
+D t=7 n=17014934
+C t=7 a=1 n=17014935
+D t=7 n=17014935
+C t=7 a=1 n=17014936
+D t=7 n=17014936
+C t=7 a=1 n=17014937
+D t=7 n=17014937
+C t=7 a=1 n=17014938
+D t=7 n=17014938
+C t=7 a=1 n=17014939
+D t=7 n=17014939
+C t=7 a=1 n=17014940
+D t=7 n=17014940
+C t=7 a=1 n=17014941
+D t=7 n=17014941
+C t=7 a=1 n=17014942
+D t=7 n=17014942
+C t=7 a=1 n=17014943
+D t=7 n=17014943
+C t=7 a=1 n=17014944
+D t=7 n=17014944
+C t=7 a=1 n=17014945
+D t=7 n=17014945
+C t=7 a=1 n=17014946
+D t=7 n=17014946
+C t=7 a=1 n=17014947
+D t=7 n=17014947
+C t=7 a=1 n=17014948
+D t=7 n=17014948
+C t=7 a=1 n=17014949
+D t=7 n=17014949
+C t=7 a=1 n=17014950
+D t=7 n=17014950
+C t=7 a=1 n=17014951
+D t=7 n=17014951
+C t=7 a=1 n=17014952
+D t=7 n=17014952
+C t=7 a=1 n=17014953
+D t=7 n=17014953
+C t=7 a=1 n=17014954
+D t=7 n=17014954
+C t=7 a=1 n=17014955
+D t=7 n=17014955
+C t=7 a=1 n=17014956
+D t=7 n=17014956
+C t=7 a=1 n=17014957
+D t=7 n=17014957
+C t=7 a=1 n=17014958
+D t=7 n=17014958
+C t=7 a=1 n=17014959
+D t=7 n=17014959
+C t=7 a=1 n=17014960
+D t=7 n=17014960
+C t=7 a=1 n=17014961
+D t=7 n=17014961
+C t=7 a=1 n=17014962
+D t=7 n=17014962
+C t=7 a=1 n=17014963
+D t=7 n=17014963
+C t=7 a=1 n=17014964
+D t=7 n=17014964
+C t=7 a=1 n=17014965
+D t=7 n=17014965
+C t=7 a=1 n=17014966
+D t=7 n=17014966
+C t=7 a=1 n=17014967
+D t=7 n=17014967
+C t=7 a=1 n=17014968
+D t=7 n=17014968
+C t=7 a=1 n=17014969
+D t=7 n=17014969
+C t=7 a=1 n=17014970
+D t=7 n=17014970
+C t=7 a=1 n=17014971
+D t=7 n=17014971
+C t=7 a=1 n=17014972
+D t=7 n=17014972
+C t=7 a=1 n=17014973
+D t=7 n=17014973
+C t=7 a=1 n=17014974
+D t=7 n=17014974
+C t=7 a=1 n=17014975
+D t=7 n=17014975
+C t=7 a=1 n=17014976
+D t=7 n=17014976
+C t=7 a=1 n=17014977
+D t=7 n=17014977
+C t=7 a=1 n=17014978
+D t=7 n=17014978
+C t=7 a=1 n=17014979
+D t=7 n=17014979
+C t=7 a=1 n=17014980
+D t=7 n=17014980
+C t=7 a=1 n=17014981
+D t=7 n=17014981
+C t=7 a=1 n=17014982
+D t=7 n=17014982
+C t=7 a=1 n=17014983
+D t=7 n=17014983
+C t=7 a=1 n=17014984
+D t=7 n=17014984
+C t=7 a=1 n=17014985
+D t=7 n=17014985
+C t=7 a=1 n=17014986
+D t=7 n=17014986
+C t=7 a=1 n=17014987
+D t=7 n=17014987
+C t=7 a=1 n=17014988
+D t=7 n=17014988
+C t=7 a=1 n=17014989
+D t=7 n=17014989
+C t=7 a=1 n=17014990
+D t=7 n=17014990
+C t=7 a=1 n=17014991
+D t=7 n=17014991
+C t=7 a=1 n=17014992
+D t=7 n=17014992
+C t=7 a=1 n=17014993
+D t=7 n=17014993
+C t=7 a=1 n=17014994
+D t=7 n=17014994
+C t=7 a=1 n=17014995
+D t=7 n=17014995
+C t=7 a=1 n=17014996
+D t=7 n=17014996
+C t=7 a=1 n=17014997
+D t=7 n=17014997
+C t=7 a=1 n=17014998
+D t=7 n=17014998
+C t=7 a=1 n=17014999
+D t=7 n=17014999
+C t=7 a=1 n=17015000
+D t=7 n=17015000
+C t=7 a=1 n=17015001
+D t=7 n=17015001
+C t=7 a=1 n=17015002
+D t=7 n=17015002
+C t=7 a=1 n=17015003
+D t=7 n=17015003
+C t=7 a=1 n=17015004
+D t=7 n=17015004
+C t=7 a=1 n=17015005
+D t=7 n=17015005
+C t=7 a=1 n=17015006
+D t=7 n=17015006
+C t=7 a=1 n=17015007
+D t=7 n=17015007
+C t=7 a=1 n=17015008
+D t=7 n=17015008
+C t=7 a=1 n=17015009
+D t=7 n=17015009
+C t=7 a=1 n=17015010
+D t=7 n=17015010
+C t=7 a=1 n=17015011
+D t=7 n=17015011
+C t=7 a=1 n=17015012
+D t=7 n=17015012
+C t=7 a=1 n=17015013
+D t=7 n=17015013
+C t=7 a=1 n=17015014
+D t=7 n=17015014
+C t=7 a=1 n=17015015
+D t=7 n=17015015
+C t=7 a=1 n=17015016
+D t=7 n=17015016
+C t=7 a=1 n=17015017
+D t=7 n=17015017
+C t=7 a=1 n=17015018
+D t=7 n=17015018
+C t=7 a=1 n=17015019
+D t=7 n=17015019
+C t=7 a=1 n=17015020
+D t=7 n=17015020
+C t=7 a=1 n=17015021
+D t=7 n=17015021
+C t=7 a=1 n=17015022
+D t=7 n=17015022
+C t=7 a=1 n=17015023
+D t=7 n=17015023
+C t=7 a=1 n=17015024
+D t=7 n=17015024
+C t=7 a=1 n=17015025
+D t=7 n=17015025
+C t=7 a=1 n=17015026
+D t=7 n=17015026
+C t=7 a=1 n=17015027
+D t=7 n=17015027
+C t=7 a=1 n=17015028
+D t=7 n=17015028
+C t=7 a=1 n=17015029
+D t=7 n=17015029
+C t=7 a=1 n=17015030
+D t=7 n=17015030
+C t=7 a=1 n=17015031
+D t=7 n=17015031
+C t=7 a=1 n=17015032
+D t=7 n=17015032
+C t=7 a=1 n=17015033
+D t=7 n=17015033
+C t=7 a=1 n=17015034
+D t=7 n=17015034
+C t=7 a=1 n=17015035
+D t=7 n=17015035
+C t=7 a=1 n=17015036
+D t=7 n=17015036
+C t=7 a=1 n=17015037
+D t=7 n=17015037
+C t=7 a=1 n=17015038
+D t=7 n=17015038
+C t=7 a=1 n=17015039
+D t=7 n=17015039
+C t=7 a=1 n=17015040
+D t=7 n=17015040
+C t=7 a=1 n=17015041
+D t=7 n=17015041
+C t=7 a=1 n=17015042
+D t=7 n=17015042
+C t=7 a=1 n=17015043
+D t=7 n=17015043
+C t=7 a=1 n=17015044
+D t=7 n=17015044
+C t=7 a=1 n=17015045
+D t=7 n=17015045
+C t=7 a=1 n=17015046
+D t=7 n=17015046
+C t=7 a=1 n=17015047
+D t=7 n=17015047
+C t=7 a=1 n=17015048
+D t=7 n=17015048
+C t=7 a=1 n=17015049
+D t=7 n=17015049
+C t=7 a=1 n=17015050
+D t=7 n=17015050
+C t=7 a=1 n=17015051
+D t=7 n=17015051
+C t=7 a=1 n=17015052
+D t=7 n=17015052
+C t=7 a=1 n=17015053
+D t=7 n=17015053
+C t=7 a=1 n=17015054
+D t=7 n=17015054
+C t=7 a=1 n=17015055
+D t=7 n=17015055
+C t=7 a=1 n=17015056
+D t=7 n=17015056
+C t=7 a=1 n=17015057
+D t=7 n=17015057
+C t=7 a=1 n=17015058
+D t=7 n=17015058
+C t=7 a=1 n=17015059
+D t=7 n=17015059
+C t=7 a=1 n=17015060
+D t=7 n=17015060
+C t=7 a=1 n=17015061
+D t=7 n=17015061
+C t=7 a=1 n=17015062
+D t=7 n=17015062
+C t=7 a=1 n=17015063
+D t=7 n=17015063
+C t=7 a=1 n=17015064
+D t=7 n=17015064
+C t=7 a=1 n=17015065
+D t=7 n=17015065
+C t=7 a=1 n=17015066
+D t=7 n=17015066
+C t=7 a=1 n=17015067
+D t=7 n=17015067
+C t=7 a=1 n=17015068
+D t=7 n=17015068
+C t=7 a=1 n=17015069
+D t=7 n=17015069
+C t=7 a=1 n=17015070
+D t=7 n=17015070
+C t=7 a=1 n=17015071
+D t=7 n=17015071
+C t=7 a=1 n=17015072
+D t=7 n=17015072
+C t=7 a=1 n=17015073
+D t=7 n=17015073
+C t=7 a=1 n=17015074
+D t=7 n=17015074
+C t=7 a=1 n=17015075
+D t=7 n=17015075
+C t=7 a=1 n=17015076
+D t=7 n=17015076
+C t=7 a=1 n=17015077
+D t=7 n=17015077
+C t=7 a=1 n=17015078
+D t=7 n=17015078
+C t=7 a=1 n=17015079
+D t=7 n=17015079
+C t=7 a=1 n=17015080
+D t=7 n=17015080
+C t=7 a=1 n=17015081
+D t=7 n=17015081
+C t=7 a=1 n=17015082
+D t=7 n=17015082
+C t=7 a=1 n=17015083
+D t=7 n=17015083
+C t=7 a=1 n=17015084
+D t=7 n=17015084
+C t=7 a=1 n=17015085
+D t=7 n=17015085
+C t=7 a=1 n=17015086
+D t=7 n=17015086
+C t=7 a=1 n=17015087
+D t=7 n=17015087
+C t=7 a=1 n=17015088
+D t=7 n=17015088
+C t=7 a=1 n=17015089
+D t=7 n=17015089
+C t=7 a=1 n=17015090
+D t=7 n=17015090
+C t=7 a=1 n=17015091
+D t=7 n=17015091
+C t=7 a=1 n=17015092
+D t=7 n=17015092
+C t=7 a=1 n=17015093
+D t=7 n=17015093
+C t=7 a=1 n=17015094
+D t=7 n=17015094
+C t=7 a=1 n=17015095
+D t=7 n=17015095
+C t=7 a=1 n=17015096
+D t=7 n=17015096
+C t=7 a=1 n=17015097
+D t=7 n=17015097
+C t=7 a=1 n=17015098
+D t=7 n=17015098
+C t=7 a=1 n=17015099
+D t=7 n=17015099
+C t=7 a=1 n=17015100
+D t=7 n=17015100
+C t=7 a=1 n=17015101
+D t=7 n=17015101
+C t=7 a=1 n=17015102
+D t=7 n=17015102
+C t=7 a=1 n=17015103
+D t=7 n=17015103
+C t=7 a=1 n=17015104
+D t=7 n=17015104
+C t=7 a=1 n=17015105
+D t=7 n=17015105
+C t=7 a=1 n=17015106
+D t=7 n=17015106
+C t=7 a=1 n=17015107
+D t=7 n=17015107
+C t=7 a=1 n=17015108
+D t=7 n=17015108
+C t=7 a=1 n=17015109
+D t=7 n=17015109
+C t=7 a=1 n=17015110
+D t=7 n=17015110
+C t=7 a=1 n=17015111
+D t=7 n=17015111
+C t=7 a=1 n=17015112
+D t=7 n=17015112
+C t=7 a=1 n=17015113
+D t=7 n=17015113
+C t=7 a=1 n=17015114
+D t=7 n=17015114
+C t=7 a=1 n=17015115
+D t=7 n=17015115
+C t=7 a=1 n=17015116
+D t=7 n=17015116
+C t=7 a=1 n=17015117
+D t=7 n=17015117
+C t=7 a=1 n=17015118
+D t=7 n=17015118
+C t=7 a=1 n=17015119
+D t=7 n=17015119
+C t=7 a=1 n=17015120
+D t=7 n=17015120
+C t=7 a=1 n=17015121
+D t=7 n=17015121
+C t=7 a=1 n=17015122
+D t=7 n=17015122
+C t=7 a=1 n=17015123
+D t=7 n=17015123
+C t=7 a=1 n=17015124
+D t=7 n=17015124
+C t=7 a=1 n=17015125
+D t=7 n=17015125
+C t=7 a=1 n=17015126
+D t=7 n=17015126
+C t=7 a=1 n=17015127
+D t=7 n=17015127
+C t=7 a=1 n=17015128
+D t=7 n=17015128
+C t=7 a=1 n=17015129
+D t=7 n=17015129
+C t=7 a=1 n=17015130
+D t=7 n=17015130
+C t=7 a=1 n=17015131
+D t=7 n=17015131
+C t=7 a=1 n=17015132
+D t=7 n=17015132
+C t=7 a=1 n=17015133
+D t=7 n=17015133
+C t=7 a=1 n=17015134
+D t=7 n=17015134
+C t=7 a=1 n=17015135
+D t=7 n=17015135
+C t=7 a=1 n=17015136
+D t=7 n=17015136
+C t=7 a=1 n=17015137
+D t=7 n=17015137
+C t=7 a=1 n=17015138
+D t=7 n=17015138
+C t=7 a=1 n=17015139
+D t=7 n=17015139
+C t=7 a=1 n=17015140
+D t=7 n=17015140
+C t=7 a=1 n=17015141
+D t=7 n=17015141
+C t=7 a=1 n=17015142
+D t=7 n=17015142
+C t=7 a=1 n=17015143
+D t=7 n=17015143
+C t=7 a=1 n=17015144
+D t=7 n=17015144
+C t=7 a=1 n=17015145
+D t=7 n=17015145
+C t=7 a=1 n=17015146
+D t=7 n=17015146
+C t=7 a=1 n=17015147
+D t=7 n=17015147
+C t=7 a=1 n=17015148
+D t=7 n=17015148
+C t=7 a=1 n=17015149
+D t=7 n=17015149
+C t=7 a=1 n=17015150
+D t=7 n=17015150
+C t=7 a=1 n=17015151
+D t=7 n=17015151
+C t=7 a=1 n=17015152
+D t=7 n=17015152
+C t=7 a=1 n=17015153
+D t=7 n=17015153
+C t=7 a=1 n=17015154
+D t=7 n=17015154
+C t=7 a=1 n=17015155
+D t=7 n=17015155
+C t=7 a=1 n=17015156
+D t=7 n=17015156
+C t=7 a=1 n=17015157
+D t=7 n=17015157
+C t=7 a=1 n=17015158
+D t=7 n=17015158
+C t=7 a=1 n=17015159
+D t=7 n=17015159
+C t=7 a=1 n=17015160
+D t=7 n=17015160
+C t=7 a=1 n=17015161
+D t=7 n=17015161
+C t=7 a=1 n=17015162
+D t=7 n=17015162
+C t=7 a=1 n=17015163
+D t=7 n=17015163
+C t=7 a=1 n=17015164
+D t=7 n=17015164
+C t=7 a=1 n=17015165
+D t=7 n=17015165
+C t=7 a=1 n=17015166
+D t=7 n=17015166
+C t=7 a=1 n=17015167
+D t=7 n=17015167
+C t=7 a=1 n=17015168
+D t=7 n=17015168
+C t=7 a=1 n=17015169
+D t=7 n=17015169
+C t=7 a=1 n=17015170
+D t=7 n=17015170
+C t=7 a=1 n=17015171
+D t=7 n=17015171
+C t=7 a=1 n=17015172
+D t=7 n=17015172
+C t=7 a=1 n=17015173
+D t=7 n=17015173
+C t=7 a=1 n=17015174
+D t=7 n=17015174
+C t=7 a=1 n=17015175
+D t=7 n=17015175
+C t=7 a=1 n=17015176
+D t=7 n=17015176
+C t=7 a=1 n=17015177
+D t=7 n=17015177
+C t=7 a=1 n=17015178
+D t=7 n=17015178
+C t=7 a=1 n=17015179
+D t=7 n=17015179
+C t=7 a=1 n=17015180
+D t=7 n=17015180
+C t=7 a=1 n=17015181
+D t=7 n=17015181
+C t=7 a=1 n=17015182
+D t=7 n=17015182
+C t=7 a=1 n=17015183
+D t=7 n=17015183
+C t=7 a=1 n=17015184
+D t=7 n=17015184
+C t=7 a=1 n=17015185
+D t=7 n=17015185
+C t=7 a=1 n=17015186
+D t=7 n=17015186
+C t=7 a=1 n=17015187
+D t=7 n=17015187
+C t=7 a=1 n=17015188
+D t=7 n=17015188
+C t=7 a=1 n=17015189
+D t=7 n=17015189
+C t=7 a=1 n=17015190
+D t=7 n=17015190
+C t=7 a=1 n=17015191
+D t=7 n=17015191
+C t=7 a=1 n=17015192
+D t=7 n=17015192
+C t=7 a=1 n=17015193
+D t=7 n=17015193
+C t=7 a=1 n=17015194
+D t=7 n=17015194
+C t=7 a=1 n=17015195
+D t=7 n=17015195
+C t=7 a=1 n=17015196
+D t=7 n=17015196
+C t=7 a=1 n=17015197
+D t=7 n=17015197
+C t=7 a=1 n=17015198
+D t=7 n=17015198
+C t=7 a=1 n=17015199
+D t=7 n=17015199
+C t=7 a=1 n=17015200
+D t=7 n=17015200
+C t=7 a=1 n=17015201
+D t=7 n=17015201
+C t=7 a=1 n=17015202
+D t=7 n=17015202
+C t=7 a=1 n=17015203
+D t=7 n=17015203
+C t=7 a=1 n=17015204
+D t=7 n=17015204
+C t=7 a=1 n=17015205
+D t=7 n=17015205
+C t=7 a=1 n=17015206
+D t=7 n=17015206
+C t=7 a=1 n=17015207
+D t=7 n=17015207
+C t=7 a=1 n=17015208
+D t=7 n=17015208
+C t=7 a=1 n=17015209
+D t=7 n=17015209
+C t=7 a=1 n=17015210
+D t=7 n=17015210
+C t=7 a=1 n=17015211
+D t=7 n=17015211
+C t=7 a=1 n=17015212
+D t=7 n=17015212
+C t=7 a=1 n=17015213
+D t=7 n=17015213
+C t=7 a=1 n=17015214
+D t=7 n=17015214
+C t=7 a=1 n=17015215
+D t=7 n=17015215
+C t=7 a=1 n=17015216
+D t=7 n=17015216
+C t=7 a=1 n=17015217
+D t=7 n=17015217
+C t=7 a=1 n=17015218
+D t=7 n=17015218
+C t=7 a=1 n=17015219
+D t=7 n=17015219
+C t=7 a=1 n=17015220
+D t=7 n=17015220
+C t=7 a=1 n=17015221
+D t=7 n=17015221
+C t=7 a=1 n=17015222
+D t=7 n=17015222
+C t=7 a=1 n=17015223
+D t=7 n=17015223
+C t=7 a=1 n=17015224
+D t=7 n=17015224
+C t=7 a=1 n=17015225
+D t=7 n=17015225
+C t=7 a=1 n=17015226
+D t=7 n=17015226
+C t=7 a=1 n=17015227
+D t=7 n=17015227
+C t=7 a=1 n=17015228
+D t=7 n=17015228
+C t=7 a=1 n=17015229
+D t=7 n=17015229
+C t=7 a=1 n=17015230
+D t=7 n=17015230
+C t=7 a=1 n=17015231
+D t=7 n=17015231
+C t=7 a=1 n=17015232
+D t=7 n=17015232
+C t=7 a=1 n=17015233
+D t=7 n=17015233
+C t=7 a=1 n=17015234
+D t=7 n=17015234
+C t=7 a=1 n=17015235
+D t=7 n=17015235
+C t=7 a=1 n=17015236
+D t=7 n=17015236
+C t=7 a=1 n=17015237
+D t=7 n=17015237
+C t=7 a=1 n=17015238
+D t=7 n=17015238
+C t=7 a=1 n=17015239
+D t=7 n=17015239
+C t=7 a=1 n=17015240
+D t=7 n=17015240
+C t=7 a=1 n=17015241
+D t=7 n=17015241
+C t=7 a=1 n=17015242
+D t=7 n=17015242
+C t=7 a=1 n=17015243
+D t=7 n=17015243
+C t=7 a=1 n=17015244
+D t=7 n=17015244
+C t=7 a=1 n=17015245
+D t=7 n=17015245
+C t=7 a=1 n=17015246
+D t=7 n=17015246
+C t=7 a=1 n=17015247
+D t=7 n=17015247
+C t=7 a=1 n=17015248
+D t=7 n=17015248
+C t=7 a=1 n=17015249
+D t=7 n=17015249
+C t=7 a=1 n=17015250
+D t=7 n=17015250
+C t=7 a=1 n=17015251
+D t=7 n=17015251
+C t=7 a=1 n=17015252
+D t=7 n=17015252
+C t=7 a=1 n=17015253
+D t=7 n=17015253
+C t=7 a=1 n=17015254
+D t=7 n=17015254
+C t=7 a=1 n=17015255
+D t=7 n=17015255
+C t=7 a=1 n=17015256
+D t=7 n=17015256
+C t=7 a=1 n=17015257
+D t=7 n=17015257
+C t=7 a=1 n=17015258
+D t=7 n=17015258
+C t=7 a=1 n=17015259
+D t=7 n=17015259
+C t=7 a=1 n=17015260
+D t=7 n=17015260
+C t=7 a=1 n=17015261
+D t=7 n=17015261
+C t=7 a=1 n=17015262
+D t=7 n=17015262
+C t=7 a=1 n=17015263
+D t=7 n=17015263
+C t=7 a=1 n=17015264
+D t=7 n=17015264
+C t=7 a=1 n=17015265
+D t=7 n=17015265
+C t=7 a=1 n=17015266
+D t=7 n=17015266
+C t=7 a=1 n=17015267
+D t=7 n=17015267
+C t=7 a=1 n=17015268
+D t=7 n=17015268
+C t=7 a=1 n=17015269
+D t=7 n=17015269
+C t=7 a=1 n=17015270
+D t=7 n=17015270
+C t=7 a=1 n=17015271
+D t=7 n=17015271
+C t=7 a=1 n=17015272
+D t=7 n=17015272
+C t=7 a=1 n=17015273
+D t=7 n=17015273
+C t=7 a=1 n=17015274
+D t=7 n=17015274
+C t=7 a=1 n=17015275
+D t=7 n=17015275
+C t=7 a=1 n=17015276
+D t=7 n=17015276
+C t=7 a=1 n=17015277
+D t=7 n=17015277
+C t=7 a=1 n=17015278
+D t=7 n=17015278
+C t=7 a=1 n=17015279
+D t=7 n=17015279
+C t=7 a=1 n=17015280
+D t=7 n=17015280
+C t=7 a=1 n=17015281
+D t=7 n=17015281
+C t=7 a=1 n=17015282
+D t=7 n=17015282
+C t=7 a=1 n=17015283
+D t=7 n=17015283
+C t=7 a=1 n=17015284
+D t=7 n=17015284
+C t=7 a=1 n=17015285
+D t=7 n=17015285
+C t=7 a=1 n=17015286
+D t=7 n=17015286
+C t=7 a=1 n=17015287
+D t=7 n=17015287
+C t=7 a=1 n=17015288
+D t=7 n=17015288
+C t=7 a=1 n=17015289
+D t=7 n=17015289
+C t=7 a=1 n=17015290
+D t=7 n=17015290
+C t=7 a=1 n=17015291
+D t=7 n=17015291
+C t=7 a=1 n=17015292
+D t=7 n=17015292
+C t=7 a=1 n=17015293
+D t=7 n=17015293
+C t=7 a=1 n=17015294
+D t=7 n=17015294
+C t=7 a=1 n=17015295
+D t=7 n=17015295
+C t=7 a=1 n=17015296
+D t=7 n=17015296
+C t=7 a=1 n=17015297
+D t=7 n=17015297
+C t=7 a=1 n=17015298
+D t=7 n=17015298
+C t=7 a=1 n=17015299
+D t=7 n=17015299
+C t=7 a=1 n=17015300
+D t=7 n=17015300
+C t=7 a=1 n=17015301
+D t=7 n=17015301
+C t=7 a=1 n=17015302
+D t=7 n=17015302
+C t=7 a=1 n=17015303
+D t=7 n=17015303
+C t=7 a=1 n=17015304
+D t=7 n=17015304
+C t=7 a=1 n=17015305
+D t=7 n=17015305
+C t=7 a=1 n=17015306
+D t=7 n=17015306
+C t=7 a=1 n=17015307
+D t=7 n=17015307
+C t=7 a=1 n=17015308
+D t=7 n=17015308
+C t=7 a=1 n=17015309
+D t=7 n=17015309
+C t=7 a=1 n=17015310
+D t=7 n=17015310
+C t=7 a=1 n=17015311
+D t=7 n=17015311
+C t=7 a=1 n=17015312
+D t=7 n=17015312
+C t=7 a=1 n=17015313
+D t=7 n=17015313
+C t=7 a=1 n=17015314
+D t=7 n=17015314
+C t=7 a=1 n=17015315
+D t=7 n=17015315
+C t=7 a=1 n=17015316
+D t=7 n=17015316
+C t=7 a=1 n=17015317
+D t=7 n=17015317
+C t=7 a=1 n=17015318
+D t=7 n=17015318
+C t=7 a=1 n=17015319
+D t=7 n=17015319
+C t=7 a=1 n=17015320
+D t=7 n=17015320
+C t=7 a=1 n=17015321
+D t=7 n=17015321
+C t=7 a=1 n=17015322
+D t=7 n=17015322
+C t=7 a=1 n=17015323
+D t=7 n=17015323
+C t=7 a=1 n=17015324
+D t=7 n=17015324
+C t=7 a=1 n=17015325
+D t=7 n=17015325
+C t=7 a=1 n=17015326
+D t=7 n=17015326
+C t=7 a=1 n=17015327
+D t=7 n=17015327
+C t=7 a=1 n=17015328
+D t=7 n=17015328
+C t=7 a=1 n=17015329
+D t=7 n=17015329
+C t=7 a=1 n=17015330
+D t=7 n=17015330
+C t=7 a=1 n=17015331
+D t=7 n=17015331
+C t=7 a=1 n=17015332
+D t=7 n=17015332
+C t=7 a=1 n=17015333
+D t=7 n=17015333
+C t=7 a=1 n=17015334
+D t=7 n=17015334
+C t=7 a=1 n=17015335
+D t=7 n=17015335
+C t=7 a=1 n=17015336
+D t=7 n=17015336
+C t=7 a=1 n=17015337
+D t=7 n=17015337
+C t=7 a=1 n=17015338
+D t=7 n=17015338
+C t=7 a=1 n=17015339
+D t=7 n=17015339
+C t=7 a=1 n=17015340
+D t=7 n=17015340
+C t=7 a=1 n=17015341
+D t=7 n=17015341
+C t=7 a=1 n=17015342
+D t=7 n=17015342
+C t=7 a=1 n=17015343
+D t=7 n=17015343
+C t=7 a=1 n=17015344
+D t=7 n=17015344
+C t=7 a=1 n=17015345
+D t=7 n=17015345
+C t=7 a=1 n=17015346
+D t=7 n=17015346
+C t=7 a=1 n=17015347
+D t=7 n=17015347
+C t=7 a=1 n=17015348
+D t=7 n=17015348
+C t=7 a=1 n=17015349
+D t=7 n=17015349
+C t=7 a=1 n=17015350
+D t=7 n=17015350
+C t=7 a=1 n=17015351
+D t=7 n=17015351
+C t=7 a=1 n=17015352
+D t=7 n=17015352
+C t=7 a=1 n=17015353
+D t=7 n=17015353
+C t=7 a=1 n=17015354
+D t=7 n=17015354
+C t=7 a=1 n=17015355
+D t=7 n=17015355
+C t=7 a=1 n=17015356
+D t=7 n=17015356
+C t=7 a=1 n=17015357
+D t=7 n=17015357
+C t=7 a=1 n=17015358
+D t=7 n=17015358
+C t=7 a=1 n=17015359
+D t=7 n=17015359
+C t=7 a=1 n=17015360
+D t=7 n=17015360
+C t=7 a=1 n=17015361
+D t=7 n=17015361
+C t=7 a=1 n=17015362
+D t=7 n=17015362
+C t=7 a=1 n=17015363
+D t=7 n=17015363
+C t=7 a=1 n=17015364
+D t=7 n=17015364
+C t=7 a=1 n=17015365
+D t=7 n=17015365
+C t=7 a=1 n=17015366
+D t=7 n=17015366
+C t=7 a=1 n=17015367
+D t=7 n=17015367
+C t=7 a=1 n=17015368
+D t=7 n=17015368
+C t=7 a=1 n=17015369
+D t=7 n=17015369
+C t=7 a=1 n=17015370
+D t=7 n=17015370
+C t=7 a=1 n=17015371
+D t=7 n=17015371
+C t=7 a=1 n=17015372
+D t=7 n=17015372
+C t=7 a=1 n=17015373
+D t=7 n=17015373
+C t=7 a=1 n=17015374
+D t=7 n=17015374
+C t=7 a=1 n=17015375
+D t=7 n=17015375
+C t=7 a=1 n=17015376
+D t=7 n=17015376
+C t=7 a=1 n=17015377
+D t=7 n=17015377
+C t=7 a=1 n=17015378
+D t=7 n=17015378
+C t=7 a=1 n=17015379
+D t=7 n=17015379
+C t=7 a=1 n=17015380
+D t=7 n=17015380
+C t=7 a=1 n=17015381
+D t=7 n=17015381
+C t=7 a=1 n=17015382
+D t=7 n=17015382
+C t=7 a=1 n=17015383
+D t=7 n=17015383
+C t=7 a=1 n=17015384
+D t=7 n=17015384
+C t=7 a=1 n=17015385
+D t=7 n=17015385
+C t=7 a=1 n=17015386
+D t=7 n=17015386
+C t=7 a=1 n=17015387
+D t=7 n=17015387
+C t=7 a=1 n=17015388
+D t=7 n=17015388
+C t=7 a=1 n=17015389
+D t=7 n=17015389
+C t=7 a=1 n=17015390
+D t=7 n=17015390
+C t=7 a=1 n=17015391
+D t=7 n=17015391
+C t=7 a=1 n=17015392
+D t=7 n=17015392
+C t=7 a=1 n=17015393
+D t=7 n=17015393
+C t=7 a=1 n=17015394
+D t=7 n=17015394
+C t=7 a=1 n=17015395
+D t=7 n=17015395
+C t=7 a=1 n=17015396
+D t=7 n=17015396
+C t=7 a=1 n=17015397
+D t=7 n=17015397
+C t=7 a=1 n=17015398
+D t=7 n=17015398
+C t=7 a=1 n=17015399
+D t=7 n=17015399
+C t=7 a=1 n=17015400
+D t=7 n=17015400
+C t=7 a=1 n=17015401
+D t=7 n=17015401
+C t=7 a=1 n=17015402
+D t=7 n=17015402
+C t=7 a=1 n=17015403
+D t=7 n=17015403
+C t=7 a=1 n=17015404
+D t=7 n=17015404
+C t=7 a=1 n=17015405
+D t=7 n=17015405
+C t=7 a=1 n=17015406
+D t=7 n=17015406
+C t=7 a=1 n=17015407
+D t=7 n=17015407
+C t=7 a=1 n=17015408
+D t=7 n=17015408
+C t=7 a=1 n=17015409
+D t=7 n=17015409
+C t=7 a=1 n=17015410
+D t=7 n=17015410
+C t=7 a=1 n=17015411
+D t=7 n=17015411
+C t=7 a=1 n=17015412
+D t=7 n=17015412
+C t=7 a=1 n=17015413
+D t=7 n=17015413
+C t=7 a=1 n=17015414
+D t=7 n=17015414
+C t=7 a=1 n=17015415
+D t=7 n=17015415
+C t=7 a=1 n=17015416
+D t=7 n=17015416
+C t=7 a=1 n=17015417
+D t=7 n=17015417
+C t=7 a=1 n=17015418
+D t=7 n=17015418
+C t=7 a=1 n=17015419
+D t=7 n=17015419
+C t=7 a=1 n=17015420
+D t=7 n=17015420
+C t=7 a=1 n=17015421
+D t=7 n=17015421
+C t=7 a=1 n=17015422
+D t=7 n=17015422
+C t=7 a=1 n=17015423
+D t=7 n=17015423
+C t=7 a=1 n=17015424
+D t=7 n=17015424
+C t=7 a=1 n=17015425
+D t=7 n=17015425
+C t=7 a=1 n=17015426
+D t=7 n=17015426
+C t=7 a=1 n=17015427
+D t=7 n=17015427
+C t=7 a=1 n=17015428
+D t=7 n=17015428
+C t=7 a=1 n=17015429
+D t=7 n=17015429
+C t=7 a=1 n=17015430
+D t=7 n=17015430
+C t=7 a=1 n=17015431
+D t=7 n=17015431
+C t=7 a=1 n=17015432
+D t=7 n=17015432
+C t=7 a=1 n=17015433
+D t=7 n=17015433
+C t=7 a=1 n=17015434
+D t=7 n=17015434
+C t=7 a=1 n=17015435
+D t=7 n=17015435
+C t=7 a=1 n=17015436
+D t=7 n=17015436
+C t=7 a=1 n=17015437
+D t=7 n=17015437
+C t=7 a=1 n=17015438
+D t=7 n=17015438
+C t=7 a=1 n=17015439
+D t=7 n=17015439
+C t=7 a=1 n=17015440
+D t=7 n=17015440
+C t=7 a=1 n=17015441
+D t=7 n=17015441
+C t=7 a=1 n=17015442
+D t=7 n=17015442
+C t=7 a=1 n=17015443
+D t=7 n=17015443
+C t=7 a=1 n=17015444
+D t=7 n=17015444
+C t=7 a=1 n=17015445
+D t=7 n=17015445
+C t=7 a=1 n=17015446
+D t=7 n=17015446
+C t=7 a=1 n=17015447
+D t=7 n=17015447
+C t=7 a=1 n=17015448
+D t=7 n=17015448
+C t=7 a=1 n=17015449
+D t=7 n=17015449
+C t=7 a=1 n=17015450
+D t=7 n=17015450
+C t=7 a=1 n=17015451
+D t=7 n=17015451
+C t=7 a=1 n=17015452
+D t=7 n=17015452
+C t=7 a=1 n=17015453
+D t=7 n=17015453
+C t=7 a=1 n=17015454
+D t=7 n=17015454
+C t=7 a=1 n=17015455
+D t=7 n=17015455
+C t=7 a=1 n=17015456
+D t=7 n=17015456
+C t=7 a=1 n=17015457
+D t=7 n=17015457
+C t=7 a=1 n=17015458
+D t=7 n=17015458
+C t=7 a=1 n=17015459
+D t=7 n=17015459
+C t=7 a=1 n=17015460
+D t=7 n=17015460
+C t=7 a=1 n=17015461
+D t=7 n=17015461
+C t=7 a=1 n=17015462
+D t=7 n=17015462
+C t=7 a=1 n=17015463
+D t=7 n=17015463
+C t=7 a=1 n=17015464
+D t=7 n=17015464
+C t=7 a=1 n=17015465
+D t=7 n=17015465
+C t=7 a=1 n=17015466
+D t=7 n=17015466
+C t=7 a=1 n=17015467
+D t=7 n=17015467
+C t=7 a=1 n=17015468
+D t=7 n=17015468
+C t=7 a=1 n=17015469
+D t=7 n=17015469
+C t=7 a=1 n=17015470
+D t=7 n=17015470
+C t=7 a=1 n=17015471
+D t=7 n=17015471
+C t=7 a=1 n=17015472
+D t=7 n=17015472
+C t=7 a=1 n=17015473
+D t=7 n=17015473
+C t=7 a=1 n=17015474
+D t=7 n=17015474
+C t=7 a=1 n=17015475
+D t=7 n=17015475
+C t=7 a=1 n=17015476
+D t=7 n=17015476
+C t=7 a=1 n=17015477
+D t=7 n=17015477
+C t=7 a=1 n=17015478
+D t=7 n=17015478
+C t=7 a=1 n=17015479
+D t=7 n=17015479
+C t=7 a=1 n=17015480
+D t=7 n=17015480
+C t=7 a=1 n=17015481
+D t=7 n=17015481
+C t=7 a=1 n=17015482
+D t=7 n=17015482
+C t=7 a=1 n=17015483
+D t=7 n=17015483
+C t=7 a=1 n=17015484
+D t=7 n=17015484
+C t=7 a=1 n=17015485
+D t=7 n=17015485
+C t=7 a=1 n=17015486
+D t=7 n=17015486
+C t=7 a=1 n=17015487
+D t=7 n=17015487
+C t=7 a=1 n=17015488
+D t=7 n=17015488
+C t=7 a=1 n=17015489
+D t=7 n=17015489
+C t=7 a=1 n=17015490
+D t=7 n=17015490
+C t=7 a=1 n=17015491
+D t=7 n=17015491
+C t=7 a=1 n=17015492
+D t=7 n=17015492
+C t=7 a=1 n=17015493
+D t=7 n=17015493
+C t=7 a=1 n=17015494
+D t=7 n=17015494
+C t=7 a=1 n=17015495
+D t=7 n=17015495
+C t=7 a=1 n=17015496
+D t=7 n=17015496
+C t=7 a=1 n=17015497
+D t=7 n=17015497
+C t=7 a=1 n=17015498
+D t=7 n=17015498
+C t=7 a=1 n=17015499
+D t=7 n=17015499
+C t=7 a=1 n=17015500
+D t=7 n=17015500
+C t=7 a=1 n=17015501
+D t=7 n=17015501
+C t=7 a=1 n=17015502
+D t=7 n=17015502
+C t=7 a=1 n=17015503
+D t=7 n=17015503
+C t=7 a=1 n=17015504
+D t=7 n=17015504
+C t=7 a=1 n=17015505
+D t=7 n=17015505
+C t=7 a=1 n=17015506
+D t=7 n=17015506
+C t=7 a=1 n=17015507
+D t=7 n=17015507
+C t=7 a=1 n=17015508
+D t=7 n=17015508
+C t=7 a=1 n=17015509
+D t=7 n=17015509
+C t=7 a=1 n=17015510
+D t=7 n=17015510
+C t=7 a=1 n=17015511
+D t=7 n=17015511
+C t=7 a=1 n=17015512
+D t=7 n=17015512
+C t=7 a=1 n=17015513
+D t=7 n=17015513
+C t=7 a=1 n=17015514
+D t=7 n=17015514
+C t=7 a=1 n=17015515
+D t=7 n=17015515
+C t=7 a=1 n=17015516
+D t=7 n=17015516
+C t=7 a=1 n=17015517
+D t=7 n=17015517
+C t=7 a=1 n=17015518
+D t=7 n=17015518
+C t=7 a=1 n=17015519
+D t=7 n=17015519
+C t=7 a=1 n=17015520
+D t=7 n=17015520
+C t=7 a=1 n=17015521
+D t=7 n=17015521
+C t=7 a=1 n=17015522
+D t=7 n=17015522
+C t=7 a=1 n=17015523
+D t=7 n=17015523
+C t=7 a=1 n=17015524
+D t=7 n=17015524
+C t=7 a=1 n=17015525
+D t=7 n=17015525
+C t=7 a=1 n=17015526
+D t=7 n=17015526
+C t=7 a=1 n=17015527
+D t=7 n=17015527
+C t=7 a=1 n=17015528
+D t=7 n=17015528
+C t=7 a=1 n=17015529
+D t=7 n=17015529
+C t=7 a=1 n=17015530
+D t=7 n=17015530
+C t=7 a=1 n=17015531
+D t=7 n=17015531
+C t=7 a=1 n=17015532
+D t=7 n=17015532
+C t=7 a=1 n=17015533
+D t=7 n=17015533
+C t=7 a=1 n=17015534
+D t=7 n=17015534
+C t=7 a=1 n=17015535
+D t=7 n=17015535
+C t=7 a=1 n=17015536
+D t=7 n=17015536
+C t=7 a=1 n=17015537
+D t=7 n=17015537
+C t=7 a=1 n=17015538
+D t=7 n=17015538
+C t=7 a=1 n=17015539
+D t=7 n=17015539
+C t=7 a=1 n=17015540
+D t=7 n=17015540
+C t=7 a=1 n=17015541
+D t=7 n=17015541
+C t=7 a=1 n=17015542
+D t=7 n=17015542
+C t=7 a=1 n=17015543
+D t=7 n=17015543
+C t=7 a=1 n=17015544
+D t=7 n=17015544
+C t=7 a=1 n=17015545
+D t=7 n=17015545
+C t=7 a=1 n=17015546
+D t=7 n=17015546
+C t=7 a=1 n=17015547
+D t=7 n=17015547
+C t=7 a=1 n=17015548
+D t=7 n=17015548
+C t=7 a=1 n=17015549
+D t=7 n=17015549
+C t=7 a=1 n=17015550
+D t=7 n=17015550
+C t=7 a=1 n=17015551
+D t=7 n=17015551
+C t=7 a=1 n=17015552
+D t=7 n=17015552
+C t=7 a=1 n=17015553
+D t=7 n=17015553
+C t=7 a=1 n=17015554
+D t=7 n=17015554
+C t=7 a=1 n=17015555
+D t=7 n=17015555
+C t=7 a=1 n=17015556
+D t=7 n=17015556
+C t=7 a=1 n=17015557
+D t=7 n=17015557
+C t=7 a=1 n=17015558
+D t=7 n=17015558
+C t=7 a=1 n=17015559
+D t=7 n=17015559
+C t=7 a=1 n=17015560
+D t=7 n=17015560
+C t=7 a=1 n=17015561
+D t=7 n=17015561
+C t=7 a=1 n=17015562
+D t=7 n=17015562
+C t=7 a=1 n=17015563
+D t=7 n=17015563
+C t=7 a=1 n=17015564
+D t=7 n=17015564
+C t=7 a=1 n=17015565
+D t=7 n=17015565
+C t=7 a=1 n=17015566
+D t=7 n=17015566
+C t=7 a=1 n=17015567
+D t=7 n=17015567
+C t=7 a=1 n=17015568
+D t=7 n=17015568
+C t=7 a=1 n=17015569
+D t=7 n=17015569
+C t=7 a=1 n=17015570
+D t=7 n=17015570
+C t=7 a=1 n=17015571
+D t=7 n=17015571
+C t=7 a=1 n=17015572
+D t=7 n=17015572
+C t=7 a=1 n=17015573
+D t=7 n=17015573
+C t=7 a=1 n=17015574
+D t=7 n=17015574
+C t=7 a=1 n=17015575
+D t=7 n=17015575
+C t=7 a=1 n=17015576
+D t=7 n=17015576
+C t=7 a=1 n=17015577
+D t=7 n=17015577
+C t=7 a=1 n=17015578
+D t=7 n=17015578
+C t=7 a=1 n=17015579
+D t=7 n=17015579
+C t=7 a=1 n=17015580
+D t=7 n=17015580
+C t=7 a=1 n=17015581
+D t=7 n=17015581
+C t=7 a=1 n=17015582
+D t=7 n=17015582
+C t=7 a=1 n=17015583
+D t=7 n=17015583
+C t=7 a=1 n=17015584
+D t=7 n=17015584
+C t=7 a=1 n=17015585
+D t=7 n=17015585
+C t=7 a=1 n=17015586
+D t=7 n=17015586
+C t=7 a=1 n=17015587
+D t=7 n=17015587
+C t=7 a=1 n=17015588
+D t=7 n=17015588
+C t=7 a=1 n=17015589
+D t=7 n=17015589
+C t=7 a=1 n=17015590
+D t=7 n=17015590
+C t=7 a=1 n=17015591
+D t=7 n=17015591
+C t=7 a=1 n=17015592
+D t=7 n=17015592
+C t=7 a=1 n=17015593
+D t=7 n=17015593
+C t=7 a=1 n=17015594
+D t=7 n=17015594
+C t=7 a=1 n=17015595
+D t=7 n=17015595
+C t=7 a=1 n=17015596
+D t=7 n=17015596
+C t=7 a=1 n=17015597
+D t=7 n=17015597
+C t=7 a=1 n=17015598
+D t=7 n=17015598
+C t=7 a=1 n=17015599
+D t=7 n=17015599
+C t=7 a=1 n=17015600
+D t=7 n=17015600
+C t=7 a=1 n=17015601
+D t=7 n=17015601
+C t=7 a=1 n=17015602
+D t=7 n=17015602
+C t=7 a=1 n=17015603
+D t=7 n=17015603
+C t=7 a=1 n=17015604
+D t=7 n=17015604
+C t=7 a=1 n=17015605
+D t=7 n=17015605
+C t=7 a=1 n=17015606
+D t=7 n=17015606
+C t=7 a=1 n=17015607
+D t=7 n=17015607
+C t=7 a=1 n=17015608
+D t=7 n=17015608
+C t=7 a=1 n=17015609
+D t=7 n=17015609
+C t=7 a=1 n=17015610
+D t=7 n=17015610
+C t=7 a=1 n=17015611
+D t=7 n=17015611
+C t=7 a=1 n=17015612
+D t=7 n=17015612
+C t=7 a=1 n=17015613
+D t=7 n=17015613
+C t=7 a=1 n=17015614
+D t=7 n=17015614
+C t=7 a=1 n=17015615
+D t=7 n=17015615
+C t=7 a=1 n=17015616
+D t=7 n=17015616
+C t=7 a=1 n=17015617
+D t=7 n=17015617
+C t=7 a=1 n=17015618
+D t=7 n=17015618
+C t=7 a=1 n=17015619
+D t=7 n=17015619
+C t=7 a=1 n=17015620
+D t=7 n=17015620
+C t=7 a=1 n=17015621
+D t=7 n=17015621
+C t=7 a=1 n=17015622
+D t=7 n=17015622
+C t=7 a=1 n=17015623
+D t=7 n=17015623
+C t=7 a=1 n=17015624
+D t=7 n=17015624
+C t=7 a=1 n=17015625
+D t=7 n=17015625
+C t=7 a=1 n=17015626
+D t=7 n=17015626
+C t=7 a=1 n=17015627
+D t=7 n=17015627
+C t=7 a=1 n=17015628
+D t=7 n=17015628
+C t=7 a=1 n=17015629
+D t=7 n=17015629
+C t=7 a=1 n=17015630
+D t=7 n=17015630
+C t=7 a=1 n=17015631
+D t=7 n=17015631
+C t=7 a=1 n=17015632
+D t=7 n=17015632
+C t=7 a=1 n=17015633
+D t=7 n=17015633
+C t=7 a=1 n=17015634
+D t=7 n=17015634
+C t=7 a=1 n=17015635
+D t=7 n=17015635
+C t=7 a=1 n=17015636
+D t=7 n=17015636
+C t=7 a=1 n=17015637
+D t=7 n=17015637
+C t=7 a=1 n=17015638
+D t=7 n=17015638
+C t=7 a=1 n=17015639
+D t=7 n=17015639
+C t=7 a=1 n=17015640
+D t=7 n=17015640
+C t=7 a=1 n=17015641
+D t=7 n=17015641
+C t=7 a=1 n=17015642
+D t=7 n=17015642
+C t=7 a=1 n=17015643
+D t=7 n=17015643
+C t=7 a=1 n=17015644
+D t=7 n=17015644
+C t=7 a=1 n=17015645
+D t=7 n=17015645
+C t=7 a=1 n=17015646
+D t=7 n=17015646
+C t=7 a=1 n=17015647
+D t=7 n=17015647
+C t=7 a=1 n=17015648
+D t=7 n=17015648
+C t=7 a=1 n=17015649
+D t=7 n=17015649
+C t=7 a=1 n=17015650
+D t=7 n=17015650
+C t=7 a=1 n=17015651
+D t=7 n=17015651
+C t=7 a=1 n=17015652
+D t=7 n=17015652
+C t=7 a=1 n=17015653
+D t=7 n=17015653
+C t=7 a=1 n=17015654
+D t=7 n=17015654
+C t=7 a=1 n=17015655
+D t=7 n=17015655
+C t=7 a=1 n=17015656
+D t=7 n=17015656
+C t=7 a=1 n=17015657
+D t=7 n=17015657
+C t=7 a=1 n=17015658
+D t=7 n=17015658
+C t=7 a=1 n=17015659
+D t=7 n=17015659
+C t=7 a=1 n=17015660
+D t=7 n=17015660
+C t=7 a=1 n=17015661
+D t=7 n=17015661
+C t=7 a=1 n=17015662
+D t=7 n=17015662
+C t=7 a=1 n=17015663
+D t=7 n=17015663
+C t=7 a=1 n=17015664
+D t=7 n=17015664
+C t=7 a=1 n=17015665
+D t=7 n=17015665
+C t=7 a=1 n=17015666
+D t=7 n=17015666
+C t=7 a=1 n=17015667
+D t=7 n=17015667
+C t=7 a=1 n=17015668
+D t=7 n=17015668
+C t=7 a=1 n=17015669
+D t=7 n=17015669
+C t=7 a=1 n=17015670
+D t=7 n=17015670
+C t=7 a=1 n=17015671
+D t=7 n=17015671
+C t=7 a=1 n=17015672
+D t=7 n=17015672
+C t=7 a=1 n=17015673
+D t=7 n=17015673
+C t=7 a=1 n=17015674
+D t=7 n=17015674
+C t=7 a=1 n=17015675
+D t=7 n=17015675
+C t=7 a=1 n=17015676
+D t=7 n=17015676
+C t=7 a=1 n=17015677
+D t=7 n=17015677
+C t=7 a=1 n=17015678
+D t=7 n=17015678
+C t=7 a=1 n=17015679
+D t=7 n=17015679
+C t=7 a=1 n=17015680
+D t=7 n=17015680
+C t=7 a=1 n=17015681
+D t=7 n=17015681
+C t=7 a=1 n=17015682
+D t=7 n=17015682
+C t=7 a=1 n=17015683
+D t=7 n=17015683
+C t=7 a=1 n=17015684
+D t=7 n=17015684
+C t=7 a=1 n=17015685
+D t=7 n=17015685
+C t=7 a=1 n=17015686
+D t=7 n=17015686
+C t=7 a=1 n=17015687
+D t=7 n=17015687
+C t=7 a=1 n=17015688
+D t=7 n=17015688
+C t=7 a=1 n=17015689
+D t=7 n=17015689
+C t=7 a=1 n=17015690
+D t=7 n=17015690
+C t=7 a=1 n=17015691
+D t=7 n=17015691
+C t=7 a=1 n=17015692
+D t=7 n=17015692
+C t=7 a=1 n=17015693
+D t=7 n=17015693
+C t=7 a=1 n=17015694
+D t=7 n=17015694
+C t=7 a=1 n=17015695
+D t=7 n=17015695
+C t=7 a=1 n=17015696
+D t=7 n=17015696
+C t=7 a=1 n=17015697
+D t=7 n=17015697
+C t=7 a=1 n=17015698
+D t=7 n=17015698
+C t=7 a=1 n=17015699
+D t=7 n=17015699
+C t=7 a=1 n=17015700
+D t=7 n=17015700
+C t=7 a=1 n=17015701
+D t=7 n=17015701
+C t=7 a=1 n=17015702
+D t=7 n=17015702
+C t=7 a=1 n=17015703
+D t=7 n=17015703
+C t=7 a=1 n=17015704
+D t=7 n=17015704
+C t=7 a=1 n=17015705
+D t=7 n=17015705
+C t=7 a=1 n=17015706
+D t=7 n=17015706
+C t=7 a=1 n=17015707
+D t=7 n=17015707
+C t=7 a=1 n=17015708
+D t=7 n=17015708
+C t=7 a=1 n=17015709
+D t=7 n=17015709
+C t=7 a=1 n=17015710
+D t=7 n=17015710
+C t=7 a=1 n=17015711
+D t=7 n=17015711
+C t=7 a=1 n=17015712
+D t=7 n=17015712
+C t=7 a=1 n=17015713
+D t=7 n=17015713
+C t=7 a=1 n=17015714
+D t=7 n=17015714
+C t=7 a=1 n=17015715
+D t=7 n=17015715
+C t=7 a=1 n=17015716
+D t=7 n=17015716
+C t=7 a=1 n=17015717
+D t=7 n=17015717
+C t=7 a=1 n=17015718
+D t=7 n=17015718
+C t=7 a=1 n=17015719
+D t=7 n=17015719
+C t=7 a=1 n=17015720
+D t=7 n=17015720
+C t=7 a=1 n=17015721
+D t=7 n=17015721
+C t=7 a=1 n=17015722
+D t=7 n=17015722
+C t=7 a=1 n=17015723
+D t=7 n=17015723
+C t=7 a=1 n=17015724
+D t=7 n=17015724
+C t=7 a=1 n=17015725
+D t=7 n=17015725
+C t=7 a=1 n=17015726
+D t=7 n=17015726
+C t=7 a=1 n=17015727
+D t=7 n=17015727
+C t=7 a=1 n=17015728
+D t=7 n=17015728
+C t=7 a=1 n=17015729
+D t=7 n=17015729
+C t=7 a=1 n=17015730
+D t=7 n=17015730
+C t=7 a=1 n=17015731
+D t=7 n=17015731
+C t=7 a=1 n=17015732
+D t=7 n=17015732
+C t=7 a=1 n=17015733
+D t=7 n=17015733
+C t=7 a=1 n=17015734
+D t=7 n=17015734
+C t=7 a=1 n=17015735
+D t=7 n=17015735
+C t=7 a=1 n=17015736
+D t=7 n=17015736
+C t=7 a=1 n=17015737
+D t=7 n=17015737
+C t=7 a=1 n=17015738
+D t=7 n=17015738
+C t=7 a=1 n=17015739
+D t=7 n=17015739
+C t=7 a=1 n=17015740
+D t=7 n=17015740
+C t=7 a=1 n=17015741
+D t=7 n=17015741
+C t=7 a=1 n=17015742
+D t=7 n=17015742
+C t=7 a=1 n=17015743
+D t=7 n=17015743
+C t=7 a=1 n=17015744
+D t=7 n=17015744
+C t=7 a=1 n=17015745
+D t=7 n=17015745
+C t=7 a=1 n=17015746
+D t=7 n=17015746
+C t=7 a=1 n=17015747
+D t=7 n=17015747
+C t=7 a=1 n=17015748
+D t=7 n=17015748
+C t=7 a=1 n=17015749
+D t=7 n=17015749
+C t=7 a=1 n=17015750
+D t=7 n=17015750
+C t=7 a=1 n=17015751
+D t=7 n=17015751
+C t=7 a=1 n=17015752
+D t=7 n=17015752
+C t=7 a=1 n=17015753
+D t=7 n=17015753
+C t=7 a=1 n=17015754
+D t=7 n=17015754
+C t=7 a=1 n=17015755
+D t=7 n=17015755
+C t=7 a=1 n=17015756
+D t=7 n=17015756
+C t=7 a=1 n=17015757
+D t=7 n=17015757
+C t=7 a=1 n=17015758
+D t=7 n=17015758
+C t=7 a=1 n=17015759
+D t=7 n=17015759
+C t=7 a=1 n=17015760
+D t=7 n=17015760
+C t=7 a=1 n=17015761
+D t=7 n=17015761
+C t=7 a=1 n=17015762
+D t=7 n=17015762
+C t=7 a=1 n=17015763
+D t=7 n=17015763
+C t=7 a=1 n=17015764
+D t=7 n=17015764
+C t=7 a=1 n=17015765
+D t=7 n=17015765
+C t=7 a=1 n=17015766
+D t=7 n=17015766
+C t=7 a=1 n=17015767
+D t=7 n=17015767
+C t=7 a=1 n=17015768
+D t=7 n=17015768
+C t=7 a=1 n=17015769
+D t=7 n=17015769
+C t=7 a=1 n=17015770
+D t=7 n=17015770
+C t=7 a=1 n=17015771
+D t=7 n=17015771
+C t=7 a=1 n=17015772
+D t=7 n=17015772
+C t=7 a=1 n=17015773
+D t=7 n=17015773
+C t=7 a=1 n=17015774
+D t=7 n=17015774
+C t=7 a=1 n=17015775
+D t=7 n=17015775
+C t=7 a=1 n=17015776
+D t=7 n=17015776
+C t=7 a=1 n=17015777
+D t=7 n=17015777
+C t=7 a=1 n=17015778
+D t=7 n=17015778
+C t=7 a=1 n=17015779
+D t=7 n=17015779
+C t=7 a=1 n=17015780
+D t=7 n=17015780
+C t=7 a=1 n=17015781
+D t=7 n=17015781
+C t=7 a=1 n=17015782
+D t=7 n=17015782
+C t=7 a=1 n=17015783
+D t=7 n=17015783
+C t=7 a=1 n=17015784
+D t=7 n=17015784
+C t=7 a=1 n=17015785
+D t=7 n=17015785
+C t=7 a=1 n=17015786
+D t=7 n=17015786
+C t=7 a=1 n=17015787
+D t=7 n=17015787
+C t=7 a=1 n=17015788
+D t=7 n=17015788
+C t=7 a=1 n=17015789
+D t=7 n=17015789
+C t=7 a=1 n=17015790
+D t=7 n=17015790
+C t=7 a=1 n=17015791
+D t=7 n=17015791
+C t=7 a=1 n=17015792
+D t=7 n=17015792
+C t=7 a=1 n=17015793
+D t=7 n=17015793
+C t=7 a=1 n=17015794
+D t=7 n=17015794
+C t=7 a=1 n=17015795
+D t=7 n=17015795
+C t=7 a=1 n=17015796
+D t=7 n=17015796
+C t=7 a=1 n=17015797
+D t=7 n=17015797
+C t=7 a=1 n=17015798
+D t=7 n=17015798
+C t=7 a=1 n=17015799
+D t=7 n=17015799
+C t=7 a=1 n=17015800
+D t=7 n=17015800
+C t=7 a=1 n=17015801
+D t=7 n=17015801
+C t=7 a=1 n=17015802
+D t=7 n=17015802
+C t=7 a=1 n=17015803
+D t=7 n=17015803
+C t=7 a=1 n=17015804
+D t=7 n=17015804
+C t=7 a=1 n=17015805
+D t=7 n=17015805
+C t=7 a=1 n=17015806
+D t=7 n=17015806
+C t=7 a=1 n=17015807
+D t=7 n=17015807
+C t=7 a=1 n=17015808
+D t=7 n=17015808
+C t=7 a=1 n=17015809
+D t=7 n=17015809
+C t=7 a=1 n=17015810
+D t=7 n=17015810
+C t=7 a=1 n=17015811
+D t=7 n=17015811
+C t=7 a=1 n=17015812
+D t=7 n=17015812
+C t=7 a=1 n=17015813
+D t=7 n=17015813
+C t=7 a=1 n=17015814
+D t=7 n=17015814
+C t=7 a=1 n=17015815
+D t=7 n=17015815
+C t=7 a=1 n=17015816
+D t=7 n=17015816
+C t=7 a=1 n=17015817
+D t=7 n=17015817
+C t=7 a=1 n=17015818
+D t=7 n=17015818
+C t=7 a=1 n=17015819
+D t=7 n=17015819
+C t=7 a=1 n=17015820
+D t=7 n=17015820
+C t=7 a=1 n=17015821
+D t=7 n=17015821
+C t=7 a=1 n=17015822
+D t=7 n=17015822
+C t=7 a=1 n=17015823
+D t=7 n=17015823
+C t=7 a=1 n=17015824
+D t=7 n=17015824
+C t=7 a=1 n=17015825
+D t=7 n=17015825
+C t=7 a=1 n=17015826
+D t=7 n=17015826
+C t=7 a=1 n=17015827
+D t=7 n=17015827
+C t=7 a=1 n=17015828
+D t=7 n=17015828
+C t=7 a=1 n=17015829
+D t=7 n=17015829
+C t=7 a=1 n=17015830
+D t=7 n=17015830
+C t=7 a=1 n=17015831
+D t=7 n=17015831
+C t=7 a=1 n=17015832
+D t=7 n=17015832
+C t=7 a=1 n=17015833
+D t=7 n=17015833
+C t=7 a=1 n=17015834
+D t=7 n=17015834
+C t=7 a=1 n=17015835
+D t=7 n=17015835
+C t=7 a=1 n=17015836
+D t=7 n=17015836
+C t=7 a=1 n=17015837
+D t=7 n=17015837
+C t=7 a=1 n=17015838
+D t=7 n=17015838
+C t=7 a=1 n=17015839
+D t=7 n=17015839
+C t=7 a=1 n=17015840
+D t=7 n=17015840
+C t=7 a=1 n=17015841
+D t=7 n=17015841
+C t=7 a=1 n=17015842
+D t=7 n=17015842
+C t=7 a=1 n=17015843
+D t=7 n=17015843
+C t=7 a=1 n=17015844
+D t=7 n=17015844
+C t=7 a=1 n=17015845
+D t=7 n=17015845
+C t=7 a=1 n=17015846
+D t=7 n=17015846
+C t=7 a=1 n=17015847
+D t=7 n=17015847
+C t=7 a=1 n=17015848
+D t=7 n=17015848
+C t=7 a=1 n=17015849
+D t=7 n=17015849
+C t=7 a=1 n=17015850
+D t=7 n=17015850
+C t=7 a=1 n=17015851
+D t=7 n=17015851
+C t=7 a=1 n=17015852
+D t=7 n=17015852
+C t=7 a=1 n=17015853
+D t=7 n=17015853
+C t=7 a=1 n=17015854
+D t=7 n=17015854
+C t=7 a=1 n=17015855
+D t=7 n=17015855
+C t=7 a=1 n=17015856
+D t=7 n=17015856
+C t=7 a=1 n=17015857
+D t=7 n=17015857
+C t=7 a=1 n=17015858
+D t=7 n=17015858
+C t=7 a=1 n=17015859
+D t=7 n=17015859
+C t=7 a=1 n=17015860
+D t=7 n=17015860
+C t=7 a=1 n=17015861
+D t=7 n=17015861
+C t=7 a=1 n=17015862
+D t=7 n=17015862
+C t=7 a=1 n=17015863
+D t=7 n=17015863
+C t=7 a=1 n=17015864
+D t=7 n=17015864
+C t=7 a=1 n=17015865
+D t=7 n=17015865
+C t=7 a=1 n=17015866
+D t=7 n=17015866
+C t=7 a=1 n=17015867
+D t=7 n=17015867
+C t=7 a=1 n=17015868
+D t=7 n=17015868
+C t=7 a=1 n=17015869
+D t=7 n=17015869
+C t=7 a=1 n=17015870
+D t=7 n=17015870
+C t=7 a=1 n=17015871
+D t=7 n=17015871
+C t=7 a=1 n=17015872
+D t=7 n=17015872
+C t=7 a=1 n=17015873
+D t=7 n=17015873
+C t=7 a=1 n=17015874
+D t=7 n=17015874
+C t=7 a=1 n=17015875
+D t=7 n=17015875
+C t=7 a=1 n=17015876
+D t=7 n=17015876
+C t=7 a=1 n=17015877
+D t=7 n=17015877
+C t=7 a=1 n=17015878
+D t=7 n=17015878
+C t=7 a=1 n=17015879
+D t=7 n=17015879
+C t=7 a=1 n=17015880
+D t=7 n=17015880
+C t=7 a=1 n=17015881
+D t=7 n=17015881
+C t=7 a=1 n=17015882
+D t=7 n=17015882
+C t=7 a=1 n=17015883
+D t=7 n=17015883
+C t=7 a=1 n=17015884
+D t=7 n=17015884
+C t=7 a=1 n=17015885
+D t=7 n=17015885
+C t=7 a=1 n=17015886
+D t=7 n=17015886
+C t=7 a=1 n=17015887
+D t=7 n=17015887
+C t=7 a=1 n=17015888
+D t=7 n=17015888
+C t=7 a=1 n=17015889
+D t=7 n=17015889
+C t=7 a=1 n=17015890
+D t=7 n=17015890
+C t=7 a=1 n=17015891
+D t=7 n=17015891
+C t=7 a=1 n=17015892
+D t=7 n=17015892
+C t=7 a=1 n=17015893
+D t=7 n=17015893
+C t=7 a=1 n=17015894
+D t=7 n=17015894
+C t=7 a=1 n=17015895
+D t=7 n=17015895
+C t=7 a=1 n=17015896
+D t=7 n=17015896
+C t=7 a=1 n=17015897
+D t=7 n=17015897
+C t=7 a=1 n=17015898
+D t=7 n=17015898
+C t=7 a=1 n=17015899
+D t=7 n=17015899
+C t=7 a=1 n=17015900
+D t=7 n=17015900
+C t=7 a=1 n=17015901
+D t=7 n=17015901
+C t=7 a=1 n=17015902
+D t=7 n=17015902
+C t=7 a=1 n=17015903
+D t=7 n=17015903
+C t=7 a=1 n=17015904
+D t=7 n=17015904
+C t=7 a=1 n=17015905
+D t=7 n=17015905
+C t=7 a=1 n=17015906
+D t=7 n=17015906
+C t=7 a=1 n=17015907
+D t=7 n=17015907
+C t=7 a=1 n=17015908
+D t=7 n=17015908
+C t=7 a=1 n=17015909
+D t=7 n=17015909
+C t=7 a=1 n=17015910
+D t=7 n=17015910
+C t=7 a=1 n=17015911
+D t=7 n=17015911
+C t=7 a=1 n=17015912
+D t=7 n=17015912
+C t=7 a=1 n=17015913
+D t=7 n=17015913
+C t=7 a=1 n=17015914
+D t=7 n=17015914
+C t=7 a=1 n=17015915
+D t=7 n=17015915
+C t=7 a=1 n=17015916
+D t=7 n=17015916
+C t=7 a=1 n=17015917
+D t=7 n=17015917
+C t=7 a=1 n=17015918
+D t=7 n=17015918
+C t=7 a=1 n=17015919
+D t=7 n=17015919
+C t=7 a=1 n=17015920
+D t=7 n=17015920
+C t=7 a=1 n=17015921
+D t=7 n=17015921
+C t=7 a=1 n=17015922
+D t=7 n=17015922
+C t=7 a=1 n=17015923
+D t=7 n=17015923
+C t=7 a=1 n=17015924
+D t=7 n=17015924
+C t=7 a=1 n=17015925
+D t=7 n=17015925
+C t=7 a=1 n=17015926
+D t=7 n=17015926
+C t=7 a=1 n=17015927
+D t=7 n=17015927
+C t=7 a=1 n=17015928
+D t=7 n=17015928
+C t=7 a=1 n=17015929
+D t=7 n=17015929
+C t=7 a=1 n=17015930
+D t=7 n=17015930
+C t=7 a=1 n=17015931
+D t=7 n=17015931
+C t=7 a=1 n=17015932
+D t=7 n=17015932
+C t=7 a=1 n=17015933
+D t=7 n=17015933
+C t=7 a=1 n=17015934
+D t=7 n=17015934
+C t=7 a=1 n=17015935
+D t=7 n=17015935
+C t=7 a=1 n=17015936
+D t=7 n=17015936
+C t=7 a=1 n=17015937
+D t=7 n=17015937
+C t=7 a=1 n=17015938
+D t=7 n=17015938
+C t=7 a=1 n=17015939
+D t=7 n=17015939
+C t=7 a=1 n=17015940
+D t=7 n=17015940
+C t=7 a=1 n=17015941
+D t=7 n=17015941
+C t=7 a=1 n=17015942
+D t=7 n=17015942
+C t=7 a=1 n=17015943
+D t=7 n=17015943
+C t=7 a=1 n=17015944
+D t=7 n=17015944
+C t=7 a=1 n=17015945
+D t=7 n=17015945
+C t=7 a=1 n=17015946
+D t=7 n=17015946
+C t=7 a=1 n=17015947
+D t=7 n=17015947
+C t=7 a=1 n=17015948
+D t=7 n=17015948
+C t=7 a=1 n=17015949
+D t=7 n=17015949
+C t=7 a=1 n=17015950
+D t=7 n=17015950
+C t=7 a=1 n=17015951
+D t=7 n=17015951
+C t=7 a=1 n=17015952
+D t=7 n=17015952
+C t=7 a=1 n=17015953
+D t=7 n=17015953
+C t=7 a=1 n=17015954
+D t=7 n=17015954
+C t=7 a=1 n=17015955
+D t=7 n=17015955
+C t=7 a=1 n=17015956
+D t=7 n=17015956
+C t=7 a=1 n=17015957
+D t=7 n=17015957
+C t=7 a=1 n=17015958
+D t=7 n=17015958
+C t=7 a=1 n=17015959
+D t=7 n=17015959
+C t=7 a=1 n=17015960
+D t=7 n=17015960
+C t=7 a=1 n=17015961
+D t=7 n=17015961
+C t=7 a=1 n=17015962
+D t=7 n=17015962
+C t=7 a=1 n=17015963
+D t=7 n=17015963
+C t=7 a=1 n=17015964
+D t=7 n=17015964
+C t=7 a=1 n=17015965
+D t=7 n=17015965
+C t=7 a=1 n=17015966
+D t=7 n=17015966
+C t=7 a=1 n=17015967
+D t=7 n=17015967
+C t=7 a=1 n=17015968
+D t=7 n=17015968
+C t=7 a=1 n=17015969
+D t=7 n=17015969
+C t=7 a=1 n=17015970
+D t=7 n=17015970
+C t=7 a=1 n=17015971
+D t=7 n=17015971
+C t=7 a=1 n=17015972
+D t=7 n=17015972
+C t=7 a=1 n=17015973
+D t=7 n=17015973
+C t=7 a=1 n=17015974
+D t=7 n=17015974
+C t=7 a=1 n=17015975
+D t=7 n=17015975
+C t=7 a=1 n=17015976
+D t=7 n=17015976
+C t=7 a=1 n=17015977
+D t=7 n=17015977
+C t=7 a=1 n=17015978
+D t=7 n=17015978
+C t=7 a=1 n=17015979
+D t=7 n=17015979
+C t=7 a=1 n=17015980
+D t=7 n=17015980
+C t=7 a=1 n=17015981
+D t=7 n=17015981
+C t=7 a=1 n=17015982
+D t=7 n=17015982
+C t=7 a=1 n=17015983
+D t=7 n=17015983
+C t=7 a=1 n=17015984
+D t=7 n=17015984
+C t=7 a=1 n=17015985
+D t=7 n=17015985
+C t=7 a=1 n=17015986
+D t=7 n=17015986
+C t=7 a=1 n=17015987
+D t=7 n=17015987
+C t=7 a=1 n=17015988
+D t=7 n=17015988
+C t=7 a=1 n=17015989
+D t=7 n=17015989
+C t=7 a=1 n=17015990
+D t=7 n=17015990
+C t=7 a=1 n=17015991
+D t=7 n=17015991
+C t=7 a=1 n=17015992
+D t=7 n=17015992
+C t=7 a=1 n=17015993
+D t=7 n=17015993
+C t=7 a=1 n=17015994
+D t=7 n=17015994
+C t=7 a=1 n=17015995
+D t=7 n=17015995
+C t=7 a=1 n=17015996
+D t=7 n=17015996
+C t=7 a=1 n=17015997
+D t=7 n=17015997
+C t=7 a=1 n=17015998
+D t=7 n=17015998
+C t=7 a=1 n=17015999
+D t=7 n=17015999
+C t=7 a=1 n=17016000
+D t=7 n=17016000
+C t=7 a=1 n=17016001
+D t=7 n=17016001
+C t=7 a=1 n=17016002
+D t=7 n=17016002
+C t=7 a=1 n=17016003
+D t=7 n=17016003
+C t=7 a=1 n=17016004
+D t=7 n=17016004
+C t=7 a=1 n=17016005
+D t=7 n=17016005
+C t=7 a=1 n=17016006
+D t=7 n=17016006
+C t=7 a=1 n=17016007
+D t=7 n=17016007
+C t=7 a=1 n=17016008
+D t=7 n=17016008
+C t=7 a=1 n=17016009
+D t=7 n=17016009
+C t=7 a=1 n=17016010
+D t=7 n=17016010
+C t=7 a=1 n=17016011
+D t=7 n=17016011
+C t=7 a=1 n=17016012
+D t=7 n=17016012
+C t=7 a=1 n=17016013
+D t=7 n=17016013
+C t=7 a=1 n=17016014
+D t=7 n=17016014
+C t=7 a=1 n=17016015
+D t=7 n=17016015
+C t=7 a=1 n=17016016
+D t=7 n=17016016
+C t=7 a=1 n=17016017
+D t=7 n=17016017
+C t=7 a=1 n=17016018
+D t=7 n=17016018
+C t=7 a=1 n=17016019
+D t=7 n=17016019
+C t=7 a=1 n=17016020
+D t=7 n=17016020
+C t=7 a=1 n=17016021
+D t=7 n=17016021
+C t=7 a=1 n=17016022
+D t=7 n=17016022
+C t=7 a=1 n=17016023
+D t=7 n=17016023
+C t=7 a=1 n=17016024
+D t=7 n=17016024
+C t=7 a=1 n=17016025
+D t=7 n=17016025
+C t=7 a=1 n=17016026
+D t=7 n=17016026
+C t=7 a=1 n=17016027
+D t=7 n=17016027
+C t=7 a=1 n=17016028
+D t=7 n=17016028
+C t=7 a=1 n=17016029
+D t=7 n=17016029
+C t=7 a=1 n=17016030
+D t=7 n=17016030
+C t=7 a=1 n=17016031
+D t=7 n=17016031
+C t=7 a=1 n=17016032
+D t=7 n=17016032
+C t=7 a=1 n=17016033
+D t=7 n=17016033
+C t=7 a=1 n=17016034
+D t=7 n=17016034
+C t=7 a=1 n=17016035
+D t=7 n=17016035
+C t=7 a=1 n=17016036
+D t=7 n=17016036
+C t=7 a=1 n=17016037
+D t=7 n=17016037
+C t=7 a=1 n=17016038
+D t=7 n=17016038
+C t=7 a=1 n=17016039
+D t=7 n=17016039
+C t=7 a=1 n=17016040
+D t=7 n=17016040
+C t=7 a=1 n=17016041
+D t=7 n=17016041
+C t=7 a=1 n=17016042
+D t=7 n=17016042
+C t=7 a=1 n=17016043
+D t=7 n=17016043
+C t=7 a=1 n=17016044
+D t=7 n=17016044
+C t=7 a=1 n=17016045
+D t=7 n=17016045
+C t=7 a=1 n=17016046
+D t=7 n=17016046
+C t=7 a=1 n=17016047
+D t=7 n=17016047
+C t=7 a=1 n=17016048
+D t=7 n=17016048
+C t=7 a=1 n=17016049
+D t=7 n=17016049
+C t=7 a=1 n=17016050
+D t=7 n=17016050
+C t=7 a=1 n=17016051
+D t=7 n=17016051
+C t=7 a=1 n=17016052
+D t=7 n=17016052
+C t=7 a=1 n=17016053
+D t=7 n=17016053
+C t=7 a=1 n=17016054
+D t=7 n=17016054
+C t=7 a=1 n=17016055
+D t=7 n=17016055
+C t=7 a=1 n=17016056
+D t=7 n=17016056
+C t=7 a=1 n=17016057
+D t=7 n=17016057
+C t=7 a=1 n=17016058
+D t=7 n=17016058
+C t=7 a=1 n=17016059
+D t=7 n=17016059
+C t=7 a=1 n=17016060
+D t=7 n=17016060
+C t=7 a=1 n=17016061
+D t=7 n=17016061
+C t=7 a=1 n=17016062
+D t=7 n=17016062
+C t=7 a=1 n=17016063
+D t=7 n=17016063
+C t=7 a=1 n=17016064
+D t=7 n=17016064
+C t=7 a=1 n=17016065
+D t=7 n=17016065
+C t=7 a=1 n=17016066
+D t=7 n=17016066
+C t=7 a=1 n=17016067
+D t=7 n=17016067
+C t=7 a=1 n=17016068
+D t=7 n=17016068
+C t=7 a=1 n=17016069
+D t=7 n=17016069
+C t=7 a=1 n=17016070
+D t=7 n=17016070
+C t=7 a=1 n=17016071
+D t=7 n=17016071
+C t=7 a=1 n=17016072
+D t=7 n=17016072
+C t=7 a=1 n=17016073
+D t=7 n=17016073
+C t=7 a=1 n=17016074
+D t=7 n=17016074
+C t=7 a=1 n=17016075
+D t=7 n=17016075
+C t=7 a=1 n=17016076
+D t=7 n=17016076
+C t=7 a=1 n=17016077
+D t=7 n=17016077
+C t=7 a=1 n=17016078
+D t=7 n=17016078
+C t=7 a=1 n=17016079
+D t=7 n=17016079
+C t=7 a=1 n=17016080
+D t=7 n=17016080
+C t=7 a=1 n=17016081
+D t=7 n=17016081
+C t=7 a=1 n=17016082
+D t=7 n=17016082
+C t=7 a=1 n=17016083
+D t=7 n=17016083
+C t=7 a=1 n=17016084
+D t=7 n=17016084
+C t=7 a=1 n=17016085
+D t=7 n=17016085
+C t=7 a=1 n=17016086
+D t=7 n=17016086
+C t=7 a=1 n=17016087
+D t=7 n=17016087
+C t=7 a=1 n=17016088
+D t=7 n=17016088
+C t=7 a=1 n=17016089
+D t=7 n=17016089
+C t=7 a=1 n=17016090
+D t=7 n=17016090
+C t=7 a=1 n=17016091
+D t=7 n=17016091
+C t=7 a=1 n=17016092
+D t=7 n=17016092
+C t=7 a=1 n=17016093
+D t=7 n=17016093
+C t=7 a=1 n=17016094
+D t=7 n=17016094
+C t=7 a=1 n=17016095
+D t=7 n=17016095
+C t=7 a=1 n=17016096
+D t=7 n=17016096
+C t=7 a=1 n=17016097
+D t=7 n=17016097
+C t=7 a=1 n=17016098
+D t=7 n=17016098
+C t=7 a=1 n=17016099
+D t=7 n=17016099
+C t=7 a=1 n=17016100
+D t=7 n=17016100
+C t=7 a=1 n=17016101
+D t=7 n=17016101
+C t=7 a=1 n=17016102
+D t=7 n=17016102
+C t=7 a=1 n=17016103
+D t=7 n=17016103
+C t=7 a=1 n=17016104
+D t=7 n=17016104
+C t=7 a=1 n=17016105
+D t=7 n=17016105
+C t=7 a=1 n=17016106
+D t=7 n=17016106
+C t=7 a=1 n=17016107
+D t=7 n=17016107
+C t=7 a=1 n=17016108
+D t=7 n=17016108
+C t=7 a=1 n=17016109
+D t=7 n=17016109
+C t=7 a=1 n=17016110
+D t=7 n=17016110
+C t=7 a=1 n=17016111
+D t=7 n=17016111
+C t=7 a=1 n=17016112
+D t=7 n=17016112
+C t=7 a=1 n=17016113
+D t=7 n=17016113
+C t=7 a=1 n=17016114
+D t=7 n=17016114
+C t=7 a=1 n=17016115
+D t=7 n=17016115
+C t=7 a=1 n=17016116
+D t=7 n=17016116
+C t=7 a=1 n=17016117
+D t=7 n=17016117
+C t=7 a=1 n=17016118
+D t=7 n=17016118
+C t=7 a=1 n=17016119
+D t=7 n=17016119
+C t=7 a=1 n=17016120
+D t=7 n=17016120
+C t=7 a=1 n=17016121
+D t=7 n=17016121
+C t=7 a=1 n=17016122
+D t=7 n=17016122
+C t=7 a=1 n=17016123
+D t=7 n=17016123
+C t=7 a=1 n=17016124
+D t=7 n=17016124
+C t=7 a=1 n=17016125
+D t=7 n=17016125
+C t=7 a=1 n=17016126
+D t=7 n=17016126
+C t=7 a=1 n=17016127
+D t=7 n=17016127
+C t=7 a=1 n=17016128
+D t=7 n=17016128
+C t=7 a=1 n=17016129
+D t=7 n=17016129
+C t=7 a=1 n=17016130
+D t=7 n=17016130
+C t=7 a=1 n=17016131
+D t=7 n=17016131
+C t=7 a=1 n=17016132
+D t=7 n=17016132
+C t=7 a=1 n=17016133
+D t=7 n=17016133
+C t=7 a=1 n=17016134
+D t=7 n=17016134
+C t=7 a=1 n=17016135
+D t=7 n=17016135
+C t=7 a=1 n=17016136
+D t=7 n=17016136
+C t=7 a=1 n=17016137
+D t=7 n=17016137
+C t=7 a=1 n=17016138
+D t=7 n=17016138
+C t=7 a=1 n=17016139
+D t=7 n=17016139
+C t=7 a=1 n=17016140
+D t=7 n=17016140
+C t=7 a=1 n=17016141
+D t=7 n=17016141
+C t=7 a=1 n=17016142
+D t=7 n=17016142
+C t=7 a=1 n=17016143
+D t=7 n=17016143
+C t=7 a=1 n=17016144
+D t=7 n=17016144
+C t=7 a=1 n=17016145
+D t=7 n=17016145
+C t=7 a=1 n=17016146
+D t=7 n=17016146
+C t=7 a=1 n=17016147
+D t=7 n=17016147
+C t=7 a=1 n=17016148
+D t=7 n=17016148
+C t=7 a=1 n=17016149
+D t=7 n=17016149
+C t=7 a=1 n=17016150
+D t=7 n=17016150
+C t=7 a=1 n=17016151
+D t=7 n=17016151
+C t=7 a=1 n=17016152
+D t=7 n=17016152
+C t=7 a=1 n=17016153
+D t=7 n=17016153
+C t=7 a=1 n=17016154
+D t=7 n=17016154
+C t=7 a=1 n=17016155
+D t=7 n=17016155
+C t=7 a=1 n=17016156
+D t=7 n=17016156
+C t=7 a=1 n=17016157
+D t=7 n=17016157
+C t=7 a=1 n=17016158
+D t=7 n=17016158
+C t=7 a=1 n=17016159
+D t=7 n=17016159
+C t=7 a=1 n=17016160
+D t=7 n=17016160
+C t=7 a=1 n=17016161
+D t=7 n=17016161
+C t=7 a=1 n=17016162
+D t=7 n=17016162
+C t=7 a=1 n=17016163
+D t=7 n=17016163
+C t=7 a=1 n=17016164
+D t=7 n=17016164
+C t=7 a=1 n=17016165
+D t=7 n=17016165
+C t=7 a=1 n=17016166
+D t=7 n=17016166
+C t=7 a=1 n=17016167
+D t=7 n=17016167
+C t=7 a=1 n=17016168
+D t=7 n=17016168
+C t=7 a=1 n=17016169
+D t=7 n=17016169
+C t=7 a=1 n=17016170
+D t=7 n=17016170
+C t=7 a=1 n=17016171
+D t=7 n=17016171
+C t=7 a=1 n=17016172
+D t=7 n=17016172
+C t=7 a=1 n=17016173
+D t=7 n=17016173
+C t=7 a=1 n=17016174
+D t=7 n=17016174
+C t=7 a=1 n=17016175
+D t=7 n=17016175
+C t=7 a=1 n=17016176
+D t=7 n=17016176
+C t=7 a=1 n=17016177
+D t=7 n=17016177
+C t=7 a=1 n=17016178
+D t=7 n=17016178
+C t=7 a=1 n=17016179
+D t=7 n=17016179
+C t=7 a=1 n=17016180
+D t=7 n=17016180
+C t=7 a=1 n=17016181
+D t=7 n=17016181
+C t=7 a=1 n=17016182
+D t=7 n=17016182
+C t=7 a=1 n=17016183
+D t=7 n=17016183
+C t=7 a=1 n=17016184
+D t=7 n=17016184
+C t=7 a=1 n=17016185
+D t=7 n=17016185
+C t=7 a=1 n=17016186
+D t=7 n=17016186
+C t=7 a=1 n=17016187
+D t=7 n=17016187
+C t=7 a=1 n=17016188
+D t=7 n=17016188
+C t=7 a=1 n=17016189
+D t=7 n=17016189
+C t=7 a=1 n=17016190
+D t=7 n=17016190
+C t=7 a=1 n=17016191
+D t=7 n=17016191
+C t=7 a=1 n=17016192
+D t=7 n=17016192
+C t=7 a=1 n=17016193
+D t=7 n=17016193
+C t=7 a=1 n=17016194
+D t=7 n=17016194
+C t=7 a=1 n=17016195
+D t=7 n=17016195
+C t=7 a=1 n=17016196
+D t=7 n=17016196
+C t=7 a=1 n=17016197
+D t=7 n=17016197
+C t=7 a=1 n=17016198
+D t=7 n=17016198
+C t=7 a=1 n=17016199
+D t=7 n=17016199
+C t=7 a=1 n=17016200
+D t=7 n=17016200
+C t=7 a=1 n=17016201
+D t=7 n=17016201
+C t=7 a=1 n=17016202
+D t=7 n=17016202
+C t=7 a=1 n=17016203
+D t=7 n=17016203
+C t=7 a=1 n=17016204
+D t=7 n=17016204
+C t=7 a=1 n=17016205
+D t=7 n=17016205
+C t=7 a=1 n=17016206
+D t=7 n=17016206
+C t=7 a=1 n=17016207
+D t=7 n=17016207
+C t=7 a=1 n=17016208
+D t=7 n=17016208
+C t=7 a=1 n=17016209
+D t=7 n=17016209
+C t=7 a=1 n=17016210
+D t=7 n=17016210
+C t=7 a=1 n=17016211
+D t=7 n=17016211
+C t=7 a=1 n=17016212
+D t=7 n=17016212
+C t=7 a=1 n=17016213
+D t=7 n=17016213
+C t=7 a=1 n=17016214
+D t=7 n=17016214
+C t=7 a=1 n=17016215
+D t=7 n=17016215
+C t=7 a=1 n=17016216
+D t=7 n=17016216
+C t=7 a=1 n=17016217
+D t=7 n=17016217
+C t=7 a=1 n=17016218
+D t=7 n=17016218
+C t=7 a=1 n=17016219
+D t=7 n=17016219
+C t=7 a=1 n=17016220
+D t=7 n=17016220
+C t=7 a=1 n=17016221
+D t=7 n=17016221
+C t=7 a=1 n=17016222
+D t=7 n=17016222
+C t=7 a=1 n=17016223
+D t=7 n=17016223
+C t=7 a=1 n=17016224
+D t=7 n=17016224
+C t=7 a=1 n=17016225
+D t=7 n=17016225
+C t=7 a=1 n=17016226
+D t=7 n=17016226
+C t=7 a=1 n=17016227
+D t=7 n=17016227
+C t=7 a=1 n=17016228
+D t=7 n=17016228
+C t=7 a=1 n=17016229
+D t=7 n=17016229
+C t=7 a=1 n=17016230
+D t=7 n=17016230
+C t=7 a=1 n=17016231
+D t=7 n=17016231
+C t=7 a=1 n=17016232
+D t=7 n=17016232
+C t=7 a=1 n=17016233
+D t=7 n=17016233
+C t=7 a=1 n=17016234
+D t=7 n=17016234
+C t=7 a=1 n=17016235
+D t=7 n=17016235
+C t=7 a=1 n=17016236
+D t=7 n=17016236
+C t=7 a=1 n=17016237
+D t=7 n=17016237
+C t=7 a=1 n=17016238
+D t=7 n=17016238
+C t=7 a=1 n=17016239
+D t=7 n=17016239
+C t=7 a=1 n=17016240
+D t=7 n=17016240
+C t=7 a=1 n=17016241
+D t=7 n=17016241
+C t=7 a=1 n=17016242
+D t=7 n=17016242
+C t=7 a=1 n=17016243
+D t=7 n=17016243
+C t=7 a=1 n=17016244
+D t=7 n=17016244
+C t=7 a=1 n=17016245
+D t=7 n=17016245
+C t=7 a=1 n=17016246
+D t=7 n=17016246
+C t=7 a=1 n=17016247
+D t=7 n=17016247
+C t=7 a=1 n=17016248
+D t=7 n=17016248
+C t=7 a=1 n=17016249
+D t=7 n=17016249
+C t=7 a=1 n=17016250
+D t=7 n=17016250
+C t=7 a=1 n=17016251
+D t=7 n=17016251
+C t=7 a=1 n=17016252
+D t=7 n=17016252
+C t=7 a=1 n=17016253
+D t=7 n=17016253
+C t=7 a=1 n=17016254
+D t=7 n=17016254
+C t=7 a=1 n=17016255
+D t=7 n=17016255
+C t=7 a=1 n=17016256
+D t=7 n=17016256
+C t=7 a=1 n=17016257
+D t=7 n=17016257
+C t=7 a=1 n=17016258
+D t=7 n=17016258
+C t=7 a=1 n=17016259
+D t=7 n=17016259
+C t=7 a=1 n=17016260
+D t=7 n=17016260
+C t=7 a=1 n=17016261
+D t=7 n=17016261
+C t=7 a=1 n=17016262
+D t=7 n=17016262
+C t=7 a=1 n=17016263
+D t=7 n=17016263
+C t=7 a=1 n=17016264
+D t=7 n=17016264
+C t=7 a=1 n=17016265
+D t=7 n=17016265
+C t=7 a=1 n=17016266
+D t=7 n=17016266
+C t=7 a=1 n=17016267
+D t=7 n=17016267
+C t=7 a=1 n=17016268
+D t=7 n=17016268
+C t=7 a=1 n=17016269
+D t=7 n=17016269
+C t=7 a=1 n=17016270
+D t=7 n=17016270
+C t=7 a=1 n=17016271
+D t=7 n=17016271
+C t=7 a=1 n=17016272
+D t=7 n=17016272
+C t=7 a=1 n=17016273
+D t=7 n=17016273
+C t=7 a=1 n=17016274
+D t=7 n=17016274
+C t=7 a=1 n=17016275
+D t=7 n=17016275
+C t=7 a=1 n=17016276
+D t=7 n=17016276
+C t=7 a=1 n=17016277
+D t=7 n=17016277
+C t=7 a=1 n=17016278
+D t=7 n=17016278
+C t=7 a=1 n=17016279
+D t=7 n=17016279
+C t=7 a=1 n=17016280
+D t=7 n=17016280
+C t=7 a=1 n=17016281
+D t=7 n=17016281
+C t=7 a=1 n=17016282
+D t=7 n=17016282
+C t=7 a=1 n=17016283
+D t=7 n=17016283
+C t=7 a=1 n=17016284
+D t=7 n=17016284
+C t=7 a=1 n=17016285
+D t=7 n=17016285
+C t=7 a=1 n=17016286
+D t=7 n=17016286
+C t=7 a=1 n=17016287
+D t=7 n=17016287
+C t=7 a=1 n=17016288
+D t=7 n=17016288
+C t=7 a=1 n=17016289
+D t=7 n=17016289
+C t=7 a=1 n=17016290
+D t=7 n=17016290
+C t=7 a=1 n=17016291
+D t=7 n=17016291
+C t=7 a=1 n=17016292
+D t=7 n=17016292
+C t=7 a=1 n=17016293
+D t=7 n=17016293
+C t=7 a=1 n=17016294
+D t=7 n=17016294
+C t=7 a=1 n=17016295
+D t=7 n=17016295
+C t=7 a=1 n=17016296
+D t=7 n=17016296
+C t=7 a=1 n=17016297
+D t=7 n=17016297
+C t=7 a=1 n=17016298
+D t=7 n=17016298
+C t=7 a=1 n=17016299
+D t=7 n=17016299
+C t=7 a=1 n=17016300
+D t=7 n=17016300
+C t=7 a=1 n=17016301
+D t=7 n=17016301
+C t=7 a=1 n=17016302
+D t=7 n=17016302
+C t=7 a=1 n=17016303
+D t=7 n=17016303
+C t=7 a=1 n=17016304
+D t=7 n=17016304
+C t=7 a=1 n=17016305
+D t=7 n=17016305
+C t=7 a=1 n=17016306
+D t=7 n=17016306
+C t=7 a=1 n=17016307
+D t=7 n=17016307
+C t=7 a=1 n=17016308
+D t=7 n=17016308
+C t=7 a=1 n=17016309
+D t=7 n=17016309
+C t=7 a=1 n=17016310
+D t=7 n=17016310
+C t=7 a=1 n=17016311
+D t=7 n=17016311
+C t=7 a=1 n=17016312
+D t=7 n=17016312
+C t=7 a=1 n=17016313
+D t=7 n=17016313
+C t=7 a=1 n=17016314
+D t=7 n=17016314
+C t=7 a=1 n=17016315
+D t=7 n=17016315
+C t=7 a=1 n=17016316
+D t=7 n=17016316
+C t=7 a=1 n=17016317
+D t=7 n=17016317
+C t=7 a=1 n=17016318
+D t=7 n=17016318
+C t=7 a=1 n=17016319
+D t=7 n=17016319
+C t=7 a=1 n=17016320
+D t=7 n=17016320
+C t=7 a=1 n=17016321
+D t=7 n=17016321
+C t=7 a=1 n=17016322
+D t=7 n=17016322
+C t=7 a=1 n=17016323
+D t=7 n=17016323
+C t=7 a=1 n=17016324
+D t=7 n=17016324
+C t=7 a=1 n=17016325
+D t=7 n=17016325
+C t=7 a=1 n=17016326
+D t=7 n=17016326
+C t=7 a=1 n=17016327
+D t=7 n=17016327
+C t=7 a=1 n=17016328
+D t=7 n=17016328
+C t=7 a=1 n=17016329
+D t=7 n=17016329
+C t=7 a=1 n=17016330
+D t=7 n=17016330
+C t=7 a=1 n=17016331
+D t=7 n=17016331
+C t=7 a=1 n=17016332
+D t=7 n=17016332
+C t=7 a=1 n=17016333
+D t=7 n=17016333
+C t=7 a=1 n=17016334
+D t=7 n=17016334
+C t=7 a=1 n=17016335
+D t=7 n=17016335
+C t=7 a=1 n=17016336
+D t=7 n=17016336
+C t=7 a=1 n=17016337
+D t=7 n=17016337
+C t=7 a=1 n=17016338
+D t=7 n=17016338
+C t=7 a=1 n=17016339
+D t=7 n=17016339
+C t=7 a=1 n=17016340
+D t=7 n=17016340
+C t=7 a=1 n=17016341
+D t=7 n=17016341
+C t=7 a=1 n=17016342
+D t=7 n=17016342
+C t=7 a=1 n=17016343
+D t=7 n=17016343
+C t=7 a=1 n=17016344
+D t=7 n=17016344
+C t=7 a=1 n=17016345
+D t=7 n=17016345
+C t=7 a=1 n=17016346
+D t=7 n=17016346
+C t=7 a=1 n=17016347
+D t=7 n=17016347
+C t=7 a=1 n=17016348
+D t=7 n=17016348
+C t=7 a=1 n=17016349
+D t=7 n=17016349
+C t=7 a=1 n=17016350
+D t=7 n=17016350
+C t=7 a=1 n=17016351
+D t=7 n=17016351
+C t=7 a=1 n=17016352
+D t=7 n=17016352
+C t=7 a=1 n=17016353
+D t=7 n=17016353
+C t=7 a=1 n=17016354
+D t=7 n=17016354
+C t=7 a=1 n=17016355
+D t=7 n=17016355
+C t=7 a=1 n=17016356
+D t=7 n=17016356
+C t=7 a=1 n=17016357
+D t=7 n=17016357
+C t=7 a=1 n=17016358
+D t=7 n=17016358
+C t=7 a=1 n=17016359
+D t=7 n=17016359
+C t=7 a=1 n=17016360
+D t=7 n=17016360
+C t=7 a=1 n=17016361
+D t=7 n=17016361
+C t=7 a=1 n=17016362
+D t=7 n=17016362
+C t=7 a=1 n=17016363
+D t=7 n=17016363
+C t=7 a=1 n=17016364
+D t=7 n=17016364
+C t=7 a=1 n=17016365
+D t=7 n=17016365
+C t=7 a=1 n=17016366
+D t=7 n=17016366
+C t=7 a=1 n=17016367
+D t=7 n=17016367
+C t=7 a=1 n=17016368
+D t=7 n=17016368
+C t=7 a=1 n=17016369
+D t=7 n=17016369
+C t=7 a=1 n=17016370
+D t=7 n=17016370
+C t=7 a=1 n=17016371
+D t=7 n=17016371
+C t=7 a=1 n=17016372
+D t=7 n=17016372
+C t=7 a=1 n=17016373
+D t=7 n=17016373
+C t=7 a=1 n=17016374
+D t=7 n=17016374
+C t=7 a=1 n=17016375
+D t=7 n=17016375
+C t=7 a=1 n=17016376
+D t=7 n=17016376
+C t=7 a=1 n=17016377
+D t=7 n=17016377
+C t=7 a=1 n=17016378
+D t=7 n=17016378
+C t=7 a=1 n=17016379
+D t=7 n=17016379
+C t=7 a=1 n=17016380
+D t=7 n=17016380
+C t=7 a=1 n=17016381
+D t=7 n=17016381
+C t=7 a=1 n=17016382
+D t=7 n=17016382
+C t=7 a=1 n=17016383
+D t=7 n=17016383
+C t=7 a=1 n=17016384
+D t=7 n=17016384
+C t=7 a=1 n=17016385
+D t=7 n=17016385
+C t=7 a=1 n=17016386
+D t=7 n=17016386
+C t=7 a=1 n=17016387
+D t=7 n=17016387
+C t=7 a=1 n=17016388
+D t=7 n=17016388
+C t=7 a=1 n=17016389
+D t=7 n=17016389
+C t=7 a=1 n=17016390
+D t=7 n=17016390
+C t=7 a=1 n=17016391
+D t=7 n=17016391
+C t=7 a=1 n=17016392
+D t=7 n=17016392
+C t=7 a=1 n=17016393
+D t=7 n=17016393
+C t=7 a=1 n=17016394
+D t=7 n=17016394
+C t=7 a=1 n=17016395
+D t=7 n=17016395
+C t=7 a=1 n=17016396
+D t=7 n=17016396
+C t=7 a=1 n=17016397
+D t=7 n=17016397
+C t=7 a=1 n=17016398
+D t=7 n=17016398
+C t=7 a=1 n=17016399
+D t=7 n=17016399
+C t=7 a=1 n=17016400
+D t=7 n=17016400
+C t=7 a=1 n=17016401
+D t=7 n=17016401
+C t=7 a=1 n=17016402
+D t=7 n=17016402
+C t=7 a=1 n=17016403
+D t=7 n=17016403
+C t=7 a=1 n=17016404
+D t=7 n=17016404
+C t=7 a=1 n=17016405
+D t=7 n=17016405
+C t=7 a=1 n=17016406
+D t=7 n=17016406
+C t=7 a=1 n=17016407
+D t=7 n=17016407
+C t=7 a=1 n=17016408
+D t=7 n=17016408
+C t=7 a=1 n=17016409
+D t=7 n=17016409
+C t=7 a=1 n=17016410
+D t=7 n=17016410
+C t=7 a=1 n=17016411
+D t=7 n=17016411
+C t=7 a=1 n=17016412
+D t=7 n=17016412
+C t=7 a=1 n=17016413
+D t=7 n=17016413
+C t=7 a=1 n=17016414
+D t=7 n=17016414
+C t=7 a=1 n=17016415
+D t=7 n=17016415
+C t=7 a=1 n=17016416
+D t=7 n=17016416
+C t=7 a=1 n=17016417
+D t=7 n=17016417
+C t=7 a=1 n=17016418
+D t=7 n=17016418
+C t=7 a=1 n=17016419
+D t=7 n=17016419
+C t=7 a=1 n=17016420
+D t=7 n=17016420
+C t=7 a=1 n=17016421
+D t=7 n=17016421
+C t=7 a=1 n=17016422
+D t=7 n=17016422
+C t=7 a=1 n=17016423
+D t=7 n=17016423
+C t=7 a=1 n=17016424
+D t=7 n=17016424
+C t=7 a=1 n=17016425
+D t=7 n=17016425
+C t=7 a=1 n=17016426
+D t=7 n=17016426
+C t=7 a=1 n=17016427
+D t=7 n=17016427
+C t=7 a=1 n=17016428
+D t=7 n=17016428
+C t=7 a=1 n=17016429
+D t=7 n=17016429
+C t=7 a=1 n=17016430
+D t=7 n=17016430
+C t=7 a=1 n=17016431
+D t=7 n=17016431
+C t=7 a=1 n=17016432
+D t=7 n=17016432
+C t=7 a=1 n=17016433
+D t=7 n=17016433
+C t=7 a=1 n=17016434
+D t=7 n=17016434
+C t=7 a=1 n=17016435
+D t=7 n=17016435
+C t=7 a=1 n=17016436
+D t=7 n=17016436
+C t=7 a=1 n=17016437
+D t=7 n=17016437
+C t=7 a=1 n=17016438
+D t=7 n=17016438
+C t=7 a=1 n=17016439
+D t=7 n=17016439
+C t=7 a=1 n=17016440
+D t=7 n=17016440
+C t=7 a=1 n=17016441
+D t=7 n=17016441
+C t=7 a=1 n=17016442
+D t=7 n=17016442
+C t=7 a=1 n=17016443
+D t=7 n=17016443
+C t=7 a=1 n=17016444
+D t=7 n=17016444
+C t=7 a=1 n=17016445
+D t=7 n=17016445
+C t=7 a=1 n=17016446
+D t=7 n=17016446
+C t=7 a=1 n=17016447
+D t=7 n=17016447
+C t=7 a=1 n=17016448
+D t=7 n=17016448
+C t=7 a=1 n=17016449
+D t=7 n=17016449
+C t=7 a=1 n=17016450
+D t=7 n=17016450
+C t=7 a=1 n=17016451
+D t=7 n=17016451
+C t=7 a=1 n=17016452
+D t=7 n=17016452
+C t=7 a=1 n=17016453
+D t=7 n=17016453
+C t=7 a=1 n=17016454
+D t=7 n=17016454
+C t=7 a=1 n=17016455
+D t=7 n=17016455
+C t=7 a=1 n=17016456
+D t=7 n=17016456
+C t=7 a=1 n=17016457
+D t=7 n=17016457
+C t=7 a=1 n=17016458
+D t=7 n=17016458
+C t=7 a=1 n=17016459
+D t=7 n=17016459
+C t=7 a=1 n=17016460
+D t=7 n=17016460
+C t=7 a=1 n=17016461
+D t=7 n=17016461
+C t=7 a=1 n=17016462
+D t=7 n=17016462
+C t=7 a=1 n=17016463
+D t=7 n=17016463
+C t=7 a=1 n=17016464
+D t=7 n=17016464
+C t=7 a=1 n=17016465
+D t=7 n=17016465
+C t=7 a=1 n=17016466
+D t=7 n=17016466
+C t=7 a=1 n=17016467
+D t=7 n=17016467
+C t=7 a=1 n=17016468
+D t=7 n=17016468
+C t=7 a=1 n=17016469
+D t=7 n=17016469
+C t=7 a=1 n=17016470
+D t=7 n=17016470
+C t=7 a=1 n=17016471
+D t=7 n=17016471
+C t=7 a=1 n=17016472
+D t=7 n=17016472
+C t=7 a=1 n=17016473
+D t=7 n=17016473
+C t=7 a=1 n=17016474
+D t=7 n=17016474
+C t=7 a=1 n=17016475
+D t=7 n=17016475
+C t=7 a=1 n=17016476
+D t=7 n=17016476
+C t=7 a=1 n=17016477
+D t=7 n=17016477
+C t=7 a=1 n=17016478
+D t=7 n=17016478
+C t=7 a=1 n=17016479
+D t=7 n=17016479
+C t=7 a=1 n=17016480
+D t=7 n=17016480
+C t=7 a=1 n=17016481
+D t=7 n=17016481
+C t=7 a=1 n=17016482
+D t=7 n=17016482
+C t=7 a=1 n=17016483
+D t=7 n=17016483
+C t=7 a=1 n=17016484
+D t=7 n=17016484
+C t=7 a=1 n=17016485
+D t=7 n=17016485
+C t=7 a=1 n=17016486
+D t=7 n=17016486
+C t=7 a=1 n=17016487
+D t=7 n=17016487
+C t=7 a=1 n=17016488
+D t=7 n=17016488
+C t=7 a=1 n=17016489
+D t=7 n=17016489
+C t=7 a=1 n=17016490
+D t=7 n=17016490
+C t=7 a=1 n=17016491
+D t=7 n=17016491
+C t=7 a=1 n=17016492
+D t=7 n=17016492
+C t=7 a=1 n=17016493
+D t=7 n=17016493
+C t=7 a=1 n=17016494
+D t=7 n=17016494
+C t=7 a=1 n=17016495
+D t=7 n=17016495
+C t=7 a=1 n=17016496
+D t=7 n=17016496
+C t=7 a=1 n=17016497
+D t=7 n=17016497
+C t=7 a=1 n=17016498
+D t=7 n=17016498
+C t=7 a=1 n=17016499
+D t=7 n=17016499
+C t=7 a=1 n=17016500
+D t=7 n=17016500
+C t=7 a=1 n=17016501
+D t=7 n=17016501
+C t=7 a=1 n=17016502
+D t=7 n=17016502
+C t=7 a=1 n=17016503
+D t=7 n=17016503
+C t=7 a=1 n=17016504
+D t=7 n=17016504
+C t=7 a=1 n=17016505
+D t=7 n=17016505
+C t=7 a=1 n=17016506
+D t=7 n=17016506
+C t=7 a=1 n=17016507
+D t=7 n=17016507
+C t=7 a=1 n=17016508
+D t=7 n=17016508
+C t=7 a=1 n=17016509
+D t=7 n=17016509
+C t=7 a=1 n=17016510
+D t=7 n=17016510
+C t=7 a=1 n=17016511
+D t=7 n=17016511
+C t=7 a=1 n=17016512
+D t=7 n=17016512
+C t=7 a=1 n=17016513
+D t=7 n=17016513
+C t=7 a=1 n=17016514
+D t=7 n=17016514
+C t=7 a=1 n=17016515
+D t=7 n=17016515
+C t=7 a=1 n=17016516
+D t=7 n=17016516
+C t=7 a=1 n=17016517
+D t=7 n=17016517
+C t=7 a=1 n=17016518
+D t=7 n=17016518
+C t=7 a=1 n=17016519
+D t=7 n=17016519
+C t=7 a=1 n=17016520
+D t=7 n=17016520
+C t=7 a=1 n=17016521
+D t=7 n=17016521
+C t=7 a=1 n=17016522
+D t=7 n=17016522
+C t=7 a=1 n=17016523
+D t=7 n=17016523
+C t=7 a=1 n=17016524
+D t=7 n=17016524
+C t=7 a=1 n=17016525
+D t=7 n=17016525
+C t=7 a=1 n=17016526
+D t=7 n=17016526
+C t=7 a=1 n=17016527
+D t=7 n=17016527
+C t=7 a=1 n=17016528
+D t=7 n=17016528
+C t=7 a=1 n=17016529
+D t=7 n=17016529
+C t=7 a=1 n=17016530
+D t=7 n=17016530
+C t=7 a=1 n=17016531
+D t=7 n=17016531
+C t=7 a=1 n=17016532
+D t=7 n=17016532
+C t=7 a=1 n=17016533
+D t=7 n=17016533
+C t=7 a=1 n=17016534
+D t=7 n=17016534
+C t=7 a=1 n=17016535
+D t=7 n=17016535
+C t=7 a=1 n=17016536
+D t=7 n=17016536
+C t=7 a=1 n=17016537
+D t=7 n=17016537
+C t=7 a=1 n=17016538
+D t=7 n=17016538
+C t=7 a=1 n=17016539
+D t=7 n=17016539
+C t=7 a=1 n=17016540
+D t=7 n=17016540
+C t=7 a=1 n=17016541
+D t=7 n=17016541
+C t=7 a=1 n=17016542
+D t=7 n=17016542
+C t=7 a=1 n=17016543
+D t=7 n=17016543
+C t=7 a=1 n=17016544
+D t=7 n=17016544
+C t=7 a=1 n=17016545
+D t=7 n=17016545
+C t=7 a=1 n=17016546
+D t=7 n=17016546
+C t=7 a=1 n=17016547
+D t=7 n=17016547
+C t=7 a=1 n=17016548
+D t=7 n=17016548
+C t=7 a=1 n=17016549
+D t=7 n=17016549
+C t=7 a=1 n=17016550
+D t=7 n=17016550
+C t=7 a=1 n=17016551
+D t=7 n=17016551
+C t=7 a=1 n=17016552
+D t=7 n=17016552
+C t=7 a=1 n=17016553
+D t=7 n=17016553
+C t=7 a=1 n=17016554
+D t=7 n=17016554
+C t=7 a=1 n=17016555
+D t=7 n=17016555
+C t=7 a=1 n=17016556
+D t=7 n=17016556
+C t=7 a=1 n=17016557
+D t=7 n=17016557
+C t=7 a=1 n=17016558
+D t=7 n=17016558
+C t=7 a=1 n=17016559
+D t=7 n=17016559
+C t=7 a=1 n=17016560
+D t=7 n=17016560
+C t=7 a=1 n=17016561
+D t=7 n=17016561
+C t=7 a=1 n=17016562
+D t=7 n=17016562
+C t=7 a=1 n=17016563
+D t=7 n=17016563
+C t=7 a=1 n=17016564
+D t=7 n=17016564
+C t=7 a=1 n=17016565
+D t=7 n=17016565
+C t=7 a=1 n=17016566
+D t=7 n=17016566
+C t=7 a=1 n=17016567
+D t=7 n=17016567
+C t=7 a=1 n=17016568
+D t=7 n=17016568
+C t=7 a=1 n=17016569
+D t=7 n=17016569
+C t=7 a=1 n=17016570
+D t=7 n=17016570
+C t=7 a=1 n=17016571
+D t=7 n=17016571
+C t=7 a=1 n=17016572
+D t=7 n=17016572
+C t=7 a=1 n=17016573
+D t=7 n=17016573
+C t=7 a=1 n=17016574
+D t=7 n=17016574
+C t=7 a=1 n=17016575
+D t=7 n=17016575
+C t=7 a=1 n=17016576
+D t=7 n=17016576
+C t=7 a=1 n=17016577
+D t=7 n=17016577
+C t=7 a=1 n=17016578
+D t=7 n=17016578
+C t=7 a=1 n=17016579
+D t=7 n=17016579
+C t=7 a=1 n=17016580
+D t=7 n=17016580
+C t=7 a=1 n=17016581
+D t=7 n=17016581
+C t=7 a=1 n=17016582
+D t=7 n=17016582
+C t=7 a=1 n=17016583
+D t=7 n=17016583
+C t=7 a=1 n=17016584
+D t=7 n=17016584
+C t=7 a=1 n=17016585
+D t=7 n=17016585
+C t=7 a=1 n=17016586
+D t=7 n=17016586
+C t=7 a=1 n=17016587
+D t=7 n=17016587
+C t=7 a=1 n=17016588
+D t=7 n=17016588
+C t=7 a=1 n=17016589
+D t=7 n=17016589
+C t=7 a=1 n=17016590
+D t=7 n=17016590
+C t=7 a=1 n=17016591
+D t=7 n=17016591
+C t=7 a=1 n=17016592
+D t=7 n=17016592
+C t=7 a=1 n=17016593
+D t=7 n=17016593
+C t=7 a=1 n=17016594
+D t=7 n=17016594
+C t=7 a=1 n=17016595
+D t=7 n=17016595
+C t=7 a=1 n=17016596
+D t=7 n=17016596
+C t=7 a=1 n=17016597
+D t=7 n=17016597
+C t=7 a=1 n=17016598
+D t=7 n=17016598
+C t=7 a=1 n=17016599
+D t=7 n=17016599
+C t=7 a=1 n=17016600
+D t=7 n=17016600
+C t=7 a=1 n=17016601
+D t=7 n=17016601
+C t=7 a=1 n=17016602
+D t=7 n=17016602
+C t=7 a=1 n=17016603
+D t=7 n=17016603
+C t=7 a=1 n=17016604
+D t=7 n=17016604
+C t=7 a=1 n=17016605
+D t=7 n=17016605
+C t=7 a=1 n=17016606
+D t=7 n=17016606
+C t=7 a=1 n=17016607
+D t=7 n=17016607
+C t=7 a=1 n=17016608
+D t=7 n=17016608
+C t=7 a=1 n=17016609
+D t=7 n=17016609
+C t=7 a=1 n=17016610
+D t=7 n=17016610
+C t=7 a=1 n=17016611
+D t=7 n=17016611
+C t=7 a=1 n=17016612
+D t=7 n=17016612
+C t=7 a=1 n=17016613
+D t=7 n=17016613
+C t=7 a=1 n=17016614
+D t=7 n=17016614
+C t=7 a=1 n=17016615
+D t=7 n=17016615
+C t=7 a=1 n=17016616
+D t=7 n=17016616
+C t=7 a=1 n=17016617
+D t=7 n=17016617
+C t=7 a=1 n=17016618
+D t=7 n=17016618
+C t=7 a=1 n=17016619
+D t=7 n=17016619
+C t=7 a=1 n=17016620
+D t=7 n=17016620
+C t=7 a=1 n=17016621
+D t=7 n=17016621
+C t=7 a=1 n=17016622
+D t=7 n=17016622
+C t=7 a=1 n=17016623
+D t=7 n=17016623
+C t=7 a=1 n=17016624
+D t=7 n=17016624
+C t=7 a=1 n=17016625
+D t=7 n=17016625
+C t=7 a=1 n=17016626
+D t=7 n=17016626
+C t=7 a=1 n=17016627
+D t=7 n=17016627
+C t=7 a=1 n=17016628
+D t=7 n=17016628
+C t=7 a=1 n=17016629
+D t=7 n=17016629
+C t=7 a=1 n=17016630
+D t=7 n=17016630
+C t=7 a=1 n=17016631
+D t=7 n=17016631
+C t=7 a=1 n=17016632
+D t=7 n=17016632
+C t=7 a=1 n=17016633
+D t=7 n=17016633
+C t=7 a=1 n=17016634
+D t=7 n=17016634
+C t=7 a=1 n=17016635
+D t=7 n=17016635
+C t=7 a=1 n=17016636
+D t=7 n=17016636
+C t=7 a=1 n=17016637
+D t=7 n=17016637
+C t=7 a=1 n=17016638
+D t=7 n=17016638
+C t=7 a=1 n=17016639
+D t=7 n=17016639
+C t=7 a=1 n=17016640
+D t=7 n=17016640
+C t=7 a=1 n=17016641
+D t=7 n=17016641
+C t=7 a=1 n=17016642
+D t=7 n=17016642
+C t=7 a=1 n=17016643
+D t=7 n=17016643
+C t=7 a=1 n=17016644
+D t=7 n=17016644
+C t=7 a=1 n=17016645
+D t=7 n=17016645
+C t=7 a=1 n=17016646
+D t=7 n=17016646
+C t=7 a=1 n=17016647
+D t=7 n=17016647
+C t=7 a=1 n=17016648
+D t=7 n=17016648
+C t=7 a=1 n=17016649
+D t=7 n=17016649
+C t=7 a=1 n=17016650
+D t=7 n=17016650
+C t=7 a=1 n=17016651
+D t=7 n=17016651
+C t=7 a=1 n=17016652
+D t=7 n=17016652
+C t=7 a=1 n=17016653
+D t=7 n=17016653
+C t=7 a=1 n=1701
+=== block 4 | oracle verilator 5.052 (version captured in slice) | r1/sound/w/s3_comb_wait/vl_c.txt | 5813 bytes
+%Warning-MULTIDRIVEN: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3:21: Variable written to in always_comb also written by other process (IEEE 1800-2023 9.2.2.2): 'n'
+                                                                                                                                                                                             : ... note: In instance 'top'
+                      /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:3:21: 
+    3 |   always_comb begin n = n + 1; y = a; $display("C t=%0t a=%b n=%0d", $time, a, n); wait (b); $display("D t=%0t n=%0d", $time, n); end
+      |                     ^
+                      /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s584/r1/sound/cells/s3_comb_wait.sv:2:26: ... Location of other write
+    2 |   logic a, b, y; int n = 0;
+      |                          ^
+                      ... For warning description see https://verilator.org/warn/MULTIDRIVEN?v=5.052
+                      ... Use "/* verilator lint_off MULTIDRIVEN */" and lint_on around source to disable this message.
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vtop.cpp Vtop___024root__0.cpp Vtop__main.cpp Vtop___024root__Slow.cpp Vtop___024root__0__Slow.cpp Vtop__Syms__Slow.cpp > Vtop__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vtop__ALL.o Vtop__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vtop__ALL.a    -pthread -lpthread   -o Vtop
+rm Vtop__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.034 MB sources in 2 modules, into 0.035 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.087 s (elab=0.000, cvt=0.003, bld=4.081); cpu 0.007 s on 1 threads; allocated 10.172 MB
+=== block 5 | vita [A] | r2run/r1a/r1_sound_cells__s3_comb_wait.out | 146 bytes
+=== vita (native=interp=vm)
+rc=0
+C t=0 a=0 n=1
+C t=0 a=0 n=2
+D t=7 n=2
+D t=7 n=2
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== block 6 | vita [POST2] | r2run/post2/r1_sound_cells__s3_comb_wait.out | 122 bytes
+=== vita (native=interp=vm)
+rc=0
+C t=0 a=0 n=1
+D t=7 n=1
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== block 7 | vita [POST2] | r3run/post2/r1_sound_cells__s3_comb_wait.out | 122 bytes | identical to block 6
+=== block 8 | vita [POST3] | r3run/post3/r1_sound_cells__s3_comb_wait.out | 122 bytes | identical to block 6
+=== block 9 | vita [POST3] | r4run/post3/r1_sound_cells__s3_comb_wait.out | 122 bytes | identical to block 6
+=== block 10 | vita [POST4] | r4run/post4/r1_sound_cells__s3_comb_wait.out | 122 bytes | identical to block 6
+=== block 11 | vita [PRE] | r2run/pre/r1_sound_cells__s3_comb_wait.out | 122 bytes
+=== vita (native=interp=vm)
+rc=0
+C t=0 a=x n=1
+D t=7 n=1
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== block 12 | vita [PRE] | r3run/pre/r1_sound_cells__s3_comb_wait.out | 122 bytes | identical to block 11
+=== end

@@ -1,0 +1,8 @@
+module t;
+  localparam logic signed [7:0] X = -8'sd4;
+  localparam int N = 8;
+  function automatic logic [7:0] fl(input int a); logic [7:0] r; fl = r; endfunction
+  logic [fl(0) + ((X + {N{1'b0}}) == 8'hFC) + 3 : 0] v;
+  initial $display("vb=%0d", $bits(v));
+  initial #100 $finish;
+endmodule

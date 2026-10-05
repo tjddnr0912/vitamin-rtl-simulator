@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a6__Icue_nw_gif
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a6/Icue_nw_gif.sv
+roadmap_row: §2 🆕 U
+set: plan/a6
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: not a POST_a mover (absent from impl/moves_audit.txt)
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Icue_nw_gif.ivl | 61 bytes
+cuenwg big
+Icue_nw_gif.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Icue_nw_gif.vl | 237 bytes
+cuenwg big
+- Icue_nw_gif.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Icue_nw_gif.s2v | 65 bytes
+cuenwg big
+Icue_nw_gif.s2v.v:10: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV1] | ./Icue_nw_gif.dev1 | 183 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+cuenwg small
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV1] | ./Icue_nw_gif.dev1.route | 0 bytes
+
+=== block 6 | vita [DEV3] | ./Icue_nw_gif.dev3 | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+cuenwg big
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [DEV3] | ./Icue_nw_gif.dev3.route | 0 bytes | identical to block 5
+=== block 8 | vita [POSTA] | ./Icue_nw_gif.posta | 183 bytes | identical to block 4
+=== block 9 | vita [POSTA] | ./Icue_nw_gif.posta.route | 0 bytes | identical to block 5
+=== block 10 | vita [POSTB] | ./Icue_nw_gif.postb | 181 bytes | identical to block 6
+=== block 11 | vita [POSTB] | ./Icue_nw_gif.postb.route | 0 bytes | identical to block 5
+=== block 12 | vita [PRE] | ./Icue_nw_gif.pre | 183 bytes | identical to block 4
+=== block 13 | vita [PRE] | ./Icue_nw_gif.pre.route | 0 bytes | identical to block 5
+=== block 14 | vita [PROTO2] | ./Icue_nw_gif.post2 | 183 bytes | identical to block 4
+=== block 15 | vita [PROTO2] | ./Icue_nw_gif.post2.route | 0 bytes | identical to block 5
+=== end

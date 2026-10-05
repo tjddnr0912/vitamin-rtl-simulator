@@ -1,0 +1,33 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__s__s04_psel_lsb_p
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/s/s04_psel_lsb_p.sv
+roadmap_row: §2 🆕 AE
+set: g/s
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: F: keep; D: l10 keep; s04 silent->silent' (r=x)
+verdict_source: s588/GROUNDING.md:289
+notes: GROUNDING Q4 A lane row naming s04 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./s04_psel_lsb_p.ivl | 62 bytes
+r=xxxxxxxx
+s04_psel_lsb_p.sv:8: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./s04_psel_lsb_p.vl | 109 bytes
+%Error: Internal Error: s04_psel_lsb_p.sv:8:41: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./s04_psel_lsb_p.s2v | 66 bytes
+r=xxxxxxxx
+s04_psel_lsb_p.s2v.v:15: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./s04_psel_lsb_p.PRE | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r=xxxx
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-m] | ./s04_psel_lsb_p.PROBE | 175 bytes | identical to block 4
+=== end

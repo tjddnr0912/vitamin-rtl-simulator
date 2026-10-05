@@ -1,0 +1,85 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__diff__cells__k06_fatal_wave2
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/diff/cells/k06_fatal_wave2.sv
+roadmap_row: §2 🆕 AB
+set: r2/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: from the read set (r2h2 `f2 t=0 x=1 w1=z`, then `w1=0`); k06, a `$fatal` latched by an assign's call does not stop the rest of that t0 settle (PRE the same). `sched/scan_arm.rs` is now 1929 lines (was 1854), `native/run.rs` 1788 (was 1643).
+verdict_source: s590/COMMIT_SLICE.txt:164
+notes: verdict_class = verbatim excerpt of the source line (wrapped commit-message lines joined)
+alias: r3/k06/k06_fatal_wave2 (byte-identical source) verdict: from the read set (r2h2 `f2 t=0 x=1 w1=z`, then `w1=0`); k06, a `$fatal` latched by an assign's call does not stop the rest of that t0 settle (PRE the same). `sched/scan_arm.rs` is now 1929 lines (was 1854), `native/run.rs` 1788 (was 1643). verdict_source: s590/COMMIT_SLICE.txt:164
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/k06_fatal_wave2.out | 1736 bytes
+##### k06_fatal_wave2
+=== PRE2 (native=interp=vm)
+rc=1
+f3 t=0 v=z
+f2 t=0 v=z
+f1 t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+f1 t=0 v=1
+f2 t=0 v=1
+k06_fatal_wave2.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: boom id=2 v=1 [in top.f] [at time 0]
+f3 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=1
+f1 t=0 v=1
+f2 t=0 v=1
+k06_fatal_wave2.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: boom id=2 v=1 [in top.f] [at time 0]
+f3 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=1
+f1 t=0 v=1
+f2 t=0 v=1
+k06_fatal_wave2.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: boom id=2 v=1 [in top.f] [at time 0]
+f3 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+--- PRE2==POSTA False  POSTA==POSTC True  PRE2==POSTC False  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=1
+f3 t=0 v=z
+f2 t=0 v=z
+f1 t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+f1 t=0 v=1
+f2 t=0 v=1
+k06_fatal_wave2.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: boom id=2 v=1 [in top.f] [at time 0]
+f3 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=1
+f1 t=0 v=1
+f2 t=0 v=1
+k06_fatal_wave2.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: boom id=2 v=1 [in top.f] [at time 0]
+f3 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=1
+f1 t=0 v=1
+f3 t=0 v=x
+f2 t=0 v=1
+FATAL: k06_fatal_wave2.sv:5: boom id=2 v=1
+       Time: 0  Scope: top.f
+=== verilator run rc=1
+f1 t=0 v=1
+f2 t=0 v=1
+[0] %Fatal: k06_fatal_wave2.sv:5: Assertion failed in top.f: boom id=2 v=1
+%Error: k06_fatal_wave2.sv:5: Verilog $stop
+Aborting...
+=== end

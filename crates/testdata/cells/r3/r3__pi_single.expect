@@ -1,0 +1,15 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r3__pi_single
+slice: unrecorded (r3; details _slices/r3/)
+origin: r3/pi_single.sv
+roadmap_row: unrecorded
+set: r3
+oracles_present: verilator
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: verilator build stderr only (0 bytes); no simulation stdout of any oracle captured; no vita output in r3
+blocks: 1
+=== block 1 | oracle verilator 5.052 (version captured in slice) [verilator-build-stderr] | ./vl_pi_single.err | 0 bytes
+
+=== end

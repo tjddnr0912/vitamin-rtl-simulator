@@ -1,0 +1,390 @@
+== l01_lp4_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l01_lp4_p
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l02_untyped_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xxxx b=4 |  | rc=0
+  vl   : P=xxxx b=4 |  | rc=0
+  s2v  : P=xxxx b=4 |  | rc=0
+== l02_untyped_p
+  PRE  : P=0000 b=4 |  | rc=0
+  ivl  : P=xxxx b=4 |  | rc=0
+  vl   : P=xxxx b=4 |  | rc=0
+  s2v  : P=xxxx b=4 |  | rc=0
+== l03_lpint_x1_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx1(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l03_lpint_x1_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l04_lpinteger_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=X |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l04_lpinteger_p
+  PRE  : P=0 |  | rc=0
+  ivl  : P=X |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l05_lpbit_x1_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx1(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0001 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== l05_lpbit_x1_p
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== l06_packed_bound_d
+  PRE  : | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound (the func | rc=1
+  ivl  : b=1 |  | rc=0
+  vl   : | %Error: l06_packed_bound_d.sv:7:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : b=x |  | rc=0
+== l06_packed_bound_p
+  PRE  : b=1 |  | rc=0
+  ivl  : b=1 |  | rc=0
+  vl   : | %Error: l06_packed_bound_p.sv:7:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : b=x |  | rc=0
+== l07_unpacked_dim_d
+  PRE  : | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound (the func | rc=1
+  ivl  : s=1 |  | rc=0
+  vl   : | %Error: l07_unpacked_dim_d.sv:7:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : s=x |  | rc=0
+== l07_unpacked_dim_p
+  PRE  : s=1 |  | rc=0
+  ivl  : s=1 |  | rc=0
+  vl   : | %Error: l07_unpacked_dim_p.sv:7:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : s=x |  | rc=0
+== l08_repl_count_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no constant-fold arm [in top] | rc=1
+  ivl  : | l08_repl_count_d.sv:7: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+  vl   : | %Error: l08_repl_count_d.sv:7:36: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '4'bxx | build_rc=1
+  s2v  : | l08_repl_count_d.s2v.v:12: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+== l08_repl_count_p
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no constant-fold arm [in top] | rc=1
+  ivl  : | l08_repl_count_p.sv:7: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+  vl   : | %Error: l08_repl_count_p.sv:7:36: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '4'bxx | build_rc=1
+  s2v  : | l08_repl_count_p.s2v.v:11: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+== l09_ipsel_width_d
+  PRE  : r=1 |  | rc=0
+  ivl  : | l09_ipsel_width_d.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: l09_ipsel_width_d.sv:8:44: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | l09_ipsel_width_d.s2v.v:15: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+== l09_ipsel_width_p
+  PRE  : r=0 |  | rc=0
+  ivl  : | l09_ipsel_width_p.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: l09_ipsel_width_p.sv:8:44: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | l09_ipsel_width_p.s2v.v:14: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+== l10_psel_msb_d
+  PRE  : r=1 |  | rc=0
+  ivl  : r=xxxxxxxx |  | rc=0
+  vl   : | %Error: Internal Error: l10_psel_msb_d.sv:8:39: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : r=xxxxxxxx |  | rc=0
+== l10_psel_msb_p
+  PRE  : r=1 |  | rc=0
+  ivl  : r=xxxxxxxx |  | rc=0
+  vl   : | %Error: Internal Error: l10_psel_msb_p.sv:8:39: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : r=xxxxxxxx |  | rc=0
+== l11_gen_if_d
+  PRE  : | VITA-E3010:generate-if condition is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l11_gen_if_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l12_gen_if_eq0_d
+  PRE  : | VITA-E3010:generate-if condition is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l12_gen_if_eq0_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l13_gen_case_d
+  PRE  : | VITA-E3010:generate-case scrutinee is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l13_gen_case_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l14_gen_for_d
+  PRE  : | VITA-E3010:generate-for condition is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : | l14_gen_for_d.sv:7: error: Generate "loop" conditional expression cannot have undefined bits. given ((i)<(fx(' | rc=1
+  vl   : |  | rc=0
+  s2v  : | l14_gen_for_d.s2v.v:14: error: Generate "loop" conditional expression cannot have undefined bits. given ((_gv_ | rc=1
+== l14_gen_for_p
+  PRE  : |  | rc=0
+  ivl  : | l14_gen_for_p.sv:7: error: Generate "loop" conditional expression cannot have undefined bits. given ((i)<(fx(' | rc=1
+  vl   : |  | rc=0
+  s2v  : | l14_gen_for_p.s2v.v:13: error: Generate "loop" conditional expression cannot have undefined bits. given ((_gv_ | rc=1
+== l15_case_label_d
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l15_case_label_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l16_enum4_d
+  PRE  : | VITA-E3009:enum label `A` value is not a foldable constant [in top] | rc=1
+  ivl  : | l16_enum4_d.sv:8: error: No function named `fx1' found in this context (top). | rc=3
+  vl   : A=xxx1 |  | rc=0
+  s2v  : A=xxx1 |  | rc=0
+== l16_enum4_p
+  PRE  : A=0001 |  | rc=0
+  ivl  : | l16_enum4_p.sv:8: error: No function named `fx1' found in this context (top). | rc=3
+  vl   : A=xxx1 |  | rc=0
+  s2v  : A=xxx1 |  | rc=0
+== l17_enum2_d
+  PRE  : | VITA-E3009:enum label `A` value is not a foldable constant [in top] | rc=1
+  ivl  : | l17_enum2_d.sv:8: error: No function named `fx1' found in this context (top). | rc=3
+  vl   : | %Error: l17_enum2_d.sv:8:27: Enum value with X/Zs cannot be assigned to non-fourstate type (IEEE 1800-2023 6.1 | build_rc=1
+  s2v  : A=xxx1 |  | rc=0
+== l17_enum2_p
+  PRE  : A=0001 |  | rc=0
+  ivl  : | l17_enum2_p.sv:8: error: No function named `fx1' found in this context (top). | rc=3
+  vl   : | %Error: l17_enum2_p.sv:8:27: Enum value with X/Zs cannot be assigned to non-fourstate type (IEEE 1800-2023 6.1 | build_rc=1
+  s2v  : A=xxx1 |  | rc=0
+== l18_bits_call_d
+  PRE  : | VITA-E3009:parameter `B` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : B=4 |  | rc=0
+  vl   : B=4 |  | rc=0
+  s2v  : B=4 |  | rc=0
+== l18_bits_call_p
+  PRE  : | VITA-E3009:parameter `B` value is not a constant: `$bits(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : B=4 |  | rc=0
+  vl   : B=4 |  | rc=0
+  s2v  : B=4 |  | rc=0
+== l19_hdr_default_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top.u] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l19_hdr_default_p
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l20_override_d
+  PRE  : | VITA-E3009:the override of parameter `P` is not a constant, so the declared default would be used instead — th | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l20_override_p
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l21_package_d
+  PRE  : | VITA-E3009:package parameter `P` value is not a foldable constant [in pk] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l21_package_p
+  PRE  : | VITA-E3009:package parameter `P` value is not a foldable constant [in pk] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l22_inst_array_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l22_inst_array_p
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== l23_repeat_d
+  PRE  : n=0 |  | rc=0
+  ivl  : |  | rc=0
+  vl   : n=0 |  | rc=0
+  s2v  : |  | rc=0
+== l23_repeat_p
+  PRE  : n=0 |  | rc=0
+  ivl  : |  | rc=142
+  vl   : n=0 |  | rc=0
+  s2v  : |  | rc=142
+== l24_delay_d
+  PRE  : t=0 |  | rc=0
+  ivl  : t=0 |  | rc=0
+  vl   : t=0 |  | rc=0
+  s2v  : t=0 |  | rc=0
+== l24_delay_p
+  PRE  : t=0 |  | rc=0
+  ivl  : t=0 |  | rc=0
+  vl   : t=0 |  | rc=0
+  s2v  : t=0 |  | rc=0
+== l25_and0_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== l25_and0_p
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== l26_ceqx_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== l26_ceqx_p
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: 4'bxxxx has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=1 |  | rc=0
+== l27_int_plus_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== l27_int_plus_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== l28_intcast_x1_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx1(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l28_intcast_x1_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l29_clog2_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== l29_clog2_p
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== l30_gen_lp_d
+  PRE  : | VITA-E3009:generate-scope parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top.g] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l30_gen_lp_p
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== l31_var_init_d
+  PRE  : w=xxxx |  | rc=0
+  ivl  : w=xxxx |  | rc=0
+  vl   : w=0000 |  | rc=0
+  s2v  : w=xxxx |  | rc=0
+== l31_var_init_p
+  PRE  : w=xxxx |  | rc=0
+  ivl  : w=xxxx |  | rc=0
+  vl   : w=0000 |  | rc=0
+  s2v  : w=xxxx |  | rc=0
+== l32_cont_assign_d
+  PRE  : w=xxxx |  | rc=0
+  ivl  : w=xxxx |  | rc=0
+  vl   : w=0000 |  | rc=0
+  s2v  : w=xxxx |  | rc=0
+== l32_cont_assign_p
+  PRE  : w=xxxx |  | rc=0
+  ivl  : w=xxxx |  | rc=0
+  vl   : w=0000 |  | rc=0
+  s2v  : w=xxxx |  | rc=0
+== l33_rt_display_d
+  PRE  : r=xxxx |  | rc=0
+  ivl  : r=xxxx |  | rc=0
+  vl   : r=0000 |  | rc=0
+  s2v  : r=xxxx |  | rc=0
+== l33_rt_display_p
+  PRE  : r=xxxx |  | rc=0
+  ivl  : r=xxxx |  | rc=0
+  vl   : r=0000 |  | rc=0
+  s2v  : r=xxxx |  | rc=0
+== l34_lp4_x1_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx1(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xxx1 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== l34_lp4_x1_p
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxx1 |  | rc=0
+  vl   : P=xxx1 |  | rc=0
+  s2v  : P=xxx1 |  | rc=0
+== l35_tern_x_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=00xx |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=00xx |  | rc=0
+== l35_tern_x_p
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=00xx |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=00xx |  | rc=0
+== l36_lpint_x_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l36_lpint_x_p
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l37_eq_cmp_int_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx1(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l37_eq_cmp_int_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l38_lnot_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l38_lnot_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l39_override_int_d
+  PRE  : | VITA-E3009:the override of parameter `P` is not a constant, so the declared default would be used instead — th | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0
+== l39_override_int_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0

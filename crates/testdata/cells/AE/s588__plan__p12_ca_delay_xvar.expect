@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__plan__p12_ca_delay_xvar
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/plan/p12_ca_delay_xvar.sv
+roadmap_row: §2 🆕 AE
+set: plan
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s588/PLAN.md:39
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./p12_ca_delay_xvar.ivl | 70 bytes
+t5 w=1
+t6 w=1
+p12_ca_delay_xvar.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./p12_ca_delay_xvar.vl | 245 bytes
+t5 w=0
+t6 w=0
+- p12_ca_delay_xvar.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.778 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./p12_ca_delay_xvar.s2v | 74 bytes
+t5 w=1
+t6 w=1
+p12_ca_delay_xvar.s2v.v:18: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./p12_ca_delay_xvar.PRE | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t5 w=1
+t6 w=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== end

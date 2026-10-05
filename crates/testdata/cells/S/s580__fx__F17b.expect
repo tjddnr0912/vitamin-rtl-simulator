@@ -1,0 +1,18 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__fx__F17b
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/fx/F17b.sv
+roadmap_row: §2 🆕 S
+set: fx
+oracles_present: sv2v,doc-quote
+vita_tags: post-dbg-r1,post2dbg,postrel,PRE,r4new,r4post3,r4pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); oracle values quoted at s580/REPORT.md:453; R4 cmp3_post4 bucket(s): pre×1 (s580/r4/cmp3_post4.txt)
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 1
+=== block 1 | vita [PRE] | ./F17b.pre.txt | 164 bytes
+F17b.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== end

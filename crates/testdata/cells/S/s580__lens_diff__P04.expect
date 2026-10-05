@@ -1,0 +1,297 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P04
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P04.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog
+vita_tags: POST,PRE,POST-interp,POST-vm,r2dbg,POST2
+verdict: CLEAN
+verdict_source: s580/lens_diff/REPORT.md:55
+notes: R4 cmp3_post4 bucket(s): post3×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-interp: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-vm: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P04.iv.txt | 291 bytes
+D01 1
+D02 1
+D03 1
+D04 1
+D05 1
+D06 1
+D07 1
+D08 1
+D09 1
+D10 1
+D10b 1
+D11 0
+D12 1
+D13 1
+D14 1
+D15 0
+D16 1
+D17 1
+D18 1
+D19 1
+D20 1
+D21 1
+D22 1
+D23 1
+D24 0
+D25 1
+D26 1
+D27 1
+D28 1
+D29 1
+D30 1
+D31 1
+D32 1
+D33 0
+D34 0
+D35 1
+D36 1
+D37 1
+D38 0
+D39 1
+D40 1
+P04.sv:14: $finish called at 1000 (1s)
+rc=0
+=== block 2 | vita [POST] | ./P04.post.txt | 418 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+D01 1
+D02 1
+D03 1
+D04 1
+D05 1
+D06 1
+D07 1
+D08 1
+D09 1
+D10 1
+D10b 1
+D11 0
+D12 1
+D13 1
+D14 1
+D15 0
+D16 1
+D17 1
+D18 1
+D19 1
+D20 1
+D21 1
+D22 1
+D23 1
+D24 0
+D25 1
+D26 1
+D27 1
+D28 1
+D29 1
+D30 1
+D31 1
+D32 1
+D33 0
+D34 0
+D35 1
+D36 1
+D37 1
+D38 0
+D39 1
+D40 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 3 | vita [POST] | ./P04.postq.txt | 418 bytes | identical to block 2
+=== block 4 | vita [POST] | ./be_P04_native.txt | 319 bytes
+D01 1
+D02 1
+D03 1
+D04 1
+D05 1
+D06 1
+D07 1
+D08 1
+D09 1
+D10 1
+D10b 1
+D11 0
+D12 1
+D13 1
+D14 1
+D15 0
+D16 1
+D17 1
+D18 1
+D19 1
+D20 1
+D21 1
+D22 1
+D23 1
+D24 0
+D25 1
+D26 1
+D27 1
+D28 1
+D29 1
+D30 1
+D31 1
+D32 1
+D33 0
+D34 0
+D35 1
+D36 1
+D37 1
+D38 0
+D39 1
+D40 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | r2/lens/diff_P04.post.txt | 418 bytes
+D01 1
+D02 1
+D03 1
+D04 1
+D05 1
+D06 1
+D07 1
+D08 1
+D09 1
+D10 1
+D10b 1
+D11 0
+D12 1
+D13 1
+D14 1
+D15 0
+D16 1
+D17 1
+D18 1
+D19 1
+D20 1
+D21 1
+D22 1
+D23 1
+D24 0
+D25 1
+D26 1
+D27 1
+D28 1
+D29 1
+D30 1
+D31 1
+D32 1
+D33 0
+D34 0
+D35 1
+D36 1
+D37 1
+D38 0
+D39 1
+D40 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [POST] | r2/lens/diff_P04.postq.txt | 418 bytes | identical to block 5
+=== block 7 | vita [POST-interp] | ./be_P04_interp.txt | 319 bytes | identical to block 4
+=== block 8 | vita [POST-vm] | ./be_P04_vm.txt | 319 bytes | identical to block 4
+=== block 9 | vita [POST2] | r2/lens/diff_P04.post2.txt | 418 bytes | identical to block 5
+=== block 10 | vita [POST2] | r2/lens/diff_P04.post2q.txt | 418 bytes | identical to block 5
+=== block 11 | vita [PRE] | ./P04.pre.txt | 418 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+D01 x
+D02 x
+D03 x
+D04 x
+D05 0
+D06 0
+D07 0
+D08 0
+D09 0
+D10 0
+D10b 0
+D11 0
+D12 x
+D13 x
+D14 x
+D15 0
+D16 x
+D17 x
+D18 x
+D19 x
+D20 x
+D21 x
+D22 x
+D23 x
+D24 0
+D25 x
+D26 x
+D27 0
+D28 x
+D29 x
+D30 x
+D31 x
+D32 x
+D33 x
+D34 1
+D35 x
+D36 0
+D37 x
+D38 0
+D39 x
+D40 x
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [PRE] | ./P04.preq.txt | 418 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+D01 1
+D02 1
+D03 0
+D04 1
+D05 0
+D06 0
+D07 0
+D08 0
+D09 0
+D10 0
+D10b 0
+D11 0
+D12 1
+D13 1
+D14 1
+D15 0
+D16 1
+D17 0
+D18 0
+D19 0
+D20 0
+D21 0
+D22 0
+D23 0
+D24 0
+D25 0
+D26 1
+D27 0
+D28 1
+D29 1
+D30 1
+D31 1
+D32 1
+D33 1
+D34 1
+D35 1
+D36 0
+D37 0
+D38 0
+D39 1
+D40 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== end

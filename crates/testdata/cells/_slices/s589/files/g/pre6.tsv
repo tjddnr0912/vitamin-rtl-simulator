@@ -1,0 +1,28 @@
+in2_fml_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+in2_fml_fn	WRONG2	v=232	v=8	v=8	v=8
+in2_fml_par	WRONG2	v=232	v=8	v=8	v=8
+in2_fml_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+in2_loc_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+in2_loc_fn	WRONG2	v=232	v=8	v=8	v=8
+in2_loc_par	WRONG2	v=232	v=8	v=8	v=8
+in2_loc_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+in2_ret_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+in2_ret_fn	WRONG2	v=232	v=8	v=8	v=8
+in2_ret_par	WRONG2	v=232	v=8	v=8	v=8
+in2_ret_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+in_fml	WRONG2	v=232	v=8	v=8	v=8
+in_lit	ok2	v=8	v=8	v=8	v=8
+in_mod	ok2	v=8	v=8	v=8	v=8
+in_par	WRONG2	v=232	v=8	v=8	v=8
+inpv_fml_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+inpv_fml_fn	WRONG2	v=232	v=8	v=8	v=8
+inpv_fml_par	WRONG2	v=232	v=8	v=8	v=8
+inpv_fml_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+inpv_loc_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+inpv_loc_fn	WRONG2	v=232	v=8	v=8	v=8
+inpv_loc_par	WRONG2	v=232	v=8	v=8	v=8
+inpv_loc_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+inpv_ret_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+inpv_ret_fn	WRONG2	v=232	v=8	v=8	v=8
+inpv_ret_par	WRONG2	v=232	v=8	v=8	v=8
+inpv_ret_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8

@@ -1,0 +1,88 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c4__PT5
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c4/PT5.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c4
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c4.p5.summ:29
+notes: source md5-identical to s581/lens_diff3/v/PT5.sv (§4.5.581 lens cell); oracle runs are s593 run4.sh runs; named at s593/GROUNDING.md:92; named at s593/PLAN.md:18
+alias: g/c15/v_PT5 (byte-identical source) verdict: PRE!=all verdict_source: s593/g/c15.summ:841
+alias: g/c14/v_PT5 (byte-identical source) verdict: PRE!=all verdict_source: s593/g/c15.summ:841
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 21
+=== block 1 | oracle iverilog 13.0 (version at preservation) | g/c15/v_PT5.ivl | 48 bytes
+R=1
+v_PT5.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version at preservation) | ./PT5.ivl | 46 bytes
+R=1
+PT5.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version at preservation) | g/c15/v_PT5.vl | 505 bytes
+%Warning-WIDTHEXPAND: v_PT5.sv:2:16: Operator VAR 'LV' expects 64 bits on the Initial value, but Initial value's CONST '40'h100000000c' generates 40 bits.
+%Warning-WIDTHEXPAND: v_PT5.sv:3:22: Operator EQWILD expects 64 bits on the RHS, but RHS's CONST '4'sb1z00' generates 4 bits.
+R=1
+- v_PT5.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version at preservation) | ./PT5.vl | 498 bytes
+%Warning-WIDTHEXPAND: PT5.sv:2:16: Operator VAR 'LV' expects 64 bits on the Initial value, but Initial value's CONST '40'h100000000c' generates 40 bits.
+%Warning-WIDTHEXPAND: PT5.sv:3:22: Operator EQWILD expects 64 bits on the RHS, but RHS's CONST '4'sb1z00' generates 4 bits.
+R=1
+- PT5.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version at preservation) | g/c15/v_PT5.s2v | 52 bytes
+R=1
+v_PT5.s2v.v:10: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version at preservation) | ./PT5.s2v | 50 bytes
+R=1
+PT5.s2v.v:10: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [post1] | g/c14/v_PT5.p1vo | 269 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v_PT5.sv:3:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [post1] | g/c15/v_PT5.p1vo | 269 bytes | identical to block 7
+=== block 9 | vita [post1] | ./PT5.post1 | 267 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+PT5.sv:3:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 10 | vita [post2] | ./PT5.post2 | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 11 | vita [post2] | ./PT5.post2.route | 0 bytes
+
+=== block 12 | vita [post3] | ./PT5.post3 | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R=0
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 13 | vita [post3] | ./PT5.post3.route | 0 bytes | identical to block 11
+=== block 14 | vita [post5] | g/c14/v_PT5.p5vo | 174 bytes | identical to block 10
+=== block 15 | vita [post5] | g/c15/v_PT5.p5vo | 174 bytes | identical to block 10
+=== block 16 | vita [post5] | ./PT5.post5 | 174 bytes | identical to block 10
+=== block 17 | vita [post5] | ./PT5.post5.route | 0 bytes | identical to block 11
+=== block 18 | vita [pre] | g/c14/v_PT5.prevo | 269 bytes | identical to block 7
+=== block 19 | vita [pre] | g/c15/v_PT5.pre | 269 bytes | identical to block 7
+=== block 20 | vita [pre] | g/c15/v_PT5.prevo | 269 bytes | identical to block 7
+=== block 21 | vita [pre] | ./PT5.pre | 267 bytes | identical to block 9
+=== end

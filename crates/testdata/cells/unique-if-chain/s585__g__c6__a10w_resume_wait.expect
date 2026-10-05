@@ -1,0 +1,86 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c6__a10w_resume_wait
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c6/a10w_resume_wait.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c6
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: a10w_resume_wait g__a10w_resume_wait
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/a10w_resume_wait.out | 1310 bytes
+##### a10w_resume_wait
+=== verilator compile rc=0 run rc=0
+eval t=5 r=00
+[5] %Error: a10w_resume_wait.sv:8: Assertion failed in top: unique case, but none matched for '2'h0'
+resumed t=5
+t=6 done
+- a10w_resume_wait.sv:15: Verilog $finish
+=== iverilog compile rc=0 msgs: a10w_resume_wait.sv:8: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+eval t=5 r=00
+WARNING: a10w_resume_wait.sv:8: value is unhandled for priority or unique case statement
+         Time: 5  Scope: top
+resumed t=5
+t=6 done
+a10w_resume_wait.sv:15: $finish called at 7 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+eval t=5 r=00
+a10w_resume_wait.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+resumed t=5
+t=6 done
+simulation ended (Finish) at time 7
+errors=0 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+eval t=5 r=00
+a10w_resume_wait.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+resumed t=5
+t=6 done
+simulation ended (Finish) at time 7
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__a10w_resume_wait.out | 1313 bytes
+##### g__a10w_resume_wait
+=== verilator compile rc=0 run rc=0
+eval t=5 r=00
+[5] %Error: a10w_resume_wait.sv:8: Assertion failed in top: unique case, but none matched for '2'h0'
+resumed t=5
+t=6 done
+- a10w_resume_wait.sv:15: Verilog $finish
+=== iverilog compile rc=0 msgs: a10w_resume_wait.sv:8: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+eval t=5 r=00
+WARNING: a10w_resume_wait.sv:8: value is unhandled for priority or unique case statement
+         Time: 5  Scope: top
+resumed t=5
+t=6 done
+a10w_resume_wait.sv:15: $finish called at 7 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+eval t=5 r=00
+a10w_resume_wait.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+resumed t=5
+t=6 done
+simulation ended (Finish) at time 7
+errors=0 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+eval t=5 r=00
+a10w_resume_wait.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+resumed t=5
+t=6 done
+simulation ended (Finish) at time 7
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/a10w_resume_wait.out | 1310 bytes | identical to block 1
+=== end

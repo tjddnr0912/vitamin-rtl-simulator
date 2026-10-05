@@ -1,0 +1,31 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t9c_cg_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t9c_cg_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t9c_cg_fp.ivl | 225 bytes
+t9c_cg_fp.sv:7: syntax error
+t9c_cg_fp.sv:7: error: Invalid module item.
+t9c_cg_fp.sv:8: syntax error
+t9c_cg_fp.sv:8: error: Invalid module item.
+t9c_cg_fp.sv:8: syntax error
+t9c_cg_fp.sv:10: error: Invalid module item.
+rc=6
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t9c_cg_fp.vl | 135 bytes
+%Error: t9c_cg_fp.sv:8:30: Non-constant expression in bin range; values must be constants
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t9c_cg_fp.build | 364 bytes
+%Error: t9c_cg_fp.sv:8:30: Non-constant expression in bin range; values must be constants
+                         : ... note: In instance 'top'
+    8 |     coverpoint v { bins b = {f(2)}; }
+      |                              ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== end

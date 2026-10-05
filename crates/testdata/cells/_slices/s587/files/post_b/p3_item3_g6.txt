@@ -1,0 +1,4 @@
+lanes=71 POSTfu==PREfp 68 differ 3
+DIFF g12f_elab_s3
+DIFF g13a_lp_rpt
+DIFF g13b_rpt_lp

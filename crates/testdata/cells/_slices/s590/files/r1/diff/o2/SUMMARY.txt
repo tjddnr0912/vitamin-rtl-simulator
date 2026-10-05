@@ -1,0 +1,6 @@
+e01_tri_md: PRE2==POST False split False vcd_same True
+e02_vec_chain: PRE2==POST False split False vcd_same True
+e03_const_in_init_read: PRE2==POST False split False vcd_same True
+e04_const_in_events: PRE2==POST True split False vcd_same True
+e07_supply: PRE2==POST True split False vcd_same True
+e08_cfg_tie: PRE2==POST False split False vcd_same True

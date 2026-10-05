@@ -1,0 +1,50 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r3__diff__c__k__kx_fhdr_task
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r3/diff/c/k/kx_fhdr_task.sv
+roadmap_row: §2 🆕 AD
+set: r3/diff/c/k
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-b,POST-c,POST-c-sep,PRE,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r3/diff/REPORT.md:31
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./kx_fhdr_task.ivl | 246 bytes
+kx_fhdr_task.sv:3: error: No function named `t2' found in this context (p).
+kx_fhdr_task.sv:3: error: Dimensions must be constant.
+kx_fhdr_task.sv:3       : This MSB expression violates the rule: (t2())-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./kx_fhdr_task.vl | 330 bytes
+%Error: kx_fhdr_task.sv:3:29: Cannot call a task/void-function as a function: 't2'
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing --assert -Wno-fatal --Mdir vl_kx_fhdr_task -o sim kx_fhdr_task.sv
+build_rc=139
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./kx_fhdr_task.s2v | 264 bytes
+kx_fhdr_task.s2v.v:10: error: No function named `p_t2' found in this context (top).
+kx_fhdr_task.s2v.v:10: error: Dimensions must be constant.
+kx_fhdr_task.s2v.v:10       : This MSB expression violates the rule: (p_t2())-('sd1)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [POST-b] | ./kx_fhdr_task.pb | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=255
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-c] | ./kx_fhdr_task.pc | 174 bytes | identical to block 4
+=== block 6 | vita [POST-c-sep] | ./kx_fhdr_task.pcs | 230 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=255
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [PRE] | ./kx_fhdr_task.pre | 174 bytes | identical to block 4
+=== end

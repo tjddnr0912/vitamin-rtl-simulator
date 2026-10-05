@@ -1,0 +1,87 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__r1__diff__r2u__ud9_udp_instance_delay
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/r1/diff/r2u/ud9_udp_instance_delay.sv
+roadmap_row: §2 🆕 Z
+set: r1/diff/r2u
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE
+verdict: loud gap [sev: NOTE]
+verdict_source: s584/r1/diff/REPORT.md:59
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+blocks: 8
+=== block 1 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud9_udp_instance_delay.out | 1007 bytes
+##### ud9_udp_instance_delay
+=== iverilog
+compile rc=0
+run rc=0
+a t=1 o=x
+w t=2 o=1
+b t=6 o=1
+w t=7 o=0
+c t=8 o=0
+ud9_udp_instance_delay.sv:7: $finish called at 8 (1s)
+=== verilator
+compile rc=0
+run rc=0
+w t=0 o=1
+a t=1 o=1
+w t=5 o=0
+b t=6 o=0
+c t=8 o=0
+- ud9_udp_instance_delay.sv:7: Verilog $finish
+=== vita[pre-native pre-interp pre-vm a-native a-interp a-vm post2-native post2-interp post2-vm]
+rc=1
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' after '#', found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found '2'
+ud9_udp_instance_delay.sv:5:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after instantiation, found identifier 'u'
+ud9_udp_instance_delay.sv:5:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '('
+errors=5 warnings=0 notes=0
+=== block 2 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud9_udp_instance_delay.out2 | 1007 bytes | identical to block 1
+=== block 3 | combined [iverilog+verilator+PRE+POST2+POST3] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./ud9_udp_instance_delay.out3 | 1019 bytes
+##### ud9_udp_instance_delay
+=== iverilog
+compile rc=0
+run rc=0
+a t=1 o=x
+w t=2 o=1
+b t=6 o=1
+w t=7 o=0
+c t=8 o=0
+ud9_udp_instance_delay.sv:7: $finish called at 8 (1s)
+=== verilator
+compile rc=0
+run rc=0
+w t=0 o=1
+a t=1 o=1
+w t=5 o=0
+b t=6 o=0
+c t=8 o=0
+- ud9_udp_instance_delay.sv:7: Verilog $finish
+=== vita[pre-native pre-interp pre-vm post2-native post2-interp post2-vm post3-native post3-interp post3-vm]
+rc=1
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' after '#', found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found '2'
+ud9_udp_instance_delay.sv:5:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after instantiation, found identifier 'u'
+ud9_udp_instance_delay.sv:5:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '('
+errors=5 warnings=0 notes=0
+=== block 4 | vita [POST2] | r3run/post2/r1_diff_r2u__ud9_udp_instance_delay.out | 637 bytes
+=== vita (native=interp=vm)
+rc=1
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' after '#', found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '2'
+ud9_udp_instance_delay.sv:5:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found '2'
+ud9_udp_instance_delay.sv:5:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after instantiation, found identifier 'u'
+ud9_udp_instance_delay.sv:5:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '('
+errors=5 warnings=0 notes=0
+=== block 5 | vita [POST3] | r3run/post3/r1_diff_r2u__ud9_udp_instance_delay.out | 637 bytes | identical to block 4
+=== block 6 | vita [POST3] | r4run/post3/r1_diff_r2u__ud9_udp_instance_delay.out | 637 bytes | identical to block 4
+=== block 7 | vita [POST4] | r4run/post4/r1_diff_r2u__ud9_udp_instance_delay.out | 637 bytes | identical to block 4
+=== block 8 | vita [PRE] | r3run/pre/r1_diff_r2u__ud9_udp_instance_delay.out | 637 bytes | identical to block 4
+=== end

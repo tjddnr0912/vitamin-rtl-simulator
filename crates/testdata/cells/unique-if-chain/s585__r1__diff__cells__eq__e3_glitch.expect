@@ -1,0 +1,115 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__eq__e3_glitch
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/eq/e3_glitch.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells/eq
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST2,unrecorded,POST2-staged,PRE-staged,POST,JIT2
+verdict: gained verilator lines
+verdict_source: s585/g/cmp3_final.txt:5
+notes: runs: d__e3_glitch e3_glitch
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/out/e3_glitch.out | 1863 bytes
+e3_glitch | vl:3@e3_glitch.sv:5,4@e3_glitch.sv:5,4@e3_glitch.sv:9 | iv:REJ | PRE:- rc=0 | POST:W4031:4@e3_glitch.sv:5:12,W4031:4@e3_glitch.sv:9:15 rc=0 | P==P:False
+##### e3_glitch
+=== verilator compile rc=0 run rc=0
+-Info: e3_glitch.sv:12: $dumpvar ignored, as Verilated without --trace
+t=0 a=0 b=1 y=2 z=0
+t=1 a=1 b=0 y=1 z=0
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=1
+t=2 a=0 b=1 y=2 z=2
+[3] %Error: e3_glitch.sv:5: Assertion failed in top: 'unique if' statement violated
+t=3 a=1 b=1 y=2 z=2
+t=3 a=0 b=1 y=2 z=2
+[4] %Error: e3_glitch.sv:5: Assertion failed in top: 'unique if' statement violated
+t=4 a=0 b=0 y=2 z=2
+[4] %Error: e3_glitch.sv:9: Assertion failed in top: 'unique if' statement violated
+t=5 a=1 b=0 y=1 z=2
+t=5 a=1 b=0 y=1 z=1
+- e3_glitch.sv:19: Verilog $finish
+=== iverilog compile rc=10
+e3_glitch.sv:5: syntax error
+e3_glitch.sv:5: Syntax in assignment statement l-value.
+e3_glitch.sv:6: syntax error
+e3_glitch.sv:6: Syntax in assignment statement l-value.
+e3_glitch.sv:9: syntax error
+e3_glitch.sv:9: Syntax in assignment statement l-value.
+e3_glitch.sv:9: syntax error
+e3_glitch.sv:9: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=0 a=0 b=1 y=2 z=x
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=2
+t=4 a=0 b=0 y=2 z=2
+t=5 a=1 b=0 y=1 z=1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=0 a=0 b=1 y=2 z=x
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=2
+e3_glitch.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+e3_glitch.sv:9:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 a=0 b=0 y=2 z=2
+t=5 a=1 b=0 y=1 z=1
+simulation ended (Finish) at time 6
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/d__e3_glitch.out | 1846 bytes
+##### d__e3_glitch
+=== verilator compile rc=0 run rc=0
+-Info: e3_glitch.sv:12: $dumpvar ignored, as Verilated without --trace
+t=0 a=0 b=1 y=2 z=0
+t=1 a=1 b=0 y=1 z=0
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=1
+t=2 a=0 b=1 y=2 z=2
+[3] %Error: e3_glitch.sv:5: Assertion failed in top: 'unique if' statement violated
+t=3 a=1 b=1 y=2 z=2
+t=3 a=0 b=1 y=2 z=2
+[4] %Error: e3_glitch.sv:5: Assertion failed in top: 'unique if' statement violated
+t=4 a=0 b=0 y=2 z=2
+[4] %Error: e3_glitch.sv:9: Assertion failed in top: 'unique if' statement violated
+t=5 a=1 b=0 y=1 z=2
+t=5 a=1 b=0 y=1 z=1
+- e3_glitch.sv:19: Verilog $finish
+=== iverilog compile rc=10
+e3_glitch.sv:5: syntax error
+e3_glitch.sv:5: Syntax in assignment statement l-value.
+e3_glitch.sv:6: syntax error
+e3_glitch.sv:6: Syntax in assignment statement l-value.
+e3_glitch.sv:9: syntax error
+e3_glitch.sv:9: Syntax in assignment statement l-value.
+e3_glitch.sv:9: syntax error
+e3_glitch.sv:9: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=0 a=0 b=1 y=2 z=x
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=2
+t=4 a=0 b=0 y=2 z=2
+t=5 a=1 b=0 y=1 z=1
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=0 a=0 b=1 y=2 z=x
+t=1 a=1 b=0 y=1 z=1
+t=2 a=0 b=1 y=2 z=2
+e3_glitch.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+e3_glitch.sv:9:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 a=0 b=0 y=2 z=2
+t=5 a=1 b=0 y=1 z=1
+simulation ended (Finish) at time 6
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

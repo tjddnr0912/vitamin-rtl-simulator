@@ -1,0 +1,85 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__e04_const_in_events
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/e04_const_in_events.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTC,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+vita_binary: POSTA_SEP: md5 6bfa9a6d22f153ae49a38b3a23fa3bb1 commit unrecorded
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/e04_const_in_events.out | 1732 bytes
+##### e04_const_in_events
+=== PRE2 (native=interp=vm)
+rc=1
+e04_const_in_events.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-select / variable index / array / packed need per-bit edge tracking) [in top]
+errors=1 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=1
+e04_const_in_events.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-select / variable index / array / packed need per-bit edge tracking) [in top]
+errors=1 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=1
+e04_const_in_events.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-select / variable index / array / packed need per-bit edge tracking) [in top]
+errors=1 warnings=1 notes=0
+--- PRE2==POSTA True  POSTA==POSTC True  PRE2==POSTC True  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'e04_const_in_events.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'e04_const_in_events.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+init y1 bad zzzz
+ev y1=6 t=0
+ev y2=7 t=0
+pos y1[1] t=0
+pos y2[0] t=0
+e04_const_in_events.sv:16: $finish called at 3 (1s)
+=== verilator run rc=0
+init y1 ok
+pos y1[1] t=0
+- e04_const_in_events.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+PRE2_SEP+POSTA_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o2/e04_const_in_events.out | 1331 bytes
+##### e04_const_in_events
+=== PRE2 (native=interp=vm)
+rc=1
+e04_const_in_events.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-select / variable index / array / packed need per-bit edge tracking) [in top]
+errors=1 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=1
+e04_const_in_events.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: edge event-control bit-select must select the net's LSB with a constant index (non-LSB / part-select / variable index / array / packed need per-bit edge tracking) [in top]
+errors=1 warnings=1 notes=0
+--- PRE2==POST(all backends): True  POST split: False  VCD PRE2==POST(all): True
+=== staged PRE2 vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'e04_const_in_events.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== staged POST vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'e04_const_in_events.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== iverilog run rc=0
+init y1 bad zzzz
+ev y1=6 t=0
+ev y2=7 t=0
+pos y1[1] t=0
+pos y2[0] t=0
+e04_const_in_events.sv:16: $finish called at 3 (1s)
+=== verilator run rc=0
+init y1 ok
+pos y1[1] t=0
+- e04_const_in_events.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

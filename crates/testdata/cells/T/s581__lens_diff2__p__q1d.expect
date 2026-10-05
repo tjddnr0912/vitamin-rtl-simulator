@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff2__p__q1d
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff2/p/q1d.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff2/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+aux: s581__lens_diff2__p__q1d.aux/lens_diff2/p/q1d.G (origin s581/lens_diff2/p/q1d.G)
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./q1d.iv.txt | 371 bytes
+<command line>: error: invalid digit in hex value specified for defparam: top.P
+q1d.sv:7: syntax error
+q1d.sv:8: error: Invalid module item.
+q1d.sv:9: syntax error
+q1d.sv:11: error: Invalid module item.
+q1d.sv:11: syntax error
+q1d.sv:12: error: Invalid module item.
+q1d.sv:12: syntax error
+q1d.sv:13: error: Invalid module item.
+q1d.sv:13: syntax error
+I give up.
+
+rc=10
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./q1d.vl.txt | 117 bytes
+%Error: q1d.sv:7:20: syntax error, unexpected STRENGTH keyword (strong1/etc)
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./q1d.vlb.txt | 277 bytes
+%Error: q1d.sv:7:20: syntax error, unexpected STRENGTH keyword (strong1/etc)
+    7 |   end else begin : small
+      |                    ^~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./q1d.sv.txt | 12 bytes
+NA(-G)
+rc=0
+=== block 5 | vita [POST] | ./q1d.post.txt | 235 bytes
+q1d.sv:7:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'small'
+q1d.sv:7:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'small'
+errors=2 warnings=0 notes=0
+
+rc=1
+=== block 6 | vita [POST2] | ./q1d.post2.txt | 235 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./q1d.pre.txt | 235 bytes | identical to block 5
+=== end

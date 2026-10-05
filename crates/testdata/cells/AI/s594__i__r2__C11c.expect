@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__i__r2__C11c
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/i/r2/C11c.sv
+roadmap_row: §2 🆕 AI
+set: i/r2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d3,pa,pb,pre,pre594,stgpb,stgpre2
+verdict: =PRE
+verdict_source: s594/i/r2_delta_pa_pb.txt:10
+notes: named at s594/IMPL.md:175
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./C11c.ivl | 47 bytes
+L=1
+C11c.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./C11c.vl | 464 bytes
+%Warning-WIDTHEXPAND: C11c.sv:4:77: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's EQ generates 1 bits.
+%Warning-WIDTHEXPAND: C11c.sv:4:114: Operator ADD expects 32 bits on the LHS, but LHS's VARREF 'r' generates 8 bits.
+L=1
+- C11c.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 4.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./C11c.s2v | 51 bytes
+L=1
+C11c.s2v.v:17: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [d3] | ./C11c.d3 | 174 bytes
+L=0
+simulation ended (Finish) at time 100
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [pa] | ./C11c.pa | 174 bytes
+L=1
+simulation ended (Finish) at time 100
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [pb] | ./C11c.pb | 174 bytes | identical to block 4
+=== block 7 | vita [pre] | ./C11c.pre | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L=0
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [pre] | ./C11c.pre.route | 13 bytes
+t fk frame 0
+=== block 9 | vita [pre594] | ./C11c.pre594 | 174 bytes | identical to block 4
+=== end

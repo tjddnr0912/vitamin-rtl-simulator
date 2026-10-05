@@ -1,0 +1,38 @@
+== C0
+  PRE: L=1
+  POST: L=1
+  IVL: L=1
+  VL: L=1
+  S2V: L=1
+== C1
+  PRE: L=0
+  POST: L=1
+  IVL: L=0
+  VL: L=x
+  S2V: L=x
+== C2
+  PRE: GI=else
+  POST: GI=then
+  IVL: GI=else
+  VL: GI=then
+  S2V: GI=else
+== C3
+  PRE: L=0
+  POST: L=1
+  IVL: L=0
+  VL: L=x
+  S2V: L=x
+== C3c
+  PRE: L=0
+  POST: L=1
+  IVL: L=1
+  VL: L=1
+  S2V: L=1
+== C4
+  PRE: k=0
+  POST: k=0
+  IVL: ./run.sh: line 10: 80802 Alarm clock: 14         perl -e 'alarm 15; exec @ARGV' vvp -n $b.vvp
+  IVL: rc=142
+  VL: k=1
+  S2V: ./run.sh: line 12: 81058 Alarm clock: 14         perl -e 'alarm 15; exec @ARGV' vvp -n $b.s2v.vvp
+  S2V: rc=142

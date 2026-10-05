@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__a1_comb_sens_plaincase
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/a1_comb_sens_plaincase.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: agree
+verdict_source: s582/grounding/REPORT.md:176
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b3/out_a1_comb_sens_plaincase/iv.out | 272 bytes
+t1 m=0
+t2 m=0 (hi changed)
+t3 m=0 (lo changed)
+t4 m=2 (v changed)
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/a1_comb_sens_plaincase.sv:15: $finish called at 14 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_a1_comb_sens_plaincase/vl.out | 449 bytes
+t1 m=0
+t2 m=0 (hi changed)
+t3 m=0 (lo changed)
+t4 m=2 (v changed)
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/a1_comb_sens_plaincase.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 14ps; walltime 0.000 s; speed 304.348 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | vita [PRE] | grounding/b3/out_a1_comb_sens_plaincase/vita.out | 235 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t1 m=0
+t2 m=0 (hi changed)
+t3 m=0 (lo changed)
+t4 m=2 (v changed)
+simulation ended (Finish) at time 14
+errors=0 warnings=1 notes=0
+rc=0
+=== end

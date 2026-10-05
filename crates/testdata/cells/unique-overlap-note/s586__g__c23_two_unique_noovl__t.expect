@@ -1,0 +1,50 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__g__c23_two_unique_noovl__t
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/g/c23_two_unique_noovl/t.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: g/c23_two_unique_noovl
+oracles_present: iverilog,verilator
+vita_tags: PROBE,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g/c23_two_unique_noovl
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+vita_binary: PROBE: md5 9d6736b579a0bb7e6c27a7e58aeaeda1 commit fc1fc07e
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./iv.cerr | 133 bytes
+t.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+t.sv:11: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./iv.cout | 0 bytes
+
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./iv.crc | 2 bytes
+0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./iv.err | 0 bytes | identical to block 2
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./iv.out | 38 bytes
+y=1
+t.sv:17: $finish called at 2 (1s)
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./iv.rc | 2 bytes | identical to block 3
+=== block 7 | oracle verilator 5.052 (version captured in slice) | ./vl.cerr | 0 bytes | identical to block 2
+=== block 8 | oracle verilator 5.052 (version captured in slice) | ./vl.crc | 2 bytes | identical to block 3
+=== block 9 | oracle verilator 5.052 (version captured in slice) | ./vl.err | 0 bytes | identical to block 2
+=== block 10 | oracle verilator 5.052 (version captured in slice) | ./vl.out | 214 bytes
+y=1
+- t.sv:17: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 18.519 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 11 | oracle verilator 5.052 (version captured in slice) | ./vl.rc | 2 bytes | identical to block 3
+=== block 12 | vita [PRE] | ./vita.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 13 | vita [PRE] | ./vita.out | 40 bytes
+y=1
+simulation ended (Finish) at time 2
+=== block 14 | vita [PRE] | ./vita.rc | 2 bytes | identical to block 3
+=== block 15 | vita [PROBE] | ./probe.err | 355 bytes
+t.sv:6:5: note[VITA-I2021] I-PARSE-UNIQUE-UNCHECKED: `unique` / `unique0` overlaps (more than one matching item or condition) are not checked; only a missing match is reported. This is the first such site; others are not listed
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=1
+=== block 16 | vita [PROBE] | ./probe.out | 40 bytes | identical to block 13
+=== block 17 | vita [PROBE] | ./probe.rc | 2 bytes | identical to block 3
+=== end

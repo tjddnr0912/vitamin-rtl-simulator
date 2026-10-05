@@ -1,0 +1,509 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__diff__cells__f06_held_delayed_after_t0
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/diff/cells/f06_held_delayed_after_t0.sv
+roadmap_row: §2 🆕 AB
+set: r3/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,PRE3,POSTC,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP,R5DEV
+verdict: native=interp=vm except the W4030 fallback note on d19/f06, as before): post_e only DELETES lines of post_d on every mover except f07/u20d, where the deleted repeat calls change a `$random` draw count / a counter (values below); no added call, no call on z/x (f07 post_e: 0 `x=x|z` lines).
+verdict_source: s590/IMPL.md:141
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTD_JIT: unresolved (no row in the slice META binaries table)
+vita_binary: POSTD_NODEF: unresolved (no row in the slice META binaries table)
+vita_binary: PRE3_SEP: md5 78439b423ee29af2d2a6a5034a4ff409 commit 75f46453
+vita_binary: POSTD_SEP: unresolved (no row in the slice META binaries table)
+vita_binary: R5DEV: md5 8c800916aaa11d72c15fbd5031167f33 commit unrecorded
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+PRE3+POSTC+POSTD+POSTD_JIT+POSTD_NODEF+PRE3_SEP+POSTD_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/diff/o/f06_held_delayed_after_t0.out | 6819 bytes
+##### f06_held_delayed_after_t0
+=== PRE2 native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== PRE2 interp [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== PRE2 vm [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== PRE3 native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== PRE3 interp [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== PRE3 vm [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== POSTC native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== POSTC interp [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== POSTC vm [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== POSTD native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== POSTD interp [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== POSTD vm [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== JIT POSTD native
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== PRODUCT POSTD
+rc=1
+fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a call in a delayed continuous assign: S3b), and this build carries no other executor — the `oracle` backends are compiled out [at time 0]
+simulation ended (Finish) at time 0
+errors=1 warnings=1 notes=0
+=== staged PRE3 vcmp=0 velab=0
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== staged POSTD vcmp=0 velab=0
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+--- P2=P3 True C=D True P3=D False splitD True vcdCD True jit=D True prod=D False stD True stPair True
+=== iverilog run rc=0
+f t=0 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=4 x=3
+ev y=4 t=6
+t8 y=4 z=5
+f06_held_delayed_after_t0.sv:11: $finish called at 8 (1s)
+=== verilator run rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+ev y=0 t=0
+f t=2 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=3 x=2
+f t=4 x=3
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+t8 y=4 z=5
+- f06_held_delayed_after_t0.sv:11: Verilog $finish
+f t=8 x=3
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE3+POSTD+R5DEV] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r5/movers/f06_held_delayed_after_t0.txt | 1256 bytes
+##### f06_held_delayed_after_t0  (/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s590/r3/diff/cells/f06_held_delayed_after_t0.sv)
+=== PRE3 rc=0 native=interp=vm:False
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+=== post_d rc=0 native=interp=vm:False
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+=== post_e rc=0 native=interp=vm:False
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+=== iverilog rc=0
+f t=0 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=4 x=3
+ev y=4 t=6
+t8 y=4 z=5
+=== verilator rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+ev y=0 t=0
+f t=2 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=3 x=2
+f t=4 x=3
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+t8 y=4 z=5
+f t=8 x=3
+=== end

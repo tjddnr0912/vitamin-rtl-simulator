@@ -1,0 +1,168 @@
+### C_adim  [ALL]
+  pre : asz=4
+  post1: asz=4
+  post2: asz=4
+  ivl : asz=4
+  s2v : asz=4
+  vl  : asz=4
+### C_gfor  [PRE!=all]
+  pre : !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  ivl : gi=0 | gi=1
+  s2v : gi=0 | gi=1
+  vl  : gi=0 | gi=1
+### C_ksc  [PRE=iv=s2v]
+  pre : GS=zero
+  post1: GS=zero
+  post2: GS=zero
+  ivl : GS=zero
+  s2v : GS=zero
+  vl  : !%Error: C_ksc.sv:4:16: Use of x/? constant in generate case statement, (no such thing as 'generate c | !%Error: Exiting due to 1 error(s) | build_rc=1
+### C_ku0  [PRE=iv=s2v]
+  pre : GC=item
+  post1: GC=item
+  post2: GC=item
+  ivl : GC=item
+  s2v : GC=item
+  vl  : !%Error: C_ku0.sv:4:22: Use of x/? constant in generate case statement, (no such thing as 'generate c | !%Error: Exiting due to 1 error(s) | build_rc=1
+### C_pb  [ALL]
+  pre : vb=4
+  post1: vb=4
+  post2: vb=4
+  ivl : vb=4
+  s2v : vb=4
+  vl  : vb=4
+### C_psel  [ALL]
+  pre : ps=11
+  post1: ps=11
+  post2: ps=11
+  ivl : ps=11
+  s2v : ps=11
+  vl  : ps=11
+### C_rep  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post2: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  ivl : R=00000011
+  s2v : R=00000011
+  vl  : R=00000011
+### C_tern  [ALL]
+  pre : R=7
+  post1: R=7
+  post2: R=7
+  ivl : R=7
+  s2v : R=7
+  vl  : R=7
+### E_adim  [PRE!=all]
+  pre : asz=32
+  post1: asz=32
+  post2: asz=4
+  ivl : asz=4
+  s2v : asz=4
+  vl  : asz=4
+### E_gfor  [PRE!=all]
+  pre : !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  ivl : gi=0 | gi=1
+  s2v : gi=0 | gi=1
+  vl  : gi=0 | gi=1
+### E_ksc  [PRE!=all]
+  pre : !VITA-E3010 generate-case scrutinee is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-case scrutinee is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GS=zero
+  ivl : GS=zero
+  s2v : GS=zero
+  vl  : !%Error: E_ksc.sv:4:16: Use of x/? constant in generate case statement, (no such thing as 'generate c | !%Error: Exiting due to 1 error(s) | build_rc=1
+### E_ku0  [PRE!=all]
+  pre : GC=def
+  post1: GC=def
+  post2: GC=item
+  ivl : GC=item
+  s2v : GC=item
+  vl  : !%Error: E_ku0.sv:4:22: Use of x/? constant in generate case statement, (no such thing as 'generate c | !%Error: Exiting due to 1 error(s) | build_rc=1
+### E_pb  [PRE!=all]
+  pre : vb=1
+  post1: vb=1
+  post2: vb=4
+  ivl : vb=4
+  s2v : vb=4
+  vl  : vb=4
+### E_psel  [PRE!=all]
+  pre : ps=1
+  post1: ps=1
+  post2: ps=11
+  ivl : ps=11
+  s2v : ps=11
+  vl  : ps=11
+### E_rep  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post2: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  ivl : R=00000011
+  s2v : R=00000011
+  vl  : R=00000011
+### E_tern  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=7
+  ivl : R=7
+  s2v : R=7
+  vl  : R=7
+### L_adim  [PRE=iv=s2v]
+  pre : asz=4
+  post1: asz=32
+  post2: asz=4
+  ivl : asz=4
+  s2v : asz=4
+  vl  : asz=4
+### L_gfor  [PRE!=all]
+  pre : !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: !VITA-E3010 generate-for condition is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  ivl : gi=0 | gi=1
+  s2v : gi=0 | gi=1
+  vl  : gi=0 | gi=1
+### L_ksc  [PRE=iv=s2v]
+  pre : GS=zero
+  post1: !VITA-E3010 generate-case scrutinee is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GS=zero
+  ivl : GS=zero
+  s2v : GS=zero
+  vl  : !%Error: Exiting due to 1 error(s) | !%Error: L_ksc.sv:4:16: Use of x/? constant in generate case statement, (no such thing as 'generate c | build_rc=1
+### L_ku0  [PRE=iv=s2v]
+  pre : GC=item
+  post1: GC=def
+  post2: GC=item
+  ivl : GC=item
+  s2v : GC=item
+  vl  : !%Error: Exiting due to 1 error(s) | !%Error: L_ku0.sv:4:22: Use of x/? constant in generate case statement, (no such thing as 'generate c | build_rc=1
+### L_pb  [PRE=iv=s2v]
+  pre : vb=4
+  post1: vb=1
+  post2: vb=4
+  ivl : vb=4
+  s2v : vb=4
+  vl  : vb=4
+### L_psel  [PRE=iv=s2v]
+  pre : ps=11
+  post1: ps=1
+  post2: ps=11
+  ivl : ps=11
+  s2v : ps=11
+  vl  : ps=11
+### L_rep  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  post2: !VITA-E3009 parameter `R` value is not a constant: the replication `{n{…}}` has no constant-fold arm [ | rc=1
+  ivl : R=00000011
+  s2v : R=00000011
+  vl  : R=00000011
+### L_tern  [PRE=iv=s2v]
+  pre : R=7
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=7
+  ivl : R=7
+  s2v : R=7
+  vl  : R=7

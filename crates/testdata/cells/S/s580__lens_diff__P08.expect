@@ -1,0 +1,117 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P08
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P08.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: F5 NON-BLOCKING
+verdict_source: s580/lens_diff/REPORT.md:38;s580/lens_diff/REPORT.md:46
+notes: R4 cmp3_post4 bucket(s): post3×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P08.iv.txt | 158 bytes
+W01 1
+W02 1
+W03 1
+W04 0
+W05 1
+W06 1
+W07 1
+W08 1
+Q01 1
+Q02 1
+H01 0
+H02 1
+H03 0
+H04 0
+H05 1
+L01 1
+L02 0
+L20 0
+L09 1
+P08.sv:30: $finish called at 1000 (1s)
+rc=0
+=== block 2 | vita [POST] | ./P08.post.txt | 550 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P08.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+P08.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 3 | vita [POST] | ./P08.postq.txt | 550 bytes | identical to block 2
+=== block 4 | vita [POST] | r2/lens/diff_P08.post.txt | 550 bytes | identical to block 2
+=== block 5 | vita [POST] | r2/lens/diff_P08.postq.txt | 550 bytes | identical to block 2
+=== block 6 | vita [POST2] | r2/lens/diff_P08.post2.txt | 261 bytes
+W01 1
+W02 1
+W03 1
+W04 0
+W05 1
+W06 1
+W07 1
+W08 1
+Q01 1
+Q02 1
+H01 0
+H02 1
+H03 0
+H04 0
+H05 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST2] | r2/lens/diff_P08.post2q.txt | 285 bytes
+W01 1
+W02 1
+W03 1
+W04 0
+W05 1
+W06 1
+W07 1
+W08 1
+Q01 1
+Q02 1
+H01 0
+H02 1
+H03 0
+H04 0
+H05 1
+L01 1
+L02 0
+L20 0
+L09 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [PRE] | ./P08.pre.txt | 261 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+W01 0
+W02 0
+W03 0
+W04 0
+W05 x
+W06 0
+W07 x
+W08 x
+Q01 0
+Q02 0
+H01 0
+H02 x
+H03 0
+H04 0
+H05 x
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [PRE] | ./P08.preq.txt | 474 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P08.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+P08.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=2 warnings=1 notes=0
+rc=1
+=== end

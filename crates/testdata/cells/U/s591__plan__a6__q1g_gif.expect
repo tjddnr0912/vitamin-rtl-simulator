@@ -1,0 +1,81 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a6__q1g_gif
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a6/q1g_gif.sv
+roadmap_row: §2 🆕 U
+set: plan/a6
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: silent->correct(=ivl,s2v)
+verdict_source: s591/impl/moves_audit.txt:40
+notes: class PRE vs posta (POST_a), IMPL.md:14
+alias: impl/dump/edc93279da5f38c7 (byte-identical source) verdict: silent->correct(=ivl,s2v) verdict_source: s591/impl/moves_audit.txt:40
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 20
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/edc93279da5f38c7.ivl | 148 bytes
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+@ big
+edc93279da5f38c7.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./q1g_gif.ivl | 139 bytes
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+@ big
+q1g_gif.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/edc93279da5f38c7.vl | 259 bytes
+@ P=3 Q=4 w=3 sh=0 N=5 b=32
+- edc93279da5f38c7.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 5.882 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./q1g_gif.vl | 250 bytes
+@ P=3 Q=4 w=3 sh=0 N=5 b=32
+- q1g_gif.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.778 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/edc93279da5f38c7.s2v | 151 bytes
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+@ big
+edc93279da5f38c7.s2v.v:15: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./q1g_gif.s2v | 142 bytes
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+@ big
+q1g_gif.s2v.v:15: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./q1g_gif.dev1 | 262 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+@ big
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV1] | ./q1g_gif.dev1.route | 0 bytes
+
+=== block 9 | vita [DEV2] | impl/dump/edc93279da5f38c7.dev2 | 262 bytes | identical to block 7
+=== block 10 | vita [DEV2] | impl/dump/edc93279da5f38c7.dev2.route | 0 bytes | identical to block 8
+=== block 11 | vita [DEV3] | ./q1g_gif.dev3 | 262 bytes | identical to block 7
+=== block 12 | vita [DEV3] | ./q1g_gif.dev3.route | 0 bytes | identical to block 8
+=== block 13 | vita [POSTA] | ./q1g_gif.posta | 262 bytes | identical to block 7
+=== block 14 | vita [POSTA] | ./q1g_gif.posta.route | 0 bytes | identical to block 8
+=== block 15 | vita [POSTB] | ./q1g_gif.postb | 262 bytes | identical to block 7
+=== block 16 | vita [POSTB] | ./q1g_gif.postb.route | 0 bytes | identical to block 8
+=== block 17 | vita [PRE] | ./q1g_gif.pre | 256 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+@ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 18 | vita [PRE] | ./q1g_gif.pre.route | 0 bytes | identical to block 8
+=== block 19 | vita [PROTO2] | ./q1g_gif.post2 | 262 bytes | identical to block 7
+=== block 20 | vita [PROTO2] | ./q1g_gif.post2.route | 0 bytes | identical to block 8
+=== end

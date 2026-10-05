@@ -1,0 +1,32 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__s0__r04_ret_enum_bit
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/s0/r04_ret_enum_bit.sv
+roadmap_row: §2 🆕 AE
+set: s0
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s588/IMPL.md:59
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r04_ret_enum_bit.ivl | 109 bytes
+r04_ret_enum_bit.sv:5: error: This assignment requires an explicit cast.
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r04_ret_enum_bit.vl | 173 bytes
+%Error-ENUMVALUE: r04_ret_enum_bit.sv:5:22: Implicit conversion to enum 'enum{}top.e_t' from 'bit[3:0]' (IEEE 1800-2023 6.19.3)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./r04_ret_enum_bit.s2v | 235 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s588/g/run4.sh: line 9: 96111 Alarm clock: 14         perl -e "alarm 30; exec @ARGV" vvp -n $b.s2vvp
+rc=142
+=== block 4 | vita [PRE] | ./r04_ret_enum_bit.PRE | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n=1
+done
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== end

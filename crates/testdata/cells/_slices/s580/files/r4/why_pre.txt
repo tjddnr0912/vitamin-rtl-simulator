@@ -1,0 +1,200 @@
+## s580/census/c/C10.sv  :: C10 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/c/C11.sv  :: C11 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/c/C12.sv  :: C12 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/c/C13.sv  :: C13 then | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/c/C28.sv  :: C28 2
+## s580/census/c/C29.sv  :: C29 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/c/C31.sv  :: C31 i=0 in | C31 i=1 in | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/z/Z04.sv  :: Z04 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/z/Z05.sv  :: Z05 1 0
+## s580/fx/F12.sv  :: gen-if then | gen-for 0 in | gen-for 1 in | override 1 | params 1 1 0 bits 2 | simulation ended (Finish) at time 1
+## s580/fx/F17a.sv  :: L 1 | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/F17b.sv  :: L 1 | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/G1.sv  :: G1 1 0 5 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/G2.sv  :: G2 0 5 1 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/CD1.sv  :: A=1 A2=0 M=1 M2=0 | simulation ended (Quiescent) at time 0 | errors=0 warnings=1 notes=0 | rc=0
+## s580/r2/SL1.sv  :: G0 1 | G1 0 | G2 1 | simulation ended (Finish) at time 1 | errors=0 warnings=1 notes=0 | rc=0
+## s580/r2/SL1q.sv  :: G0 1 | G1 0 | simulation ended (Finish) at time 1 | errors=0 warnings=1 notes=0 | rc=0
+## s580/r2/fx2/H01.sv  :: gen-a then | gen-b else | override W=2 | L 1 1 1 1 0 0 1 1 1 1 1 | bits 2 4 | simulation ended (Finish) at time 2
+## s580/r2/fx2/H02.sv  :: gen-q then | Q 1 1 0 1 0 1 0 I 1 1 bits 2 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/fx2/H02q.sv  :: gen-q then | Q 1 1 0 1 0 1 0 bits 2 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/fx2/H03.sv  :: L 0 0 0 bits 2 2 2 size 2
+## s580/r2/fx2/H07.sv  :: R 1 1 1 1 1 1 1 0 1 | C 1 1 1 1 1 1 1 0 1 | more 1 1 1 1 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/fx2/H08.sv  :: FOLD item
+## s580/r2/r26/S01A.sv  :: S01A 2
+## s580/r2/r26/S01B.sv  :: S01B 2
+## s580/r2/r26/S01G.sv  :: S01G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S01L.sv  :: S01L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S01O.sv  :: t.u_S01 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S02A.sv  :: S02A 2
+## s580/r2/r26/S02B.sv  :: S02B 2
+## s580/r2/r26/S02G.sv  :: S02G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S02L.sv  :: S02L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S02O.sv  :: t.u_S02 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S03A.sv  :: S03A 2
+## s580/r2/r26/S03B.sv  :: S03B 2
+## s580/r2/r26/S03G.sv  :: S03G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S03L.sv  :: S03L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S03O.sv  :: t.u_S03 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S04A.sv  :: S04A 2
+## s580/r2/r26/S04B.sv  :: S04B 2
+## s580/r2/r26/S04G.sv  :: S04G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S04L.sv  :: S04L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S04O.sv  :: t.u_S04 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S05A.sv  :: S05A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S05B.sv  :: S05B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S07A.sv  :: S07A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S07B.sv  :: S07B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S08A.sv  :: S08A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S08B.sv  :: S08B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S11A.sv  :: S11A 2
+## s580/r2/r26/S11B.sv  :: S11B 2
+## s580/r2/r26/S11G.sv  :: S11G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S11L.sv  :: S11L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S11O.sv  :: t.u_S11 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S13A.sv  :: S13A 2
+## s580/r2/r26/S13B.sv  :: S13B 2
+## s580/r2/r26/S13G.sv  :: S13G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S13L.sv  :: S13L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S13O.sv  :: t.u_S13 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S14A.sv  :: S14A.sv:3:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S14B.sv  :: S14B.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | errors=1 warnings=0 notes=0 | rc=1
+## s580/r2/r26/S15A.sv  :: S15A 2
+## s580/r2/r26/S15B.sv  :: S15B 2
+## s580/r2/r26/S15G.sv  :: S15G then | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S15L.sv  :: S15L 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/S15O.sv  :: t.u_S15 P=1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r2/r26/X3.sv  :: X3 rep 0011 | X3 psel 11 | X3 gencase item
+## s580/r2/r26/X4.sv  :: X4.sv:3:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | X4.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=2 warnings=0 notes=0 | rc=1
+## s580/r4/fx/H07C.sv  :: C 1 1 1 1 1 1 1 0 1 | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r4/fx/I12.sv  :: I 1 1 1 | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/r4/fx/K02.sv  :: K02.sv:15:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | K02.sv:16:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | K02.sv:18:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or | K02.sv:26:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constan | errors=4 warnings=0 notes=0 | rc=1
+## s580/r4/fx/K02q.sv  :: K02q.sv:12:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` o | errors=13 warnings=0 notes=0
+## s580/lens_snd/probes/P1.sv  :: L1=1 L3=1 L5=1 L7=1 L8=1 L9=1 bits(rb)=2 | R1=1 R3=1 R5=1 R7=1 R9=1 | L2=1 L4=1 L6=1 L10=1 | Q2=1 Q4=1 Q6=1 Q10=1 | G1 then | simulation ended (Finish) at time 2
+## s580/lens_snd/probes/P1.sv -DNO_INSIDE :: L2=1 L4=1 L6=1 L10=1
+## s580/lens_snd/probes/P2a.sv  :: L2=1 L4=1 bits(rbq)=2 | GQ then
+## s580/lens_snd/probes/P2b.sv  :: bits(rb)=2
+## s580/lens_snd/probes/P2c.sv  :: LB=1 | OVR P=1 | OVX v inside {P} = 0 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_snd/probes/P4a.sv  :: rbs=2 rbu=2 rb2=2 rb1=2 | rbsq=2 rbuq=2 rb2q=2
+## s580/lens_snd/probes/P4a.sv -DNO_INSIDE :: rbsq=2 rbuq=2 rb2q=2
+## s580/lens_snd/probes/P5.sv  :: LW=0 LN=0 F1=1 F2=1 F3=1 | LWQ=0 FQ=1 | simulation ended (Finish) at time 1 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_snd/probes/P5.sv -DNO_INSIDE :: LWQ=0 FQ=1 | simulation ended (Finish) at time 1 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_snd/probes/P7.sv -DNO_INSIDE :: L4q=0 FQ=1
+## s580/lens_diff/P03.sv  :: L03 0 | L04 1 | L05 1 | L06 1 | L09 1 | L10 1
+## s580/lens_diff/P03.sv -DB :: L03 0 | L04 1 | L05 1 | L06 1 | L09 1 | L10 1
+## s580/lens_diff/P03.sv -DRL :: errors=1 warnings=1 notes=0
+## s580/lens_diff/P03.sv -DB -DIV :: L03 0 | L04 1 | L05 1 | L06 1 | L09 1 | L10 1
+## s580/lens_diff/P06.sv  :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06.sv -DFIN :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06.sv -DFJ :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06.sv -DFRC :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06.sv -DIFC :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv  :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv -DFIN :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv -DFJ :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv -DFRC :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv -DIFC :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P06v.sv -DNOGC :: C08 2 | C09 2 | C10 3 | C11 1 | C11b 1 | C11c 1
+## s580/lens_diff/P10b.sv  :: L30 1 | L31 1 | R30 1 | R31 1 | R32 1 | R33 1
+## s580/lens_diff2/Q1.sv  :: L01 1 | R01 1 | L02 1 | R02 1 | L03 1 | R03 1
+## s580/lens_diff2/Q1.sv -DWX :: errors=19 warnings=1 notes=0
+## s580/lens_diff2/Q1.sv -DIV :: L01 1 | R01 1 | L02 1 | R02 1 | L03 1 | R03 1
+## s580/lens_diff2/Q1.sv -DWX -DIV :: errors=19 warnings=1 notes=0
+## s580/lens_diff2/Q2.sv -DCONSTS :: R41 1 | R42 1 | R43 1 | R44 1 | R45 1 | R46 1
+## s580/lens_diff2/Q2.sv -DCONSTS -DIV :: R41 1 | R42 1 | R43 1 | R44 1 | R45 1 | R46 1
+## s580/lens_diff2/Q3.sv  :: G1 then | GS then | GC1 one | GL lab1 | OV1 1 1 | OVS 1 1
+## s580/lens_diff2/Q3.sv -DADT :: G1 then | GS then | GC1 one | GL lab1 | ADT 4 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DFBODY :: errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DFNRX :: Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  | errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DGA :: G1 then | GS then | GC1 one | GL lab1 | GA first | OV1 1 1
+## s580/lens_diff2/Q3.sv -DGFOR :: errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DPSEL :: G1 then | GS then | GC1 one | GL lab1 | PSEL 1 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DRBB :: G1 then | GS then | GC1 one | GL lab1 | RBB 2 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DRBT :: G1 then | GS then | GC1 one | GL lab1 | RBT 4 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DREPX :: G1 then | GS then | GC1 one | GL lab1 | REPX 0 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DTDX :: Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  | errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DXBEFORE :: G1 then | GS then | GC1 one | GL lab1 | GB one | OV1 1 1
+## s580/lens_diff2/Q3.sv -DIV :: G1 then | GS then | GC1 one | GL lab1 | OV1 1 1 | OVS 1 1
+## s580/lens_diff2/Q3.sv -DADT -DIV :: G1 then | GS then | GC1 one | GL lab1 | ADT 4 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DFBODY -DIV :: errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DFNRX -DIV :: Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  | errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DGA -DIV :: G1 then | GS then | GC1 one | GL lab1 | GA first | OV1 1 1
+## s580/lens_diff2/Q3.sv -DGFOR -DIV :: errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DPSEL -DIV :: G1 then | GS then | GC1 one | GL lab1 | PSEL 1 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DRBB -DIV :: G1 then | GS then | GC1 one | GL lab1 | RBB 2 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DRBT -DIV :: G1 then | GS then | GC1 one | GL lab1 | RBT 4 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DREPX -DIV :: G1 then | GS then | GC1 one | GL lab1 | REPX 0 | OV1 1 1
+## s580/lens_diff2/Q3.sv -DTDX -DIV :: Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or  | errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q3.sv -DXBEFORE -DIV :: G1 then | GS then | GC1 one | GL lab1 | GB one | OV1 1 1
+## s580/lens_diff2/Q5.sv -DCMP :: Q5.sv:30:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K04` value is not a constant | errors=5 warnings=1 notes=0
+## s580/lens_diff2/Q5.sv -DIV :: U13 0 | U01 1 | U12 0 | U14 0 | U02 1 | U03 1
+## s580/lens_diff2/Q5.sv -DCMP -DIV :: errors=5 warnings=1 notes=0
+## s580/lens_diff2/Q5.sv -DRTT -DIV :: errors=1 warnings=1 notes=0
+## s580/lens_diff2/Q6.sv -DSTR :: G0 1 | G1 0 | G2 1 | simulation ended (Finish) at time 3 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff2/Q6.sv -DSTR -DIV :: G0 1 | G1 0 | G2 1 | simulation ended (Finish) at time 3 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff2/Q9.sv  :: UEV 0 | UEB 4 | NP1 1 | RN1 1 | NP2 0 | RN2 0
+## s580/lens_diff2/Q9.sv -DIV :: UEV 0 | UEB 4 | NP1 1 | RN1 1 | NP2 0 | RN2 0
+## s580/lens_snd2/probes/P10.sv  :: R 1 0 1 1 0 1 | K 1 0 1 1 0 1 | I 1 0 1 1 0 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/lens_snd2/probes/P10.sv -DNO_INSIDE :: R 1 0 1 1 0 1 | K 1 0 1 1 0 1 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/lens_snd2/probes/P2.sv  :: RI 1 1 1 1 1 | KI 1 1 1 1 1 | RQ 1 1 1 1 | KQ 1 1 1 1 | RZ 1 0 | simulation ended (Finish) at time 2
+## s580/lens_snd2/probes/P2.sv -DNO_INSIDE :: RQ 1 1 1 1 | KQ 1 1 1 1 | RZ 1 0 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/lens_snd2/probes/P5.sv  :: RE 1 1 0 1 1 0 1 0 1 0 0 | KE 1 1 0 1 1 0 1 0 1 0 0 | RW 1 0 1 1 1 0 1 0 | KW 1 0 1 1 1 0 1 0 | X 1 1 0 / 1 1 0 | N 1 1 1 / 1 1 1
+## s580/lens_snd2/probes/P5.sv -DNO_INSIDE :: RE 1 1 0 1 1 0 1 0 1 0 0 | KE 1 1 0 1 1 0 1 0 1 0 0 | RW 1 0 1 1 1 0 1 0 | KW 1 0 1 1 1 0 1 0 | X 1 1 0 / 1 1 0 | simulation ended (Finish) at time 2
+## s580/lens_diff3/G1.sv -DL2 :: L2 item
+## s580/lens_diff3/G1.sv -DL3 :: L3 item
+## s580/lens_diff3/G1.sv -DL4 :: L4 item
+## s580/lens_diff3/G1.sv -DL5 :: L5 item
+## s580/lens_diff3/G1.sv -DL5N :: L5N item
+## s580/lens_diff3/G1.sv -DL6 :: L6 item
+## s580/lens_diff3/G1.sv -DL9 :: G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constan | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_diff3/G1.sv -DL2 -DIV :: L2 item
+## s580/lens_diff3/G1.sv -DL3 -DIV :: L3 item
+## s580/lens_diff3/G1.sv -DL4 -DIV :: L4 item
+## s580/lens_diff3/G1.sv -DL5 -DIV :: L5 item
+## s580/lens_diff3/G1.sv -DL5N -DIV :: L5N item
+## s580/lens_diff3/G1.sv -DL6 -DIV :: L6 item
+## s580/lens_diff3/G1.sv -DL9 -DIV :: G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constan | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_diff3/G2.sv  :: simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM1 :: M1 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM10 :: M10 one | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM2 :: M2 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM3 :: M3 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM4 :: M4 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM4P :: M4P dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM6 :: M6 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM7 :: M7 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM8 :: M8 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM9 :: M9 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DIV :: simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM1 -DIV :: M1 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM10 -DIV :: M10 one | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM2 -DIV :: M2 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM3 -DIV :: M3 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM4 -DIV :: M4 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM4P -DIV :: M4P dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM6 -DIV :: M6 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM7 -DIV :: M7 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM8 -DIV :: M8 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G2.sv -DM9 -DIV :: M9 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G3.sv -DM9 :: M9 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/G3.sv -DM9 -DIV :: M9 dflt | simulation ended (Finish) at time 5 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/P1.sv -DCONSTS :: B01 1 | B02 1 | B03 1 | B04 1 | B05 1 | B06 1
+## s580/lens_diff3/P1.sv -DCONSTS -DIV :: B01 1 | B02 1 | B03 1 | B04 1 | B05 1 | B06 1
+## s580/lens_snd3/p/p3.sv -DG1 :: G1 item
+## s580/lens_snd3/p/p3.sv -DG3 :: G3 item
+## s580/lens_snd3/p/p3.sv -DG4 :: p3.sv:26:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p3.sv -DG5 :: G5 item
+## s580/lens_snd3/p/p3.sv -DG6 :: G6 item
+## s580/lens_snd3/p/p3.sv -DG9 :: p3.sv:56:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p3.sv -DLV :: L1 1 | L2 1 | L6 1 | R6 1 | simulation ended (Finish) at time 100 | errors=0 warnings=1 notes=0
+## s580/lens_snd3/p/p5.sv -DH1 :: H1 item
+## s580/lens_snd3/p/p5.sv -DH2 :: H2 item
+## s580/lens_snd3/p/p5.sv -DH3 :: H3 item
+## s580/lens_snd3/p/p5.sv -DH4 :: p5.sv:27:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p5.sv -DH7 :: H7 item
+## s580/lens_snd3/p/p6.sv -DJ1 :: p6.sv:5:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p6.sv -DJ2 :: p6.sv:11:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p6.sv -DJ3 :: p6.sv:17:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant | errors=1 warnings=1 notes=0 | rc=1
+## s580/lens_snd3/p/p6.sv -DJ5 :: J5 item
+## s580/lens_snd3/p/p6.sv -DJ6 :: J6 item
+## s580/lens_snd3/p/p6.sv -DJV :: V1 1 | V2 1 | simulation ended (Finish) at time 100 | errors=0 warnings=1 notes=0 | rc=0

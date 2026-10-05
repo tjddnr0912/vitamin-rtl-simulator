@@ -1,0 +1,50 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__i__r2__C8k
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/i/r2/C8k.sv
+roadmap_row: §2 🆕 AI
+set: i/r2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre,pre594,stgpb,stgpre2
+verdict: !=PRE
+verdict_source: s594/i/r2_delta_pa_pb.txt:15
+notes: named at s594/IMPL.md:247
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./C8k.ivl | 46 bytes
+K=2
+C8k.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./C8k.vl | 458 bytes
+%Warning-WIDTHEXPAND: C8k.sv:5:27: Operator ADD expects 32 bits on the LHS, but LHS's CONST '8'h0' generates 8 bits.
+%Warning-WIDTHEXPAND: C8k.sv:5:35: Operator SHIFTL expects 32 bits on the LHS, but LHS's CONST '8'h1' generates 8 bits.
+K=2
+- C8k.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./C8k.s2v | 50 bytes
+K=2
+C8k.s2v.v:12: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [pa] | ./C8k.pa | 174 bytes
+K=2
+simulation ended (Finish) at time 100
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [pb] | ./C8k.pb | 174 bytes | identical to block 4
+=== block 6 | vita [pre] | ./C8k.pre | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K=2
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [pre] | ./C8k.pre.route | 13 bytes
+t fl frame 0
+=== block 8 | vita [pre594] | ./C8k.pre594 | 174 bytes | identical to block 4
+=== end

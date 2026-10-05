@@ -1,0 +1,34 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r07_x_selreads
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r07_x_selreads.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:26
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r07_x_selreads.ivl | 386 bytes
+r07_x_selreads.sv:16: error: A hierarchical reference (`s.a') is not allowed in a constant function.
+r07_x_selreads.sv:50: error: Unable to evaluate parameter P6 value: top.f6(32'sd2)
+r07_x_selreads.sv:51: error: Unable to evaluate parameter P7 value: top.f7(32'sd2)
+r07_x_selreads.sv:52: error: Unable to evaluate parameter P8 value: top.f8(32'sd2)
+4 error(s) during elaboration.
+rc=4
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r07_x_selreads.vl | 161 bytes
+%Error: r07_x_selreads.sv:53:31: Expecting expression to be constant, but can't determine constant for FUNCREF 'f9'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r07_x_selreads.build | 590 bytes
+%Error: r07_x_selreads.sv:53:31: Expecting expression to be constant, but can't determine constant for FUNCREF 'f9'
+                               : ... note: In instance 'top'
+        r07_x_selreads.sv:43:13: ... Location of non-constant ARRAYSEL: Array select of non-array
+        r07_x_selreads.sv:53:31: ... Called from 'f9()' with parameters:
+           a = ?32?h2
+   53 |   localparam logic [3:0] P9 = f9(2);
+      |                               ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== end

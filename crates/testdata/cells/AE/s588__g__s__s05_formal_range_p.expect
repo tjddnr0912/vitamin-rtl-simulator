@@ -1,0 +1,33 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__s__s05_formal_range_p
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/s/s05_formal_range_p.sv
+roadmap_row: §2 🆕 AE
+set: g/s
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: F: keep; D: keep
+verdict_source: s588/GROUNDING.md:296
+notes: GROUNDING Q4 A lane row naming s05 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./s05_formal_range_p.ivl | 60 bytes
+P=1
+s05_formal_range_p.sv:11: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./s05_formal_range_p.vl | 154 bytes
+%Error: s05_formal_range_p.sv:7:41: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./s05_formal_range_p.s2v | 63 bytes
+P=x
+s05_formal_range_p.s2v.v:19: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./s05_formal_range_p.PRE | 281 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s05_formal_range_p.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `h(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [PROBE-m] | ./s05_formal_range_p.PROBE | 281 bytes | identical to block 4
+=== end

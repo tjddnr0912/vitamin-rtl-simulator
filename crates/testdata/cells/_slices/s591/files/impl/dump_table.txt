@@ -1,0 +1,246 @@
+## 024ae268707ccd8d display("ee
+  pre: ee P=18446744073709551625 b=32|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `P` has already been imported into this scope from package `pb` (explici|rc=1|
+  ivl: error: 'P' has already been imported into this scope from package 'pb'.|rc=1|
+  s2v: rc=1|sv2v: import of pa::P conflicts with prior import of pb::P|
+  vl: ee P=18446744073709551625 b=65|
+## 0cb742abf36b67ca display("ifnw
+  pre: ifnw top.x P=18446744073709551625 bv=4 b=65|
+  dev2: ifnw top.x P=18446744073709551625 bv=10 b=65|
+  ivl: ifnw top.x P=18446744073709551625 bv=10 b=65|
+  s2v: ifnw top.x P=18446744073709551625 bv=10 b=65|
+  vl: ifnw top.x P=3 bv=4 b=32|
+## 0db913b347e506b0 display("val
+  pre: val E1=18446744073709551616 K=0|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from pac|rc=1|
+  ivl: error: 'E1' has already been imported into this scope from package 'pk'.|rc=1|
+  s2v: rc=1|sv2v: declaration of E1 conflicts with prior import of pk::E1|
+  vl: val E1=1 K=1|
+## 11be854aa3b2a768 display("B2D
+  pre: B2D E1=18446744073709551616 K=0|
+  dev2: B2D E1=18446744073709551616 K=0|
+  ivl: B2D E1=1 K=1|
+  s2v: B2D E1=1 K=1|
+  vl: B2D E1=1 K=1|
+## 14c9641e04a85c96 display("ev
+  pre: ev W=18446744073709551625 b=8|
+  dev2: ev W=5 b=8|
+  ivl: ev W=5 b=8|
+  s2v: ev W=5 b=8|
+  vl: ev W=18446744073709551625 b=65|
+## 165ec17853df35d5 display("ees
+  pre: ees P=3|
+  dev2: ees P=3|
+  ivl: ees P=3|
+  s2v: ees P=3|
+  vl: ees P=3|
+## 206f43787236bd61 display("val
+  pre: val P=18446744073709551625 K=9|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: undefined name `P` is not a const|error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|rc=1|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: val P=18446744073709551625 K=9|
+## 26460e7d1cb7dd2d display("ae
+  pre: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  ivl: ae top.u6 W=x|
+  s2v: ae top.u6 W=x|
+  vl: ae top.u6 W=x|
+## 273302c80c634870 display("egrx
+  pre: egrx E1=7 K=7|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from pac|error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: undefined name `E1` is not a cons|error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.E1` [in top]|
+  ivl: error: 'E1' has already been imported into this scope from package 'pk'.|rc=1|
+  s2v: rc=1|sv2v: declaration of E1 conflicts with prior import of pk::E1|
+  vl: egrx E1=1 K=1|
+## 27e1221ddfb1254b display("pp
+  pre: pp Z=5|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `Z` value is not a foldable constant [in pc]|rc=1|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: pp Z=3|
+## 2807b146178c62c5 display("val
+  pre: val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=32 sh=16|
+  dev2: val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=32 sh=16|
+  ivl: val P=3 K=3 KW=4 wv=3 b=32 sh=0|
+  s2v: val P=3 K=3 KW=4 wv=3 b=32 sh=0|
+  vl: val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16|
+## 280867ce9070fbf4 display("ifee
+  pre: ifee P=18446744073709551625 b=65|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `P` has already been imported into this scope from package `pa` (explici|rc=1|
+  ivl: error: 'P' has already been imported into this scope from package 'pa'.|rc=1|
+  s2v: rc=1|sv2v: import of pb::P conflicts with prior import of pa::P|
+  vl: ifee P=3 b=32|
+## 29227be4169857f0 display("ewn
+  pre: ewn E1=1 K=1|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from pac|rc=1|
+  ivl: error: 'E1' has already been imported into this scope from package 'pk'.|rc=1|
+  s2v: rc=1|sv2v: declaration of E1 conflicts with prior import of pk::E1|
+  vl: ewn E1=1 K=1|
+## 32680ee210251b0b display("ppnu
+  pre: ppnu Z=3|
+  dev2: ppnu Z=3|
+  ivl: ppnu Z=3|
+  s2v: ppnu Z=3|
+  vl: ppnu Z=3|
+## 34b3d7bf28c0ff71 display("egr
+  pre: egr E1=18446744073709551616 K=0|
+  dev2: egr E1=18446744073709551616 K=0|
+  ivl: egr E1=1 K=1|
+  s2v: egr E1=1 K=1|
+  vl: egr E1=1 K=1|
+## 42d29e9cf371e0c6 display("pae
+  pre: pae W=3|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: undefined name `P` is not a const|rc=1|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: pae W=x|
+## 48179d1902816f6e display("eeg
+  pre: eeg small|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `P` has already been imported into this scope from package `pa` (explici|rc=1|
+  ivl: error: 'P' has already been imported into this scope from package 'pa'.|rc=1|
+  s2v: rc=1|sv2v: import of pb::P conflicts with prior import of pa::P|
+  vl: eeg small|
+## 4895cff3cb38d2b6 display("ee
+  pre: ee P=18446744073709551625 b=65|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `P` has already been imported into this scope from package `pa` (explici|rc=1|
+  ivl: error: 'P' has already been imported into this scope from package 'pa'.|rc=1|
+  s2v: rc=1|sv2v: import of pb::P conflicts with prior import of pa::P|
+  vl: ee P=3 b=32|
+## 55f8fd41cda1ce45 display("val
+  pre: val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32|pc def|
+  dev2: val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32|pc def|
+  ivl: val E1=1 K=1 KW=1 wv=1 b=32|pc one|
+  s2v: val E1=1 K=1 KW=1 wv=1 b=32|pc one|
+  vl: val E1=1 K=1 KW=1 wv=1 b=32|pc one|
+## 69ab7bb10b97b587 display("ae
+  pre: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  ivl: ae top.u6 W=x|
+  s2v: ae top.u6 W=x|
+  vl: ae top.u6 W=x|
+## 6bd42d28c8e04760 display("gif
+  pre: gif top.u[1].e small|gif top.u[0].e small|
+  dev2: gif top.u[1].t big|gif top.u[0].t big|
+  ivl: gif top.u[0].t big|gif top.u[1].t big|
+  s2v: gif top.u[0].t big|gif top.u[1].t big|
+  vl: gif top.u[0].e small|gif top.u[1].e small|
+## 6e1d83bb286747d1 display("pae
+  pre: pae W=3|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  ivl: pae W=x|
+  s2v: pae W=x|
+  vl: pae W=x|
+## 8bb44a28207b3185 display("W
+  pre: W=10000000000000007 bits_v=6 eq=1|
+  dev2: W=10000000000000007 bits_v=8 eq=1|
+  ivl: W=10000000000000007 bits_v=8 eq=1|
+  s2v: W=10000000000000007 bits_v=8 eq=1|
+  vl: W=10000000000000007 bits_v=8 eq=1|
+## 9142b65727f26845 display("pel
+  pre: pel Z=1|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from pac|rc=1|
+  ivl: error: 'E1' has already been imported into this scope from package 'pk'.|rc=1|
+  s2v: rc=1|sv2v: declaration of E1 conflicts with prior import of pk::E1|
+  vl: pel Z=1|
+## 91d879b99725b05d display("ecul
+  pre: ecul E1=7 K=7|
+  dev2: ecul E1=7 K=7|
+  ivl: ecul E1=7 K=7|
+  s2v: ecul E1=7 K=7|
+  vl: ecul E1=7 K=7|
+## 97b1025d95defa85 display("cuewn
+  pre: cuewn P=18446744073709551625 K=18446744073709551625 b=32|
+  dev2: cuewn P=18446744073709551625 K=18446744073709551625 b=32|
+  ivl: cuewn P=3 K=3 b=32|
+  s2v: cuewn P=3 K=3 b=32|
+  vl: cuewn P=3 K=3 b=32|
+## 9a14fff601fd0f53 display("w
+  pre: w W=18446744073709551625|
+  dev2: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.W` [in top]|rc=1|
+  ivl: error: Ambiguous use of 'W'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "W" ambiguously refers to the definitions in any of pa, pb|
+  vl: w W=18446744073709551625|
+## 9fa21933275af481 display("aa
+  pre: aa P=3|
+  dev2: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|rc=1|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: aa P=3|
+## a5e06dff5e45fad8 display("ppen
+  pre: ppen Z=5|
+  dev2: ppen Z=5|
+  ivl: ppen Z=5|
+  s2v: ppen Z=5|
+  vl: ppen Z=3|
+## c3142d0c1cde531a display("sel
+  pre: sel s0=1 s64=1 lo=9|
+  dev2: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: sel s0=1 s64=1 lo=9|
+## c3398e710da0a8b3 display("gif
+  pre: gif small|wid b=4|
+  dev2: gif big|wid b=10|
+  ivl: gif big|wid b=10|
+  s2v: gif big|wid b=10|
+  vl: gif small|wid b=4|
+## ca39512565a94884 display("ae
+  pre: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm|rc=1|
+  ivl: ae top.g[0].u6 W=x|ae top.g[1].u6 W=x|
+  s2v: ae top.g[0].u6 W=x|ae top.g[1].u6 W=x|
+  vl: ae top.g[1].u6 W=x|ae top.g[0].u6 W=x|
+## ccd8dd43e76a57e1 display("peenw
+  pre: peenw Z=18446744073709551625|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: `P` has already been imported into this scope from package `pa` (explici|rc=1|
+  ivl: error: 'P' has already been imported into this scope from package 'pa'.|rc=1|
+  s2v: rc=1|sv2v: import of pb::P conflicts with prior import of pa::P|
+  vl: peenw Z=3|
+## ccde8eb569459154 display("pp
+  pre: pp Z=18446744073709551625|
+  dev2: error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `Z` value is not a foldable constant [in pc]|rc=1|
+  ivl: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+  vl: pp Z=3|
+## cdb565c4c98d9186 display("pp
+  pre: pp Z=18446744073709551628|
+  dev2: pp Z=18446744073709551628|
+  ivl: pp Z=18446744073709551628|
+  s2v: pp Z=18446744073709551628|
+  vl: pp Z=18446744073709551628|
+## ce01fb604d8edc28 display("@
+  pre: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ hit3|
+  dev2: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant [in top]|rc=1|
+  ivl: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ hitw|@ big|
+  s2v: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ hitw|@ big|
+  vl: @ P=3 Q=4 w=3 sh=0 N=5 b=32|@ hit3|
+## d1962b4bee91d6f8 display("w
+  pre: w W=5|
+  dev2: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.W` [in top]|rc=1|
+  ivl: error: Ambiguous use of 'W'. It is exported by both 'pa' and by 'pb'.|rc=1|
+  s2v: rc=1|sv2v: identifier "W" ambiguously refers to the definitions in any of pa, pb|
+  vl: w W=5|
+## e184694b1aa7784e display("lwc
+  pre: lwc E1=1 K=1|
+  dev2: lwc E1=1 K=1|
+  ivl: lwc E1=1 K=1|
+  s2v: lwc E1=1 K=1|
+  vl: lwc E1=1 K=1|
+## e9c3bba779808dd7 display("cuenw
+  pre: cuenw P=18446744073709551625 K=9 b=65|
+  dev2: cuenw P=18446744073709551625 K=9 b=65|
+  ivl: cuenw P=18446744073709551625 K=9 b=65|
+  s2v: cuenw P=18446744073709551625 K=9 b=65|
+  vl: cuenw P=18446744073709551625 K=9 b=65|
+## eb59cbdb6b305884 display("egbx
+  pre: egbx E1=7 K=7|
+  dev2: egbx E1=7 K=7|
+  ivl: error: 'E1' has already been imported into this scope from package 'pk'.|warning: Anachronistic use of begin/end to surround generate schemes.|rc=1|
+  s2v: egbx E1=7 K=7|
+  vl: egbx E1=1 K=1|
+## edc93279da5f38c7 display("@
+  pre: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|
+  dev2: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ big|
+  ivl: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ big|
+  s2v: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65|@ big|
+  vl: @ P=3 Q=4 w=3 sh=0 N=5 b=32|

@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__W4_ad
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/W4_ad.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:973
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./W4_ad.ivl | 264 bytes
+W4_ad.sv:4: error: A hierarchical reference (`g.Y') is not allowed in a constant expression.
+W4_ad.sv:4: error: Dimensions must be constant.
+W4_ad.sv:4       : This LSB expression violates the rule: ((g.Y)w(8'b11111z00))+('sd2)
+2 error(s) during elaboration.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./W4_ad.vl | 225 bytes
+asz=4
+- W4_ad.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 499.999 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./W4_ad.s2v | 52 bytes
+asz=4
+W4_ad.s2v.v:17: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./W4_ad.cut | 169 bytes
+W4_ad.sv:4:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: a hierarchical reference (`g.Y`) is not allowed in a constant range bound [in t.u]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [pre] | ./W4_ad.pre | 169 bytes | identical to block 4
+=== end

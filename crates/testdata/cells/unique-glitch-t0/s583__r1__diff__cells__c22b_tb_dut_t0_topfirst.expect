@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c22b_tb_dut_t0_topfirst
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c22b_tb_dut_t0_topfirst.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE
+verdict: F2
+verdict_source: s583/r1/diff/REPORT.md:72
+alias: r1/diff/w/c22b_tb_dut_t0_topfirst/c22b_tb_dut_t0_topfirst (byte-identical source) verdict: F2 verdict_source: s583/r1/diff/REPORT.md:72
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+POST] verilator 5.052 (version captured in slice) | ./c22b_tb_dut_t0_topfirst.out | 2645 bytes
+##### c22b_tb_dut_t0_topfirst
+=== verilator compile rc=0 run rc=0
+t=1 y=2 z=1
+[2] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[2] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+[2] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[2] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+t=3 y=0 z=0
+[3] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[3] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[3] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+- c22b_tb_dut_t0_topfirst.sv:9: Verilog $finish
+[4] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[4] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+[4] %Error: c22b_tb_dut_t0_topfirst.sv:20: Assertion failed in top.u: unique case, but none matched for '2'h0'
+[4] %Error: c22b_tb_dut_t0_topfirst.sv:16: Assertion failed in top.u: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=0
+c22b_tb_dut_t0_topfirst.sv:20:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+t=1 y=2 z=1
+c22b_tb_dut_t0_topfirst.sv:20:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+t=3 y=0 z=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+c22b_tb_dut_t0_topfirst.sv:16:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+c22b_tb_dut_t0_topfirst.sv:20:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 0]
+t=1 y=2 z=1
+c22b_tb_dut_t0_topfirst.sv:16:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+c22b_tb_dut_t0_topfirst.sv:20:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+t=3 y=0 z=0
+simulation ended (Finish) at time 4
+errors=0 warnings=5 notes=0
+--- PRE==POST (all backends): False
+=== end

@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r2__sound__cells__d3c_comb_latch_from_ca_case
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r2/sound/cells/d3c_comb_latch_from_ca_case.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r2/sound/cells
+oracles_present: iverilog
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: d3c_comb_latch_from_ca_case
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+blocks: 1
+=== block 1 | combined [iverilog,PRE] iverilog 13.0 (version captured in slice) | r2/sound/out/d3c_comb_latch_from_ca_case.out | 1365 bytes
+##### d3c_comb_latch_from_ca_case
+=== iverilog compile rc=0 msgs: d3c_comb_latch_from_ca_case.sv:5: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'w[1:0]').
+d3c_comb_latch_from_ca_case.sv:5: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'w[1:0]').
+d3c_comb_latch_from_ca_case.sv:5: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+d3c_comb_latch_from_ca_case.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+t=1 r=2 q=2
+WARNING: d3c_comb_latch_from_ca_case.sv:6: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+WARNING: d3c_comb_latch_from_ca_case.sv:5: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+t=3 r=0 q=0
+d3c_comb_latch_from_ca_case.sv:7: $finish called at 4 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 r=2 q=2
+d3c_comb_latch_from_ca_case.sv:5:35: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+d3c_comb_latch_from_ca_case.sv:6:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=3 r=0 q=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== end

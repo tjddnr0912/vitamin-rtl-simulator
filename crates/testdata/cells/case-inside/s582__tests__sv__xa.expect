@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__xa
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/xa.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: verilator,sv2v
+vita_tags: DBG3,POST2,POST3,PRE
+verdict: refused
+verdict_source: s582/post3/DELTA.md:75
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime; aux: tests/sv/xb.sv
+aux: s582__tests__sv__xa.aux/tests/sv/xb.sv (origin s582/tests/sv/xb.sv)
+vita_binary: DBG3: md5 159907e8a9b77d85a93b90c2f89bf7e3 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 10
+=== block 1 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/xab/vl.out | 295 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xa.sv:2:17: syntax error, unexpected inside, expecting IDENTIFIER or IDENTIFIER-for-pathpulse or randomize
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/xab/vl_build.log | 457 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xa.sv:2:17: syntax error, unexpected inside, expecting IDENTIFIER or IDENTIFIER-for-pathpulse or randomize
+    2 |   parameter int inside = 5;
+      |                 ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/xab/sv.out | 209 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xa.sv:2:17: Parse error: unexpected token 'inside' (KW_inside)
+rc=1
+=== block 4 | vita [DBG3] | tests/sv/out/xab/post.out | 505 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xb.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xa.sv:2); IEEE 1800-2017 reserves `inside` [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [POST2] | post3/cmp/xab/post2.err | 452 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xb.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in t]
+errors=1 warnings=0 notes=0
+=== block 6 | vita [POST2] | post3/cmp/xab/post2.out | 5 bytes
+rc=1
+=== block 7 | vita [POST3] | post3/cmp/xab/post3.err | 500 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xb.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xa.sv:2); IEEE 1800-2017 reserves `inside` [in t]
+errors=1 warnings=0 notes=0
+=== block 8 | vita [POST3] | post3/cmp/xab/post3.out | 5 bytes | identical to block 6
+=== block 9 | vita [PRE] | post3/cmp/xab/pre.out | 315 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/xb.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 10 | vita [PRE] | tests/sv/out/xab/pre.out | 315 bytes | identical to block 9
+=== end

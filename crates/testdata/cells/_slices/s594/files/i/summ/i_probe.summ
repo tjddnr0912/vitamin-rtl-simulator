@@ -1,0 +1,112 @@
+### Mfn_cntE
+  pre594 : L=0
+  p3r : L=1
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Pkf_cnt
+  pre594 : L=1
+  p3r : L=0
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Pkf_cnt0
+  pre594 : L=1
+  p3r : L=1
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Pkf_cntE
+  pre594 : L=0
+  p3r : L=0
+  pa : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Pkf_el
+  pre594 : L=1
+  p3r : L=0
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### T3e_rpt
+  pre594 : k=0
+  p3r : k=3
+  pa : k=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 54213 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=3
+### T3l_rep
+  pre594 : rep=fff
+  p3r : rep=fff
+  pa : rep=fff
+  ivl : !1 error(s) during elaboration.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error: Exiting due to 1 error(s)
+### T3l_rpt
+  pre594 : k=3
+  p3r : k=3
+  pa : k=3
+  ivl : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 53881 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp | !rc=142
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 54998 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=3
+### T3n_rep
+  pre594 : rep=0
+  p3r : rep=fff
+  pa : rep=0
+  ivl : !1 error(s) during elaboration.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error: Exiting due to 1 error(s)
+### T3n_rpt
+  pre594 : k=0
+  p3r : k=3
+  pa : k=0
+  ivl : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 53975 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp | !rc=142
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 55054 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=3
+### Z0l_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  p3r : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  pa : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Z0l_lt
+  pre594 : L=1
+  p3r : L=1
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Z0l_lv
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  p3r : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  pa : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  ivl : L=252 B=9
+  s2v : L=252 B=8
+  vl : L=252 B=8
+### Z0n_lp
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  p3r : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  pa : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Z0n_lt
+  pre594 : L=0
+  p3r : L=0
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Z0n_lv
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  p3r : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  pa : !VITA-E3009 parameter `L` value is not a constant: the concatenation `{…}` has no 
+  ivl : L=252 B=9
+  s2v : L=252 B=8
+  vl : L=252 B=8

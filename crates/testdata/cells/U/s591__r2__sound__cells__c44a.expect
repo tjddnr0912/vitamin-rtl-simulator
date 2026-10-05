@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__sound__cells__c44a
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/sound/cells/c44a.sv
+roadmap_row: §2 🆕 U
+set: r2/sound/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,POSTA,POSTB,POSTB_ST
+verdict: c44 two files (padded `$unit` Q in a.sv, adjacent imports in b.sv): PRE `mf P=3 Q=1` | post_a = post_b = staged E3010
+verdict_source: s591/r2/sound/REPORT.md:24
+notes: verbatim excerpt of the source line; multi-file cell: c44a.sv c44b.sv (order from .files)
+aux: s591__r2__sound__cells__c44a.aux/r2/sound/cells/c44_multifile.files (origin s591/r2/sound/cells/c44_multifile.files)
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: POSTB_ST: md5 unrecorded commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r2/sound/cells/w_c44_multifile/ivl.out | 81 bytes
+c44b.sv:5: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.
+=== block 2 | oracle verilator 5.052 (version captured in slice) | r2/sound/cells/w_c44_multifile/vl/vl.out | 705 bytes
+%Error: Cannot find file containing module: 'c44a.sv c44b.sv'
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+        ... This may be because there's no search path specified with -I<dir>.
+        ... Looked in:
+             c44a.sv c44b.sv
+             c44a.sv c44b.sv.v
+             c44a.sv c44b.sv.sv
+             obj/c44a.sv c44b.sv
+             obj/c44a.sv c44b.sv.v
+             obj/c44a.sv c44b.sv.sv
+        ... With current working directory '/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s591/r2/sound/cells/w_c44_multifile/vl'
+%Error: Exiting due to 1 error(s)
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | r2/sound/cells/w_c44_multifile/s2v.out | 180 bytes
+sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package
+=== block 4 | combined [iverilog+sv2v|PRE+POSTA+POSTB+POSTB_ST] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./c44_multifile.res | 542 bytes
+pre rc=0: mf P=3 Q=1|
+post_a rc=1: c44b.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|
+post_b rc=1: c44b.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|
+post_b-staged 0/1/-: c44b.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]|
+IVL rc=1: c44b.sv:5: error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.|
+S2V rc=1: sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb|
+=== block 5 | vita [POSTA] | r2/sound/cells/w_c44_multifile/post_a.out | 224 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c44b.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+errors=1 warnings=1 notes=0
+=== block 6 | vita [POSTB] | r2/sound/cells/w_c44_multifile/post_b.out | 224 bytes | identical to block 5
+=== block 7 | vita [PRE] | r2/sound/cells/w_c44_multifile/pre.out | 176 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+mf P=3 Q=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+=== end

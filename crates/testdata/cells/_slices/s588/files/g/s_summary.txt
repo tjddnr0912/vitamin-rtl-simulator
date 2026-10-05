@@ -1,0 +1,120 @@
+== s01_rt_repl_d
+  PRE  : r=0 |  | rc=0
+  ivl  : | s01_rt_repl_d.sv:8: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+  vl   : | %Error: s01_rt_repl_d.sv:8:43: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '4'bxxxx' | build_rc=1
+  s2v  : | s01_rt_repl_d.s2v.v:14: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+== s01_rt_repl_p
+  PRE  : | VITA-E3009:a replication count of zero is only legal as a direct operand of a concatenation (IEEE §11.4.12.1)  | rc=1
+  ivl  : | s01_rt_repl_p.sv:8: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+  vl   : | %Error: s01_rt_repl_p.sv:8:43: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '4'bxxxx' | build_rc=1
+  s2v  : | s01_rt_repl_p.s2v.v:13: error: Concatenation repeat may not be undefined (4'bxxxx). | rc=1
+== s02_ca_ipsel_d
+  PRE  : y=0001 |  | rc=0
+  ivl  : | s02_ca_ipsel_d.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: s02_ca_ipsel_d.sv:8:25: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | s02_ca_ipsel_d.s2v.v:13: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+== s02_ca_ipsel_p
+  PRE  : y=0000 |  | rc=0
+  ivl  : | s02_ca_ipsel_p.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: s02_ca_ipsel_p.sv:8:25: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | s02_ca_ipsel_p.s2v.v:12: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+== s03_gen_case_label_d
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== s03_gen_case_label_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== s04_psel_lsb_d
+  PRE  : r=x |  | rc=0
+  ivl  : r=xxxxxxxx |  | rc=0
+  vl   : | %Error: Internal Error: s04_psel_lsb_d.sv:8:41: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : r=xxxxxxxx |  | rc=0
+== s04_psel_lsb_p
+  PRE  : r=xxxx |  | rc=0
+  ivl  : r=xxxxxxxx |  | rc=0
+  vl   : | %Error: Internal Error: s04_psel_lsb_p.sv:8:41: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : r=xxxxxxxx |  | rc=0
+== s05_formal_range_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : | %Error: s05_formal_range_d.sv:7:41: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : P=x |  | rc=0
+== s05_formal_range_p
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : | %Error: s05_formal_range_p.sv:7:41: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : P=x |  | rc=0
+== s06_lp_ipsel_base_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=xxxx |  | rc=0
+  vl   : | %Error: Internal Error: s06_lp_ipsel_base_d.sv:8:32: ../V3Number.cpp:1063: toUInt with 4-state 3'bxxx | build_rc=1
+  s2v  : P=xxxx |  | rc=0
+== s06_lp_ipsel_base_p
+  PRE  : P=0101 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : | %Error: Internal Error: s06_lp_ipsel_base_p.sv:8:32: ../V3Number.cpp:1063: toUInt with 4-state 3'bxxx | build_rc=1
+  s2v  : P=xxxx |  | rc=0
+== s07_lp_bitsel_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=x |  | rc=0
+  vl   : | %Error: Internal Error: s07_lp_bitsel_d.sv:8:26: ../V3Number.cpp:1063: toUInt with 4-state 3'bxxx | build_rc=1
+  s2v  : P=x |  | rc=0
+== s07_lp_bitsel_p
+  PRE  : P=1 |  | rc=0
+  ivl  : P=x |  | rc=0
+  vl   : | %Error: Internal Error: s07_lp_bitsel_p.sv:8:26: ../V3Number.cpp:1063: toUInt with 4-state 3'bxxx | build_rc=1
+  s2v  : P=x |  | rc=0
+== s08_rt_ipsel_width_d
+  PRE  : r=1 |  | rc=0
+  ivl  : | s08_rt_ipsel_width_d.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: s08_rt_ipsel_width_d.sv:8:44: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | s08_rt_ipsel_width_d.s2v.v:14: error: Indexed part select width must be an integral constants greater than zer | rc=1
+== s08_rt_ipsel_width_p
+  PRE  : r=0 |  | rc=0
+  ivl  : | s08_rt_ipsel_width_p.sv:8: error: Indexed part select width must be an integral constants greater than zero. | rc=1
+  vl   : | %Error: Internal Error: s08_rt_ipsel_width_p.sv:8:44: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx | build_rc=1
+  s2v  : | s08_rt_ipsel_width_p.s2v.v:13: error: Indexed part select width must be an integral constants greater than zer | rc=1
+== s09_local_range_d
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : | %Error: s09_local_range_d.sv:8:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : P=x |  | rc=0
+== s09_local_range_p
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=1 |  | rc=0
+  vl   : | %Error: s09_local_range_p.sv:8:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1) | build_rc=1
+  s2v  : P=x |  | rc=0
+== s10_unpacked_lp_count_d
+  PRE  : | VITA-E3009:parameter `N` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : | s10_unpacked_lp_count_d.sv:8: error: Dimension size must be greater than zero. | rc=1
+  vl   : | %Error: s10_unpacked_lp_count_d.sv:8:18: right side of bit range isn't a two-state constant (IEEE 1800-2023 6. | build_rc=1
+  s2v  : s=X |  | rc=0
+== s10_unpacked_lp_count_p
+  PRE  : | VITA-E3009:an unpacked array dimension size must be a POSITIVE constant (IEEE §7.4.2) — `q[0]` / `q[-3]` decla | rc=1
+  ivl  : | s10_unpacked_lp_count_p.sv:8: error: Dimension size must be greater than zero. | rc=1
+  vl   : | %Error: s10_unpacked_lp_count_p.sv:8:18: right side of bit range isn't a two-state constant (IEEE 1800-2023 6. | build_rc=1
+  s2v  : s=X |  | rc=0
+== s11_gen_if_whole_untyped_d
+  PRE  : | VITA-E3009:parameter `X` value is not a constant: `fx(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== s11_gen_if_whole_untyped_p
+  PRE  : |  | rc=0
+  ivl  : |  | rc=0
+  vl   : |  | rc=0
+  s2v  : |  | rc=0
+== s12_delay_ca_d
+  PRE  : w=1 |  | rc=0
+  ivl  : w=1 |  | rc=0
+  vl   : w=1 |  | rc=0
+  s2v  : | s12_delay_ca_d.sv:8:8: Parse error: unexpected token '#' (Sym_pound) | rc=1
+== s12_delay_ca_p
+  PRE  : w=1 |  | rc=0
+  ivl  : w=1 |  | rc=0
+  vl   : w=1 |  | rc=0
+  s2v  : | s12_delay_ca_p.sv:8:8: Parse error: unexpected token '#' (Sym_pound) | rc=1

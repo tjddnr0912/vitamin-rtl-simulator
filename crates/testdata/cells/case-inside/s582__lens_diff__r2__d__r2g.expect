@@ -1,0 +1,58 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__r2__d__r2g
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/r2/d/r2g.v
+roadmap_row: §3.b case-inside
+set: lens_diff/r2/d
+oracles_present: iverilog,verilator
+vita_tags: POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/r2/d/out_r2g/iv.out | 209 bytes
+gfun=1 afun=1 cfun=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:26: $finish called at 1 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/r2/d/out_r2g/vl.out | 384 bytes
+gfun=1 afun=1 cfun=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:26: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ns; walltime 0.000 s; speed 25.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | vita [POST2] | lens_diff/r2/d/out_r2g/post2.out | 1363 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:6:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u1.g]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:11:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u2.$func$f1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:18:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u3.$func$f2]
+errors=3 warnings=0 notes=0
+rc=1
+=== block 4 | vita [POST2] | lens_diff/r3/rescore/p2_r2g.v/out.txt | 1363 bytes | identical to block 3
+=== block 5 | vita [POST2] | post3/cmp/lens_diff__r2__d__r2g.v/post2.err | 1358 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:6:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u1.g]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:11:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u2.$func$f1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:18:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a name `inside` is declared here, so the items are ambiguous with plain `case` labels that read it; IEEE 1800-2017 reserves `inside` — rename the declaration (IEEE 1800-2017 §12.5.4) [in top.u3.$func$f2]
+errors=3 warnings=0 notes=0
+=== block 6 | vita [POST2] | post3/cmp/lens_diff__r2__d__r2g.v/post2.out | 5 bytes
+rc=1
+=== block 7 | vita [POST3] | lens_diff/r3/rescore/p3_r2g.v/out.txt | 1525 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:6:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u1.g]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:11:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u2.$func$f1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:18:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u3.$func$f2]
+errors=3 warnings=0 notes=0
+rc=1
+=== block 8 | vita [POST3] | post3/cmp/lens_diff__r2__d__r2g.v/post3.err | 1520 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:6:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u1.g]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:11:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u2.$func$f1]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:18:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r2/d/r2g.v:5); IEEE 1800-2017 reserves `inside` [in top.u3.$func$f2]
+errors=3 warnings=0 notes=0
+=== block 9 | vita [POST3] | post3/cmp/lens_diff__r2__d__r2g.v/post3.out | 5 bytes | identical to block 6
+=== block 10 | vita [PRE] | lens_diff/r2/d/out_r2g/pre.out | 90 bytes
+gfun=1 afun=1 cfun=1
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [PRE] | post3/cmp/lens_diff__r2__d__r2g.v/pre.out | 90 bytes | identical to block 10
+=== end

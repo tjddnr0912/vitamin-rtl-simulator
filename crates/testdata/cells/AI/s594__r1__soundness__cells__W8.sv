@@ -1,0 +1,4 @@
+module t #(parameter int N = 9, parameter logic [7:0] L = '0 | (((8'd200 + 8'd100) >> 1) + (|{N{8'hFF}})));
+  initial $display("L=%0d", L);
+  initial #100 $finish;
+endmodule

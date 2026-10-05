@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__r2__r2f_upward
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/r2/r2f_upward.v
+roadmap_row: §3.b case-inside
+set: lens_sound/r2
+oracles_present: iverilog,verilator
+vita_tags: POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_sound/r2/out_r2f_upward/iv.out | 210 bytes
+child upward m=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:8: $finish called at 10 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_r2f_upward.v.log | 390 bytes
+%Error: r2f_upward.v:3:39: Can't find definition of task/function: 'inside'
+    3 |   initial begin #1 x = 4'd4; case (x) inside(3): m = 1; default: m = 0; endcase $display("child upward m=%0d", m); end
+      |                                       ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 3 | vita [POST2] | lens_sound/r2/out_r2f_upward/post2.out | 186 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+child upward m=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 4 | vita [POST2] | lens_sound/r3/rerun/r2f_upward.post2 | 186 bytes | identical to block 3
+=== block 5 | vita [POST2] | post3/cmp/lens_sound__r2__r2f_upward.v/post2.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 6 | vita [POST2] | post3/cmp/lens_sound__r2__r2f_upward.v/post2.out | 59 bytes
+child upward m=0
+simulation ended (Finish) at time 10
+rc=0
+=== block 7 | vita [POST3] | lens_sound/r3/rerun/r2f_upward.post3 | 633 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:3:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:6); IEEE 1800-2017 reserves `inside` [in top.c]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [POST3] | post3/cmp/lens_sound__r2__r2f_upward.v/post3.err | 628 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:3:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:6); IEEE 1800-2017 reserves `inside` [in top.c]
+errors=1 warnings=1 notes=0
+=== block 9 | vita [POST3] | post3/cmp/lens_sound__r2__r2f_upward.v/post3.out | 5 bytes
+rc=1
+=== block 10 | vita [PRE] | lens_sound/r2/out_r2f_upward/pre.out | 387 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/r2/r2f_upward.v:3:30: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared function `inside` [in top.c]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 11 | vita [PRE] | post3/cmp/lens_sound__r2__r2f_upward.v/pre.out | 387 bytes | identical to block 10
+=== end

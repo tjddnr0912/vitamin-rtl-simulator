@@ -1,0 +1,408 @@
+== g01a_hdr_sub
+  PRE fu : VITA-E3009:parameter `W` value is not a constant: `f(…)` has no constant-fold arm [in top.u] | rc=1
+  PRE fp : W=7 | rc=0
+  ivl fp : W=7 | rc=0
+  vl  fu : W=7 | rc=0
+  vl  fp : W=7 | rc=0
+== g01b_hdr_top
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=7 | rc=0
+  ivl fp : P=7 | rc=0
+  vl  fu : P=7 | rc=0
+  vl  fp : P=7 | rc=0
+== g02a_ifc_hdr
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top.i] | rc=1
+  PRE fp : P=7 | rc=0
+  ivl fp : P=7 | rc=0
+  vl  fu : P=7 | rc=0
+  vl  fp : P=7 | rc=0
+== g02b_ifc_body
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top.i] | rc=1
+  PRE fp : P=7 | rc=0
+  ivl fp : P=7 | rc=0
+  vl  fu : P=7 | rc=0
+  vl  fp : P=7 | rc=0
+== g02c_ifc_real
+  PRE fu : VITA-E3009:parameter `R` value is not a constant: `f(…)` has no constant-fold arm [in top.i] | rc=1
+  PRE fp : R=7.00 | rc=0
+  ivl fp : R=7.00 | rc=0
+  vl  fu : R=7.00 | rc=0
+  vl  fp : R=7.00 | rc=0
+== g02d_ifc_lp
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top.i] | rc=1
+  PRE fp : P=7 | rc=0
+  ivl fp : P=7 | rc=0
+  vl  fu : P=7 | rc=0
+  vl  fp : P=7 | rc=0
+== g03a_untyped
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=7 b=4 | rc=0
+  ivl fp : P=7 b=4 | rc=0
+  vl  fu : P=7 b=4 | rc=0
+  vl  fp : P=7 b=4 | rc=0
+== g03b_typed8
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=07 b=8 | rc=0
+  ivl fp : P=07 b=8 | rc=0
+  vl  fu : %Warning-WIDTHTRUNC: g03b_typed8_u.sv:6:26: Operator VAR 'P' expects 8 bits on the Initial value, but Initial  | P=07 b=8 | rc=0
+  vl  fp : %Warning-WIDTHTRUNC: g03b_typed8_p.sv:6:26: Operator VAR 'P' expects 8 bits on the Initial value, but Initial  | P=07 b=8 | rc=0
+== g03c_real
+  PRE fu : VITA-E3009:parameter `R` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : R=7.00 | rc=0
+  ivl fp : R=7.00 | rc=0
+  vl  fu : R=7.00 | rc=0
+  vl  fp : R=7.00 | rc=0
+== g04_gen_enum
+  PRE fu : VITA-E3010:undeclared net/variable `top.g[0].A` [in top.g] | VITA-E3010:undeclared net/variable `top.g[0].B` [in top.g] | rc=1
+  PRE fp : VITA-E3010:undeclared net/variable `top.g[0].A` [in top.g] | VITA-E3010:undeclared net/variable `top.g[0].B` [in top.g] | rc=1
+  ivl fp : g04_gen_enum_p.sv:8: error: Unable to bind wire/reg/memory `A' in `top.g' | g04_gen_enum_p.sv:8: error: Unable to bind wire/reg/memory `B' in `top.g' | 2 error(s) during elaboration. | rc=2
+  vl  fu : A=7 B=8 | rc=0
+  vl  fp : A=7 B=8 | rc=0
+== g04b_gen_enum2
+  PRE fu : VITA-E3010:undeclared net/variable `top.g[0].B` [in top.g] | rc=1
+  PRE fp : VITA-E3010:undeclared net/variable `top.g[0].B` [in top.g] | rc=1
+  ivl fp : g04b_gen_enum2_p.sv:8: error: Unable to bind wire/reg/memory `B' in `top.g' | sh: line 1: 90223 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/fo |      90227 Segmentation fault: 11  | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/f | rc=139
+  vl  fu : e=8 | rc=0
+  vl  fp : e=8 | rc=0
+== g05a_inst_arr
+  PRE fu : VITA-E3009:instance array `u` range is not a constant [in top] | rc=1
+  PRE fp : hit top.u[7] | rc=0
+  ivl fp : hit top.u[7] | rc=0
+  vl  fu : hit top.u[7] | rc=0
+  vl  fp : hit top.u[7] | rc=0
+== g05b_inst_child
+  PRE fu : VITA-E3009:instance array `u`: a child port width does not const-fold [in top] | rc=1
+  PRE fp : VITA-E3009:instance array `u`: a child port width does not const-fold [in top] | rc=1
+  ivl fp : hit top.u[7] b=4 | rc=0
+  vl  fu : hit top.u[7] b=4 | rc=0
+  vl  fp : hit top.u[7] b=4 | rc=0
+== g05c_formal_arr
+  PRE fu : VITA-E3009:function `sz`: unpacked-array formal `a` is unsupported — a non-constant unpacked-array bo | rc=1
+  PRE fp : s=817 | rc=0
+  ivl fp : g05c_formal_arr_p.sv:12: error: Array arr needs an array index here. | 2 error(s) during elaboration. | rc=2
+  vl  fu : s=817 | rc=0
+  vl  fp : s=817 | rc=0
+== g05d_str_arr
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | rc=1
+  ivl fp : ERROR: g05d_str_arr_p.sv:7: $size argument must be a dynamic array, queue or string, given a vpiMemory. | rc=1
+  vl  fu : n=8 s7=h | rc=0
+  vl  fp : n=8 s7=h | rc=0
+== g05e_lp_range
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : P=ff b=8 | rc=0
+  ivl fp : P=ff b=8 | rc=0
+  vl  fu : P=ff b=8 | rc=0
+  vl  fp : P=ff b=8 | rc=0
+== g05f_enum_base
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : b=8 e=ff | rc=0
+  ivl fp : g05f_enum_base_p.sv:6: error: No function named `f' found in this context (top). | g05f_enum_base_p.sv:6: error: Dimensions must be constant. | g05f_enum_base_p.sv:6       : This MSB expression violates the rule: f('sd2) | g05f_enum_base_p.sv:6: error: Enumeration name A has an incorrectly sized constant. | g05f_enum_base_p.sv:6: error: Enumeration name A has a value that is too large: 8'd255.
+  vl  fu : b=8 e=ff | rc=0
+  vl  fp : b=8 e=ff | rc=0
+== g05g_vcd
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-W3056:negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width | rc=1
+  PRE fp : done | rc=0
+  ivl fp : done | rc=0
+  vl  fu : %Warning-ASCRANGE: g05g_vcd_u.sv:7:9: Ascending bit range vector: left < right of bit range: [0:7] | -Info: g05g_vcd_u.sv:11: $dumpvar ignored, as Verilated without --trace | done | rc=0
+  vl  fp : %Warning-ASCRANGE: g05g_vcd_p.sv:7:9: Ascending bit range vector: left < right of bit range: [0:7] | -Info: g05g_vcd_p.sv:11: $dumpvar ignored, as Verilated without --trace | done | rc=0
+== g05h_neg_lsb
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-W3056:negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width | rc=1
+  PRE fp : b=10 l=7 r=-2 v=3fe | rc=0
+  ivl fp : b=10 l=7 r=-2 v=3fe | rc=0
+  vl  fu : b=10 l=7 r=-2 v=3fe | rc=0
+  vl  fp : b=10 l=7 r=-2 v=3fe | rc=0
+== g05i_asc_lsb
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : b=8 l=0 r=7 v0=0 v7=1 | rc=0
+  ivl fp : b=8 l=0 r=7 v0=0 v7=1 | rc=0
+  vl  fu : %Warning-ASCRANGE: g05i_asc_lsb_u.sv:6:9: Ascending bit range vector: left < right of bit range: [0:7] | b=8 l=0 r=7 v0=0 v7=1 | rc=0
+  vl  fp : %Warning-ASCRANGE: g05i_asc_lsb_p.sv:6:9: Ascending bit range vector: left < right of bit range: [0:7] | b=8 l=0 r=7 v0=0 v7=1 | rc=0
+== g05j_lp_arr
+  PRE fu : VITA-E3009:parameter `Q` value is not a constant: undefined name `A` is not a constant [in top] | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:assignment pattern has 8 element(s) but the array dimension has 1 (IEEE 1800 §10.9.1 requi | rc=1
+  PRE fp : n=8 a7=17 q=17 | rc=0
+  ivl fp : rc=1
+  vl  fu : n=8 a7=17 q=17 | rc=0
+  vl  fp : n=8 a7=17 q=17 | rc=0
+== g05k_task_local
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : tb=8 x=ff | rc=0
+  ivl fp : tb=8 x=ff | rc=0
+  vl  fu : tb=8 x=ff | rc=0
+  vl  fp : tb=8 x=ff | rc=0
+== g05l_task_susp
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : tb=8 x=ff | rc=0
+  ivl fp : tb=8 x=ff | rc=0
+  vl  fu : tb=8 x=ff | rc=0
+  vl  fp : tb=8 x=ff | rc=0
+== g05m_port_unp
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:a whole unpacked array has no value in this context (v1: arrays are copied by array assign | rc=1
+  PRE fp : l=7 r=0 i=1 p7=1 p0=0 | rc=0
+  ivl fp : l=7 r=0 i=1 p7=1 p0=0 | rc=0
+  vl  fu : l=7 r=0 i=1 p7=1 p0=0 | rc=0
+  vl  fp : l=7 r=0 i=1 p7=1 p0=0 | rc=0
+== g05n_net_unp
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:assignment pattern has 8 element(s) but the array dimension has 1 (IEEE 1800 §10.9.1 requi | rc=1
+  PRE fp : l=7 r=0 i=1 u7=1 u0=0 | rc=0
+  ivl fp : l=7 r=0 i=1 u7=1 u0=0 | rc=0
+  vl  fu : l=7 r=0 i=1 u7=1 u0=0 | rc=0
+  vl  fp : l=7 r=0 i=1 u7=1 u0=0 | rc=0
+== g05o_task_unp
+  PRE fu : VITA-E3009:an assignment pattern `'{…}` is supported only as the whole right-hand side of an unpacked | VITA-E3009:frame task `t` body uses an unpacked ARRAY declared local to this task. Supported here: `$ | rc=1
+  PRE fp : VITA-E3009:an assignment pattern `'{…}` is supported only as the whole right-hand side of an unpacked | rc=1
+  ivl fp : x7=1 x0=0 i=1 | rc=0
+  vl  fu : x7=1 x0=0 i=1 | rc=0
+  vl  fp : x7=1 x0=0 i=1 | rc=0
+== g05p_md_packed
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : b2=8 b3=8 m2=c m3=c e=c3 | rc=0
+  ivl fp : b2=8 b3=8 m2=c m3=c e=c3 | rc=0
+  vl  fu : b2=8 b3=8 m2=c m3=c e=c3 | rc=0
+  vl  fp : b2=8 b3=8 m2=c m3=c e=c3 | rc=0
+== g05q_bits_prescan
+  PRE fu : VITA-E3009:parameter `B` value is not a constant: undefined name `late` is not a constant [in top] | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : VITA-E3009:parameter `B` value is not a constant: undefined name `late` is not a constant [in top] | rc=1
+  ivl fp : B=0 | rc=0
+  vl  fu : B=8 | rc=0
+  vl  fp : B=8 | rc=0
+== g05r_str_arr2
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : s7=h s0=a | rc=0
+  ivl fp : s7=h s0=a | rc=0
+  vl  fu : s7=h s0=a | rc=0
+  vl  fp : s7=h s0=a | rc=0
+== g05s_str_arr3
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : s7=z | rc=0
+  ivl fp : s7=z | rc=0
+  vl  fu : s7=z | rc=0
+  vl  fp : s7=z | rc=0
+== g05t_task_unp2
+  PRE fu : VITA-E3009:frame task `t` body uses an unpacked ARRAY declared local to this task. Supported here: `$ | VITA-E3009:enum method `x.first` is unavailable: the enum type of `x` was not registered, which happe | VITA-E3009:enum method `x.next` is unavailable: the enum type of `x` was not registered, which happen | rc=1
+  PRE fp : VITA-E3009:enum method `x.first` is unavailable: the enum type of `x` was not registered, which happe | VITA-E3009:enum method `x.next` is unavailable: the enum type of `x` was not registered, which happen | rc=1
+  ivl fp : x7=1 x0=0 l=7 i=1 | rc=0
+  vl  fu : x7=1 x0=0 l=7 i=1 | rc=0
+  vl  fp : x7=1 x0=0 l=7 i=1 | rc=0
+== g05u_bits_prescan2
+  PRE fu : VITA-E3009:parameter `B` value is not a constant: undefined name `early` is not a constant [in top] | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : B=8 | rc=0
+  ivl fp : B=8 | rc=0
+  vl  fu : B=8 | rc=0
+  vl  fp : B=8 | rc=0
+== g05v_task_unp3
+  PRE fu : VITA-E3009:frame task `t` body uses an unpacked ARRAY declared local to this task. Supported here: `$ | rc=1
+  PRE fp : x7=1 x0=0 l=7 i=1 | rc=0
+  ivl fp : x7=1 x0=0 l=7 i=1 | rc=0
+  vl  fu : x7=1 x0=0 l=7 i=1 | rc=0
+  vl  fp : x7=1 x0=0 l=7 i=1 | rc=0
+== g06a_ur_bits
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : b=28 | rc=0
+  ivl fp : b=28 | rc=0
+  vl  fu : b=28 | rc=0
+  vl  fp : b=28 | rc=0
+== g06b_ur_query
+  PRE fu : VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : l=0 r=6 i=-1 s=7 d=2 | rc=0
+  ivl fp : l=0 r=6 i=-1 s=7 d=2 | rc=0
+  vl  fu : l=0 r=6 i=-1 s=7 d=2 | rc=0
+  vl  fp : l=0 r=6 i=-1 s=7 d=2 | rc=0
+== g06c_str_n
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | VITA-E3010:undeclared net/variable `top.s2` [in top] | VITA-E3009:unsupported system function in expression [in top] | VITA-E3010:undeclared net/variable `top.s2` [in top] | rc=1
+  PRE fp : VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | VITA-E3010:undeclared net/variable `top.s2` [in top] | VITA-E3009:unsupported system function in expression [in top] | rc=1
+  ivl fp : ERROR: g06c_str_n_p.sv:8: $size argument must be a dynamic array, queue or string, given a vpiMemory. | ERROR: g06c_str_n_p.sv:8: $size argument must be a dynamic array, queue or string, given a vpiMemory. | rc=1
+  vl  fu : n=7 n2=7 s6=g | rc=0
+  vl  fp : n=7 n2=7 s6=g | rc=0
+== g06d_formal_n
+  PRE fu : VITA-E3009:function `sz`: unpacked-array formal `a` is unsupported — a non-constant or non-positive u | rc=1
+  PRE fp : s=716 | rc=0
+  ivl fp : g06d_formal_n_p.sv:12: error: Array arr needs an array index here. | 2 error(s) during elaboration. | rc=2
+  vl  fu : s=716 | rc=0
+  vl  fp : s=716 | rc=0
+== g06e_blk_str
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3009:unsupported system function in expression [in top] | rc=1
+  ivl fp : g06e_blk_str_p.sv:7: warning: Static variable initialization requires explicit lifetime in this context. | ERROR: g06e_blk_str_p.sv:8: $size argument must be a dynamic array, queue or string, given a vpiMemory. | rc=1
+  vl  fu : %Warning-IMPLICITSTATIC: g06e_blk_str_u.sv:7:12: Variable's lifetime implicitly set to static (IEEE 1800-2023  | n=7 s6=g | rc=0
+  vl  fp : %Warning-IMPLICITSTATIC: g06e_blk_str_p.sv:7:12: Variable's lifetime implicitly set to static (IEEE 1800-2023  | n=7 s6=g | rc=0
+== g06f_frame_str
+  PRE fu : VITA-E3009:frame task `t` body uses an unpacked ARRAY declared local to this task. Supported here: `$ | rc=1
+  PRE fp : n=7 s6=z | rc=0
+  ivl fp : ERROR: g06f_frame_str_p.sv:9: $size argument must be a dynamic array, queue or string, given a vpiMemory. | rc=1
+  vl  fu : n=7 s6=z | rc=0
+  vl  fp : n=7 s6=z | rc=0
+== g06g_str_n2
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s2` [in top] | VITA-E3010:undeclared net/variable `top.s2` [in top] | rc=1
+  PRE fp : s6=g s0=a | rc=0
+  ivl fp : s6=g s0=a | rc=0
+  vl  fu : s6=g s0=a | rc=0
+  vl  fp : s6=g s0=a | rc=0
+== g06h_str_n3
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : s6=z | rc=0
+  ivl fp : s6=z | rc=0
+  vl  fu : s6=z | rc=0
+  vl  fp : s6=z | rc=0
+== g06i_blk_str2
+  PRE fu : VITA-E3009:a string variable takes no packed/unpacked dimensions (v7) [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | VITA-E3010:undeclared net/variable `top.s` [in top] | rc=1
+  PRE fp : s6=g s0=a | rc=0
+  ivl fp : g06i_blk_str2_p.sv:7: warning: Static variable initialization requires explicit lifetime in this context. | s6=g s0=a | rc=0
+  vl  fu : %Warning-IMPLICITSTATIC: g06i_blk_str2_u.sv:7:12: Variable's lifetime implicitly set to static (IEEE 1800-2023 | s6=g s0=a | rc=0
+  vl  fp : %Warning-IMPLICITSTATIC: g06i_blk_str2_p.sv:7:12: Variable's lifetime implicitly set to static (IEEE 1800-2023 | s6=g s0=a | rc=0
+== g06j_ur_bits_param
+  PRE fu : VITA-E3009:parameter `B` value is not a constant: undefined name `u` is not a constant [in top] | VITA-E3009:a function call that does not fold to a constant is not allowed in a constant range bound  | rc=1
+  PRE fp : B=28 | rc=0
+  ivl fp : B=28 | rc=0
+  vl  fu : B=28 | rc=0
+  vl  fp : B=28 | rc=0
+== g07a_cast_lp
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=127 | rc=0
+  ivl fp : P=127 | rc=0
+  vl  fu : %Warning-WIDTHEXPAND: g07a_cast_lp_u.sv:6:18: Operator VAR 'P' expects 32 bits on the Initial value, but Initi | P=127 | rc=0
+  vl  fp : %Warning-WIDTHEXPAND: g07a_cast_lp_p.sv:6:18: Operator VAR 'P' expects 32 bits on the Initial value, but Initi | P=127 | rc=0
+== g07b_cast_bits
+  PRE fu : VITA-E3009:size cast width must be a positive constant expression [in top] | rc=1
+  PRE fp : b=7 | rc=0
+  ivl fp : b=7 | rc=0
+  vl  fu : b=7 | rc=0
+  vl  fp : b=7 | rc=0
+== g07c_cast_rpt
+  PRE fu : VITA-E3009:size cast width must be a positive constant expression [in top] | rc=1
+  PRE fp : n=15 | rc=0
+  ivl fp : n=15 | rc=0
+  vl  fu : %Warning-WIDTHEXPAND: g07c_cast_rpt_u.sv:7:27: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign R | n=15 | rc=0
+  vl  fp : %Warning-WIDTHEXPAND: g07c_cast_rpt_p.sv:7:27: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign R | n=15 | rc=0
+== g08a_hier_psr
+  PRE fu : r=1 | rc=0
+  PRE fp : r=4d | rc=0
+  ivl fp : r=4d | rc=0
+  vl  fu : r=4d | rc=0
+  vl  fp : r=4d | rc=0
+== g08b_hier_psw
+  PRE fu : v=0000 | rc=0
+  PRE fp : v=ab80 | rc=0
+  ivl fp : v=ab80 | rc=0
+  vl  fu : v=ab80 | rc=0
+  vl  fp : v=ab80 | rc=0
+== g08c_hier_prr
+  PRE fu : r=1 | rc=0
+  PRE fp : r=cd | rc=0
+  ivl fp : r=cd | rc=0
+  vl  fu : r=cd | rc=0
+  vl  fp : r=cd | rc=0
+== g08d_hier_prw
+  PRE fu : v=0000 | rc=0
+  PRE fp : v=ab00 | rc=0
+  ivl fp : v=ab00 | rc=0
+  vl  fu : v=ab00 | rc=0
+  vl  fp : v=ab00 | rc=0
+== g09a_reg_rep
+  PRE fu : r=00 | rc=0
+  PRE fp : r=40 | rc=0
+  ivl fp : r=40 | rc=0
+  vl  fu : r=40 | rc=0
+  vl  fp : r=40 | rc=0
+== g09b_reg_ps
+  PRE fu : r=01 | rc=0
+  PRE fp : r=40 | rc=0
+  ivl fp : r=40 | rc=0
+  vl  fu : r=40 | rc=0
+  vl  fp : r=40 | rc=0
+== g09c_reg_pr
+  PRE fu : r=01 | rc=0
+  PRE fp : r=40 | rc=0
+  ivl fp : r=40 | rc=0
+  vl  fu : r=40 | rc=0
+  vl  fp : r=40 | rc=0
+== g09d_reg_hpr
+  PRE fu : r=01 | rc=0
+  PRE fp : r=40 | rc=0
+  ivl fp : r=40 | rc=0
+  vl  fu : r=40 | rc=0
+  vl  fp : r=40 | rc=0
+== g09e_reg_ca
+  PRE fu : r=00 | rc=0
+  PRE fp : r=40 | rc=0
+  ivl fp : r=40 | rc=0
+  vl  fu : r=40 | rc=0
+  vl  fp : r=40 | rc=0
+== g10a_neg_cnt
+  PRE fu : r=00 | rc=0
+  PRE fp : VITA-E3009:a replication count may not be negative (IEEE §11.4.12.2) [in top] | rc=1
+  ivl fp : g10a_neg_cnt_p.sv:7: error: Concatenation repeat may not be negative (-1). | 1 error(s) during elaboration. | rc=1
+  vl  fu : %Error: g10a_neg_cnt_u.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hfff | %Error: Exiting due to 1 error(s) | build_rc=1
+  vl  fp : %Error: g10a_neg_cnt_p.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hfff | %Error: Exiting due to 1 error(s) | build_rc=1
+== g10b_zero_cnt
+  PRE fu : r=05 | rc=0
+  PRE fp : r=05 | rc=0
+  ivl fp : r=05 | rc=0
+  vl  fu : %Warning-WIDTHEXPAND: g10b_zero_cnt_u.sv:7:22: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RH | r=05 | rc=0
+  vl  fp : %Warning-WIDTHEXPAND: g10b_zero_cnt_p.sv:7:22: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RH | r=05 | rc=0
+== g11a_md_pr
+  PRE fu : m=1 | rc=0
+  PRE fp : m=89abcdef | rc=0
+  ivl fp : m=89abcdef | rc=0
+  vl  fu : m=89abcdef | rc=0
+  vl  fp : m=89abcdef | rc=0
+== g11b_md3
+  PRE fu : m=0 | rc=0
+  PRE fp : m=fedcba98 | rc=0
+  ivl fp : m=fedcba98 | rc=0
+  vl  fu : m=fedcba98 | rc=0
+  vl  fp : m=fedcba98 | rc=0
+== g11c_md_prw
+  PRE fu : m=0000000000000000 | rc=0
+  PRE fp : m=0123456700000000 | rc=0
+  ivl fp : m=0123456700000000 | rc=0
+  vl  fu : m=0123456700000000 | rc=0
+  vl  fp : m=0123456700000000 | rc=0
+== g11d_md3w
+  PRE fu : VITA-E3009:nested lvalue select (v1: single-level) [in top] | rc=1
+  PRE fp : m=0123456789abcdef0000000076543210 | rc=0
+  ivl fp : m=0123456789abcdef0000000076543210 | rc=0
+  vl  fu : m=0123456789abcdef0000000076543210 | rc=0
+  vl  fp : m=0123456789abcdef0000000076543210 | rc=0
+== g12a_elab_s
+  PRE fu : VITA-E3009:an elaboration `$info` argument is not a constant this pass can render (a literal, a param | rc=1
+  PRE fp : VITA-E3009:an elaboration `$info` argument is not a constant this pass can render (a literal, a param | rc=1
+  ivl fp : g12a_elab_s_p.sv:6: error: Elaboration task $info() parameter [2] 'top.g(32'sd2)' is not constant. | 1 error(s) during elaboration. | rc=1
+  vl  fu : rc=0
+  vl  fp : rc=0
+== g12b_ifc_elab
+  PRE fu : VITA-E3009:an elaboration `$info` argument is not a constant this pass can render (a literal, a param | rc=1
+  PRE fp : VITA-I3006:el=7 [in top.i] | rc=0
+  ivl fp : g12b_ifc_elab_p.sv:6: error: Elaboration task $info() parameter [2] 'top.i.f(32'sd2)' is not constant. | 1 error(s) during elaboration. | rc=1
+  vl  fu : rc=0
+  vl  fp : rc=0
+== g12c_fatal1
+  PRE fu : VITA-F3005:boom [in top] | rc=1
+  PRE fp : VITA-F3005:boom [in top] | rc=1
+  ivl fp : g12c_fatal1_p.sv:6: error: Elaboration task $fatal() parameter [1] '(top.f(32'sd2))-(32'sd7)' is not constant. | 1 error(s) during elaboration. | rc=1
+  vl  fu : %Warning-USERFATAL: g12c_fatal1_u.sv:6:3: boom | rc=0
+  vl  fp : %Warning-USERFATAL: g12c_fatal1_p.sv:6:3: boom | rc=0
+== g12d_elab_mod
+  PRE fu : VITA-E3009:an elaboration `$info` argument is not a constant this pass can render (a literal, a param | rc=1
+  PRE fp : VITA-I3006:el=7 [in top] | rc=0
+  ivl fp : g12d_elab_mod_p.sv:6: error: Elaboration task $info() parameter [2] 'top.f(32'sd2)' is not constant. | 1 error(s) during elaboration. | rc=1
+  vl  fu : rc=0
+  vl  fp : rc=0
+== g12f_elab_s3
+  PRE fu : VITA-E3009:an elaboration `$info` argument is not a constant this pass can render (a literal, a param | rc=1
+  PRE fp : VITA-I3006:s=   A [in top] | rc=0
+  ivl fp : g12f_elab_s3_p.sv:6: error: Elaboration task $info() parameter [2] 'top.g(32'sd2)' is not constant. | 1 error(s) during elaboration. | rc=1
+  vl  fu : rc=0
+  vl  fp : rc=0
+== g13a_lp_rpt
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=7 n=7 | rc=0
+  ivl fp : P=7 n=7 | rc=0
+  vl  fu : [1] %Error: g13a_lp_rpt_u.sv:4: Assertion failed in top.f: 'unique if' statement violated | -Info: g13a_lp_rpt_u.sv:4: Verilog $stop, ignored due to +verilator+error+limit | P=7 n=7 | rc=0
+  vl  fp : P=7 n=7 | rc=0
+== g13b_rpt_lp
+  PRE fu : VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  PRE fp : P=7 n=7 | rc=0
+  ivl fp : g13b_rpt_lp_p.sv:7: error: Unable to bind wire/reg/memory `P' in `top' | 1 error(s) during elaboration. | rc=1
+  vl  fu : [1] %Error: g13b_rpt_lp_u.sv:4: Assertion failed in top.f: 'unique if' statement violated | -Info: g13b_rpt_lp_u.sv:4: Verilog $stop, ignored due to +verilator+error+limit | P=7 n=7 | rc=0
+  vl  fp : P=7 n=7 | rc=0

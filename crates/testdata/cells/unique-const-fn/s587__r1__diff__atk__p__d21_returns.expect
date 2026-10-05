@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk__p__d21_returns
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk/p/d21_returns.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk/p
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/diff/REPORT.md:33
+alias: r2/diff/re/atk/p/d21_returns (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./d21_returns.ivl | 64 bytes
+P1=5 P2=7 P3=2
+d21_returns.sv:20: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./d21_returns.vl | 240 bytes
+P1=5 P2=7 P3=2
+- d21_returns.sv:20: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 76.923 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_d21_returns.build | 0 bytes
+
+=== block 4 | vita [S7] | ./d21_returns.s7 | 183 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P1=5 P2=7 P3=2
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S8] | ./d21_returns.s8 | 183 bytes | identical to block 4
+=== end

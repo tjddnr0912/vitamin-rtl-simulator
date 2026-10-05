@@ -1,0 +1,22 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_snd__probes__I4
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_snd/probes/I4.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_snd/probes
+oracles_present: verilator,sv2v
+vita_tags: unrecorded
+verdict: clean
+verdict_source: s581/lens_snd/REPORT.md:91
+notes: run output not captured for sv2v (translation or empty file only); verilator: build log only, run output not captured
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./I4.vlb.txt | 404 bytes
+%Error: I4.sv:3:21: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 'top.u'
+    3 |     ((P + 4'd1) ==? 4'b000?): begin : g_a initial $display("I4 a"); end
+      |                     ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./I4.s.err | 0 bytes
+
+=== end

@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk2__p__e03_ia_override
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk2/p/e03_ia_override.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk2/p
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/diff/REPORT.md:27
+alias: r2/diff/re/atk2/p/e03_ia_override (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./e03_ia_override.ivl | 215 bytes
+top.u[0].gy W=3 b=4 p=5 gy
+top.u[1].gy W=3 b=4 p=a gy
+top.v[0].gy W=1 b=2 p=1 gy
+top.v[1].gy W=1 b=2 p=1 gy
+top.v[2].gy W=1 b=2 p=2 gy
+top.v[3].gy W=1 b=2 p=2 gy
+e03_ia_override.sv:14: $finish called at 5 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./e03_ia_override.vl | 392 bytes
+top.v[0].gy W=1 b=2 p=1 gy
+top.v[1].gy W=1 b=2 p=1 gy
+top.v[2].gy W=1 b=2 p=2 gy
+top.v[3].gy W=1 b=2 p=2 gy
+top.u[0].gy W=3 b=4 p=5 gy
+top.u[1].gy W=3 b=4 p=a gy
+- e03_ia_override.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 312.500 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_e03_ia_override.build | 0 bytes
+
+=== block 4 | vita [S7] | ./e03_ia_override.s7 | 330 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+top.u[1].gy W=3 b=4 p=a gy
+top.u[0].gy W=3 b=4 p=5 gy
+top.v[3].gy W=1 b=2 p=2 gy
+top.v[2].gy W=1 b=2 p=2 gy
+top.v[1].gy W=1 b=2 p=1 gy
+top.v[0].gy W=1 b=2 p=1 gy
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S8] | ./e03_ia_override.s8 | 330 bytes | identical to block 4
+=== end

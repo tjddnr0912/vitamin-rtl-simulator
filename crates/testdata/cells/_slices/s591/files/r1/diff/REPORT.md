@@ -1,0 +1,22 @@
+# §4.5.591 lens DIFFERENTIAL round 1 — REPORT (final)
+round: 1 · lens verdict: PASS (product does not shake) · 2 MAJOR doc-claim fixes before commit
+binaries: PRE $S/s591/pre/vita ac965d2938f4b5bbbda4291ecd64d1dc · POST $S/s591/post_a/vita 732fb809ebad55f14fd214d72925c960 · POST staged post_a/sep (vcmp 1d978ae2…, velab 19706214…, vrun 3ed5dc14…)
+harness: $D/run6.sh (pre, post, pstg, ivl, vl, s2v), $D/show.sh, $D/wl.sh; cells $D/cells (43 designed, budget 40: overrun 3)
+counts: 43 cells; PRE=POST byte-identical 38; movers 5 (D24 silent->loud, D40 silent->loud, D41 silent->loud, D42 silent->correct, D54 silent->correct); correct->loud 0; loud->value 0; staged POST == one-shot POST 43/43 (minus per-stage errors= lines); determinism 3/3; corpus 15 workloads vcmp+velab rc 0 both, 30/30 artefacts byte-identical (own re-run, $D/corpus/cmp.txt)
+
+## findings (most severe first)
+| id | sev | new/known | cell | PRE | POST | iverilog | verilator | sv2v | 4-way |
+|---|---|---|---|---|---|---|---|---|---|
+| F1 | MAJOR | new (claim) | D19 `import pa::t; import pb::t;` (typedef) / D20 same for function f | `d19 b=8` / `d20 f=5` | same (silent) | "'t' has already been imported into this scope from package 'pa'." / same for 'f' | `b=4` / `f=3` | "import of pb::t conflicts with prior import of pa::t" / pb::f | real gap, pre-existing; test-file doc says "two explicit imports of one name from two packages in one scope" become loud — only names offering a value (const/wide/var) do |
+| F2 | MAJOR | new (claim) | D21 `import pb::P; import pa::*;` (explicit first) | `gif big P=…625 b=65` | same | same | same (explicit) | same | test-file doc "Verilator binds a wildcard import over an explicit one" false in this order; measured rule = first import wins (D22 vl `P=18446744073709551619` = wildcard first; Iab_sel/D40 vl = first package). Disqualification holds, condition misstated |
+| F3 | MINOR | new residue | D24 pkg `import pa::*; localparam Z=P; import pb::*; localparam Y=P;` | `d24 Z=3 Y=5` | `E3009 package parameter Y value is not a foldable constant [in pc]` (staged same) | `d24 Z=3 Y=3` | `d24 Z=3 Y=3` | `d24 Z=3 Y=3` | silent->loud (PRE wrong vs 3 oracles); import-by-reference not modelled; module twin D24m loud on PRE and POST for Z and Y (pre-existing) |
+| F4 | MINOR | known doc gap | ROADMAP §0 disqualifier list | — | — | — | — | — | lists iverilog defects ①–⑧ only; no verilator import-precedence entry; record with condition |
+| F5 | MINOR | known class | D41 / Iee_gif / Ewn location | — | E3009 at module header `D41m.sv:1:8`, `Iee_gif.sv:3:8`, `Ewn.sv:2:8` | at the import `D41m.sv:3`, `Iee_gif.sv:5`, `Ewn.sv:4` | — | — | instance-site error location class |
+
+## 18 verilator-only cells: VERIFIED as silent->loud
+15 two-wildcard ambiguous refs (Iaa_*6, Iab_*6, Iaa_disp, Iwv, Ivw) ivl "Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'." (reverse order Iab_sel/D40: "by both 'pb' and by 'pa'"), s2v "identifier "P" ambiguously refers to the definitions in any of pa, pb"; Ewn ivl "'E1' has already been imported into this scope from package 'pk'." s2v "declaration of E1 conflicts with prior import of pk::E1"; Iee_gif ivl "'P' has already been imported into this scope from package 'pa'." s2v "import of pb::P conflicts with prior import of pa::P"; Inw_gcs ivl/s2v `gcs wide`, PRE `gcs three` = vl (wrong). Verilator refuses LRM §26.3 top2 (D11, D50): "%Error-ENUMVALUE: ... Implicit conversion to enum 'enum{}q::teeth_t' from 'enum{}p::bool_t'" where ivl/s2v/PRE/POST `myteeth=1`. LRM verbatim: UNVERIFIED (no copy reachable).
+
+## clean (PRE=POST=staged, = oracle or loud on both)
+D01/D02 same pkg twice (all `P=3`, `P=…625 b=65`); D10 wildcard+explicit label same pkg; D11/D50 LRM top2; D13 struct member; D21/D22 wide orders; D23/D25 unreferenced ambiguity; D27/D27r 2-file $unit label + explicit import `E1=7`; D39 pkg chains; D29a iface typedef refused (claim TRUE). Loud on both (no risk): generate-block import, function import, export (E2002), anon enum, `E[2]`, class/block enum typedef, pkg routine naming imports, real/string explicit import, work-lib separate units, cross-file/included $unit labels (D27c/D27i E3010 `top.E0`; 3 oracles `v=0 E1=7`).
+aside: iverilog lets an outer explicit import beat an inner scope's own label (D08 `g E1=7`, D09 `f=7`; vl/s2v/vita `1`).
+next (unrun, budget): `$unit` explicit + module wildcard same name (same root as PLAN's new $unit-scope row); local decl after wildcard use.

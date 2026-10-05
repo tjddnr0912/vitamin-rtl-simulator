@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g2b__e_sel3_case_M
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g2b/e_sel3_case_M.sv
+roadmap_row: §3.b unique-const-fn
+set: g2b
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,POST-a,PRE-sep,S3,S4,S8,VPOST
+verdict: unrecorded
+verdict_source: unrecorded
+alias: post_b/velab_work/e_sel3_case_M/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/velab_work/e_sel3_case_M/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/c444/g2b/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/velab/w/g2b__e_sel3_case_M/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/re/c444/g2b/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/velab/w/g2b__e_sel3_case_M/e_sel3_case_M (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./e_sel3_case_M.ivl | 661 bytes
+e_sel3_case_M.sv:7: assert: elab_expr.cc:6122: failed assertion prefix_indices.size()+1 == net->sig()->packed_dims().size()
+sh: line 1: 33463 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg221853913" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg21853913" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli21853913"
+     33464 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh21853913" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./e_sel3_case_M.vl | 419 bytes
+[1] %Error: e_sel3_case_M.sv:4: Assertion failed in top.f: unique case, but none matched for '32'h00000002'
+-Info: e_sel3_case_M.sv:4: Verilog $stop, ignored due to +verilator+error+limit
+m=78
+- e_sel3_case_M.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 12.987 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_e_sel3_case_M.build | 0 bytes
+
+=== block 4 | vita [MECH] | ./e_sel3_case_M.mech | 683 bytes
+e_sel3_case_M.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e_sel3_case_M.sv:7:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: variable indexed part-select on a multi-dim packed array is unsupported (iverilog 13.0 also rejects it; the bit-vs-element unit is undefined) [in top]
+errors=1 warnings=1 notes=1
+rc=1
+=== block 5 | vita [S3] | ./e_sel3_case_M.s3 | 683 bytes | identical to block 4
+=== block 6 | vita [S4] | ./e_sel3_case_M.s4 | 683 bytes | identical to block 4
+=== block 7 | vita [S8] | ./e_sel3_case_M.s8 | 683 bytes | identical to block 4
+=== end

@@ -1,0 +1,12 @@
+package q;
+  localparam int W = 3;
+  int pv = 0;
+  function int h(input logic [W:0] x); return x + pv; endfunction
+endpackage
+module top;
+  import q::h;
+  
+  int v; int a = 1000;
+  always_comb v = h(a);
+  initial begin #1 $display("v=%0d", v); $finish; end
+endmodule

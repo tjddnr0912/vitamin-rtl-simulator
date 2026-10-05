@@ -1,0 +1,119 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__diff__cells__k07_finish_in_cycle
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/diff/cells/k07_finish_in_cycle.sv
+roadmap_row: §2 🆕 AB
+set: r2/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/k07_finish_in_cycle.out | 3826 bytes
+##### k07_finish_in_cycle
+=== PRE2 (native=interp=vm)
+rc=1
+f4 t=0 v=z
+f3 t=0 v=z
+f2 t=0 v=x
+f1 t=0 v=x
+f4 t=0 v=x
+f3 t=0 v=x
+f2 t=0 v=x
+f1 t=0 v=0
+f2 t=0 v=1
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f] [at time 0]
+f4 t=0 v=1
+f2 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=1
+f1 t=0 v=0
+f4 t=0 v=z
+f3 t=0 v=z
+f2 t=0 v=1
+f4 t=0 v=x
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f] [at time 0]
+f2 t=0 v=1
+f4 t=0 v=1
+f2 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=1
+f1 t=0 v=0
+f4 t=0 v=z
+f3 t=0 v=z
+f2 t=0 v=1
+f4 t=0 v=x
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f] [at time 0]
+f2 t=0 v=1
+f4 t=0 v=1
+f2 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=1 notes=0
+--- PRE2==POSTA False  POSTA==POSTC True  PRE2==POSTC False  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=1
+f4 t=0 v=z
+f3 t=0 v=z
+f2 t=0 v=x
+f1 t=0 v=x
+f4 t=0 v=x
+f3 t=0 v=x
+f2 t=0 v=x
+f1 t=0 v=0
+f2 t=0 v=1
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f] [at time 0]
+f4 t=0 v=1
+f2 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=1
+f1 t=0 v=0
+f4 t=0 v=z
+f3 t=0 v=z
+f2 t=0 v=1
+f4 t=0 v=x
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5:32: fatal[VITA-F4004] F-RUN-FATAL: `$finish` was reached inside a subroutine body. vita ends the run with an error instead of performing it, because a body that stops half-way still owes its calling expression a value and the reference simulators disagree about which one. The rest of this body still executes, as it does after a `$fatal`. Move the `$finish` to the caller. [in top.f] [at time 0]
+f2 t=0 v=1
+f4 t=0 v=1
+f2 t=0 v=1
+simulation ended (Error) at time 0
+errors=1 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+f1 t=0 v=0
+f4 t=0 v=x
+f2 t=0 v=1
+f3 t=0 v=0
+k07_finish_in_cycle.sv:5: $finish called at 0 (1s)
+=== verilator run rc=0
+f1 t=0 v=0
+f2 t=0 v=1
+f3 t=0 v=0
+- k07_finish_in_cycle.sv:5: Verilog $finish
+f4 t=0 v=1
+f2 t=0 v=1
+f3 t=0 v=0
+- k07_finish_in_cycle.sv:5: Verilog $finish
+f4 t=0 v=1
+f2 t=0 v=1
+f3 t=0 v=0
+- k07_finish_in_cycle.sv:5: Verilog $finish
+f4 t=0 v=1
+ev o1=0 t=0
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

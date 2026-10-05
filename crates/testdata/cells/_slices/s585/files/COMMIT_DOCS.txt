@@ -1,0 +1,30 @@
+docs: record §4.5.585 — `unique-if-chain`'s residue is BLOCKED on new §2 🆕 AB and `unique-pkg-closure`; 🆕 AB is §5.2 row 3
+
+- ROADMAP §2: 🆕 AB (new, OPEN, §5.2 row 3): a function reached from a
+  continuous assign runs once more at t0 on x, before the `initial` that
+  writes its inputs, so a `unique` / `priority` miss in it or in anything it
+  calls reports W4031 at t0 and an immediate `assert` fails E4003 (exit 1)
+  where both oracles are silent; it holds `unique-if-chain`'s
+  subroutine-body residue. 🆕 AA's cells gain aa1_chain (an `if` chain).
+  "Oracle splits" gains the self-timed `always` written before its driving
+  `initial` (vita = iverilog's source order; verilator starts the `initial`
+  first).
+- ROADMAP §3.b: `unique-if-chain` is BLOCKED and names its two residues:
+  (1) chains in function and task bodies (on §2 🆕 AB, `unique-const-fn`,
+  `unique-pkg-closure`); (2) an outer series whose `else` is a qualified
+  `if` (a split with IEEE 1800-2017 Syntax 12-2, not chased).
+  `unique-pkg-closure` (new, OPEN): the package-scoped call closure walk
+  treats the synthesized report as impure and refuses a legal `pk::f(…)`.
+  `unique-overlap-note` and `unique-const-fn` cite their new §5.2 rows.
+- ROADMAP §5.2: row 1 removed, §2 🆕 AB enters as row 3 (§4.5.585's fix
+  path, ①) behind `unique-overlap-note` and `unique-const-fn`; rows 4–9
+  keep their numbers; the order prose follows. Summary recounted by line
+  census: open 456 → 459, startable 271 → 272, blocked 185 → 187.
+- REMAINING_WORK §D: one prerequisite line for `unique-if-chain`'s
+  subroutine-body residue (§2 🆕 AB, `unique-const-fn`,
+  `unique-pkg-closure`); the preamble names that external-report residue.
+- PROBE_CATALOG: a function that calls a task is accepted (IEEE 1800-2017
+  §13.4; verilator and iverilog refuse).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

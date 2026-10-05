@@ -1,0 +1,53 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__sound__c__b5__c25_iface_shadow
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/sound/c/b5/c25_iface_shadow.sv
+roadmap_row: §2 🆕 AD
+set: r1/sound/c/b5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-b,POST-c,PRE,POST-a-sep,POST-b-sep,POST-c-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r1/sound/REPORT.md:49
+alias: post_b/lens/sound_b5/c25_iface_shadow (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./c25_iface_shadow.ivl | 66 bytes
+v=255 b=8
+c25_iface_shadow.sv:14: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./c25_iface_shadow.vl | 388 bytes
+%Warning-WIDTHEXPAND: c25_iface_shadow.sv:13:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 8 bits.
+v=255 b=8
+- c25_iface_shadow.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./c25_iface_shadow.s2v | 99 bytes
+c25_iface_shadow.s2v.v:15: syntax error
+c25_iface_shadow.s2v.v:15: error: Malformed statement
+rc=2
+=== block 4 | vita [POST-a] | ./c25_iface_shadow.post | 301 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c25_iface_shadow.sv:13:28: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, array views, and self-determined expressions fold; v7) [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POST-a-sep] | ./c25_iface_shadow.sposta | 329 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+c25_iface_shadow.sv:13:28: error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, array views, and self-determined expressions fold; v7) [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST-b] | ./c25_iface_shadow.postb | 301 bytes | identical to block 4
+=== block 7 | vita [POST-b-sep] | ./c25_iface_shadow.spostb | 329 bytes | identical to block 5
+=== block 8 | vita [POST-c] | ./c25_iface_shadow.postc | 301 bytes | identical to block 4
+=== block 9 | vita [POST-c-sep] | ./c25_iface_shadow.spostc | 329 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./c25_iface_shadow.pre | 301 bytes | identical to block 4
+=== end

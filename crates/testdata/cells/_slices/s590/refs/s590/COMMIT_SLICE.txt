@@ -1,0 +1,170 @@
+sim-engine: a continuous assign that reaches an effectful call runs at time 0 once, after the first batch (§2 🆕 AB)
+
+§4.5.590 — §2 🆕 AB (§5.2 row 1; §4.5.585's fix path). Oracles: iverilog
+13.0 -g2012, verilator 5.052 --binary --timing --assert. Verilator is no
+oracle on x/z or on time-0 order (2-state; it runs a continuous assign
+before or after an `initial` depending on its arguments), so only its
+time-0 call count is compared.
+
+Bug: the time-0 settle evaluated every continuous assign before any
+process ran, so `assign y = f(a, b);` called `f` on `x` first and again
+once the `initial` wrote `a`, `b`: one extra `$display` line (k1: vita
+`f t=0 x=x z=x` then `f t=0 x=0 z=1`; both oracles the second only), a
+`unique` / `priority` miss in `f` or anything it calls reported W4031 at
+t0 (q1caf_case_tbF/L, t0f_ca_case, n_ca_objf2case_tbL x4 through a class
+handle, q6a through a formal-less `function void`), an immediate
+`assert` failed E4003 and a clean design exited 1 (k2b), a `$fatal`
+ended the run at t0 (k2_fatal_x); both oracles silent, exit 0. A delayed
+assign evaluated its rhs for its width, and a multi-driver group every
+member on every pass, so their calls ran on `x` too (c1_delay 4 calls
+on `x`, s4 3).
+
+Mechanism (new `sched/t0_hold.rs`; `levelize/call_deps.rs`
+`func_effect_free`; `sched/scan_arm.rs`, `sched/run_loop.rs`,
+`native/run.rs`; no IR, format or JIT change):
+- Hold set, built once in `Scheduler::new` (`T0Hold::build`): an assign
+  whose rhs or lhs index reaches a user call (an exhaustive `sim_ir::Expr`
+  walk that holds on any arm it cannot see through) AND (a reached callee
+  is not effect-free — `func_read_deps`' walk declines its body, or a
+  system task is reachable, transitively — OR the assign reads a heap
+  handle, through which a class method's body is out of that walk's
+  sight), minus an assign `ca_deps` certifies with an EMPTY read set and
+  no multi-driver group (nothing a t0 process writes reaches it, so
+  holding it would only reorder a race: a4 `f(1'b0, 1'b1)` keeps PRE's
+  place = verilator; iverilog runs it after the `initial`).
+- Closure: every assign reading a net a held assign drives is held too
+  (worklist over per-net readers), so no assign settles on a held net's
+  declared default (x2b: `assign v = (w === 1'bz);` below a held `w`
+  settled `v = 1` and the first batch saw a posedge iverilog never fires).
+- Hold window: every settle before the first batch is taken (seed,
+  initializer re-settle, loop-top) drops a held assign from the pass
+  without re-dirtying it; the multi-driver resolution skips a group with
+  a held member, `schedule_delayed_cas` and the copy-net repair skip
+  held assigns; a held delayed assign drives its initial `x`, sized from
+  the lvalue and the rhs's static width without evaluating the rhs.
+- Release: the first settle after the first batch is taken (at run start
+  when there is none) settles the non-held assigns to a fixpoint, then
+  releases the held ones in waves by Kahn counting per net (an assign's
+  wave comes once every other held driver of a net in its read set is
+  released; when none is ready the rest go in one wave), settling after
+  each; the wave that releases an assign marks it dirty. Inside the
+  waves each pass visits only the held members of `ca_always`, the
+  multi-driver groups with a held member and the held delayed assigns
+  (by the closure nothing else reads a held net). A net first dirtied by
+  the waves with no definite bit leaves the change list (the arming's T0
+  X-DROP, applied again because the hold moved those writes past it).
+- Hold-free path: `settle_cont_assigns` tests `T0Hold::active` once per
+  call and otherwise runs `settle_cont_assigns_inner::<false>`, the
+  fixpoint monomorphised with no hold test in the pass or multi-driver
+  loops; `T0Hold` is boxed in `Scheduler`; a design with no call is not
+  walked and allocates nothing.
+- Native loop top: checks a latched `call_fatal` before and after its
+  loop-top settle, as the engine's run loop does, so a `$fatal` a
+  continuous assign's call latches ends every backend at its time (k3:
+  native ended `(Error) at time 2`, interp / vm and both oracles at 1).
+
+Byte-identity: with an empty seed set `active` is false from
+construction, every settle is the pre-hold fixpoint (const-generic copy;
+round 3's token diff of PRE's loop vs `inner::<false>`: no divergence),
+the release never runs; outside the boundary only the native fatal check
+changes behaviour, and only on a latched `call_fatal`. Corpus: stdout +
+stderr 22/22 byte-identical PRE vs POST, corpus-runner 10 ok +
+verilog-axi ruled-split. The corpus holds 0 assigns (verilog-ethernet's
+80 `lfsr_mask` assigns are certified empty-deps, exempt), so corpus
+identity is vacuous for the hold path. JIT build = POST on every cell;
+`--no-default-features` differs only on the delayed-call product
+refusals PRE has; staged vcmp/velab/vrun = one-shot except designs both
+binaries refuse at elaboration.
+
+Movers (PRE vs POST vs both oracles, 175 grounding / plan cells x 3
+backends, per axis; measured on the round-1 freeze, from which the
+shipped tree moves only two lens cells' native output, sd01a/b): 167
+cells with an oracle, 106 moved, 0 moved on an axis where PRE = iverilog
+= verilator. Call count: 31 -> oracle, 17 neither -> neither. Reports:
+39 -> oracle, 12 neither -> neither, 5 iverilog -> verilator (f1, b1p,
+v4, v6 x2: iverilog's x call depends on argument spelling, T1, ROADMAP
+§0 ⑨). Events: 2 -> oracle (e4, x2d), 1 neither -> neither, 1 verilator
+-> neither (e2, a race). Values: 6 -> oracle, 12 neither -> neither, and
+on the race axis 6 verilator -> neither, 1 verilator -> iverilog (an
+`i0` read of a held output: vita `z` on a net / `x` on a variable,
+iverilog `z`, verilator the value or 2-state `0`; ROADMAP §2 Oracle
+splits). Lens cells moved to both oracles: d07, d10, d11, d14; to
+iverilog: sd02a/b (`final y=z`); closer: d09 calls 7 -> 4 (iverilog 3,
+verilator 6), d18 22 -> 18 (both 6), d19 11 -> 8 (iverilog 1, verilator
+3), e01 7 -> 5 (both 1).
+VCD: the one cell with `$dumpvars` (d15) records the held wires' initial
+values as `z`, then `x` / `1` at #0, where PRE and iverilog record `x`
+then `1`; the end-of-#0 values agree.
+
+Performance (release, PRE vs POST, discarded warm-up pair then
+ABBAABBA, AB and BA ratios agree everywhere):
+- nothing held: clk_200k interp 0.90/0.91, vm 0.90/0.91, native
+  1.02/1.03 (the interp / vm gain unattributed); corpus native wall per
+  row 0.994-1.017 (sha256 ... keccak-arr).
+- held chains of certified assigns: chain / wires 1k-16k 1.02-1.07,
+  arr / vec / vchain 0.98-1.00, the round-2 lens shapes (fan-in,
+  fan-out, rings, call chains) 0.97-1.05, sd_chain_1000_1000 0.27 /
+  0.32, sm_chain_1000_250 0.28 / 0.34 (interp / native).
+- held uncertified chains are O(N^2) during the release: r_chain (a
+  `$random` callee) 250/500/1000 interp 2.70/6.80/16.99, native
+  2.78/6.52/16.09; native 1k-8k 15.3/38.9/91.4/198.4x, hu_urandom
+  1k-4k 14.4/35.9/81.0x (ROADMAP §5.b T0-HOLD-CHAIN).
+
+Review: 4 rounds, differential + soundness lenses, frozen binaries.
+- Round 1: BLOCKING, the release was O(N^3) time / O(N^2) memory on a
+  held chain (transitive preds re-scanned per wave: chain_8000 47.7 s /
+  189 MB vs PRE 0.05 s / 41 MB); fixed by the per-net Kahn waves and the
+  worklist closure (identity probe: old and new wave sets asserted equal
+  on 215 cells x 3 backends and the full suite). MINOR: native polled
+  `call_fatal` only after its loop-top settle (sd01a/b backend split;
+  fixed, the pre-settle check); three unpinned shapes (effectful callee
+  through a pure wrapper, two-level closure, lhs-index call; pinned).
+- Round 2: MAJOR, each wave settle re-visited every `ca_always` member
+  and multi-driver group (sd_chain 2.23x, sm_chain 1.80x) and the
+  nothing-held settle was interp +4.5% (clk_200k); fixed by the
+  wave-visit restriction and the hold-free monomorphised path. MINOR:
+  two mutants (MK1 build threshold, MKA first net only) survived the
+  workspace suite, each putting back a call on a held net's default;
+  pinned (r2e, r2c). MINOR: a declined callee's body reads are not in
+  `ca_deps`' read set (r2h2; PRE also wrong): documented residue.
+- Round 3: PASS on both lenses (post_c -> post_d 0 movers on 31 lens
+  cells x 3 backends incl. VCD bytes), with the held-uncertified O(N^2)
+  as a MAJOR residue (r_chain_500 7.27x).
+- Round 4 (D8 scope signal): re-running a held uncertified assign only
+  in its own wave made r_chain linear and f07 12 calls (PRE 30, both
+  oracles 6), but soundness found a BLOCKING stale value: through a
+  declined callee's body read the assign stayed computed on a held net's
+  default past t0 (r4a `W2 t=1 w2=0`, r4c, r4d, r4g, and the
+  differential's g06 `ev u=0 t=1`: events at t >= 1 in neither oracle).
+  Reverted; this commit is the round-3 tree. The fix shape (own wave only
+  where the read set is complete) waits on the body-read prerequisite.
+Mutants (expected killers written first): 20 (round 1), 26 (rounds
+2-3), 28 on this tree, all killed by the narrow run (no survivor needed
+the workspace run); round 3 soundness MR, MH killed.
+
+Tests: crates/cli/tests/t0_call_cont_assign_hold.rs (3 backends each,
+k1 also staged; oracle text above each pin): k1, k2b,
+q1caf_tbF/L, d1-d4, j1, a10-a12, x2b, e4, e7, k7_finish, q8, q7 / q9
+(held delayed x-drive, engine and native), n4e (X-DROP), k3, T1, the
+waves (b1, s5, r2c, r2e), q5 (a call reading `mem[0]` is held), race
+pins (a4, T3, T2b, q3) and residue pins (s4, c1_delay,
+n_ca_objf2case_tbL). unique_if_chain.rs: u20's W4020 count 2 -> 1 (u20d
+attribution: PRE's two came from the x-run before `dut init`; the one
+left is the pre-existing ignored member-handle write on a constructed
+object, PROBE_CATALOG), and every 🆕 AB sentence rewritten to POST's
+measured output.
+
+Residues (ROADMAP §2 🆕 AB, BLOCKED on a declined callee's body reads in
+`ca_deps`): held uncertified chains re-run per wave (f07: PRE 30, POST
+42, both oracles 6; the next printed `$random` moves with the draw
+count: PRE -887079274, POST -445445430, iverilog -1295874971; x3 4,
+d19 8, e01 5 calls where the oracles make 1-3) and per settle pass at
+later steps; per-net wave order (d18 18, both oracles 6; e02 9, iverilog
+10, verilator 13); a cycle released whole (k01 `f6 t=0 v=z`); body reads
+missing from the read set (r2h2 `f2 t=0 x=1 w1=z`, then `w1=0`); k06, a
+`$fatal` latched by an assign's call does not stop the rest of that t0
+settle (PRE the same). `sched/scan_arm.rs` is now 1929 lines (was
+1854), `native/run.rs` 1788 (was 1643).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

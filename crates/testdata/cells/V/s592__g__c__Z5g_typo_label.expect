@@ -1,0 +1,60 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__Z5g_typo_label
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/Z5g_typo_label.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+notes: named at s592/COMMIT_DOCS.txt:72
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Z5g_typo_label.iv.txt | 188 bytes
+Z5g_typo_label.sv:4: error: Unable to bind parameter `NOPE' in `top.gb'
+Z5g_typo_label.sv:3: error: Cannot evaluate  genvar case item expression: NOPE
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Z5g_typo_label.vl.txt | 113 bytes
+%Error: Z5g_typo_label.sv:4:7: Can't find definition of variable: 'NOPE'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Z5g_typo_label.vlb.txt | 336 bytes
+%Error: Z5g_typo_label.sv:4:7: Can't find definition of variable: 'NOPE'
+    4 |       NOPE: begin : g wire [7:0] w = 8'd200; initial #1 $display("@k %0d bits=%0d", w, $bits(w)); end
+      |       ^~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Z5g_typo_label.sv.txt | 196 bytes
+Z5g_typo_label.sv2v.v:5: error: Unable to bind parameter `NOPE' in `top.gb'
+Z5g_typo_label.sv2v.v:4: error: Cannot evaluate  genvar case item expression: NOPE
+2 error(s) during elaboration.
+
+rc=2
+=== block 5 | vita [post_a] | ./Z5g_typo_label.post.txt | 183 bytes
+@def 9 bits=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_b] | ./Z5g_typo_label.post_b.txt | 183 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./Z5g_typo_label.post_c.txt | 183 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./Z5g_typo_label.post_d.txt | 183 bytes | identical to block 5
+=== block 9 | vita [postd] | ./Z5g_typo_label.postd.txt | 183 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./Z5g_typo_label.postd2.txt | 183 bytes | identical to block 5
+=== block 11 | vita [postd3] | ./Z5g_typo_label.postd3.txt | 183 bytes | identical to block 5
+=== block 12 | vita [postd4] | ./Z5g_typo_label.postd4.txt | 183 bytes | identical to block 5
+=== block 13 | vita [pre] | ./Z5g_typo_label.pre.txt | 183 bytes | identical to block 5
+=== end

@@ -1,0 +1,48 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk__p__d07_bits_type_repeat
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk/p/d07_bits_type_repeat.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk/p
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/diff/REPORT.md:36
+alias: r2/diff/re/atk/p/d07_bits_type_repeat (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./d07_bits_type_repeat.ivl | 72 bytes
+n=8 m=15 k=15
+d07_bits_type_repeat.sv:11: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./d07_bits_type_repeat.vl | 248 bytes
+n=8 m=15 k=15
+- d07_bits_type_repeat.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 10.417 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_d07_bits_type_repeat.build | 0 bytes
+
+=== block 4 | vita [S7] | ./d07_bits_type_repeat.s7 | 1710 bytes
+d07_bits_type_repeat.sv:8:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found keyword 'logic'
+d07_bits_type_repeat.sv:8:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:8:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:8:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'logic'
+d07_bits_type_repeat.sv:8:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '['
+d07_bits_type_repeat.sv:9:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found keyword 'logic'
+d07_bits_type_repeat.sv:9:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:9:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:9:19: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'logic'
+d07_bits_type_repeat.sv:9:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '['
+d07_bits_type_repeat.sv:10:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found keyword 'logic'
+d07_bits_type_repeat.sv:10:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:10:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'
+d07_bits_type_repeat.sv:10:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'logic'
+d07_bits_type_repeat.sv:10:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '['
+errors=15 warnings=0 notes=0
+rc=1
+=== block 5 | vita [S8] | ./d07_bits_type_repeat.s8 | 1710 bytes | identical to block 4
+=== end

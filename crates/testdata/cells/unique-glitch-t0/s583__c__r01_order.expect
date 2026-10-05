@@ -1,0 +1,124 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__r01_order
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/r01_order.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: agree with iv. Streams: iv WARNING on stdout, vl stdout, vita stderr
+verdict_source: s583/GROUNDING.md:60
+alias: m/sw/c_r01_order/r01_order (byte-identical source) verdict: agree with iv. Streams: iv WARNING on stdout, vl stdout, vita stderr verdict_source: s583/GROUNDING.md:60
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./r01_order.out | 1380 bytes
+##### r01_order.sv
+=== iverilog
+compile rc=0 msgs: r01_order.sv:6: warning: System task ($display) cannot be synthesized in an always_comb process.
+r01_order.sv:7: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+comb-eval t=0 r=01
+monitor t=0 r=01 q=0
+A-after-write t=5
+comb-eval t=5 r=00
+WARNING: r01_order.sv:7: value is unhandled for priority or unique case statement
+         Time: 5  Scope: top
+A-after-#0 t=5
+after-NBA q=1 t=5
+monitor t=5 r=00 q=1
+strobe t=5 r=00
+r01_order.sv:23: $finish called at 7 (1s)
+=== verilator
+compile rc=0
+run rc=0
+comb-eval t=0 r=01
+after-NBA q=0 t=0
+monitor t=0 r=01 q=0
+A-after-write t=5
+comb-eval t=5 r=00
+[5] %Error: r01_order.sv:7: Assertion failed in top: unique case, but none matched for '2'h0'
+monitor t=5 r=00 q=0
+A-after-#0 t=5
+after-NBA q=1 t=5
+monitor t=5 r=00 q=1
+strobe t=5 r=00
+- r01_order.sv:23: Verilog $finish
+comb-eval t=7 r=00
+[7] %Error: r01_order.sv:7: Assertion failed in top: unique case, but none matched for '2'h0'
+=== vita (native=interp=vm)
+rc=0
+comb-eval t=0 r=01
+monitor t=0 r=01 q=0
+A-after-write t=5
+comb-eval t=5 r=00
+r01_order.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+A-after-#0 t=5
+after-NBA q=1 t=5
+monitor t=5 r=00 q=1
+strobe t=5 r=00
+simulation ended (Finish) at time 7
+errors=0 warnings=2 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_r01_order/obs_POST/results.jsonl | 133 bytes
+{"v":1,"t":7,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":7,"errors":0,"warnings":2,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_r01_order/obs_POST/run.json | 1428 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "r01_order.sv", "blake3": "d02ae2b076376ee9efd80a7f9f1f2beb7dc93da8bcdecdfc54434ba4d933a258"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 2, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 4, "total": 8, "frame_bodies": 0, "reject_reasons": {"delay": 4}},
+  "wprog": {"asked": 9, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925644,
+  "wall_s": 0.000434,
+  "elab_s": 0.000309,
+  "sim_s": 0.000121
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_r01_order/obs_PRE/results.jsonl | 133 bytes | identical to block 2
+=== block 5 | vita [PRE/obs] | m/sw/c_r01_order/obs_PRE/run.json | 1428 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "r01_order.sv", "blake3": "d02ae2b076376ee9efd80a7f9f1f2beb7dc93da8bcdecdfc54434ba4d933a258"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 2, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 4, "total": 8, "frame_bodies": 0, "reject_reasons": {"delay": 4}},
+  "wprog": {"asked": 9, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925644,
+  "wall_s": 0.000444,
+  "elab_s": 0.000316,
+  "sim_s": 0.000122
+}
+=== end

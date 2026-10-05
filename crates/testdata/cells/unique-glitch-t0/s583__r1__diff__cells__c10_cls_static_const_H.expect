@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c10_cls_static_const_H
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c10_cls_static_const_H.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE
+verdict: NON-BLOCKING
+verdict_source: s583/r1/diff/REPORT.md:44
+alias: r1/diff/w/c10_cls_static_const_H/c10_cls_static_const_H (byte-identical source) verdict: NON-BLOCKING verdict_source: s583/r1/diff/REPORT.md:44
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+POST] verilator 5.052 (version captured in slice) | ./c10_cls_static_const_H.out | 2374 bytes
+##### c10_cls_static_const_H
+=== verilator compile rc=0 run rc=0
+P=10
+- c10_cls_static_const_H.sv:10: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+c10_cls_static_const_H.sv:2:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+c10_cls_static_const_H.sv:3:12: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'r'
+c10_cls_static_const_H.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'if'
+c10_cls_static_const_H.sv:4:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'else'
+c10_cls_static_const_H.sv:5:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+c10_cls_static_const_H.sv:6:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+errors=6 warnings=0 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+c10_cls_static_const_H.sv:2:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+c10_cls_static_const_H.sv:3:12: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'r'
+c10_cls_static_const_H.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'if'
+c10_cls_static_const_H.sv:4:24: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'else'
+c10_cls_static_const_H.sv:5:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+c10_cls_static_const_H.sv:6:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+errors=6 warnings=0 notes=0
+--- PRE==POST (all backends): True
+=== end

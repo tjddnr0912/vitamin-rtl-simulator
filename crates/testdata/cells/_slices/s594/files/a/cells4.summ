@@ -1,0 +1,60 @@
+### Mcmp_EAE_int
+  pre : L=0
+  p3r : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=X
+  vl : L=X
+### Mcmp_RAE_gi
+  pre : GI=else
+  p3r : GI=then
+  ivl : GI=else
+  s2v : GI=else
+  vl : GI=then
+### Mcmp_RAE_int
+  pre : L=0
+  p3r : L=1
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### Mcmp_RAE_lg
+  pre : L=0
+  p3r : L=1
+  ivl : L=x
+  s2v : L=x
+  vl : L=x
+### Mcmp_RG_int
+  pre : L=0
+  p3r : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### Mdl_EAE
+  pre : w=1 t=10
+  p3r : w=1 t=10
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : w=1 t=10
+  vl : w=0 t=0 | w=1 t=10
+### Mdl_LAE
+  pre : w=1 t=264
+  p3r : w=1 t=264
+  ivl : w=1 t=10
+  s2v : w=1 t=10
+  vl : w=0 t=0 | w=1 t=264
+### Mdl_RAE
+  pre : w=1 t=10
+  p3r : w=1 t=264
+  ivl : w=1 t=10
+  s2v : w=1 t=10
+  vl : w=0 t=0 | w=1 t=264
+### Mdl_RG
+  pre : w=1 t=264
+  p3r : w=1 t=264
+  ivl : w=1 t=264
+  s2v : w=1 t=264
+  vl : w=0 t=0 | w=1 t=264
+### Mfn_cpR_lg
+  pre : L=0
+  p3r : L=1
+  ivl : L=x
+  s2v : L=x
+  vl : L=x

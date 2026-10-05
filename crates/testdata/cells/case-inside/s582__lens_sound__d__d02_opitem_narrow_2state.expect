@@ -1,0 +1,140 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d02_opitem_narrow_2state
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d02_opitem_narrow_2state.sv
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 17
+=== block 1 | oracle verilator 5.052 (version captured in slice) | lens_sound/d/out_d02_opitem_narrow_2state/vl.out | 1188 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:29:76: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:30:72: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:31:76: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:32:82: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+%Error: Exiting due to 4 error(s)
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_sound/d/out_d02_opitem_narrow_2state/vl_build.log | 2825 bytes
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:29:76: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                                      : ... note: In instance 'top'
+   29 |     v8 = 8'h10; $display("t3 if v8=10 inside {a4+b4} = %0d", v8 inside {a4 + b4});
+      |                                                                            ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:30:72: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                                      : ... note: In instance 'top'
+   30 |     v8 = 8'h00; $display("t7 if 00 inside {{a4+b4}} = %0d", v8 inside {{a4 + b4}});
+      |                                                                        ^
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:31:76: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                                      : ... note: In instance 'top'
+   31 |     s8 = -8'sd16; $display("t1 if -16 inside {sa+sb} = %0d", s8 inside {sa + sb});
+      |                                                                            ^
+%Error-UNSUPPORTED: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:32:82: Unsupported: RHS of ==? or !=? is fourstate but not a constant
+                                                                                                                                                                                                      : ... note: In instance 'top'
+   32 |     s8 = -8'sd16; $display("t5 if -16 inside {signed'(sa+sb)} = %0d", s8 inside {signed'(sa + sb)});
+      |                                                                                  ^~~~~~
+%Error: Exiting due to 4 error(s)
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | lens_sound/d/out_d02_opitem_narrow_2state/sv.out | 458 bytes
+p3 v8=10 in {a4+b4} = 1
+p4 v8=10 in {[a4+b4:FF]} = 1
+p4b v8=10 in {a4<<1} = 1
+p5 F7 in {~a4} = 1
+p6 07 in {~a4} = 0
+p7 00 in {{a4+b4}} = 1
+p8 10 in {{a4+b4}} = 0
+s1 -16 in {sa+sb} = 1
+s2 8 in {-sa} = 1
+s3 -16 in {[sa+sb:0]} = 1
+s4 0 in {signed'(sa+sb)} = 1
+s5 -16 in {signed'(sa+sb)} = 0
+t3 if v8=10 inside {a4+b4} = 1
+t7 if 00 inside {{a4+b4}} = 1
+t1 if -16 inside {sa+sb} = 1
+t5 if -16 inside {signed'(sa+sb)} = 0
+sv2v.v:93: $finish called at 10 (1s)
+rc=0
+=== block 4 | vita [POST] | lens_sound/d/out_d02_opitem_narrow_2state/post.out | 585 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+p3 v8=10 in {a4+b4} = 1
+p4 v8=10 in {[a4+b4:FF]} = 1
+p4b v8=10 in {a4<<1} = 1
+p5 F7 in {~a4} = 1
+p6 07 in {~a4} = 0
+p7 00 in {{a4+b4}} = 1
+p8 10 in {{a4+b4}} = 0
+s1 -16 in {sa+sb} = 1
+s2 8 in {-sa} = 1
+s3 -16 in {[sa+sb:0]} = 1
+s4 0 in {signed'(sa+sb)} = 1
+s5 -16 in {signed'(sa+sb)} = 0
+t3 if v8=10 inside {a4+b4} = 1
+t7 if 00 inside {{a4+b4}} = 1
+t1 if -16 inside {sa+sb} = 1
+t5 if -16 inside {signed'(sa+sb)} = 0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | lens_sound/r2/rerun/d02_opitem_narrow_2state.post | 585 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 7 | vita [POST] | post2/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post.out | 458 bytes
+p3 v8=10 in {a4+b4} = 1
+p4 v8=10 in {[a4+b4:FF]} = 1
+p4b v8=10 in {a4<<1} = 1
+p5 F7 in {~a4} = 1
+p6 07 in {~a4} = 0
+p7 00 in {{a4+b4}} = 1
+p8 10 in {{a4+b4}} = 0
+s1 -16 in {sa+sb} = 1
+s2 8 in {-sa} = 1
+s3 -16 in {[sa+sb:0]} = 1
+s4 0 in {signed'(sa+sb)} = 1
+s5 -16 in {signed'(sa+sb)} = 0
+t3 if v8=10 inside {a4+b4} = 1
+t7 if 00 inside {{a4+b4}} = 1
+t1 if -16 inside {sa+sb} = 1
+t5 if -16 inside {signed'(sa+sb)} = 0
+simulation ended (Finish) at time 10
+rc=0
+=== block 8 | vita [POST2] | lens_sound/r2/rerun/d02_opitem_narrow_2state.post2 | 585 bytes | identical to block 4
+=== block 9 | vita [POST2] | lens_sound/r3/rerun/d02_opitem_narrow_2state.post2 | 585 bytes | identical to block 4
+=== block 10 | vita [POST2] | post2/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post2.err | 127 bytes | identical to block 6
+=== block 11 | vita [POST2] | post2/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post2.out | 458 bytes | identical to block 7
+=== block 12 | vita [POST2] | post3/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post2.err | 127 bytes | identical to block 6
+=== block 13 | vita [POST2] | post3/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post2.out | 458 bytes | identical to block 7
+=== block 14 | vita [POST3] | lens_sound/r3/rerun/d02_opitem_narrow_2state.post3 | 585 bytes | identical to block 4
+=== block 15 | vita [POST3] | post3/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post3.err | 127 bytes | identical to block 6
+=== block 16 | vita [POST3] | post3/cmp/lens_sound__d__d02_opitem_narrow_2state.sv/post3.out | 458 bytes | identical to block 7
+=== block 17 | vita [PRE] | lens_sound/d/out_d02_opitem_narrow_2state/pre.out | 5923 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:7:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found identifier 'a4'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:7:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:9:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found identifier 'a4'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:9:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '<<'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:11:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected operator (got a unary-only operator in infix position), found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:11:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:11:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:13:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected operator (got a unary-only operator in infix position), found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:13:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:13:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '~'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:15:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '{'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:15:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '}', found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:15:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:17:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '{'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:17:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '}', found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:17:26: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:19:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found identifier 'sa'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:19:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '+'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:25:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found keyword 'signed'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:25:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'signed'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:27:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found keyword 'signed'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d02_opitem_narrow_2state.sv:27:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'signed'
+errors=22 warnings=0 notes=0
+rc=1
+=== end

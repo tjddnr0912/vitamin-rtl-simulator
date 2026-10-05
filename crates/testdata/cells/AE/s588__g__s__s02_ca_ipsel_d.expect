@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__s__s02_ca_ipsel_d
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/s/s02_ca_ipsel_d.sv
+roadmap_row: §2 🆕 AE
+set: g/s
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: F: keep; D: silent->silent' (r=1, y=0001, r=1)
+verdict_source: s588/GROUNDING.md:288
+notes: GROUNDING Q4 A lane row naming s02 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./s02_ca_ipsel_d.ivl | 218 bytes
+s02_ca_ipsel_d.sv:8: error: Indexed part select width must be an integral constants greater than zero.
+s02_ca_ipsel_d.sv:8:      : This width expression violates that rule: fx('sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./s02_ca_ipsel_d.vl | 109 bytes
+%Error: Internal Error: s02_ca_ipsel_d.sv:8:25: ../V3Number.cpp:1063: toUInt with 4-state 4'bxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./s02_ca_ipsel_d.s2v | 226 bytes
+s02_ca_ipsel_d.s2v.v:13: error: Indexed part select width must be an integral constants greater than zero.
+s02_ca_ipsel_d.s2v.v:13:      : This width expression violates that rule: fx('sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [PRE] | ./s02_ca_ipsel_d.PRE | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+y=0001
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-m] | ./s02_ca_ipsel_d.PROBE | 175 bytes | identical to block 4
+=== end

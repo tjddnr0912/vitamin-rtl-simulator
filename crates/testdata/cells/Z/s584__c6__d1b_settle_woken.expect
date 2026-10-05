@@ -1,0 +1,112 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__c6__d1b_settle_woken
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/c6/d1b_settle_woken.sv
+roadmap_row: §2 🆕 Z
+set: c6
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE,PROTO/POSTA,PROTO/POSTB,PROTO/PRE,PROTO/R4f,PROTO/R5,PROTO/R5h,PROTO/R5hp,PROTO/R5hps,PROTO/R5hpss,PROTO/R5i,PROTO/R5s,PROTO/R7,PROTO/R7p,PROTO/R7ps,PROTO/R7pss,unrecorded(s3b)/PRE,unrecorded(s3dbg)/PRE,unrecorded(s3dbg2)/PRE,unrecorded(s3rel)/PRE,unrecorded(s3relb)/PRE
+verdict: not 2-oracle; NOTE iv runs the comb ONCE at t0 here
+verdict_source: s584/S0.md:37
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PROTO/POSTA: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/POSTB: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/PRE: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R4f: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5h: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hp: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hpss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5i: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5s: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7p: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7ps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7pss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+blocks: 29
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./d1b_settle_woken.out | 627 bytes
+##### d1b_settle_woken.sv
+=== iverilog
+compile rc=0 msgs: d1b_settle_woken.sv:7: warning: System task ($display) cannot be synthesized in an always_comb process.
+run rc=0
+C t=0 w=1
+C t=5 w=0
+n=2
+d1b_settle_woken.sv:8: $finish called at 6 (1s)
+=== verilator
+compile rc=0 msgs: %Warning-UNOPTFLAT: d1b_settle_woken.sv:5:7: Signal unoptimizable: Circular combinational logic: 'top.n'
+run rc=1
+C t=0 w=1
+%Error-DIDNOTCONVERGE: Settle region did not converge after '--converge-limit' of 10000 tries
+Aborting...
+=== vita (native=interp=vm)
+rc=0
+C t=0 w=1
+C t=5 w=0
+n=2
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== block 2 | vita [A] | r2run/r1a/c6__d1b_settle_woken.out | 131 bytes
+=== vita (native=interp=vm)
+rc=0
+C t=0 w=1
+C t=0 w=1
+C t=5 w=0
+n=3
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== block 3 | vita [POST2] | r2run/post2/c6__d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 4 | vita [POST2] | r3run/post2/c6__d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 5 | vita [POST3] | r3run/post3/c6__d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 6 | vita [POST3] | r4run/post3/c6__d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 7 | vita [POST4] | r4run/post4/c6__d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 8 | vita [PRE] | r2run/pre/c6__d1b_settle_woken.out | 121 bytes
+=== vita (native=interp=vm)
+rc=0
+C t=0 w=1
+C t=5 w=0
+n=2
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== block 9 | vita [PRE] | r3run/pre/c6__d1b_settle_woken.out | 121 bytes | identical to block 8
+=== block 10 | vita [PROTO/POSTA] | r2/POSTA/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 11 | vita [PROTO/POSTB] | r2/POSTB/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 12 | vita [PROTO/PRE] | r2/PRE/d1b_settle_woken.out | 114 bytes
+=== vita (interp=vm)
+rc=0
+C t=0 w=1
+C t=5 w=0
+n=2
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== block 13 | vita [PROTO/PRE] | r3/PRE/d1b_settle_woken.out | 121 bytes | identical to block 8
+=== block 14 | vita [PROTO/R4f] | r2/R4f/d1b_settle_woken.out | 124 bytes
+=== vita (interp=vm)
+rc=0
+C t=0 w=1
+C t=0 w=1
+C t=5 w=0
+n=3
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== block 15 | vita [PROTO/R5] | r2/R5/d1b_settle_woken.out | 114 bytes | identical to block 12
+=== block 16 | vita [PROTO/R5h] | r2/R5h/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 17 | vita [PROTO/R5hp] | r2/R5hp/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 18 | vita [PROTO/R5hp] | r3/R5hp/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 19 | vita [PROTO/R5hps] | r2/R5hps/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 20 | vita [PROTO/R5hps] | r3/R5hps/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 21 | vita [PROTO/R5hpss] | r2/R5hpss/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 22 | vita [PROTO/R5i] | r2/R5i/d1b_settle_woken.out | 114 bytes | identical to block 12
+=== block 23 | vita [PROTO/R5s] | r2/R5s/d1b_settle_woken.out | 114 bytes | identical to block 12
+=== block 24 | vita [PROTO/R7] | r2/R7/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 25 | vita [PROTO/R7p] | r2/R7p/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 26 | vita [PROTO/R7p] | r3/R7p/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 27 | vita [PROTO/R7ps] | r2/R7ps/d1b_settle_woken.out | 124 bytes | identical to block 14
+=== block 28 | vita [PROTO/R7ps] | r3/R7ps/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== block 29 | vita [PROTO/R7pss] | r2/R7pss/d1b_settle_woken.out | 131 bytes | identical to block 2
+=== end

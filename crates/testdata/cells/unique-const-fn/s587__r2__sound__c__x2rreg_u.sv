@@ -1,0 +1,8 @@
+module top;
+  
+  function automatic reg [3:0] f(input int a);
+    unique if (a == 1) f = 1;
+  endfunction
+  localparam logic [31:0] P = f(2);
+  initial begin $display("P=%h", P); #1 $finish; end
+endmodule

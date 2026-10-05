@@ -1,0 +1,175 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__c2__q_chain3_Bb_A_Bc
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/c2/q_chain3_Bb_A_Bc.sv
+roadmap_row: §2 🆕 Z
+set: c2
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE
+verdict: SPLIT (vita=iv)
+verdict_source: s584/GROUNDING.md:65
+alias: c3/orig/q_chain3_Bb_A_Bc (byte-identical source) verdict: SPLIT (vita=iv) verdict_source: s584/GROUNDING.md:65
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+vita_binary: PROTO/POSTA: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/POSTB: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/PRE: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R4f: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5h: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hp: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5hpss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5i: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R5s: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7p: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7ps: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+vita_binary: PROTO/R7pss: md5 2768dfd2810664ab9442143655cd9b65 commit 63b9dbb9
+blocks: 29
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./q_chain3_Bb_A_Bc.out | 1497 bytes
+##### q_chain3_Bb_A_Bc.sv
+=== iverilog
+compile rc=0 msgs: q_chain3_Bb_A_Bc.sv:9: warning: System task ($display) cannot be synthesized in an always_comb process.
+q_chain3_Bb_A_Bc.sv:6: warning: System task ($display) cannot be synthesized in an always_comb process.
+q_chain3_Bb_A_Bc.sv:4: warning: System task ($display) cannot be synthesized in an always_comb process.
+q_chain3_Bb_A_Bc.sv:7: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+Bc t=0
+A t=0 ac=0x
+WARNING: q_chain3_Bb_A_Bc.sv:7: value is unhandled for priority or unique case statement
+         Time: 0  Scope: top
+Bb t=0
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+WARNING: q_chain3_Bb_A_Bc.sv:7: value is unhandled for priority or unique case statement
+         Time: 5  Scope: top
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+q_chain3_Bb_A_Bc.sv:13: $finish called at 7 (1s)
+=== verilator
+compile rc=0
+run rc=0
+Bb t=0
+Bc t=0
+A t=0 ac=00
+A t=5 ac=11
+A t=5 ac=11
+t=6 y=3
+A t=6 ac=11
+A t=6 ac=11
+- q_chain3_Bb_A_Bc.sv:13: Verilog $finish
+A t=7 ac=11
+A t=7 ac=11
+=== vita (native=interp=vm)
+rc=0
+Bb t=0
+A t=0 ac=0x
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 2 | vita [A] | r2run/r1a/c2__q_chain3_Bb_A_Bc.out | 484 bytes
+=== vita (native=interp=vm)
+rc=0
+Bb t=0
+A t=0 ac=0x
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+Bc t=0
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 3 | vita [POST2] | r2run/post2/c2__q_chain3_Bb_A_Bc.out | 477 bytes
+=== vita (native=interp=vm)
+rc=0
+Bb t=0
+A t=0 ac=0x
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 4 | vita [POST2] | r3run/post2/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 5 | vita [POST3] | r3run/post3/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 6 | vita [POST3] | r4run/post3/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 7 | vita [POST4] | r4run/post4/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 8 | vita [PRE] | r2run/pre/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 9 | vita [PRE] | r3run/pre/c2__q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 10 | vita [PROTO/POSTA] | r2/POSTA/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== block 11 | vita [PROTO/POSTB] | r2/POSTB/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== block 12 | vita [PROTO/PRE] | r2/PRE/q_chain3_Bb_A_Bc.out | 470 bytes
+=== vita (interp=vm)
+rc=0
+Bb t=0
+A t=0 ac=0x
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 13 | vita [PROTO/PRE] | r3/PRE/q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 14 | vita [PROTO/R4f] | r2/R4f/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 15 | vita [PROTO/R5] | r2/R5/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 16 | vita [PROTO/R5h] | r2/R5h/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 17 | vita [PROTO/R5hp] | r2/R5hp/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 18 | vita [PROTO/R5hp] | r3/R5hp/q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 19 | vita [PROTO/R5hps] | r2/R5hps/q_chain3_Bb_A_Bc.out | 477 bytes
+=== vita (interp=vm)
+rc=0
+Bb t=0
+A t=0 ac=0x
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+Bc t=0
+Bc t=0
+A t=0 ac=00
+Bb t=5
+A t=5 ac=10
+q_chain3_Bb_A_Bc.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+Bc t=5
+A t=5 ac=11
+t=6 y=3
+simulation ended (Finish) at time 7
+errors=0 warnings=3 notes=0
+=== block 20 | vita [PROTO/R5hps] | r3/R5hps/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== block 21 | vita [PROTO/R5hpss] | r2/R5hpss/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== block 22 | vita [PROTO/R5i] | r2/R5i/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 23 | vita [PROTO/R5s] | r2/R5s/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 24 | vita [PROTO/R7] | r2/R7/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 25 | vita [PROTO/R7p] | r2/R7p/q_chain3_Bb_A_Bc.out | 470 bytes | identical to block 12
+=== block 26 | vita [PROTO/R7p] | r3/R7p/q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 3
+=== block 27 | vita [PROTO/R7ps] | r2/R7ps/q_chain3_Bb_A_Bc.out | 477 bytes | identical to block 19
+=== block 28 | vita [PROTO/R7ps] | r3/R7ps/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== block 29 | vita [PROTO/R7pss] | r2/R7pss/q_chain3_Bb_A_Bc.out | 484 bytes | identical to block 2
+=== end

@@ -1,0 +1,44 @@
+designs=3 variants=59 moved(PRE!=POST3b)=28
+  D04: n=34 moved=16
+  D05: n=12 moved=8
+  D11: n=13 moved=4
+== MOVED rows: id | exp | PRE | POST3b | iverilog | sv2v
+B19_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+B19_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+B20_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B20_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+B21_lp | R=0 | R=0 | VITA-E3009 | IVERR | R=0
+B21_gi | GI=else | GI=else | VITA-E3010 | IVERR | GI=else
+B23b_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B23b_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+B24_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B24_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+B29_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B29_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+B31_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B31_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+B32_lp | R=1 | R=1 | VITA-E3009 | IVERR | R=1
+B32_gi | GI=then | GI=then | VITA-E3010 | IVERR | GI=then
+C05_lp | R=0 | R=0 | VITA-E3009 | R=0 | R=0
+C05_gi | GI=else | GI=else | VITA-E3010 | GI=else | GI=else
+C06_lp | R=1 | R=1 | VITA-E3009 | R=1 | R=1
+C06_gi | GI=then | GI=then | VITA-E3010 | GI=then | GI=then
+C09_lp | R=1 | R=1 | VITA-E3009 | R=1 | R=1
+C09_gi | GI=then | GI=then | VITA-E3010 | GI=then | GI=then
+C12_lp | R=1 | R=1 | VITA-E3009 | R=1 | R=1
+C12_gi | GI=then | GI=then | VITA-E3010 | GI=then | GI=then
+PT5g | GI=then | VITA-E3010 | GI=else | GI=then | GI=then
+PT6 | R=1 | VITA-E3009 | R=1 | R=1 | R=1
+PT10 | R=0 | VITA-E3009 | R=0 | R=0 | R=0
+PT12 | R=0 | VITA-E3009 | R=0 | R=0 | R=0
+== NOT moved, POST3b differs from an agreeing oracle pair (pre-existing candidates)
+B28_lp | R=1 | VITA-E3009 | VITA-E3009 | R=1 | R=1
+B28_gi | GI=then | VITA-E3010 | VITA-E3010 | GI=then | GI=then
+C13_lp | R=0 | VITA-E3009 | VITA-E3009 | R=0 | R=0
+C13_gi | GI=else | VITA-E3010 | VITA-E3010 | GI=else | GI=else
+PT7 | R=1 | R=0 | R=0 | R=1 | R=1
+PT8 | R=1 | R=0 | R=0 | R=1 | R=1
+PT9 | R=0 | R=1 | R=1 | R=0 | R=0
+PT11 | R=1 | R=0 | R=0 | R=1 | R=1
+PT5c | R=1 | R=0 | R=0 | R=1 | R=1
+PT7c | R=1 | R=0 | R=0 | R=1 | R=1

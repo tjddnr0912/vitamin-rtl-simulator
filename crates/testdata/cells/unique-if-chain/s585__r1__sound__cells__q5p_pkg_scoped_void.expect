@@ -1,0 +1,123 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q5p_pkg_scoped_void
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q5p_pkg_scoped_void.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: verilator
+vita_tags: PRE,PRE-H,POST2,POST,JIT2,NODEF2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: PRE-H spelling; runs: q5p_pkg_scoped_void s__q5p_pkg_scoped_void
+aux: s585__r1__sound__cells__q5p_pkg_scoped_void.aux/r1/sound/cells/q5p_pkg_scoped_void_H.sv (origin s585/r1/sound/cells/q5p_pkg_scoped_void_H.sv)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: PRE-H: md5 unrecorded commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+vita_binary: NODEF2: md5 f97f67cf3a0daeea5a19c81925570a42 commit unrecorded
+blocks: 5
+=== block 1 | combined [verilator,PRE,PRE-H,POST] verilator 5.052 (version captured in slice) | r1/sound/out/q5p_pkg_scoped_void.out | 3084 bytes
+##### q5p_pkg_scoped_void
+=== verilator compile rc=0 run rc=0
+[1] %Error: q5p_pkg_scoped_void.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+t=1 fv q=0
+[2] %Error: q5p_pkg_scoped_void.sv:8: Assertion failed in pk.t: 'unique if' statement violated
+t=2 t q=0
+t=3 fv q=2
+- q5p_pkg_scoped_void.sv:17: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void_H.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void_H.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void_H.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=1 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.vu': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=1 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.vu': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [verilator,PRE,PRE-H,POST2] verilator 5.052 (version captured in slice) | g/out3/s__q5p_pkg_scoped_void.out | 3087 bytes
+##### s__q5p_pkg_scoped_void
+=== verilator compile rc=0 run rc=0
+[1] %Error: q5p_pkg_scoped_void.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+t=1 fv q=0
+[2] %Error: q5p_pkg_scoped_void.sv:8: Assertion failed in pk.t: 'unique if' statement violated
+t=2 t q=0
+t=3 fv q=2
+- q5p_pkg_scoped_void.sv:17: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void_H.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void_H.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void_H.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=1 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.vu': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=1 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.vu': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q5p_pkg_scoped_void.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 3 | vita [JIT2] | r2/sound/lanes/q5p_pkg_scoped_void.jit | 388 bytes
+q5p_pkg_scoped_void.sv:14:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:15:10: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+q5p_pkg_scoped_void.sv:16:17: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'
+errors=3 warnings=0 notes=0
+=== block 4 | vita [NODEF2] | r2/sound/lanes/q5p_pkg_scoped_void.nod | 388 bytes | identical to block 3
+=== block 5 | vita [POST2] | r2/sound/lanes/q5p_pkg_scoped_void.def | 388 bytes | identical to block 3
+=== end

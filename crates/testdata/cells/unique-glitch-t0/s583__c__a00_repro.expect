@@ -1,0 +1,120 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__a00_repro
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/a00_repro.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: PRE
+verdict: vita-wrong at t0 (2 oracles silent) — cause: order (a00t)
+verdict_source: s583/GROUNDING.md:28
+alias: m/sw/c_a00_repro/a00_repro (byte-identical source) verdict: vita-wrong at t0 (2 oracles silent) — cause: order (a00t) verdict_source: s583/GROUNDING.md:28
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+verilator+sv2v+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./a00_repro.out | 3579 bytes
+##### /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv
+=== iverilog
+compile rc=0 msgs: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+WARNING: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+t=3 y=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:14: $finish called at 4 (1s)
+=== verilator
+compile rc=0
+run rc=1
+[2] %Error: a00_repro.sv:5: Assertion failed in top: unique case, but none matched for '2'h0'
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5: Verilog $stop
+Aborting...
+=== sv2v->iv
+run rc=0
+t=3 y=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/w_a00_repro/sv2v.v:20: $finish called at 4 (1s)
+=== vita-native
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=3 y=1
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== vita-interp
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=3 y=1
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== vita-vm
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s583/c/a00_repro.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=3 y=1
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_a00_repro/obs_POST/results.jsonl | 133 bytes
+{"v":1,"t":4,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":4,"errors":0,"warnings":3,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_a00_repro/obs_POST/run.json | 1428 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "a00_repro.sv", "blake3": "34adf5cfa0dfc129841d7f639774ea82754d065b567527bc5ec1eaeb9400997d"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 4,
+  "counts": {"errors": 0, "warnings": 3, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 7, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925642,
+  "wall_s": 0.000386,
+  "elab_s": 0.000270,
+  "sim_s": 0.000101
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_a00_repro/obs_PRE/results.jsonl | 133 bytes | identical to block 2
+=== block 5 | vita [PRE/obs] | m/sw/c_a00_repro/obs_PRE/run.json | 1428 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "a00_repro.sv", "blake3": "34adf5cfa0dfc129841d7f639774ea82754d065b567527bc5ec1eaeb9400997d"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 4,
+  "counts": {"errors": 0, "warnings": 3, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 7, "declined": 2, "reasons": {"operator": 2}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925642,
+  "wall_s": 0.000463,
+  "elab_s": 0.000323,
+  "sim_s": 0.000122
+}
+=== end

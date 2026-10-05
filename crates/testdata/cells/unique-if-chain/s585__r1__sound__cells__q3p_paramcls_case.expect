@@ -1,0 +1,83 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q3p_paramcls_case
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q3p_paramcls_case.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST2
+verdict: PROBE_CATALOG
+verdict_source: s585/DOCS_ROWS.md:36
+notes: runs: q3p_paramcls_case s__q3p_paramcls_case
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [iverilog,PRE] iverilog 13.0 (version captured in slice) | r1/sound/out/q3p_paramcls_case.out | 1463 bytes
+##### q3p_paramcls_case
+=== iverilog compile rc=2
+q3p_paramcls_case.sv:1: syntax error
+I give up.
+=== vita PRE (native=interp=vm)
+rc=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+t=1 y=1
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+t=3 y=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=9 notes=0
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/s__q3p_paramcls_case.out | 3989 bytes
+##### s__q3p_paramcls_case
+=== verilator compile rc=1 [run by r3]
+%Error-FUNCTIMECTL: q3p_paramcls_case.sv:4:64: Functions cannot invoke tasks (IEEE 1800-2023 13.4)
+                                             : ... note: In instance 'top'
+    4 |   function logic [W-1:0] f(input logic x, input logic z); this.t(x, z); return {x, z}; endfunction
+      |                                                                ^
+                                             : ... Suggest make caller 'function f' a task
+    4 |   function logic [W-1:0] f(input logic x, input logic z); this.t(x, z); return {x, z}; endfunction
+      |                          ^
+                                             : ... Or, suggest make called 'task t' a function void
+    3 |   task t(input logic x, input logic z); unique case (1'b1) x: r = 1; z: r = 2; endcase endtask
+      |        ^
+                    ... For error description see https://verilator.org/warn/FUNCTIMECTL?v=5.052
+%Error: Exiting due to 1 error(s)
+=== iverilog compile rc=2
+q3p_paramcls_case.sv:1: syntax error
+I give up.
+=== vita PRE (native=interp=vm)
+rc=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+t=1 y=1
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+t=3 y=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=9 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 0]
+t=1 y=1
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 2]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+t=3 y=0
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 3]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+q3p_paramcls_case.sv:3:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.P__2.t] [at time 4]
+simulation ended (Finish) at time 4
+errors=0 warnings=9 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

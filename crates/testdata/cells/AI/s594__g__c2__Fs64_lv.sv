@@ -1,0 +1,8 @@
+`timescale 1ns/1ns
+module t;
+  localparam logic signed [7:0] X = -4;
+  localparam longint AQ [0:1] = '{-64'sd4, 64'sd2};
+  localparam L = (AQ[0] + 64'd0) > 64'd100;
+  initial #1 $display("L=%0d B=%0d", L, $bits(L));
+  initial #20 $finish;
+endmodule

@@ -1,0 +1,60 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c__Gwf_gif
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c/Gwf_gif.sv
+roadmap_row: §2 🆕 U
+set: g/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: [ALL]
+verdict_source: s591/g/c.summ:511
+notes: grounding PRE-vs-oracles tag; not a POST mover (absent from impl/moves_ground.txt)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Gwf_gif.ivl | 92 bytes
+gif top.g[0].e miss
+gif top.g[1].t hit
+post 9
+Gwf_gif.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Gwf_gif.vl | 267 bytes
+gif top.g[0].e miss
+gif top.g[1].t hit
+post 9
+- Gwf_gif.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 5.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Gwf_gif.s2v | 96 bytes
+gif top.g[0].e miss
+gif top.g[1].t hit
+post 9
+Gwf_gif.s2v.v:20: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Gwf_gif.dev3 | 216 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+gif top.g[0].e miss
+gif top.g[1].t hit
+post 9
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./Gwf_gif.dev3.route | 0 bytes
+
+=== block 6 | vita [POSTA] | ./Gwf_gif.posta | 216 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./Gwf_gif.posta.route | 0 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./Gwf_gif.postb | 216 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./Gwf_gif.postb.route | 0 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./Gwf_gif.pre | 216 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./Gwf_gif.pre.route | 0 bytes | identical to block 5
+=== block 12 | vita [PROTO1] | ./Gwf_gif.post1 | 216 bytes | identical to block 4
+=== block 13 | vita [PROTO1] | ./Gwf_gif.post1.route | 0 bytes | identical to block 5
+=== block 14 | vita [PROTO2] | ./Gwf_gif.post2 | 216 bytes | identical to block 4
+=== block 15 | vita [PROTO2] | ./Gwf_gif.post2.route | 0 bytes | identical to block 5
+=== end

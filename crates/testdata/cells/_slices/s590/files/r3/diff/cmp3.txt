@@ -1,0 +1,613 @@
+flag totals over 43 cells:
+  P2=P3: True 43  False: 
+  C=D: True 43  False: 
+  P3=D: True 16  False: d06_finish_in_f d07_finish_in_initial d09_cycle d10_port_in d11_port_out d14_force d18_gen_chain d19_delay_chain e01_tri_md e02_vec_chain e03_const_in_init_read e04b_const_in_edges e08_cfg_tie f01_force_held_after_t0 f02_force_input_of_held f03_force_t0_release_later f05_md_group_after_t0 f06_held_delayed_after_t0 f07_rchain_random_probe k01_cycle_tails k02_chain_and_cycle k03_kahn_net_indeg k04_closure_nonheld k05_release_vs_source k06_fatal_wave2 k07_finish_in_cycle k09_func_reads_global
+  splitD: True 2  False: d01_clk_gate d02_rst d03_comb_input d04_nba_input d05_hash0_input d06_finish_in_f d07_finish_in_initial d08_strobe_monitor d09_cycle d10_port_in d11_port_out d12_tri_md d13_strength d14_force d15_vcd d16_random d17_star_comb d18_gen_chain d21_dbg_cpu e01_tri_md e02_vec_chain e03_const_in_init_read e04_const_in_events e04b_const_in_edges e07_supply e08_cfg_tie f01_force_held_after_t0 f02_force_input_of_held f03_force_t0_release_later f04_held_then_clocked f05_md_group_after_t0 f07_rchain_random_probe k01_cycle_tails k02_chain_and_cycle k03_kahn_net_indeg k04_closure_nonheld k05_release_vs_source k06_fatal_wave2 k07_finish_in_cycle k08_zsens_ring k09_func_reads_global
+  vcdCD: True 43  False: 
+  jit=D: True 43  False: 
+  prod=D: True 41  False: d19_delay_chain f06_held_delayed_after_t0
+  stD: True 38  False: d12_tri_md d13_strength d16_random e04_const_in_events e07_supply
+  stPair: True 43  False: 
+##### f01_force_held_after_t0
+[PRE3]
+rc=0
+f t=0 x=x
+f t=0 x=0
+ev h=1 t=0
+ev r=2 t=0
+f t=2 x=3
+ev h=4 t=2
+ev r=5 t=2
+ev h=9 t=4
+ev r=10 t=4
+f t=6 x=5
+f t=8 x=5
+ev h=6 t=8
+ev r=7 t=8
+t10 h=6 r=7
+ev r=0 t=10
+ev r=7 t=11
+t12 h=6 r=7
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f t=0 x=0
+ev h=1 t=0
+ev r=2 t=0
+f t=2 x=3
+ev h=4 t=2
+ev r=5 t=2
+ev h=9 t=4
+ev r=10 t=4
+f t=6 x=5
+f t=8 x=5
+ev h=6 t=8
+ev r=7 t=8
+t10 h=6 r=7
+ev r=0 t=10
+ev r=7 t=11
+t12 h=6 r=7
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f t=0 x=0
+ev h=1 t=0
+ev r=2 t=0
+f t=2 x=3
+ev h=4 t=2
+ev r=5 t=2
+ev h=9 t=4
+ev r=10 t=4
+f t=6 x=5
+ev h=6 t=8
+ev r=7 t=8
+t10 h=6 r=7
+ev r=0 t=10
+ev r=7 t=11
+t12 h=6 r=7
+f01_force_held_after_t0.sv:21: $finish called at 12 (1s)
+=== verilator run rc=0
+f t=0 x=0
+ev h=1 t=0
+ev r=2 t=0
+f t=2 x=3
+ev h=4 t=2
+ev r=5 t=2
+f t=4 x=3
+ev h=9 t=4
+ev r=10 t=4
+f t=6 x=5
+f t=8 x=5
+ev h=6 t=8
+ev r=7 t=8
+t10 h=6 r=7
+f t=10 x=5
+ev r=0 t=10
+f t=11 x=5
+ev r=7 t=11
+t12 h=6 r=7
+- f01_force_held_after_t0.sv:21: Verilog $finish
+f t=12 x=5
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f02_force_input_of_held
+[PRE3]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=2
+ev h=3 t=0
+f t=2 x=7
+ev h=8 t=2
+f t=6 x=6
+ev h=7 t=6
+t8 w=6 h=7
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f t=0 x=2
+ev h=3 t=0
+f t=2 x=7
+ev h=8 t=2
+f t=6 x=6
+ev h=7 t=6
+t8 w=6 h=7
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f t=0 x=2
+ev h=3 t=0
+f t=2 x=7
+ev h=8 t=2
+f t=4 x=7
+f t=6 x=6
+ev h=7 t=6
+t8 w=6 h=7
+f02_force_input_of_held.sv:16: $finish called at 8 (1s)
+=== verilator run rc=0
+f t=0 x=2
+ev h=3 t=0
+f t=2 x=7
+ev h=8 t=2
+f t=4 x=7
+f t=6 x=6
+ev h=7 t=6
+t8 w=6 h=7
+- f02_force_input_of_held.sv:16: Verilog $finish
+f t=8 x=6
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f03_force_t0_release_later
+[PRE3]
+rc=0
+f t=0 x=x
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f t=0 x=1
+ev r=13 t=0
+ev r=10 t=3
+t4 h=2 r=10
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+f03_force_t0_release_later.sv:17: $finish called at 6 (1s)
+=== verilator run rc=0
+f t=0 x=1
+ev r=13 t=0
+f t=3 x=1
+ev r=10 t=3
+t4 h=2 r=10
+f t=4 x=1
+f t=5 x=2
+ev r=11 t=5
+t6 h=3 r=11
+- f03_force_t0_release_later.sv:17: Verilog $finish
+f t=6 x=2
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f04_held_then_clocked
+[PRE3]
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+[POSTD] = PRE3
+=== iverilog run rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+f04_held_then_clocked.sv:11: $finish called at 20 (1s)
+=== verilator run rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+- f04_held_then_clocked.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f05_md_group_after_t0
+[PRE3]
+rc=0
+f1 t=0 x=x
+f1 t=0 x=x
+f1 t=0 x=x
+f1 t=0 x=2
+f1 t=0 x=2
+ev w=0011 t=0
+f1 t=0 x=2
+f1 t=2 x=2
+ev w=1101 t=2
+ev w=1010 t=4
+f1 t=6 x=5
+f1 t=6 x=5
+ev w=0110 t=6
+f1 t=6 x=5
+f1 t=8 x=5
+t8 w=0110
+f1 t=8 x=5
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f1 t=0 x=2
+f1 t=0 x=2
+ev w=0011 t=0
+f1 t=0 x=2
+f1 t=2 x=2
+ev w=1101 t=2
+ev w=1010 t=4
+f1 t=6 x=5
+f1 t=6 x=5
+ev w=0110 t=6
+f1 t=6 x=5
+f1 t=8 x=5
+t8 w=0110
+f1 t=8 x=5
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f1 t=0 x=2
+ev w=0011 t=0
+ev w=1101 t=2
+f1 t=4 x=5
+ev w=1010 t=4
+ev w=0110 t=6
+t8 w=0110
+f05_md_group_after_t0.sv:17: $finish called at 8 (1s)
+=== verilator run rc=0
+f1 t=0 x=2
+ev w=0011 t=0
+ev w=1101 t=2
+ev w=1010 t=4
+f1 t=6 x=5
+ev w=0110 t=6
+t8 w=0110
+- f05_md_group_after_t0.sv:17: Verilog $finish
+f1 t=8 x=5
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f06_held_delayed_after_t0
+[PRE3]
+=== X native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== X interp [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== X vm [BACKEND SPLIT]
+rc=0
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+[POSTD]
+=== X native [BACKEND SPLIT]
+rc=0
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a call in a delayed continuous assign: S3b); ran on `vm` instead — the result is unaffected, the speed is
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=2 notes=0
+=== X interp [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== X vm [BACKEND SPLIT]
+rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+f t=2 x=1
+ev y=2 t=2
+f t=2 x=1
+f t=3 x=1
+f t=3 x=2
+f t=4 x=2
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+f t=6 x=3
+f t=8 x=3
+t8 y=4 z=5
+f t=8 x=3
+simulation ended (Finish) at time 8
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f t=0 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=4 x=3
+ev y=4 t=6
+t8 y=4 z=5
+f06_held_delayed_after_t0.sv:11: $finish called at 8 (1s)
+=== verilator run rc=0
+f t=0 x=1
+f t=0 x=1
+f t=0 x=1
+ev y=0 t=0
+f t=2 x=1
+ev y=2 t=2
+f t=3 x=2
+f t=3 x=2
+f t=4 x=3
+f t=4 x=3
+f t=5 x=3
+f t=6 x=3
+ev y=4 t=6
+t8 y=4 z=5
+- f06_held_delayed_after_t0.sv:11: Verilog $finish
+f t=8 x=3
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### f07_rchain_random_probe
+[PRE3]
+rc=0
+g t=0 x=x r=303379748
+g t=0 x=x r=-1064739199
+g t=0 x=x r=-2071669239
+g t=0 x=x r=-1309649309
+g t=0 x=x r=112818957
+g t=0 x=x r=1189058957
+g t=0 x=x r=-1295874971
+g t=0 x=x r=-1992863214
+g t=0 x=x r=15983361
+g t=0 x=x r=114806029
+g t=0 x=x r=992211318
+g t=0 x=x r=512609597
+g t=0 x=x r=1993627629
+g t=0 x=x r=1177417612
+g t=0 x=x r=2097015289
+g t=0 x=x r=-482925370
+g t=0 x=x r=-487095099
+g t=0 x=x r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=1 r=-490058043
+g t=0 x=0 r=777537884
+g t=0 x=1 r=-561108803
+g t=0 x=0 r=-1767155667
+g t=0 x=1 r=-1297668507
+g t=1 x=0 r=-1309711773
+g t=1 x=1 r=91457290
+g t=1 x=0 r=-1069866368
+g t=1 x=1 r=274997536
+g t=1 x=0 r=1433945514
+g t=1 x=1 r=-825439075
+t1 w5=0 rnd=-887079274
+g t=1 x=0 r=-1987856365
+g t=1 x=1 r=-2034485235
+g t=1 x=0 r=-1448618413
+g t=1 x=1 r=899669355
+g t=1 x=0 r=-358208811
+g t=1 x=1 r=-2129180158
+g t=2 x=0 r=-682213714
+g t=2 x=1 r=251652381
+g t=2 x=0 r=-406490417
+g t=2 x=1 r=293882147
+g t=2 x=0 r=84501770
+g t=2 x=1 r=-445445430
+g t=2 x=0 r=-1640936388
+g t=2 x=1 r=2036907506
+g t=2 x=0 r=1160667530
+g t=2 x=1 r=549761857
+g t=2 x=0 r=-330615592
+g t=2 x=1 r=1008792440
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+g t=0 x=0 r=303379748
+g t=0 x=0 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+g t=0 x=0 r=-1295874971
+g t=0 x=1 r=-1992863214
+g t=0 x=0 r=15983361
+g t=0 x=0 r=114806029
+g t=0 x=1 r=992211318
+g t=0 x=0 r=512609597
+g t=0 x=0 r=1993627629
+g t=0 x=1 r=1177417612
+g t=0 x=0 r=2097015289
+g t=0 x=1 r=-482925370
+g t=0 x=0 r=-487095099
+g t=0 x=1 r=-720121174
+g t=0 x=0 r=1924134885
+g t=0 x=1 r=-1143836041
+g t=0 x=0 r=-1993157102
+g t=0 x=1 r=1206705039
+g t=0 x=0 r=2033215986
+g t=0 x=1 r=-411658546
+g t=0 x=0 r=-201295128
+g t=0 x=0 r=-490058043
+g t=0 x=1 r=777537884
+g t=0 x=0 r=-561108803
+g t=0 x=1 r=-1767155667
+g t=0 x=0 r=-1297668507
+g t=0 x=0 r=-1309711773
+g t=0 x=1 r=91457290
+g t=0 x=0 r=-1069866368
+g t=0 x=1 r=274997536
+g t=0 x=0 r=1433945514
+g t=0 x=1 r=-825439075
+g t=0 x=0 r=-887079274
+g t=0 x=1 r=-1987856365
+g t=0 x=0 r=-2034485235
+g t=0 x=1 r=-1448618413
+g t=0 x=0 r=899669355
+g t=0 x=1 r=-358208811
+g t=1 x=0 r=-2129180158
+g t=1 x=1 r=-682213714
+g t=1 x=0 r=251652381
+g t=1 x=1 r=-406490417
+g t=1 x=0 r=293882147
+g t=1 x=1 r=84501770
+t1 w5=0 rnd=-445445430
+g t=1 x=0 r=-1640936388
+g t=1 x=1 r=2036907506
+g t=1 x=0 r=1160667530
+g t=1 x=1 r=549761857
+g t=1 x=0 r=-330615592
+g t=1 x=1 r=1008792440
+g t=2 x=0 r=-997584247
+g t=2 x=1 r=1975848427
+g t=2 x=0 r=1526883766
+g t=2 x=1 r=1665923526
+g t=2 x=0 r=1460999086
+g t=2 x=1 r=-562756932
+g t=2 x=0 r=353361194
+g t=2 x=1 r=-2049467893
+g t=2 x=0 r=-1198014863
+g t=2 x=1 r=1123172741
+g t=2 x=0 r=670192975
+g t=2 x=1 r=-1647550405
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+g t=0 x=0 r=303379748
+g t=0 x=1 r=-1064739199
+g t=0 x=0 r=-2071669239
+g t=0 x=1 r=-1309649309
+g t=0 x=0 r=112818957
+g t=0 x=1 r=1189058957
+t1 w5=0 rnd=-1295874971
+f07_rchain_random_probe.sv:13: $finish called at 2 (1s)
+=== verilator run rc=0
+g t=0 x=0 r=1604469840
+g t=0 x=1 r=612369497
+g t=0 x=0 r=-41050761
+g t=0 x=1 r=-1222506707
+g t=0 x=0 r=608244723
+g t=0 x=1 r=2003761928
+t1 w5=0 rnd=-1959092748
+- f07_rchain_random_probe.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05

@@ -1,0 +1,60 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g1b__b_cl_if_N
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g1b/b_cl_if_N.sv
+roadmap_row: §3.b unique-const-fn
+set: g1b
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,POST-a,PRE-sep,S3,S4,S8,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+alias: post_b/velab_work/b_cl_if_N/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/velab_work/b_cl_if_N/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/c444/g1b/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/velab/w/g1b__b_cl_if_N/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/re/c444/g1b/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/velab/w/g1b__b_cl_if_N/b_cl_if_N (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./b_cl_if_N.ivl | 423 bytes
+b_cl_if_N.sv:4: syntax error
+b_cl_if_N.sv:4: Syntax in assignment statement l-value.
+b_cl_if_N.sv:6: syntax error
+b_cl_if_N.sv:6: error: Invalid module item.
+b_cl_if_N.sv:7: syntax error
+b_cl_if_N.sv:7: error: Invalid module item.
+b_cl_if_N.sv:7: syntax error
+b_cl_if_N.sv:7: error: Invalid module item.
+b_cl_if_N.sv:7: syntax error
+b_cl_if_N.sv:9: error: Invalid module item.
+b_cl_if_N.sv:9: syntax error
+I give up.
+rc=12
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./b_cl_if_N.vl | 226 bytes
+P=10
+- b_cl_if_N.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 9.524 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_b_cl_if_N.build | 0 bytes
+
+=== block 4 | vita [MECH] | ./b_cl_if_N.mech | 920 bytes
+b_cl_if_N.sv:7:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+b_cl_if_N.sv:7:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+b_cl_if_N.sv:7:42: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+b_cl_if_N.sv:9:39: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found '#'
+b_cl_if_N.sv:9:39: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '#'
+b_cl_if_N.sv:9:41: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found ')'
+b_cl_if_N.sv:9:42: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '::'
+errors=7 warnings=0 notes=0
+rc=1
+=== block 5 | vita [PRE] | ./b_cl_if_N.vita | 920 bytes | identical to block 4
+=== block 6 | vita [S3] | ./b_cl_if_N.s3 | 920 bytes | identical to block 4
+=== block 7 | vita [S4] | ./b_cl_if_N.s4 | 920 bytes | identical to block 4
+=== block 8 | vita [S8] | ./b_cl_if_N.s8 | 920 bytes | identical to block 4
+=== end

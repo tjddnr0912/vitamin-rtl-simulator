@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__A4_rb
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/A4_rb.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:157
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./A4_rb.ivl | 48 bytes
+vb=1
+A4_rb.sv:6: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./A4_rb.vl | 141 bytes
+%Error: A4_rb.sv:4:29: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./A4_rb.s2v | 51 bytes
+vb=x
+A4_rb.s2v.v:10: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./A4_rb.cut | 74 bytes
+vb=5
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./A4_rb.cut.route | 13 bytes
+t fx frame 0
+=== block 6 | vita [pre] | ./A4_rb.pre | 74 bytes | identical to block 4
+=== block 7 | vita [pre] | ./A4_rb.pre.route | 13 bytes | identical to block 5
+=== end

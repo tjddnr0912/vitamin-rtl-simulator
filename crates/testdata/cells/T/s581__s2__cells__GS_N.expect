@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__s2__cells__GS_N
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/s2/cells/GS_N.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: s2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST2,POST3,POST,PRE
+verdict: unchanged
+verdict_source: s581/S2_matrix.tsv:95
+alias: lens_diff3/s2c/cells/GS_N (byte-identical source) verdict: unchanged verdict_source: s581/S2_matrix.tsv:95
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./GS_N.iv.txt | 64 bytes
+GS_N.sv:3: sorry: "inside" expressions not supported yet.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./GS_N.vl.txt | 112 bytes
+%Error: GS_N.sv:3:33: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./GS_N.vlb | 510 bytes
+%Error: GS_N.sv:3:33: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 't'
+    3 |   case (((4'd15 + 4'd1) inside {5'b0?000})) 1'b1: begin : g initial #1 $display("GS_N one"); end default: begin : h initial #1 $display("GS_N default"); end endcase
+      |                                 ^~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./GS_N.sv.txt | 19 bytes
+GS_N default
+
+rc=0
+=== block 5 | vita [POST] | ./GS_N.post.txt | 86 bytes
+GS_N default
+simulation ended (Quiescent) at time 1
+errors=0 warnings=0 notes=0
+
+rc=0
+=== block 6 | vita [POST2] | ./GS_N.p2.txt | 86 bytes | identical to block 5
+=== block 7 | vita [POST3] | ./GS_N.p3.txt | 86 bytes | identical to block 5
+=== block 8 | vita [POST3b] | lens_diff3/s2c/cells/GS_N.post3b.txt | 86 bytes | identical to block 5
+=== block 9 | vita [PRE] | ./GS_N.pre.txt | 86 bytes | identical to block 5
+=== end

@@ -1,0 +1,72 @@
+ac10_rep_case	VITA-E3009	w=00000000	w=00000000	w=00000007	w=00000007	w=00000007
+ac11_psel_case	VITA-E3009	o=00000001	o=00000001	o=00000007	o=00000007	o=00000007
+ac12_mlsel_case	VITA-E3009	o=00000001	o=00000001	o=0000000f	o=0000000f	o=0000000f
+ac13_gcase_case	arm=def	arm=def	arm=def	arm=h	arm=h	arm=h
+ac14_mlsel_x	VITA-E3009	o=00000001	o=00000001	o=xxxxxxxx	REFUSE:%Error: Internal Error: ac14_mlsel_x.sv:10:26: ../V3Number.c	o=xxxxxxxx
+ac15_rep_case_lit	w=00000000	w=00000000	w=00000000	w=00000007	w=00000007	w=00000007
+ac16_rep_display	VITA-E3009	VITA-E3009	VITA-E3009	w=00000007	w=00000007	w=00000007
+ac17_netw_case	VITA-E3009	VITA-E3009	VITA-E3009	v=f b=4	v=f b=4	v=f b=4
+ac18_lp_case	VITA-E3009	VITA-E3009	VITA-E3009	P=3	P=3	P=3
+ac19_rt_case	VITA-E3009	v=3	v=3	v=3	v=3	v=3
+ac1_rep_x	VITA-E3009	w=00000000	w=00000000	1 error(s) during elaboration. +REFUSE:ac1_rep_x.sv:10: error: Concatenation repeat may not be unde	REFUSE:%Error: ac1_rep_x.sv:10:29: Replication value of < 0 or X/Z 	1 error(s) during elaboration. +REFUSE:ac1_rep_x.s2v.v:12: error: Concatenation repeat may not be u
+ac2_psel_x	VITA-E3009	o=00000000	o=00000000	ac2_psel_x.sv:11:      : This width expression violates that rule: q::h('sd2) 1 error(s) during elaboration. +REFUSE:ac2_psel_x.sv:11: error: Indexed part select width must be a	REFUSE:%Error: Internal Error: ac2_psel_x.sv:11:31: ../V3Number.cpp	ac2_psel_x.s2v.v:14:      : This width expression violates that rule: q_h('sd2) 1 error(s) during elaboration. +REFUSE:ac2_psel_x.s2v.v:14: error: Indexed part select width must b
+ac3_gcase_x	arm=def	arm=h	arm=h	arm=def	arm=def	arm=def
+ac4_rep_x_mod	w=00000000	w=00000000	w=00000000	1 error(s) during elaboration. +REFUSE:ac4_rep_x_mod.sv:7: error: Concatenation repeat may not be u	REFUSE:%Error: ac4_rep_x_mod.sv:7:27: Replication value of < 0 or X	1 error(s) during elaboration. +REFUSE:ac4_rep_x_mod.s2v.v:8: error: Concatenation repeat may not b
+ac5_psel_x_mod	o=00000000	o=00000000	o=00000000	ac5_psel_x_mod.sv:8:      : This width expression violates that rule: hm('sd2) 1 error(s) during elaboration. +REFUSE:ac5_psel_x_mod.sv:8: error: Indexed part select width must b	REFUSE:%Error: Internal Error: ac5_psel_x_mod.sv:8:28: ../V3Number.	ac5_psel_x_mod.s2v.v:10:      : This width expression violates that rule: hm('sd2) 1 error(s) during elaboration. +REFUSE:ac5_psel_x_mod.s2v.v:10: error: Indexed part select width mu
+ac6_gcase_x_mod	arm=h	arm=h	arm=h	arm=def	arm=def	arm=def
+ac7_repeat_x	VITA-E3009	n=0	n=0	(no output)	n=0	(no output)
+ac8_delay_x	VITA-E3009	t1 w=1 t3 w=1	t1 w=1 t3 w=1	t1 w=1 t3 w=1	t1 w=1 t3 w=1	t1 w=1 t3 w=1
+ac9_cast_x	VITA-E3009	VITA-E3009	VITA-E3009	2 error(s) during elaboration. +REFUSE:ac9_cast_x.sv:11: error: Cast size expression must be consta	REFUSE:%Error: Internal Error: ac9_cast_x.sv:11:27: ../V3Number.cpp	o=01
+ae1_ret_ce	VITA-E3009	P=0000	P=0000	1 error(s) during elaboration. +REFUSE:ae1_ret_ce.sv:8: error: Unable to evaluate parameter P value	P=xxxx	1 error(s) during elaboration. +REFUSE:ae1_ret_ce.s2v.v:11: error: Unable to evaluate parameter P v
+ae2_loc_ce	VITA-E3009	P=0000	P=0000	P=xxxx	P=xxxx	P=xxxx
+ae3_loc_ce_pctl	VITA-E3009	P=0000	P=0000	P=xxxx	P=xxxx	P=xxxx
+ae4_ret_rt	VITA-E3009	v=xxxx	v=xxxx	v=xxxx	v=0000	v=xxxx
+ae5_twin_lit	P=0000	P=0000	P=0000	P=xxxx	P=xxxx	P=xxxx
+ae6_dflt_ce	VITA-E3009	VITA-E3009	VITA-E3009	P=xxxx	P=xxxx	ae6_dflt_ce.s2v.v:15:      : Verilog doesn't allow passing empty parameters to functions. 1 error(s) during elaboration. +REFUSE:ae6_dflt_ce.s2v.v:15: error: The function q_h has been calle
+ae7_ret_ce_x	VITA-E3009	P=0000	P=0000	1 error(s) during elaboration. +REFUSE:ae7_ret_ce_x.sv:8: error: Unable to evaluate parameter P val	P=xxxx	1 error(s) during elaboration. +REFUSE:ae7_ret_ce_x.s2v.v:8: error: Unable to evaluate parameter P 
+ae8_body_ce	VITA-E3009	P=00000000	VITA-E3009	P=xxxxxxxx	P=xxxxxxxx	P=xxxxxxxx
+cl1_unit_hdrcall	P=232 v=232	VITA-E3009	VITA-E3009	P=232 v=232	P=232 v=232	P=232 v=232
+cl2_unit_hdrpar	P=232 v=232	P=232 v=232	P=232 v=232	P=232 v=232	P=232 v=232	P=232 v=232
+cl3_imp_hdr	VITA-E3009	VITA-E3009	VITA-E3009	P=232 v=232	P=232 v=232	P=232 v=232
+cl4_scoped_nest	P=1000 v=1000	P=232 v=232	P=232 v=232	P=232 v=232	P=232 v=232	P=232 v=232
+ib1_unit_concat	VITA-E3009	VITA-E3009	VITA-E3009	P=a5 v=a5	P=a5 v=a5	P=a5 v=a5
+ib1b_unit_concat_P	P=a5	VITA-E3009	P=a5	P=a5	P=a5	P=a5
+ib2_unit_cast	VITA-E3009	VITA-E3009	VITA-E3009	P=0f v=0f	P=0f v=0f	P=0f v=0f
+ib3_unit_fn_body	VITA-E3009	VITA-E3009	VITA-E3009	P=10 v=10	P=10 v=10	P=10 v=10
+ib3b_unit_fn_body_P	VITA-E3009	P=10	VITA-E3009	P=10	P=10	P=10
+id1_a41_mod	P=0	P=0	P=0	P=2	P=2	P=2
+id1_a41_pk	VITA-E3009	P=0	P=0	P=2	P=2	P=2
+id2_ovf_mod	P=00000000	P=00000000	P=00000000	P=00000000	P=00000000	P=00000000
+id2_ovf_pk	VITA-E3009	P=00000000	P=00000000	P=00000000	P=00000000	P=00000000
+id3_uns_mod	P=-1	P=-1	P=-1	P=4294967295	P=4294967295	P=4294967295
+id3_uns_pk	P=-1	P=-1	P=-1	P=4294967295	P=4294967295	P=4294967295
+nc10_bitsgen	VITA-E3010	VITA-E3010	VITA-E3010	b=4	b=4	b=4
+nc11_psel	VITA-E3009	o=000000ef	o=000000ef	o=000000ef	o=000000ef	o=000000ef
+nc12_netw	VITA-E3009	v=ff b=8	v=ff b=8	v=ff b=8	v=ff b=8	v=ff b=8
+nc1_genif	VITA-E3010	br=then	br=then	br=then	br=then	br=then
+nc2_gencase	VITA-E3010	arm=2	arm=2	arm=2	arm=2	arm=2
+nc3_ia	VITA-E3009	top.u[1] top.u[0]	top.u[1] top.u[0]	top.u[0] top.u[1]	top.u[0] top.u[1]	top.u[0] top.u[1]
+nc4_ovr	VITA-E3009	P=2	P=2	P=2	P=2	P=2
+nc5_unit	VITA-E3009	U=2	U=2	U=2	U=2	U=2
+nc6_rep	VITA-E3009	w=00000007	w=00000007	w=00000007	w=00000007	w=00000007
+nc7_delay	VITA-E3009	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=1 t3 w=1	t1 w=0 t3 w=1	t1 w=1 t3 w=1
+nc8_repeat	VITA-E3009	n=2	n=2	n=2	n=2	n=2
+nc9_caselbl	VITA-E3009	hit	hit	hit	hit	hit
+r1_flip_wide	P=1000	P=8	P=8	P=8	P=8	P=8
+r1_flip_wide_rt	v=1000	v=8	v=8	v=8	v=8	v=8
+rba1_ce	P=8	VITA-E3009	VITA-E3009	P=8	P=8	P=8
+rba2_rt	v=8	VITA-E3009	VITA-E3009	v=8	v=8	v=8
+rba3_rep	w=000000ff	VITA-E3009	VITA-E3009	w=000000ff	w=000000ff	w=000000ff
+rba4_wc	VITA-E3009	VITA-E3009	VITA-E3009	P=8 v=8	P=8 v=8	P=8 v=8
+rc1_selfhdr	VITA-E3009	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	rc1_selfhdr.sv:2: assert: elab_expr.cc:2927: failed assertion def sh: line 1: 40116 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2282f6a1e" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg282f6a1e" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli282f6a1e" 40117 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh282f6a1e" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +CRASH(134)	REFUSE:%Error: Verilator internal fault, sorry. Suggest trying --de	rc1_selfhdr.s2v.v:2       : This MSB expression violates the rule: f('sd2) 2 error(s) during elaboration. +REFUSE:rc1_selfhdr.s2v.v:2: error: No function named `f' found in t
+rc2_mutual	VITA-E3009	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	rc2_mutual.sv:3: assert: elab_expr.cc:2927: failed assertion def sh: line 1: 40144 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228361514" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28361514" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28361514" 40145 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28361514" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +CRASH(134)	REFUSE:%Error: Verilator internal fault, sorry. Suggest trying --de	rc2_mutual.s2v.v:3       : This MSB expression violates the rule: g('sd2) 2 error(s) during elaboration. +REFUSE:rc2_mutual.s2v.v:3: error: No function named `g' found in th
+rc3_selfhdr_mod	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	rc3_selfhdr_mod.sv:2: assert: elab_expr.cc:2927: failed assertion def sh: line 1: 40175 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2283e8b9b" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg283e8b9b" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli283e8b9b" 40176 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh283e8b9b" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +CRASH(134)	REFUSE:%Error: Verilator internal fault, sorry. Suggest trying --de	rc3_selfhdr_mod.s2v.v:2: assert: elab_expr.cc:2927: failed assertion def sh: line 1: 40187 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228419f6f" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28419f6f" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28419f6f" 40188 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28419f6f" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +CRASH(134)
+rc4_shadow_selfhdr	P=8	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	thread 'vita-main' has overflowed its stack +STACK-OVERFLOW	rc4_shadow_selfhdr.sv:2: assert: elab_expr.cc:2927: failed assertion def sh: line 1: 62003 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg23e1c6ef7" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg3e1c6ef7" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli3e1c6ef7" 62004 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh3e1c6ef7" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +CRASH(134)	REFUSE:%Error: Verilator internal fault, sorry. Suggest trying --de	P=0
+sh1_fnlp_rt	VITA-E2002	VITA-E2002	VITA-E2002	v=0f	v=0f	v=0f
+sh2_fnlp_ce	VITA-E2002	VITA-E2002	VITA-E2002	P=0f	P=0f	P=0f
+sh3_fnlp_mod	VITA-E2002	VITA-E2002	VITA-E2002	P=0f v=0f	P=0f v=0f	P=0f v=0f
+sh4_tasklp_rt	VITA-E2002	VITA-E2002	VITA-E2002	sh4_tasklp_rt.sv:10: assert: pform.cc:1478: failed assertion lexical_scope == cur_module sh: line 1: 40712 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228c842ea" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28c842ea" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28c842ea" 40713 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28c842ea" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - +REFUSE:sh4_tasklp_rt.sv:12: syntax error	v=0f	v=0f
+sh6_fn_enum	VITA-E3009	v=ff	v=ff	v=ff	v=03	REFUSE:sh6_fn_enum.sv:4:5: Parse error: missing expected `endfuncti
+tw_delay_lit	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=0 t3 w=1	t1 w=x t3 w=1
+tw_delay_mod	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=x t3 w=1	t1 w=1 t3 w=1	t1 w=0 t3 w=1	t1 w=1 t3 w=1
+tw_ia_lit	top.u[1] top.u[0]	top.u[1] top.u[0]	top.u[1] top.u[0]	top.u[0] top.u[1]	top.u[0] top.u[1]	top.u[0] top.u[1]

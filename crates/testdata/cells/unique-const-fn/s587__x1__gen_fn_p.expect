@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x1__gen_fn_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x1/gen_fn_p.sv
+roadmap_row: §3.b unique-const-fn
+set: x1
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S5,S6,S7,S8
+verdict: WRONG -> excluded
+verdict_source: s587/IMPL.md:136
+notes: IMPL X1(c) census; class is the plain twin on PRE vs both oracles
+vita_binary: S5: md5 9a5525108f2cf61ee3ce0279ba55bd5f commit unrecorded
+vita_binary: S6: md5 8a62233bbe50d76b03c2c28c63e17ae2 commit unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./gen_fn_p.ivl | 55 bytes
+P=3 bw=4
+gen_fn_p.sv:12: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./gen_fn_p.vl | 256 bytes
+%Error: gen_fn_p.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: gen_fn_p.sv:8:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_gen_fn_p.build | 825 bytes
+%Error: gen_fn_p.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                        : ... note: In instance 'top'
+    7 |     function automatic int f(input int a); return 3; endfunction
+      |                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: gen_fn_p.sv:8:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                        : ... note: In instance 'top'
+        gen_fn_p.sv:7:28: ... Location of non-constant FUNC 'f': Constant function called under generate
+        gen_fn_p.sv:8:24: ... Called from 'f()' with parameters:
+           a = ?32?h2
+    8 |     localparam int P = f(2);
+      |                        ^
+%Error: Exiting due to 2 error(s)
+=== block 4 | vita [S5] | ./gen_fn_p.s5 | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=7 bw=8
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S6] | ./gen_fn_p.s6 | 177 bytes | identical to block 4
+=== block 6 | vita [S7] | ./gen_fn_p.s7 | 177 bytes | identical to block 4
+=== block 7 | vita [S8] | ./gen_fn_p.s8 | 177 bytes | identical to block 4
+=== end

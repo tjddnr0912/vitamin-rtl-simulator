@@ -1,0 +1,109 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P2
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P2.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: FINDING B (domain split; runtime wrong)
+verdict_source: s580/lens_snd2/REPORT.md:18
+notes: R4 cmp3_post4 bucket(s): pre×2,post3×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 18
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P2.ivd.txt | 226 bytes
+RQ 1 1 1 1
+KQ 1 1 1 1
+RZ 1 0 KZ 1 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:33: $finish called at 2 (1ns)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P2_nok.ivd.txt | 208 bytes
+RQ 1 1 1 1
+RZ 1 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:39: $finish called at 2 (1ns)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./P2.vl.txt | 427 bytes
+RI 1 1 1 1 1
+KI 1 1 1 1 1
+RQ 1 1 1 1
+KQ 1 1 1 1
+RZ 1 0 KZ 1 0
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:33: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ns; walltime 0.000 s; speed 30.769 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./P2.vlb.txt | 4409 bytes
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.035 MB sources in 2 modules, into 0.032 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.160 s (elab=0.000, cvt=0.003, bld=4.153); cpu 0.007 s on 1 threads; allocated 10.188 MB
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./P2.iv.txt | 256 bytes
+RI 1 1 1 1 1
+KI 1 1 1 1 1
+RQ 1 1 1 1
+KQ 1 1 1 1
+RZ 1 0 KZ 1 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv2v.v:34: $finish called at 2 (1s)
+rc=0 
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./P2.sv2v.err | 0 bytes
+
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | ./P2_nok.iv.txt | 229 bytes
+RI 1 1 1 1 1
+RQ 1 1 1 1
+RZ 1 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2_nok.sv2v.v:21: $finish called at 2 (1s)
+rc=0 
+=== block 8 | oracle sv2v 0.0.13 (version captured in slice) | ./P2_nok.sv2v.err | 0 bytes | identical to block 6
+=== block 9 | vita [POST] | ./P2.post.txt | 2586 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:11:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KA` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KB` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KC` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KD` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KW` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:17:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KAq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KBq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:19:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KCq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P2.sv:20:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KWq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+errors=9 warnings=0 notes=0
+rc=1
+=== block 10 | vita [POST] | ./P2_nok.post.txt | 100 bytes
+RI 0 0 0 0 0
+RQ 0 0 0 0
+RZ 1 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [POST2] | ./P2.post2.txt | 131 bytes
+RI 0 0 0 0 0
+KI 1 1 1 1 1
+RQ 0 0 0 0
+KQ 1 1 1 1
+RZ 1 0 KZ 1 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 12 | vita [POST2] | ./P2_nok.post2.txt | 100 bytes | identical to block 10
+=== block 13 | vita [POST2-interp] | ./P2.p2interp.txt | 131 bytes | identical to block 11
+=== block 14 | vita [POST2-interp] | ./P2_nok.p2interp.txt | 100 bytes | identical to block 10
+=== block 15 | vita [POST2-vm] | ./P2.p2vm.txt | 131 bytes | identical to block 11
+=== block 16 | vita [POST2-vm] | ./P2_nok.p2vm.txt | 100 bytes | identical to block 10
+=== block 17 | vita [PRE] | ./P2.pre.txt | 2586 bytes | identical to block 9
+=== block 18 | vita [PRE] | ./P2_nok.pre.txt | 100 bytes
+RI x x x x x
+RQ 0 1 0 1
+RZ 1 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== end

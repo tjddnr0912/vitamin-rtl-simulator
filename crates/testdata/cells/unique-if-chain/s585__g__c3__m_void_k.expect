@@ -1,0 +1,108 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c3__m_void_k
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c3/m_void_k.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c3
+oracles_present: verilator
+vita_tags: PRE,PRE-H,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: PRE-H spelling; runs: g__m_void_k m_void_k
+aux: s585__g__c3__m_void_k.aux/g/c3/m_void_k_H.sv (origin s585/g/c3/m_void_k_H.sv)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: PRE-H: md5 unrecorded commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [verilator,PRE,PRE-H,POST] verilator 5.052 (version captured in slice) | g/out2/m_void_k.out | 3469 bytes
+##### m_void_k
+=== verilator compile rc=1
+%Error: m_void_k.sv:7:22: Expecting expression to be constant, but can't determine constant for FUNCREF 'cf'
+                        : ... note: In instance 'top'
+        m_void_k.sv:6:40: ... Location of non-constant TASKREF 'fv': Unknown node type, perhaps missing visitor in SimulateVisitor
+        m_void_k.sv:7:22: ... Called from 'cf()' with parameters:
+           x = ?32?h0
+    7 |   localparam int P = cf(0);
+      |                      ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== vita PRE (native=interp=vm)
+rc=1
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+m_void_k_H.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k_H.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'm_void_k.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'm_void_k.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [verilator,PRE,PRE-H,POST2] verilator 5.052 (version captured in slice) | g/out3/g__m_void_k.out | 3472 bytes
+##### g__m_void_k
+=== verilator compile rc=1
+%Error: m_void_k.sv:7:22: Expecting expression to be constant, but can't determine constant for FUNCREF 'cf'
+                        : ... note: In instance 'top'
+        m_void_k.sv:6:40: ... Location of non-constant TASKREF 'fv': Unknown node type, perhaps missing visitor in SimulateVisitor
+        m_void_k.sv:7:22: ... Called from 'cf()' with parameters:
+           x = ?32?h0
+    7 |   localparam int P = cf(0);
+      |                      ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== vita PRE (native=interp=vm)
+rc=1
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+m_void_k_H.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k_H.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'm_void_k.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+m_void_k.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+m_void_k.sv:1:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `cf` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'm_void_k.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 3 | combined [verilator,PRE,PRE-H,POSTC] verilator 5.052 (version captured in slice) | g/out/m_void_k.out | 3469 bytes | identical to block 1
+=== end

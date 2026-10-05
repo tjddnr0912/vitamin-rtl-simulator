@@ -1,0 +1,70 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d04_hoisted_signed_call
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d04_hoisted_signed_call.sv
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: disqualified on this cell
+verdict_source: s582/lens_sound/REPORT.md:19
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 16
+=== block 1 | oracle verilator 5.052 (version captured in slice) | lens_sound/d/out_d04_hoisted_signed_call/vl.out | 571 bytes
+A case f(-1) inside [-2:1] m=0 cnt=1
+B case g(-1,o) inside [-2:1] m=0 o=-1
+C case f(-1) inside 4'sb1111 m=1 cnt=2
+D plain case f(-1) 4'sb1111 m=1 cnt=3
+E if f(-1) inside {[-2:1]} = 1 cnt=4
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d04_hoisted_signed_call.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 66.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | lens_sound/d/out_d04_hoisted_signed_call/sv.out | 156 bytes
+sv2v.v:14: error: Function top.g port o is not an input port.
+sv2v.v:14:      : Function arguments must be input ports.
+1 error(s) during elaboration.
+rc=1
+=== block 3 | vita [POST] | lens_sound/d/out_d04_hoisted_signed_call/post.out | 575 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+A case f(-1) inside [-2:1] m=1 cnt=1
+B case g(-1,o) inside [-2:1] m=1 o=-1
+C case f(-1) inside 4'sb1111 m=1 cnt=2
+D plain case f(-1) 4'sb1111 m=1 cnt=3
+E if f(-1) inside {[-2:1]} = 1 cnt=5
+simulation ended (Finish) at time 1
+errors=0 warnings=2 notes=0
+rc=0
+=== block 4 | vita [POST] | lens_sound/r2/rerun/d04_hoisted_signed_call.post | 575 bytes | identical to block 3
+=== block 5 | vita [POST] | post2/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post.err | 345 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+errors=0 warnings=2 notes=0
+=== block 6 | vita [POST] | post2/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post.out | 230 bytes
+A case f(-1) inside [-2:1] m=1 cnt=1
+B case g(-1,o) inside [-2:1] m=1 o=-1
+C case f(-1) inside 4'sb1111 m=1 cnt=2
+D plain case f(-1) 4'sb1111 m=1 cnt=3
+E if f(-1) inside {[-2:1]} = 1 cnt=5
+simulation ended (Finish) at time 1
+rc=0
+=== block 7 | vita [POST2] | lens_sound/r2/rerun/d04_hoisted_signed_call.post2 | 575 bytes | identical to block 3
+=== block 8 | vita [POST2] | lens_sound/r3/rerun/d04_hoisted_signed_call.post2 | 575 bytes | identical to block 3
+=== block 9 | vita [POST2] | post2/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post2.err | 345 bytes | identical to block 5
+=== block 10 | vita [POST2] | post2/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post2.out | 230 bytes | identical to block 6
+=== block 11 | vita [POST2] | post3/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post2.err | 345 bytes | identical to block 5
+=== block 12 | vita [POST2] | post3/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post2.out | 230 bytes | identical to block 6
+=== block 13 | vita [POST3] | lens_sound/r3/rerun/d04_hoisted_signed_call.post3 | 575 bytes | identical to block 3
+=== block 14 | vita [POST3] | post3/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post3.err | 345 bytes | identical to block 5
+=== block 15 | vita [POST3] | post3/cmp/lens_sound__d__d04_hoisted_signed_call.sv/post3.out | 230 bytes | identical to block 6
+=== block 16 | vita [PRE] | lens_sound/d/out_d04_hoisted_signed_call/pre.out | 560 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d04_hoisted_signed_call.sv:11:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'sb1111'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d04_hoisted_signed_call.sv:11:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'sb1111'
+errors=2 warnings=0 notes=0
+rc=1
+=== end

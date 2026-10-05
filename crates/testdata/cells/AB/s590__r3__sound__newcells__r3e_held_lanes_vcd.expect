@@ -1,0 +1,376 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__sound__newcells__r3e_held_lanes_vcd
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/sound/newcells/r3e_held_lanes_vcd.sv
+roadmap_row: §2 🆕 AB
+set: r3/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE3,POSTC,POSTD,POSTE,R5DEV,PRE3_SEP,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: Q1: dispatch correct at every entry; after finish() every settle is inner::<false>; times > 0 PRE3 == POSTD on r3c, r3e, r2a, r2b, r3b, r3f. Token diff: no divergence (const-generic copy).
+verdict_source: s590/r3/sound/REPORT.md:15
+notes: verdict_class = verbatim excerpt of the source line; 36 byte-identical output copies listed as alias
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: R5DEV: md5 8c800916aaa11d72c15fbd5031167f33 commit unrecorded
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 3
+=== block 1 | combined [iverilog+verilator|PRE3+POSTC+POSTD] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/sound/out/r3e_held_lanes_vcd.out | 2339 bytes
+##### r3e_held_lanes_vcd
+=== iverilog run rc=0
+VCD info: dumpfile e.vcd opened for output.
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=3 x=1
+f t=3 x=x
+r3e_held_lanes_vcd.sv:11: $finish called at 6 (1s)
+
+=== verilator run rc=0
+-Info: r3e_held_lanes_vcd.sv:11: $dumpvar ignored, as Verilated without --trace
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=1
+f t=3 x=1
+f t=4 x=1
+f t=4 x=1
+- r3e_held_lanes_vcd.sv:11: Verilog $finish
+f t=6 x=1
+f t=6 x=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 6ps; walltime 0.000 s; speed 117.647 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=z
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=7f2c547973ffaa52668987cbafed5835
+=== POSTC (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=6e2a9099e23c2c54aabdd9a0897b6f8d
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=6e2a9099e23c2c54aabdd9a0897b6f8d
+--- r3e_held_lanes_vcd PRE3==POSTC:000 PRE3==POSTD:000 POSTC==POSTD:111 split=-
+=== block 2 | combined [iverilog+verilator|PRE3+POSTD+R5DEV] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r5/movers/r3e_held_lanes_vcd.txt | 1527 bytes
+##### r3e_held_lanes_vcd  (/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s590/r3/sound/newcells/r3e_held_lanes_vcd.sv)
+=== PRE3 rc=0 native=interp=vm:True
+f t=0 x=z
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+=== post_d rc=0 native=interp=vm:True
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+=== post_e rc=0 native=interp=vm:True
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+=== iverilog rc=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=3 x=1
+f t=3 x=x
+=== verilator rc=0
+-Info: r3e_held_lanes_vcd.sv:11: $dumpvar ignored, as Verilated without --trace
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=1
+f t=3 x=1
+f t=4 x=1
+f t=4 x=1
+f t=6 x=1
+f t=6 x=1
+=== block 3 | vita [PRE3+POSTD+POSTE] | r4/sound/out/r3e_held_lanes_vcd.out | 1679 bytes
+##### r3e_held_lanes_vcd
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=z
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=x
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=7f2c547973ffaa52668987cbafed5835
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=6e2a9099e23c2c54aabdd9a0897b6f8d
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=0 x=0
+f t=1 x=0
+f t=1 x=0
+f t=3 x=0
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=3 x=x
+f t=3 x=1
+f t=3 x=0
+f t=3 x=1
+f t=3 x=0
+f t=4 x=1
+f t=4 x=0
+f t=6 x=1
+f t=6 x=0
+f t=6 x=1
+f t=6 x=0
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+
+VCD e.vcd md5=6e2a9099e23c2c54aabdd9a0897b6f8d
+--- r3e_held_lanes_vcd PRE3==POSTD:000 PRE3==POSTE:000 POSTD==POSTE:000 split=-
+=== end

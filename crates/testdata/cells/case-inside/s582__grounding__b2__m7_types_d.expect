@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m7_types_d
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m7_types_d.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: sv2v
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 2
+=== block 1 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m7_types_d/sv.out | 666 bytes
+sv2v.v:25: error: ^ operator may not have REAL operands.
+sv2v.v:25: error: ^ operator may not have REAL operands.
+sv2v.v:25: error: ^ operator may not have REAL operands.
+sv2v.v:25: error: ^ operator may not have REAL operands.
+sv2v.v:25: error: ^ operator may not have REAL operands.
+sv2v.v:32: error: ^ operator may not have REAL operands.
+sv2v.v:32: error: ^ operator may not have REAL operands.
+sv2v.v:32: error: ^ operator may not have REAL operands.
+sv2v.v:32: error: ^ operator may not have REAL operands.
+sv2v.v:32: error: ^ operator may not have REAL operands.
+sv2v.v:48: error: Object top.f has no method "name(...)".
+11 error(s) during elaboration.
+rc=11
+=== block 2 | vita [PRE] | grounding/b2/out_m7_types_d/vita.out | 255 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s m=1
+s2 m=0
+r m=2
+r2 m=1
+f=R_F m=1
+f=I_F m=0
+f=S_F m=2
+f=B_F m=2
+f=U_F m=3
+f=J_F m=3
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

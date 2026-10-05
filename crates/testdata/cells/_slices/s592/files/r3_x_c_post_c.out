@@ -1,0 +1,28 @@
+E09_import_sh                IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=def 9 bits=4 | post_c=def 9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+F1_forfwd_sh                 IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=L0 w=10 | post_c=L0 w=10 | post_d=ERR:VITA-E3010:`N` is used before it is declared in this gen
+F3_forfwd_sh_nonet           IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=L0 | post_c=L0 | post_d=ERR:VITA-E3010:`N` is used before it is declared in this gen
+I2_iffwd_sh                  IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=else 9 bits=4 | post_c=else 9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+I3_iffwd_sh_rev              IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=then 200 bits=8 | post_c=then 200 bits=8 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+I4_iffwd_sh_nonet            IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=else | post_c=else | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+M4_chain2sh                  IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=seven P=7 | post_c=seven P=5 | post_d=ERR:VITA-E3010:this generate case depends on a parameter dec
+V04_scrfwd_sh                IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=one 1 bits=8 | post_c=one 1 bits=8 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+V04x_scrfwd_sh               IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=one 1 bits=6 | post_c=one 1 bits=6 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+V05c_r1p                     IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=k 200 bits=8 | post_c=k 200 bits=8 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+V05d_r1q                     IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=def 9 bits=4 | post_c=def 9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+V06n_C1narrow                IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=def 9 bits=4 P=5 | post_c=def 9 bits=4 P=3 | post_d=ERR:VITA-E3010:this generate case depends on a parameter dec
+V24s_region_import           IEEE:UP ACCEPT->LOUDok  SVVL:UP WRONG->LOUD   | iv=ERR:V24s_region_import.sv:9: error: 'K' has already been imp | post_c=k | post_d=ERR:VITA-E3010:`K` is used before it is declared in this mod
+Z0c_lrm2631_par_case         IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=pkg 9 bits=4 | post_c=pkg 9 bits=4 | post_d=ERR:VITA-E3010:`X` is used before it is declared in this gen
+Z1f_for_inst_sh              IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.gb.L[0].u P=10 | post_c=top.gb.L[0].u P=10 | post_d=ERR:VITA-E3010:`N` is used before it is declared in this gen
+Z1g_for_ae_sh                IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=L0 w=10 P=xxxx | post_c=L0 w=10 P=0000 | post_d=ERR:VITA-E3010:`N` is used before it is declared in this gen
+Z5h_nested_encl_fwd_sh       IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=outer 9 bits=4 | post_c=outer 9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in an enclo
+Z5m_genfn_body_fwd_sh        IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=k f=4 | post_c=k f=8 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+Z5n_genfor_body_param_chain_sh IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=L0 one 9 bits=4 P=1 | L1 other 200 bits=8 P=2 | post_c=L0 one 9 bits=4 P=10 | L1 other 200 bits=8 P=11 | post_d=ERR:VITA-E3010:this generate if depends on a parameter decla
+
+== post_c -> post_d under IEEE (149 cells)
+   130 same                   
+    13 DOWN OK->LOUD          E09_import_sh F1_forfwd_sh F3_forfwd_sh_nonet I2_iffwd_sh I3_iffwd_sh_rev I4_iffwd_sh_nonet V04_scrfwd_sh V04x_scrfwd_sh V05c_r1p V05d_r1q Z0c_lrm2631_par_case Z1f_for_inst_sh Z5h_nested_encl_fwd_sh
+     5 UP WRONG->LOUD         M4_chain2sh V06n_C1narrow Z1g_for_ae_sh Z5m_genfn_body_fwd_sh Z5n_genfor_body_param_chain_sh
+     1 UP ACCEPT->LOUDok      V24s_region_import
+== post_c -> post_d under SVVL (149 cells)
+   130 same                   
+    19 UP WRONG->LOUD         E09_import_sh F1_forfwd_sh F3_forfwd_sh_nonet I2_iffwd_sh I3_iffwd_sh_rev I4_iffwd_sh_nonet M4_chain2sh V04_scrfwd_sh V04x_scrfwd_sh V05c_r1p V05d_r1q V06n_C1narrow V24s_region_import Z0c_lrm2631_par_case Z1f_for_inst_sh Z1g_for_ae_sh Z5h_nested_encl_fwd_sh Z5m_genfn_body_fwd_sh Z5n_genfor_body_param_chain_sh

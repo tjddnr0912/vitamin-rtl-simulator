@@ -1,0 +1,79 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r2__sound__c__two__ab
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r2/sound/c/two/ab.sv
+roadmap_row: §2 🆕 AD
+set: r2/sound/c/two
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-b,POST-c,PRE,POST-b-sep,POST-c-sep
+verdict: wrong->ok
+verdict_source: s589/IMPL.md:176
+notes: class word nearest `ab` on that line
+alias: post_c/r2/r2_sound_two/ab (byte-identical source) verdict: wrong->ok verdict_source: s589/IMPL.md:176
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./ab.ivl | 57 bytes
+v=15 b=4 u=255
+ab.sv:17: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./ab.vl | 499 bytes
+%Warning-WIDTHEXPAND: ab.sv:16:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 4 bits.
+%Warning-WIDTHEXPAND: ab.sv:16:50: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h2' generates 8 bits.
+v=15 b=4 u=255
+- ab.sv:17: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./ab.s2v | 60 bytes
+v=15 b=4 u=255
+ab.s2v.v:27: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POST-a] | ./ab.posta | 188 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=1023 b=10 u=255
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-a] | ./two.post_a | 1142 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+error[VITA-E3009] E-ELAB-UNSUPPORTED: import from unknown package `q` [in top]
+error[VITA-E3009] E-ELAB-UNSUPPORTED: $bits argument shape unsupported (nets, array views, and self-determined expressions fold; v7) [in top]
+error[VITA-E3009] E-ELAB-UNSUPPORTED: unsupported hierarchical function call `p.h` (the callee must be a framed function with input-only scalar formals and a non-string return, reached through an instance path)
+error[VITA-E3009] E-ELAB-UNSUPPORTED: unsupported hierarchical function call `p.h` (the callee must be a framed function with input-only scalar formals and a non-string return, reached through an instance path)
+error[VITA-E3009] E-ELAB-UNSUPPORTED: unsupported hierarchical function call `p.h2` (the callee must be a framed function with input-only scalar formals and a non-string return, reached through an instance path)
+errors=5 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST-b] | ./ab.postb | 185 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=15 b=4 u=255
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST-b] | ./two.post_b | 1142 bytes | identical to block 5
+=== block 8 | vita [POST-b-sep] | ./ab.spostb | 241 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=15 b=4 u=255
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 9 | vita [POST-c] | ./ab.postc | 185 bytes | identical to block 6
+=== block 10 | vita [POST-c-sep] | ./ab.spostc | 241 bytes | identical to block 8
+=== block 11 | vita [PRE] | ./ab.pre | 187 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=15 b=4 u=65535
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [PRE] | ./two.pre | 1142 bytes | identical to block 5
+=== end

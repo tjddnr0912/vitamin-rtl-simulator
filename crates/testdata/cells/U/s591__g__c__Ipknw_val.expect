@@ -1,0 +1,44 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c__Ipknw_val
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c/Ipknw_val.sv
+roadmap_row: §2 🆕 U
+set: g/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: [PRE!=all]
+verdict_source: s591/g/c.summ:811
+notes: grounding PRE-vs-oracles tag; not a POST mover (absent from impl/moves_ground.txt)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Ipknw_val.ivl | 126 bytes
+pk Z=18446744073709551625 Y=18446744073709551626 K=9 fz=18446744073709551625
+Ipknw_val.sv:13: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Ipknw_val.vl | 244 bytes
+pk Z=3 Y=4 K=3 fz=3
+- Ipknw_val.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Ipknw_val.s2v | 129 bytes
+pk Z=18446744073709551625 Y=18446744073709551626 K=9 fz=18446744073709551625
+Ipknw_val.s2v.v:13: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Ipknw_val.dev3 | 503 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Ipknw_val.sv:12:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pc::fz(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pc::*` and call `fz` by its bare name instead [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./Ipknw_val.posta | 503 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./Ipknw_val.postb | 503 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./Ipknw_val.pre | 503 bytes | identical to block 4
+=== block 8 | vita [PROTO1] | ./Ipknw_val.post1 | 503 bytes | identical to block 4
+=== block 9 | vita [PROTO2] | ./Ipknw_val.post2 | 503 bytes | identical to block 4
+=== end

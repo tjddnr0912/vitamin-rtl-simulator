@@ -1,0 +1,4 @@
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t=6 end
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0

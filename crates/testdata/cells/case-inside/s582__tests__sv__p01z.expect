@@ -1,0 +1,61 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__p01z
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/p01z.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG1,POST,POST2,POST3,PRE,unrecorded/default,unrecorded/native
+verdict: loud (not a case-inside refusal) — casez before inside: one E2002 naming the rule (PRE: two)
+verdict_source: s582/post/CENSUS.md:105
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG1: md5 2674c193c5cdb62f66e0a380149d04a7 commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/tests__sv__p01z/iv.out | 363 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6: error: Incomprehensible case expression.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/p01z/vl.out | 242 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:25: Illegal to have inside on a casex/casez
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/p01z/vl_build.log | 474 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:25: Illegal to have inside on a casex/casez
+    6 |     v = 4'd1; casez (v) inside 4'd1: m = 1; default: m = 0; endcase $display("m=%0d", m);
+      |                         ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/p01z/sv.out | 408 bytes
+sv2v: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:21: Parse error: cannot use inside with casez
+CallStack (from HasCallStack):
+  error, called at .stack-work/dist/x86_64-osx/ghc-9.6.4/build/sv2v/sv2v-tmp/Language/SystemVerilog/Parser/Parse.hs:11032:22 in main:Language.SystemVerilog.Parser.Parse
+rc=1
+=== block 5 | vita [DBG1] | tests/sv/out/p01z/post.out | 361 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected `case` before `inside` — `casez` / `casex` have no `inside` form (IEEE 1800-2017 §12.5.4), found identifier 'inside'
+errors=1 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST] | post/census/tests__sv__p01z/post.out | 361 bytes | identical to block 5
+=== block 7 | vita [POST] | post2/cmp/tests__sv__p01z.sv/post.err | 356 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected `case` before `inside` — `casez` / `casex` have no `inside` form (IEEE 1800-2017 §12.5.4), found identifier 'inside'
+errors=1 warnings=0 notes=0
+=== block 8 | vita [POST] | post2/cmp/tests__sv__p01z.sv/post.out | 5 bytes
+rc=1
+=== block 9 | vita [POST2] | post2/cmp/tests__sv__p01z.sv/post2.err | 499 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'd1'
+errors=2 warnings=0 notes=0
+=== block 10 | vita [POST2] | post2/cmp/tests__sv__p01z.sv/post2.out | 5 bytes | identical to block 8
+=== block 11 | vita [POST2] | post3/cmp/tests__sv__p01z.sv/post2.err | 499 bytes | identical to block 9
+=== block 12 | vita [POST2] | post3/cmp/tests__sv__p01z.sv/post2.out | 5 bytes | identical to block 8
+=== block 13 | vita [POST3] | post3/cmp/tests__sv__p01z.sv/post3.err | 499 bytes | identical to block 9
+=== block 14 | vita [POST3] | post3/cmp/tests__sv__p01z.sv/post3.out | 5 bytes | identical to block 8
+=== block 15 | vita [PRE] | tests/sv/out/p01z/pre.out | 504 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'd1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/p01z.sv:6:32: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'd1'
+errors=2 warnings=0 notes=0
+rc=1
+=== end

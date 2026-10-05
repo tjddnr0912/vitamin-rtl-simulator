@@ -1,0 +1,86 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__rc2_mutual
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/rc2_mutual.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/PLAN.md:52
+alias: post_a/cells/a/rc2_mutual (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/a/rc2_mutual (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 23
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./rc2_mutual.ivl | 602 bytes
+rc2_mutual.sv:3: assert: elab_expr.cc:2927: failed assertion def
+sh: line 1: 40144 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228361514" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28361514" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28361514"
+     40145 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28361514" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./rc2_mutual.vl | 243 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing --assert -Wno-fatal --Mdir vl_rc2_mutual -o sim rc2_mutual.sv
+build_rc=139
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./rc2_mutual.s2v | 244 bytes
+rc2_mutual.s2v.v:3: error: No function named `g' found in this context (top).
+rc2_mutual.s2v.v:3: error: Dimensions must be constant.
+rc2_mutual.s2v.v:3       : This MSB expression violates the rule: g('sd2)
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [P1d] | ./rc2_mutual.p4 | 262 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 8: 40138 Abort trap: 6           $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 5 | vita [P1d] | ./rc2_mutual.p4nb | 283 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 9: 40139 Abort trap: 6           VITA_PROTO_OFF=ibody $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 6 | vita [POST-a] | post_a/cells/a/rc2_mutual.post | 370 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+rc2_mutual.sv:2:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 7 | vita [POST-a] | r2/diff/impl/a/rc2_mutual.post | 370 bytes | identical to block 6
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/rc2_mutual.spost | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc2_mutual.sv:2:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 9 | vita [POST-b] | post_a/cells/a/rc2_mutual.pb | 370 bytes | identical to block 6
+=== block 10 | vita [POST-b] | post_a/cells/a/rc2_mutual.postb | 370 bytes | identical to block 6
+=== block 11 | vita [POST-b] | r2/diff/impl/a/rc2_mutual.pb | 370 bytes | identical to block 6
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/rc2_mutual.spostb | 398 bytes | identical to block 8
+=== block 13 | vita [POST-c] | post_a/cells/a/rc2_mutual.postc | 370 bytes | identical to block 6
+=== block 14 | vita [POST-c] | r2/diff/impl/a/rc2_mutual.pc | 370 bytes | identical to block 6
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/rc2_mutual.spostc | 398 bytes | identical to block 8
+=== block 16 | vita [PRE] | ./rc2_mutual.pre | 370 bytes | identical to block 6
+=== block 17 | vita [S2] | post_a/cells/a/rc2_mutual.s2 | 370 bytes | identical to block 6
+=== block 18 | vita [S2-sep] | post_a/cells/a/rc2_mutual.ss2 | 398 bytes | identical to block 8
+=== block 19 | vita [S3] | post_a/cells/a/rc2_mutual.s3 | 370 bytes | identical to block 6
+=== block 20 | vita [S4] | post_a/cells/a/rc2_mutual.s4 | 370 bytes | identical to block 6
+=== block 21 | vita [S5] | post_a/cells/a/rc2_mutual.s5 | 370 bytes | identical to block 6
+=== block 22 | vita [S5-sep] | post_a/cells/a/rc2_mutual.ss5 | 398 bytes | identical to block 8
+=== block 23 | vita [W0] | post_a/cells/a/rc2_mutual.w0 | 370 bytes | identical to block 6
+=== end

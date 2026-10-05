@@ -1,0 +1,38 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__mx__E5opu8__I10_u16_if
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/mx/E5opu8__I10_u16_if.sv
+roadmap_row: §3.b case-inside
+set: grounding/mx
+oracles_present: sv2v
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: matrix cell; row results in grounding/mx/analysis.txt, aggregate in step0/step0b.out
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 2
+=== block 1 | oracle sv2v 0.0.13 (version captured in slice) | grounding/mx/out_E5opu8__I10_u16_if/sv.out | 155 bytes
+80+80 1 1 1 1
+FF+FF 0 0 0 0
+7F+7F 0 0 0 0
+00+00 0 0 0 0
+FF+01 1 1 1 1
+FE+00 0 0 0 0
+80+7F 0 0 0 0
+00+FE 0 0 0 0
+sv2v.v:210: $finish called at 10 (1s)
+rc=0
+=== block 2 | vita [PRE] | grounding/mx/out_E5opu8__I10_u16_if/vita.out | 281 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+80+80 1 1 1 1
+FF+FF 0 0 0 0
+7F+7F 0 0 0 0
+00+00 0 0 0 0
+FF+01 1 1 1 1
+FE+00 0 0 0 0
+80+7F 0 0 0 0
+00+FE 0 0 0 0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

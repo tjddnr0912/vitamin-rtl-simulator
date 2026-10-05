@@ -1,0 +1,121 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff2__p__q3x
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff2/p/q3x.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff2/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./q3x.iv.txt | 34 bytes
+@ 1 1 1 1 1 1 1 1 1 1 1 1 1
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./q3x.vl.txt | 288 bytes
+%Error: q3x.sv:2:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: q3x.sv:3:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: q3x.sv:4:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./q3x.vlb.txt | 3077 bytes
+%Error: q3x.sv:2:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    2 |   logic [((4'bx100 ==? 4'b1?00) + 1'b0):0] x1;
+      |                                 ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: q3x.sv:3:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    3 |   logic [{1'b0, (4'bx100 ==? 4'b1?00)}:0] x2;
+      |          ^
+%Error: q3x.sv:4:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    4 |   logic [~(4'bx100 ==? 4'b1?00):0] x3;
+      |          ^
+%Error: q3x.sv:5:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    5 |   logic [!(4'bx100 ==? 4'b1?00):0] x4;
+      |          ^
+%Error: q3x.sv:6:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    6 |   logic [((4'bx100 ==? 4'b1?00) ^ 1'b1):0] x5;
+      |                                 ^
+%Error: q3x.sv:7:10: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    7 |   logic [$signed(4'bx100 ==? 4'b1?00):0] x6;
+      |          ^~~~~~~
+%Error: q3x.sv:8:21: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    8 |   logic [1'(4'bx100 ==? 4'b1?00):0] x7;
+      |                     ^~~
+%Error: q3x.sv:9:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                   : ... note: In instance 'top'
+    9 |   logic [((4'bx100 ==? 4'b1?00) == 1'b1):0] x8;
+      |                                 ^~
+%Error: q3x.sv:10:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 'top'
+   10 |   logic [((4'bx100 ==? 4'b1?00) * 2):0] x9;
+      |                                 ^
+%Error: q3x.sv:11:11: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 'top'
+   11 |   logic [(-(4'bx100 ==? 4'b1?00)):0] x10;
+      |           ^
+%Error: q3x.sv:12:33: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 'top'
+   12 |   logic [((4'bx100 ==? 4'b1?00) ? 1 : 0):0] x11;
+      |                                 ^
+%Error: q3x.sv:13:19: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 'top'
+   13 |   logic [(4'bx100 !=? 4'b1?00):0] x12;
+      |                   ^~~
+%Error: q3x.sv:14:19: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                    : ... note: In instance 'top'
+   14 |   logic [(4'bx100 ==? 4'b1?00):0] x13;
+      |                   ^~~
+%Error: Exiting due to 13 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./q3x.sv.txt | 34 bytes
+@ x x x x x x x x x x x x x
+
+rc=0
+=== block 5 | vita [POST] | ./q3x.post.txt | 3386 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+q3x.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:4:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:5:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:6:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:7:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$signed` that is not a constant here is not allowed in a constant range bound [in top]
+q3x.sv:8:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a cast that is not a constant here is not allowed in a constant range bound [in top]
+q3x.sv:9:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:10:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:11:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:12:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:13:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+q3x.sv:14:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x, or its x/z pattern is not a single literal — is not allowed in a constant range bound [in top]
+errors=13 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [POST2] | ./q3x.post2.txt | 1457 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+q3x.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not allowed in a constant range bound [in top]
+q3x.sv:5:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not allowed in a constant range bound [in top]
+q3x.sv:7:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$signed` that is not a constant here is not allowed in a constant range bound [in top]
+q3x.sv:8:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a cast that is not a constant here is not allowed in a constant range bound [in top]
+q3x.sv:9:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not allowed in a constant range bound [in top]
+q3x.sv:13:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not allowed in a constant range bound [in top]
+q3x.sv:14:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits makes this bound's value x, which is not allowed in a constant range bound [in top]
+errors=7 warnings=1 notes=0
+
+rc=1
+=== block 7 | vita [PRE] | ./q3x.pre.txt | 410 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+q3x.sv:7:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$signed` that is not a constant here is not allowed in a constant range bound [in top]
+q3x.sv:8:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a cast that is not a constant here is not allowed in a constant range bound [in top]
+errors=2 warnings=1 notes=0
+
+rc=1
+=== end

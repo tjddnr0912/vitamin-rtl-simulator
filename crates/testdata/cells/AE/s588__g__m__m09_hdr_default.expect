@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__m__m09_hdr_default
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/m/m09_hdr_default.sv
+roadmap_row: §2 🆕 AE
+set: g/m
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: silent->correct
+verdict_source: s588/GROUNDING.md:310
+notes: GROUNDING Q4 B "F" column
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./m09_hdr_default.ivl | 61 bytes
+P=2
+done
+m09_hdr_default.sv:3: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./m09_hdr_default.vl | 238 bytes
+P=2
+done
+- m09_hdr_default.sv:3: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 153.846 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./m09_hdr_default.s2v | 64 bytes
+P=2
+done
+m09_hdr_default.s2v.v:6: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./m09_hdr_default.PRE | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=1
+done
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-m] | ./m09_hdr_default.PROBE | 177 bytes | identical to block 4
+=== end

@@ -1,0 +1,118 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__m_case_unique
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/m_case_unique.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+alias: m/sw/c_m_case_unique/m_case_unique (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./m_case_unique.out | 1869 bytes
+##### m_case_unique.sv
+=== iverilog
+compile rc=0 msgs: m_case_unique.sv:5: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+m_case_unique.sv:10: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+m_case_unique.sv:15: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+m_case_unique.sv:20: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+WARNING: m_case_unique.sv:5: value is unhandled for priority or unique case statement
+         Time: 1  Scope: top
+t=1 case done
+WARNING: m_case_unique.sv:10: value is unhandled for priority or unique case statement
+         Time: 2  Scope: top
+t=2 casez done
+WARNING: m_case_unique.sv:15: value is unhandled for priority or unique case statement
+         Time: 3  Scope: top
+t=3 casex done
+t=4 case-match done
+m_case_unique.sv:25: $finish called at 5 (1s)
+=== verilator
+compile rc=0
+run rc=0
+[1] %Error: m_case_unique.sv:5: Assertion failed in top: unique case, but none matched for '2'h0'
+t=1 case done
+[2] %Error: m_case_unique.sv:10: Assertion failed in top: unique case, but none matched for '2'h0'
+t=2 casez done
+[3] %Error: m_case_unique.sv:15: Assertion failed in top: unique case, but none matched for '2'h0'
+t=3 casex done
+t=4 case-match done
+- m_case_unique.sv:25: Verilog $finish
+=== vita (native=interp=vm)
+rc=0
+m_case_unique.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 case done
+m_case_unique.sv:10:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 casez done
+m_case_unique.sv:15:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 casex done
+t=4 case-match done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_m_case_unique/obs_POST/results.jsonl | 133 bytes
+{"v":1,"t":5,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":5,"errors":0,"warnings":4,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_m_case_unique/obs_POST/run.json | 1433 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "m_case_unique.sv", "blake3": "6611f1893cb94eef5cfa9a701624f06968a47f38f7246cd71bbf9bf6dfe8ec4c"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 5,
+  "counts": {"errors": 0, "warnings": 4, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 14, "declined": 4, "reasons": {"operator": 4}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000431,
+  "elab_s": 0.000315,
+  "sim_s": 0.000113
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_m_case_unique/obs_PRE/results.jsonl | 133 bytes | identical to block 2
+=== block 5 | vita [PRE/obs] | m/sw/c_m_case_unique/obs_PRE/run.json | 1433 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "m_case_unique.sv", "blake3": "6611f1893cb94eef5cfa9a701624f06968a47f38f7246cd71bbf9bf6dfe8ec4c"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 5,
+  "counts": {"errors": 0, "warnings": 4, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 14, "declined": 4, "reasons": {"operator": 4}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000433,
+  "elab_s": 0.000318,
+  "sim_s": 0.000111
+}
+=== end

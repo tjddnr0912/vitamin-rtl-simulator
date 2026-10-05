@@ -1,0 +1,105 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__q14_assertctl
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/q14_assertctl.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: POST2 W4031 lines PRE and verilator lack
+verdict_source: s585/g/cmp3_final.txt:8
+notes: runs: d__q14_assertctl q14_assertctl
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/q14_assertctl.out | 3811 bytes
+q14_assertctl | vl:COMPILE-FAIL | PRE:W4031:1@q14_assertctl.sv:6:12,W4031:2@q14_assertctl.sv:10:12,W4031:3@q14_assertctl.sv:13:14 rc=0 | POST:W4031:1@q14_assertctl.sv:5:12,W4031:1@q14_assertctl.sv:6:12,W4031:1@q14_assertctl.sv:7:14,W4031:2@q14_assertctl.sv:9:12,W4031:2@q14_assertctl.sv:10:12,W4031:3@q14_assertctl.sv:12:14,W4031:3@q14_assertctl.sv:13:14,W4031:3@q14_assertctl.sv:14:12 rc=0 | P==P:False
+##### q14_assertctl
+=== verilator compile rc=1
+%Error-UNSUPPORTED: q14_assertctl.sv:4:8: Unsupported: assert control assertion_type
+                                        : ... note: In instance 'top'
+    4 |     #1 $assertcontrol(4, 32);
+      |        ^~~~~~~~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: q14_assertctl.sv:8:8: Unsupported: assert control assertion_type
+                                        : ... note: In instance 'top'
+    8 |     #1 $assertcontrol(3, 32);
+      |        ^~~~~~~~~~~~~~
+%Error-UNSUPPORTED: q14_assertctl.sv:11:8: Unsupported: assert control assertion_type
+                                         : ... note: In instance 'top'
+   11 |     #1 $assertcontrol(4, 128);
+=== vita PRE (native=interp=vm)
+rc=0
+q14_assertctl.sv:4:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:8:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:11:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=4 end
+simulation ended (Finish) at time 5
+errors=0 warnings=7 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q14_assertctl.sv:4:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:8:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:11:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:7:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:9:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:12:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q14_assertctl.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q14_assertctl.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=4 end
+simulation ended (Finish) at time 5
+errors=0 warnings=12 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__q14_assertctl.out | 3555 bytes
+##### d__q14_assertctl
+=== verilator compile rc=1
+%Error-UNSUPPORTED: q14_assertctl.sv:4:8: Unsupported: assert control assertion_type
+                                        : ... note: In instance 'top'
+    4 |     #1 $assertcontrol(4, 32);
+      |        ^~~~~~~~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error-UNSUPPORTED: q14_assertctl.sv:8:8: Unsupported: assert control assertion_type
+                                        : ... note: In instance 'top'
+    8 |     #1 $assertcontrol(3, 32);
+      |        ^~~~~~~~~~~~~~
+%Error-UNSUPPORTED: q14_assertctl.sv:11:8: Unsupported: assert control assertion_type
+                                         : ... note: In instance 'top'
+   11 |     #1 $assertcontrol(4, 128);
+=== vita PRE (native=interp=vm)
+rc=0
+q14_assertctl.sv:4:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:8:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:11:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=4 end
+simulation ended (Finish) at time 5
+errors=0 warnings=7 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q14_assertctl.sv:4:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:8:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:11:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: unsupported system task `$assertcontrol` skipped (v2) [in top]
+q14_assertctl.sv:5:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:7:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+q14_assertctl.sv:9:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+q14_assertctl.sv:12:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q14_assertctl.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q14_assertctl.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=4 end
+simulation ended (Finish) at time 5
+errors=0 warnings=12 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

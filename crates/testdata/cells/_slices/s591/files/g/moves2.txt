@@ -1,0 +1,241 @@
+row/A1D: silent->correct(=ivl,s2v,vl)
+    pre : A1D top.g[0] i=18446744073709551625 K=9 | A1D top.g[1] i=18446744073709551625 K=9
+    post: A1D top.g[0] i=0 K=0 | A1D top.g[1] i=1 K=1
+row/B2D: silent->correct(=ivl,s2v,vl)
+    pre : B2D E1=18446744073709551616 K=0
+    post: B2D E1=1 K=1
+row/q1g: silent->loud
+    pre : @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | @ hit3
+    post: !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+c/Epk_val: silent->correct(=ivl,s2v,vl)
+    pre : pk E1=1 K=0 KW=18446744073709551616
+    post: pk E1=1 K=1 KW=1
+c/Ewe_val: silent->loud(oracle loud: ivl,s2v)
+    pre : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32
+    post: !VITA-E3009 `E1` has already been imported into this scope (explicit import from package `pk`) and is  | rc=1
+c/Ewi_cmp: silent->correct(=ivl,s2v,vl)
+    pre : cmp eq1=0 lt=0
+    post: cmp eq1=1 lt=0
+c/Ewi_ovr: loud->value(=ivl,s2v,vl)
+    pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+    post: ovr top.u P=1 b=32 | port top.u2 b=2
+c/Ewi_sel: silent->correct(=ivl,vl)
+    pre : sel s0=0 s1=0
+    post: sel s0=1 s1=0
+c/Ewi_val: silent->correct(=ivl,s2v,vl)
+    pre : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32
+    post: pc one | val E1=1 K=1 KW=1 wv=1 b=32
+c/Gr_fn: silent->correct(=ivl,s2v,vl)
+    pre : fn top.g[0] f=3 | fn top.g[1] f=3 | post 2.500000
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post 2.500000
+c/Gri_fn: silent->correct(=ivl,s2v,vl)
+    pre : fn top.g[0] f=4 | fn top.g[1] f=4 | post 4.000000
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post 4.000000
+c/Gs_cmp: silent->correct(=ivl,s2v,vl)
+    pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post AB
+    post: cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+c/Gs_fn: silent->correct(=ivl,s2v,vl)
+    pre : fn top.g[0] f=16706 | fn top.g[1] f=16706 | post AB
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+c/Gs_ovr: loud->value(=ivl,s2v,vl)
+    pre : !VITA-E3009 undefined name `N` is not allowed in a constant range bound [in top.g[0].u2] | rc=1
+    post: ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+c/Gs_sel: silent->correct(=ivl,s2v,vl)
+    pre : post AB | sel top.g[0] s0=0 s1=1 | sel top.g[1] s0=0 s1=1
+    post: post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+c/Gs_val: silent->correct(=s2v,vl)
+    pre : pc top.g[0] def | pc top.g[1] def | post AB | val top.g[0] i=16706 K=0 KW=0 wv=16706 b=32 | val top.g[1] i=16706 K=1 KW=1 wv=16706 b=32
+    post: pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+c/Gw_cmp: silent->correct(=ivl,s2v,vl)
+    pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+    post: cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+c/Gw_fn: silent->correct(=ivl,s2v,vl)
+    pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+c/Gw_ovr: loud->value(=ivl,s2v,vl)
+    pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+    post: ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+c/Gw_sel: silent->correct(=ivl,s2v,vl)
+    pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+    post: post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+c/Gw_val: silent->correct(=s2v,vl)
+    pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=1844
+    post: pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+c/Gwb_val: silent->correct(=s2v,vl)
+    pre : post 18446744073709551625 | val top.b.g[0] i=18446744073709551625 K=9 b=32 | val top.b.g[1] i=18446744073709551625 K=9 b=32
+    post: post 18446744073709551625 | val top.b.g[0] i=0 K=0 b=32 | val top.b.g[1] i=1 K=1 b=32
+c/Gwe_cmp: silent->correct(=ivl,vl)
+    pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+    post: cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+c/Gwe_fn: silent->correct(=ivl,vl)
+    pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+c/Gwe_ovr: loud->value(=ivl,vl)
+    pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+    post: ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+c/Gwe_sel: silent->correct(=ivl,vl)
+    pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+    post: post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+c/Gwe_val: silent->correct(=vl)
+    pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=1844
+    post: pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+c/Gwi_cmp: silent->correct(=ivl,vl)
+    pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+    post: cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+c/Gwi_fn: silent->correct(=ivl,vl)
+    pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+c/Gwi_ovr: loud->value(=ivl,vl)
+    pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+    post: ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+c/Gwi_sel: silent->correct(=ivl,vl)
+    pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+    post: post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+c/Gwi_val: silent->correct(=vl)
+    pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=1844
+    post: pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+c/Gwn_val: silent->correct(=ivl,s2v,vl)
+    pre : post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=18446744073709551625 K=9 | val top.g[0].h[1] j=18446744073709551625 K=9 | val top.g[1].h[0] j=18446744073709551625 K=9 | val top.g[1].h[
+    post: post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=0 K=0 | val top.g[0].h[1] j=1 K=1 | val top.g[1].h[0] j=0 K=0 | val top.g[1].h[1] j=1 K=1
+c/Iaa_cmp: correct->loud(oracle loud: ivl,s2v)
+    pre : cmp gt=0 eq3=1
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_gcs: correct->loud(oracle loud: ivl,s2v)
+    pre : gcs three
+    post: !VITA-E3010 generate-case scrutinee is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iaa_gif: correct->loud(oracle loud: ivl,s2v)
+    pre : gif small
+    post: !VITA-E3010 generate-if condition is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iaa_ovr: silent->loud(oracle loud: ivl,s2v)
+    pre : ovr top.u P=3 b=32 | port sub2 b=1 | ~VITA-W3057
+    post: !VITA-E3009 the override of parameter `P` is not a constant, so the declared default would be used ins | ~VITA-W3056 | ~VITA-W3057 | rc=1
+c/Iaa_pcs: correct->loud(oracle loud: ivl,s2v)
+    pre : pcs three
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_sel: silent->loud(oracle loud: ivl,s2v)
+    pre : sel s0=1 s64=x lo=3
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iaa_val: correct->loud(oracle loud: ivl,s2v)
+    pre : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+    post: !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determined expressions fold; | !VITA-E3009 parameter `KW` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3009 parameter `K`
+c/Iaa_wid: correct->loud(oracle loud: ivl,s2v)
+    pre : wid b=4
+    post: !VITA-E3009 undefined name `P` is not allowed in a constant range bound [in top] | rc=1
+c/Iab_cmp: correct->loud(oracle loud: ivl,s2v)
+    pre : cmp gt=1 eq3=0
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_gcs: loud->loud(changed text)
+    pre : !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+    post: !VITA-E3010 generate-case scrutinee is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iab_gif: correct->loud(oracle loud: ivl,s2v)
+    pre : gif big
+    post: !VITA-E3010 generate-if condition is not a constant: undefined name `P` is not a constant [in top] | rc=1
+c/Iab_ovr: silent->loud(oracle loud: ivl,s2v)
+    pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+    post: !VITA-E3009 the override of parameter `P` is not a constant, so the declared default would be used ins | ~VITA-W3056 | ~VITA-W3057 | rc=1
+c/Iab_pcs: correct->loud(oracle loud: ivl,s2v)
+    pre : pcs wide
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_sel: correct->loud(oracle loud: ivl,s2v)
+    pre : sel s0=1 s64=1 lo=9
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c/Iab_val: correct->loud(oracle loud: ivl,s2v)
+    pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determined expressions fold; | !VITA-E3009 parameter `KW` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3009 parameter `K`
+c/Iab_wid: correct->loud(oracle loud: ivl,s2v)
+    pre : wid b=10
+    post: !VITA-E3009 undefined name `P` is not allowed in a constant range bound [in top] | rc=1
+c/Icu_val: silent->correct(=ivl,s2v,vl)
+    pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+c/Ihd_val: silent->correct(=ivl,s2v)
+    pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+    post: gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+c/Inw_gcs: correct->loud
+    pre : gcs three
+    post: !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+c/Inw_gif: value->value(pre=vl post=ivl,s2v)
+    pre : gif small
+    post: gif big
+c/Inw_wid: value->value(pre=vl post=ivl,s2v)
+    pre : wid b=4
+    post: wid b=10
+c/Iwn_cmp: value->value(pre=vl post=ivl,s2v)
+    pre : cmp gt=1 eq3=0
+    post: cmp gt=0 eq3=1
+c/Iwn_ovr: wrong->wrong
+    pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+    post: ovr top.u P=3 b=32 | port sub2 b=1 | ~VITA-W3057
+c/Iwn_pcs: value->value(pre=vl post=ivl,s2v)
+    pre : pcs wide
+    post: pcs three
+c/Iwn_sel: value->value(pre=vl post=ivl,s2v)
+    pre : sel s0=1 s64=1 lo=9
+    post: sel s0=1 s64=x lo=3
+c/Iwn_val: silent->correct(=ivl,s2v)
+    pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=32 sh=16
+    post: val P=3 K=3 KW=4 wv=3 b=32 sh=0
+c2/Gmd_val: silent->correct(=vl)
+    pre : val top.g[0] i=18446744073709551625 K=9 b=32 | val top.g[1] i=18446744073709551625 K=9 b=32
+    post: val top.g[0] i=0 K=0 b=32 | val top.g[1] i=1 K=1 b=32
+c3/Efwd_n: silent->loud(oracle loud: ivl)
+    pre : fwd K=7 E1=1
+    post: !VITA-E3009 parameter `K` value is not a constant: undefined name `E1` is not a constant [in top] | rc=1
+c3/Efwd_w: silent->loud(oracle loud: ivl)
+    pre : fwd K=0 E1=18446744073709551616
+    post: !VITA-E3009 parameter `K` value is not a constant: undefined name `E1` is not a constant [in top] | rc=1
+c3/Epk_imp: silent->correct(=ivl,s2v,vl)
+    pre : pki E1=1 K=0 b=32
+    post: pki E1=1 K=1 b=32
+c3/Ghr: silent->correct(=ivl,s2v,vl)
+    pre : hr sel=f0 top=xx | in top.u.g[0] i=335812727670730321938 | in top.u.g[1] i=335812727670730321938
+    post: hr sel=12 top=12 | in top.u.g[0] i=0 | in top.u.g[1] i=1
+c3/Gnr_fn: silent->correct(=ivl,s2v,vl)
+    pre : fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=x
+    post: fn top.g[0] f=0 | fn top.g[1] f=1 | post sel=a
+c3/Gw_tk: silent->correct(=ivl,s2v,vl)
+    pre : tk top.g[0] r=9 | tk top.g[1] r=9
+    post: tk top.g[0] r=0 | tk top.g[1] r=1
+c3/Ipkwn_c: value->value(pre=vl post=ivl,s2v)
+    pre : pk Z=18446744073709551625 Y=18446744073709551626 K=9 B=65
+    post: pk Z=3 Y=4 K=3 B=32
+c3/X3: silent->correct(=ivl,s2v,vl)
+    pre : W=10000000000000007 bits_v=6 eq=1
+    post: W=10000000000000007 bits_v=8 eq=1
+c4/CHg: silent->correct(=ivl,s2v,vl)
+    pre : post top.u 18446744073709551625 | post top.v 3 | val top.u.g[0] i=18446744073709551625 K=9 | val top.u.g[1] i=18446744073709551625 K=9 | val top.v.g[0] i=0 K=0 | val top.v.g[1] i=1 K=1
+    post: post top.u 18446744073709551625 | post top.v 3 | val top.u.g[0] i=0 K=0 | val top.u.g[1] i=1 K=1 | val top.v.g[0] i=0 K=0 | val top.v.g[1] i=1 K=1
+c4/IAe: silent->correct(=ivl,s2v,vl)
+    pre : e top.u[0] E1=18446744073709551616 K=0 | e top.u[1] E1=18446744073709551616 K=0
+    post: e top.u[0] E1=1 K=1 | e top.u[1] E1=1 K=1
+c4/IAg: silent->correct(=ivl,s2v,vl)
+    pre : val top.u[0].g[0] i=18446744073709551625 K=9 | val top.u[0].g[1] i=18446744073709551625 K=9 | val top.u[1].g[0] i=18446744073709551625 K=9 | val top.u[1].g[1] i=18446744073709551625 K=9
+    post: val top.u[0].g[0] i=0 K=0 | val top.u[0].g[1] i=1 K=1 | val top.u[1].g[0] i=0 K=0 | val top.u[1].g[1] i=1 K=1
+c4/IAi: value->value(pre=vl post=ivl,s2v)
+    pre : gif top.u[0].e small | gif top.u[1].e small
+    post: gif top.u[0].t big | gif top.u[1].t big
+c5/IFnw: silent->correct(=ivl,s2v)
+    pre : ifnw top.x P=18446744073709551625 bv=4 b=65
+    post: ifnw top.x P=18446744073709551625 bv=10 b=65
+c5/IFwn: silent->correct(=ivl,s2v)
+    pre : ifwn top.x P=18446744073709551625 K=9 b=32
+    post: ifwn top.x P=3 K=3 b=32
+c5/Iaa_disp: correct->loud(oracle loud: ivl,s2v)
+    pre : aa P=3
+    post: !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+c5/Iev: silent->correct(=ivl,s2v)
+    pre : ev W=18446744073709551625 b=8
+    post: ev W=5 b=8
+c5/Ivw: correct->loud(oracle loud: ivl,s2v)
+    pre : vw W=18446744073709551625
+    post: !VITA-E3010 undeclared net/variable `top.W` [in top] | rc=1
+c6/Ppnn_ref: silent->loud(oracle loud: ivl,s2v)
+    pre : ppnn Z=5
+    post: !VITA-E3009 package parameter `Z` value is not a foldable constant [in pc] | rc=1
+c6/Ppnw_ref: silent->loud(oracle loud: ivl,s2v)
+    pre : ppnw Z=18446744073709551625
+    post: !VITA-E3009 package parameter `Z` value is not a foldable constant [in pc] | rc=1
+c6/Ppwn_lbl: silent->correct(=ivl,s2v,vl)
+    pre : ppwl Z=9 ZW=18446744073709551625
+    post: ppwl Z=1 ZW=1
+COUNTS {'silent->correct': 42, 'same': 191, 'silent->loud': 9, 'loud->value': 5, 'correct->loud': 15, 'loud->loud': 1, 'value->value': 7, 'wrong->wrong': 1} total 271

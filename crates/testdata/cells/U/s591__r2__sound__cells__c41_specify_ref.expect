@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__sound__cells__c41_specify_ref
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/sound/cells/c41_specify_ref.sv
+roadmap_row: §2 🆕 U
+set: r2/sound/cells
+oracles_present: iverilog,sv2v
+vita_tags: PRE,POSTA,POSTB,POSTB_ST
+verdict: ports, bare-region GenItem::Item/For/If/Case/Block. Not ModuleItems: `specify` = E2002 parse error on PRE/post_b (c41;
+verdict_source: s591/r2/sound/REPORT.md:17
+notes: verbatim excerpt of the source line
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: POSTB_ST: md5 unrecorded commit unrecorded
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r2/sound/cells/w_c41_specify_ref/ivl.out | 56 bytes
+sp P=3
+c41_specify_ref.sv:8: $finish called at 100 (1s)
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | r2/sound/cells/w_c41_specify_ref/s2v.out | 66 bytes
+c41_specify_ref.sv:5:3: Parse error: missing expected `endmodule`
+=== block 3 | combined [iverilog+sv2v|PRE+POSTA+POSTB+POSTB_ST] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./c41_specify_ref.res | 1084 bytes
+pre rc=1: c41_specify_ref.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'specify'|c41_specify_ref.sv:5:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'endspecify'|
+post_a rc=1: c41_specify_ref.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'specify'|c41_specify_ref.sv:5:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'endspecify'|
+post_b rc=1: c41_specify_ref.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'specify'|c41_specify_ref.sv:5:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'endspecify'|
+post_b-staged 1/-/-: c41_specify_ref.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'specify'|c41_specify_ref.sv:5:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'endspecify'|
+IVL rc=0: sp P=3|
+S2V rc=1: c41_specify_ref.sv:5:3: Parse error: missing expected `endmodule`|
+=== block 4 | vita [POSTA] | r2/sound/cells/w_c41_specify_ref/post_a.out | 260 bytes
+c41_specify_ref.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'specify'
+c41_specify_ref.sv:5:29: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'endspecify'
+errors=2 warnings=0 notes=0
+=== block 5 | vita [POSTB] | r2/sound/cells/w_c41_specify_ref/post_b.out | 260 bytes | identical to block 4
+=== block 6 | vita [PRE] | r2/sound/cells/w_c41_specify_ref/pre.out | 260 bytes | identical to block 4
+=== end

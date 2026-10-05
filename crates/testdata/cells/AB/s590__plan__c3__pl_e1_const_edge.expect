@@ -1,0 +1,132 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__plan__c3__pl_e1_const_edge
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/plan/c3/pl_e1_const_edge.sv
+roadmap_row: §2 🆕 AB
+set: plan/c3
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,POSTDEV,P6,P5_SIDE,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: B only after a hold: race; exemption keeps PRE
+verdict_source: s590/PLAN.md:45
+notes: from PLAN.md table last column; 2 byte-identical output copies listed as alias
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 5
+=== block 1 | combined [verilator+iverilog|PRE+P5_SIDE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | plan/out_c3/pl_e1_const_edge.out | 614 bytes
+##### pl_e1_const_edge
+=== verilator compile rc=0 run rc=0
+f t=0 x=1
+i0 w=1
+W t=0 w=1
+t=1 w=1
+- pl_e1_const_edge.sv:15: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+i0 w=z
+f t=0 x=1
+P t=0 w=1
+B t=0 w=1
+W t=0 w=1
+t=1 w=1
+pl_e1_const_edge.sv:15: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+i0 w=z
+f t=0 x=1
+P t=0 w=1
+W t=0 w=1
+B t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [verilator+iverilog|PRE+P6] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | p6/full_plc3/pl_e1_const_edge.out | 603 bytes
+##### pl_e1_const_edge
+=== verilator compile rc=0 run rc=0
+f t=0 x=1
+i0 w=1
+W t=0 w=1
+t=1 w=1
+- pl_e1_const_edge.sv:15: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+i0 w=z
+f t=0 x=1
+P t=0 w=1
+B t=0 w=1
+W t=0 w=1
+t=1 w=1
+pl_e1_const_edge.sv:15: $finish called at 2 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== block 3 | vita [PRE+P5_SIDE] | p6/p5ref_plc3/pl_e1_const_edge.out | 362 bytes
+##### pl_e1_const_edge
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+i0 w=z
+f t=0 x=1
+P t=0 w=1
+W t=0 w=1
+B t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== block 4 | vita [PRE+P6] | p6/p6_plc3/pl_e1_const_edge.out | 351 bytes
+##### pl_e1_const_edge
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f t=0 x=1
+i0 w=1
+P t=0 w=1
+W t=0 w=1
+t=1 w=1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== block 5 | vita [PRE+POSTDEV] | p6/dev_plc3/pl_e1_const_edge.out | 351 bytes | identical to block 4
+=== end

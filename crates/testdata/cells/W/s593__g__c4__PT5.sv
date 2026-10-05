@@ -1,0 +1,9 @@
+module sub #(parameter type T = logic [3:0], parameter T PV = '0);
+  localparam T LV = 40'h10_0000_000C;
+  localparam R = (PV ==? 4'sb1?00);
+  initial $display("R=%0d", R);
+endmodule
+module top;
+  sub #(.T(logic signed [63:0]), .PV(-64'sd4)) u();
+  initial #100 $finish;
+endmodule

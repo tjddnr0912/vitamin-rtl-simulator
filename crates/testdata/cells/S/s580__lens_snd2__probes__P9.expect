@@ -1,0 +1,28 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P9
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P9.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog
+vita_tags: unrecorded
+verdict: D extends to LOCAL operands
+verdict_source: s580/lens_snd2/REPORT.md:45
+notes: R4 cmp3_post4 bucket(s): both×4,post3×2 (s580/r4/cmp3_post4.txt)
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P9_QUEUE.ivd.txt | 94 bytes
+P9.sv:16: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P9_SFMT.ivd.txt | 94 bytes
+P9.sv:12: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./P9_STRI.ivd.txt | 57 bytes
+P9.sv:18: sorry: "inside" expressions not supported yet.
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./P9_STRV.ivd.txt | 157 bytes
+P9.sv:10: error: ==? operator may only have INTEGRAL operands.
+P9.sv:10: error: ==? operator may only have INTEGRAL operands.
+2 error(s) during elaboration.
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./P9_UARR.ivd.txt | 84 bytes
+P9.sv:14: error: Array ua needs an array index here.
+1 error(s) during elaboration.
+=== end

@@ -1,0 +1,105 @@
+category	path_or_glob	count	bytes	reason
+binary	i/*	2	56667472	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post1/**	1	28252752	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post2/**	1	28252800	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post3/**	1	28252784	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post3r/**	1	7420864	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post3t/**	1	28252896	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post4w/**	1	28253152	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post_a/**	5	37269632	Mach-O executable (vita / prototype / trace / mutant build)
+binary	post_b/**	5	37352256	Mach-O executable (vita / prototype / trace / mutant build)
+binary	pre/**	5	37269552	Mach-O executable (vita / prototype / trace / mutant build)
+build-dir	g/pin/**	23	669259	build tree (verilator obj dir / cargo target)
+build-test-log	*.log	10	363698	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	*.rc	7	18	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	a/*.p3r.runlog	3	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	a/*.pre.rc	5	10	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	a/*.pre.runlog	5	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	g/*.p0.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	g/*.p1.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	g/*.p2.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	g/*.pre.rc	3	6	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	g/*.pre.runlog	3	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.d1.log	1	8	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.d1.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.d3.log	1	8	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.d3.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.log	22	2204268	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pa.log	2	16	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pa.rc	2	4	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pb.log	1	8	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pb.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pre594.log	2	24	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.pre594.rc	2	4	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/*.rc	6	12	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/dump/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/dump2/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/probe/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/r2/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	i/r2/lens/sound/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	post_a/**	4	3074	binary dir build logs / markers
+build-test-log	post_b/**	4	844	binary dir build logs / markers
+build-test-log	pre/**	5	4289	binary dir build logs / markers
+build-test-log	r1/differential/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	r1/differential/*.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	r2/differential/*.log	1	0	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+build-test-log	r2/differential/*.rc	1	2	cargo/nextest/clippy/fmt/gate/build/harness logs and rc markers
+corpus	g/*.py	2	3268	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	g/velab/**	210	49576946	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/*.log	4	5046	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/*.out	4	5067	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/*.py	2	4844	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/*.rc	1	2	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/ab_tmp/**	11	1474627	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	i/fire/**	32	7751834	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+corpus	r1/differential/corp/**	64	14167687	corpus/examples .vu/.velab, firing traces, elab timing, corpus logs
+cross-slice-copy	g/*.done	1	5	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	g/*.movers	1	498	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	g/*.rc	1	2	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	g/*.runlog	1	24	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	g/old/**	28944	5041028	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	i/summ/*.summ	22	350966	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-copy	i/summ2/*.summ	22	350966	§4.5.593 cell sets copied into s594 (GROUNDING.md:12 "g/old (s593's 1658 cells, copied)"): every common file (SV, .ivl/.vl/.s2v/.s2v.v, .pre) is byte-identical to s593/g|a/<set>; the s594-only files are vita outputs (pre594 d1 d3 p0-p3 pa pb stg* w4) and their summaries
+cross-slice-sources	g/*.log	1	35	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	g/*.py	1	5283	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	g/*.rc	1	2	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	g/h594/**	2	6	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	g/h594p3/**	2	6	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	i/*.log	2	70	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	i/*.py	2	10578	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	i/*.rc	1	2	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	i/h666/**	2	6	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+cross-slice-sources	i/h666b/**	2	6	666-variant harness over §4.5.580/581 sources (0 movers; movers.txt/json, empty w/)
+doc-draft	docs/**	5	19452	docs edit scripts (ROADMAP / PROBE_CATALOG / REMAINING_WORK editors)
+doc-or-list	g/*.list	1	2484	test-name list / note
+iverilog-image	a/ivd/*.vvp	11	32950	iverilog compiled image
+iverilog-image	g/pin/**	1	1216	iverilog compiled image
+mutation	i/mut/**	34	10630760	mutation battery logs / scripts / snapshots
+mutation	i/mut2/**	38	12269604	mutation battery logs / scripts / snapshots
+mutation	i/snap/**	1	7460	mutation battery logs / scripts / snapshots
+mutation	r1/soundness/mut/**	6	1640628	mutation battery logs / scripts / snapshots
+mutation	r2/soundness/mut/**	6	1643030	mutation battery logs / scripts / snapshots
+no-oracle-output	a/ivd/*.d3	3	452	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.pa	3	452	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.pb	3	452	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.pre594	3	452	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.stgpb	3	620	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.stgpre2	3	620	vita output of a cell with no oracle output
+no-oracle-output	a/ivd/*.sv	3	1240	SV source with no oracle output captured
+no-oracle-output	g/pin/**	2	361	SV source with no oracle output captured
+rust-patch	g/*.p3.rs	1	61582	saved Rust source / diff
+rust-patch	g/*.patch	4	18820	saved Rust source / diff
+rust-patch	i/*.diff	1	93969	saved Rust source / diff
+rust-patch	i/mut/**	5	237747	saved Rust source / diff
+rust-patch	i/mut2/**	7	356932	saved Rust source / diff
+rust-patch	i/snap/**	1	5797	saved Rust source / diff
+rust-patch	post_a/**	2	156062	saved Rust source diff
+rust-patch	post_b/**	2	186914	saved Rust source diff
+rust-patch	r1/soundness/mut/**	1	63508	saved Rust source / diff
+rust-patch	r2/soundness/mut/**	1	7460	saved Rust source / diff
+script	g/*.py	3	5563	classifier / helper script (not a generator or per-set runner)
+script	g/*.sh	2	1090	classifier / helper script (not a generator or per-set runner)
+script	i/*.py	4	4349	classifier / helper script (not a generator or per-set runner)
+script	i/*.sh	1	530	classifier / helper script (not a generator or per-set runner)
+script	r1/differential/*.py	1	977	classifier / helper script (not a generator or per-set runner)
+script	r2/differential/*.py	1	1789	classifier / helper script (not a generator or per-set runner)

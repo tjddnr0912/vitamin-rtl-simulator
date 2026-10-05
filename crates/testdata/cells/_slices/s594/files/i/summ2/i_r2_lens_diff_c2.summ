@@ -1,0 +1,28 @@
+### D25b_wild_name
+  pre594 : !VITA-E3009 parameter `L1` value is not a constant: 8'b0000_00xx has no constant-f
+  pa : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  pb : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  ivl : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  s2v : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  vl : R: L1=0 L2=0 L3=0 L4=1 L5=1
+### D25c_wild_lit
+  pre594 : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  pa : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  pb : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  ivl : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  s2v : R: L1=0 L2=0 L3=0 L4=1 L5=1
+  vl : R: L1=0 L2=0 L3=0 L4=1 L5=1
+### Rlit_a_s_gc
+  pre594 : R: GC=def
+  pa : R: GC=def
+  pb : R: GC=def
+  ivl : R: GC=item
+  s2v : R: GC=item
+  vl : R: GC=item
+### Rlp_a_s_gc
+  pre594 : R: GC=def
+  pa : R: GC=def
+  pb : R: GC=def
+  ivl : R: GC=item
+  s2v : R: GC=item
+  vl : R: GC=item

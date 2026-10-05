@@ -1,0 +1,62 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d09b_plain_regress
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d09b_plain_regress.sv
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: byte-identical (diff empty)
+verdict_source: s582/lens_sound/REPORT.md:48
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 15
+=== block 1 | oracle sv2v 0.0.13 (version captured in slice) | lens_sound/d/out_d09b_plain_regress/sv.out | 734 bytes
+sv2v.v:28: warning: Choosing typ expression.
+Assertion failed: (ivl_expr_value(expr) == IVL_VT_BOOL || ivl_expr_value(expr) == IVL_VT_VECTOR), function draw_eval_vec4, file eval_vec4.c, line 1360.
+sh: line 1: 61833 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg23df0d611" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg3df0d611" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli3df0d611"
+     61834 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh3df0d611" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | vita [POST] | lens_sound/d/out_d09b_plain_regress/post.out | 432 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+p1 1
+p2 0
+p3 1
+p4 1
+p5 2
+p6 1
+p7 3 cnt=1
+p9 2
+simulation ended (Finish) at time 1
+errors=0 warnings=2 notes=0
+rc=0
+=== block 3 | vita [POST] | lens_sound/r2/rerun/d09b_plain_regress.post | 432 bytes | identical to block 2
+=== block 4 | vita [POST] | post2/cmp/lens_sound__d__d09b_plain_regress.sv/post.err | 345 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+errors=0 warnings=2 notes=0
+=== block 5 | vita [POST] | post2/cmp/lens_sound__d__d09b_plain_regress.sv/post.out | 87 bytes
+p1 1
+p2 0
+p3 1
+p4 1
+p5 2
+p6 1
+p7 3 cnt=1
+p9 2
+simulation ended (Finish) at time 1
+rc=0
+=== block 6 | vita [POST2] | lens_sound/r2/rerun/d09b_plain_regress.post2 | 432 bytes | identical to block 2
+=== block 7 | vita [POST2] | lens_sound/r3/rerun/d09b_plain_regress.post2 | 432 bytes | identical to block 2
+=== block 8 | vita [POST2] | post2/cmp/lens_sound__d__d09b_plain_regress.sv/post2.err | 345 bytes | identical to block 4
+=== block 9 | vita [POST2] | post2/cmp/lens_sound__d__d09b_plain_regress.sv/post2.out | 87 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/lens_sound__d__d09b_plain_regress.sv/post2.err | 345 bytes | identical to block 4
+=== block 11 | vita [POST2] | post3/cmp/lens_sound__d__d09b_plain_regress.sv/post2.out | 87 bytes | identical to block 5
+=== block 12 | vita [POST3] | lens_sound/r3/rerun/d09b_plain_regress.post3 | 432 bytes | identical to block 2
+=== block 13 | vita [POST3] | post3/cmp/lens_sound__d__d09b_plain_regress.sv/post3.err | 345 bytes | identical to block 4
+=== block 14 | vita [POST3] | post3/cmp/lens_sound__d__d09b_plain_regress.sv/post3.out | 87 bytes | identical to block 5
+=== block 15 | vita [PRE] | lens_sound/d/out_d09b_plain_regress/pre.out | 432 bytes | identical to block 2
+=== end

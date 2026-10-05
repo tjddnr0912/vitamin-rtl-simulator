@@ -1,0 +1,26 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t8c_sel3_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t8c_sel3_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t8c_sel3_fp.ivl | 659 bytes
+t8c_sel3_fp.sv:7: assert: elab_expr.cc:6122: failed assertion prefix_indices.size()+1 == net->sig()->packed_dims().size()
+sh: line 1: 48532 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2309d38f0" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg309d38f0" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli309d38f0"
+     48535 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh309d38f0" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t8c_sel3_fp.vl | 230 bytes
+m=78
+- t8c_sel3_fp.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 100.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t8c_sel3_fp.build | 0 bytes
+
+=== end

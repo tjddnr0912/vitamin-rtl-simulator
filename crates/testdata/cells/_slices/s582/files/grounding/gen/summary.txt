@@ -1,0 +1,229 @@
+=== c01_repro
+  ci/vita  rc=1 ndiag=32 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=1000 m=1 ; v=0010 m=2 ; v=0110 m=0 ; v=1100 m=1 ; v=0000 m=0 ; v=0011 m=2 ; v=0100 m=0 ; v=0001 m=2
+  ci/vl    rc=0 | v=1000 m=1 ; v=0010 m=2 ; v=0110 m=0 ; v=1100 m=1 ; v=0000 m=0 ; v=0011 m=2 ; v=0100 m=0 ; v=0001 m=2
+  d/vita   rc=0 | v=1000 m=1 ; v=0010 m=2 ; v=0110 m=0 ; v=1100 m=1 ; v=0000 m=0 ; v=0011 m=2 ; v=0100 m=0 ; v=0001 m=2
+  if/vita  rc=0 | v=1000 m=1 ; v=0010 m=2 ; v=0110 m=0 ; v=1100 m=1 ; v=0000 m=0 ; v=0011 m=2 ; v=0100 m=0 ; v=0001 m=2
+=== c02_xz_item
+  ci/vita  rc=1 ndiag=20 first=["EE2002: expected ':' in case item, found '4'b1x0z'"]
+  ci/sv    rc=0 | v=1000 m=1 ; v=1001 m=1 ; v=1100 m=1 ; v=1101 m=1 ; v=0001 m=2 ; v=0111 m=2 ; v=0011 m=2 ; v=0000 m=0 ; v=1010 m=0 ; v=1011 m=3
+  ci/vl    rc=0 | v=1000 m=1 ; v=1001 m=1 ; v=1100 m=1 ; v=1101 m=1 ; v=0001 m=2 ; v=0111 m=2 ; v=0011 m=2 ; v=0000 m=0 ; v=1010 m=0 ; v=1011 m=3
+  d/vita   rc=0 | v=1000 m=1 ; v=1001 m=1 ; v=1100 m=1 ; v=1101 m=1 ; v=0001 m=2 ; v=0111 m=2 ; v=0011 m=2 ; v=0000 m=0 ; v=1010 m=0 ; v=1011 m=3
+  if/vita  rc=0 | v=1000 m=1 ; v=1001 m=1 ; v=1100 m=1 ; v=1101 m=1 ; v=0001 m=2 ; v=0111 m=2 ; v=0011 m=2 ; v=0000 m=0 ; v=1010 m=0 ; v=1011 m=3
+=== c03_xz_sel
+  ci/vita  rc=1 ndiag=36 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=1x00 m=1 ; v=x100 m=0 ; v=011x m=0 ; v=100z m=0 ; v=xxxx m=0 ; v=1z00 m=1 ; v=1001 m=3 ; v=zzzz m=0 ; v=10x1 m=0
+  ci/vl    rc=0 | v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0 ; v=0000 m=0
+  d/vita   rc=0 | v=1x00 m=1 ; v=x100 m=0 ; v=011x m=0 ; v=100z m=0 ; v=xxxx m=0 ; v=1z00 m=1 ; v=1001 m=3 ; v=zzzz m=0 ; v=10x1 m=0
+  if/vita  rc=0 | v=1x00 m=1 ; v=x100 m=0 ; v=011x m=0 ; v=100z m=0 ; v=xxxx m=0 ; v=1z00 m=1 ; v=1001 m=3 ; v=zzzz m=0 ; v=10x1 m=0
+=== c05_range_signed
+  ci/vita  rc=1 ndiag=16 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=-2 m=1 ; v=-1 m=1 ; v=0 m=1 ; v=1 m=1 ; v=2 m=0 ; v=3 m=2 ; v=-8 m=0 ; v=7 m=0
+  ci/vl    rc=0 | v=-2 m=0 ; v=-1 m=0 ; v=0 m=0 ; v=1 m=0 ; v=2 m=0 ; v=3 m=2 ; v=-8 m=0 ; v=7 m=0
+  d/vita   rc=0 | v=-2 m=1 ; v=-1 m=1 ; v=0 m=1 ; v=1 m=1 ; v=2 m=0 ; v=3 m=2 ; v=-8 m=0 ; v=7 m=0
+  if/vita  rc=0 | v=-2 m=1 ; v=-1 m=1 ; v=0 m=1 ; v=1 m=1 ; v=2 m=0 ; v=3 m=2 ; v=-8 m=0 ; v=7 m=0
+=== c05b_range_mixed
+  ci/vita  rc=1 ndiag=10 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=-1 m=2 ; v=2 m=1 ; v=-7 m=0 ; v=0 m=2 ; v=1 m=1
+  ci/vl    rc=0 | v=-1 m=0 ; v=2 m=1 ; v=-7 m=0 ; v=0 m=0 ; v=1 m=1
+  d/vita   rc=0 | v=-1 m=2 ; v=2 m=1 ; v=-7 m=0 ; v=0 m=2 ; v=1 m=1
+  if/vita  rc=0 | v=-1 m=2 ; v=2 m=1 ; v=-7 m=0 ; v=0 m=2 ; v=1 m=1
+=== c05c_range_u_negbound
+  ci/vita  rc=1 ndiag=8 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0000 m=0 ; v=0001 m=0 ; v=1110 m=0 ; v=1111 m=0
+  ci/vl    rc=0 | v=0000 m=0 ; v=0001 m=0 ; v=1110 m=0 ; v=1111 m=0
+  d/vita   rc=0 | v=0000 m=0 ; v=0001 m=0 ; v=1110 m=0 ; v=1111 m=0
+  if/vita  rc=0 | v=0000 m=0 ; v=0001 m=0 ; v=1110 m=0 ; v=1111 m=0
+=== c06a_narrow_sel_wide_item
+  ci/vita  rc=1 ndiag=24 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=1100 m=1 ; v=1000 m=1 ; v=1111 m=0 ; v=0101 m=3 ; v=0110 m=3 ; v=0011 m=0
+  ci/vl    rc=0 | v=1100 m=1 ; v=1000 m=1 ; v=1111 m=0 ; v=0101 m=3 ; v=0110 m=3 ; v=0011 m=0
+  d/vita   rc=0 | v=1100 m=1 ; v=1000 m=1 ; v=1111 m=0 ; v=0101 m=3 ; v=0110 m=3 ; v=0011 m=0
+  if/vita  rc=0 | v=1100 m=1 ; v=1000 m=1 ; v=1111 m=0 ; v=0101 m=3 ; v=0110 m=3 ; v=0011 m=0
+=== c06b_wide_sel_narrow_item
+  ci/vita  rc=1 ndiag=24 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0c m=1 ; v=1c m=0 ; v=08 m=1 ; v=01 m=2 ; v=11 m=0 ; v=f8 m=0
+  ci/vl    rc=0 | v=0c m=1 ; v=1c m=0 ; v=08 m=1 ; v=01 m=2 ; v=11 m=0 ; v=f8 m=0
+  d/vita   rc=0 | v=0c m=1 ; v=1c m=0 ; v=08 m=1 ; v=01 m=2 ; v=11 m=0 ; v=f8 m=0
+  if/vita  rc=0 | v=0c m=1 ; v=1c m=0 ; v=08 m=1 ; v=01 m=2 ; v=11 m=0 ; v=f8 m=0
+=== c06c_signed_wide_sel_signed_pat
+  ci/vita  rc=1 ndiag=12 first=["EE2002: expected ':' in case item, found '4'sb1?00'"]
+  ci/sv    rc=0 | v=fc m=1 ; v=f8 m=1 ; v=0c m=0 ; v=08 m=0 ; v=fb m=0 ; v=0b m=2
+  ci/vl    rc=0 | v=fc m=1 ; v=f8 m=1 ; v=0c m=0 ; v=08 m=0 ; v=fb m=0 ; v=0b m=2
+  d/vita   rc=0 | v=fc m=1 ; v=f8 m=1 ; v=0c m=0 ; v=08 m=0 ; v=fb m=0 ; v=0b m=2
+  if/vita  rc=0 | v=fc m=1 ; v=f8 m=1 ; v=0c m=0 ; v=08 m=0 ; v=fb m=0 ; v=0b m=2
+=== c07_rev
+  ci/vita  rc=1 ndiag=3 first=['EE3010: undeclared net/variable `top.inside` [in top]']
+  ci/sv    rc=0 | v=0001 m=0 ; v=0010 m=0 ; v=0011 m=0
+  ci/vl    rc=0 | v=0001 m=0 ; v=0010 m=0 ; v=0011 m=0
+  d/vita   rc=0 | v=0001 m=0 ; v=0010 m=0 ; v=0011 m=0
+  if/vita  rc=0 | v=0001 m=0 ; v=0010 m=0 ; v=0011 m=0
+=== c08a_dollar_u
+  ci/vita  rc=1 ndiag=12 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=1 | /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c08a_dollar_u_ci.sv:6:14: Parse error: unexpected token '$' (Sym_dollar)
+  ci/vl    rc=0 | v=1111 m=1 ; v=1100 m=1 ; v=1011 m=0 ; v=0000 m=2 ; v=0010 m=2 ; v=0011 m=0
+  d/vita   rc=1 | 
+           diag: EE3009: `$` is only valid inside a queue element select (`q[$]`) [in top]
+  if/vita  rc=1 | 
+           diag: EE3009: `$` is only valid inside a queue element select (`q[$]`) [in top]
+=== c08b_dollar_s
+  ci/vita  rc=1 ndiag=12 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=1 | /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c08b_dollar_s_ci.sv:6:8: Parse error: unexpected token '$' (Sym_dollar)
+  ci/vl    rc=0 | v=-8 m=1 ; v=-7 m=1 ; v=-6 m=2 ; v=6 m=1 ; v=7 m=1 ; v=0 m=1
+  d/vita   rc=1 | 
+           diag: EE3009: `$` is only valid inside a queue element select (`q[$]`) [in top]
+  if/vita  rc=1 | 
+           diag: EE3009: `$` is only valid inside a queue element select (`q[$]`) [in top]
+=== c09_array
+  ci/vita  rc=1 ndiag=4 first=["EE2002: expected ':' in case item, found identifier 'arr'"]
+  ci/sv    rc=0 | v=0101 m=0 ; v=0111 m=0 ; v=0010 m=2 ; v=0110 m=0
+  ci/vl    rc=9 | ./Vtop___024root__0.cpp:140:24: error: invalid operands to binary expression ('unsigned int' and 'VlUnpacked<CData, 2>' (aka 'VlUnpacked<unsigned char, 2>')) ; ./Vtop___024root__0.cpp:143:24: error: invalid operands to binary expression ('unsigned int' and 'VlUnpacked<CData, 2>' (aka 'VlUnpacked<unsigned char, 2>')) ; ./Vtop___024root__0.cpp:146:24: error: invalid operands to binary expression ('unsigned int' and 'VlUnpacked<CData, 2>' (aka 'VlUnpacked<unsigned char, 2>')) ; ./Vtop___024root__0.cpp:149:24: error: invalid operands to binary expression ('unsigned int' and 'VlUnpacked<CData, 2>' 
+  d/vita   rc=1 | 
+           diag: EE3009: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in top]
+  if/vita  rc=1 | 
+           diag: EE3009: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in top]
+=== c10_multi
+  ci/vita  rc=1 ndiag=16 first=["EE2002: expected ':' in case item, found '4'd1'"]
+  ci/sv    rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=1000 m=1 ; v=1001 m=1 ; v=0010 m=2 ; v=1100 m=2 ; v=1111 m=2 ; v=0100 m=0
+  ci/vl    rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=1000 m=1 ; v=1001 m=1 ; v=0010 m=2 ; v=1100 m=2 ; v=1111 m=2 ; v=0100 m=0
+  d/vita   rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=1000 m=1 ; v=1001 m=1 ; v=0010 m=2 ; v=1100 m=2 ; v=1111 m=2 ; v=0100 m=0
+  if/vita  rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=1000 m=1 ; v=1001 m=1 ; v=0010 m=2 ; v=1100 m=2 ; v=1111 m=2 ; v=0100 m=0
+=== c11_overlap
+  ci/vita  rc=1 ndiag=8 first=['EE3010: undeclared net/variable `top.inside` [in top]']
+  ci/sv    rc=0 | v=0101 m=1 ; v=0110 m=1 ; v=1000 m=4 ; v=1001 m=4
+  ci/vl    rc=0 | v=0101 m=1 ; v=0110 m=1 ; v=1000 m=4 ; v=1001 m=4
+  d/vita   rc=0 | v=0101 m=1 ; v=0110 m=1 ; v=1000 m=4 ; v=1001 m=4
+  if/vita  rc=0 | v=0101 m=1 ; v=0110 m=1 ; v=1000 m=4 ; v=1001 m=4
+=== c12_nodef
+  ci/vita  rc=1 ndiag=16 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0001 m=1 ; v=0010 m=2 ; v=0100 m=9 ; v=xx00 m=9
+  ci/vl    rc=0 | v=0001 m=1 ; v=0010 m=2 ; v=0100 m=9 ; v=0000 m=9
+  d/vita   rc=0 | v=0001 m=1 ; v=0010 m=2 ; v=0100 m=9 ; v=xx00 m=9
+  if/vita  rc=0 | v=0001 m=1 ; v=0010 m=2 ; v=0100 m=9 ; v=xx00 m=9
+=== c13a_unique_nomatch
+  ci/vita  rc=1 ndiag=8 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0001 m=1 ; v=0101 m=9
+  ci/vl    rc=1 | v=0001 m=1 ; [0] %Error: c13a_unique_nomatch_ci.sv:11: Assertion failed in top: unique case, but none matched for '4'h5' ; %Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13a_unique_nomatch_ci.sv:11: Verilog $stop ; Aborting...
+  d/vita   rc=0 | v=0001 m=1 ; v=0101 m=9
+           diag: WW4031: value is unhandled for priority or unique case statement [in top] [at time 0]
+  if/vita  rc=0 | v=0001 m=1 ; v=0101 m=9
+=== c13b_unique_overlap
+  ci/vita  rc=1 ndiag=4 first=['EE3010: undeclared net/variable `top.inside` [in top]']
+  ci/sv    rc=0 | v=0101 m=1 ; v=0001 m=1
+  ci/vl    rc=1 | [0] %Error: c13b_unique_overlap_ci.sv:5: Assertion failed in top: unique case, but multiple matches found for '4'h5' ; %Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13b_unique_overlap_ci.sv:5: Verilog $stop ; Aborting...
+  d/vita   rc=0 | v=0101 m=1 ; v=0001 m=1
+  if/vita  rc=0 | v=0101 m=1 ; v=0001 m=1
+=== c13c_unique0_nomatch
+  ci/vita  rc=1 ndiag=8 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0001 m=1 ; v=0101 m=9
+  ci/vl    rc=0 | v=0001 m=1 ; v=0101 m=9
+  d/vita   rc=0 | v=0001 m=1 ; v=0101 m=9
+  if/vita  rc=0 | v=0001 m=1 ; v=0101 m=9
+=== c13d_priority_nomatch
+  ci/vita  rc=1 ndiag=8 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0001 m=1 ; v=0101 m=9
+  ci/vl    rc=1 | v=0001 m=1 ; [0] %Error: c13d_priority_nomatch_ci.sv:11: Assertion failed in top: priority case, but non-match found for '4'h5' ; %Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/gen/c13d_priority_nomatch_ci.sv:11: Verilog $stop ; Aborting...
+  d/vita   rc=0 | v=0001 m=1 ; v=0101 m=9
+           diag: WW4031: value is unhandled for priority or unique case statement [in top] [at time 0]
+  if/vita  rc=0 | v=0001 m=1 ; v=0101 m=9
+=== c13e_priority_overlap
+  ci/vita  rc=1 ndiag=2 first=['EE3010: undeclared net/variable `top.inside` [in top]']
+  ci/sv    rc=0 | v=0101 m=1
+  ci/vl    rc=0 | v=0101 m=1
+  d/vita   rc=0 | v=0101 m=1
+  if/vita  rc=0 | v=0101 m=1
+=== c13f_unique_default
+  ci/vita  rc=1 ndiag=6 first=["EE2002: expected ':' in case item, found '4'd1'"]
+  ci/sv    rc=0 | v=0001 m=1 ; v=1100 m=2 ; v=0011 m=0
+  ci/vl    rc=0 | v=0001 m=1 ; v=1100 m=2 ; v=0011 m=0
+  d/vita   rc=0 | v=0001 m=1 ; v=1100 m=2 ; v=0011 m=0
+  if/vita  rc=0 | v=0001 m=1 ; v=1100 m=2 ; v=0011 m=0
+=== c13g_unique_xsel
+  ci/vita  rc=1 ndiag=4 first=["EE2002: expected ':' in case item, found '4'd1'"]
+  ci/sv    rc=0 | v=x001 m=9 ; v=1x00 m=2
+  ci/vl    rc=0 | v=0001 m=1 ; v=1000 m=2
+  d/vita   rc=0 | v=x001 m=9 ; v=1x00 m=2
+           diag: WW4031: value is unhandled for priority or unique case statement [in top] [at time 0]
+  if/vita  rc=0 | v=x001 m=9 ; v=1x00 m=2
+=== c19a_sign_pairwise
+  ci/vita  rc=1 ndiag=2 first=['EE3010: undeclared net/variable `top.inside` [in top]']
+  ci/sv    rc=0 | v=-1 m=1 ; v=0 m=2
+  ci/vl    rc=0 | v=-1 m=0 ; v=0 m=2
+  d/vita   rc=0 | v=-1 m=1 ; v=0 m=2
+  if/vita  rc=0 | v=-1 m=1 ; v=0 m=2
+=== c19b_width_pairwise
+  ci/vita  rc=1 ndiag=6 first=["EE2002: expected ':' in case item, found '8'h00'"]
+  ci/sv    rc=0 | a+b m=1 ; a+b m=1 ; a+b m=1
+  ci/vl    rc=0 | a+b m=2 ; a+b m=2 ; a+b m=1
+  d/vita   rc=0 | a+b m=1 ; a+b m=1 ; a+b m=1
+  if/vita  rc=0 | a+b m=1 ; a+b m=1 ; a+b m=1
+=== c19c_sign_range_pairwise
+  ci/vita  rc=1 ndiag=6 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=-1 m=1 ; v=-2 m=1 ; v=0 m=2
+  ci/vl    rc=0 | v=-1 m=0 ; v=-2 m=0 ; v=0 m=2
+  d/vita   rc=0 | v=-1 m=1 ; v=-2 m=1 ; v=0 m=2
+  if/vita  rc=0 | v=-1 m=1 ; v=-2 m=1 ; v=0 m=2
+=== c20a_const_sel
+  ci/vita  rc=1 ndiag=4 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | m=1
+  ci/vl    rc=0 | m=1
+  d/vita   rc=0 | m=1
+  if/vita  rc=0 | m=1
+=== c20b_param_sel
+  ci/vita  rc=1 ndiag=4 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | m=1
+  ci/vl    rc=0 | m=1
+  d/vita   rc=0 | m=1
+  if/vita  rc=0 | m=1
+=== c30_runtime_x_item
+  ci/vita  rc=1 ndiag=3 first=["EE2002: expected ':' in case item, found identifier 'w'"]
+  ci/sv    rc=0 | v=1000 m=1 ; v=1100 m=1 ; v=0100 m=0
+  ci/vl    rc=0 | v=1000 m=1 ; v=1100 m=0 ; v=0100 m=0
+  d/vita   rc=0 | v=1000 m=0 ; v=1100 m=0 ; v=0100 m=0
+  if/vita  rc=0 | v=1000 m=0 ; v=1100 m=0 ; v=0100 m=0
+=== c31_compound_xz_item
+  ci/vita  rc=1 ndiag=12 first=["EE2002: expected ':' in case item, found '{'"]
+  ci/sv    rc=0 | v=1000 m=1 ; v=1100 m=1 ; v=0100 m=0
+  ci/vl    rc=0 | v=1000 m=1 ; v=1100 m=1 ; v=0100 m=0
+  d/vita   rc=1 | 
+           diag: EE3009: an `inside` element that builds an x/z/? literal into a larger expression is not supported: IEEE 1800-2017 §11.4.13 compares the element with `==?`, a
+  if/vita  rc=1 | 
+           diag: EE3009: an `inside` element that builds an x/z/? literal into a larger expression is not supported: IEEE 1800-2017 §11.4.13 compares the element with `==?`, a
+=== c32_wide72
+  ci/vita  rc=1 ndiag=16 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=800000000000000050 m=1 ; v=800000000000000051 m=0 ; v=000000000000000002 m=2 ; v=000000000000000000 m=0
+  ci/vl    rc=0 | v=800000000000000050 m=1 ; v=800000000000000051 m=0 ; v=000000000000000002 m=2 ; v=000000000000000000 m=0
+  d/vita   rc=0 | v=800000000000000050 m=1 ; v=800000000000000051 m=0 ; v=000000000000000002 m=2 ; v=000000000000000000 m=0
+  if/vita  rc=0 | v=800000000000000050 m=1 ; v=800000000000000051 m=0 ; v=000000000000000002 m=2 ; v=000000000000000000 m=0
+=== c34_param_xz_item
+  ci/vita  rc=1 ndiag=3 first=["EE2002: expected ':' in case item, found identifier 'P'"]
+  ci/sv    rc=0 | v=1000 m=1 ; v=1100 m=1 ; v=0100 m=0
+  ci/vl    rc=0 | v=1000 m=1 ; v=1100 m=1 ; v=0100 m=0
+  d/vita   rc=1 | 
+           diag: EE3009: parameter `P` value is not a constant: 4'b1?00 has no constant-fold arm [in top]
+  if/vita  rc=1 | 
+           diag: EE3009: parameter `P` value is not a constant: 4'b1?00 has no constant-fold arm [in top]
+=== c37_allx_default
+  ci/vita  rc=1 ndiag=6 first=["EE2002: expected ':' in case item, found '4'b????'"]
+  ci/sv    rc=0 | v=xxxx m=1 ; v=zzzz m=1 ; v=0011 m=1
+  ci/vl    rc=0 | v=0000 m=1 ; v=0000 m=1 ; v=0000 m=1
+  d/vita   rc=0 | v=xxxx m=1 ; v=zzzz m=1 ; v=0011 m=1
+  if/vita  rc=0 | v=xxxx m=1 ; v=zzzz m=1 ; v=0011 m=1
+=== c38_empty_stmt
+  ci/vita  rc=1 ndiag=6 first=["EE2002: expected ':' in case item, found '4'd1'"]
+  ci/sv    rc=0 | v=0001 m=9 ; v=0010 m=2 ; v=0011 m=0
+  ci/vl    rc=0 | v=0001 m=9 ; v=0010 m=2 ; v=0011 m=0
+  d/vita   rc=0 | v=0001 m=9 ; v=0010 m=2 ; v=0011 m=0
+  if/vita  rc=0 | v=0001 m=9 ; v=0010 m=2 ; v=0011 m=0
+=== c39_unsized_items
+  ci/vita  rc=1 ndiag=20 first=['WW2004: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, po']
+  ci/sv    rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=0101 m=2 ; v=1111 m=0 ; v=1000 m=0
+  ci/vl    rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=0101 m=2 ; v=1111 m=0 ; v=1000 m=0
+  d/vita   rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=0101 m=2 ; v=1111 m=3 ; v=1000 m=0
+  if/vita  rc=0 | v=0001 m=1 ; v=0011 m=1 ; v=0101 m=2 ; v=1111 m=3 ; v=1000 m=0
+=== c40_fill_xz_item
+  ci/vita  rc=1 ndiag=6 first=["EE2002: expected ':' in case item, found ''bx1'"]
+  ci/sv    rc=0 | v=000000001 m=1 ; v=000000003 m=1 ; v=000000002 m=0
+  ci/vl    rc=0 | v=000000001 m=1 ; v=000000003 m=1 ; v=000000002 m=0
+  d/vita   rc=0 | v=000000001 m=1 ; v=000000003 m=1 ; v=000000002 m=0
+  if/vita  rc=0 | v=000000001 m=1 ; v=000000003 m=1 ; v=000000002 m=0

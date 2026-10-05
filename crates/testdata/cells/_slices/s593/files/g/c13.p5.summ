@@ -1,0 +1,63 @@
+### arrC  [PRE=some]
+  pre : A0=15 lt0=0 | A1=14 lt0=0
+  post1: A0=15 lt0=0 | A1=14 lt0=0
+  post5: A0=15 lt0=0 | A1=14 lt0=0
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=15 lt0=0 | A1=14 lt0=0
+### arrDrop  [PRE!=all]
+  pre : A0=-1 lt0=1 | A1=-2 lt0=1
+  post1: A0=-1 lt0=1 | A1=-2 lt0=1
+  post5: A0=15 lt0=0 | A1=14 lt0=0
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=15 lt0=0 | A1=14 lt0=0
+### arrDropC  [PRE=some]
+  pre : A0=-1 lt0=1 | A1=-2 lt0=1
+  post1: A0=-1 lt0=1 | A1=-2 lt0=1
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrH  [PRE=some]
+  pre : A0=15 lt0=0 | A1=14 lt0=0
+  post1: A0=15 lt0=0 | A1=14 lt0=0
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrInt  [PRE=some]
+  pre : A0=4294967295 lt0=0 | A1=4294967294 lt0=0
+  post1: A0=4294967295 lt0=0 | A1=4294967294 lt0=0
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=4294967295 lt0=0 | A1=4294967294 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrL  [PRE=some]
+  pre : A0=15 lt0=0 | A1=14 lt0=0
+  post1: A0=15 lt0=0 | A1=14 lt0=0
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrTwin  [PRE=some]
+  pre : A0=-1 lt0=1 | A1=-2 lt0=1
+  post1: A0=-1 lt0=1 | A1=-2 lt0=1
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=15 lt0=0 | A1=14 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrTwinInt  [PRE=some]
+  pre : A0=-1 lt0=1 | A1=-2 lt0=1
+  post1: A0=-1 lt0=1 | A1=-2 lt0=1
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=4294967295 lt0=0 | A1=4294967294 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1
+### arrW  [PRE=some]
+  pre : A0=1208925819614629174706175 lt0=0 | A1=1208925819614629174706174 lt0=0
+  post1: A0=1208925819614629174706175 lt0=0 | A1=1208925819614629174706174 lt0=0
+  post5: A0=-1 lt0=1 | A1=-2 lt0=1
+  ivl : !sorry: unpacked array parameters are not supported yet. | rc=1
+  s2v : A0=1208925819614629174706175 lt0=0 | A1=1208925819614629174706174 lt0=0
+  vl  : A0=-1 lt0=1 | A1=-2 lt0=1

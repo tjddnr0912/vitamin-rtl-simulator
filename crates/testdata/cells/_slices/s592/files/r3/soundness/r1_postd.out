@@ -1,0 +1,312 @@
+== B1_bind_fwd
+         iv: ERR:B1_bind_fwd.sv:15: syntax error(rc2)
+         sv: ERR:B1_bind_fwd.sv:15:1: Parse error: unexpected token 'bind' (KW_bind)(rc1)
+         vl: top.c.gb.g w=200 bits=8
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.c.gb.g w=8 bits=4
+== EI1_elseif
+         iv: top.b w=2 bits=4
+         sv: top.b w=2 bits=4
+         vl: top.b w=2 bits=4
+     post_b: top.b w=2 bits=4
+     post_d: top.b w=2 bits=4
+        pre: top.b w=2 bits=4
+== F15_zero_nets_iter
+         iv: NONE
+         sv: top.b.g[0] | top.b.g[1]
+         vl: top.b.g[0] | top.b.g[1]
+     post_b: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: top.b.g[0] | top.b.g[1]
+== F3i_iarr_two_mismatch
+         iv: top.u[0].gb.x x | top.u[1].gb.x x
+         sv: top.u[0].gb.y y | top.u[1].gb.y y
+         vl: top.u[0].gb.y y | top.u[1].gb.y y
+     post_b: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.u[0].gb.y y | top.u[1].gb.y y
+== F6_samecount_vals
+         iv: top.b.g[1] | top.b.g[2]
+         sv: top.b.g[2] | top.b.g[3]
+         vl: top.b.g[2] | top.b.g[3]
+     post_b: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+        pre: top.b.g[2] | top.b.g[3]
+== FN1_gfn_noouter
+         iv: ERR:FN1_gfn_noouter.sv:4: error: No function named `f' found in this conte(rc2)
+         sv: ERR:FN1_gfn_noouter.sv2v.v:9: error: No function named `f' found in this c(rc2)
+         vl: ERR:%Error: FN1_gfn_noouter.sv:7:32: Constant function may not be declared(rc1)
+     post_b: top.gb.g w=9 bits=4
+     post_d: top.gb.g w=9 bits=4
+        pre: top.gb.g w=9 bits=4
+== FN2_gfn_before
+         iv: ERR:FN2_gfn_before.sv:4: error: No function named `f' found in this contex(rc4)
+         sv: ERR:FN2_gfn_before.sv2v.v:8: error: No function named `f' found in this co(rc4)
+         vl: ERR:%Error: FN2_gfn_before.sv:3:32: Constant function may not be declared (rc1)
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: `f(…)` ha(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: `f(…)` ha(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: `f(…)` ha(rc1)
+== FN3_mfn_after
+         iv: top.gb.x w=1 bits=4
+         sv: top.gb.x w=1 bits=4
+         vl: top.gb.x w=1 bits=4
+     post_b: top.gb.x w=1 bits=4
+     post_d: top.gb.x w=1 bits=4
+        pre: top.gb.x w=1 bits=4
+== H1_ifcparam
+         iv: ERR:H1_ifcparam.sv:4: error: A hierarchical reference (`bus.W') is not all(rc4)
+         sv: top.a w=1 bits=4
+         vl: top.a w=1 bits=4
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== H2_childparam
+         iv: ERR:H2_childparam.sv:4: error: A hierarchical reference (`u.W') is not all(rc4)
+         sv: ERR:H2_childparam.sv2v.v:7: error: A hierarchical reference (`u.W') is not(rc4)
+         vl: top.b w=200 bits=8
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== H3_childparam_gen
+         iv: ERR:H3_childparam_gen.sv:5: error: A hierarchical reference (`u.W') is not(rc4)
+         sv: ERR:H3_childparam_gen.sv2v.v:8: error: A hierarchical reference (`u.W') is(rc4)
+         vl: top.gb.b w=200 bits=8
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== H4_defparam
+         iv: ERR:H4_defparam.sv:5: error: A hierarchical reference (`u.W') is not allow(rc4)
+         sv: ERR:H4_defparam.sv2v.v:8: error: A hierarchical reference (`u.W') is not a(rc4)
+         vl: top.b w=200 bits=8
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== H5_ifc_in_gen
+         iv: ERR:H5_ifc_in_gen.sv:5: error: A hierarchical reference (`bus.W') is not a(rc4)
+         sv: top.gb.a w=1 bits=4
+         vl: top.gb.a w=1 bits=4
+     post_b: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+     post_d: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== K1_mac2inv
+         iv: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+         sv: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+         vl: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+     post_b: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+     post_d: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+        pre: top.a1 w=1 bits=4 | top.b2 w=200 bits=8
+== K2_mac1inv2c
+         iv: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+         sv: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+         vl: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+     post_b: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+     post_d: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+        pre: top.a1 w=1 bits=4 | top.b2 w=201 bits=8
+== K3_macfor2c
+         iv: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+         sv: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+         vl: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+     post_b: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+     post_d: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+        pre: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+== K4_maccase2c
+         iv: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+         sv: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+         vl: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+     post_b: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+     post_d: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+        pre: top.c1 w=1 bits=4 | top.c2d w=201 bits=8
+== K5_inc2
+         iv: top.genblk1 then w=1 | top.genblk2 else w=200
+         sv: top.genblk1 then w=1 | top.genblk2 else w=200
+         vl: top.genblk1 then w=1 | top.genblk2 else w=200
+     post_b: top.genblk1 then w=1 | top.genblk2 else w=200
+     post_d: top.genblk1 then w=1 | top.genblk2 else w=200
+        pre: top.genblk1 then w=1 | top.genblk2 else w=200
+== K7_mac2inv_for
+         iv: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+         sv: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+         vl: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+     post_b: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+     post_d: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+        pre: top.f1[0] | top.f1[1] | top.f2[0] | top.f2[1] | top.f2[2]
+== M12b_chain_real
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:M12b_chain_real.sv2v.v:8: error: Cannot evaluate generate "loop" initi(rc1)
+         vl: NONE
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== M12c_chain_wide65
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[2] w=2
+         vl: top.b.g[2] w=2
+     post_b: ERR:VITA-E3010:this generate for depends on a parameter declared (rc1)
+     post_d: ERR:VITA-E3010:this generate for depends on a parameter declared (rc1)
+        pre: top.b.g[2] w=2
+== M12d_chain_str
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: NONE
+         vl: ERR:%Error: Internal Error: M12d_chain_str.sv:5:21: ../V3Number.cpp:2487: (rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== M12e_chain_u64max
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: NONE
+         vl: top.b.g[-1] w=15 | top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+     post_b: ERR:VITA-E3010:this generate for depends on a parameter declared (rc1)
+     post_d: ERR:VITA-E3010:this generate for depends on a parameter declared (rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.b[0].g[-1].w` [in top(rc1)
+== M12f_chain_wide65_typedP
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[2] w=2
+         vl: top.b.g[2] w=2
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== M12g_chain_realP
+         iv: ERR:M12g_chain_realP.sv:5: error: Cannot evaluate generate "loop" initiali(rc1)
+         sv: ERR:M12g_chain_realP.sv2v.v:8: error: Cannot evaluate generate "loop" init(rc1)
+         vl: NONE
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== MSG1_blame_innocent
+         iv: top.b.x x
+         sv: top.b.y y
+         vl: top.b.y y
+     post_b: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+        pre: top.b.y y
+== NEG1_step_neg
+         iv: top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+     post_b: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+== R1_step_bodyparam
+         iv: top.g[0] | top.g[2]
+         sv: top.g[0] | top.g[2]
+         vl: top.g[0] | top.g[1] | top.g[2] | top.g[3]
+     post_b: top.g[0] | top.g[2]
+     post_d: top.g[0] | top.g[2]
+        pre: top.g[0] | top.g[2]
+== STALL1_step_zero
+         iv: top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:STALL1_step_zero.sv2v.v:7: error: The generate "loop" is not increment(rc1)
+         vl: ERR:%Error: STALL1_step_zero.sv:4:5: Unrolling generate loop took too long(rc1)
+     post_b: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: top.b.g[0] w=0
+== U13_if_ltype
+         iv: top.b.x w=1 bits=4
+         sv: top.b.x w=1 bits=4
+         vl: ERR:%Error: U13_if_ltype.sv:4:9: Data type used where a non-data type is e(rc1)
+     post_b: top.b.x w=1 bits=4
+     post_d: top.b.x w=1 bits=4
+        pre: top.b.x w=1 bits=4
+== U1_initA_ltype
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[1] w=1 | top.b.g[2] w=2
+         vl: ERR:%Error: U1_initA_ltype.sv:4:21: Data type used where a non-data type i(rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U2_initA_arr
+         iv: ERR:U2_initA_arr.sv:8: sorry: unpacked array parameters are not supported (rc1)
+         sv: NONE
+         vl: ERR:%Error: U2_initA_arr.sv:4:19: Illegal assignment: types are not assign(rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U3_initA_str
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: NONE
+         vl: ERR:%Error: Internal Error: U3_initA_str.sv:4:21: ../V3Number.cpp:2487: Nu(rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U4_initA_net
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U4_initA_net.sv2v.v:7: error: A reference to a net or variable (`A') i(rc2)
+         vl: ERR:%Error: U4_initA_net.sv:4:21: Expecting expression to be constant, but(rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U5_initA_enum
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[2] w=2
+         vl: top.b.g[2] w=2
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U6_initA_var
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U6_initA_var.sv2v.v:7: error: A reference to a net or variable (`A') i(rc2)
+         vl: ERR:%Error: U6_initA_var.sv:4:21: Expecting expression to be constant, but(rc1)
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U7_initA_real
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U7_initA_real.sv2v.v:7: error: Cannot evaluate generate "loop" initial(rc1)
+         vl: NONE
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U8_initA_wide
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[2] w=2
+         vl: top.b.g[2] w=2
+     post_b: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+        pre: top.b.g[2] w=2
+== U8b_initA_wide65
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: top.b.g[2] w=2
+         vl: top.b.g[2] w=2
+     post_b: top.b.g[1] w=1 | top.b.g[2] w=2
+     post_d: top.b.g[1] w=1 | top.b.g[2] w=2
+        pre: top.b.g[1] w=1 | top.b.g[2] w=2
+== U8e_initA_u64max
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: NONE
+         vl: top.b.g[-1] w=15 | top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+     post_b: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+     post_d: ERR:VITA-E3010:`A` is used before it is declared in this generate(rc1)
+        pre: ERR:VITA-E3010:undeclared net/variable `top.b[0].g[-1].w` [in top(rc1)
+== U8f_initA_x
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U8f_initA_x.sv2v.v:7: error: Generate "loop" initialization expression(rc1)
+         vl: NONE
+     post_b: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+     post_d: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+== U8g_initA_div0
+         iv: top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U8g_initA_div0.sv2v.v:7: error: Generate "loop" initialization express(rc1)
+         vl: NONE
+     post_b: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+     post_d: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+== U8i_condA_wide65
+         iv: top.b.g[0] w=0 | top.b.g[1] w=1
+         sv: ERR:U8i_condA_wide65.sv2v.v:7: error: Probable infinite loop detected in g(rc1)
+         vl: ERR:%Error: U8i_condA_wide65.sv:4:5: Unrolling generate loop took too long(rc1)
+     post_b: top.b.g[0] w=0 | top.b.g[1] w=1
+     post_d: top.b.g[0] w=0 | top.b.g[1] w=1
+        pre: top.b.g[0] w=0 | top.b.g[1] w=1
+== U8j_stepA_x
+         iv: top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2
+         sv: ERR:U8j_stepA_x.sv2v.v:7: error: Generate "loop" increment expression cann(rc1)
+         vl: top.b.g[0] w=0
+     post_b: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+     post_d: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+        pre: ERR:VITA-E3009:generate-scope parameter `A` value is not a consta(rc1)
+== W65_back_chain
+         iv: P=18446744073709551618 Q=10000000000000002 | top.g[2]
+         sv: P=18446744073709551618 Q=10000000000000002 | top.g[2]
+         vl: P=18446744073709551618 Q=10000000000000002 | top.g[2]
+     post_b: ERR:VITA-E3009:parameter `P` value is not a foldable constant exp(rc1)
+     post_d: ERR:VITA-E3009:parameter `P` value is not a foldable constant exp(rc1)
+        pre: ERR:VITA-E3009:parameter `P` value is not a foldable constant exp(rc1)

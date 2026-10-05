@@ -1,0 +1,70 @@
+### flc
+  pre594 : L=%0d          1
+  p3 : L=%0d          1
+  pa : L=%0d          1
+  ivl : L=%0d          1
+  s2v : L=%0d          1
+  vl : L=%0d          1
+### fnc
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: undefined name `C` is not a con
+  p3 : !VITA-E3009 parameter `L` value is not a constant: undefined name `C` is not a con
+  pa : !VITA-E3009 parameter `L` value is not a constant: undefined name `C` is not a con
+  ivl : !1 error(s) during elaboration.
+  s2v : L=%0d1
+  vl : L=%0d1
+### fncL
+  pre594 : L=%0d1
+  p3 : L=%0d1
+  pa : L=%0d1
+  ivl : L=%0d1
+  s2v : L=%0d1
+  vl : L=%0d1
+### fnv
+  pre594 : !VITA-E3009 parameter `V` value is not a constant: the replication `{n{…}}` has no
+  p3 : !VITA-E3009 parameter `V` value is not a constant: the replication `{n{…}}` has no
+  pa : !VITA-E3009 parameter `V` value is not a constant: the replication `{n{…}}` has no
+  ivl : V=%0d B=%0d3          2
+  s2v : V=%0d B=%0d3          2
+  vl : V=%0d B=%0d3          2
+### hier
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: a hierarchical reference (`u.P`
+  p3 : !VITA-E3009 parameter `L` value is not a constant: a hierarchical reference (`u.P`
+  pa : !VITA-E3009 parameter `L` value is not a constant: a hierarchical reference (`u.P`
+  ivl : !1 error(s) during elaboration.
+  s2v : !1 error(s) during elaboration.
+  vl : !%Error-HIERPARAM: hier.sv:6:26: Parameter values cannot use hierarchical values 
+### hierrt
+  pre594 : !VITA-E3009 a hierarchical reference (`u.P`) is not allowed in a constant range bo
+  p3 : !VITA-E3009 a hierarchical reference (`u.P`) is not allowed in a constant range bo
+  pa : !VITA-E3009 a hierarchical reference (`u.P`) is not allowed in a constant range bo
+  ivl : !2 error(s) during elaboration.
+  s2v : !2 error(s) during elaboration.
+  vl : vb=5
+### slenL
+  pre594 : L=%0d1
+  p3 : L=%0d1
+  pa : L=%0d1
+  ivl : L=%0d1
+  s2v : L=%0d1
+  vl : L=%0d1
+### w65L
+  pre594 : L=%0d1
+  p3 : L=%0d1
+  pa : L=%0d1
+  ivl : L=%0d1
+  s2v : L=%0d1
+  vl : L=%0d1
+### w65R
+  pre594 : L=%0d0
+  p3 : L=%0d0
+  pa : L=%0d0
+  ivl : L=%0d1
+  s2v : L=%0d1
+  vl : L=%0d1
+### w65l2
+  pre594 : L=%0d1
+  p3 : L=%0d1
+  pa : L=%0d1
+  ivl : L=%0d1
+  s2v : L=%0d1
+  vl : L=%0d1

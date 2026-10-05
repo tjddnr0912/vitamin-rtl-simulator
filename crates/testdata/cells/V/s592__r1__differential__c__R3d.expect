@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__R3d
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/R3d.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_d,pre,pre_st,post_d_st
+verdict: = PRE = iv (silent ok)
+verdict_source: s592/r1/differential/REPORT.md:36
+notes: named at s592/r1/differential/REPORT.md:36
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./R3d.iv.txt | 51 bytes
+@bits=4
+R3d.sv:16: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./R3d.vl.txt | 91 bytes
+%Error: R3d.sv:15:46: Can't find definition of 'b'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./R3d.vlb.txt | 348 bytes
+%Error: R3d.sv:15:46: Can't find definition of 'b'
+                    : ... note: In instance 'top'
+   15 |   initial #1 $display("@bits=%0d", $bits(g.b.w));
+      |                                              ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./R3d.sv.txt | 55 bytes
+@bits=4
+R3d.sv2v.v:19: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_d] | ./R3d.postd.txt | 178 bytes
+@bits=4
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [pre] | ./R3d.pre.txt | 178 bytes | identical to block 5
+=== end

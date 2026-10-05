@@ -1,0 +1,142 @@
+g01a_hdr_sub_p         rc=0   W4031=0 sites=f:frame:0              out=[W=7 ] 
+g01a_hdr_sub_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `f(…)` has no constant-fold arm
+g01b_hdr_top_p         rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+g01b_hdr_top_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g01c_hdr_ovr_p         rc=0   W4031=0 sites=f:frame:0              out=[W=5 bw=32 T=6 ] 
+g01c_hdr_ovr_u         rc=0   W4031=0 sites=f:frame:0              out=[W=5 bw=32 T=6 ] 
+g01d_body_ovr_p        rc=0   W4031=0 sites=f:frame:0              out=[W=5 bw=32 ] 
+g01d_body_ovr_u        rc=0   W4031=0 sites=f:frame:0              out=[W=5 bw=32 ] 
+g02a_ifc_hdr_p         rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+g02a_ifc_hdr_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g02b_ifc_body_p        rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+g02b_ifc_body_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g02c_ifc_real_p        rc=0   W4031=0 sites=f:frame:0              out=[R=7.00 ] 
+g02c_ifc_real_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: `f(…)` has no constant-fold arm
+g02d_ifc_lp_p          rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+g02d_ifc_lp_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g03a_untyped_p         rc=0   W4031=0 sites=f:frame:0              out=[P=7 b=4 ] 
+g03a_untyped_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g03b_typed8_p          rc=0   W4031=0 sites=f:frame:0              out=[P=07 b=8 ] 
+g03b_typed8_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g03c_real_p            rc=0   W4031=0 sites=f:frame:0              out=[R=7.00 ] 
+g03c_real_u            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: `f(…)` has no constant-fold arm
+g04_gen_enum_p         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].A` [in top.g]
+g04_gen_enum_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].A` [in top.g]
+g04b_gen_enum2_p       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].B` [in top.g]
+g04b_gen_enum2_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.g[0].B` [in top.g]
+g05a_inst_arr_p        rc=0   W4031=0 sites=f:frame:0              out=[hit top.u[7] ] 
+g05a_inst_arr_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: instance array `u` range is not a constant [in top]
+g05b_inst_child_p      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: instance array `u`: a child port width does not const-fold [in top]
+g05b_inst_child_u      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: instance array `u`: a child port width does not const-fold [in top]
+g05c_formal_arr_p      rc=0   W4031=0 sites=f:frame:0,sz:frame:1   out=[s=817 ] 
+g05c_formal_arr_u      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: function `sz`: unpacked-array formal `a` is unsupported — a non-consta
+g05d_str_arr_p         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.s` [in top]
+g05d_str_arr_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g05e_lp_range_p        rc=0   W4031=0 sites=f:frame:0              out=[P=ff b=8 ] 
+g05e_lp_range_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05f_enum_base_p       rc=0   W4031=0 sites=f:frame:0              out=[b=8 e=ff ] 
+g05f_enum_base_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05g_vcd_p             rc=0   W4031=0 sites=f:frame:0              out=[done ] 
+g05g_vcd_u             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05h_neg_lsb_p         rc=0   W4031=0 sites=f:frame:0              out=[b=10 l=7 r=-2 v=3fe ] 
+g05h_neg_lsb_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05i_asc_lsb_p         rc=0   W4031=0 sites=f:frame:0              out=[b=8 l=0 r=7 v0=0 v7=1 ] 
+g05i_asc_lsb_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05j_lp_arr_p          rc=0   W4031=0 sites=f:frame:0              out=[n=8 a7=17 q=17 ] 
+g05j_lp_arr_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `Q` value is not a constant: undefined name `A` is not a con
+g05k_task_local_p      rc=0   W4031=0 sites=f:frame:0,t:frame:1    out=[tb=8 x=ff ] 
+g05k_task_local_u      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05l_task_susp_p       rc=0   W4031=0 sites=f:frame:0,t:frame:1    out=[tb=8 x=ff ] 
+g05l_task_susp_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05m_port_unp_p        rc=0   W4031=0 sites=f:frame:0              out=[l=7 r=0 i=1 p7=1 p0=0 ] 
+g05m_port_unp_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05n_net_unp_p         rc=0   W4031=0 sites=f:frame:0              out=[l=7 r=0 i=1 u7=1 u0=0 ] 
+g05n_net_unp_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05o_task_unp_p        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an assignment pattern `'{…}` is supported only as the whole right-hand
+g05o_task_unp_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an assignment pattern `'{…}` is supported only as the whole right-hand
+g05p_md_packed_p       rc=0   W4031=0 sites=f:frame:0              out=[b2=8 b3=8 m2=c m3=c e=c3 ] 
+g05p_md_packed_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g05q_bits_prescan_p    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `B` value is not a constant: undefined name `late` is not a 
+g05q_bits_prescan_u    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `B` value is not a constant: undefined name `late` is not a 
+g05r_str_arr2_p        rc=0   W4031=0 sites=f:frame:0              out=[s7=h s0=a ] 
+g05r_str_arr2_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g05s_str_arr3_p        rc=0   W4031=0 sites=f:frame:0              out=[s7=z ] 
+g05s_str_arr3_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g05t_task_unp2_p       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: enum method `x.first` is unavailable: the enum type of `x` was not reg
+g05t_task_unp2_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: frame task `t` body uses an unpacked ARRAY declared local to this task
+g05u_bits_prescan2_p   rc=0   W4031=0 sites=f:frame:0              out=[B=8 ] 
+g05u_bits_prescan2_u   rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `B` value is not a constant: undefined name `early` is not a
+g05v_task_unp3_p       rc=0   W4031=0 sites=f:frame:0,t:frame:1    out=[x7=1 x0=0 l=7 i=1 ] 
+g05v_task_unp3_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: frame task `t` body uses an unpacked ARRAY declared local to this task
+g05w_inst_hdr_p        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `f(…)` has no constant-fold arm
+g05w_inst_hdr_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `f(…)` has no constant-fold arm
+g06a_ur_bits_p         rc=0   W4031=0 sites=f:frame:0              out=[b=28 ] 
+g06a_ur_bits_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g06b_ur_query_p        rc=0   W4031=0 sites=f:frame:0              out=[l=0 r=6 i=-1 s=7 d=2 ] 
+g06b_ur_query_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+g06c_str_n_p           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.s` [in top]
+g06c_str_n_u           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g06d_formal_n_p        rc=0   W4031=0 sites=f:frame:0,sz:frame:1   out=[s=716 ] 
+g06d_formal_n_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: function `sz`: unpacked-array formal `a` is unsupported — a non-consta
+g06e_blk_str_p         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.s` [in top]
+g06e_blk_str_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g06f_frame_str_p       rc=0   W4031=0 sites=f:frame:0,t:frame:1    out=[n=7 s6=z ] 
+g06f_frame_str_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: frame task `t` body uses an unpacked ARRAY declared local to this task
+g06g_str_n2_p          rc=0   W4031=0 sites=f:frame:0              out=[s6=g s0=a ] 
+g06g_str_n2_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g06h_str_n3_p          rc=0   W4031=0 sites=f:frame:0              out=[s6=z ] 
+g06h_str_n3_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g06i_blk_str2_p        rc=0   W4031=0 sites=f:frame:0              out=[s6=g s0=a ] 
+g06i_blk_str2_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a string variable takes no packed/unpacked dimensions (v7) [in top]
+g06j_ur_bits_param_p   rc=0   W4031=0 sites=f:frame:0              out=[B=28 ] 
+g06j_ur_bits_param_u   rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `B` value is not a constant: undefined name `u` is not a con
+g07a_cast_lp_p         rc=0   W4031=0 sites=f:frame:0              out=[P=127 ] 
+g07a_cast_lp_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g07b_cast_bits_p       rc=0   W4031=0 sites=f:frame:0              out=[b=7 ] 
+g07b_cast_bits_u       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: size cast width must be a positive constant expression [in top]
+g07c_cast_rpt_p        rc=0   W4031=0 sites=f:frame:0              out=[n=15 ] 
+g07c_cast_rpt_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: size cast width must be a positive constant expression [in top]
+g08a_hier_psr_p        rc=0   W4031=0 sites=f:frame:1              out=[r=4d ] 
+g08a_hier_psr_u        rc=0   W4031=0 sites=f:frame:1              out=[r=1 ] 
+g08b_hier_psw_p        rc=0   W4031=0 sites=f:frame:1              out=[v=ab80 ] 
+g08b_hier_psw_u        rc=0   W4031=0 sites=f:frame:1              out=[v=0000 ] 
+g08c_hier_prr_p        rc=0   W4031=0 sites=f:frame:1              out=[r=cd ] 
+g08c_hier_prr_u        rc=0   W4031=0 sites=f:frame:1              out=[r=1 ] 
+g08d_hier_prw_p        rc=0   W4031=0 sites=f:frame:1              out=[v=ab00 ] 
+g08d_hier_prw_u        rc=0   W4031=0 sites=f:frame:1              out=[v=0000 ] 
+g09a_reg_rep_p         rc=0   W4031=0 sites=f:frame:1              out=[r=40 ] 
+g09a_reg_rep_u         rc=0   W4031=0 sites=f:frame:1              out=[r=00 ] 
+g09b_reg_ps_p          rc=0   W4031=0 sites=f:frame:1              out=[r=40 ] 
+g09b_reg_ps_u          rc=0   W4031=0 sites=f:frame:1              out=[r=01 ] 
+g09c_reg_pr_p          rc=0   W4031=0 sites=f:frame:1              out=[r=40 ] 
+g09c_reg_pr_u          rc=0   W4031=0 sites=f:frame:1              out=[r=01 ] 
+g09d_reg_hpr_p         rc=0   W4031=0 sites=f:frame:1              out=[r=40 ] 
+g09d_reg_hpr_u         rc=0   W4031=0 sites=f:frame:1              out=[r=01 ] 
+g09e_reg_ca_p          rc=0   W4031=0 sites=f:frame:1              out=[r=40 ] 
+g09e_reg_ca_u          rc=0   W4031=0 sites=f:frame:1              out=[r=00 ] 
+g10a_neg_cnt_p         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a replication count may not be negative (IEEE §11.4.12.2) [in top]
+g10a_neg_cnt_u         rc=0   W4031=0 sites=f:frame:1              out=[r=00 ] 
+g10b_zero_cnt_p        rc=0   W4031=0 sites=f:frame:1              out=[r=05 ] 
+g10b_zero_cnt_u        rc=0   W4031=0 sites=f:frame:1              out=[r=05 ] 
+g11a_md_pr_p           rc=0   W4031=0 sites=f:frame:0              out=[m=89abcdef ] 
+g11a_md_pr_u           rc=0   W4031=0 sites=f:frame:1              out=[m=1 ] 
+g11b_md3_p             rc=0   W4031=0 sites=f:frame:0              out=[m=fedcba98 ] 
+g11b_md3_u             rc=0   W4031=0 sites=f:frame:1              out=[m=0 ] 
+g11c_md_prw_p          rc=0   W4031=0 sites=f:frame:0              out=[m=0123456700000000 ] 
+g11c_md_prw_u          rc=0   W4031=0 sites=f:frame:1              out=[m=0000000000000000 ] 
+g11d_md3w_p            rc=0   W4031=0 sites=f:frame:0              out=[m=0123456789abcdef0000000076543210 ] 
+g11d_md3w_u            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: nested lvalue select (v1: single-level) [in top]
+g12a_elab_s_p          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an elaboration `$info` argument is not a constant this pass can render
+g12a_elab_s_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an elaboration `$info` argument is not a constant this pass can render
+g12b_ifc_elab_p        rc=0   W4031=0 sites=f:frame:0              out=[] 
+g12b_ifc_elab_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an elaboration `$info` argument is not a constant this pass can render
+g12c_fatal1_p          rc=1   W4031=0 sites=no-runjson             out=[] VITA-F3005] F-ELAB-USER-FATAL: boom [in top]
+g12c_fatal1_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-F3005] F-ELAB-USER-FATAL: boom [in top]
+g12d_elab_mod_p        rc=0   W4031=0 sites=f:frame:0              out=[] 
+g12d_elab_mod_u        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an elaboration `$info` argument is not a constant this pass can render
+g12f_elab_s3_p         rc=0   W4031=0 sites=g:frame:0              out=[] 
+g12f_elab_s3_u         rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: an elaboration `$info` argument is not a constant this pass can render
+g13a_lp_rpt_p          rc=0   W4031=0 sites=f:frame:0              out=[P=7 n=7 ] 
+g13a_lp_rpt_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+g13b_rpt_lp_p          rc=0   W4031=0 sites=f:frame:0              out=[P=7 n=7 ] 
+g13b_rpt_lp_u          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm

@@ -1,0 +1,53 @@
+== Fa
+  PRE: L=0
+  post_a: L=1
+  IVL: L=0
+  VL: L=x
+  S2V: L=x
+  post_b: L=0 
+== Fc
+  PRE: L1=0 U=4294967292 B=32
+  post_a: L1=0 U=252 B=8
+  IVL: L1=0 U=252 B=9
+  VL: L1=X U=252 B=8
+  S2V: L1=X U=252 B=8
+  post_b: L1=0 U=252 B=8 
+== Fk
+  PRE: U=4294967292 B=32
+  post_a: U=252 B=8
+  IVL: U=252 B=9
+  VL: U=252 B=8
+  S2V: U=252 B=8
+  post_b: U=252 B=8 
+== Pr
+  PRE: Pr.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pf(…)` has no constant-fold arm [in t]
+  PRE: errors=1 warnings=1 notes=0
+  PRE: rc=1
+  post_a: Pr.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pf(…)` has no constant-fold arm [in t]
+  post_a: errors=1 warnings=1 notes=0
+  post_a: rc=1
+  IVL: L=1 r=1
+  VL: L=1 r=1
+  S2V: L=1 r=1
+  post_b: Pr.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pf(…)` has no constant-fold arm [in t] errors=1 warnings=1 notes=0 
+== Pd
+  PRE: Pd.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pd(…)` has no constant-fold arm [in t]
+  PRE: errors=1 warnings=1 notes=0
+  PRE: rc=1
+  post_a: Pd.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pd(…)` has no constant-fold arm [in t]
+  post_a: errors=1 warnings=1 notes=0
+  post_a: rc=1
+  IVL: L=1 r=1
+  VL: L=1 r=1
+  S2V: Pd.s2v.v:12: error: The function p_pd has been called with missing/empty parameters.
+  S2V: Pd.s2v.v:12:      : Verilog doesn't allow passing empty parameters to functions.
+  S2V: 1 error(s) during elaboration.
+  S2V: rc=1
+  post_b: Pd.sv:8:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `p.pd(…)` has no constant-fold arm [in t] errors=1 warnings=1 notes=0 
+== Uu
+  PRE: L=0 r=1
+  post_a: L=1 r=1
+  IVL: L=1 r=1
+  VL: L=1 r=1
+  S2V: L=1 r=1
+  post_b: L=0 r=1 

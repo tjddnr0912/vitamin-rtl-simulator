@@ -1,0 +1,143 @@
+parser, cli: one Info line says `unique` / `unique0` overlaps are not checked (§3.b unique-overlap-note)
+
+§4.5.586 — ROADMAP §5.2 row 1, §3.b unique-overlap-note (the external
+report). Oracles: iverilog 13.0 -g2012, vvp -n (prints `t.sv:6: vvp.tgt
+sorry: Case unique/unique0 qualities are ignored.` at compile time, once
+per elaborated case site; rejects `unique if`); verilator 5.052 --binary
+--timing --assert, run with +verilator+error+limit+1000 (checks the
+overlap at run time, once per evaluation); IEEE 1800-2017 §12.4.2 /
+§12.5.3 (recalled, no local copy).
+
+Bug: vita does not check a `unique` / `unique0` case or if for more than
+one match (a documented cut and a §8 non-goal: the lowered cascade is
+first-match-wins), and nothing said so, so a clean log read as "checked":
+an overlapping `unique casez` (r = 2'b11 against `2'b?1` and `2'b1?`) ran
+the first item, `y=1`, with no line about it, where verilator reports
+`[1] %Error: t.sv:6: Assertion failed in t: unique case, but multiple
+matches found for '2'h3'` and iverilog prints its sorry at t.sv:6.
+
+The rule:
+- One line, `I-PARSE-UNIQUE-OVERLAP-UNCHECKED` / `VITA-I2021`, at the first
+  `unique` or `unique0` qualifier of the parse in token order, on case,
+  casez, casex, case inside and if. `parse_unique_priority`
+  (hdl-parser/src/assertions.rs; its one caller is the statement funnel,
+  stmt.rs:165) records it through `Parser::record_unique_qualifier`
+  (lib.rs) as `ParseWarnKind::UniqueOverlapUnchecked`. The latch keys on
+  the kind, so the first site wins and "once" has one home; one `Parser`
+  per parse and no statement-level backtracking, so each qualifier token
+  is visited once. Token order is the expanded buffer's: command-line file
+  order, `include`d text where it is included, a macro at its call site; a
+  qualifier `ifdef`-ed out is not written. A site never reached still
+  counts (an uninstantiated module under --top, an untaken generate
+  branch, an uncalled function); iverilog prints for the uncalled function
+  only.
+- `priority` never prints it (IEEE defines no multiple-match rule for
+  it), nor does vita's non-standard `priority0`.
+- Severity Info: `info[VITA-I2021]`, counted under `notes=`, dropped by
+  -Wno-I2021, -Wno-VITA-I2021 or the mnemonic, never promoted (-Werror and
+  -Werror=I2021 leave exit 0), exit code unchanged. Not Note: manual 007
+  defines a note as the follow-on of the error above it, carrying that
+  error's code, and doc15's severity letters are E/W/I/F. Not Warning:
+  -Werror would then fail every design with a qualifier (ibex has 123
+  `unique case` lines).
+- Band 2xxx, because the parse stage emits it; 2004–2020 are reserved in
+  doc15 Appendix A, so the number is 2021.
+- Location: file:line:col of the qualifier token (`loc_from_span`), the
+  line iverilog names (verilator names the `case` line).
+- `frontend_pp_to_unit_mapped` (cli/src/frontend.rs) holds the span from
+  the parse-warning loop and emits the line after every parse-stage
+  return: a preprocessor error, a lex or syntax error and `no design units
+  found in source` print exactly PRE's stderr. Anything that fails later
+  still prints it: an elaboration error, a duplicate design unit (E2001,
+  raised by elaborate), a design with no top module (E3009), a
+  -Werror-promoted warning, `$fatal`. W2004 stays ahead of the parse-error
+  gate, so it prints before I2021.
+- Printed by `vita` and `vcmp`, once per vcmp invocation (the
+  work-library flow included); `velab` and `vrun` never parse and never
+  print it.
+- crates/cli/tests/always_comb_t0_util/mod.rs `diags()` drops I2021 beside
+  W1017: both are once per parse and print at `vcmp`, never at a staged
+  `vrun`, so keeping it broke 12 pins and `staged_matches`.
+
+No AST, IR, .vu, .velab or SimIr change; format_version 35 unchanged. A
+design with no `unique` / `unique0` qualifier never calls the helper, so
+its stderr is byte-identical as well. With one: stdout, exit code and
+results.jsonl unchanged, .vu and .velab byte-identical to PRE (so is the
+run, VCD included); stderr gains exactly one line and `notes=0` becomes
+`notes=1`. ibex, the only corpus workload with a qualifier: stdout
+digest 13b2ddfcd551ba2f identical, exit 0 (the round-1 POST binary).
+
+Measured (PRE = fc1fc07e release, POST = the round-2 binary, which the
+final diff changes in comments and docs only; a lane's stdout and exit
+equal PRE's, and its stderr differs by the I2021 line and the notes count
+only, unless said):
+- native, interp, vm, -q, --log (the line in run.log), --obs-dir
+  (run.json differs in timings and utc_unix_s only): one line; interp =
+  vm = native. -Werror: the line, exit 0. -Wno-I2021: no line;
+  -Werror=I2021: the line; both exit 0 (PRE exit 3: no such code).
+- staged multicall and separate-bins vcmp -> velab -> vrun: vcmp 1, velab
+  0, vrun 0. Work library (two vcmp --work, velab -L, vrun): one line per
+  vcmp. JIT with VITA_JIT=1 and the product build --no-default-features:
+  equal to default.
+- One line at the expected site: an uninstantiated module under --top, an
+  untaken generate branch, an uncalled function, an include, a macro, -D,
+  both argv orders, `priority casez` before `unique0 case` (the unique0),
+  an elaboration error, a W2004 before the first `unique`.
+- No line, stderr = PRE: a syntax error, an `ifdef`-ed out qualifier,
+  `priority` only, `q.unique()`, a constraint `unique {}` (E2002, as PRE),
+  a source holding only a compilation-unit function on vita and vcmp, the
+  four examples.
+
+Review: 2 rounds, differential + soundness lenses.
+- Round 1: both PASS, no BLOCKING. Four non-blocking findings, fixed: F1
+  the line printed ahead of the `no design units found in source` return
+  (a compilation-unit-only source printed I2021, then E2002; now PRE's
+  bytes on vita and vcmp); F2 / N1 the comment's "iverilog prints its
+  sorry only for a design it compiles" held for parse failures only (an
+  elaboration error prints I2021 and iverilog no sorry), so the comment
+  and the docs now say which failures print it; F3 a latch keyed on any
+  parse warning survived the new file and the workspace gate, so a test
+  puts a W2004 select ahead of the first `unique`; P3 the docs filed
+  `priority0` under IEEE, now "vita's non-standard `priority0`".
+- Round 2 (delta): both PASS; 0 of 29 round-1 runs moved; the lens's two
+  mutants (latch on any warning, emit above the no-design-unit return) are
+  killed. Text nits fixed: the docs and the frontend comment name E2001
+  and a design with no top module as failures that still print the line;
+  the `priority0` sentences; an assertions.rs comment that filed
+  `priority0` under §12.4.2.
+
+Tests: crates/cli/tests/unique_overlap_note.rs (iverilog and verilator
+text above every pin): the whole line; unique0 and unique if; priority
+alone silent; the first unique qualifier, not the first qualifier; two
+sites, one line; argv order; include, macro, ifdef; a qualifier on its own
+line; unreached sites; a syntax error and a compilation-unit-only source
+print PRE's bytes on vita and vcmp; W2004 ahead of the first `unique`;
+order W2004, I2021, W1017; Info, -Wno-, -Werror, -q; every backend, staged
+at vcmp only; `q.unique()`. diag bijection 70 -> 71. Mutants killed: 18,
+the 16 of the battery on the new file (the latch on priority too, on
+`unique` only, no once-latch, last site wins, emitted inside the pre-gate
+loop, Warning, Note, no location, the `case` / `if` keyword span, the arm
+deleted, case arm only, if arm only, vcmp drops it, a token scan, emitted
+above the no-design-unit return, a latch on any warning) and the
+soundness lens's own builds of the last two. Gate: nextest 9048 passed
+(PRE 9032), 15 skipped; doctests, clippy, fmt and the product axis clean.
+
+Docs: manual 006 §1.4 (the rule, iverilog and verilator), manual 003 (two
+rows), manual 007 (a 2xxx row; 70 -> 71 codes, 3 Info, 34 suppressible;
+two stale 68s -> 71), manual 004 (stale 68 -> 71), README (70 -> 71),
+CHANGELOG; doc15 entry VITA-I2021 and Appendix A's count.
+
+Out of scope, recorded in PROBE_CATALOG: vita accepts the non-IEEE
+`priority0 if` / `priority0 case` (both oracles: syntax error); `logic
+priority0;` is E2002 (both accept it); a design-unit lifetime (`program
+automatic p`, `module automatic top;`) is E2002 `expected identifier,
+found keyword 'automatic'` (both run it). Not chased: an interface-only
+design is E3009 `no top module to elaborate` (verilator refuses it too,
+iverilog elaborates it: a split); `` `line `` is ignored, so the line
+names the physical file like every location (§3.b line-directive);
+verilator runs no branch on a `unique if` violation (vita = IEEE's first
+match). One line per parse where iverilog prints one per elaborated site
+is the row's decision.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

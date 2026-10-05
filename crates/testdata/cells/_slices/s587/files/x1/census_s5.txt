@@ -1,0 +1,238 @@
+== bind_hdr
+  p.PRE   : top.t.c W=3 | rc=0
+  p.s5    : top.t.c W=3 | rc=0
+  u.PRE   : top.t.c W=3 | rc=0
+  u.s5    : top.t.c W=3 | rc=0
+  p.ivl   : bind_hdr_p.sv:16: syntax error | I give up. | rc=2
+  p.vl    : top.t.c W=3 | rc=0
+== cls_rt
+  p.PRE   : VITA-E2002:expected identifier, found '::' | VITA-E2002:expected '(' before port connections, found '::' | VITA-E2002:expected ';' after instantiation, found identifier 'C' | rc=1
+  p.s5    : VITA-E2002:expected identifier, found '::' | VITA-E2002:expected '(' before port connections, found '::' | VITA-E2002:expected ';' after instantiation, found identifier 'C' | rc=1
+  u.PRE   : VITA-E2002:expected identifier, found '::' | VITA-E2002:expected '(' before port connections, found '::' | VITA-E2002:expected ';' after instantiation, found identifier 'C' | rc=1
+  u.s5    : VITA-E2002:expected identifier, found '::' | VITA-E2002:expected '(' before port connections, found '::' | VITA-E2002:expected ';' after instantiation, found identifier 'C' | rc=1
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== gen_fn
+  p.PRE   : P=7 bw=8 | rc=0
+  p.s5    : P=7 bw=8 | rc=0
+  u.PRE   : VITA-E3009:generate-scope parameter `P` value is not a constant: `f(…)` has no co | VITA-E3009:a function call that does not fold to a constant is not allowed in a c | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  u.s5    : VITA-E3009:generate-scope parameter `P` value is not a constant: `f(…)` has no co | VITA-E3009:a function call that does not fold to a constant is not allowed in a c | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  p.ivl   : P=3 bw=4 | rc=0
+  p.vl    : %Error: gen_fn_p.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4. | %Error: gen_fn_p.sv:8:24: Expecting expression to be constant, but can't determine constant for FUNC | %Error: Exiting due to 2 error(s) | build_rc=1
+== gen_fn_ret
+  p.PRE   : VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  p.s5    : VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  u.PRE   : VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co | VITA-E3009:a function call that does not fold to a constant is not allowed in a c | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  u.s5    : VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co | VITA-E3010:undeclared net/variable `top.g[0].P` [in top.g] | rc=1
+  p.ivl   : P=8 v=8 | rc=0
+  p.vl    : %Error: gen_fn_ret_p.sv:7:28: Constant function may not be declared under generate (IEEE 1800-2023 1 | %Error: gen_fn_ret_p.sv:8:31: Expecting expression to be constant, but can't determine constant for  | %Error: gen_fn_ret_p.sv:8:39: Constant function may not be declared under generate (IEEE 1800-2023 1 | %Error: gen_fn_ret_p.sv:9:24: Expecting expression to be constant, but can't determine constant for 
+== hier_rt
+  p.PRE   : v=8 | rc=0
+  p.s5    : v=8 | rc=0
+  u.PRE   : v=8 | rc=0
+  u.s5    : v=8 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== hier_wq
+  p.PRE   : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  p.s5    : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  u.PRE   : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  u.s5    : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  p.ivl   : B=4 | rc=0
+  p.vl    : B=4 | rc=0
+== ia_body
+  p.PRE   : top.u[1] L=3 bq=4 | top.u[0] L=3 bq=4 | rc=0
+  p.s5    : top.u[1] L=3 bq=4 | top.u[0] L=3 bq=4 | rc=0
+  u.PRE   : top.u[1] L=3 bq=4 | top.u[0] L=3 bq=4 | rc=0
+  u.s5    : top.u[1] L=3 bq=4 | top.u[0] L=3 bq=4 | rc=0
+  p.ivl   : top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4 | rc=0
+  p.vl    : top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4 | rc=0
+== ia_hdr
+  p.PRE   : top.u[1] W=3 b=4 p=5 | top.u[0] W=3 b=4 p=5 | rc=0
+  p.s5    : top.u[1] W=3 b=4 p=5 | top.u[0] W=3 b=4 p=5 | rc=0
+  u.PRE   : VITA-E3009:parameter `W` value is not a constant: `f(…)` has no constant-fold arm | VITA-E3009:instance array `u`: port `p` width 1 expects a connection of width 1 o | rc=1
+  u.s5    : VITA-E3009:parameter `W` value is not a constant: `f(…)` has no constant-fold arm | VITA-E3009:instance array `u`: port `p` width 1 expects a connection of width 1 o | rc=1
+  p.ivl   : top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a | rc=0
+  p.vl    : top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a | rc=0
+== ia_port
+  p.PRE   : top.u[1] b=4 p=5 | top.u[0] b=4 p=5 | rc=0
+  p.s5    : top.u[1] b=4 p=5 | top.u[0] b=4 p=5 | rc=0
+  u.PRE   : VITA-E3009:instance array `u`: a child port width does not const-fold [in top] | rc=1
+  u.s5    : VITA-E3009:instance array `u`: a child port width does not const-fold [in top] | rc=1
+  p.ivl   : top.u[0] b=4 p=5 | top.u[1] b=4 p=a | rc=0
+  p.vl    : top.u[0] b=4 p=5 | top.u[1] b=4 p=a | rc=0
+== if_own
+  p.PRE   : bs=4 L=3 | rc=0
+  p.s5    : bs=4 L=3 | rc=0
+  u.PRE   : bs=4 L=3 | rc=0
+  u.s5    : bs=4 L=3 | rc=0
+  p.ivl   : bs=4 L=3 | rc=0
+  p.vl    : bs=4 L=3 | rc=0
+== if_port
+  p.PRE   : bs=4 | rc=0
+  p.s5    : bs=4 | rc=0
+  u.PRE   : bs=4 | rc=0
+  u.s5    : bs=4 | rc=0
+  p.ivl   : if_port_p.sv:5: syntax error | if_port_p.sv:5: Errors in port declarations. | rc=2
+  p.vl    : bs=4 | rc=0
+== if_rt_ret
+  p.PRE   : v=8 | rc=0
+  p.s5    : v=8 | rc=0
+  u.PRE   : v=8 | rc=0
+  u.s5    : v=8 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== if_wq
+  p.PRE   : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  p.s5    : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  u.PRE   : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  u.s5    : VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin | rc=1
+  p.ivl   : B=4 | rc=0
+  p.vl    : B=4 | rc=0
+== imp_ce_ret
+  p.PRE   : P=232 | rc=0
+  p.s5    : P=232 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm | VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm | rc=1
+  p.ivl   : P=8 | rc=0
+  p.vl    : P=8 | rc=0
+== imp_rt_ret
+  p.PRE   : v=232 | rc=0
+  p.s5    : v=232 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : v=232 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== imp_two_pkgs
+  p.PRE   : P=232 v=232 | rc=0
+  p.s5    : P=232 v=232 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | rc=1
+  p.ivl   : P=8 v=8 | rc=0
+  p.vl    : P=8 v=8 | rc=0
+== inst_hdr
+  p.PRE   : top.u W=3 b=4 p=5 | rc=0
+  p.s5    : top.u W=3 b=4 p=5 | rc=0
+  u.PRE   : top.u W=3 b=4 p=5 | rc=0
+  u.s5    : top.u W=3 b=4 p=5 | rc=0
+  p.ivl   : inst_hdr_p.sv:11: warning: Port 1 (p) of module child expects 4 bit(s), given 8. | inst_hdr_p.sv:11:        : Pruning 4 high bits of the expression. | top.u W=3 b=4 p=5 | rc=0
+  p.vl    : top.u W=3 b=4 p=5 | rc=0
+== pk_ce_body
+  p.PRE   : P=1003 | rc=0
+  p.s5    : P=1003 | rc=0
+  u.PRE   : P=1003 | rc=0
+  u.s5    : P=1003 | rc=0
+  p.ivl   : P=1003 | rc=0
+  p.vl    : P=1003 | rc=0
+== pk_ce_cast
+  p.PRE   : P=0 | rc=0
+  p.s5    : P=0 | rc=0
+  u.PRE   : P=0 | rc=0
+  u.s5    : P=0 | rc=0
+  p.ivl   : P=0 | rc=0
+  p.vl    : P=0 | rc=0
+== pk_ce_dflt
+  p.PRE   : P=1007 v=1003 | rc=0
+  p.s5    : P=1007 v=1003 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | rc=1
+  u.s5    : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | rc=1
+  p.ivl   : P=1003 v=1003 | rc=0
+  p.vl    : %Error: pk_ce_dflt_p.sv:3:26: Duplicate declaration of function: 'h__Vtcwrap_2' | %Error: Exiting due to 1 error(s) | build_rc=1
+== pk_ce_fml
+  p.PRE   : P=1000 | rc=0
+  p.s5    : P=1000 | rc=0
+  u.PRE   : P=1000 | rc=0
+  u.s5    : P=1000 | rc=0
+  p.ivl   : P=8 | rc=0
+  p.vl    : P=8 | rc=0
+== pk_ce_loc
+  p.PRE   : P=1000 | rc=0
+  p.s5    : P=1000 | rc=0
+  u.PRE   : P=1000 | rc=0
+  u.s5    : P=1000 | rc=0
+  p.ivl   : P=8 | rc=0
+  p.vl    : P=8 | rc=0
+== pk_ce_ret
+  p.PRE   : P=232 | rc=0
+  p.s5    : P=232 | rc=0
+  u.PRE   : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | rc=1
+  u.s5    : VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a | rc=1
+  p.ivl   : P=8 | rc=0
+  p.vl    : P=8 | rc=0
+== pk_fr_loc
+  p.PRE   : v=232 | rc=0
+  p.s5    : v=232 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : v=232 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== pk_param
+  p.PRE   : b=8 | rc=0
+  p.s5    : b=8 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : b=8 | rc=0
+  p.ivl   : b=8 | rc=0
+  p.vl    : b=8 | rc=0
+== pk_rt_cast
+  p.PRE   : v=-24 | rc=0
+  p.s5    : v=-24 | rc=0
+  u.PRE   : VITA-E3009:size cast width must be a positive constant expression [in top.$func$q | rc=1
+  u.s5    : VITA-E3009:size cast width must be a positive constant expression [in top.$func$q | rc=1
+  p.ivl   : v=0 | rc=0
+  p.vl    : v=0 | rc=0
+== pk_rt_fml
+  p.PRE   : v=232 | rc=0
+  p.s5    : v=232 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : v=232 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== pk_rt_loc
+  p.PRE   : v=232 | rc=0
+  p.s5    : v=232 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : v=232 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== pk_rt_psel
+  p.PRE   : v=000000cd | rc=0
+  p.s5    : v=000000cd | rc=0
+  u.PRE   : v=00000001 | rc=0
+  u.s5    : v=00000001 | rc=0
+  p.ivl   : v=0000000d | rc=0
+  p.vl    : v=0000000d | rc=0
+== pk_rt_rep
+  p.PRE   : v=0000007f | rc=0
+  p.s5    : v=0000007f | rc=0
+  u.PRE   : v=00000000 | rc=0
+  u.s5    : v=00000000 | rc=0
+  p.ivl   : v=00000007 | rc=0
+  p.vl    : v=00000007 | rc=0
+== pk_rt_ret
+  p.PRE   : v=232 | rc=0
+  p.s5    : v=232 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : v=232 | rc=0
+  p.ivl   : v=8 | rc=0
+  p.vl    : v=8 | rc=0
+== pk_task_loc
+  p.PRE   : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  p.s5    : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  u.PRE   : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  u.s5    : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  p.ivl   : pk_task_loc_p.sv:15: syntax error | pk_task_loc_p.sv:15: error: Malformed statement | pk_task_loc_p.sv:15: syntax error | pk_task_loc_p.sv:15: error: Invalid module item.
+  p.vl    : v=8 | rc=0
+== pk_task_susp
+  p.PRE   : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  p.s5    : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  u.PRE   : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  u.s5    : VITA-E2002:expected '=' or '<=' after lvalue, found '::' | rc=1
+  p.ivl   : pk_task_susp_p.sv:15: syntax error | pk_task_susp_p.sv:15: error: Malformed statement | pk_task_susp_p.sv:15: syntax error | pk_task_susp_p.sv:15: error: Invalid module item.
+  p.vl    : v=8 | rc=0
+== pk_wq
+  p.PRE   : B=8 | rc=0
+  p.s5    : B=8 | rc=0
+  u.PRE   : VITA-E3009:a function call that does not fold to a constant is not allowed in a c | rc=1
+  u.s5    : B=8 | rc=0
+  p.ivl   : B=4 | rc=0
+  p.vl    : B=4 | rc=0

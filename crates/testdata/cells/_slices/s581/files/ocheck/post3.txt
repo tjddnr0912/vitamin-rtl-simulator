@@ -1,0 +1,429 @@
+NEW=oracle             post3 s580/census/c/C10.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/c/C11.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/c/C12.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/c/C13.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/c/C28.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/census/c/C29.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/c/C31.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/z/Z04.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/census/z/Z05.sv   iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/fx/F12.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/fx/F17a.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/fx/F17b.sv 
+NEW=PRE(stdout,rc)     pre s580/fx/G1.sv 
+NEW=oracle             post3 s580/fx/G2.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW!=oracle            post3 s580/r2/CD1.sv   iv:=NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW A=1 A2=0 M=1 M2=0
+      SV  A=1 A2=0 M=0 M2=0
+NEW=PRE(stdout,rc)     pre s580/r2/SL1.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/SL1q.sv 
+NEW=oracle             post3 s580/r2/fx2/H01.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     neither s580/r2/fx2/H02.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/fx2/H02q.sv 
+NEW!=oracle            neither s580/r2/fx2/H03.sv   iv:refuse sv2v:!NEW pre_rc=0 new_rc=0
+      NEW L 0 0 0 bits 2 2 1 size 2
+      SV  L 0 0 0 bits 2 2 2 size 2
+NEW=oracle             post3 s580/r2/fx2/H07.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/fx2/H08.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S01A.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S01B.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S01G.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S01L.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S01O.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S02A.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S02B.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S02G.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S02L.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S02O.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S03A.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S03B.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S03G.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S03L.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S03O.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S04A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S04B.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S04G.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S04L.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S04O.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S05A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S05B.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S07A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S07B.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S08A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S08B.sv 
+NEW=oracle             post3 s580/r2/r26/S11A.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S11B.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S11G.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S11L.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S11O.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S13A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S13B.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S13G.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S13L.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S13O.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S14A.sv 
+NEW=PRE(stdout,rc)     pre s580/r2/r26/S14B.sv 
+NEW=oracle             post3 s580/r2/r26/S15A.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S15B.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S15G.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S15L.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/r2/r26/S15O.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/r2/r26/X1.sv 
+NEW=oracle             post3 s580/r2/r26/X3.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/r2/r26/X4.sv 
+NEW=oracle             post3 s580/r4/fx/H07C.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     neither s580/r4/fx/I12.sv 
+NEW!=oracle            neither s580/r4/fx/K02.sv   iv:refuse sv2v:!NEW pre_rc=0 new_rc=0
+      NEW Q 1 1 0 1 0 0
+      NEW bits 2 2 2 1 1 1 size 2 x
+      NEW case-compound default
+      NEW case-label item
+      NEW gen-q then
+      SV  bits 2 2 2 2 2 2 size 2 x
+      SV  case-compound item
+NEW=PRE(stdout,rc)     pre s580/r4/fx/K02q.sv 
+NEW=oracle             post3 s580/lens_snd/probes/P1.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_snd/probes/P1.sv -DNO_INSIDE  iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_snd/probes/P2a.sv   iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_snd/probes/P2b.sv   iv:refuse sv2v:=NEW pre_rc=0 new_rc=0
+NEW!=oracle            post3 s580/lens_snd/probes/P2c.sv   iv:refuse sv2v:!NEW pre_rc=1 new_rc=0
+      NEW LB=1
+      NEW OVR P=1
+      NEW OVX v inside {P} = 0
+      SV  OVX v inside {P} = x
+NEW!=oracle            neither s580/lens_snd/probes/P4a.sv   iv:refuse sv2v:!NEW pre_rc=0 new_rc=0
+      NEW rbs=2 rbu=2 rb2=1 rb1=2
+      NEW rbsq=2 rbuq=2 rb2q=1
+      SV  rbs=2 rbu=2 rb2=2 rb1=2
+      SV  rbsq=2 rbuq=2 rb2q=2
+NEW!=oracle            neither s580/lens_snd/probes/P4a.sv -DNO_INSIDE  iv:!NEW sv2v:!NEW pre_rc=0 new_rc=0
+      NEW rbsq=2 rbuq=2 rb2q=1
+      IV  rbsq=2 rbuq=2 rb2q=2
+      SV  rbsq=2 rbuq=2 rb2q=2
+NEW=PRE(stdout,rc)     neither s580/lens_snd/probes/P5.sv 
+NEW=PRE(stdout,rc)     pre s580/lens_snd/probes/P5.sv -DNO_INSIDE
+no-oracle              post3 s580/lens_snd/probes/P7.sv   iv:refuse sv2v:refuse pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_snd/probes/P7.sv -DNO_INSIDE  iv:=NEW sv2v:refuse pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_diff/P03.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff/P03.sv -DB  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff/P03.sv -DRL
+NEW=oracle             post3 s580/lens_diff/P03.sv -DIV  iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_diff/P03.sv -DB -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06.sv   iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06.sv -DFIN  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06.sv -DFJ  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06.sv -DFRC  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06.sv -DIFC  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv   iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv -DFIN  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv -DFJ  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv -DFRC  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv -DIFC  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff/P06v.sv -DNOGC  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+NEW!=oracle            post3 s580/lens_diff/P08b.sv -DIV  iv:=NEW sv2v:!NEW pre_rc=0 new_rc=0
+      NEW L01 1
+      NEW L02 0
+      NEW L09 1
+      NEW L20 0
+      NEW Q01 1
+      NEW Q02 1
+      NEW W01 1
+      NEW W02 1
+      NEW W03 1
+      NEW W06 1
+      NEW W08 1
+      SV  Q01 0
+      SV  Q02 0
+      SV  W01 0
+      SV  W02 0
+      SV  W03 0
+      SV  W06 0
+      SV  W08 0
+NEW=oracle             post3 s580/lens_diff/P10b.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff/P10b.sv -DIV  iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=oracle             post3 s580/lens_diff/P10c.sv -DIV  iv:=NEW sv2v:=NEW pre_rc=0 new_rc=0
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q1.sv 
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q1.sv -DWX
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q1.sv -DIV
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q1.sv -DWX -DIV
+NEW=oracle             post3 s580/lens_diff2/Q2.sv -DCONSTS  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff2/Q2.sv -DCONSTS -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff2/Q3.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DADT  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q3.sv -DFBODY
+NEW!=oracle            neither s580/lens_diff2/Q3.sv -DFNRX  iv:refuse sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW FNRX 1
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      SV  FNRX x
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DGA  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q3.sv -DGFOR
+NEW!=oracle            post3 s580/lens_diff2/Q3.sv -DPSEL  iv:refuse sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW PSEL 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      SV  PSEL x
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q3.sv -DRBB
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DRBT  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff2/Q3.sv -DREPX  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+NEW!=oracle            neither s580/lens_diff2/Q3.sv -DTDX  iv:refuse sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      NEW TDX 1
+      SV  TDX x
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DXBEFORE  iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DADT -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q3.sv -DFBODY -DIV
+NEW!=oracle            neither s580/lens_diff2/Q3.sv -DFNRX -DIV  iv:=NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW FNRX 1
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      SV  FNRX x
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DGA -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q3.sv -DGFOR -DIV
+NEW!=oracle            post3 s580/lens_diff2/Q3.sv -DPSEL -DIV  iv:!NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW PSEL 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      IV  PSEL x
+      SV  PSEL x
+NEW=PRE(stdout,rc)     neither s580/lens_diff2/Q3.sv -DRBB -DIV
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DRBT -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+no-oracle              post3 s580/lens_diff2/Q3.sv -DREPX -DIV  iv:refuse sv2v:refuse pre_rc=1 new_rc=0
+NEW!=oracle            neither s580/lens_diff2/Q3.sv -DTDX -DIV  iv:=NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW AD1 4
+      NEW ADS 4
+      NEW G1 then
+      NEW GC1 one
+      NEW GL lab1
+      NEW GS then
+      NEW LF0 0
+      NEW LF1 1
+      NEW LG 0
+      NEW LT1 1
+      NEW OV0 0 1
+      NEW OV1 1 1
+      NEW OVS 1 1
+      NEW PK0 0
+      NEW PK1 1
+      NEW RB0 2
+      NEW RB1 4
+      NEW RBS 4
+      NEW TDX 1
+      SV  TDX x
+NEW=oracle             post3 s580/lens_diff2/Q3.sv -DXBEFORE -DIV  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     pre s580/lens_diff2/Q5.sv -DCMP
+NEW!=oracle            post3 s580/lens_diff2/Q5.sv -DIV  iv:=NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW F01 1
+      NEW F02 0
+      NEW F03 1
+      NEW F04 0
+      NEW F05 1
+      NEW U01 1
+      NEW U02 1
+      NEW U03 1
+      NEW U04 1
+      NEW U05 1
+      NEW U06 0
+      NEW U12 0
+      NEW U13 0
+      NEW U14 0
+      NEW U15 1
+      NEW U16 1
+      NEW U17 0
+      SV  F01 0
+      SV  F03 0
+      SV  F05 0
+      SV  U01 0
+      SV  U02 0
+      SV  U03 0
+      SV  U04 0
+      SV  U05 0
+      SV  U15 0
+      SV  U16 0
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q5.sv -DCMP -DIV
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q5.sv -DRTT -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff2/Q6.sv -DSTR
+NEW=PRE(stdout,rc)     pre s580/lens_diff2/Q6.sv -DSTR -DIV
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv 
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv -DIU
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv -DRR
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv -DIV
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv -DIU -DIV
+NEW=PRE(stdout,rc)     post3 s580/lens_diff2/Q8.sv -DRR -DIV
+NEW!=oracle            post3 s580/lens_diff2/Q9.sv   iv:refuse sv2v:!NEW pre_rc=1 new_rc=0
+      NEW NP1 1
+      NEW NP2 0
+      NEW NP3 1
+      NEW RN1 1
+      NEW RN2 0
+      NEW RN3 1
+      NEW UEB 4
+      NEW UEV 0
+      SV  UEV 16
+NEW!=oracle            post3 s580/lens_diff2/Q9.sv -DIV  iv:!NEW sv2v:!NEW pre_rc=1 new_rc=0
+      NEW NP1 1
+      NEW NP2 0
+      NEW NP3 1
+      NEW RN1 1
+      NEW RN2 0
+      NEW RN3 1
+      NEW UEB 4
+      NEW UEV 0
+      IV  UEB 5
+      IV  UEV 16
+      SV  UEV 16
+NEW=oracle             post3 s580/lens_snd2/probes/P10.sv   iv:refuse sv2v:=NEW pre_rc=1 new_rc=0
+NEW=oracle             post3 s580/lens_snd2/probes/P10.sv -DNO_INSIDE  iv:=NEW sv2v:=NEW pre_rc=1 new_rc=0
+NEW=PRE(stdout,rc)     neither s580/lens_snd2/probes/P2.sv 
+NEW=PRE(stdout,rc)     neither s580/lens_snd2/probes/P2.sv -DNO_INSIDE
+NEW=PRE(stdout,rc)     neither s580/lens_snd2/probes/P5.sv 
+NEW=PRE(stdout,rc)     neither s580/lens_snd2/probes/P5.sv -DNO_INSIDE
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL2
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL3
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL4
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL5
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL5N
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL6
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL9
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL2 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL3 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL4 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL5 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL5N -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL6 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G1.sv -DL9 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv 
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM1
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM10
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM2
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM3
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM4
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM4P
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM6
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM7
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM8
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM9
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM1 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM10 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM2 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM3 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM4 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM4P -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM6 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM7 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM8 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G2.sv -DM9 -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G3.sv -DM9
+NEW=PRE(stdout,rc)     pre s580/lens_diff3/G3.sv -DM9 -DIV
+NEW=PRE(stdout,rc)     neither s580/lens_diff3/P1.sv -DCONSTS
+NEW=PRE(stdout,rc)     neither s580/lens_diff3/P1.sv -DCONSTS -DIV
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG1
+NEW!=oracle            neither s580/lens_snd3/p/p3.sv -DG2  iv:!NEW sv2v:!NEW pre_rc=0 new_rc=0
+      NEW G2 default
+      IV  G2 item
+      SV  G2 item
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG3
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG4
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG5
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG6
+NEW!=oracle            neither s580/lens_snd3/p/p3.sv -DG7  iv:!NEW sv2v:!NEW pre_rc=0 new_rc=0
+      NEW G7 default
+      IV  G7 item
+      SV  G7 item
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p3.sv -DG9
+NEW=PRE(stdout,rc)     neither s580/lens_snd3/p/p3.sv -DLV
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p5.sv -DH1
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p5.sv -DH2
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p5.sv -DH3
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p5.sv -DH4
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p5.sv -DH7
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJ1
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJ2
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJ3
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJ5
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJ6
+NEW=PRE(stdout,rc)     pre s580/lens_snd3/p/p6.sv -DJV
+{'NEW=oracle': 68, 'NEW=PRE(stdout,rc)': 114, 'NEW!=oracle': 18, 'no-oracle': 14}

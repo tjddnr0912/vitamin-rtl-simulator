@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p6__arrE_gc
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p6/arrE_gc.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p6
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,post2,pre
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./arrE_gc.ivl | 75 bytes
+arrE_gc.sv:3: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./arrE_gc.vl | 154 bytes
+%Error: arrE_gc.sv:5:15: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./arrE_gc.s2v | 56 bytes
+GC=item
+arrE_gc.s2v.v:18: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./arrE_gc.cut | 76 bytes
+GC=def
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./arrE_gc.cut.route | 0 bytes
+
+=== block 6 | vita [post2] | ./arrE_gc.post2 | 76 bytes | identical to block 4
+=== block 7 | vita [post2] | ./arrE_gc.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [pre] | ./arrE_gc.pre | 76 bytes | identical to block 4
+=== block 9 | vita [pre] | ./arrE_gc.pre.route | 0 bytes | identical to block 5
+=== end

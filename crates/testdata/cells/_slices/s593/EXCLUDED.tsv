@@ -1,0 +1,31 @@
+category	path_or_glob	count	bytes	reason
+binary	post1/**	1	28252368	Mach-O debug vita (post1..post5)
+binary	post2/**	1	28254160	Mach-O debug vita (post1..post5)
+binary	post3/**	1	28253840	Mach-O debug vita (post1..post5)
+binary	post4/**	1	28253376	Mach-O debug vita (post1..post5)
+binary	post5/**	1	28255344	Mach-O debug vita (post1..post5)
+build-test-log	a/*.p1log	2	0	build / check / harness run logs and rc markers
+build-test-log	a/*.p1rc	2	4	build / check / harness run logs and rc markers
+build-test-log	a/*.rc	5	10	build / check / harness run logs and rc markers
+build-test-log	a/*.runlog	5	0	build / check / harness run logs and rc markers
+build-test-log	g/*.log	7	25557	build / check / harness run logs and rc markers
+build-test-log	g/*.rc	10	24	build / check / harness run logs and rc markers
+build-test-log	g/*.runlog	7	0	build / check / harness run logs and rc markers
+cross-slice-sources	a/*.log	2	330	666-variant harness over §4.5.580/581 sources (s580/*, f2/w65.sv): raw PRE/CUT/oracle outputs keyed by variant id, sv2v translations, verilator build logs, movers tables; no SV source in s593 (PLAN.md:31-38)
+cross-slice-sources	a/*.py	3	9797	666-variant harness over §4.5.580/581 sources (s580/*, f2/w65.sv): raw PRE/CUT/oracle outputs keyed by variant id, sv2v translations, verilator build logs, movers tables; no SV source in s593 (PLAN.md:31-38)
+cross-slice-sources	a/*.rc	2	4	666-variant harness over §4.5.580/581 sources (s580/*, f2/w65.sv): raw PRE/CUT/oracle outputs keyed by variant id, sv2v translations, verilator build logs, movers tables; no SV source in s593 (PLAN.md:31-38)
+cross-slice-sources	a/*.txt	1	44845	666-variant harness over §4.5.580/581 sources (s580/*, f2/w65.sv): raw PRE/CUT/oracle outputs keyed by variant id, sv2v translations, verilator build logs, movers tables; no SV source in s593 (PLAN.md:31-38)
+cross-slice-sources	a/h666/**	1136	1533225	666-variant harness over §4.5.580/581 sources (s580/*, f2/w65.sv): raw PRE/CUT/oracle outputs keyed by variant id, sv2v translations, verilator build logs, movers tables; no SV source in s593 (PLAN.md:31-38)
+doc-draft	*.md	1	2718058	ROADMAP archive copy
+doc-draft	g/*.md	1	2718058	ROADMAP archive copy
+no-oracle-output	g/c14/*.p1vo	358	77898	g/c14 copies of §4.5.581 lens cells (s581/lens_diff3): vita-only (prevo/p1vo/p5vo), no oracle run in s593
+no-oracle-output	g/c14/*.p5vo	358	77898	g/c14 copies of §4.5.581 lens cells (s581/lens_diff3): vita-only (prevo/p1vo/p5vo), no oracle run in s593
+no-oracle-output	g/c14/*.prevo	358	77898	g/c14 copies of §4.5.581 lens cells (s581/lens_diff3): vita-only (prevo/p1vo/p5vo), no oracle run in s593
+no-oracle-output	g/c14/*.sv	358	70220	g/c14 copies of §4.5.581 lens cells (s581/lens_diff3): vita-only (prevo/p1vo/p5vo), no oracle run in s593
+rust-patch	g/*.patch	5	63153	saved Rust source diff
+script	a/*.py	1	1335	classifier / helper script (not a generator or per-set runner)
+script	g/*.py	4	5886	classifier / helper script (not a generator or per-set runner)
+third-party-suspect	g/c5/H_edge_f45_4c4dd67f.*	13	2747	evidence g/c5/H_edge_f45_4c4dd67f.sv:6: name `lfsr` in thirdparty_modnames.txt: module lfsr #(parameter int Dw = 4, parameter int Iw = 2, parameter logic [Dw-1:0][Iw-1:0] SP = '0) (input logic [Dw-1:0
+third-party-suspect	g/c5/U_the_ibex_shape_reads_a_package_parameter_10649dad.*	13	2187	evidence g/c5/U_the_ibex_shape_reads_a_package_parameter_10649dad.sv:1: name `ibex_pkg` in thirdparty_modnames.txt; keyword ibex_: package ibex_pkg; typedef struct packed { logic irq_int; logic irq_ext; logic [4:0] lower_cause; } exc_cause_t;
+third-party-suspect	g/pins/header_import_param__edge_f45__28601_43.*	1	743	evidence g/c5/H_edge_f45_4c4dd67f.sv:6: name `lfsr` in thirdparty_modnames.txt: module lfsr #(parameter int Dw = 4, parameter int Iw = 2, parameter logic [Dw-1:0][Iw-1:0] SP = '0) (input logic [Dw-1:0
+third-party-suspect	g/pins/typed_param_user_type__the_ibex_shape_reads_a_package_parameter_member_in_an_importing_module__28927_23.*	1	571	evidence g/c5/U_the_ibex_shape_reads_a_package_parameter_10649dad.sv:1: name `ibex_pkg` in thirdparty_modnames.txt; keyword ibex_: package ibex_pkg; typedef struct packed { logic irq_int; logic irq_ext; logic [4:0] lower_cause; } exc_cause_t;

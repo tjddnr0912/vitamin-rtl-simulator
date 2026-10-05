@@ -1,0 +1,75 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__n__n01_cue_nw_gif
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/n/n01_cue_nw_gif.sv
+roadmap_row: §2 🆕 U
+set: r2/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,POSTA,POSTB,POSTB_SEP,PRE
+verdict: pre=val[-] posta=val[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:73
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/dump/9fe7651a80736fc9 (byte-identical source) verdict: pre=val[-] posta=val[-] postb=val[ivl,s2v,vl] MOVED oracle_loud=- verdict_source: s591/r2/lens_delta.txt:73
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r2/dump/9fe7651a80736fc9.ivl | 96 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+9fe7651a80736fc9.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./n01_cue_nw_gif.ivl | 94 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+n01_cue_nw_gif.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | r2/dump/9fe7651a80736fc9.vl | 271 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+- 9fe7651a80736fc9.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 5.882 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./n01_cue_nw_gif.vl | 269 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+- n01_cue_nw_gif.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 6.667 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | r2/dump/9fe7651a80736fc9.s2v | 99 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+9fe7651a80736fc9.s2v.v:13: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./n01_cue_nw_gif.s2v | 97 bytes
+n01 big
+n01 P=18446744073709551625 b=10
+n01_cue_nw_gif.s2v.v:13: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV3] | ./n01_cue_nw_gif.dev3 | 210 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n01 big
+n01 P=18446744073709551625 b=10
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV3] | ./n01_cue_nw_gif.dev3.route | 0 bytes
+
+=== block 9 | vita [POSTA] | ./n01_cue_nw_gif.posta | 211 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n01 small
+n01 P=18446744073709551625 b=4
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 10 | vita [POSTA] | ./n01_cue_nw_gif.posta.route | 0 bytes | identical to block 8
+=== block 11 | vita [POSTB] | ./n01_cue_nw_gif.postb | 210 bytes | identical to block 7
+=== block 12 | vita [POSTB] | ./n01_cue_nw_gif.postb.route | 0 bytes | identical to block 8
+=== block 13 | vita [PRE] | ./n01_cue_nw_gif.pre | 211 bytes | identical to block 9
+=== block 14 | vita [PRE] | ./n01_cue_nw_gif.pre.route | 0 bytes | identical to block 8
+=== end

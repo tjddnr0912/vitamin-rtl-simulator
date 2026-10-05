@@ -1,0 +1,48 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__s2__cells__NW1
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/s2/cells/NW1.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: s2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST2,POST3,POST,PRE
+verdict: unchanged
+verdict_source: s581/S2_matrix.tsv:123
+alias: lens_diff3/s2c/cells/NW1 (byte-identical source) verdict: unchanged verdict_source: s581/S2_matrix.tsv:123
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./NW1.iv.txt | 130 bytes
+NW1.sv:3: error: A hierarchical reference (`t.u.v') is not allowed in a constant expression.
+1 error(s) during elaboration.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./NW1.vl.txt | 88 bytes
+%Error: NW1.sv:3:20: Can't find definition of 'u' in dotted scope/variable: 't.u'
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./NW1.vlb | 346 bytes
+%Error: NW1.sv:3:20: Can't find definition of 'u' in dotted scope/variable: 't.u'
+    3 |   localparam L = t.u.v ==? 4'b1?00;
+      |                    ^
+        ... Known scopes under 't': <no instances found>
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./NW1.sv.txt | 132 bytes
+NW1.sv2v.v:2: error: A hierarchical reference (`u.v') is not allowed in a constant expression.
+1 error(s) during elaboration.
+
+rc=1
+=== block 5 | vita [POST] | ./NW1.post.txt | 184 bytes
+NW1.sv:3:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: a hierarchical reference (`t.u.v`) is not a constant [in t]
+errors=1 warnings=0 notes=0
+
+rc=1
+=== block 6 | vita [POST2] | ./NW1.p2.txt | 184 bytes | identical to block 5
+=== block 7 | vita [POST3] | ./NW1.p3.txt | 184 bytes | identical to block 5
+=== block 8 | vita [POST3b] | lens_diff3/s2c/cells/NW1.post3b.txt | 184 bytes | identical to block 5
+=== block 9 | vita [PRE] | ./NW1.pre.txt | 184 bytes | identical to block 5
+=== end

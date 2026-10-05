@@ -1,0 +1,160 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__c__m_if_priority
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/c/m_if_priority.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: c
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: hand-IEEE §12.4.2; vl not an oracle for priority-if; chain2/3/t6 missing under hand-IEEE
+verdict_source: s583/GROUNDING.md:99
+alias: m/sw/c_m_if_priority/m_if_priority (byte-identical source) verdict: hand-IEEE §12.4.2; vl not an oracle for priority-if; chain2/3/t6 missing under hand-IEEE verdict_source: s583/GROUNDING.md:99
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./m_if_priority.out | 3178 bytes
+##### m_if_priority.sv
+=== iverilog
+compile rc=50
+m_if_priority.sv:5: syntax error
+m_if_priority.sv:5: Syntax in assignment statement l-value.
+m_if_priority.sv:7: syntax error
+m_if_priority.sv:7: Syntax in assignment statement l-value.
+m_if_priority.sv:7: syntax error
+m_if_priority.sv:7: Syntax in assignment statement l-value.
+m_if_priority.sv:9: syntax error
+m_if_priority.sv:9: Syntax in assignment statement l-value.
+m_if_priority.sv:9: syntax error
+m_if_priority.sv:9: Syntax in assignment statement l-value.
+m_if_priority.sv:9: syntax error
+m_if_priority.sv:9: Syntax in assignment statement l-value.
+m_if_priority.sv:11: syntax error
+m_if_priority.sv:11: Syntax in assignment statement l-value.
+m_if_priority.sv:11: syntax error
+m_if_priority.sv:11: Syntax in assignment statement l-value.
+m_if_priority.sv:11: syntax error
+m_if_priority.sv:11: Syntax in assignment statement l-value.
+m_if_priority.sv:13: syntax error
+m_if_priority.sv:13: Syntax in assignment statement l-value.
+m_if_priority.sv:13: syntax error
+m_if_priority.sv:13: Syntax in assignment statement l-value.
+m_if_priority.sv:15: syntax error
+m_if_priority.sv:15: error: Invalid module item.
+m_if_priority.sv:15: syntax error
+m_if_priority.sv:15: error: Invalid module item.
+m_if_priority.sv:17: syntax error
+m_if_priority.sv:17: error: Invalid module item.
+m_if_priority.sv:17: syntax error
+m_if_priority.sv:17: error: Invalid module instantiation
+m_if_priority.sv:17: error: generate else is missing matching if.
+m_if_priority.sv:19: syntax error
+m_if_priority.sv:19: error: Invalid module item.
+m_if_priority.sv:19: syntax error
+m_if_priority.sv:19: error: Invalid module item.
+m_if_priority.sv:19: syntax error
+m_if_priority.sv:19: error: Invalid module instantiation
+m_if_priority.sv:19: error: generate else is missing matching if.
+m_if_priority.sv:21: syntax error
+m_if_priority.sv:21: error: Invalid module item.
+m_if_priority.sv:21: syntax error
+m_if_priority.sv:21: error: Invalid module instantiation
+m_if_priority.sv:21: error: Invalid module item.
+m_if_priority.sv:21: syntax error
+m_if_priority.sv:21: error: Invalid module instantiation
+m_if_priority.sv:21: error: generate else is missing matching if.
+m_if_priority.sv:23: syntax error
+m_if_priority.sv:23: error: Invalid module item.
+m_if_priority.sv:24: syntax error
+m_if_priority.sv:25: error: Invalid module item.
+=== verilator
+compile rc=0
+run rc=0
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+- m_if_priority.sv:23: Verilog $finish
+=== vita (native=interp=vm)
+rc=0
+m_if_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+m_if_priority.sv:17:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+errors=0 warnings=3 notes=0
+=== block 2 | vita [POST/obs] | m/sw/c_m_if_priority/obs_POST/results.jsonl | 135 bytes
+{"v":1,"t":10,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":10,"errors":0,"warnings":6,"fatals":0}
+=== block 3 | vita [POST/obs] | m/sw/c_m_if_priority/obs_POST/run.json | 1421 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "m_if_priority.sv", "blake3": "1ddf160a15b1a58ffb1fd4f8b9f9eda2c563ae055b7493bd96f1634a20e3cdc4"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 10,
+  "counts": {"errors": 0, "warnings": 6, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 26, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000489,
+  "elab_s": 0.000358,
+  "sim_s": 0.000126
+}
+=== block 4 | vita [PRE/obs] | m/sw/c_m_if_priority/obs_PRE/results.jsonl | 135 bytes
+{"v":1,"t":10,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":10,"errors":0,"warnings":3,"fatals":0}
+=== block 5 | vita [PRE/obs] | m/sw/c_m_if_priority/obs_PRE/run.json | 1421 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "m_if_priority.sv", "blake3": "1ddf160a15b1a58ffb1fd4f8b9f9eda2c563ae055b7493bd96f1634a20e3cdc4"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 10,
+  "counts": {"errors": 0, "warnings": 3, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 1, "total": 3, "frame_bodies": 0, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 26, "declined": 0, "reasons": {}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 0, "frame": 0, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": []},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790925643,
+  "wall_s": 0.000509,
+  "elab_s": 0.000380,
+  "sim_s": 0.000125
+}
+=== end

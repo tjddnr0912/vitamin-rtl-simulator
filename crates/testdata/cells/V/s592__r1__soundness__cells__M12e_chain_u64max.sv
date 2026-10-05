@@ -1,0 +1,12 @@
+module top;
+  localparam Q = 1;
+  if (1) begin : b
+    localparam P = Q;
+    for (genvar i = P; i < 3; i = i + 1) begin : g
+      wire [3:0] w = i;
+      initial #1 $display("@%m w=%0d", w);
+    end
+    localparam [63:0] Q = 64'hFFFF_FFFF_FFFF_FFFF;
+  end
+  initial #5 $finish;
+endmodule

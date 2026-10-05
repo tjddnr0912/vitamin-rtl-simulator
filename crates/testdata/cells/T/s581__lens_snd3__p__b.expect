@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_snd3__p__b
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_snd3/p/b.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_snd3/p
+oracles_present: iverilog,sv2v
+vita_tags: POST3b,PRE
+verdict: pre-existing consumer weakness, AD_X/RB_X family
+verdict_source: s581/lens_snd3/REPORT.md:24
+alias: lens_snd3/p/run/P3b/B1/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/B2/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/B3/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/P3b/G1L/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/B1/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/B2/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/B3/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/PRE/G1L/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/B1/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/B2/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/B3/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/iv/G1L/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/B1/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/B2/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/B3/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: lens_snd3/p/run/sv/G1L/b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_B1.txt | 40 bytes
+ARM=4
+b.sv:18: $finish called at 5 (1s)
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_B3.txt | 40 bytes | identical to block 1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | lens_snd3/p/out/iv_G1L.txt | 40 bytes
+ARM=a
+b.sv:18: $finish called at 5 (1s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_B1.txt | 38 bytes
+ARM=4
+o.v:6: $finish called at 5 (1s)
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_B2.txt | 38 bytes | identical to block 4
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_B3.txt | 38 bytes | identical to block 4
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | lens_snd3/p/out/sv_G1L.txt | 39 bytes
+ARM=a
+o.v:14: $finish called at 5 (1s)
+=== block 8 | vita [POST3b] | lens_snd3/p/out/P3b_B1.txt | 174 bytes
+rc=0
+ARM=1
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 9 | vita [POST3b] | lens_snd3/p/out/P3b_B2.txt | 174 bytes | identical to block 8
+=== block 10 | vita [POST3b] | lens_snd3/p/out/P3b_B3.txt | 174 bytes
+rc=0
+ARM=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 11 | vita [POST3b] | lens_snd3/p/out/P3b_G1L.txt | 174 bytes
+rc=0
+ARM=a
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 12 | vita [PRE] | lens_snd3/p/out/PRE_B1.txt | 174 bytes | identical to block 8
+=== block 13 | vita [PRE] | lens_snd3/p/out/PRE_B2.txt | 174 bytes | identical to block 8
+=== block 14 | vita [PRE] | lens_snd3/p/out/PRE_B3.txt | 174 bytes | identical to block 10
+=== block 15 | vita [PRE] | lens_snd3/p/out/PRE_G1L.txt | 174 bytes | identical to block 11
+=== end

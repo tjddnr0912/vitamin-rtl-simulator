@@ -1,0 +1,40 @@
+a_priority_case_M      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_case_N      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_casex_M     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_casex_N     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_casez_M     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_casez_N     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_if_M        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_if_N        rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+a_priority_inside_M    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority_inside_N    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_case_M     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_case_N     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_casex_M    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_casex_N    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_casez_M    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_casez_N    rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_if_M       rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+a_priority0_if_N       rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+a_priority0_inside_M   rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_priority0_inside_N   rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_case_M        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_case_N        rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_casex_M       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_casex_N       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_casez_M       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_casez_N       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_if_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_if_N          rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+a_unique_inside_M      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique_inside_N      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_case_M       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_case_N       rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_casex_M      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_casex_N      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_casez_M      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_casez_N      rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_if_M         rc=0   W4031=0 sites=f:frame:0              out=[P=7 ] 
+a_unique0_if_N         rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+a_unique0_inside_M     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+a_unique0_inside_N     rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm

@@ -1,0 +1,63 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__u__r07_x_selreads
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/u/r07_x_selreads.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:26
+alias: r2/diff/a/lanes/r07_x_selreads (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-c-jit: md5 f1cd245ccf95b589f4e8c123ec824a24 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r07_x_selreads.ivl | 877 bytes
+r07_x_selreads.sv:5: syntax error
+r07_x_selreads.sv:5: Syntax in assignment statement l-value.
+r07_x_selreads.sv:10: syntax error
+r07_x_selreads.sv:10: Syntax in assignment statement l-value.
+r07_x_selreads.sv:15: syntax error
+r07_x_selreads.sv:15: Syntax in assignment statement l-value.
+r07_x_selreads.sv:22: syntax error
+r07_x_selreads.sv:22: Syntax in assignment statement l-value.
+r07_x_selreads.sv:28: syntax error
+r07_x_selreads.sv:28: Syntax in assignment statement l-value.
+r07_x_selreads.sv:32: syntax error
+r07_x_selreads.sv:32: Syntax in assignment statement l-value.
+r07_x_selreads.sv:35: syntax error
+r07_x_selreads.sv:35: Syntax in assignment statement l-value.
+r07_x_selreads.sv:38: syntax error
+r07_x_selreads.sv:38: Syntax in assignment statement l-value.
+r07_x_selreads.sv:42: syntax error
+r07_x_selreads.sv:42: Syntax in assignment statement l-value.
+rc=18
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r07_x_selreads.vl | 161 bytes
+%Error: r07_x_selreads.sv:53:31: Expecting expression to be constant, but can't determine constant for FUNCREF 'f9'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r07_x_selreads.build | 590 bytes
+%Error: r07_x_selreads.sv:53:31: Expecting expression to be constant, but can't determine constant for FUNCREF 'f9'
+                               : ... note: In instance 'top'
+        r07_x_selreads.sv:43:13: ... Location of non-constant ARRAYSEL: Array select of non-array
+        r07_x_selreads.sv:53:31: ... Called from 'f9()' with parameters:
+           a = ?32?h2
+   53 |   localparam logic [3:0] P9 = f9(2);
+      |                               ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | vita [POST-c-jit] | r2/diff/a/lanes/r07_x_selreads.jit | 1795 bytes
+r07_x_selreads.sv:5:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r07_x_selreads.sv:45:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f1(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:46:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P2` value is not a constant: `f2(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:47:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P3` value is not a constant: `f3(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:48:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P4` value is not a constant: `f4(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:49:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P5` value is not a constant: `f5(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:50:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P6` value is not a constant: `f6(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:51:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P7` value is not a constant: `f7(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:52:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P8` value is not a constant: `f8(…)` has no constant-fold arm [in top]
+r07_x_selreads.sv:53:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P9` value is not a constant: `f9(…)` has no constant-fold arm [in top]
+errors=9 warnings=1 notes=1
+rc=1
+=== end

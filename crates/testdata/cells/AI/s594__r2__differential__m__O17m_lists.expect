@@ -1,0 +1,48 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r2__differential__m__O17m_lists
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r2/differential/m/O17m_lists.sv
+roadmap_row: §2 🆕 AI
+set: r2/differential/m
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre594,stgpa,stgpb
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./O17m_lists.ivl | 88 bytes
+R: A1=3 L2=252 B2=32
+R: P=1 Q=252 QB=9
+O17m_lists.sv:15: $finish called at 40 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./O17m_lists.vl | 263 bytes
+R: A1=3 L2=252 B2=32
+R: P=1 Q=252 QB=8
+- O17m_lists.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ps; walltime 0.000 s; speed 1.250 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./O17m_lists.s2v | 91 bytes
+R: A1=3 L2=252 B2=32
+R: P=1 Q=252 QB=8
+O17m_lists.s2v.v:26: $finish called at 40 (1s)
+rc=0
+=== block 4 | vita [pa] | ./O17m_lists.post | 208 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R: A1=3 L2=252 B2=32
+R: P=1 Q=252 QB=8
+simulation ended (Finish) at time 40
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [pb] | ./O17m_lists.postb | 208 bytes | identical to block 4
+=== block 6 | vita [pre594] | ./O17m_lists.pre | 216 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R: A1=3 L2=252 B2=32
+R: P=1 Q=4294967292 QB=32
+simulation ended (Finish) at time 40
+errors=0 warnings=1 notes=0
+rc=0
+=== end

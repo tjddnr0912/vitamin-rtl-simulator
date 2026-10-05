@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__R3c
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/R3c.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_d,pre,pre_st,post_d_st
+verdict: E3009 both (unreachable)
+verdict_source: s592/r1/differential/REPORT.md:36
+notes: named at s592/r1/differential/REPORT.md:36
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./R3c.iv.txt | 49 bytes
+@f=11
+R3c.sv:12: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./R3c.vl.txt | 244 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module top R3c.sv -Mdir obj_R3c
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./R3c.vlb.txt | 238 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module top R3c.sv -Mdir obj_R3c
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./R3c.sv.txt | 114 bytes
+R3c.sv2v.v:21: error: No function named `g.b.f' found in this context (top).
+1 error(s) during elaboration.
+
+rc=1
+=== block 5 | vita [post_d] | ./R3c.postd.txt | 360 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R3c.sv:11:33: error[VITA-E3009] E-ELAB-UNSUPPORTED: unsupported hierarchical function call `g.b.f` (the callee must be a framed function with input-only scalar formals and a non-string return, reached through an instance path)
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [pre] | ./R3c.pre.txt | 360 bytes | identical to block 5
+=== end

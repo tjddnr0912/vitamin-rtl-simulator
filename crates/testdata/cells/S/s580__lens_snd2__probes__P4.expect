@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P4
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P4.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s580/lens_snd2/REPORT.md:24 without a class phrase; R4 cmp3_post4 bucket(s): post3×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P4.ivd.txt | 3300 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:3: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:4: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:14: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:15: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:16: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:17: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:20: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:21: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:22: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:22: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:24: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:25: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:36: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:36: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:37: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv:37: sorry: "inside" expressions not supported yet.
+rc=16
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./P4.iv.txt | 260 bytes
+R 0 0 0 0
+C 0 0 00000000 00000000 0 0
+F 0 0 0 0
+T 0 0
+G 0 0
+N 1 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P4.sv2v.v:55: $finish called at 2 (1s)
+rc=0 
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./P4.sv2v.err | 0 bytes
+
+=== block 4 | vita [POST] | ./P4.post.txt | 141 bytes
+R 1 0 1 0
+C 1 0 00000001 00000000 1 0
+F 1 1 1 0
+M 1 0
+T 1 0
+G 1 0
+N 0 1
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST2] | ./P4.post2.txt | 141 bytes | identical to block 4
+=== block 6 | vita [POST2-interp] | ./P4.p2interp.txt | 141 bytes | identical to block 4
+=== block 7 | vita [POST2-vm] | ./P4.p2vm.txt | 141 bytes | identical to block 4
+=== block 8 | vita [PRE] | ./P4.pre.txt | 141 bytes
+R 0 0 0 0
+C 0 0 00000000 00000000 0 0
+F 0 0 0 0
+M 0 0
+T 0 0
+G 0 0
+N 1 1
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== end

@@ -1,0 +1,74 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P6
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P6.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: FINDING C (NON-BLOCKING, new in round 2, correct->loud)
+verdict_source: s580/lens_snd2/REPORT.md:35
+notes: R4 cmp3_post4 bucket(s): both×3 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 24
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P6_FOLD.ivd.txt | 198 bytes
+G1 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6.sv:14: $finish called at 1 (1ns)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P6_XI.ivd.txt | 210 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6.sv:8: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./P6_XV.ivd.txt | 201 bytes
+G1 default
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6.sv:14: $finish called at 1 (1ns)
+rc=0
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_FOLD.iv.txt | 207 bytes
+G1 item
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6_FOLD.sv2v.v:14: $finish called at 1 (1s)
+rc=0 
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_FOLD.sv2v.err | 0 bytes
+
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_XI.iv.txt | 208 bytes
+G1 default
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6_XI.sv2v.v:14: $finish called at 1 (1s)
+rc=0 
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_XI.sv2v.err | 0 bytes | identical to block 5
+=== block 8 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_XV.iv.txt | 208 bytes
+G1 default
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6_XV.sv2v.v:14: $finish called at 1 (1s)
+rc=0 
+=== block 9 | oracle sv2v 0.0.13 (version captured in slice) | ./P6_XV.sv2v.err | 0 bytes | identical to block 5
+=== block 10 | vita [POST] | ./P6_FOLD.post.txt | 77 bytes
+G1 item
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [POST] | ./P6_XI.post.txt | 80 bytes
+G1 default
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== block 12 | vita [POST] | ./P6_XV.post.txt | 80 bytes | identical to block 11
+=== block 13 | vita [POST2] | ./P6_FOLD.post2.txt | 77 bytes | identical to block 10
+=== block 14 | vita [POST2] | ./P6_XI.post2.txt | 445 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6.sv:8:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 15 | vita [POST2] | ./P6_XV.post2.txt | 445 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P6.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 16 | vita [POST2-interp] | ./P6_FOLD.p2interp.txt | 77 bytes | identical to block 10
+=== block 17 | vita [POST2-interp] | ./P6_XI.p2interp.txt | 445 bytes | identical to block 14
+=== block 18 | vita [POST2-interp] | ./P6_XV.p2interp.txt | 445 bytes | identical to block 15
+=== block 19 | vita [POST2-vm] | ./P6_FOLD.p2vm.txt | 77 bytes | identical to block 10
+=== block 20 | vita [POST2-vm] | ./P6_XI.p2vm.txt | 445 bytes | identical to block 14
+=== block 21 | vita [POST2-vm] | ./P6_XV.p2vm.txt | 445 bytes | identical to block 15
+=== block 22 | vita [PRE] | ./P6_FOLD.pre.txt | 77 bytes | identical to block 10
+=== block 23 | vita [PRE] | ./P6_XI.pre.txt | 80 bytes | identical to block 11
+=== block 24 | vita [PRE] | ./P6_XV.pre.txt | 80 bytes | identical to block 11
+=== end

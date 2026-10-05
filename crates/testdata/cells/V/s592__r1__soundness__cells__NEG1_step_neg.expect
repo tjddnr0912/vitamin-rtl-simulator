@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__soundness__cells__NEG1_step_neg
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/soundness/cells/NEG1_step_neg.sv
+roadmap_row: §2 🆕 V
+set: r1/soundness/cells
+oracles_present: iverilog
+vita_tags: post_b,post_d
+verdict: IEEE:n/a  SVVL:n/a
+verdict_source: s592/r3_x_lens_sound_pre.out:8
+notes: named at s592/IMPL.md:215
+alias: g/lens/sound/NEG1_step_neg (byte-identical source) verdict: IEEE:n/a  SVVL:n/a verdict_source: s592/r3_x_lens_sound_pre.out:8
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./NEG1_step_neg.iv.txt | 100 bytes
+@top.b.g[0] w=0
+@top.b.g[1] w=1
+@top.b.g[2] w=2
+NEG1_step_neg.sv:10: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | vita [post_b] | ./NEG1_step_neg.post_b.txt | 464 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+NEG1_step_neg.sv:4:39: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `S` is used before it is declared in this generate block (declared at 8:16), so vita's elaboration passes choose different iterations here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate for [in top.b]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 3 | vita [post_c] | g/lens/sound/NEG1_step_neg.post_c.txt | 217 bytes
+@top.b.g[0] w=0
+@top.b.g[1] w=1
+@top.b.g[2] w=2
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 4 | vita [post_d] | ./NEG1_step_neg.post_d.txt | 426 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+NEG1_step_neg.sv:4:39: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `S` is used before it is declared in this generate block (declared at 8:16), so vita's elaboration passes choose different iterations here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference [in top.b]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 5 | vita [postd2] | g/lens/sound/NEG1_step_neg.postd2.txt | 217 bytes | identical to block 3
+=== block 6 | vita [postd3] | g/lens/sound/NEG1_step_neg.postd3.txt | 217 bytes | identical to block 3
+=== block 7 | vita [postd4] | g/lens/sound/NEG1_step_neg.postd4.txt | 426 bytes | identical to block 4
+=== end

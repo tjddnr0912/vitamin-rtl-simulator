@@ -1,0 +1,64 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__DF08
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/DF08.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre,pre_st,post_b_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_lens_diff_pre.out:10
+alias: g/lens/diff/DF08 (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_diff_pre.out:10
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./DF08.iv.txt | 51 bytes
+@mod_f
+DF08.sv:10: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./DF08.vl.txt | 243 bytes
+%Error: DF08.sv:8:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: DF08.sv:5:11: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./DF08.vlb.txt | 833 bytes
+%Error: DF08.sv:8:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                    : ... note: In instance 'top'
+    8 |     function automatic integer f(input integer x); f = x + 1; endfunction
+      |                                ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: DF08.sv:5:11: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                    : ... note: In instance 'top'
+        DF08.sv:8:32: ... Location of non-constant FUNC 'f': Constant function called under generate
+        DF08.sv:5:11: ... Called from 'f()' with parameters:
+           x = ?32?h1
+    5 |       if (f(1) == 2) begin : a initial $display("@g_f"); end
+      |           ^
+%Error: Exiting due to 2 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./DF08.sv.txt | 55 bytes
+@mod_f
+DF08.sv2v.v:23: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./DF08.post.txt | 177 bytes
+@mod_f
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_b] | r1/differential/det1/DF08.post.txt | 177 bytes | identical to block 5
+=== block 7 | vita [post_c] | g/lens/diff/DF08.post_c.txt | 177 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./DF08.postd.txt | 177 bytes | identical to block 5
+=== block 9 | vita [postd2] | g/lens/diff/DF08.postd2.txt | 177 bytes | identical to block 5
+=== block 10 | vita [postd3] | g/lens/diff/DF08.postd3.txt | 177 bytes | identical to block 5
+=== block 11 | vita [postd4] | g/lens/diff/DF08.postd4.txt | 177 bytes | identical to block 5
+=== block 12 | vita [pre] | ./DF08.pre.txt | 177 bytes | identical to block 5
+=== end

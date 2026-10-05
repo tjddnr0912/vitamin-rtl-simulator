@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__a__a29_x2g_sibling_int
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/a/a29_x2g_sibling_int.sv
+roadmap_row: §2 🆕 AE
+set: g/a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-a
+verdict: silent-wrong
+verdict_source: s588/GROUNDING.md:155
+notes: GROUNDING Q3 "PRE class" column
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-a: md5 2249f265256c275bcf5f3eda7b0d10f0 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./a29_x2g_sibling_int.ivl | 176 bytes
+a29_x2g_sibling_int.sv:9: error: Unable to evaluate parameter P value: bool<32>((32'sd7)+(<select=top.g(32'sd3)[(0)+:32] expr_type=logic>))
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./a29_x2g_sibling_int.vl | 238 bytes
+P=x
+- a29_x2g_sibling_int.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 100.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./a29_x2g_sibling_int.s2v | 170 bytes
+a29_x2g_sibling_int.s2v.v:15: error: Unable to evaluate parameter P value: (32'sd7)+(<select=top.g(32'sd3)[(0)+:32] expr_type=logic>)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [PRE] | ./a29_x2g_sibling_int.PRE | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=7
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-a] | ./a29_x2g_sibling_int.PROBE | 172 bytes | identical to block 4
+=== end

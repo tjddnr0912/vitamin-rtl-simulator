@@ -1,0 +1,256 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__d01_clk_gate
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/d01_clk_gate.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: PRE2==POST, both == iverilog: d01 gated clock t0 edges, d02 async reset via held CA, d03 always_comb producer, d04 NBA input, d05 #0 input, d08 $strobe/$monitor, d17 always@*/always_comb reader.
+verdict_source: s590/r1/diff/REPORT.md:10
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 6
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o1/d01_clk_gate.out | 873 bytes
+##### d01_clk_gate
+=== PRE2 (native=interp=vm)
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+--- PRE2==POST(all backends): True  POST split: False  VCD PRE2==POST(all): True
+=== iverilog run rc=0
+P1L t=0
+P1W t=0
+N2L t=0
+N2W t=0
+N1L t=5
+N1W t=5
+P2L t=5
+P2W t=5
+P1L t=10
+P1W t=10
+N2L t=10
+N2W t=10
+d01_clk_gate.sv:23: $finish called at 12 (1s)
+=== verilator run rc=0
+P1W t=0
+P1L t=0
+N1W t=5
+N1L t=5
+P2W t=5
+P2L t=5
+P1W t=10
+P1L t=10
+N2W t=10
+N2L t=10
+- d01_clk_gate.sv:23: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/d01_clk_gate.out | 1575 bytes
+##### d01_clk_gate
+=== PRE2 (native=interp=vm)
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+--- PRE2==POSTA True  POSTA==POSTC True  PRE2==POSTC True  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=0
+P1W t=0
+N2W t=0
+P1L t=0
+N2L t=0
+N1W t=5
+P2W t=5
+N1L t=5
+P2L t=5
+P1W t=10
+N2W t=10
+P1L t=10
+N2L t=10
+simulation ended (Finish) at time 12
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+P1L t=0
+P1W t=0
+N2L t=0
+N2W t=0
+N1L t=5
+N1W t=5
+P2L t=5
+P2W t=5
+P1L t=10
+P1W t=10
+N2L t=10
+N2W t=10
+d01_clk_gate.sv:23: $finish called at 12 (1s)
+=== verilator run rc=0
+P1W t=0
+P1L t=0
+N1W t=5
+N1L t=5
+P2W t=5
+P2L t=5
+P1W t=10
+P1L t=10
+N2W t=10
+N2L t=10
+- d01_clk_gate.sv:23: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 3 | vita [POSTA] | r1/diff/w/obs/obs_post_a/results.jsonl | 135 bytes
+{"v":1,"t":12,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":12,"errors":0,"warnings":1,"fatals":0}
+=== block 4 | vita [POSTA] | r1/diff/w/obs/obs_post_a/run.json | 1581 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "d01_clk_gate.sv", "blake3": "a7ef9127a98c2bc4078aa701e8d52958a6c644be44bd47d19b59827e96f90702"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 12,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 9, "total": 11, "frame_bodies": 1, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 9, "declined": 4, "reasons": {"call": 4}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 1, "frame": 1, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": [
+    {"module": "top", "name": "g", "kind": "function", "route": "frame", "sites": 4, "decl_file": "d01_clk_gate.sv", "decl_line": 3, "decl_col": 28}
+  ]},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1791160848,
+  "wall_s": 0.000781,
+  "elab_s": 0.000522,
+  "sim_s": 0.000240
+}
+=== block 5 | vita [PRE2] | r1/diff/w/obs/obs_pre2/results.jsonl | 135 bytes | identical to block 3
+=== block 6 | vita [PRE2] | r1/diff/w/obs/obs_pre2/run.json | 1581 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 35,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "d01_clk_gate.sv", "blake3": "a7ef9127a98c2bc4078aa701e8d52958a6c644be44bd47d19b59827e96f90702"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 12,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 9, "total": 11, "frame_bodies": 1, "reject_reasons": {"delay": 2}},
+  "wprog": {"asked": 9, "declined": 4, "reasons": {"call": 4}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 1, "frame": 1, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": [
+    {"module": "top", "name": "g", "kind": "function", "route": "frame", "sites": 4, "decl_file": "d01_clk_gate.sv", "decl_line": 3, "decl_col": 28}
+  ]},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1791160848,
+  "wall_s": 0.000806,
+  "elab_s": 0.000544,
+  "sim_s": 0.000244
+}
+=== end

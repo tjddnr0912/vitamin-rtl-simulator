@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c15__v_A15_gi
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c15/v_A15_gi.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c15
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c15.summ:232
+notes: source md5-identical to s581/lens_diff3/v/A15_gi.sv (§4.5.581 lens cell); oracle runs are s593 run4.sh runs
+alias: g/c14/v_A15_gi (byte-identical source) verdict: PRE!=all verdict_source: s593/g/c15.summ:232
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./v_A15_gi.ivl | 55 bytes
+GI=then
+v_A15_gi.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./v_A15_gi.vl | 230 bytes
+GI=then
+- v_A15_gi.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.692 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./v_A15_gi.s2v | 58 bytes
+GI=then
+v_A15_gi.s2v.v:9: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./v_A15_gi.p1vo | 276 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v_A15_gi.sv:3:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 'b10_1?00 has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [post5] | ./v_A15_gi.p5vo | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+GI=then
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [pre] | ./v_A15_gi.pre | 276 bytes | identical to block 4
+=== block 7 | vita [pre] | ./v_A15_gi.prevo | 276 bytes | identical to block 4
+=== end

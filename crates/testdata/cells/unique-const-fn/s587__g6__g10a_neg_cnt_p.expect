@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g6__g10a_neg_cnt_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g6/g10a_neg_cnt_p.sv
+roadmap_row: §3.b unique-const-fn
+set: g6
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,PRE-sep,S3,S4,S8,PRE
+verdict: KEEP (PRE fp == oracle)
+verdict_source: s587/IMPL.md:17
+notes: IMPL step-1 G6 lane list (lane g10a)
+alias: t/t4c_negcnt_fp (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r1/diff/g6r/g10a_neg_cnt_p (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:17
+alias: r2/diff/re/g6r/g10a_neg_cnt_p (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:17
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./g10a_neg_cnt_p.ivl | 111 bytes
+g10a_neg_cnt_p.sv:7: error: Concatenation repeat may not be negative (-1).
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | t/t4c_negcnt_fp.ivl | 110 bytes
+t4c_negcnt_fp.sv:7: error: Concatenation repeat may not be negative (-1).
+1 error(s) during elaboration.
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./g10a_neg_cnt_p.vl | 162 bytes
+%Error: g10a_neg_cnt_p.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hffffffff'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./vl_g10a_neg_cnt_p.build | 980 bytes
+%Error: g10a_neg_cnt_p.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hffffffff'
+                              : ... note: In instance 'top'
+    7 |   initial begin #1 r = {f(2)-8{1'b1}}; $display("r=%h", r); $finish; end
+      |                               ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Warning-WIDTHEXPAND: g10a_neg_cnt_p.sv:7:22: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's REPLICATE generates 1 bits.
+                                            : ... note: In instance 'top'
+    7 |   initial begin #1 r = {f(2)-8{1'b1}}; $display("r=%h", r); $finish; end
+      |                      ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Error: Exiting due to 1 error(s)
+=== block 5 | oracle verilator 5.052 (version captured in slice) | t/t4c_negcnt_fp.vl | 161 bytes
+%Error: t4c_negcnt_fp.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hffffffff'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 6 | oracle verilator 5.052 (version captured in slice) | t/vl_t4c_negcnt_fp.build | 976 bytes
+%Error: t4c_negcnt_fp.sv:7:31: Replication value of < 0 or X/Z not legal (IEEE 1800-2023 11.4.12.1): '32'hffffffff'
+                             : ... note: In instance 'top'
+    7 |   initial begin #1 r = {f(2)-8{1'b1}}; $display("r=%h", r); $finish; end
+      |                               ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Warning-WIDTHEXPAND: t4c_negcnt_fp.sv:7:22: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's REPLICATE generates 1 bits.
+                                           : ... note: In instance 'top'
+    7 |   initial begin #1 r = {f(2)-8{1'b1}}; $display("r=%h", r); $finish; end
+      |                      ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Error: Exiting due to 1 error(s)
+=== block 7 | vita [MECH] | ./g10a_neg_cnt_p.mech | 262 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+g10a_neg_cnt_p.sv:7:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: a replication count may not be negative (IEEE §11.4.12.2) [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [PRE] | ./g10a_neg_cnt_p.vita | 262 bytes | identical to block 7
+=== block 9 | vita [S3] | ./g10a_neg_cnt_p.s3 | 262 bytes | identical to block 7
+=== block 10 | vita [S4] | ./g10a_neg_cnt_p.s4 | 262 bytes | identical to block 7
+=== block 11 | vita [S8] | ./g10a_neg_cnt_p.s8 | 262 bytes | identical to block 7
+=== end

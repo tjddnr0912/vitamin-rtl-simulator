@@ -1,0 +1,18 @@
+W128fin|PRE:error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3010];|iv:|sv:gcase item;gif then;L=1 bits=2;
+W128fne|PRE:gcase default;gif else;L=0 bits=1;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase default;gif else;L=0 bits=1;|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;
+W128fq|PRE:gcase item;gif then;L=1 bits=2;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase item;gif then;L=1 bits=2;|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W128nin|PRE:gcase default;gif else;L=0 bits=1;|POST3:gcase default;gif else;L=0 bits=1;|3b:gcase default;gif else;L=0 bits=1;|iv:|sv:gcase default;gif else;L=0 bits=1;
+W128nne|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W128nq|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;
+W65fin|PRE:error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3010];|iv:|sv:gcase item;gif then;L=1 bits=2;
+W65fne|PRE:gcase default;gif else;L=0 bits=1;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase default;gif else;L=0 bits=1;|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;
+W65fq|PRE:gcase item;gif then;L=1 bits=2;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase item;gif then;L=1 bits=2;|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W65nin|PRE:gcase default;gif else;L=0 bits=1;|POST3:gcase default;gif else;L=0 bits=1;|3b:gcase default;gif else;L=0 bits=1;|iv:|sv:gcase default;gif else;L=0 bits=1;
+W65nne|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W65nq|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;
+W68fin|PRE:error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3010];|iv:|sv:gcase item;gif then;L=1 bits=2;
+W68fne|PRE:gcase default;gif else;L=0 bits=1;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase default;gif else;L=0 bits=1;|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;
+W68fq|PRE:gcase item;gif then;L=1 bits=2;|POST3:error[VITA-E3009];error[VITA-E3010];|3b:gcase item;gif then;L=1 bits=2;|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W68nin|PRE:gcase default;gif else;L=0 bits=1;|POST3:gcase default;gif else;L=0 bits=1;|3b:gcase default;gif else;L=0 bits=1;|iv:|sv:gcase default;gif else;L=0 bits=1;
+W68nne|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase item;gif then;L=1 bits=2;|sv:gcase item;gif then;L=1 bits=2;
+W68nq|PRE:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|POST3:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|3b:error[VITA-E3009];error[VITA-E3009];error[VITA-E3010];|iv:gcase default;gif else;L=0 bits=1;|sv:gcase default;gif else;L=0 bits=1;

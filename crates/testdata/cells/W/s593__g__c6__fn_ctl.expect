@@ -1,0 +1,46 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c6__fn_ctl
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c6/fn_ctl.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c6
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: ALL
+verdict_source: s593/g/c6.p5.summ:99
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./fn_ctl.ivl | 57 bytes
+f=252 g=0
+fn_ctl.sv:10: $finish called at 100 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./fn_ctl.vl | 366 bytes
+%Warning-WIDTHEXPAND: fn_ctl.sv:4:21: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'X' generates 8 bits.
+f=252 g=0
+- fn_ctl.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ns; walltime 0.000 s; speed 9.091 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./fn_ctl.s2v | 59 bytes
+f=252 g=0
+fn_ctl.s2v.v:16: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./fn_ctl.post1 | 81 bytes
+f=252 g=0
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./fn_ctl.post1.route | 28 bytes
+sub f frame 1
+sub g frame 1
+=== block 6 | vita [post2] | ./fn_ctl.post2 | 81 bytes | identical to block 4
+=== block 7 | vita [post2] | ./fn_ctl.post2.route | 28 bytes | identical to block 5
+=== block 8 | vita [post5] | ./fn_ctl.post5 | 81 bytes | identical to block 4
+=== block 9 | vita [post5] | ./fn_ctl.post5.route | 28 bytes | identical to block 5
+=== block 10 | vita [pre] | ./fn_ctl.pre | 81 bytes | identical to block 4
+=== block 11 | vita [pre] | ./fn_ctl.pre.route | 28 bytes | identical to block 5
+=== end

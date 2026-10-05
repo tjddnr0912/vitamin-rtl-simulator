@@ -1,0 +1,77 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a5__Inw_pae
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a5/Inw_pae.sv
+roadmap_row: §2 🆕 U
+set: plan/a5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: silent->loud
+verdict_source: s591/impl/moves_audit.txt:34
+notes: class PRE vs posta (POST_a), IMPL.md:14
+alias: impl/dump/6e1d83bb286747d1 (byte-identical source) verdict: silent->loud verdict_source: s591/impl/moves_audit.txt:34
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/6e1d83bb286747d1.ivl | 63 bytes
+pae W=x
+6e1d83bb286747d1.sv:9: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Inw_pae.ivl | 54 bytes
+pae W=x
+Inw_pae.sv:9: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/6e1d83bb286747d1.vl | 366 bytes
+%Warning-WIDTHEXPAND: 6e1d83bb286747d1.sv:6:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+pae W=x
+- 6e1d83bb286747d1.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./Inw_pae.vl | 348 bytes
+%Warning-WIDTHEXPAND: Inw_pae.sv:6:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+pae W=x
+- Inw_pae.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/6e1d83bb286747d1.s2v | 67 bytes
+pae W=x
+6e1d83bb286747d1.s2v.v:12: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./Inw_pae.s2v | 58 bytes
+pae W=x
+Inw_pae.s2v.v:12: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./Inw_pae.dev1 | 271 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Inw_pae.sv:7:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [DEV2] | impl/dump/6e1d83bb286747d1.dev2 | 280 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+6e1d83bb286747d1.sv:7:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 9 | vita [DEV3] | impl/dump/6e1d83bb286747d1.dev3 | 280 bytes | identical to block 8
+=== block 10 | vita [DEV3] | ./Inw_pae.dev3 | 271 bytes | identical to block 7
+=== block 11 | vita [POSTA] | ./Inw_pae.posta | 271 bytes | identical to block 7
+=== block 12 | vita [POSTB] | impl/dump/6e1d83bb286747d1.postb | 280 bytes | identical to block 8
+=== block 13 | vita [POSTB] | ./Inw_pae.postb | 271 bytes | identical to block 7
+=== block 14 | vita [PRE] | ./Inw_pae.pre | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pae W=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 15 | vita [PRE] | ./Inw_pae.pre.route | 16 bytes
+top fae frame 0
+=== block 16 | vita [PROTO2] | ./Inw_pae.post2 | 271 bytes | identical to block 7
+=== end

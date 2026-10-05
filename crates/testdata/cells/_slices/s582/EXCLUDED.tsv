@@ -1,0 +1,169 @@
+category	path_or_glob	count	bytes	reason
+rust-source-patch	/*.orig	1	21518	saved Rust source / patch (SPEC exclude)
+script	/*.py	2	5124	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+cargo-gate-log	*.log/*.rc/*.t0/*.t1/*.ts (slice root)	34	2840586	cargo/nextest/clippy/fmt/release/mutation logs and markers (SPEC exclude)
+doc-draft	docs_edit/*	17	3724134	ROADMAP/doc drafts (SPEC exclude)
+vita-output-unmapped	docs_probe/*	1	524	vita-only run log not attributable to an oracle cell (staged/vu/library or no-oracle r3j/r3k probes)
+cargo-gate-log	final/*	3	134713	final clippy/fmt logs + slice.patch (SPEC exclude)
+vita-output-unmapped	final/r3/*	4	436	vita-only run log not attributable to an oracle cell (staged/vu/library or no-oracle r3j/r3k probes)
+cargo-gate-log	gate/*	14	820758	gate logs (SPEC exclude)
+slice-doc	grounding/*.md	1	39052	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+no-oracle-output	grounding/b2/*.sv	4	2681	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	grounding/b2/*/sv.vvp	8	37532	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	grounding/b2/*/vl_build.log	9	41036	verilator make/c++ build log with no %Warning/%Error line
+no-oracle-output	grounding/b2/out_*/*	4	1789	output of a vita-only SV (not a cell)
+iverilog-compiled-image	grounding/b2/*/iv.vvp	3	8049	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	grounding/b3/*.sv	3	1405	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	grounding/b3/*/sv.vvp	3	15646	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	grounding/b3/*/vl_build.log	11	49316	verilator make/c++ build log with no %Warning/%Error line
+no-oracle-output	grounding/b3/out_*/*	3	669	output of a vita-only SV (not a cell)
+iverilog-compiled-image	grounding/b3/*/iv.vvp	5	19139	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	grounding/be/*	36	9729	output of a vita-only SV (not a cell)
+iverilog-compiled-image	grounding/cells/*/sv.vvp	1	3142	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	grounding/cells/*/vl_build.log	1	4433	verilator make/c++ build log with no %Warning/%Error line
+run-transcript	grounding/gen/*	2	94853	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+no-oracle-output	grounding/gen/*.sv	65	51580	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	grounding/gen/*/sv.vvp	40	199116	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	grounding/gen/*/vl_build.log	42	186186	verilator make/c++ build log with no %Warning/%Error line
+no-oracle-output	grounding/gen/out_*/*	65	30107	output of a vita-only SV (not a cell)
+script	grounding/mx/*.py	1	7695	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+run-transcript	grounding/mx/*	1	5	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+iverilog-compiled-image	grounding/mx/*/sv.vvp	156	5305038	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	grounding/mx/*/vl_build.log	78	345774	verilator make/c++ build log with no %Warning/%Error line
+misc	grounding/mx/*	1	0	misc
+duplicate	grounding/q6_batch1_summary.txt	1	18533	byte-identical to grounding/gen/summary.txt (manifested)
+script	grounding/*.py	1	1756	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+run-transcript	grounding/(no extension)	1	11	timestamp/rc marker
+slice-doc	lens_diff/*.md	1	21257	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+vita-staged-artefact	lens_diff/be/*/*/*.velab	9	17728	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	lens_diff/be/*/*/*.vu	9	25179	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+iverilog-compiled-image	lens_diff/d/*/iv.vvp	4	10453	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	lens_diff/d/*/vl_build.log	25	111103	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	lens_diff/d/*/sv.vvp	22	132932	*.vvp iverilog compiled image (SPEC exclude)
+vita-output-unmapped	lens_diff/r2/be/*	1	28	vita-only staged/library run output (r3f/r3g/r3j library compose; no oracle cell)
+vita-staged-artefact	lens_diff/r2/be/*	2	2162	*.vu/*.velab/lib.toml (SPEC exclude)
+verilator-build-log-no-diagnostic	lens_diff/r2/d/*/vl_build.log	3	13300	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	lens_diff/r2/d/*/iv.vvp	3	9109	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	lens_diff/r2/d/out_*/*	6	1959	output of a vita-only SV (not a cell)
+no-oracle-output	lens_diff/r2/d/*.v	1	4029	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	lens_diff/r2/d/*.sv	7	9127	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	lens_diff/r3/d/*/iv.vvp	3	5326	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	lens_diff/r3/d/*/vl_build.log	3	13299	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	lens_diff/r3/d/*.vvp	1	1581	iverilog compiled image (SPEC exclude)
+no-oracle-output	lens_diff/r3/d/*.sv	8	1303	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	lens_diff/r3/d/*.v	1	305	SV with no oracle output anywhere (vita-only); not a cell
+vita-output-unmapped	lens_diff/r3/lib/*	25	9011	vita-only staged/library run output (r3f/r3g/r3j library compose; no oracle cell)
+iverilog-compiled-image	lens_diff/r3/lib/*.vvp	2	4215	iverilog compiled image (SPEC exclude)
+vita-staged-artefact	lens_diff/r3/lib/*	6	7264	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	lens_diff/r3/lib/*/*	23	13526	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	lens_diff/r3/lib/*/units/*	27	20187	*.vu/*.velab/lib.toml (SPEC exclude)
+no-oracle-output	lens_diff/r3/rescore/*/*	18	38056	output of a vita-only SV (not a cell)
+slice-doc	lens_sound/*.md	1	20350	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+no-oracle-output	lens_sound/d/*.v	1	187	SV with no oracle output anywhere (vita-only); not a cell
+run-transcript	lens_sound/d/*	2	2660	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+no-oracle-output	lens_sound/d/*.sv	1	1181	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	lens_sound/d/*/sv.vvp	7	67856	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	lens_sound/d/*/iv.vvp	2	3951	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	lens_sound/d/out_*/*	3	6726	output of a vita-only SV (not a cell)
+verilator-build-log-no-diagnostic	lens_sound/d/*/vl_build.log	9	40290	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	lens_sound/r2/*.vvp	2	4135	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	lens_sound/r2/*/iv.vvp	2	12971	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	lens_sound/r2/out_*/*	8	8334	output of a vita-only SV (not a cell)
+no-oracle-output	lens_sound/r2/*.sv	4	3399	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	lens_sound/r2/*.v	1	755	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	lens_sound/r2/rerun/*	8	11238	output of a vita-only SV (not a cell)
+iverilog-compiled-image	lens_sound/r3/*.vvp	2	3500	iverilog compiled image (SPEC exclude)
+no-oracle-output	lens_sound/r3/rerun/*	18	31705	output of a vita-only SV (not a cell)
+vita-output-unmapped	lens_sound/r3/*	7	833	vita-only run log not attributable to an oracle cell (staged/vu/library or no-oracle r3j/r3k probes)
+vita-staged-artefact	lens_sound/r3/wl/*	1	563	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	lens_sound/r3/wl/units/*	2	1048	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	lens_sound/r3/*	2	1048	*.vu/*.velab/lib.toml (SPEC exclude)
+run-transcript	lens_sound/(no extension)	3	33	timestamp/rc marker
+vita-output-unmapped	lens_sound/vu/*	6	600	vita-only run log not attributable to an oracle cell (staged/vu/library or no-oracle r3j/r3k probes)
+no-oracle-output	lens_sound/vu/*.sv	2	344	SV with no oracle output anywhere (vita-only); not a cell
+vita-staged-artefact	lens_sound/vu/*	7	4315	*.vu/*.velab/lib.toml (SPEC exclude)
+slice-doc	plan/*.md	1	41744	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+iverilog-compiled-image	plan/probe/*/iv.vvp	1	3973	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	plan/probe/*/vl_build.log	4	17732	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	plan/probe/*/sv.vvp	3	12720	*.vvp iverilog compiled image (SPEC exclude)
+slice-doc	post/*.md	1	8693	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+script	post/*.py	1	7351	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+run-transcript	post/*	2	2	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+runner-input-list	post/census/*	1	18562	cell path list fed to the census/re-score runner
+iverilog-compiled-image	post/census/*/*.vvp	2	6320	*.vvp iverilog compiled image (SPEC exclude)
+rust-source-patch	post/*.patch	1	110656	saved Rust source / patch (SPEC exclude)
+source-freeze-meta	post/*	2	520	hash/status of the source diff at binary freeze (recorded in META binaries notes)
+slice-doc	post2/*.md	2	22173	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+vita-staged-artefact	post2/be/*.velab	4	3506	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	post2/be/*.vu	7	8263	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+runner-input-list	post2/cmp/*	1	26739	cell path list fed to the census/re-score runner
+no-oracle-output	post2/cmp/*/*	8	10550	output of a vita-only SV (not a cell)
+rust-source-patch	post2/*.patch	2	144455	saved Rust source / patch (SPEC exclude)
+script	post2/*.py	1	3088	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+source-freeze-meta	post2/*	1	66	hash/status of the source diff at binary freeze (recorded in META binaries notes)
+slice-doc	post3/*.md	2	27926	slice doc (verdict source; referenced by CELLS.verdict_source, not a cell file)
+vita-staged-artefact	post3/be/*.velab	4	4620	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	post3/be/*.vu	4	5122	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	post3/be/*	6	7424	*.vu/*.velab/lib.toml (SPEC exclude)
+runner-input-list	post3/cmp/*	1	30802	cell path list fed to the census/re-score runner
+no-oracle-output	post3/cmp/*/*	69	74502	output of a vita-only SV (not a cell)
+rust-source-patch	post3/*.patch	2	165389	saved Rust source / patch (SPEC exclude)
+script	post3/*.py	1	3380	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+source-freeze-meta	post3/*	1	66	hash/status of the source diff at binary freeze (recorded in META binaries notes)
+no-oracle-output	post3st/*.sv	3	358	SV with no oracle output anywhere (vita-only); not a cell
+vita-staged-artefact	post3st/*	2	2424	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib/*	1	834	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib/*/*	2	1277	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib2/*	1	556	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib2/units/*	2	1001	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib3/*	1	556	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	post3st/lib3/units/*	2	978	*.vu/*.velab/lib.toml (SPEC exclude)
+vita-staged-artefact	staged/*.velab	30	50294	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged/*.vu	30	59109	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vcd-unmapped	staged/*.vcd	2	3278	VCD not attributable to a cell
+no-oracle-output	staged/*.sv	1	494	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	staged/*	2	2716	output of a vita-only SV (not a cell)
+no-oracle-output	step0/b/*.sv	46	40377	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	step0/b/out_*/*	46	10795	output of a vita-only SV (not a cell)
+no-oracle-output	step0/cmp0a.out	1	4739	verdict table for step0 vita-only model spellings (step0/b, step0/h *_b; oracle twin = grounding *_ci); cells excluded as no-oracle-output
+script	step0/*.py	3	15508	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+no-oracle-output	step0/h/*.sv	13	7073	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	step0/h/out_*/*	13	3376	output of a vita-only SV (not a cell)
+iverilog-compiled-image	step0/h/*/sv.vvp	6	18634	*.vvp iverilog compiled image (SPEC exclude)
+verilator-build-log-no-diagnostic	step0/h/*/vl_build.log	6	26598	verilator make/c++ build log with no %Warning/%Error line
+no-oracle-output	step0/probe/*.sv	1	301	SV with no oracle output anywhere (vita-only); not a cell
+run-transcript	step0/*	2	18247	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+script	step0/*.sh	1	680	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+script	tests/*.py	2	2080	analysis/helper script, not a cell generator or the set runner (SPEC exclude)
+iverilog-compiled-image	tests/px/*.vvp	1	2206	iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	tests/px/out/*/sv.vvp	1	2200	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	tests/*	2	2	runner stdout transcript / rc marker; raw per-cell outputs are manifested
+verilator-build-log-no-diagnostic	tests/sv/out/*/vl_build.log	51	225219	verilator make/c++ build log with no %Warning/%Error line
+iverilog-compiled-image	tests/sv/out/*/sv.vvp	51	156019	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	tests/sv/out/*/iv.vvp	6	11546	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	tests/sv/out/*/iv5.vvp	1	2099	*.vvp iverilog compiled image (SPEC exclude)
+rust-source-patch	tests/*.rs	2	34102	saved Rust source / patch (SPEC exclude)
+build-dir	lens_sound/d/out_*/obj_*	271	7638091	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	grounding/cells/out_*/obj_*	25	752484	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	grounding/b2/out_*/obj_*	313	9361550	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	grounding/b3/out_*/obj_*	313	8397498	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	grounding/gen/out_*/obj_*	1072	31798287	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	grounding/mx/out_*/obj_*	1950	58347108	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	plan/probe/out_*/obj_*	100	2994269	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	tests/__pycache__	1	27264	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	tests/px/out/*/obj_*	25	746007	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	tests/sv/out/*/obj_*	1403	40895280	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	lens_diff/d/out_*/obj_*	706	20419596	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	lens_diff/r3/lib/obj_*	25	756596	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	lens_diff/r3/d/obj_*	25	746505	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	lens_diff/r3/d/out_*/obj_*	75	2243328	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	lens_diff/r2/d/out_*/obj_*	75	2276874	verilator obj_dir / cargo target build trees (SPEC exclude)
+build-dir	step0/h/out_*/obj_*	150	4505320	verilator obj_dir / cargo target build trees (SPEC exclude)
+built-binary	post/vita	1	7321472	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	tests/vita_dbg2	1	33951336	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	tests/vita_dbg3	1	33976600	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	tests/vita_dbg	1	33950312	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	docs_probe/vita_dbg	1	33977832	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	pre/vita	1	7304736	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	post2/vita	1	7321472	Mach-O vita binary (SPEC exclude); md5 in META binaries table
+built-binary	post3/vita	1	7321504	Mach-O vita binary (SPEC exclude); md5 in META binaries table

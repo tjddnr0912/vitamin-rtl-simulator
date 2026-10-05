@@ -1,0 +1,59 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__differential__c__DN02
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/differential/c/DN02.sv
+roadmap_row: §2 🆕 V
+set: r1/differential/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre,pre_st,post_b_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_lens_diff_pre.out:10
+alias: g/lens/diff/DN02 (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_diff_pre.out:10
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./DN02.iv.txt | 50 bytes
+@outer
+DN02.sv:8: $finish called at 10 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./DN02.vl.txt | 120 bytes
+%Error: DN02.sv:4:15: Reference to 'T' before declaration (IEEE 1800-2023 6.18)
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./DN02.vlb.txt | 544 bytes
+%Error: DN02.sv:4:15: Reference to 'T' before declaration (IEEE 1800-2023 6.18)
+                    : ... Suggest move the declaration before the reference, or use a forward typedef
+    4 |     if ($bits(T) == 8) begin : a initial #1 $display("@inner"); end
+      |               ^
+        DN02.sv:6:25: ... Location of original declaration
+    6 |     typedef logic [7:0] T;
+      |                         ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./DN02.sv.txt | 55 bytes
+@inner
+DN02.sv2v.v:11: $finish called at 10 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./DN02.post.txt | 177 bytes
+@outer
+simulation ended (Finish) at time 10
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_b] | r1/differential/det1/DN02.post.txt | 177 bytes | identical to block 5
+=== block 7 | vita [post_c] | g/lens/diff/DN02.post_c.txt | 177 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./DN02.postd.txt | 177 bytes | identical to block 5
+=== block 9 | vita [postd2] | g/lens/diff/DN02.postd2.txt | 177 bytes | identical to block 5
+=== block 10 | vita [postd3] | g/lens/diff/DN02.postd3.txt | 177 bytes | identical to block 5
+=== block 11 | vita [postd4] | g/lens/diff/DN02.postd4.txt | 177 bytes | identical to block 5
+=== block 12 | vita [pre] | ./DN02.pre.txt | 177 bytes | identical to block 5
+=== end

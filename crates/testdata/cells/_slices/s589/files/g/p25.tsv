@@ -1,0 +1,12 @@
+rv558_gen	WRONG2	P=255 v=15	P=15 v=15	P=15 v=15	P=15 v=15
+rv558_ovr	WRONG2	P=15 b=32	P=15 b=4	P=15 b=4	P=15 b=32
+rv558_unit	WRONG2	P=255 v=255	P=15 v=15	P=15 v=15	P=255 v=255
+rv560_genwide	loud2	LOUD[VITA-E3009:generate-scope parameter `P` value is not a constant: `g(…)` has no co]	P=3	P=3	P=3
+rv560_pkbody	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=61 v=61	P=61 v=61	P=61 v=61
+rv560_pkdflt	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=61 v=61	P=61 v=61	rv560_pkdflt.s2v.v:11: : Verilog doesn't allow passing empty parameters to functions.
+rv560_pkret	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 v=8	P=8 v=8	P=8 v=8
+rv561_clog	loud2	LOUD[VITA-E3009:package-scoped call `b::h(...)` needs a body that references only its ]	P=4 v=4	P=4 v=4	REF[rv561_clog.s2v.v:6: syntax error]
+rv561_imp	ok2	P=4 v=4	P=4 v=4	P=4 v=4	P=4 v=4
+rv561_pkc	WRONG2	P=0000eeee v=01230123	P=01230123 v=01230123	P=01230123 v=01230123	P=01230123 v=01230123
+rv562_concat	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.g(…)` has no constant-fold a]	P=0300 v=0300	P=0300 v=0300	P=0300 v=0300
+rv562_gshadow	ok2	P=15	P=15	P=15	P=15

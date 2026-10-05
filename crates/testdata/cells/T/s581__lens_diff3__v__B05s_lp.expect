@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff3__v__B05s_lp
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff3/v/B05s_lp.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff3/v
+oracles_present: sv2v,doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: run output not captured for sv2v (translation or empty file only); oracle values quoted at s581/lens_diff3/r3.tsv:74
+blocks: 0
+=== end

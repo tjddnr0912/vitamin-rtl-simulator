@@ -1,0 +1,59 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g6__g05g_vcd_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g6/g05g_vcd_u.sv
+roadmap_row: §3.b unique-const-fn
+set: g6
+oracles_present: iverilog,verilator
+vita_tags: MECH,POST-b,POST-c,PRE-sep,S3,S4,S8,PRE
+verdict: KEEP (PRE fp == oracle)
+verdict_source: s587/IMPL.md:12
+notes: IMPL step-1 G6 lane list (lane g05g)
+alias: r1/diff/g6r/g05g_vcd_u (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:12
+alias: r2/diff/re/g6r/g05g_vcd_u (byte-identical source) verdict: KEEP (PRE fp == oracle) verdict_source: s587/IMPL.md:12
+vita_binary: MECH: md5 6fe6b4ba1a413517e63c32f5af6cb18d commit 7b33a009
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S3: md5 f72f95389855598bff8713b4ac0779c7 commit unrecorded
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./g05g_vcd_u.ivl | 92 bytes
+g05g_vcd_u.sv:4: syntax error
+g05g_vcd_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./g05g_vcd_u.vl | 400 bytes
+%Warning-ASCRANGE: g05g_vcd_u.sv:7:9: Ascending bit range vector: left < right of bit range: [0:7]
+-Info: g05g_vcd_u.sv:11: $dumpvar ignored, as Verilated without --trace
+done
+- g05g_vcd_u.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 83.333 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_g05g_vcd_u.build | 429 bytes
+%Warning-ASCRANGE: g05g_vcd_u.sv:7:9: Ascending bit range vector: left < right of bit range: [0:7]
+                                    : ... note: In instance 'top'
+    7 |   logic [0:f(2)] pa = 8'h5a;
+      |         ^
+                   ... For warning description see https://verilator.org/warn/ASCRANGE?v=5.052
+                   ... Use "/* verilator lint_off ASCRANGE */" and lint_on around source to disable this message.
+=== block 4 | vita [MECH] | ./g05g_vcd_u.mech | 1345 bytes
+g05g_vcd_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+g05g_vcd_u.sv:6:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+g05g_vcd_u.sv:7:12: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+g05g_vcd_u.sv:8:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in top]
+g05g_vcd_u.sv:8:3: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: negative packed-range low bound (e.g. `[3:-2]`) is not yet supported; net clamped to width 1 [in top]
+errors=3 warnings=2 notes=1
+rc=1
+=== block 5 | vita [PRE] | ./g05g_vcd_u.vita | 1345 bytes | identical to block 4
+=== block 6 | vita [S3] | ./g05g_vcd_u.s3 | 509 bytes
+g05g_vcd_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+done
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=1
+rc=0
+=== block 7 | vita [S4] | ./g05g_vcd_u.s4 | 509 bytes | identical to block 6
+=== block 8 | vita [S8] | ./g05g_vcd_u.s8 | 509 bytes | identical to block 6
+=== end

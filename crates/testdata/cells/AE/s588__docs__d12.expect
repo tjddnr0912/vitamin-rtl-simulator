@@ -1,0 +1,43 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__docs__d12
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/docs/d12.sv
+roadmap_row: §2 🆕 AE
+set: docs
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s588/COMMIT_DOCS.txt:66
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./d12.ivl | 64 bytes
+t6 w=1
+t7 w=1
+t8 w=1
+d12.sv:13: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./d12.vl | 239 bytes
+t6 w=1
+t7 w=1
+t8 w=1
+- d12.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.222 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./d12.s2v | 67 bytes
+t6 w=0
+t7 w=1
+t8 w=1
+d12.s2v.v:31: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./d12.PRE | 191 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t6 w=1
+t7 w=1
+t8 w=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== end

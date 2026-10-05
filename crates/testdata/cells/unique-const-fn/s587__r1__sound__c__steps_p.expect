@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__sound__c__steps_p
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/sound/c/steps_p.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/sound/c
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/sound/REPORT.md:22
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./steps_p.ivlerr | 0 bytes
+
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./vl_steps_p.build | 624 bytes
+%Error: steps_p.sv:11:22: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                        : ... note: In instance 'top'
+        steps_p.sv:5:5: ... Location of non-constant LOOP: Loop simulation took too long; probably this is an infinite loop, otherwise set '--unroll-limit' above 16384
+        steps_p.sv:11:22: ... Called from 'f()' with parameters:
+           n = ?32?h55f0
+   11 |   localparam int P = f(22000);
+      |                      ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 3 | vita [PRE] | ./steps_p.pre.txt | 171 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=22000
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== block 4 | vita [S7] | ./steps_p.s7 | 176 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=22000
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S8] | ./steps_p.s8 | 176 bytes | identical to block 4
+=== end

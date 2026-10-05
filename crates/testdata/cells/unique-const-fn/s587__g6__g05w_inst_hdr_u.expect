@@ -1,0 +1,39 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__g6__g05w_inst_hdr_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/g6/g05w_inst_hdr_u.sv
+roadmap_row: §3.b unique-const-fn
+set: g6
+oracles_present: iverilog,verilator
+vita_tags: POST-b,POST-c,PRE-sep,S4,S8,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+alias: r1/diff/g6r/g05w_inst_hdr_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/re/g6r/g05w_inst_hdr_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+vita_binary: S4: md5 da2c28ab96a4ccd0052d32a6f0f2b97f commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./g05w_inst_hdr_u.ivl | 102 bytes
+g05w_inst_hdr_u.sv:4: syntax error
+g05w_inst_hdr_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./g05w_inst_hdr_u.vl | 250 bytes
+hit top.u[7] b=4 W=7
+- g05w_inst_hdr_u.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 18.868 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_g05w_inst_hdr_u.build | 0 bytes
+
+=== block 4 | vita [PRE] | ./g05w_inst_hdr_u.vita | 772 bytes
+g05w_inst_hdr_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+g05w_inst_hdr_u.sv:1:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `f(…)` has no constant-fold arm [in top]
+g05w_inst_hdr_u.sv:8:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: instance array `u`: port `p` width 5 expects a connection of width 5 or 40, got 32 [in top]
+errors=2 warnings=1 notes=1
+rc=1
+=== block 5 | vita [S4] | ./g05w_inst_hdr_u.s4 | 772 bytes | identical to block 4
+=== block 6 | vita [S8] | ./g05w_inst_hdr_u.s8 | 772 bytes | identical to block 4
+=== end

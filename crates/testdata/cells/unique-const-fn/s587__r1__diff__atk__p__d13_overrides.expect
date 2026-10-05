@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk__p__d13_overrides
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk/p/d13_overrides.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk/p
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/diff/REPORT.md:33
+alias: r2/diff/re/atk/p/d13_overrides (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./d13_overrides.ivl | 91 bytes
+top.a W=4
+top.b W=5
+top.c W=3
+top.d W=6
+d13_overrides.sv:14: $finish called at 5 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./d13_overrides.vl | 268 bytes
+top.d W=6
+top.c W=3
+top.b W=5
+top.a W=4
+- d13_overrides.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 333.333 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_d13_overrides.build | 0 bytes
+
+=== block 4 | vita [S7] | ./d13_overrides.s7 | 208 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+top.a W=4
+top.b W=5
+top.c W=3
+top.d W=6
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [S8] | ./d13_overrides.s8 | 208 bytes | identical to block 4
+=== end

@@ -1,0 +1,78 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__d__d06_signed_xmsb
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/d/d06_signed_xmsb.sv
+roadmap_row: §3.b case-inside
+set: lens_diff/d
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST/default,POST/interp,POST/native,POST/staged,POST/vm,POST2,POST3,PRE
+verdict: no-oracle on verilator side
+verdict_source: s582/lens_diff/REPORT.md:18
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/default: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/interp: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/native: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/staged: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/vm: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 24
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/d/out_d06_signed_xmsb/iv.out | 1378 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:8: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:8: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:9: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:11: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:11: error: Incomprehensible case expression.
+rc=7
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/d/out_d06_signed_xmsb/vl.out | 390 bytes
+m1=0 m2=0 m3=0 m4=0
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | lens_diff/d/out_d06_signed_xmsb/sv.out | 61 bytes
+m1=1 m2=1 m3=1 m4=0
+sv2v.v:24: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [POST] | lens_diff/d/out_d06_signed_xmsb/post.out | 89 bytes
+m1=1 m2=1 m3=1 m4=0
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST] | lens_diff/r2/rescore/post_d06_signed_xmsb.sv/out.txt | 89 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/lens_diff__d__d06_signed_xmsb.sv/post.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 7 | vita [POST] | post2/cmp/lens_diff__d__d06_signed_xmsb.sv/post.out | 61 bytes
+m1=1 m2=1 m3=1 m4=0
+simulation ended (Finish) at time 0
+rc=0
+=== block 8 | vita [POST/default] | lens_diff/be/d06_signed_xmsb/default/out.txt | 89 bytes | identical to block 4
+=== block 9 | vita [POST/interp] | lens_diff/be/d06_signed_xmsb/interp/out.txt | 89 bytes | identical to block 4
+=== block 10 | vita [POST/native] | lens_diff/be/d06_signed_xmsb/native/out.txt | 89 bytes | identical to block 4
+=== block 11 | vita [POST/staged] | lens_diff/be/d06_signed_xmsb/staged/c.txt | 28 bytes | identical to block 6
+=== block 12 | vita [POST/staged] | lens_diff/be/d06_signed_xmsb/staged/e.txt | 28 bytes | identical to block 6
+=== block 13 | vita [POST/staged] | lens_diff/be/d06_signed_xmsb/staged/out.txt | 89 bytes | identical to block 4
+=== block 14 | vita [POST/vm] | lens_diff/be/d06_signed_xmsb/vm/out.txt | 89 bytes | identical to block 4
+=== block 15 | vita [POST2] | lens_diff/r2/rescore/post2_d06_signed_xmsb.sv/out.txt | 89 bytes | identical to block 4
+=== block 16 | vita [POST2] | lens_diff/r3/rescore/p2_d06_signed_xmsb.sv/out.txt | 89 bytes | identical to block 4
+=== block 17 | vita [POST2] | post2/cmp/lens_diff__d__d06_signed_xmsb.sv/post2.err | 28 bytes | identical to block 6
+=== block 18 | vita [POST2] | post2/cmp/lens_diff__d__d06_signed_xmsb.sv/post2.out | 61 bytes | identical to block 7
+=== block 19 | vita [POST2] | post3/cmp/lens_diff__d__d06_signed_xmsb.sv/post2.err | 28 bytes | identical to block 6
+=== block 20 | vita [POST2] | post3/cmp/lens_diff__d__d06_signed_xmsb.sv/post2.out | 61 bytes | identical to block 7
+=== block 21 | vita [POST3] | lens_diff/r3/rescore/p3_d06_signed_xmsb.sv/out.txt | 89 bytes | identical to block 4
+=== block 22 | vita [POST3] | post3/cmp/lens_diff__d__d06_signed_xmsb.sv/post3.err | 28 bytes | identical to block 6
+=== block 23 | vita [POST3] | post3/cmp/lens_diff__d__d06_signed_xmsb.sv/post3.out | 61 bytes | identical to block 7
+=== block 24 | vita [PRE] | lens_diff/d/out_d06_signed_xmsb/pre.out | 1556 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'sbx011'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'sbx011'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:8:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'sb?011'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:8:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'sb?011'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:11:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'sb1011'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d06_signed_xmsb.sv:11:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'sb1011'
+errors=6 warnings=0 notes=0
+rc=1
+=== end

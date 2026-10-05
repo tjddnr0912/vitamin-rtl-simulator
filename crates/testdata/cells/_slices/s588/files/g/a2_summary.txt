@@ -1,0 +1,115 @@
+== a41_rmw_unbound
+  PRE  : P=0 |  | rc=0
+  ivl  : P=2 |  | rc=0
+  vl   : P=2 |  | rc=0
+  s2v  : P=2 |  | rc=0
+== a42_write_x_index
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : | %Error: Internal Error: a42_write_x_index.sv:5:7: ../V3Number.cpp:1063: toUInt with 4-state 2'bxx | build_rc=1
+  s2v  : P=0001 |  | rc=0
+== a43_ret4_read_before
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a44_ret2_read_before
+  PRE  : P=1 |  | rc=0
+  ivl  : P=1 |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=x |  | rc=0
+== a45_retbit_never
+  PRE  : P=0000 |  | rc=0
+  ivl  : | a45_retbit_never.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+  vl   : P=0000 |  | rc=0
+  s2v  : | a45_retbit_never.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2) | rc=1
+== a46_typedef_bit_local
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a47_typedef_logic_local
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a48_typeparam_logic
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a49_typeparam_bit
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a50_while_uninit_i
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : | %Error: a50_while_uninit_i.sv:7:30: Expecting expression to be constant, but can't determine constant for FUNC | build_rc=1
+  s2v  : P=0000 |  | rc=0
+== a51_accum_ret4
+  PRE  : P=0100 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a52_dead_self_assign
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0011 |  | rc=0
+  vl   : P=0011 |  | rc=0
+  s2v  : P=0011 |  | rc=0
+== a55_known_bit_after_partial
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=0001 |  | rc=0
+  vl   : P=0001 |  | rc=0
+  s2v  : P=0001 |  | rc=0
+== a57_x_and_call
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=0000 |  | rc=0
+  vl   : P=0000 |  | rc=0
+  s2v  : P=0000 |  | rc=0
+== a59_self_inc_local
+  PRE  : P=0001 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a61_static_fn
+  PRE  : P=0000 |  | rc=0
+  ivl  : P=xxxx |  | rc=0
+  vl   : P=xxxx |  | rc=0
+  s2v  : P=xxxx |  | rc=0
+== a62_ret2_bitwrite
+  PRE  : P=1 |  | rc=0
+  ivl  : P=X |  | rc=0
+  vl   : P=1 |  | rc=0
+  s2v  : P=X |  | rc=0
+== a63_init_x_literal
+  PRE  : P=0011 |  | rc=0
+  ivl  : P=0011 |  | rc=0
+  vl   : P=0011 |  | rc=0
+  s2v  : P=0011 |  | rc=0
+== a64_int_from_x_and0
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=0 |  | rc=0
+== a65_if_gt5
+  PRE  : P=0010 |  | rc=0
+  ivl  : P=0010 |  | rc=0
+  vl   : P=0010 |  | rc=0
+  s2v  : P=0010 |  | rc=0
+== a66_int_sub_self
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== a67_lp_int_retinteger
+  PRE  : P=0 |  | rc=0
+  ivl  : P=0 |  | rc=0
+  vl   : P=x |  | rc=0
+  s2v  : P=x |  | rc=0
+== a68_byte_ret_x
+  PRE  : | VITA-E3009:parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl  : P=5 |  | rc=0
+  vl   : P=X |  | rc=0
+  s2v  : P=X |  | rc=0

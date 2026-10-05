@@ -1,0 +1,62 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__U_an_enum_typed_localparam_carries_the_lab_628734c2
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/U_an_enum_typed_localparam_carries_the_lab_628734c2.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: PRE=some
+verdict_source: s593/g/c5.p5.summ:1408
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/typed_param_user_type__an_enum_typed_localparam_carries_the_label_and_its_methods__28927_29 (byte-identical source) verdict: PRE=some verdict_source: s593/g/c5.p5.summ:1408
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.ivl | 790 bytes
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3: sorry: Don't know how to handle methods of parameters of type:
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3:      : 9netenum_t
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3:      : in scope tb
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3: error: Object p.P has no method "name(...)".
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3: sorry: Don't know how to handle methods of parameters of type:
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3:      : 9netenum_t
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3:      : in scope tb
+U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3: error: Object p.P has no method "next(...)".
+4 error(s) during elaboration.
+rc=4
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.vl | 277 bytes
+DIGEST=C B 1
+- U_an_enum_typed_localparam_carries_the_lab_628734c2.sv:3: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 83.334 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v | 971 bytes
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5: sorry: Don't know how to handle methods of parameters of type:
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5:      : netvector_t:logic unsigned[1:0]
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5:      : in scope tb
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5: error: Object tb.p_P has no method "name(...)".
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5: error: Object tb.p_v has no method "name(...)".
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5: sorry: Don't know how to handle methods of parameters of type:
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5:      : netvector_t:logic unsigned[1:0]
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5:      : in scope tb
+U_an_enum_typed_localparam_carries_the_lab_628734c2.s2v.v:5: error: Object tb.p_P has no method "next(...)".
+5 error(s) during elaboration.
+rc=5
+=== block 4 | vita [post1] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post1 | 181 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+DIGEST=C B 1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [post1] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post1.route | 29 bytes
+tb $enum_name$p::e_t frame 2
+=== block 6 | vita [post2] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post2 | 181 bytes | identical to block 4
+=== block 7 | vita [post2] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post2.route | 29 bytes | identical to block 5
+=== block 8 | vita [post5] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post5 | 181 bytes | identical to block 4
+=== block 9 | vita [post5] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.post5.route | 29 bytes | identical to block 5
+=== block 10 | vita [pre] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.pre | 181 bytes | identical to block 4
+=== block 11 | vita [pre] | ./U_an_enum_typed_localparam_carries_the_lab_628734c2.pre.route | 29 bytes | identical to block 5
+=== end

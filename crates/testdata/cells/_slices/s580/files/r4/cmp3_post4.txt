@@ -1,0 +1,832 @@
+post3    s580/census/A.sv 
+post3    s580/census/A_2s.sv 
+both     s580/census/A_wq.sv 
+post3    s580/census/S.sv 
+post3    s580/census/S_2s.sv 
+post3    s580/census/S_wq.sv 
+both     s580/census/V.sv 
+post3    s580/census/V_2s.sv 
+post3    s580/census/Vr.sv 
+post3    s580/census/W.sv 
+post3    s580/census/W_2s.sv 
+both     s580/census/W_wq.sv 
+post3    s580/census/X.sv 
+both     s580/census/X_wq.sv 
+post3    s580/census/e/E01.sv 
+post3    s580/census/e/E02.sv 
+both     s580/census/e/E03.sv 
+post3    s580/census/e/E04.sv 
+post3    s580/census/e/E05.sv 
+both     s580/census/e/E06.sv 
+post3    s580/census/e/E07.sv 
+post3    s580/census/e/E10.sv 
+post3    s580/census/e/E11.sv 
+both     s580/census/e/E12.sv 
+both     s580/census/e/E13.sv 
+both     s580/census/e/E14.sv 
+post3    s580/census/e/E15.sv 
+both     s580/census/e/E20.sv 
+both     s580/census/e/E21.sv 
+both     s580/census/e/E22.sv 
+both     s580/census/e/E23.sv 
+both     s580/census/e/E24.sv 
+both     s580/census/e/E25.sv 
+both     s580/census/e/E26.sv 
+both     s580/census/e/E30.sv 
+both     s580/census/e/E31.sv 
+post3    s580/census/e/E40.sv 
+post3    s580/census/e/E41.sv 
+post3    s580/census/e/E42.sv 
+post3    s580/census/e/E43.sv 
+post3    s580/census/e/E44.sv 
+post3    s580/census/e/E45.sv 
+post3    s580/census/e/E46.sv 
+post3    s580/census/e/E47.sv 
+both     s580/census/e/E50.sv 
+both     s580/census/e/E60.sv 
+both     s580/census/e/E61.sv 
+both     s580/census/e/E62.sv 
+both     s580/census/e/E63.sv 
+both     s580/census/e/E64.sv 
+both     s580/census/e/E65.sv 
+both     s580/census/e/E70.sv 
+both     s580/census/e/E71.sv 
+post3    s580/census/e/E72.sv 
+post3    s580/census/e/E73.sv 
+post3    s580/census/e/E74.sv 
+post3    s580/census/e/E75.sv 
+post3    s580/census/e/E76.sv 
+post3    s580/census/e/E77.sv 
+post3    s580/census/e/E78.sv 
+post3    s580/census/e/E79.sv 
+post3    s580/census/e/E80.sv 
+both     s580/census/e/E81.sv 
+post3    s580/census/e/E82.sv 
+post3    s580/census/e/E83.sv 
+post3    s580/census/e/E84.sv 
+post3    s580/census/e/E85.sv 
+both     s580/census/e/E86.sv 
+post3    s580/census/e/E87.sv 
+both     s580/census/e/E88.sv 
+both     s580/census/e/Q.sv 
+post3    s580/census/e/Q1.sv 
+post3    s580/census/c/C01.sv 
+post3    s580/census/c/C02.sv 
+post3    s580/census/c/C03.sv 
+post3    s580/census/c/C04.sv 
+post3    s580/census/c/C05.sv 
+post3    s580/census/c/C06.sv 
+post3    s580/census/c/C07.sv 
+post3    s580/census/c/C08.sv 
+both     s580/census/c/C09.sv 
+pre      s580/census/c/C10.sv 
+pre      s580/census/c/C11.sv 
+pre      s580/census/c/C12.sv 
+pre      s580/census/c/C13.sv 
+post3    s580/census/c/C14.sv 
+post3    s580/census/c/C15.sv 
+post3    s580/census/c/C16.sv 
+post3    s580/census/c/C17.sv 
+both     s580/census/c/C18.sv 
+both     s580/census/c/C19.sv 
+post3    s580/census/c/C20.sv 
+post3    s580/census/c/C21.sv 
+post3    s580/census/c/C22.sv 
+post3    s580/census/c/C23.sv 
+both     s580/census/c/C24.sv 
+post3    s580/census/c/C25.sv 
+post3    s580/census/c/C26.sv 
+both     s580/census/c/C27.sv 
+pre      s580/census/c/C28.sv 
+both     s580/census/c/C28b.sv 
+pre      s580/census/c/C29.sv 
+both     s580/census/c/C30.sv 
+pre      s580/census/c/C31.sv 
+post3    s580/census/c/C32.sv 
+both     s580/census/c/C33.sv 
+post3    s580/census/c/C34.sv 
+both     s580/census/cq/C09q.sv 
+both     s580/census/cq/C10q.sv 
+both     s580/census/cq/C11q.sv 
+both     s580/census/cq/C12q.sv 
+both     s580/census/cq/C13q.sv 
+both     s580/census/cq/C27q.sv 
+both     s580/census/cq/C28q.sv 
+both     s580/census/cq/C29q.sv 
+both     s580/census/cq/C30q.sv 
+both     s580/census/cq/C31q.sv 
+post3    s580/census/z/Z01.sv 
+post3    s580/census/z/Z02.sv 
+both     s580/census/z/Z03.sv 
+pre      s580/census/z/Z04.sv 
+pre      s580/census/z/Z05.sv 
+post3    s580/census/z/Z06.sv 
+post3    s580/census/z/Z07.sv 
+post3    s580/fx/F01.sv 
+post3    s580/fx/F02.sv 
+post3    s580/fx/F03.sv 
+post3    s580/fx/F04.sv 
+post3    s580/fx/F05.sv 
+post3    s580/fx/F06.sv 
+post3    s580/fx/F06n.sv 
+post3    s580/fx/F07.sv 
+post3    s580/fx/F07n.sv 
+post3    s580/fx/F08.sv 
+post3    s580/fx/F08b.sv 
+post3    s580/fx/F09.sv 
+post3    s580/fx/F10.sv 
+post3    s580/fx/F10b.sv 
+post3    s580/fx/F11.sv 
+pre      s580/fx/F12.sv 
+both     s580/fx/F14.sv 
+both     s580/fx/F15.sv 
+post3    s580/fx/F16.sv 
+pre      s580/fx/F17a.sv 
+pre      s580/fx/F17b.sv 
+both     s580/fx/F18.sv 
+post3    s580/fx/Ffill.sv 
+pre      s580/fx/G1.sv 
+pre      s580/fx/G2.sv 
+both     s580/fx/G2q.sv 
+post3    s580/fx/L1.sv 
+post3    s580/fx/L2.sv 
+post3    s580/fx/L3.sv 
+post3    s580/fx/L4.sv 
+post3    s580/fx/L5.sv 
+post3    s580/fx/L6.sv 
+post3    s580/fx/L7.sv 
+post3    s580/fx/L8.sv 
+post3    s580/probes/repro_inside_op.sv 
+post3    s580/probes/repro_inside_op.sv -DTWO_STATE
+both     s580/probes/var_el.sv 
+both     s580/ident/I01.sv 
+both     s580/ident/I02.sv 
+both     s580/ident/I03.sv 
+both     s580/ident/I04.sv 
+both     s580/ident/I05.sv 
+both     s580/ident/I06.sv 
+both     s580/ident/I10.sv 
+both     s580/ident/I11.sv 
+both     s580/ident/I12.sv 
+both     s580/ident/I13.sv 
+pre      s580/r2/CD1.sv 
+both     s580/r2/OR1.sv 
+post3    s580/r2/OR1.sv -DIV
+both     s580/r2/OR2.sv 
+post3    s580/r2/OR2.sv -DIV
+pre      s580/r2/SL1.sv 
+pre      s580/r2/SL1q.sv 
+pre      s580/r2/fx2/H01.sv 
+pre      s580/r2/fx2/H02.sv 
+pre      s580/r2/fx2/H02q.sv 
+pre      s580/r2/fx2/H03.sv 
+post3    s580/r2/fx2/H04.sv 
+post3    s580/r2/fx2/H05.sv 
+post3    s580/r2/fx2/H05w.sv 
+post3    s580/r2/fx2/H06.sv 
+pre      s580/r2/fx2/H07.sv 
+pre      s580/r2/fx2/H08.sv 
+pre      s580/r2/r26/S01A.sv 
+pre      s580/r2/r26/S01B.sv 
+pre      s580/r2/r26/S01G.sv 
+pre      s580/r2/r26/S01L.sv 
+pre      s580/r2/r26/S01O.sv 
+pre      s580/r2/r26/S02A.sv 
+pre      s580/r2/r26/S02B.sv 
+pre      s580/r2/r26/S02G.sv 
+pre      s580/r2/r26/S02L.sv 
+pre      s580/r2/r26/S02O.sv 
+pre      s580/r2/r26/S03A.sv 
+pre      s580/r2/r26/S03B.sv 
+pre      s580/r2/r26/S03G.sv 
+pre      s580/r2/r26/S03L.sv 
+pre      s580/r2/r26/S03O.sv 
+pre      s580/r2/r26/S04A.sv 
+pre      s580/r2/r26/S04B.sv 
+pre      s580/r2/r26/S04G.sv 
+pre      s580/r2/r26/S04L.sv 
+pre      s580/r2/r26/S04O.sv 
+pre      s580/r2/r26/S05A.sv 
+pre      s580/r2/r26/S05B.sv 
+both     s580/r2/r26/S05G.sv 
+both     s580/r2/r26/S05L.sv 
+both     s580/r2/r26/S05O.sv 
+both     s580/r2/r26/S06A.sv 
+both     s580/r2/r26/S06B.sv 
+both     s580/r2/r26/S06G.sv 
+both     s580/r2/r26/S06L.sv 
+both     s580/r2/r26/S06O.sv 
+pre      s580/r2/r26/S07A.sv 
+pre      s580/r2/r26/S07B.sv 
+both     s580/r2/r26/S07G.sv 
+both     s580/r2/r26/S07L.sv 
+both     s580/r2/r26/S07O.sv 
+pre      s580/r2/r26/S08A.sv 
+pre      s580/r2/r26/S08B.sv 
+both     s580/r2/r26/S08G.sv 
+both     s580/r2/r26/S08L.sv 
+both     s580/r2/r26/S08O.sv 
+both     s580/r2/r26/S09A.sv 
+both     s580/r2/r26/S09B.sv 
+both     s580/r2/r26/S09G.sv 
+both     s580/r2/r26/S09L.sv 
+both     s580/r2/r26/S09O.sv 
+both     s580/r2/r26/S10A.sv 
+both     s580/r2/r26/S10B.sv 
+both     s580/r2/r26/S10G.sv 
+both     s580/r2/r26/S10L.sv 
+both     s580/r2/r26/S10O.sv 
+pre      s580/r2/r26/S11A.sv 
+pre      s580/r2/r26/S11B.sv 
+pre      s580/r2/r26/S11G.sv 
+pre      s580/r2/r26/S11L.sv 
+pre      s580/r2/r26/S11O.sv 
+both     s580/r2/r26/S12A.sv 
+both     s580/r2/r26/S12B.sv 
+both     s580/r2/r26/S12G.sv 
+both     s580/r2/r26/S12L.sv 
+both     s580/r2/r26/S12O.sv 
+pre      s580/r2/r26/S13A.sv 
+pre      s580/r2/r26/S13B.sv 
+pre      s580/r2/r26/S13G.sv 
+pre      s580/r2/r26/S13L.sv 
+pre      s580/r2/r26/S13O.sv 
+pre      s580/r2/r26/S14A.sv 
+pre      s580/r2/r26/S14B.sv 
+both     s580/r2/r26/S14G.sv 
+both     s580/r2/r26/S14L.sv 
+both     s580/r2/r26/S14O.sv 
+pre      s580/r2/r26/S15A.sv 
+pre      s580/r2/r26/S15B.sv 
+pre      s580/r2/r26/S15G.sv 
+pre      s580/r2/r26/S15L.sv 
+pre      s580/r2/r26/S15O.sv 
+both     s580/r2/r26/S16A.sv 
+both     s580/r2/r26/S16B.sv 
+both     s580/r2/r26/S16G.sv 
+both     s580/r2/r26/S16L.sv 
+both     s580/r2/r26/S16O.sv 
+both     s580/r2/r26/S17A.sv 
+both     s580/r2/r26/S17B.sv 
+both     s580/r2/r26/S17G.sv 
+both     s580/r2/r26/S17L.sv 
+both     s580/r2/r26/S17O.sv 
+both     s580/r2/r26/S18A.sv 
+both     s580/r2/r26/S18B.sv 
+both     s580/r2/r26/S18G.sv 
+both     s580/r2/r26/S18L.sv 
+both     s580/r2/r26/S18O.sv 
+neither  s580/r2/r26/X1.sv 
+         NEW  X1.sv:7:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: an `inside` element that builds an x/z/? literal into a larger expression is not supported: IEEE 1800-2017 §11.4.13 compa   [!PRE =POST3]
+         NEW  X1.sv:9:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: an `inside` element that builds an x/z/? literal into a larger expression is not supported: IEEE 1800-2017 §11.4.13 compa   [!PRE =POST3]
+         NEW  errors=2 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [!PRE =POST3]
+         PRE  X1 rep 0000
+         PRE  X1 psel 1
+         PRE  X1 gencase default
+         PRE  simulation ended (Finish) at time 2
+         PRE  errors=0 warnings=0 notes=0
+         PRE  rc=0
+         POST3 X1.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern 
+         POST3 errors=3 warnings=0 notes=0
+both     s580/r2/r26/X2.sv 
+pre      s580/r2/r26/X3.sv 
+pre      s580/r2/r26/X4.sv 
+pre      s580/r4/fx/H07C.sv 
+pre      s580/r4/fx/I12.sv 
+pre      s580/r4/fx/K02.sv 
+pre      s580/r4/fx/K02q.sv 
+post3    s580/r4/fx/K07.sv 
+pre      s580/lens_snd/probes/P1.sv 
+pre      s580/lens_snd/probes/P1.sv -DNO_INSIDE
+pre      s580/lens_snd/probes/P2a.sv 
+pre      s580/lens_snd/probes/P2b.sv 
+pre      s580/lens_snd/probes/P2c.sv 
+post3    s580/lens_snd/probes/P3.sv 
+post3    s580/lens_snd/probes/P3.sv -DNO_INSIDE
+pre      s580/lens_snd/probes/P4a.sv 
+pre      s580/lens_snd/probes/P4a.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P4b.sv 
+both     s580/lens_snd/probes/P4b.sv -DNO_INSIDE
+pre      s580/lens_snd/probes/P5.sv 
+pre      s580/lens_snd/probes/P5.sv -DNO_INSIDE
+neither  s580/lens_snd/probes/P7.sv 
+         NEW  L4=0 F1=1 F2=1 F3=1   [!PRE =POST3]
+         NEW  L4q=1 FQ=1   [=PRE !POST3]
+         PRE  L4=0 F1=x F2=x F3=x
+         POST3 L4q=0 FQ=1
+pre      s580/lens_snd/probes/P7.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P8.sv 
+both     s580/lens_snd/probes/P8.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P9.sv 
+post3    s580/lens_snd/probes/P9.sv -DNO_INSIDE
+post3    s580/lens_diff/P01.sv 
+post3    s580/lens_diff/P01.sv -DIV
+post3    s580/lens_diff/P02.sv 
+post3    s580/lens_diff/P02.sv -DIV
+pre      s580/lens_diff/P03.sv 
+pre      s580/lens_diff/P03.sv -DB
+pre      s580/lens_diff/P03.sv -DRL
+neither  s580/lens_diff/P03.sv -DIV
+         NEW  L09 0   [=PRE !POST3]
+         NEW  L10 0   [=PRE !POST3]
+         NEW  L12 0   [=PRE !POST3]
+         NEW  L14 0   [=PRE !POST3]
+         NEW  R01 1   [!PRE =POST3]
+         NEW  R02 0   [!PRE =POST3]
+         NEW  R01v 1   [!PRE =POST3]
+         NEW  R02v 0   [!PRE =POST3]
+         NEW  G09 else   [=PRE !POST3]
+         PRE  R01 0
+         PRE  R02 1
+         PRE  R01v 0
+         PRE  R02v 1
+         POST3 L09 1
+         POST3 L10 1
+         POST3 L12 1
+         POST3 L14 1
+         POST3 G09 then
+pre      s580/lens_diff/P03.sv -DB -DIV
+both     s580/lens_diff/P03.sv -DRL -DIV
+post3    s580/lens_diff/P04.sv 
+post3    s580/lens_diff/P04.sv -DIV
+both     s580/lens_diff/P05.sv 
+both     s580/lens_diff/P05.sv -DK1
+both     s580/lens_diff/P05.sv -DK2
+both     s580/lens_diff/P05.sv -DK3
+both     s580/lens_diff/P05.sv -DK4
+post3    s580/lens_diff/P05.sv -DK5
+both     s580/lens_diff/P05.sv -DK7
+both     s580/lens_diff/P05.sv -DK8
+both     s580/lens_diff/P05.sv -DK9
+both     s580/lens_diff/P05.sv -DIV
+both     s580/lens_diff/P05.sv -DK1 -DIV
+both     s580/lens_diff/P05.sv -DK2 -DIV
+both     s580/lens_diff/P05.sv -DK3 -DIV
+both     s580/lens_diff/P05.sv -DK4 -DIV
+both     s580/lens_diff/P05.sv -DK5 -DIV
+both     s580/lens_diff/P05.sv -DK7 -DIV
+both     s580/lens_diff/P05.sv -DK8 -DIV
+both     s580/lens_diff/P05.sv -DK9 -DIV
+both     s580/lens_diff/P05g.sv 
+both     s580/lens_diff/P05g.sv -DK1
+both     s580/lens_diff/P05g.sv -DK2
+both     s580/lens_diff/P05g.sv -DK3
+both     s580/lens_diff/P05g.sv -DK4
+post3    s580/lens_diff/P05g.sv -DK5
+both     s580/lens_diff/P05g.sv -DK7
+both     s580/lens_diff/P05g.sv -DK8
+both     s580/lens_diff/P05g.sv -DK9
+both     s580/lens_diff/P05g.sv -DIV
+both     s580/lens_diff/P05g.sv -DK1 -DIV
+both     s580/lens_diff/P05g.sv -DK2 -DIV
+both     s580/lens_diff/P05g.sv -DK3 -DIV
+both     s580/lens_diff/P05g.sv -DK4 -DIV
+both     s580/lens_diff/P05g.sv -DK5 -DIV
+both     s580/lens_diff/P05g.sv -DK7 -DIV
+both     s580/lens_diff/P05g.sv -DK8 -DIV
+both     s580/lens_diff/P05g.sv -DK9 -DIV
+pre      s580/lens_diff/P06.sv 
+pre      s580/lens_diff/P06.sv -DFIN
+pre      s580/lens_diff/P06.sv -DFJ
+pre      s580/lens_diff/P06.sv -DFRC
+pre      s580/lens_diff/P06.sv -DIFC
+pre      s580/lens_diff/P06v.sv 
+pre      s580/lens_diff/P06v.sv -DFIN
+pre      s580/lens_diff/P06v.sv -DFJ
+pre      s580/lens_diff/P06v.sv -DFRC
+pre      s580/lens_diff/P06v.sv -DIFC
+pre      s580/lens_diff/P06v.sv -DNOGC
+both     s580/lens_diff/P07.sv 
+both     s580/lens_diff/P07.sv -DARR
+post3    s580/lens_diff/P07.sv -DLETT
+both     s580/lens_diff/P07.sv -DIV
+both     s580/lens_diff/P07.sv -DARR -DIV
+both     s580/lens_diff/P07.sv -DLETT -DIV
+post3    s580/lens_diff/P08.sv 
+post3    s580/lens_diff/P08.sv -DIV
+post3    s580/lens_diff/P08b.sv 
+neither  s580/lens_diff/P08b.sv -DIV
+         NEW  W01 1   [!PRE =POST3]
+         NEW  W02 1   [!PRE =POST3]
+         NEW  W03 1   [!PRE =POST3]
+         NEW  W05 1   [!PRE =POST3]
+         NEW  W06 1   [!PRE =POST3]
+         NEW  Q01 1   [!PRE =POST3]
+         NEW  Q02 1   [!PRE =POST3]
+         NEW  H02 1   [!PRE =POST3]
+         NEW  L01 0   [=PRE !POST3]
+         NEW  L02 1   [=PRE !POST3]
+         NEW  L20 1   [=PRE !POST3]
+         NEW  L09 0   [=PRE !POST3]
+         PRE  W01 0
+         PRE  W02 0
+         PRE  W03 0
+         PRE  W05 0
+         PRE  W06 0
+         PRE  Q01 0
+         PRE  Q02 0
+         PRE  H02 0
+         POST3 L01 1
+         POST3 L02 0
+         POST3 L20 0
+         POST3 L09 1
+post3    s580/lens_diff/P09.sv 
+post3    s580/lens_diff/P09.sv -DNOP
+post3    s580/lens_diff/P09.sv -DIV
+post3    s580/lens_diff/P09.sv -DNOP -DIV
+both     s580/lens_diff/P10.sv 
+both     s580/lens_diff/P10.sv -DIV
+pre      s580/lens_diff/P10b.sv 
+neither  s580/lens_diff/P10b.sv -DIV
+         NEW  L30 0   [=PRE !POST3]
+         NEW  L31 0   [=PRE !POST3]
+         NEW  R32 1   [!PRE =POST3]
+         NEW  R33 1   [!PRE =POST3]
+         NEW  G30 1   [!PRE =POST3]
+         NEW  OV 8   [=PRE !POST3]
+         PRE  R32 0
+         PRE  R33 0
+         PRE  G30 0
+         POST3 L30 1
+         POST3 L31 1
+         POST3 OV 2
+post3    s580/lens_diff/P10c.sv 
+neither  s580/lens_diff/P10c.sv -DIV
+         NEW  R32 1   [!PRE =POST3]
+         NEW  R33 1   [!PRE =POST3]
+         NEW  G30 1   [!PRE =POST3]
+         NEW  OV 8   [=PRE !POST3]
+         PRE  R32 0
+         PRE  R33 0
+         PRE  G30 0
+         POST3 OV 2
+post3    s580/lens_diff/P11.sv 
+pre      s580/lens_diff2/Q1.sv 
+pre      s580/lens_diff2/Q1.sv -DWX
+pre      s580/lens_diff2/Q1.sv -DIV
+pre      s580/lens_diff2/Q1.sv -DWX -DIV
+post3    s580/lens_diff2/Q2.sv 
+pre      s580/lens_diff2/Q2.sv -DCONSTS
+post3    s580/lens_diff2/Q2.sv -DIV
+pre      s580/lens_diff2/Q2.sv -DCONSTS -DIV
+pre      s580/lens_diff2/Q3.sv 
+pre      s580/lens_diff2/Q3.sv -DADT
+pre      s580/lens_diff2/Q3.sv -DFBODY
+pre      s580/lens_diff2/Q3.sv -DFNRX
+pre      s580/lens_diff2/Q3.sv -DGA
+pre      s580/lens_diff2/Q3.sv -DGFOR
+pre      s580/lens_diff2/Q3.sv -DPSEL
+pre      s580/lens_diff2/Q3.sv -DRBB
+pre      s580/lens_diff2/Q3.sv -DRBT
+pre      s580/lens_diff2/Q3.sv -DREPX
+both     s580/lens_diff2/Q3.sv -DSTX
+pre      s580/lens_diff2/Q3.sv -DTDX
+pre      s580/lens_diff2/Q3.sv -DXBEFORE
+pre      s580/lens_diff2/Q3.sv -DIV
+pre      s580/lens_diff2/Q3.sv -DADT -DIV
+pre      s580/lens_diff2/Q3.sv -DFBODY -DIV
+pre      s580/lens_diff2/Q3.sv -DFNRX -DIV
+pre      s580/lens_diff2/Q3.sv -DGA -DIV
+pre      s580/lens_diff2/Q3.sv -DGFOR -DIV
+pre      s580/lens_diff2/Q3.sv -DPSEL -DIV
+pre      s580/lens_diff2/Q3.sv -DRBB -DIV
+pre      s580/lens_diff2/Q3.sv -DRBT -DIV
+pre      s580/lens_diff2/Q3.sv -DREPX -DIV
+both     s580/lens_diff2/Q3.sv -DSTX -DIV
+pre      s580/lens_diff2/Q3.sv -DTDX -DIV
+pre      s580/lens_diff2/Q3.sv -DXBEFORE -DIV
+post3    s580/lens_diff2/Q4.sv 
+post3    s580/lens_diff2/Q4.sv -DSTM
+post3    s580/lens_diff2/Q4.sv -DIV
+post3    s580/lens_diff2/Q4.sv -DSTM -DIV
+post3    s580/lens_diff2/Q5.sv 
+pre      s580/lens_diff2/Q5.sv -DCMP
+both     s580/lens_diff2/Q5.sv -DRTT
+pre      s580/lens_diff2/Q5.sv -DIV
+pre      s580/lens_diff2/Q5.sv -DCMP -DIV
+pre      s580/lens_diff2/Q5.sv -DRTT -DIV
+both     s580/lens_diff2/Q6.sv 
+both     s580/lens_diff2/Q6.sv -DPSEE
+both     s580/lens_diff2/Q6.sv -DPSEL
+both     s580/lens_diff2/Q6.sv -DREPE
+both     s580/lens_diff2/Q6.sv -DREPX
+pre      s580/lens_diff2/Q6.sv -DSTR
+both     s580/lens_diff2/Q6.sv -DXB
+both     s580/lens_diff2/Q6.sv -DXE
+both     s580/lens_diff2/Q6.sv -DXI
+both     s580/lens_diff2/Q6.sv -DIV
+both     s580/lens_diff2/Q6.sv -DPSEE -DIV
+both     s580/lens_diff2/Q6.sv -DPSEL -DIV
+both     s580/lens_diff2/Q6.sv -DREPE -DIV
+both     s580/lens_diff2/Q6.sv -DREPX -DIV
+pre      s580/lens_diff2/Q6.sv -DSTR -DIV
+both     s580/lens_diff2/Q6.sv -DXB -DIV
+both     s580/lens_diff2/Q6.sv -DXE -DIV
+both     s580/lens_diff2/Q6.sv -DXI -DIV
+post3    s580/lens_diff2/Q7.sv 
+post3    s580/lens_diff2/Q7.sv -DIV
+neither  s580/lens_diff2/Q8.sv 
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=7 warnings=1 notes=0   [!PRE !POST3]
+         PRE  errors=2 warnings=1 notes=0
+         POST3 errors=5 warnings=1 notes=0
+neither  s580/lens_diff2/Q8.sv -DIU
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=8 warnings=1 notes=0   [!PRE !POST3]
+         PRE  errors=2 warnings=1 notes=0
+         POST3 errors=6 warnings=1 notes=0
+neither  s580/lens_diff2/Q8.sv -DRR
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=8 warnings=1 notes=0   [!PRE !POST3]
+         PRE  errors=2 warnings=1 notes=0
+         POST3 errors=6 warnings=1 notes=0
+neither  s580/lens_diff2/Q8.sv -DIV
+         NEW  Q8.sv:15:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K2` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:17:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K4` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:18:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K5` value is not a constant: 'b0?1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=10 warnings=1 notes=0   [=PRE !POST3]
+         PRE  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         POST3 errors=5 warnings=1 notes=0
+neither  s580/lens_diff2/Q8.sv -DIU -DIV
+         NEW  Q8.sv:15:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K2` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:17:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K4` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:18:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K5` value is not a constant: 'b0?1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=11 warnings=1 notes=0   [=PRE !POST3]
+         PRE  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         POST3 errors=6 warnings=1 notes=0
+neither  s580/lens_diff2/Q8.sv -DRR -DIV
+         NEW  Q8.sv:15:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K2` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:17:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K4` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:18:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K5` value is not a constant: 'b0?1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:19:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K6` value is not a constant: 'bx0 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:20:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K7` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  Q8.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t   [!PRE =POST3]
+         NEW  errors=11 warnings=1 notes=0   [=PRE !POST3]
+         PRE  Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         PRE  Q8.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+         POST3 errors=6 warnings=1 notes=0
+pre      s580/lens_diff2/Q9.sv 
+pre      s580/lens_diff2/Q9.sv -DIV
+post3    s580/lens_snd2/probes/P1.sv 
+post3    s580/lens_snd2/probes/P1.sv -DONLYC
+post3    s580/lens_snd2/probes/P1.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P1.sv -DONLYC -DNO_INSIDE
+pre      s580/lens_snd2/probes/P10.sv 
+pre      s580/lens_snd2/probes/P10.sv -DNO_INSIDE
+pre      s580/lens_snd2/probes/P2.sv 
+post3    s580/lens_snd2/probes/P2.sv -DNOK
+pre      s580/lens_snd2/probes/P2.sv -DNO_INSIDE
+post3    s580/lens_snd2/probes/P2.sv -DNOK -DNO_INSIDE
+post3    s580/lens_snd2/probes/P3.sv 
+post3    s580/lens_snd2/probes/P3.sv -DNO_INSIDE
+post3    s580/lens_snd2/probes/P4.sv 
+post3    s580/lens_snd2/probes/P4.sv -DNOCLASS
+pre      s580/lens_snd2/probes/P5.sv 
+pre      s580/lens_snd2/probes/P5.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P6.sv 
+both     s580/lens_snd2/probes/P6.sv -DXI
+both     s580/lens_snd2/probes/P6.sv -DXV
+post3    s580/lens_snd2/probes/P7.sv 
+post3    s580/lens_snd2/probes/P7.sv -DU
+post3    s580/lens_snd2/probes/P7.sv -DNO_INSIDE
+post3    s580/lens_snd2/probes/P7.sv -DU -DNO_INSIDE
+post3    s580/lens_snd2/probes/P8.sv 
+post3    s580/lens_snd2/probes/P8.sv -DREALI
+both     s580/lens_snd2/probes/P8.sv -DREALL
+post3    s580/lens_snd2/probes/P8.sv -DREALQ
+both     s580/lens_snd2/probes/P9.sv 
+both     s580/lens_snd2/probes/P9.sv -DQUEUE
+post3    s580/lens_snd2/probes/P9.sv -DSFMT
+both     s580/lens_snd2/probes/P9.sv -DSTRI
+post3    s580/lens_snd2/probes/P9.sv -DSTRV
+both     s580/lens_snd2/probes/P9.sv -DUARR
+both     s580/lens_diff3/G1.sv 
+both     s580/lens_diff3/G1.sv -DL1
+both     s580/lens_diff3/G1.sv -DL10
+both     s580/lens_diff3/G1.sv -DL10P
+both     s580/lens_diff3/G1.sv -DL11
+both     s580/lens_diff3/G1.sv -DL12
+both     s580/lens_diff3/G1.sv -DL1P
+pre      s580/lens_diff3/G1.sv -DL2
+both     s580/lens_diff3/G1.sv -DL2P
+pre      s580/lens_diff3/G1.sv -DL3
+pre      s580/lens_diff3/G1.sv -DL4
+both     s580/lens_diff3/G1.sv -DL4P
+pre      s580/lens_diff3/G1.sv -DL5
+pre      s580/lens_diff3/G1.sv -DL5N
+pre      s580/lens_diff3/G1.sv -DL6
+both     s580/lens_diff3/G1.sv -DL7
+both     s580/lens_diff3/G1.sv -DL8
+both     s580/lens_diff3/G1.sv -DL8P
+pre      s580/lens_diff3/G1.sv -DL9
+both     s580/lens_diff3/G1.sv -DIV
+both     s580/lens_diff3/G1.sv -DL1 -DIV
+both     s580/lens_diff3/G1.sv -DL10 -DIV
+both     s580/lens_diff3/G1.sv -DL10P -DIV
+both     s580/lens_diff3/G1.sv -DL11 -DIV
+both     s580/lens_diff3/G1.sv -DL12 -DIV
+both     s580/lens_diff3/G1.sv -DL1P -DIV
+pre      s580/lens_diff3/G1.sv -DL2 -DIV
+both     s580/lens_diff3/G1.sv -DL2P -DIV
+pre      s580/lens_diff3/G1.sv -DL3 -DIV
+pre      s580/lens_diff3/G1.sv -DL4 -DIV
+both     s580/lens_diff3/G1.sv -DL4P -DIV
+pre      s580/lens_diff3/G1.sv -DL5 -DIV
+pre      s580/lens_diff3/G1.sv -DL5N -DIV
+pre      s580/lens_diff3/G1.sv -DL6 -DIV
+both     s580/lens_diff3/G1.sv -DL7 -DIV
+both     s580/lens_diff3/G1.sv -DL8 -DIV
+both     s580/lens_diff3/G1.sv -DL8P -DIV
+pre      s580/lens_diff3/G1.sv -DL9 -DIV
+pre      s580/lens_diff3/G2.sv 
+pre      s580/lens_diff3/G2.sv -DM1
+pre      s580/lens_diff3/G2.sv -DM10
+pre      s580/lens_diff3/G2.sv -DM2
+pre      s580/lens_diff3/G2.sv -DM3
+pre      s580/lens_diff3/G2.sv -DM4
+pre      s580/lens_diff3/G2.sv -DM4P
+pre      s580/lens_diff3/G2.sv -DM6
+pre      s580/lens_diff3/G2.sv -DM7
+pre      s580/lens_diff3/G2.sv -DM8
+pre      s580/lens_diff3/G2.sv -DM9
+pre      s580/lens_diff3/G2.sv -DIV
+pre      s580/lens_diff3/G2.sv -DM1 -DIV
+pre      s580/lens_diff3/G2.sv -DM10 -DIV
+pre      s580/lens_diff3/G2.sv -DM2 -DIV
+pre      s580/lens_diff3/G2.sv -DM3 -DIV
+pre      s580/lens_diff3/G2.sv -DM4 -DIV
+pre      s580/lens_diff3/G2.sv -DM4P -DIV
+pre      s580/lens_diff3/G2.sv -DM6 -DIV
+pre      s580/lens_diff3/G2.sv -DM7 -DIV
+pre      s580/lens_diff3/G2.sv -DM8 -DIV
+pre      s580/lens_diff3/G2.sv -DM9 -DIV
+both     s580/lens_diff3/G3.sv 
+both     s580/lens_diff3/G3.sv -DM1
+both     s580/lens_diff3/G3.sv -DM10
+both     s580/lens_diff3/G3.sv -DM2
+both     s580/lens_diff3/G3.sv -DM3
+both     s580/lens_diff3/G3.sv -DM4
+both     s580/lens_diff3/G3.sv -DM4P
+both     s580/lens_diff3/G3.sv -DM6
+both     s580/lens_diff3/G3.sv -DM7
+both     s580/lens_diff3/G3.sv -DM8
+pre      s580/lens_diff3/G3.sv -DM9
+both     s580/lens_diff3/G3.sv -DM9P
+both     s580/lens_diff3/G3.sv -DIV
+both     s580/lens_diff3/G3.sv -DM1 -DIV
+both     s580/lens_diff3/G3.sv -DM10 -DIV
+both     s580/lens_diff3/G3.sv -DM2 -DIV
+both     s580/lens_diff3/G3.sv -DM3 -DIV
+both     s580/lens_diff3/G3.sv -DM4 -DIV
+both     s580/lens_diff3/G3.sv -DM4P -DIV
+both     s580/lens_diff3/G3.sv -DM6 -DIV
+both     s580/lens_diff3/G3.sv -DM7 -DIV
+both     s580/lens_diff3/G3.sv -DM8 -DIV
+pre      s580/lens_diff3/G3.sv -DM9 -DIV
+both     s580/lens_diff3/G3.sv -DM9P -DIV
+both     s580/lens_diff3/H1.sv 
+post3    s580/lens_diff3/H1.sv -DH1
+post3    s580/lens_diff3/H1.sv -DH2
+post3    s580/lens_diff3/H1.sv -DH2I
+both     s580/lens_diff3/H1.sv -DH2U
+post3    s580/lens_diff3/H1.sv -DH3
+both     s580/lens_diff3/H1.sv -DH3U
+post3    s580/lens_diff3/H1.sv -DH4
+both     s580/lens_diff3/H1.sv -DH5
+post3    s580/lens_diff3/H1.sv -DH6
+both     s580/lens_diff3/H1.sv -DH7
+post3    s580/lens_diff3/H1.sv -DH8
+both     s580/lens_diff3/H1.sv -DIV
+post3    s580/lens_diff3/H1.sv -DH1 -DIV
+post3    s580/lens_diff3/H1.sv -DH2 -DIV
+post3    s580/lens_diff3/H1.sv -DH2I -DIV
+both     s580/lens_diff3/H1.sv -DH2U -DIV
+post3    s580/lens_diff3/H1.sv -DH3 -DIV
+both     s580/lens_diff3/H1.sv -DH3U -DIV
+post3    s580/lens_diff3/H1.sv -DH4 -DIV
+both     s580/lens_diff3/H1.sv -DH5 -DIV
+post3    s580/lens_diff3/H1.sv -DH6 -DIV
+both     s580/lens_diff3/H1.sv -DH7 -DIV
+post3    s580/lens_diff3/H1.sv -DH8 -DIV
+both     s580/lens_diff3/H2.sv 
+post3    s580/lens_diff3/H2.sv -DR01
+post3    s580/lens_diff3/H2.sv -DR02
+post3    s580/lens_diff3/H2.sv -DR03
+post3    s580/lens_diff3/H2.sv -DR04
+post3    s580/lens_diff3/H2.sv -DR05
+post3    s580/lens_diff3/H2.sv -DR06
+post3    s580/lens_diff3/H2.sv -DR07
+both     s580/lens_diff3/H2.sv -DR08
+both     s580/lens_diff3/H2.sv -DR09
+post3    s580/lens_diff3/H2.sv -DR10
+post3    s580/lens_diff3/H2.sv -DR11
+post3    s580/lens_diff3/P1.sv 
+pre      s580/lens_diff3/P1.sv -DCONSTS
+both     s580/lens_diff3/P1.sv -DKF
+post3    s580/lens_diff3/P1.sv -DIV
+pre      s580/lens_diff3/P1.sv -DCONSTS -DIV
+both     s580/lens_diff3/P1.sv -DKF -DIV
+both     s580/lens_diff3/P3.sv 
+post3    s580/lens_diff3/P3.sv -DIV
+post3    s580/lens_snd3/p/p1.sv 
+post3    s580/lens_snd3/p/p1.sv -DNOC
+post3    s580/lens_snd3/p/p1.sv -DNOI
+both     s580/lens_snd3/p/p3.sv 
+pre      s580/lens_snd3/p/p3.sv -DG1
+both     s580/lens_snd3/p/p3.sv -DG2
+pre      s580/lens_snd3/p/p3.sv -DG3
+pre      s580/lens_snd3/p/p3.sv -DG4
+pre      s580/lens_snd3/p/p3.sv -DG5
+pre      s580/lens_snd3/p/p3.sv -DG6
+both     s580/lens_snd3/p/p3.sv -DG7
+both     s580/lens_snd3/p/p3.sv -DG8
+pre      s580/lens_snd3/p/p3.sv -DG9
+pre      s580/lens_snd3/p/p3.sv -DLV
+both     s580/lens_snd3/p/p4.sv 
+post3    s580/lens_snd3/p/p4.sv -DK1
+post3    s580/lens_snd3/p/p4.sv -DK2
+post3    s580/lens_snd3/p/p4.sv -DK3
+both     s580/lens_snd3/p/p4.sv -DK4
+post3    s580/lens_snd3/p/p4.sv -DK5
+post3    s580/lens_snd3/p/p4.sv -DK6
+post3    s580/lens_snd3/p/p4.sv -DK7
+post3    s580/lens_snd3/p/p4.sv -DK8
+post3    s580/lens_snd3/p/p4.sv -DK9
+both     s580/lens_snd3/p/p5.sv 
+both     s580/lens_snd3/p/p5.sv -DFN
+pre      s580/lens_snd3/p/p5.sv -DH1
+pre      s580/lens_snd3/p/p5.sv -DH2
+pre      s580/lens_snd3/p/p5.sv -DH3
+pre      s580/lens_snd3/p/p5.sv -DH4
+both     s580/lens_snd3/p/p5.sv -DH5
+both     s580/lens_snd3/p/p5.sv -DH6
+pre      s580/lens_snd3/p/p5.sv -DH7
+both     s580/lens_snd3/p/p5.sv -DH8
+both     s580/lens_snd3/p/p5.sv -DNOI
+both     s580/lens_snd3/p/p6.sv 
+pre      s580/lens_snd3/p/p6.sv -DJ1
+pre      s580/lens_snd3/p/p6.sv -DJ2
+pre      s580/lens_snd3/p/p6.sv -DJ3
+both     s580/lens_snd3/p/p6.sv -DJ4
+pre      s580/lens_snd3/p/p6.sv -DJ5
+pre      s580/lens_snd3/p/p6.sv -DJ6
+both     s580/lens_snd3/p/p6.sv -DJ7
+both     s580/lens_snd3/p/p6.sv -DJ8
+both     s580/lens_snd3/p/p6.sv -DJ9
+pre      s580/lens_snd3/p/p6.sv -DJV
+both     f2/w65.sv 
+{'both': 269, 'pre': 200, 'post3': 185, 'neither': 12}

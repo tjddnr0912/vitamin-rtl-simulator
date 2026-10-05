@@ -1,0 +1,102 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__b05_program
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/b05_program.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: POST,PRE,POST2
+verdict: P4 pre-existing
+verdict_source: s586/r1/diff/REPORT.md:20
+notes: runs: r1/diff/iv/b05_program r1/diff/v/b05_program r1/diff/v2/b05_program r1/diff/vl/b05_program
+alias: docs_cells/b05/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/prog/b05/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: POST3: md5 ef8fa1e020501546ba751e111d1e0f95 commit 3066170e
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 29
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/b05_program/cout | 178 bytes
+b05_program.sv:5: syntax error
+b05_program.sv:5: Syntax in assignment statement l-value.
+b05_program.sv:6: syntax error
+b05_program.sv:6: Syntax in assignment statement l-value.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/b05_program/crc | 2 bytes
+4
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r2/prog/b05/iv.cerr | 138 bytes
+t.sv:5: syntax error
+t.sv:5: Syntax in assignment statement l-value.
+t.sv:6: syntax error
+t.sv:6: Syntax in assignment statement l-value.
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | r2/prog/b05/iv.cout | 0 bytes
+
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | r2/prog/b05/iv.crc | 2 bytes | identical to block 2
+=== block 6 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b05_program/crc | 2 bytes
+0
+=== block 7 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b05_program/out | 391 bytes
+[1] %Error: b05_program.sv:5: Assertion failed in top.u: 'unique if' statement violated
+-Info: b05_program.sv:5: Verilog $stop, ignored due to +verilator+error+limit
+y=0
+- b05_program.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 3.030 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 8 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b05_program/rc | 2 bytes | identical to block 6
+=== block 9 | oracle verilator 5.052 (version captured in slice) | r2/prog/b05/vl.cerr | 0 bytes | identical to block 4
+=== block 10 | oracle verilator 5.052 (version captured in slice) | r2/prog/b05/vl.crc | 2 bytes | identical to block 6
+=== block 11 | oracle verilator 5.052 (version captured in slice) | r2/prog/b05/vl.err | 0 bytes | identical to block 4
+=== block 12 | oracle verilator 5.052 (version captured in slice) | r2/prog/b05/vl.out | 361 bytes
+[1] %Error: t.sv:5: Assertion failed in top.u: 'unique if' statement violated
+-Info: t.sv:5: Verilog $stop, ignored due to +verilator+error+limit
+y=0
+- t.sv:13: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 4.545 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 13 | oracle verilator 5.052 (version captured in slice) | r2/prog/b05/vl.rc | 2 bytes | identical to block 6
+=== block 14 | vita [POST] | r1/diff/v/b05_program/post.err | 1389 bytes
+b05_program.sv:1:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'automatic'
+b05_program.sv:1:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'input'
+b05_program.sv:1:27: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'logic'
+b05_program.sv:1:33: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found '['
+b05_program.sv:2:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'int'
+b05_program.sv:2:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found identifier 'y'
+b05_program.sv:3:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'initial'
+b05_program.sv:3:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'begin'
+b05_program.sv:5:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'unique'
+b05_program.sv:6:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'else'
+b05_program.sv:7:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found '$display'
+b05_program.sv:8:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'end'
+b05_program.sv:9:1: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'endprogram'
+errors=13 warnings=0 notes=0
+=== block 15 | vita [POST] | r1/diff/v/b05_program/post.out | 0 bytes | identical to block 4
+=== block 16 | vita [POST] | r1/diff/v/b05_program/post.rc | 2 bytes
+1
+=== block 17 | vita [POST2] | r1/diff/v2/b05_program/post2.err | 1389 bytes | identical to block 14
+=== block 18 | vita [POST2] | r1/diff/v2/b05_program/post2.out | 0 bytes | identical to block 4
+=== block 19 | vita [POST2] | r1/diff/v2/b05_program/post2.rc | 2 bytes | identical to block 16
+=== block 20 | vita [POST3] | docs_cells/b05/post3.err | 1259 bytes
+t.sv:1:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'automatic'
+t.sv:1:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'input'
+t.sv:1:27: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'logic'
+t.sv:1:33: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found '['
+t.sv:2:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'int'
+t.sv:2:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found identifier 'y'
+t.sv:3:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'initial'
+t.sv:3:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'begin'
+t.sv:5:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'unique'
+t.sv:6:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'else'
+t.sv:7:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found '$display'
+t.sv:8:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'end'
+t.sv:9:1: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'module', found keyword 'endprogram'
+errors=13 warnings=0 notes=0
+=== block 21 | vita [POST3] | docs_cells/b05/post3.out | 0 bytes | identical to block 4
+=== block 22 | vita [POST3] | docs_cells/b05/post3.rc | 2 bytes | identical to block 16
+=== block 23 | vita [PRE] | docs_cells/b05/pre.err | 1259 bytes | identical to block 20
+=== block 24 | vita [PRE] | r1/diff/v/b05_program/pre.err | 1389 bytes | identical to block 14
+=== block 25 | vita [PRE] | r1/diff/v/b05_program/pre.out | 0 bytes | identical to block 4
+=== block 26 | vita [PRE] | r1/diff/v/b05_program/pre.rc | 2 bytes | identical to block 16
+=== block 27 | vita [PRE] | r1/diff/v2/b05_program/pre.err | 1389 bytes | identical to block 14
+=== block 28 | vita [PRE] | r1/diff/v2/b05_program/pre.out | 0 bytes | identical to block 4
+=== block 29 | vita [PRE] | r1/diff/v2/b05_program/pre.rc | 2 bytes | identical to block 16
+=== end

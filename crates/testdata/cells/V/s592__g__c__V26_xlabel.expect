@@ -1,0 +1,82 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__V26_xlabel
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/V26_xlabel.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p2,probe_p3,probe_p4,probe_p5,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st,probe_p6_st
+verdict: IEEE:UP ACCEPT->LOUDok  SVVL:n/a
+verdict_source: s592/r3_x_c_pre.out:39
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: probe_p2: md5 fe6d04d15d761d647c4c5e0994e1f420 commit 75f46453
+vita_binary: probe_p3: md5 0b131be59368ffb543ffbb086410ea06 commit 75f46453
+vita_binary: probe_p4: md5 2bdc82586352e76a4a51e8c8ea2293ff commit 75f46453
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./V26_xlabel.iv.txt | 274 bytes
+V26_xlabel.sv:5: error: Unable to bind parameter `K' in `top.gb'
+V26_xlabel.sv:8:      : A symbol with that name was declared here. Check for declaration after use.
+V26_xlabel.sv:3: error: Cannot evaluate  genvar case item expression: K
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./V26_xlabel.vl.txt | 151 bytes
+%Error: V26_xlabel.sv:4:7: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./V26_xlabel.vlb.txt | 433 bytes
+%Error: V26_xlabel.sv:4:7: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                         : ... note: In instance 'top'
+    4 |       4'b1x10: begin : g wire [7:0] w = 8'd1; initial #1 $display("@x %0d bits=%0d", w, $bits(w)); end
+      |       ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./V26_xlabel.sv.txt | 67 bytes
+@k 200 bits=8
+V26_xlabel.sv2v.v:25: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_a] | ./V26_xlabel.post.txt | 462 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+V26_xlabel.sv:5:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 8:28), so vita's elaboration passes choose different case items here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate case [in top.gb]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_b] | ./V26_xlabel.post_b.txt | 462 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./V26_xlabel.post_c.txt | 423 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+V26_xlabel.sv:5:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 8:28), so vita's elaboration passes choose different case items here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference [in top.gb]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 8 | vita [post_d] | ./V26_xlabel.post_d.txt | 423 bytes | identical to block 7
+=== block 9 | vita [postd] | ./V26_xlabel.postd.txt | 462 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./V26_xlabel.postd2.txt | 423 bytes | identical to block 7
+=== block 11 | vita [postd3] | ./V26_xlabel.postd3.txt | 423 bytes | identical to block 7
+=== block 12 | vita [postd4] | ./V26_xlabel.postd4.txt | 423 bytes | identical to block 7
+=== block 13 | vita [pre] | ./V26_xlabel.pre.txt | 181 bytes
+@k 8 bits=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 14 | vita [probe_p2] | ./V26_xlabel.probe_p2.txt | 183 bytes
+@k 200 bits=8
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 15 | vita [probe_p3] | ./V26_xlabel.probe_p3.txt | 183 bytes | identical to block 14
+=== block 16 | vita [probe_p4] | ./V26_xlabel.probe_p4.txt | 183 bytes | identical to block 14
+=== end

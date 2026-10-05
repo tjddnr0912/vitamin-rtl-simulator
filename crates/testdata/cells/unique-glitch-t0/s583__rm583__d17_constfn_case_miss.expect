@@ -1,0 +1,30 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__rm583__d17_constfn_case_miss
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/rm583/d17_constfn_case_miss.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: rm583
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: docs-phase re-measure set (rm583); vita section = run.py VITA s583/pre/vita
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [iverilog+verilator+PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./d17_constfn_case_miss.out | 518 bytes
+##### d17_constfn_case_miss.sv
+=== iverilog
+compile rc=0 msgs: d17_constfn_case_miss.sv:4: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+P0=0
+d17_constfn_case_miss.sv:10: $finish called at 1 (1s)
+=== verilator
+compile rc=0
+run rc=0
+P0=0
+- d17_constfn_case_miss.sv:10: Verilog $finish
+=== vita (native=interp=vm)
+rc=1
+d17_constfn_case_miss.sv:9:27: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `g(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+=== end

@@ -1,0 +1,97 @@
+both     lens_snd_probes_P1.sv  cells=4 ERR:lens_snd_probes_P1.sv:7:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'end'
+both     lens_snd_probes_P2c.sv  cells=4 
+both     lens_snd_probes_P5.sv  cells=1 
+post3    lens_diff_P03.sv  cells=17 
+post3    lens_diff_P03.sv -DB cells=17 
+post3    lens_diff_P03.sv -DIV cells=17 
+post3    lens_diff_P03.sv -DB -DIV cells=17 
+both     lens_diff_P06.sv  cells=3 ERR:lens_diff_P06.sv:37:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+both     lens_diff_P06.sv -DFIN cells=3 ERR:lens_diff_P06.sv:37:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+both     lens_diff_P06.sv -DFJ cells=3 ERR:lens_diff_P06.sv:37:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+both     lens_diff_P06.sv -DFRC cells=3 ERR:lens_diff_P06.sv:37:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+both     lens_diff_P06.sv -DIFC cells=3 ERR:lens_diff_P06.sv:37:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+both     lens_diff_P06v.sv  cells=3 ERR:lens_diff_P06v.sv:39:49: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected 'end', found end of file
+post3    lens_diff_P10b.sv  cells=8 
+post3    lens_diff_P10b.sv -DIV cells=8 
+post3    lens_diff_P10c.sv  cells=8 
+post3    lens_diff_P10c.sv -DIV cells=8 
+both     lens_diff_P07.sv  cells=6 
+both     lens_diff_P07.sv -DIV cells=2 ERR:lens_diff_P07.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pat
+post3    lens_diff_P08b.sv  cells=14 
+post3    lens_diff_P08b.sv -DIV cells=14 
+both     lens_diff2_Q1.sv  cells=1 
+both     lens_diff2_Q1.sv -DIV cells=1 
+pre      lens_diff2_Q3.sv  cells=14 ERR:error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+    NEW  error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+    NEW  lens_diff2_Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:28:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:30:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+    NEW  lens_diff2_Q3.sv:25:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used i
+    NEW  lens_diff2_Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+    NEW  lens_diff2_Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+    NEW  lens_diff2_Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used i
+    NEW  lens_diff2_Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+    NEW  lens_diff2_Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+    NEW  errors=11 warnings=3 notes=0
+    NEW  rc=1
+    POST3 G1 then
+    POST3 GS then
+    POST3 GC1 one
+    POST3 GL lab1
+    POST3 OV1 1 1
+    POST3 OVS 1 1
+    POST3 OV0 0 1
+    POST3 PK1 1
+    POST3 PK0 0
+    POST3 RB1 4
+    POST3 RB0 2
+    POST3 RBS 4
+    POST3 AD1 4
+    POST3 ADS 4
+    POST3 simulation ended (Finish) at time 3
+    POST3 errors=0 warnings=1 notes=0
+    POST3 rc=0
+pre      lens_diff2_Q3.sv -DIV cells=4 ERR:lens_diff2_Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has n
+    NEW  lens_diff2_Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+    NEW  lens_diff2_Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+    NEW  lens_diff2_Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used i
+    NEW  errors=2 warnings=2 notes=0
+    NEW  rc=1
+    POST3 G1 then
+    POST3 GS then
+    POST3 GC1 one
+    POST3 GL lab1
+    POST3 OV1 1 1
+    POST3 OVS 1 1
+    POST3 OV0 0 1
+    POST3 PK1 1
+    POST3 PK0 0
+    POST3 RB1 4
+    POST3 RB0 2
+    POST3 RBS 4
+    POST3 AD1 4
+    POST3 ADS 4
+    POST3 simulation ended (Finish) at time 3
+    POST3 errors=0 warnings=1 notes=0
+    POST3 rc=0
+post3    lens_diff2_Q5.sv  cells=18 
+post3    lens_diff2_Q5.sv -DIV cells=18 
+both     lens_diff2_Q9.sv  cells=3 
+both     lens_diff2_Q9.sv -DIV cells=3 
+post3    lens_diff2_Q8.sv  cells=6 ERR:lens_diff2_Q8.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z
+post3    lens_diff2_Q8.sv -DIV cells=6 ERR:lens_diff2_Q8.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z
+post3    lens_snd2_probes_P10.sv  cells=3 
+post3    lens_snd2_probes_P5.sv  cells=3 
+post3    lens_snd2_probes_P2.sv  cells=4 
+post3    lens_diff3_P1.sv -DCONSTS cells=41 
+post3    lens_diff3_P1.sv -DCONSTS -DIV cells=41 
+both     lens_snd3_p_p3.sv -DLV cells=2 
+both     lens_snd3_p_p6.sv -DJV cells=1 
+both     lens_snd_probes_P7.sv  cells=4 ERR:lens_snd_probes_P7.sv:5:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'end'
+both     lens_snd_probes_P2a.sv  cells=4 ERR:lens_snd_probes_P2a.sv:4:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'end'
+both     lens_snd_probes_P2b.sv  cells=3 ERR:lens_snd_probes_P2b.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `t.rb` [in t]
+both     lens_snd_probes_P4a.sv  cells=15 ERR:lens_snd_probes_P4a.sv:7:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `t.rbs` [in t]
+{'both': 21, 'post3': 19, 'pre': 2}

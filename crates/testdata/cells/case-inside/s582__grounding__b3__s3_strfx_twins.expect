@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__s3_strfx_twins
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/s3_strfx_twins.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: verilator
+vita_tags: PRE
+verdict: PRE PRE-EXISTING SILENT-WRONG (1 oracle) in plain case; `t = sf(1); case (t)` = 3 and `if (sf(1) inside {..})` = 3 (sf x3) on PRE
+verdict_source: s582/grounding/REPORT.md:173
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_s3_strfx_twins/vl.out | 448 bytes
+sf(1)
+if-inside m=3
+sf(1)
+eq m=1
+sf(1)
+case(var) m=3
+sf(1)
+case(call) m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/s3_strfx_twins.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 285.714 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | vita [PRE] | grounding/b3/out_s3_strfx_twins/vita.out | 255 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sf(1)
+sf(1)
+sf(1)
+if-inside m=3
+sf(1)
+eq m=1
+sf(1)
+case(var) m=3
+sf(1)
+case(call) m=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

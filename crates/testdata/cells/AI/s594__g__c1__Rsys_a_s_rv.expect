@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__g__c1__Rsys_a_s_rv
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/g/c1/Rsys_a_s_rv.sv
+roadmap_row: §2 🆕 AI
+set: g/c1
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p0,p1,p2,p3,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p0: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: p1: md5 dacc7564ecc78ac928fbf9e333392537 commit 75f46453
+vita_binary: p2: md5 486ea9c8753d10ba904873b618814856 commit 75f46453
+vita_binary: p3: md5 147bbb984b327e4e83aa5a8346c73470 commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Rsys_a_s_rv.ivl | 56 bytes
+RV=252
+Rsys_a_s_rv.sv:6: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Rsys_a_s_rv.vl | 353 bytes
+%Warning-WIDTHEXPAND: Rsys_a_s_rv.sv:5:35: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+RV=252
+- Rsys_a_s_rv.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 357.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Rsys_a_s_rv.s2v | 58 bytes
+RV=252
+Rsys_a_s_rv.s2v.v:7: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [d1] | ./Rsys_a_s_rv.d1 | 76 bytes
+RV=252
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./Rsys_a_s_rv.d3 | 76 bytes | identical to block 4
+=== block 6 | vita [p0] | ./Rsys_a_s_rv.p0 | 76 bytes | identical to block 4
+=== block 7 | vita [p1] | ./Rsys_a_s_rv.p1 | 76 bytes | identical to block 4
+=== block 8 | vita [p2] | ./Rsys_a_s_rv.p2 | 76 bytes | identical to block 4
+=== block 9 | vita [p3] | ./Rsys_a_s_rv.p3 | 76 bytes | identical to block 4
+=== block 10 | vita [pa] | ./Rsys_a_s_rv.pa | 76 bytes | identical to block 4
+=== block 11 | vita [pb] | ./Rsys_a_s_rv.pb | 76 bytes | identical to block 4
+=== block 12 | vita [pre] | ./Rsys_a_s_rv.pre | 76 bytes | identical to block 4
+=== block 13 | vita [pre] | ./Rsys_a_s_rv.pre.route | 0 bytes
+
+=== block 14 | vita [pre594] | ./Rsys_a_s_rv.pre594 | 76 bytes | identical to block 4
+=== end

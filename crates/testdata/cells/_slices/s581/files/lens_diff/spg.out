@@ -1,0 +1,196 @@
+== Sg00  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg00.sv:5:26: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg01
+   iv   g0 hit | g1 def | gs 0 | ovr 7
+   sv   g0 hit | g1 def | gs 0 | ovr 7
+   vl   ERR:%Error: Sg01.sv:5:25: Use of x/? constant in generate case s(rc1)
+   pre  g0 hit | g1 def | gs 0 | ovr 7
+   pt   g0 hit | g1 def | gs 0 | ovr 7
+   post g0 hit | g1 def | gs 0 | ovr 7
+== Sg02
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg02.sv:5:33: Use of x/? constant in generate case s(rc1)
+   pre  g0 def | g1 hit | gs 1 | ovr 7
+   pt   g0 def | g1 hit | gs 1 | ovr 7
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg03  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg03.sv:5:25: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg04  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg04.sv:5:20: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg05  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg05.sv:5:43: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg06  <<VITA-MOVES
+   iv   g0 hit | g1 def | gs 0 | ovr 7
+   sv   g0 hit | g1 def | gs 0 | ovr 7
+   vl   ERR:%Error: Sg06.sv:5:41: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 hit | g1 def | gs 0 | ovr 7
+== Sg07  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 hit | g1 def | gs 0 | ovr 7
+   vl   ERR:%Error: Sg07.sv:5:43: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg08  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg08.sv:5:51: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg09  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg09.sv:5:20: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg10  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 hit | g1 def | gs 0 | ovr 7
+   vl   ERR:%Error: Sg10.sv:5:21: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg11  <<VITA-MOVES
+   iv   g0 hit | g1 def | gs 0 | ovr 7
+   sv   g0 hit | g1 def | gs 0 | ovr 7
+   vl   ERR:%Error: Sg11.sv:5:33: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 hit | g1 def | gs 0 | ovr 7
+== Sg12  <<VITA-MOVES
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg12.sv:5:13: Use of x/? constant in generate case s(rc1)
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sg13
+   iv   g0 def | g1 hit | gs 1 | ovr 7
+   sv   g0 def | g1 hit | gs 1 | ovr 7
+   vl   ERR:%Error: Sg13.sv:5:26: Use of x/? constant in generate case s(rc1)
+   pre  g0 def | g1 hit | gs 1 | ovr 7
+   pt   g0 def | g1 hit | gs 1 | ovr 7
+   post g0 def | g1 hit | gs 1 | ovr 7
+== Sp00  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp01  <<VITA-MOVES
+   iv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   sv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   vl   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+== Sp02  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp03  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp04  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp05  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp06  <<VITA-MOVES
+   iv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   sv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   vl   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+== Sp07  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp08  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp09  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp10  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp11  <<VITA-MOVES
+   iv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   sv   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   vl   LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 1 LB=1 L=0 | arr 1 | bits 1 | cast 2 | enum 0 1 | gf 0 | ovr 0 | psel 2 01 | rep 1
+== Sp12  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3009(rc1)
+   pt   ERR:VITA-E3009(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+== Sp13  <<VITA-MOVES
+   iv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   sv   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   vl   LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2
+   pre  ERR:VITA-E3010(rc1)
+   pt   ERR:VITA-E3010(rc1)
+   post LI 0 LB=2 L=1 | arr 2 | bits 1 | cast 3 | enum 1 2 | gf 0 | gf 1 | ovr 1 | psel 3 101 | rep 2

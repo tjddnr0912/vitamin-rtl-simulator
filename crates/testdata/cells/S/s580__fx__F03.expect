@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__fx__F03
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/fx/F03.sv
+roadmap_row: §2 🆕 S
+set: fx
+oracles_present: sv2v
+vita_tags: fx-out,post-dbg-r1,post2dbg,postrel,PRE,fx-preout,r4new,r4post3,r4pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): post3×1 (s580/r4/cmp3_post4.txt)
+alias: ident/F03 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 2
+=== block 1 | oracle sv2v 0.0.13 (version captured in slice) | ./F03.iv.txt | 237 bytes
+w33-hit 1
+w33-miss 0
+w33-narrow-el 1
+w64-hit 1
+w64-miss 0
+w64-narrow-el 1
+w65-hit 1
+w65-miss 0
+w65-narrow-el 1
+w128-hit 1
+w128-miss 0
+w128-narrow-el 1
+sized-x-msb-zero-ext 1
+sized-x-msb-high-compared 0
+F03.v:36: $finish called at 0 (1s)
+=== block 2 | vita [PRE] | ./F03.pre.txt | 271 bytes
+w33-hit x
+w33-miss 0
+w33-narrow-el x
+w64-hit x
+w64-miss 0
+w64-narrow-el x
+w65-hit x
+w65-miss 0
+w65-narrow-el x
+w128-hit x
+w128-miss 0
+w128-narrow-el x
+sized-x-msb-zero-ext x
+sized-x-msb-high-compared 0
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== end

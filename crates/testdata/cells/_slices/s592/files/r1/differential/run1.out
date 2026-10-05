@@ -1,0 +1,156 @@
+== DF01
+         iv: outer
+         sv: outer
+         vl: ERR:%Error: DF01.sv:9:32: Constant function may not be declared under gene(rc1)
+       post: outer
+        pre: outer
+== DF01n
+         iv: outer w=1 bits=4
+         sv: outer w=1 bits=4
+         vl: ERR:%Error: DF01n.sv:11:32: Constant function may not be declared under ge(rc1)
+       post: outer w=1 bits=4
+        pre: outer w=1 bits=4
+== DF02
+         iv: ERR:DF02.sv:3: error: No function named `f' found in this context (top.g).(rc4)
+         sv: ERR:DF02.sv2v.v:8: error: No function named `f' found in this context (top(rc4)
+         vl: ERR:%Error: DF02.sv:5:32: Constant function may not be declared under gene(rc1)
+       post: ERR:VITA-E3010:generate-if condition is not a constant: `f(…)` ha(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: `f(…)` ha(rc1)
+== DF03
+         iv: inner
+         sv: inner
+         vl: inner
+       post: inner
+        pre: inner
+== DF04
+         iv: region
+         sv: region
+         vl: region
+       post: unit
+        pre: unit
+== DF05
+         iv: L0 | L1 | L2
+         sv: L0 | L1 | L2
+         vl: ERR:%Error: DF05.sv:7:32: Constant function may not be declared under gene(rc1)
+       post: L0 | L1 | L2
+        pre: L0 | L1 | L2
+== DF06
+         iv: outer
+         sv: outer
+         vl: ERR:%Error: DF06.sv:9:32: Constant function may not be declared under gene(rc1)
+       post: outer
+        pre: outer
+== DF07
+         iv: outer K=101
+         sv: outer K=101
+         vl: ERR:%Error: DF07.sv:7:32: Constant function may not be declared under gene(rc1)
+       post: outer K=101
+        pre: outer K=101
+== DF08
+         iv: mod_f
+         sv: mod_f
+         vl: ERR:%Error: DF08.sv:8:32: Constant function may not be declared under gene(rc1)
+       post: mod_f
+        pre: mod_f
+== DF09
+         iv: L0 outer | L1 outer
+         sv: L0 outer | L1 outer
+         vl: ERR:%Error: DF09.sv:6:32: Constant function may not be declared under gene(rc1)
+       post: L0 outer | L1 outer
+        pre: L0 outer | L1 outer
+== DH01
+         iv: ERR:DH01.sv:5: error: A hierarchical reference (`u.P') is not allowed in a(rc4)
+         sv: ERR:DH01.sv2v.v:7: error: A hierarchical reference (`u.P') is not allowed (rc4)
+         vl: other
+       post: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== DH02
+         iv: ERR:DH02.sv:4: error: A hierarchical reference (`u.P') is not allowed in a(rc4)
+         sv: ERR:DH02.sv2v.v:6: error: A hierarchical reference (`u.P') is not allowed (rc4)
+         vl: other
+       post: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== DH03
+         iv: ERR:DH03.sv:5: error: A hierarchical reference (`g.N') is not allowed in a(rc2)
+         sv: L0 | L1 | L2
+         vl: ERR:%Error: DH03.sv:5:28: Parameter-resolved constants must not use dotted(rc1)
+       post: ERR:VITA-E3010:generate-for condition is not a constant: a hierar(rc1)
+        pre: ERR:VITA-E3010:generate-for condition is not a constant: a hierar(rc1)
+== DH04
+         iv: ERR:DH04.sv:2: error: A hierarchical reference (`top.P') is not allowed in(rc4)
+         sv: ERR:DH04.sv2v.v:3: error: A hierarchical reference (`top.P') is not allowe(rc4)
+         vl: two
+       post: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== DI01
+         iv: i8 a5 i4 3
+         sv: i8 a5 i4 3
+         vl: i8 a5 i4 3
+       post: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+        pre: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+== DI03
+         iv: 22 11
+         sv: 22 11
+         vl: 22 11
+       post: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+        pre: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+== DI05
+         iv: outer
+         sv: inner
+         vl: inner
+       post: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+        pre: ERR:VITA-E3009:generate blocks inside an interface are outside th(rc1)
+== DI05m
+         iv: outer
+         sv: inner
+         vl: inner
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: inner
+== DN01
+         iv: outer
+         sv: inner
+         vl: inner
+       post: outer
+        pre: outer
+== DN02
+         iv: outer
+         sv: inner
+         vl: ERR:%Error: DN02.sv:4:15: Reference to 'T' before declaration (IEEE 1800-2(rc1)
+       post: outer
+        pre: outer
+== DN03
+         iv: def
+         sv: enumA
+         vl: enumA
+       post: def
+        pre: def
+== DO01
+         iv: two top.g.u.a bits=8
+         sv: two top.g.u.a bits=8
+         vl: two top.g.u.a bits=8
+       post: ERR:VITA-E3009:defparam: only a direct-child `instance.param` tar(rc1)
+        pre: ERR:VITA-E3009:defparam: only a direct-child `instance.param` tar(rc1)
+== DO02
+         iv: one top.g.u.b bits=4
+         sv: two top.g.u.a bits=8
+         vl: two top.g.u.a bits=8
+       post: two top.g.u.a bits=8
+        pre: two top.g.u.a bits=8
+== DP01
+         iv: ERR:DP01.sv:4: syntax error(rc2)
+         sv: other
+         vl: other
+       post: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== DP02
+         iv: ERR:DP02.sv:4: syntax error(rc2)
+         sv: other
+         vl: other
+       post: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: a hierarc(rc1)
+== DP03
+         iv: ERR:DP03.sv:4: syntax error(rc2)
+         sv: L0 | L1
+         vl: L0 | L1
+       post: ERR:VITA-E3009:parameter `LW` value is not a constant: a hierarch(rc1)
+        pre: ERR:VITA-E3009:parameter `LW` value is not a constant: a hierarch(rc1)

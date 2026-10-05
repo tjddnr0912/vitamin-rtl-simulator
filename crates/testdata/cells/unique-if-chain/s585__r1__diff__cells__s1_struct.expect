@@ -1,0 +1,125 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__s1_struct
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/s1_struct.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: gained verilator lines | residue verilator lines
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6
+notes: runs: d__s1_struct s1_struct
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/s1_struct.out | 5812 bytes
+s1_struct | vl:0@s1_struct.sv:11,1@s1_struct.sv:17,1@s1_struct.sv:17,2@s1_struct.sv:20,2@s1_struct.sv:20,3@s1_struct.sv:21,3@s1_struct.sv:21,4@s1_struct.sv:22,4@s1_struct.sv:22,5@s1_struct.sv:23,6@s1_struct.sv:24,7@s1_struct.sv:25,8@s1_struct.sv:7,8@s1_struct.sv:7,8@s1_struct.sv:7,9@s1_struct.sv:27,9@s1_struct.sv:27,10@s1_struct.sv:34,10@s1_struct.sv:34 | PRE:- rc=0 | POST:W4031:0@s1_struct.sv:11:12,W4031:1@s1_struct.sv:17:14,W4031:1@s1_struct.sv:17:14,W4031:2@s1_struct.sv:20:42,W4031:2@s1_struct.sv:20:42,W4031:3@s1_struct.sv:21:26,W4031:3@s1_struct.sv:21:26,W4031:4@s1_struct.sv:22:31,W4031:4@s1_struct.sv:22:31,W4031:5@s1_struct.sv:23:30,W4031:6@s1_struct.sv:24:36,W4031:7@s1_struct.sv:25:29,W4031:8@s1_struct.sv:7:12,W4031:8@s1_struct.sv:7:12,W4031:8@s1_struct.sv:7:12,W4031:9@s1_struct.sv:27:36,W4031:9@s1_struct.sv:27:36,W4031:10@s1_struct.sv:34:14,W4031:10@s1_struct.sv:34:14 rc=0 | P==P:False
+##### s1_struct
+=== verilator compile rc=0 run rc=0
+[0] %Error: s1_struct.sv:11: Assertion failed in top.tj: 'unique if' statement violated
+[1] %Error: s1_struct.sv:17: Assertion failed in top: 'unique if' statement violated
+[1] %Error: s1_struct.sv:17: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s1_struct.sv:20: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s1_struct.sv:20: Assertion failed in top: 'unique if' statement violated
+[3] %Error: s1_struct.sv:21: Assertion failed in top.unnamedblk1_1: 'unique if' statement violated
+[3] %Error: s1_struct.sv:21: Assertion failed in top.unnamedblk1_1: 'unique if' statement violated
+[4] %Error: s1_struct.sv:22: Assertion failed in top: 'unique if' statement violated
+[4] %Error: s1_struct.sv:22: Assertion failed in top: 'unique if' statement violated
+[5] %Error: s1_struct.sv:23: Assertion failed in top: 'unique if' statement violated
+[6] %Error: s1_struct.sv:24: Assertion failed in top: 'unique if' statement violated
+[7] %Error: s1_struct.sv:25: Assertion failed in top.named: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[9] %Error: s1_struct.sv:27: Assertion failed in top: 'unique if' statement violated
+[9] %Error: s1_struct.sv:27: Assertion failed in top: 'unique if' statement violated
+[10] %Error: s1_struct.sv:34: Assertion failed in top.gl[0]: 'unique if' statement violated
+[10] %Error: s1_struct.sv:34: Assertion failed in top.gl[1]: 'unique if' statement violated
+t=11 end
+- s1_struct.sv:30: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=11 end
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+s1_struct.sv:11:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tj] [at time 0]
+s1_struct.sv:17:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+s1_struct.sv:17:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+s1_struct.sv:20:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+s1_struct.sv:20:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+s1_struct.sv:21:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+s1_struct.sv:21:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+s1_struct.sv:22:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+s1_struct.sv:22:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+s1_struct.sv:23:30: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+s1_struct.sv:24:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+s1_struct.sv:25:29: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.named] [at time 7]
+s1_struct.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.rec] [at time 8]
+s1_struct.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.rec] [at time 8]
+s1_struct.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.rec] [at time 8]
+s1_struct.sv:27:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+s1_struct.sv:27:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+s1_struct.sv:34:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gl[0]] [at time 10]
+s1_struct.sv:34:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gl[1]] [at time 10]
+t=11 end
+simulation ended (Finish) at time 12
+errors=0 warnings=20 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__s1_struct.out | 4329 bytes
+##### d__s1_struct
+=== verilator compile rc=0 run rc=0
+[0] %Error: s1_struct.sv:11: Assertion failed in top.tj: 'unique if' statement violated
+[1] %Error: s1_struct.sv:17: Assertion failed in top: 'unique if' statement violated
+[1] %Error: s1_struct.sv:17: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s1_struct.sv:20: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s1_struct.sv:20: Assertion failed in top: 'unique if' statement violated
+[3] %Error: s1_struct.sv:21: Assertion failed in top.unnamedblk1_1: 'unique if' statement violated
+[3] %Error: s1_struct.sv:21: Assertion failed in top.unnamedblk1_1: 'unique if' statement violated
+[4] %Error: s1_struct.sv:22: Assertion failed in top: 'unique if' statement violated
+[4] %Error: s1_struct.sv:22: Assertion failed in top: 'unique if' statement violated
+[5] %Error: s1_struct.sv:23: Assertion failed in top: 'unique if' statement violated
+[6] %Error: s1_struct.sv:24: Assertion failed in top: 'unique if' statement violated
+[7] %Error: s1_struct.sv:25: Assertion failed in top.named: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[8] %Error: s1_struct.sv:7: Assertion failed in top.rec: 'unique if' statement violated
+[9] %Error: s1_struct.sv:27: Assertion failed in top: 'unique if' statement violated
+[9] %Error: s1_struct.sv:27: Assertion failed in top: 'unique if' statement violated
+[10] %Error: s1_struct.sv:34: Assertion failed in top.gl[0]: 'unique if' statement violated
+[10] %Error: s1_struct.sv:34: Assertion failed in top.gl[1]: 'unique if' statement violated
+t=11 end
+- s1_struct.sv:30: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=11 end
+simulation ended (Finish) at time 12
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+s1_struct.sv:17:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+s1_struct.sv:17:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+s1_struct.sv:20:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+s1_struct.sv:20:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+s1_struct.sv:21:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+s1_struct.sv:21:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+s1_struct.sv:22:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+s1_struct.sv:22:31: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+s1_struct.sv:23:30: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+s1_struct.sv:24:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+s1_struct.sv:25:29: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.named] [at time 7]
+s1_struct.sv:27:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+s1_struct.sv:27:36: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+s1_struct.sv:34:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gl[0]] [at time 10]
+s1_struct.sv:34:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.gl[1]] [at time 10]
+t=11 end
+simulation ended (Finish) at time 12
+errors=0 warnings=16 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

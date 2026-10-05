@@ -1,0 +1,131 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m4_ctx_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m4_ctx_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: accept = verilator (sv2v n/a)
+verdict_source: s582/post/CENSUS.md:16
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b2__m4_ctx_ci/iv.out | 6068 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5: error: Malformed statement
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:27: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:28: error: Malformed statement
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:28: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:29: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:29: error: Malformed statement
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:30: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:31: error: Malformed statement
+rc=32
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m4_ctx_ci/vl.out | 600 bytes
+nest C
+v=1000 comb=1 ff=ab fn=1 task=1 meth=1
+nest A
+v=0010 comb=2 ff=05 fn=2 task=2 meth=2
+nest A
+v=0110 comb=0 ff=ee fn=0 task=0 meth=0
+nest C
+v=1100 comb=1 ff=ab fn=1 task=1 meth=1
+nest B
+v=0011 comb=2 ff=05 fn=2 task=2 meth=2
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:33: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 20ps; walltime 0.000 s; speed 370.370 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m4_ctx_ci/sv.out | 210 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:3:3: Parse error: missing expected `endmodule`
+rc=1
+=== block 4 | vita [POST] | post/census/grounding__b2__m4_ctx_ci/post.out | 399 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+nest C
+v=1000 comb=1 ff=ab fn=1 task=1 meth=1
+nest A
+v=0010 comb=2 ff=05 fn=2 task=2 meth=2
+nest A
+v=0110 comb=0 ff=ee fn=0 task=0 meth=0
+nest C
+v=1100 comb=1 ff=ab fn=1 task=1 meth=1
+nest B
+v=0011 comb=2 ff=05 fn=2 task=2 meth=2
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | post2/cmp/grounding__b2__m4_ctx_ci.sv/post.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 6 | vita [POST] | post2/cmp/grounding__b2__m4_ctx_ci.sv/post.out | 272 bytes
+nest C
+v=1000 comb=1 ff=ab fn=1 task=1 meth=1
+nest A
+v=0010 comb=2 ff=05 fn=2 task=2 meth=2
+nest A
+v=0110 comb=0 ff=ee fn=0 task=0 meth=0
+nest C
+v=1100 comb=1 ff=ab fn=1 task=1 meth=1
+nest B
+v=0011 comb=2 ff=05 fn=2 task=2 meth=2
+simulation ended (Finish) at time 20
+rc=0
+=== block 7 | vita [POST2] | post2/cmp/grounding__b2__m4_ctx_ci.sv/post2.err | 127 bytes | identical to block 5
+=== block 8 | vita [POST2] | post2/cmp/grounding__b2__m4_ctx_ci.sv/post2.out | 272 bytes | identical to block 6
+=== block 9 | vita [POST2] | post3/cmp/grounding__b2__m4_ctx_ci.sv/post2.err | 127 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/grounding__b2__m4_ctx_ci.sv/post2.out | 272 bytes | identical to block 6
+=== block 11 | vita [POST3] | post3/cmp/grounding__b2__m4_ctx_ci.sv/post3.err | 127 bytes | identical to block 5
+=== block 12 | vita [POST3] | post3/cmp/grounding__b2__m4_ctx_ci.sv/post3.out | 272 bytes | identical to block 6
+=== block 13 | vita [PRE] | grounding/b2/out_m4_ctx_ci/vita.out | 7128 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5:42: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9:38: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12:37: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15:38: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18:42: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5:23: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:5:42: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:9:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:12:37: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:15:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:18:42: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:28:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b0?10'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m4_ctx_ci.sv:28:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b0?10'
+errors=17 warnings=5 notes=0
+rc=1
+=== end

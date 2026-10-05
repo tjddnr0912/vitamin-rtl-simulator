@@ -1,0 +1,16 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r2__diff__c__n__cu_b
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r2/diff/c/n/cu_b.sv
+roadmap_row: §2 🆕 AD
+set: r2/diff/c/n
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r2/diff/REPORT.md:37; oracle only quoted in a doc (s589/r3/diff/REPORT.md:15)
+alias: r3/diff/c/n/cu_b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: docs_probe/cu_b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/two/cu_b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+blocks: 0
+=== end

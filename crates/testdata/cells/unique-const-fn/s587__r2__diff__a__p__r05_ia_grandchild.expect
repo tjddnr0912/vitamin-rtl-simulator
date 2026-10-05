@@ -1,0 +1,28 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r05_ia_grandchild
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r05_ia_grandchild.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:23
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r05_ia_grandchild.ivl | 101 bytes
+top.u[0].l W=3 b=4 q=5
+top.u[1].l W=3 b=4 q=a
+r05_ia_grandchild.sv:17: $finish called at 5 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r05_ia_grandchild.vl | 278 bytes
+top.u[0].l W=3 b=4 q=5
+top.u[1].l W=3 b=4 q=a
+- r05_ia_grandchild.sv:17: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 277.777 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r05_ia_grandchild.build | 0 bytes
+
+=== end

@@ -1,0 +1,62 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d10_casez_inside_ident
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d10_casez_inside_ident.v
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: iverilog
+vita_tags: POST,POST2,POST2/default,POST2/interp,POST2/native,POST2/staged,POST2/vm,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/default: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/interp: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/native: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/staged: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST2/vm: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 20
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_sound/d/out_d10_casez_inside_ident/iv.out | 235 bytes
+F casez x=2 vs inside[1:0] m=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d10_casez_inside_ident.v:10: $finish called at 1 (1s)
+rc=0
+=== block 2 | vita [POST] | lens_sound/d/out_d10_casez_inside_ident/post.out | 381 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d10_casez_inside_ident.v:6:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected `case` before `inside` — `casez` / `casex` have no `inside` form (IEEE 1800-2017 §12.5.4), found identifier 'inside'
+errors=1 warnings=0 notes=0
+rc=1
+=== block 3 | vita [POST] | lens_sound/r2/rerun/d10_casez_inside_ident.post | 381 bytes | identical to block 2
+=== block 4 | vita [POST] | post2/cmp/lens_sound__d__d10_casez_inside_ident.v/post.err | 376 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d10_casez_inside_ident.v:6:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected `case` before `inside` — `casez` / `casex` have no `inside` form (IEEE 1800-2017 §12.5.4), found identifier 'inside'
+errors=1 warnings=0 notes=0
+=== block 5 | vita [POST] | post2/cmp/lens_sound__d__d10_casez_inside_ident.v/post.out | 5 bytes
+rc=1
+=== block 6 | vita [POST2] | lens_sound/r2/rerun/d10_casez_inside_ident.post2 | 199 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+F casez x=2 vs inside[1:0] m=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [POST2] | lens_sound/r3/rerun/d10_casez_inside_ident.post2 | 199 bytes | identical to block 6
+=== block 8 | vita [POST2] | post2/cmp/lens_sound__d__d10_casez_inside_ident.v/post2.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 9 | vita [POST2] | post2/cmp/lens_sound__d__d10_casez_inside_ident.v/post2.out | 72 bytes
+F casez x=2 vs inside[1:0] m=1
+simulation ended (Finish) at time 1
+rc=0
+=== block 10 | vita [POST2] | post3/cmp/lens_sound__d__d10_casez_inside_ident.v/post2.err | 127 bytes | identical to block 8
+=== block 11 | vita [POST2] | post3/cmp/lens_sound__d__d10_casez_inside_ident.v/post2.out | 72 bytes | identical to block 9
+=== block 12 | vita [POST2/default] | post2/be/d10_casez_inside_ident.v.default | 67 bytes
+F casez x=2 vs inside[1:0] m=1
+simulation ended (Finish) at time 1
+=== block 13 | vita [POST2/interp] | post2/be/d10_casez_inside_ident.v.interp | 67 bytes | identical to block 12
+=== block 14 | vita [POST2/native] | post2/be/d10_casez_inside_ident.v.native | 67 bytes | identical to block 12
+=== block 15 | vita [POST2/staged] | post2/be/d10_casez_inside_ident.v.staged | 67 bytes | identical to block 12
+=== block 16 | vita [POST2/vm] | post2/be/d10_casez_inside_ident.v.vm | 67 bytes | identical to block 12
+=== block 17 | vita [POST3] | lens_sound/r3/rerun/d10_casez_inside_ident.post3 | 199 bytes | identical to block 6
+=== block 18 | vita [POST3] | post3/cmp/lens_sound__d__d10_casez_inside_ident.v/post3.err | 127 bytes | identical to block 8
+=== block 19 | vita [POST3] | post3/cmp/lens_sound__d__d10_casez_inside_ident.v/post3.out | 72 bytes | identical to block 9
+=== block 20 | vita [PRE] | lens_sound/d/out_d10_casez_inside_ident/pre.out | 199 bytes | identical to block 6
+=== end

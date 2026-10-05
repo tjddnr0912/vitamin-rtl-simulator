@@ -1,0 +1,947 @@
+both     s580/census/A.sv 
+both     s580/census/A_2s.sv 
+both     s580/census/A_wq.sv 
+both     s580/census/S.sv 
+both     s580/census/S_2s.sv 
+both     s580/census/S_wq.sv 
+both     s580/census/V.sv 
+both     s580/census/V_2s.sv 
+both     s580/census/Vr.sv 
+both     s580/census/W.sv 
+both     s580/census/W_2s.sv 
+both     s580/census/W_wq.sv 
+both     s580/census/X.sv 
+both     s580/census/X_wq.sv 
+both     s580/census/e/E01.sv 
+both     s580/census/e/E02.sv 
+both     s580/census/e/E03.sv 
+both     s580/census/e/E04.sv 
+both     s580/census/e/E05.sv 
+both     s580/census/e/E06.sv 
+both     s580/census/e/E07.sv 
+both     s580/census/e/E10.sv 
+both     s580/census/e/E11.sv 
+both     s580/census/e/E12.sv 
+both     s580/census/e/E13.sv 
+both     s580/census/e/E14.sv 
+both     s580/census/e/E15.sv 
+both     s580/census/e/E20.sv 
+both     s580/census/e/E21.sv 
+both     s580/census/e/E22.sv 
+both     s580/census/e/E23.sv 
+both     s580/census/e/E24.sv 
+both     s580/census/e/E25.sv 
+both     s580/census/e/E26.sv 
+both     s580/census/e/E30.sv 
+both     s580/census/e/E31.sv 
+both     s580/census/e/E40.sv 
+both     s580/census/e/E41.sv 
+both     s580/census/e/E42.sv 
+both     s580/census/e/E43.sv 
+both     s580/census/e/E44.sv 
+both     s580/census/e/E45.sv 
+both     s580/census/e/E46.sv 
+both     s580/census/e/E47.sv 
+both     s580/census/e/E50.sv 
+both     s580/census/e/E60.sv 
+both     s580/census/e/E61.sv 
+both     s580/census/e/E62.sv 
+both     s580/census/e/E63.sv 
+both     s580/census/e/E64.sv 
+both     s580/census/e/E65.sv 
+both     s580/census/e/E70.sv 
+both     s580/census/e/E71.sv 
+both     s580/census/e/E72.sv 
+both     s580/census/e/E73.sv 
+both     s580/census/e/E74.sv 
+both     s580/census/e/E75.sv 
+both     s580/census/e/E76.sv 
+both     s580/census/e/E77.sv 
+both     s580/census/e/E78.sv 
+both     s580/census/e/E79.sv 
+both     s580/census/e/E80.sv 
+both     s580/census/e/E81.sv 
+both     s580/census/e/E82.sv 
+both     s580/census/e/E83.sv 
+both     s580/census/e/E84.sv 
+both     s580/census/e/E85.sv 
+both     s580/census/e/E86.sv 
+both     s580/census/e/E87.sv 
+both     s580/census/e/E88.sv 
+both     s580/census/e/Q.sv 
+both     s580/census/e/Q1.sv 
+both     s580/census/c/C01.sv 
+both     s580/census/c/C02.sv 
+both     s580/census/c/C03.sv 
+both     s580/census/c/C04.sv 
+both     s580/census/c/C05.sv 
+both     s580/census/c/C06.sv 
+both     s580/census/c/C07.sv 
+both     s580/census/c/C08.sv 
+both     s580/census/c/C09.sv 
+post3    s580/census/c/C10.sv 
+post3    s580/census/c/C11.sv 
+post3    s580/census/c/C12.sv 
+post3    s580/census/c/C13.sv 
+both     s580/census/c/C14.sv 
+both     s580/census/c/C15.sv 
+both     s580/census/c/C16.sv 
+both     s580/census/c/C17.sv 
+both     s580/census/c/C18.sv 
+both     s580/census/c/C19.sv 
+both     s580/census/c/C20.sv 
+both     s580/census/c/C21.sv 
+both     s580/census/c/C22.sv 
+both     s580/census/c/C23.sv 
+both     s580/census/c/C24.sv 
+both     s580/census/c/C25.sv 
+both     s580/census/c/C26.sv 
+both     s580/census/c/C27.sv 
+post3    s580/census/c/C28.sv 
+both     s580/census/c/C28b.sv 
+post3    s580/census/c/C29.sv 
+both     s580/census/c/C30.sv 
+post3    s580/census/c/C31.sv 
+both     s580/census/c/C32.sv 
+both     s580/census/c/C33.sv 
+both     s580/census/c/C34.sv 
+both     s580/census/cq/C09q.sv 
+both     s580/census/cq/C10q.sv 
+both     s580/census/cq/C11q.sv 
+both     s580/census/cq/C12q.sv 
+both     s580/census/cq/C13q.sv 
+both     s580/census/cq/C27q.sv 
+both     s580/census/cq/C28q.sv 
+both     s580/census/cq/C29q.sv 
+both     s580/census/cq/C30q.sv 
+both     s580/census/cq/C31q.sv 
+both     s580/census/z/Z01.sv 
+both     s580/census/z/Z02.sv 
+both     s580/census/z/Z03.sv 
+post3    s580/census/z/Z04.sv 
+post3    s580/census/z/Z05.sv 
+both     s580/census/z/Z06.sv 
+both     s580/census/z/Z07.sv 
+both     s580/fx/F01.sv 
+both     s580/fx/F02.sv 
+both     s580/fx/F03.sv 
+both     s580/fx/F04.sv 
+both     s580/fx/F05.sv 
+both     s580/fx/F06.sv 
+both     s580/fx/F06n.sv 
+both     s580/fx/F07.sv 
+both     s580/fx/F07n.sv 
+both     s580/fx/F08.sv 
+both     s580/fx/F08b.sv 
+both     s580/fx/F09.sv 
+both     s580/fx/F10.sv 
+both     s580/fx/F10b.sv 
+both     s580/fx/F11.sv 
+post3    s580/fx/F12.sv 
+both     s580/fx/F14.sv 
+both     s580/fx/F15.sv 
+both     s580/fx/F16.sv 
+post3    s580/fx/F17a.sv 
+post3    s580/fx/F17b.sv 
+both     s580/fx/F18.sv 
+both     s580/fx/Ffill.sv 
+post3    s580/fx/G1.sv 
+post3    s580/fx/G2.sv 
+both     s580/fx/G2q.sv 
+both     s580/fx/L1.sv 
+both     s580/fx/L2.sv 
+both     s580/fx/L3.sv 
+both     s580/fx/L4.sv 
+both     s580/fx/L5.sv 
+both     s580/fx/L6.sv 
+both     s580/fx/L7.sv 
+both     s580/fx/L8.sv 
+both     s580/probes/repro_inside_op.sv 
+both     s580/probes/repro_inside_op.sv -DTWO_STATE
+both     s580/probes/var_el.sv 
+both     s580/ident/I01.sv 
+both     s580/ident/I02.sv 
+both     s580/ident/I03.sv 
+both     s580/ident/I04.sv 
+both     s580/ident/I05.sv 
+both     s580/ident/I06.sv 
+both     s580/ident/I10.sv 
+both     s580/ident/I11.sv 
+both     s580/ident/I12.sv 
+both     s580/ident/I13.sv 
+post3    s580/r2/CD1.sv 
+both     s580/r2/OR1.sv 
+both     s580/r2/OR1.sv -DIV
+both     s580/r2/OR2.sv 
+both     s580/r2/OR2.sv -DIV
+post3    s580/r2/SL1.sv 
+post3    s580/r2/SL1q.sv 
+post3    s580/r2/fx2/H01.sv 
+post3    s580/r2/fx2/H02.sv 
+post3    s580/r2/fx2/H02q.sv 
+post3    s580/r2/fx2/H03.sv 
+both     s580/r2/fx2/H04.sv 
+both     s580/r2/fx2/H05.sv 
+both     s580/r2/fx2/H05w.sv 
+both     s580/r2/fx2/H06.sv 
+post3    s580/r2/fx2/H07.sv 
+post3    s580/r2/fx2/H08.sv 
+post3    s580/r2/r26/S01A.sv 
+post3    s580/r2/r26/S01B.sv 
+post3    s580/r2/r26/S01G.sv 
+post3    s580/r2/r26/S01L.sv 
+post3    s580/r2/r26/S01O.sv 
+post3    s580/r2/r26/S02A.sv 
+post3    s580/r2/r26/S02B.sv 
+post3    s580/r2/r26/S02G.sv 
+post3    s580/r2/r26/S02L.sv 
+post3    s580/r2/r26/S02O.sv 
+post3    s580/r2/r26/S03A.sv 
+post3    s580/r2/r26/S03B.sv 
+post3    s580/r2/r26/S03G.sv 
+post3    s580/r2/r26/S03L.sv 
+post3    s580/r2/r26/S03O.sv 
+post3    s580/r2/r26/S04A.sv 
+post3    s580/r2/r26/S04B.sv 
+post3    s580/r2/r26/S04G.sv 
+post3    s580/r2/r26/S04L.sv 
+post3    s580/r2/r26/S04O.sv 
+post3    s580/r2/r26/S05A.sv 
+post3    s580/r2/r26/S05B.sv 
+both     s580/r2/r26/S05G.sv 
+both     s580/r2/r26/S05L.sv 
+both     s580/r2/r26/S05O.sv 
+both     s580/r2/r26/S06A.sv 
+both     s580/r2/r26/S06B.sv 
+both     s580/r2/r26/S06G.sv 
+both     s580/r2/r26/S06L.sv 
+both     s580/r2/r26/S06O.sv 
+post3    s580/r2/r26/S07A.sv 
+post3    s580/r2/r26/S07B.sv 
+both     s580/r2/r26/S07G.sv 
+both     s580/r2/r26/S07L.sv 
+both     s580/r2/r26/S07O.sv 
+post3    s580/r2/r26/S08A.sv 
+post3    s580/r2/r26/S08B.sv 
+both     s580/r2/r26/S08G.sv 
+both     s580/r2/r26/S08L.sv 
+both     s580/r2/r26/S08O.sv 
+both     s580/r2/r26/S09A.sv 
+both     s580/r2/r26/S09B.sv 
+both     s580/r2/r26/S09G.sv 
+both     s580/r2/r26/S09L.sv 
+both     s580/r2/r26/S09O.sv 
+both     s580/r2/r26/S10A.sv 
+both     s580/r2/r26/S10B.sv 
+both     s580/r2/r26/S10G.sv 
+both     s580/r2/r26/S10L.sv 
+both     s580/r2/r26/S10O.sv 
+post3    s580/r2/r26/S11A.sv 
+post3    s580/r2/r26/S11B.sv 
+post3    s580/r2/r26/S11G.sv 
+post3    s580/r2/r26/S11L.sv 
+post3    s580/r2/r26/S11O.sv 
+both     s580/r2/r26/S12A.sv 
+both     s580/r2/r26/S12B.sv 
+both     s580/r2/r26/S12G.sv 
+both     s580/r2/r26/S12L.sv 
+both     s580/r2/r26/S12O.sv 
+post3    s580/r2/r26/S13A.sv 
+post3    s580/r2/r26/S13B.sv 
+post3    s580/r2/r26/S13G.sv 
+post3    s580/r2/r26/S13L.sv 
+post3    s580/r2/r26/S13O.sv 
+post3    s580/r2/r26/S14A.sv 
+post3    s580/r2/r26/S14B.sv 
+both     s580/r2/r26/S14G.sv 
+both     s580/r2/r26/S14L.sv 
+both     s580/r2/r26/S14O.sv 
+post3    s580/r2/r26/S15A.sv 
+post3    s580/r2/r26/S15B.sv 
+post3    s580/r2/r26/S15G.sv 
+post3    s580/r2/r26/S15L.sv 
+post3    s580/r2/r26/S15O.sv 
+both     s580/r2/r26/S16A.sv 
+both     s580/r2/r26/S16B.sv 
+both     s580/r2/r26/S16G.sv 
+both     s580/r2/r26/S16L.sv 
+both     s580/r2/r26/S16O.sv 
+both     s580/r2/r26/S17A.sv 
+both     s580/r2/r26/S17B.sv 
+both     s580/r2/r26/S17G.sv 
+both     s580/r2/r26/S17L.sv 
+both     s580/r2/r26/S17O.sv 
+both     s580/r2/r26/S18A.sv 
+both     s580/r2/r26/S18B.sv 
+both     s580/r2/r26/S18G.sv 
+both     s580/r2/r26/S18L.sv 
+both     s580/r2/r26/S18O.sv 
+pre      s580/r2/r26/X1.sv 
+both     s580/r2/r26/X2.sv 
+post3    s580/r2/r26/X3.sv 
+pre      s580/r2/r26/X4.sv 
+post3    s580/r4/fx/H07C.sv 
+post3    s580/r4/fx/I12.sv 
+neither  s580/r4/fx/K02.sv 
+         NEW  K02.sv:15:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x   [!PRE =POST3]
+         NEW  K02.sv:16:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x   [!PRE =POST3]
+         NEW  K02.sv:18:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x   [!PRE =POST3]
+         NEW  errors=3 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [!PRE =POST3]
+         PRE  gen-q else
+         PRE  case-label default
+         PRE  case-compound default
+         PRE  Q 0 0 1 0 1 1
+         PRE  bits 1 1 1 1 1 1 size x x
+         PRE  simulation ended (Finish) at time 2
+         PRE  errors=0 warnings=0 notes=0
+         PRE  rc=0
+         POST3 K02.sv:26:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern
+         POST3 errors=4 warnings=0 notes=0
+post3    s580/r4/fx/K02q.sv 
+both     s580/r4/fx/K07.sv 
+post3    s580/lens_snd/probes/P1.sv 
+post3    s580/lens_snd/probes/P1.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P2a.sv 
+post3    s580/lens_snd/probes/P2b.sv 
+post3    s580/lens_snd/probes/P2c.sv 
+both     s580/lens_snd/probes/P3.sv 
+both     s580/lens_snd/probes/P3.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P4a.sv 
+post3    s580/lens_snd/probes/P4a.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P4b.sv 
+both     s580/lens_snd/probes/P4b.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P5.sv 
+post3    s580/lens_snd/probes/P5.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P7.sv 
+post3    s580/lens_snd/probes/P7.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P8.sv 
+both     s580/lens_snd/probes/P8.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P9.sv 
+both     s580/lens_snd/probes/P9.sv -DNO_INSIDE
+both     s580/lens_diff/P01.sv 
+both     s580/lens_diff/P01.sv -DIV
+both     s580/lens_diff/P02.sv 
+both     s580/lens_diff/P02.sv -DIV
+post3    s580/lens_diff/P03.sv 
+post3    s580/lens_diff/P03.sv -DB
+post3    s580/lens_diff/P03.sv -DRL
+post3    s580/lens_diff/P03.sv -DIV
+post3    s580/lens_diff/P03.sv -DB -DIV
+both     s580/lens_diff/P03.sv -DRL -DIV
+both     s580/lens_diff/P04.sv 
+both     s580/lens_diff/P04.sv -DIV
+both     s580/lens_diff/P05.sv 
+both     s580/lens_diff/P05.sv -DK1
+both     s580/lens_diff/P05.sv -DK2
+both     s580/lens_diff/P05.sv -DK3
+both     s580/lens_diff/P05.sv -DK4
+both     s580/lens_diff/P05.sv -DK5
+both     s580/lens_diff/P05.sv -DK7
+both     s580/lens_diff/P05.sv -DK8
+both     s580/lens_diff/P05.sv -DK9
+both     s580/lens_diff/P05.sv -DIV
+both     s580/lens_diff/P05.sv -DK1 -DIV
+both     s580/lens_diff/P05.sv -DK2 -DIV
+both     s580/lens_diff/P05.sv -DK3 -DIV
+both     s580/lens_diff/P05.sv -DK4 -DIV
+both     s580/lens_diff/P05.sv -DK5 -DIV
+both     s580/lens_diff/P05.sv -DK7 -DIV
+both     s580/lens_diff/P05.sv -DK8 -DIV
+both     s580/lens_diff/P05.sv -DK9 -DIV
+both     s580/lens_diff/P05g.sv 
+both     s580/lens_diff/P05g.sv -DK1
+both     s580/lens_diff/P05g.sv -DK2
+both     s580/lens_diff/P05g.sv -DK3
+both     s580/lens_diff/P05g.sv -DK4
+both     s580/lens_diff/P05g.sv -DK5
+both     s580/lens_diff/P05g.sv -DK7
+both     s580/lens_diff/P05g.sv -DK8
+both     s580/lens_diff/P05g.sv -DK9
+both     s580/lens_diff/P05g.sv -DIV
+both     s580/lens_diff/P05g.sv -DK1 -DIV
+both     s580/lens_diff/P05g.sv -DK2 -DIV
+both     s580/lens_diff/P05g.sv -DK3 -DIV
+both     s580/lens_diff/P05g.sv -DK4 -DIV
+both     s580/lens_diff/P05g.sv -DK5 -DIV
+both     s580/lens_diff/P05g.sv -DK7 -DIV
+both     s580/lens_diff/P05g.sv -DK8 -DIV
+both     s580/lens_diff/P05g.sv -DK9 -DIV
+post3    s580/lens_diff/P06.sv 
+post3    s580/lens_diff/P06.sv -DFIN
+post3    s580/lens_diff/P06.sv -DFJ
+post3    s580/lens_diff/P06.sv -DFRC
+post3    s580/lens_diff/P06.sv -DIFC
+post3    s580/lens_diff/P06v.sv 
+post3    s580/lens_diff/P06v.sv -DFIN
+post3    s580/lens_diff/P06v.sv -DFJ
+post3    s580/lens_diff/P06v.sv -DFRC
+post3    s580/lens_diff/P06v.sv -DIFC
+post3    s580/lens_diff/P06v.sv -DNOGC
+both     s580/lens_diff/P07.sv 
+both     s580/lens_diff/P07.sv -DARR
+both     s580/lens_diff/P07.sv -DLETT
+both     s580/lens_diff/P07.sv -DIV
+both     s580/lens_diff/P07.sv -DARR -DIV
+both     s580/lens_diff/P07.sv -DLETT -DIV
+both     s580/lens_diff/P08.sv 
+both     s580/lens_diff/P08.sv -DIV
+both     s580/lens_diff/P08b.sv 
+post3    s580/lens_diff/P08b.sv -DIV
+both     s580/lens_diff/P09.sv 
+both     s580/lens_diff/P09.sv -DNOP
+both     s580/lens_diff/P09.sv -DIV
+both     s580/lens_diff/P09.sv -DNOP -DIV
+both     s580/lens_diff/P10.sv 
+both     s580/lens_diff/P10.sv -DIV
+post3    s580/lens_diff/P10b.sv 
+post3    s580/lens_diff/P10b.sv -DIV
+both     s580/lens_diff/P10c.sv 
+post3    s580/lens_diff/P10c.sv -DIV
+both     s580/lens_diff/P11.sv 
+post3    s580/lens_diff2/Q1.sv 
+post3    s580/lens_diff2/Q1.sv -DWX
+post3    s580/lens_diff2/Q1.sv -DIV
+post3    s580/lens_diff2/Q1.sv -DWX -DIV
+both     s580/lens_diff2/Q2.sv 
+post3    s580/lens_diff2/Q2.sv -DCONSTS
+both     s580/lens_diff2/Q2.sv -DIV
+post3    s580/lens_diff2/Q2.sv -DCONSTS -DIV
+post3    s580/lens_diff2/Q3.sv 
+post3    s580/lens_diff2/Q3.sv -DADT
+post3    s580/lens_diff2/Q3.sv -DFBODY
+post3    s580/lens_diff2/Q3.sv -DFNRX
+post3    s580/lens_diff2/Q3.sv -DGA
+post3    s580/lens_diff2/Q3.sv -DGFOR
+post3    s580/lens_diff2/Q3.sv -DPSEL
+post3    s580/lens_diff2/Q3.sv -DRBB
+post3    s580/lens_diff2/Q3.sv -DRBT
+post3    s580/lens_diff2/Q3.sv -DREPX
+both     s580/lens_diff2/Q3.sv -DSTX
+post3    s580/lens_diff2/Q3.sv -DTDX
+post3    s580/lens_diff2/Q3.sv -DXBEFORE
+post3    s580/lens_diff2/Q3.sv -DIV
+post3    s580/lens_diff2/Q3.sv -DADT -DIV
+post3    s580/lens_diff2/Q3.sv -DFBODY -DIV
+post3    s580/lens_diff2/Q3.sv -DFNRX -DIV
+post3    s580/lens_diff2/Q3.sv -DGA -DIV
+post3    s580/lens_diff2/Q3.sv -DGFOR -DIV
+post3    s580/lens_diff2/Q3.sv -DPSEL -DIV
+post3    s580/lens_diff2/Q3.sv -DRBB -DIV
+post3    s580/lens_diff2/Q3.sv -DRBT -DIV
+post3    s580/lens_diff2/Q3.sv -DREPX -DIV
+both     s580/lens_diff2/Q3.sv -DSTX -DIV
+post3    s580/lens_diff2/Q3.sv -DTDX -DIV
+post3    s580/lens_diff2/Q3.sv -DXBEFORE -DIV
+both     s580/lens_diff2/Q4.sv 
+both     s580/lens_diff2/Q4.sv -DSTM
+both     s580/lens_diff2/Q4.sv -DIV
+both     s580/lens_diff2/Q4.sv -DSTM -DIV
+both     s580/lens_diff2/Q5.sv 
+post3    s580/lens_diff2/Q5.sv -DCMP
+both     s580/lens_diff2/Q5.sv -DRTT
+post3    s580/lens_diff2/Q5.sv -DIV
+post3    s580/lens_diff2/Q5.sv -DCMP -DIV
+post3    s580/lens_diff2/Q5.sv -DRTT -DIV
+both     s580/lens_diff2/Q6.sv 
+both     s580/lens_diff2/Q6.sv -DPSEE
+both     s580/lens_diff2/Q6.sv -DPSEL
+both     s580/lens_diff2/Q6.sv -DREPE
+both     s580/lens_diff2/Q6.sv -DREPX
+post3    s580/lens_diff2/Q6.sv -DSTR
+both     s580/lens_diff2/Q6.sv -DXB
+both     s580/lens_diff2/Q6.sv -DXE
+both     s580/lens_diff2/Q6.sv -DXI
+both     s580/lens_diff2/Q6.sv -DIV
+both     s580/lens_diff2/Q6.sv -DPSEE -DIV
+both     s580/lens_diff2/Q6.sv -DPSEL -DIV
+both     s580/lens_diff2/Q6.sv -DREPE -DIV
+both     s580/lens_diff2/Q6.sv -DREPX -DIV
+post3    s580/lens_diff2/Q6.sv -DSTR -DIV
+both     s580/lens_diff2/Q6.sv -DXB -DIV
+both     s580/lens_diff2/Q6.sv -DXE -DIV
+both     s580/lens_diff2/Q6.sv -DXI -DIV
+both     s580/lens_diff2/Q7.sv 
+both     s580/lens_diff2/Q7.sv -DIV
+post3    s580/lens_diff2/Q8.sv 
+post3    s580/lens_diff2/Q8.sv -DIU
+post3    s580/lens_diff2/Q8.sv -DRR
+post3    s580/lens_diff2/Q8.sv -DIV
+post3    s580/lens_diff2/Q8.sv -DIU -DIV
+post3    s580/lens_diff2/Q8.sv -DRR -DIV
+post3    s580/lens_diff2/Q9.sv 
+post3    s580/lens_diff2/Q9.sv -DIV
+both     s580/lens_snd2/probes/P1.sv 
+both     s580/lens_snd2/probes/P1.sv -DONLYC
+both     s580/lens_snd2/probes/P1.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P1.sv -DONLYC -DNO_INSIDE
+post3    s580/lens_snd2/probes/P10.sv 
+post3    s580/lens_snd2/probes/P10.sv -DNO_INSIDE
+post3    s580/lens_snd2/probes/P2.sv 
+both     s580/lens_snd2/probes/P2.sv -DNOK
+post3    s580/lens_snd2/probes/P2.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P2.sv -DNOK -DNO_INSIDE
+both     s580/lens_snd2/probes/P3.sv 
+both     s580/lens_snd2/probes/P3.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P4.sv 
+both     s580/lens_snd2/probes/P4.sv -DNOCLASS
+post3    s580/lens_snd2/probes/P5.sv 
+post3    s580/lens_snd2/probes/P5.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P6.sv 
+both     s580/lens_snd2/probes/P6.sv -DXI
+both     s580/lens_snd2/probes/P6.sv -DXV
+both     s580/lens_snd2/probes/P7.sv 
+both     s580/lens_snd2/probes/P7.sv -DU
+both     s580/lens_snd2/probes/P7.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P7.sv -DU -DNO_INSIDE
+both     s580/lens_snd2/probes/P8.sv 
+both     s580/lens_snd2/probes/P8.sv -DREALI
+both     s580/lens_snd2/probes/P8.sv -DREALL
+both     s580/lens_snd2/probes/P8.sv -DREALQ
+both     s580/lens_snd2/probes/P9.sv 
+both     s580/lens_snd2/probes/P9.sv -DQUEUE
+both     s580/lens_snd2/probes/P9.sv -DSFMT
+both     s580/lens_snd2/probes/P9.sv -DSTRI
+both     s580/lens_snd2/probes/P9.sv -DSTRV
+both     s580/lens_snd2/probes/P9.sv -DUARR
+both     s580/lens_diff3/G1.sv 
+neither  s580/lens_diff3/G1.sv -DL1
+         NEW  L1 item   [!PRE !POST3]
+         PRE  L1 dflt
+         POST3 L1 dflt
+both     s580/lens_diff3/G1.sv -DL10
+both     s580/lens_diff3/G1.sv -DL10P
+both     s580/lens_diff3/G1.sv -DL11
+both     s580/lens_diff3/G1.sv -DL12
+neither  s580/lens_diff3/G1.sv -DL1P
+         NEW  L1P item   [!PRE !POST3]
+         PRE  L1P dflt
+         POST3 L1P dflt
+post3    s580/lens_diff3/G1.sv -DL2
+both     s580/lens_diff3/G1.sv -DL2P
+post3    s580/lens_diff3/G1.sv -DL3
+post3    s580/lens_diff3/G1.sv -DL4
+both     s580/lens_diff3/G1.sv -DL4P
+post3    s580/lens_diff3/G1.sv -DL5
+post3    s580/lens_diff3/G1.sv -DL5N
+post3    s580/lens_diff3/G1.sv -DL6
+both     s580/lens_diff3/G1.sv -DL7
+both     s580/lens_diff3/G1.sv -DL8
+both     s580/lens_diff3/G1.sv -DL8P
+neither  s580/lens_diff3/G1.sv -DL9
+         NEW  L9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [=PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [=PRE !POST3]
+         NEW  rc=0   [=PRE !POST3]
+         PRE  L9 dflt
+         POST3 G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+both     s580/lens_diff3/G1.sv -DIV
+neither  s580/lens_diff3/G1.sv -DL1 -DIV
+         NEW  L1 item   [!PRE !POST3]
+         PRE  L1 dflt
+         POST3 L1 dflt
+both     s580/lens_diff3/G1.sv -DL10 -DIV
+both     s580/lens_diff3/G1.sv -DL10P -DIV
+both     s580/lens_diff3/G1.sv -DL11 -DIV
+both     s580/lens_diff3/G1.sv -DL12 -DIV
+neither  s580/lens_diff3/G1.sv -DL1P -DIV
+         NEW  L1P item   [!PRE !POST3]
+         PRE  L1P dflt
+         POST3 L1P dflt
+post3    s580/lens_diff3/G1.sv -DL2 -DIV
+both     s580/lens_diff3/G1.sv -DL2P -DIV
+post3    s580/lens_diff3/G1.sv -DL3 -DIV
+post3    s580/lens_diff3/G1.sv -DL4 -DIV
+both     s580/lens_diff3/G1.sv -DL4P -DIV
+post3    s580/lens_diff3/G1.sv -DL5 -DIV
+post3    s580/lens_diff3/G1.sv -DL5N -DIV
+post3    s580/lens_diff3/G1.sv -DL6 -DIV
+both     s580/lens_diff3/G1.sv -DL7 -DIV
+both     s580/lens_diff3/G1.sv -DL8 -DIV
+both     s580/lens_diff3/G1.sv -DL8P -DIV
+neither  s580/lens_diff3/G1.sv -DL9 -DIV
+         NEW  L9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [=PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [=PRE !POST3]
+         NEW  rc=0   [=PRE !POST3]
+         PRE  L9 dflt
+         POST3 G1.sv:82:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_diff3/G2.sv 
+neither  s580/lens_diff3/G2.sv -DM1
+         NEW  M1 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M1 dflt
+neither  s580/lens_diff3/G2.sv -DM10
+         NEW  M10 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M10 one
+neither  s580/lens_diff3/G2.sv -DM2
+         NEW  M2 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M2 dflt
+neither  s580/lens_diff3/G2.sv -DM3
+         NEW  M3 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M3 dflt
+neither  s580/lens_diff3/G2.sv -DM4
+         NEW  M4 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M4 dflt
+neither  s580/lens_diff3/G2.sv -DM4P
+         NEW  M4P item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M4P dflt
+neither  s580/lens_diff3/G2.sv -DM6
+         NEW  M6 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M6 dflt
+neither  s580/lens_diff3/G2.sv -DM7
+         NEW  M7 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M7 dflt
+post3    s580/lens_diff3/G2.sv -DM8
+neither  s580/lens_diff3/G2.sv -DM9
+         NEW  M9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M9 dflt
+post3    s580/lens_diff3/G2.sv -DIV
+neither  s580/lens_diff3/G2.sv -DM1 -DIV
+         NEW  M1 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M1 dflt
+neither  s580/lens_diff3/G2.sv -DM10 -DIV
+         NEW  M10 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M10 one
+neither  s580/lens_diff3/G2.sv -DM2 -DIV
+         NEW  M2 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M2 dflt
+neither  s580/lens_diff3/G2.sv -DM3 -DIV
+         NEW  M3 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M3 dflt
+neither  s580/lens_diff3/G2.sv -DM4 -DIV
+         NEW  M4 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M4 dflt
+neither  s580/lens_diff3/G2.sv -DM4P -DIV
+         NEW  M4P item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M4P dflt
+neither  s580/lens_diff3/G2.sv -DM6 -DIV
+         NEW  M6 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M6 dflt
+neither  s580/lens_diff3/G2.sv -DM7 -DIV
+         NEW  M7 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M7 dflt
+post3    s580/lens_diff3/G2.sv -DM8 -DIV
+neither  s580/lens_diff3/G2.sv -DM9 -DIV
+         NEW  M9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G2.sv:2:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M9 dflt
+both     s580/lens_diff3/G3.sv 
+neither  s580/lens_diff3/G3.sv -DM1
+         NEW  M1 item   [!PRE !POST3]
+         PRE  M1 dflt
+         POST3 M1 dflt
+neither  s580/lens_diff3/G3.sv -DM10
+         NEW  M10 item   [!PRE !POST3]
+         PRE  M10 one
+         POST3 M10 one
+neither  s580/lens_diff3/G3.sv -DM2
+         NEW  M2 item   [!PRE !POST3]
+         PRE  M2 dflt
+         POST3 M2 dflt
+neither  s580/lens_diff3/G3.sv -DM3
+         NEW  M3 item   [!PRE !POST3]
+         PRE  M3 dflt
+         POST3 M3 dflt
+neither  s580/lens_diff3/G3.sv -DM4
+         NEW  M4 item   [!PRE !POST3]
+         PRE  M4 dflt
+         POST3 M4 dflt
+neither  s580/lens_diff3/G3.sv -DM4P
+         NEW  M4P item   [!PRE !POST3]
+         PRE  M4P dflt
+         POST3 M4P dflt
+neither  s580/lens_diff3/G3.sv -DM6
+         NEW  M6 item   [!PRE !POST3]
+         PRE  M6 dflt
+         POST3 M6 dflt
+neither  s580/lens_diff3/G3.sv -DM7
+         NEW  M7 item   [!PRE !POST3]
+         PRE  M7 dflt
+         POST3 M7 dflt
+both     s580/lens_diff3/G3.sv -DM8
+neither  s580/lens_diff3/G3.sv -DM9
+         NEW  M9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G3.sv:3:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M9 dflt
+neither  s580/lens_diff3/G3.sv -DM9P
+         NEW  M9P item   [!PRE !POST3]
+         PRE  M9P dflt
+         POST3 M9P dflt
+both     s580/lens_diff3/G3.sv -DIV
+neither  s580/lens_diff3/G3.sv -DM1 -DIV
+         NEW  M1 item   [!PRE !POST3]
+         PRE  M1 dflt
+         POST3 M1 dflt
+neither  s580/lens_diff3/G3.sv -DM10 -DIV
+         NEW  M10 item   [!PRE !POST3]
+         PRE  M10 one
+         POST3 M10 one
+neither  s580/lens_diff3/G3.sv -DM2 -DIV
+         NEW  M2 item   [!PRE !POST3]
+         PRE  M2 dflt
+         POST3 M2 dflt
+neither  s580/lens_diff3/G3.sv -DM3 -DIV
+         NEW  M3 item   [!PRE !POST3]
+         PRE  M3 dflt
+         POST3 M3 dflt
+neither  s580/lens_diff3/G3.sv -DM4 -DIV
+         NEW  M4 item   [!PRE !POST3]
+         PRE  M4 dflt
+         POST3 M4 dflt
+neither  s580/lens_diff3/G3.sv -DM4P -DIV
+         NEW  M4P item   [!PRE !POST3]
+         PRE  M4P dflt
+         POST3 M4P dflt
+neither  s580/lens_diff3/G3.sv -DM6 -DIV
+         NEW  M6 item   [!PRE !POST3]
+         PRE  M6 dflt
+         POST3 M6 dflt
+neither  s580/lens_diff3/G3.sv -DM7 -DIV
+         NEW  M7 item   [!PRE !POST3]
+         PRE  M7 dflt
+         POST3 M7 dflt
+both     s580/lens_diff3/G3.sv -DM8 -DIV
+neither  s580/lens_diff3/G3.sv -DM9 -DIV
+         NEW  M9 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 5   [!PRE =POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE =POST3]
+         NEW  rc=0   [!PRE =POST3]
+         PRE  G3.sv:3:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+         PRE  errors=1 warnings=1 notes=0
+         PRE  rc=1
+         POST3 M9 dflt
+neither  s580/lens_diff3/G3.sv -DM9P -DIV
+         NEW  M9P item   [!PRE !POST3]
+         PRE  M9P dflt
+         POST3 M9P dflt
+both     s580/lens_diff3/H1.sv 
+both     s580/lens_diff3/H1.sv -DH1
+both     s580/lens_diff3/H1.sv -DH2
+both     s580/lens_diff3/H1.sv -DH2I
+both     s580/lens_diff3/H1.sv -DH2U
+both     s580/lens_diff3/H1.sv -DH3
+both     s580/lens_diff3/H1.sv -DH3U
+both     s580/lens_diff3/H1.sv -DH4
+both     s580/lens_diff3/H1.sv -DH5
+both     s580/lens_diff3/H1.sv -DH6
+both     s580/lens_diff3/H1.sv -DH7
+both     s580/lens_diff3/H1.sv -DH8
+both     s580/lens_diff3/H1.sv -DIV
+both     s580/lens_diff3/H1.sv -DH1 -DIV
+both     s580/lens_diff3/H1.sv -DH2 -DIV
+both     s580/lens_diff3/H1.sv -DH2I -DIV
+both     s580/lens_diff3/H1.sv -DH2U -DIV
+both     s580/lens_diff3/H1.sv -DH3 -DIV
+both     s580/lens_diff3/H1.sv -DH3U -DIV
+both     s580/lens_diff3/H1.sv -DH4 -DIV
+both     s580/lens_diff3/H1.sv -DH5 -DIV
+both     s580/lens_diff3/H1.sv -DH6 -DIV
+both     s580/lens_diff3/H1.sv -DH7 -DIV
+both     s580/lens_diff3/H1.sv -DH8 -DIV
+both     s580/lens_diff3/H2.sv 
+both     s580/lens_diff3/H2.sv -DR01
+both     s580/lens_diff3/H2.sv -DR02
+both     s580/lens_diff3/H2.sv -DR03
+both     s580/lens_diff3/H2.sv -DR04
+both     s580/lens_diff3/H2.sv -DR05
+both     s580/lens_diff3/H2.sv -DR06
+both     s580/lens_diff3/H2.sv -DR07
+both     s580/lens_diff3/H2.sv -DR08
+both     s580/lens_diff3/H2.sv -DR09
+both     s580/lens_diff3/H2.sv -DR10
+both     s580/lens_diff3/H2.sv -DR11
+both     s580/lens_diff3/P1.sv 
+post3    s580/lens_diff3/P1.sv -DCONSTS
+both     s580/lens_diff3/P1.sv -DKF
+both     s580/lens_diff3/P1.sv -DIV
+post3    s580/lens_diff3/P1.sv -DCONSTS -DIV
+both     s580/lens_diff3/P1.sv -DKF -DIV
+both     s580/lens_diff3/P3.sv 
+both     s580/lens_diff3/P3.sv -DIV
+both     s580/lens_snd3/p/p1.sv 
+both     s580/lens_snd3/p/p1.sv -DNOC
+both     s580/lens_snd3/p/p1.sv -DNOI
+both     s580/lens_snd3/p/p3.sv 
+post3    s580/lens_snd3/p/p3.sv -DG1
+both     s580/lens_snd3/p/p3.sv -DG2
+post3    s580/lens_snd3/p/p3.sv -DG3
+neither  s580/lens_snd3/p/p3.sv -DG4
+         NEW  G4 item   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 100   [=PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [=PRE !POST3]
+         NEW  rc=0   [=PRE !POST3]
+         PRE  G4 default
+         POST3 p3.sv:26:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern 
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_snd3/p/p3.sv -DG5
+post3    s580/lens_snd3/p/p3.sv -DG6
+both     s580/lens_snd3/p/p3.sv -DG7
+both     s580/lens_snd3/p/p3.sv -DG8
+pre      s580/lens_snd3/p/p3.sv -DG9
+post3    s580/lens_snd3/p/p3.sv -DLV
+both     s580/lens_snd3/p/p4.sv 
+both     s580/lens_snd3/p/p4.sv -DK1
+both     s580/lens_snd3/p/p4.sv -DK2
+both     s580/lens_snd3/p/p4.sv -DK3
+both     s580/lens_snd3/p/p4.sv -DK4
+both     s580/lens_snd3/p/p4.sv -DK5
+both     s580/lens_snd3/p/p4.sv -DK6
+both     s580/lens_snd3/p/p4.sv -DK7
+both     s580/lens_snd3/p/p4.sv -DK8
+both     s580/lens_snd3/p/p4.sv -DK9
+both     s580/lens_snd3/p/p5.sv 
+both     s580/lens_snd3/p/p5.sv -DFN
+post3    s580/lens_snd3/p/p5.sv -DH1
+post3    s580/lens_snd3/p/p5.sv -DH2
+post3    s580/lens_snd3/p/p5.sv -DH3
+pre      s580/lens_snd3/p/p5.sv -DH4
+both     s580/lens_snd3/p/p5.sv -DH5
+both     s580/lens_snd3/p/p5.sv -DH6
+post3    s580/lens_snd3/p/p5.sv -DH7
+neither  s580/lens_snd3/p/p5.sv -DH8
+         NEW  H8 item   [!PRE !POST3]
+         PRE  H8 default
+         POST3 H8 default
+both     s580/lens_snd3/p/p5.sv -DNOI
+both     s580/lens_snd3/p/p6.sv 
+pre      s580/lens_snd3/p/p6.sv -DJ1
+pre      s580/lens_snd3/p/p6.sv -DJ2
+pre      s580/lens_snd3/p/p6.sv -DJ3
+neither  s580/lens_snd3/p/p6.sv -DJ4
+         NEW  J4 item   [!PRE !POST3]
+         PRE  J4 default
+         POST3 J4 default
+post3    s580/lens_snd3/p/p6.sv -DJ5
+post3    s580/lens_snd3/p/p6.sv -DJ6
+neither  s580/lens_snd3/p/p6.sv -DJ7
+         NEW  J7 item   [!PRE !POST3]
+         PRE  J7 default
+         POST3 J7 default
+neither  s580/lens_snd3/p/p6.sv -DJ8
+         NEW  J8 item   [!PRE !POST3]
+         PRE  J8 default
+         POST3 J8 default
+both     s580/lens_snd3/p/p6.sv -DJ9
+post3    s580/lens_snd3/p/p6.sv -DJV
+neither  f2/w65.sv 
+         NEW  A item   [!PRE !POST3]
+         PRE  A dflt
+         POST3 A dflt
+{'both': 427, 'pre': 7, 'post3': 181, 'neither': 51}

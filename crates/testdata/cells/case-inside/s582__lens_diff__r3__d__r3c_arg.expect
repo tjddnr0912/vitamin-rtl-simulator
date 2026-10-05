@@ -1,0 +1,34 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__r3__d__r3c_arg
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/r3/d/r3c_arg.v
+roadmap_row: §3.b case-inside
+set: lens_diff/r3/d
+oracles_present: iverilog,verilator
+vita_tags: POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/r3/d/out_r3c_arg/iv.out | 199 bytes
+arg m=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3c_arg.v:7: $finish called at 0 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/r3/d/out_r3c_arg/vl.out | 371 bytes
+arg m=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3c_arg.v:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | vita [POST3] | lens_diff/r3/d/out_r3c_arg/post3.out | 528 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3c_arg.v:7:40: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3c_arg.v:5); IEEE 1800-2017 reserves `inside` [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 4 | vita [PRE] | lens_diff/r3/d/out_r3c_arg/pre.out | 77 bytes
+arg m=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== end

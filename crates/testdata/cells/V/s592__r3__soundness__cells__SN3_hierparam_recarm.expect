@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r3__soundness__cells__SN3_hierparam_recarm
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r3/soundness/cells/SN3_hierparam_recarm.sv
+roadmap_row: §2 🆕 V
+set: r3/soundness/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./SN3_hierparam_recarm.iv.txt | 64 bytes
+@P=1
+SN3_hierparam_recarm.sv:11: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./SN3_hierparam_recarm.vl.txt | 109 bytes
+%Error: SN3_hierparam_recarm.sv:10:39: Can't find definition of 'g1'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./SN3_hierparam_recarm.vlb.txt | 368 bytes
+%Error: SN3_hierparam_recarm.sv:10:39: Can't find definition of 'g1'
+                                     : ... note: In instance 'top'
+   10 |   initial #1 $display("@P=%0d", gb.g1.P);
+      |                                       ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./SN3_hierparam_recarm.sv.txt | 68 bytes
+@P=1
+SN3_hierparam_recarm.sv2v.v:19: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_b] | ./SN3_hierparam_recarm.post_b.txt | 472 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+SN3_hierparam_recarm.sv:5:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 8:16), so vita's elaboration passes choose different case items here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate case [in top.gb]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_d] | ./SN3_hierparam_recarm.post_d.txt | 174 bytes
+@P=1
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 7 | vita [pre] | ./SN3_hierparam_recarm.pre.txt | 174 bytes | identical to block 6
+=== end

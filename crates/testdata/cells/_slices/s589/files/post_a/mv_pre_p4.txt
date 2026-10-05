@@ -1,0 +1,270 @@
+('loud', 'loud') 4
+('loud', 'noora') 1
+('loud', 'ok') 88
+('loud', 'same') 67
+('loud', 'split') 3
+('loud', 'wrong') 13
+('noora', 'same') 2
+('ok', 'loud') 5
+('ok', 'same') 119
+('ok', 'wrong') 1
+('split', 'same') 3
+('wrong', 'ok') 138
+('wrong', 'same') 27
+('wrong', 'wrong') 3
+loud->loud	a/ib1_unit_concat	LOUD[VITA-E3009:package-scoped call `q::h(...)` needs a body that references only its ]	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=a5 v=a5	P=a5 v=a5
+loud->loud	a/ib3_unit_fn_body	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	LOUD[VITA-E3009:package-scoped call `q::h(...)` needs a body that references only its ]	P=10 v=10	P=10 v=10
+loud->loud	a/nc10_bitsgen	LOUD[VITA-E3010:generate-if condition is not a constant: `q.h(…)` has no constant-fold]	LOUD[VITA-E3010:generate-if condition is not a constant: `$bits(…)` has no constant-fo]	b=4	b=4
+loud->loud	g_c5/rv561_clog	LOUD[VITA-E3009:parameter `P` value is not a constant: `b.h(…)` has no constant-fold a]	LOUD[VITA-E3009:package-scoped call `b::h(...)` needs a body that references only its ]	P=4 v=4	P=4 v=4
+loud->noora	a/ac1_rep_x	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	w=00000000	REF	REF
+loud->ok	a/ac19_rt_case	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=3	v=3	v=3
+loud->ok	a/ac7_repeat_x	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	n=0	REF	n=0
+loud->ok	a/ac8_delay_x	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	t1 w=1 | t3 w=1	t1 w=1 | t3 w=1	t1 w=1 | t3 w=1
+loud->ok	a/ib3b_unit_fn_body_P	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=10	P=10	P=10
+loud->ok	a/id2_ovf_pk	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000000	P=00000000	P=00000000
+loud->ok	a/nc11_psel	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	o=000000ef	o=000000ef	o=000000ef
+loud->ok	a/nc12_netw	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=ff b=8	v=ff b=8	v=ff b=8
+loud->ok	a/nc1_genif	LOUD[VITA-E3010:generate-if condition is not a constant: `q.h(…)` has no constant-fold]	br=then	br=then	br=then
+loud->ok	a/nc2_gencase	LOUD[VITA-E3010:generate-case scrutinee is not a constant: `q.h(…)` has no constant-fo]	arm=2	arm=2	arm=2
+loud->ok	a/nc3_ia	LOUD[VITA-E3009:instance array `u` range is not a constant [in top]]	top.u[0] | top.u[1]	top.u[0] | top.u[1]	top.u[0] | top.u[1]
+loud->ok	a/nc4_ovr	LOUD[VITA-E3009:the override of parameter `P` is not a constant, so the declared defau]	P=2	P=2	P=2
+loud->ok	a/nc5_unit	LOUD[VITA-E3009:parameter `U` value is not a constant: `q.h(…)` has no constant-fold a]	U=2	U=2	U=2
+loud->ok	a/nc6_rep	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	w=00000007	w=00000007	w=00000007
+loud->ok	a/nc8_repeat	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	n=2	n=2	n=2
+loud->ok	a/nc9_caselbl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	hit	hit	hit
+loud->ok	g_c/a_cast_ce_par	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+loud->ok	g_c/a_cast_ce_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+loud->ok	g_c/a_cast_rt_ctl	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+loud->ok	g_c/a_cast_rt_fnpar	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+loud->ok	g_c/a_dflt_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	P=1003
+loud->ok	g_c/a_dflt_ce_fnpar	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	P=1003
+loud->ok	g_c/a_dflt_ce_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	P=1003
+loud->ok	g_c/a_fml_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_fml_rt_fnpar	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_fml_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c/a_frloc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_frloc_rt_fnpar	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_frloc_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c/a_loc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_loc_rt_fnpar	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_loc_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c/a_ret_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+loud->ok	g_c/a_ret_ce_fnpar	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+loud->ok	g_c/a_ret_ce_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+loud->ok	g_c/a_ret_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_ret_rt_fnpar	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/a_ret_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c/iimp_cast_ce_ctl	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$h]	P=0	P=0	P=0
+loud->ok	g_c/iimp_cast_ce_par	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=0	P=0	P=0
+loud->ok	g_c/iimp_cast_rt_ctl	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$h]	v=0	v=0	v=0
+loud->ok	g_c/iimp_dflt_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=1003	P=1003	P=1003
+loud->ok	g_c/iimp_loc_ce_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	P=8	P=8	P=8
+loud->ok	g_c/iimp_loc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/iimp_ret_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=8	P=8	P=8
+loud->ok	g_c/iimp_ret_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/iwc_cast_ce_par	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=0	P=0	P=0
+loud->ok	g_c/s_cast_ce_par	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+loud->ok	g_c/s_cast_rt_ctl	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+loud->ok	g_c/s_dflt_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	P=1003
+loud->ok	g_c/s_fml_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/s_frloc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/s_loc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/s_ret_ce_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+loud->ok	g_c/s_ret_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c/w_ctl_imp	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	B=4	B=4	B=4
+loud->ok	g_c/w_ctl_q	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	B=4	B=4	B=4
+loud->ok	g_c/w_pctl_imp	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	B=4	B=4	B=4
+loud->ok	g_c/w_pctl_q	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	B=4	B=4	B=4
+loud->ok	g_c2/n_twolevel	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 v=8	P=8 v=8	P=8 v=8
+loud->ok	g_c4/b_bits2_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=4	v=4	v=4
+loud->ok	g_c4/b_cast2_ce_par	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=-24	P=-24	P=-24
+loud->ok	g_c4/b_cast2_ce_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=-24	P=-24	P=-24
+loud->ok	g_c4/pg_gen	LOUD[VITA-E3009:generate-scope parameter `P` value is not a constant: `q.h(…)` has no ]	P=8 v=8	P=8 v=8	P=8 v=8
+loud->ok	g_c4/pi_rpar_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 v=8	P=8 v=8	P=8 v=8
+loud->ok	g_c4/simp_cast_rt_ctl	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$h]	v=0	v=0	v=0
+loud->ok	g_c4/simp_fml_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c4/simp_fml_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c4/simp_loc_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c4/simp_loc_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c4/simp_ret_rt_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c4/simp_ret_rt_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c5/rv561_clogP	LOUD[VITA-E3009:parameter `P` value is not a constant: `b.h(…)` has no constant-fold a]	P=4	P=4	P=4
+loud->ok	g_c6/in2_fml_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/in2_fml_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c6/in2_loc_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/in2_loc_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c6/in2_ret_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/in2_ret_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_fml_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_fml_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_loc_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_loc_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_ret_ctl	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+loud->ok	g_c6/inpv_ret_pctl	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+loud->ok	g_c7/ty_bits_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 b=4	P=8 b=4	P=8 b=4
+loud->ok	g_c7/ty_bits_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 b=4	P=8 b=4	P=8 b=4
+loud->ok	g_c7/ty_sgn_ctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+loud->ok	g_c7/ty_sgn_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+loud->split	a/ae4_ret_rt	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=xxxx	v=xxxx	v=0000
+loud->split	a/nc7_delay	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	t1 w=x | t3 w=1	t1 w=1 | t3 w=1	t1 w=0 | t3 w=1
+loud->split	a/sh6_fn_enum	LOUD[VITA-E3009:undefined name `B1` is not allowed in a constant range bound [in top.$]	v=ff	v=ff	v=03
+loud->wrong	a/ac10_rep_case	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	w=00000000	w=00000007	w=00000007
+loud->wrong	a/ac11_psel_case	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	o=00000001	o=00000007	o=00000007
+loud->wrong	a/ac12_mlsel_case	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	o=00000001	o=0000000f	o=0000000f
+loud->wrong	a/ac14_mlsel_x	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	o=00000001	o=xxxxxxxx	REF
+loud->wrong	a/ac2_psel_x	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	o=00000000	ac2_psel_x.sv:11: : This width expression violates that rule: q::h('sd2)	REF
+loud->wrong	a/ae1_ret_ce	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000	REF	P=xxxx
+loud->wrong	a/ae2_loc_ce	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000	P=xxxx	P=xxxx
+loud->wrong	a/ae3_loc_ce_pctl	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000	P=xxxx	P=xxxx
+loud->wrong	a/ae7_ret_ce_x	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000	REF	P=xxxx
+loud->wrong	a/ae8_body_ce	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000000	P=xxxxxxxx	P=xxxxxxxx
+loud->wrong	a/id1_a41_pk	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=2	P=2
+loud->wrong	a/rc1_selfhdr	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.f(…)` has no constant-fold a]	./run.sh: line 8: 40110 Abort trap: 6           $S/s589/g/post4/vita $b.sv | fatal runtime error: stack overflow | thread 'vita-main' has overflowed its stack {rc=134}	40117 Abort trap: 6 | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh282f6a1e" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - | rc1_selfhdr.sv:2: assert: elab_expr.cc:2927: failed assertion def | sh: line 1: 40116 Done /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2282f6a1e" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg282f6a1e" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli282f6a1e"	REF
+loud->wrong	a/rc2_mutual	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	./run.sh: line 8: 40138 Abort trap: 6           $S/s589/g/post4/vita $b.sv | fatal runtime error: stack overflow | thread 'vita-main' has overflowed its stack {rc=134}	40145 Abort trap: 6 | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28361514" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - | rc2_mutual.sv:3: assert: elab_expr.cc:2927: failed assertion def | sh: line 1: 40144 Done /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228361514" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28361514" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28361514"	REF
+ok->loud	a/cl1_unit_hdrcall	P=232 v=232	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=232 v=232	P=232 v=232
+ok->loud	a/ib1b_unit_concat_P	P=a5	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=a5	P=a5
+ok->loud	a/rba1_ce	P=8	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8
+ok->loud	a/rba2_rt	v=8	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8
+ok->loud	a/rba3_rep	w=000000ff	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	w=000000ff	w=000000ff
+ok->wrong	a/ac3_gcase_x	arm=def	arm=h	arm=def	arm=def
+wrong->ok	a/cl4_scoped_nest	P=1000 v=1000	P=232 v=232	P=232 v=232	P=232 v=232
+wrong->ok	a/r1_flip_wide	P=1000	P=8	P=8	P=8
+wrong->ok	a/r1_flip_wide_rt	v=1000	v=8	v=8	v=8
+wrong->ok	g_c/a_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/a_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/a_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/a_fml_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_ce_fnpar	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_ce_pctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_frloc_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_ce_fnpar	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_ce_pctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_frloc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_frloc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_loc_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_ce_fnpar	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_ce_pctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/a_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_psel_rt_ctl	v=00000001	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/a_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/a_psel_rt_fnpar	v=00000001	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/a_rep_rt_ctl	v=00000000	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/a_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/a_rep_rt_fnpar	v=00000000	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/a_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/a_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/a_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/iimp_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iimp_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iimp_loc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/iimp_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iimp_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iimp_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/iwc_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iwc_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/iwc_loc_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/iwc_loc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/iwc_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/iwc_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/iwc_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c/s_dflt_ce_fn	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/s_dflt_ce_par	P=1007	P=1003	P=1003	P=1003
+wrong->ok	g_c/s_fml_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_fml_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_fml_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_frloc_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_frloc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_frloc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_frloc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_frloc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_loc_ce_ctl	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_loc_ce_fn	P=1000	P=8	P=8	P=8
+wrong->ok	g_c/s_loc_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_psel_rt_ctl	v=00000001	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/s_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c/s_rep_rt_ctl	v=00000000	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/s_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c/s_ret_ce_fn	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_ret_ce_par	P=232	P=8	P=8	P=8
+wrong->ok	g_c/s_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c/s_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c/w_fn_imp	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_fn_q	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_par_imp	B=8	B=4	B=4	B=4
+wrong->ok	g_c/w_par_q	B=8	B=4	B=4	B=4
+wrong->ok	g_c2/n_pkgimp	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c2/n_twolevel_g	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/b_bits2_rt_par	v=8	v=4	v=4	v=4
+wrong->ok	g_c4/imp_two_pkgs	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/pb_bits	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pi_rpar	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+wrong->ok	g_c4/pt_task	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pt_task_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/pw_wide	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c4/simp_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_psel_rt_ctl	v=00000001	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c4/simp_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c4/simp_rep_rt_ctl	v=00000000	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c4/simp_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c4/simp_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/simp_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_cast_rt_fn	v=-24	v=0	v=0	v=0
+wrong->ok	g_c4/swc_fml_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_fml_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_loc_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_loc_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_psel_rt_fn	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+wrong->ok	g_c4/swc_rep_rt_fn	v=0000007f	v=00000007	v=00000007	v=00000007
+wrong->ok	g_c4/swc_ret_rt_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c4/swc_ret_rt_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c5/rv561_pkc	P=0000eeee v=01230123	P=01230123 v=01230123	P=01230123 v=01230123	P=01230123 v=01230123
+wrong->ok	g_c6/in2_fml_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_fml_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_loc_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_loc_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_ret_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in2_ret_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in_fml	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/in_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_fml_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_fml_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_loc_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_loc_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_ret_fn	v=232	v=8	v=8	v=8
+wrong->ok	g_c6/inpv_ret_par	v=232	v=8	v=8	v=8
+wrong->ok	g_c7/ty_bits_fn	P=232 b=8	P=8 b=4	P=8 b=4	P=8 b=4
+wrong->ok	g_c7/ty_bits_par	P=232 b=8	P=8 b=4	P=8 b=4	P=8 b=4
+wrong->ok	g_c7/ty_sgn_fn	P=15 P2=15 b=8	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+wrong->ok	g_c7/ty_sgn_par	P=15 P2=15 b=8	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+wrong->wrong	a/rc3_selfhdr_mod	runc.sh: PID Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f" | fatal runtime error: stack overflow | thread 'vita-main' has overflowed its stack {rc=134}	./run.sh: line 8: 40171 Abort trap: 6           $S/s589/g/post4/vita $b.sv | fatal runtime error: stack overflow | thread 'vita-main' has overflowed its stack {rc=134}	40176 Abort trap: 6 | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh283e8b9b" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - | rc3_selfhdr_mod.sv:2: assert: elab_expr.cc:2927: failed assertion def | sh: line 1: 40175 Done /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2283e8b9b" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg283e8b9b" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli283e8b9b"	REF
+wrong->wrong	a/rc4_shadow_selfhdr	P=8	./run.sh: line 8: 61994 Abort trap: 6           $S/s589/g/post4/vita $b.sv | fatal runtime error: stack overflow | thread 'vita-main' has overflowed its stack {rc=134}	62004 Abort trap: 6 | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh3e1c6ef7" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- - | rc4_shadow_selfhdr.sv:2: assert: elab_expr.cc:2927: failed assertion def | sh: line 1: 62003 Done /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg23e1c6ef7" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg3e1c6ef7" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli3e1c6ef7"	REF
+wrong->wrong	g_c5/rv558_ovr	P=255 b=32	P=15 b=32	P=15 b=4	P=15 b=4

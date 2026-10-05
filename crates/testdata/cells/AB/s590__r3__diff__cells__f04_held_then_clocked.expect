@@ -1,0 +1,160 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r3__diff__cells__f04_held_then_clocked
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r3/diff/cells/f04_held_then_clocked.sv
+roadmap_row: §2 🆕 AB
+set: r3/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,PRE3,POSTC,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTD_JIT: unresolved (no row in the slice META binaries table)
+vita_binary: POSTD_NODEF: unresolved (no row in the slice META binaries table)
+vita_binary: PRE3_SEP: md5 78439b423ee29af2d2a6a5034a4ff409 commit 75f46453
+vita_binary: POSTD_SEP: unresolved (no row in the slice META binaries table)
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE2+PRE3+POSTC+POSTD+POSTD_JIT+POSTD_NODEF+PRE3_SEP+POSTD_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r3/diff/o/f04_held_then_clocked.out | 3267 bytes
+##### f04_held_then_clocked
+=== PRE2 (native=interp=vm)
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== PRE3 (native=interp=vm)
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== POSTD (native=interp=vm)
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== JIT POSTD native
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== PRODUCT POSTD
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+=== staged PRE3 vcmp=0 velab=0
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=0 notes=0
+=== staged POSTD vcmp=0 velab=0
+rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+simulation ended (Finish) at time 20
+errors=0 warnings=0 notes=0
+--- P2=P3 True C=D True P3=D True splitD False vcdCD True jit=D True prod=D True stD True stPair True
+=== iverilog run rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+f04_held_then_clocked.sv:11: $finish called at 20 (1s)
+=== verilator run rc=0
+t=1 cnt=0 h=3 r=86
+t=3 cnt=86 h=89 r=12
+t=5 cnt=12 h=15 r=90
+t=7 cnt=90 h=93 r=8
+t=9 cnt=8 h=11 r=94
+t=11 cnt=94 h=97 r=52
+t=13 cnt=52 h=55 r=98
+t=15 cnt=98 h=101 r=48
+t=17 cnt=48 h=51 r=102
+t=19 cnt=102 h=105 r=60
+- f04_held_then_clocked.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

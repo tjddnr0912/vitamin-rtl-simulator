@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__plan__p19_task_repeat_timing
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/plan/p19_task_repeat_timing.sv
+roadmap_row: §2 🆕 AE
+set: plan
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE
+verdict: silent -> correct
+verdict_source: s588/COMMIT_DOCS.txt:33
+notes: commit-message line listing p19
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./p19_task_repeat_timing.ivl | 74 bytes
+n=2 t=3
+done
+p19_task_repeat_timing.sv:11: $finish called at 20 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./p19_task_repeat_timing.vl | 251 bytes
+n=1 t=1
+done
+- p19_task_repeat_timing.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 20ps; walltime 0.000 s; speed 357.143 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./p19_task_repeat_timing.s2v | 77 bytes
+n=2 t=3
+done
+p19_task_repeat_timing.s2v.v:35: $finish called at 20 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./p19_task_repeat_timing.PRE | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n=1 t=1
+done
+simulation ended (Finish) at time 20
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PRE] | ./p19_task_repeat_timing.PRE0 | 182 bytes | identical to block 4
+=== end

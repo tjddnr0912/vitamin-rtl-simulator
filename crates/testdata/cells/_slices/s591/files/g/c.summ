@@ -1,0 +1,870 @@
+### Efr_ff  [PRE=some]
+  pre : ff r=11 | post 2.500000
+  ivl : ff r=13 | post 2.500000
+  s2v : !Efr_ff.sv:5:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : ff r=11 | post 2.500000
+### Efr_fn  [PRE!=all]
+  pre : !VITA-E3009 parameter `KF` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl : fn f=3 KF=3 | post 2.500000
+  s2v : !Efr_fn.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : !%Error: Efr_fn.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCRE | !%Error: Exiting due to 1 error(s) | build_rc=1
+### Efr_tk  [PRE=some]
+  pre : post 2.500000 | tk r=1
+  ivl : post 2.500000 | tk r=3
+  s2v : !Efr_tk.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post 2.500000 | tk r=1
+### Efs_ff  [PRE=some]
+  pre : ff r=11 | post AB
+  ivl : ff r=16716 | post AB
+  s2v : !Efs_ff.sv:5:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : ff r=11 | post AB
+### Efs_fn  [PRE!=all]
+  pre : !VITA-E3009 parameter `KF` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl : fn f=16706 KF=16706 | post AB
+  s2v : !Efs_fn.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : !%Error: Efs_fn.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCRE | !%Error: Exiting due to 1 error(s) | build_rc=1
+### Efs_tk  [PRE=some]
+  pre : post AB | tk r=1
+  ivl : post AB | tk r=16706
+  s2v : !Efs_tk.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post AB | tk r=1
+### Efw_ff  [PRE=some]
+  pre : ff r=11 | post 18446744073709551616
+  ivl : ff r=10 | post 18446744073709551616
+  s2v : !Efw_ff.sv:5:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : ff r=11 | post 18446744073709551616
+### Efw_fn  [PRE!=all]
+  pre : !VITA-E3009 parameter `KF` value is not a constant: `f(…)` has no constant-fold arm [in top] | rc=1
+  ivl : fn f=0 KF=0 | post 18446744073709551616
+  s2v : !Efw_fn.sv:4:5: Parse error: missing expected `endfunction` | rc=1
+  vl  : !%Error: Efw_fn.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCRE | !%Error: Exiting due to 1 error(s) | build_rc=1
+### Efw_tk  [PRE=some]
+  pre : post 18446744073709551616 | tk r=1
+  ivl : post 18446744073709551616 | tk r=0
+  s2v : !Efw_tk.sv:5:5: Parse error: missing expected `endtask` | rc=1
+  vl  : post 18446744073709551616 | tk r=1
+### Elw_val  [PRE!=all]
+  pre : !VITA-E3009 `E1` is declared twice in this module: as a localparam and as an enum label — a module bod | ~VITA-E3009 | rc=1
+  ivl : !error: 'E1' has already been declared in this scope. | Elw_val.sv:2:      : It was declared here as a parameter. | rc=1
+  s2v : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=65
+  vl  : !%Error: Elw_val.sv:3:21: Duplicate declaration of enum value: E1 | !%Error: Exiting due to 1 error(s) | build_rc=1
+### Eni_cmp  [ALL]
+  pre : cmp eq1=1 lt=0
+  ivl : cmp eq1=1 lt=0
+  s2v : cmp eq1=1 lt=0
+  vl  : cmp eq1=1 lt=0
+### Eni_gcs  [ALL]
+  pre : gcs one
+  ivl : gcs one
+  s2v : gcs one
+  vl  : gcs one
+### Eni_gif  [ALL]
+  pre : gif hit
+  ivl : gif hit
+  s2v : gif hit
+  vl  : gif hit
+### Eni_ovr  [ALL]
+  pre : ovr top.u P=1 b=32 | port top.u2 b=2
+  ivl : ovr top.u P=1 b=32 | port top.u2 b=2
+  s2v : ovr top.u P=1 b=32 | port top.u2 b=2
+  vl  : ovr top.u P=1 b=32 | port top.u2 b=2
+### Eni_sel  [PRE=some]
+  pre : sel s0=1 s1=0
+  ivl : sel s0=1 s1=0
+  s2v : !error: Malformed statement | !syntax error | rc=2
+  vl  : sel s0=1 s1=0
+### Eni_val  [ALL]
+  pre : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  ivl : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  s2v : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  vl  : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+### Eni_wid  [ALL]
+  pre : wid b=3
+  ivl : wid b=3
+  s2v : wid b=3
+  vl  : wid b=3
+### Epk_val  [PRE!=all]
+  pre : pk E1=1 K=0 KW=18446744073709551616
+  ivl : pk E1=1 K=1 KW=1
+  s2v : pk E1=1 K=1 KW=1
+  vl  : pk E1=1 K=1 KW=1
+### Eri_cmp  [ALL]
+  pre : cmp eq1=1 lt=0
+  ivl : cmp eq1=1 lt=0
+  s2v : cmp eq1=1 lt=0
+  vl  : cmp eq1=1 lt=0
+### Eri_gcs  [ALL]
+  pre : gcs one
+  ivl : gcs one
+  s2v : gcs one
+  vl  : gcs one
+### Eri_gif  [ALL]
+  pre : gif hit
+  ivl : gif hit
+  s2v : gif hit
+  vl  : gif hit
+### Eri_ovr  [ALL]
+  pre : ovr top.u P=1 b=32 | port top.u2 b=2
+  ivl : ovr top.u P=1 b=32 | port top.u2 b=2
+  s2v : ovr top.u P=1 b=32 | port top.u2 b=2
+  vl  : ovr top.u P=1 b=32 | port top.u2 b=2
+### Eri_sel  [PRE=some]
+  pre : sel s0=1 s1=0
+  ivl : sel s0=1 s1=0
+  s2v : !error: Malformed statement | !syntax error | rc=2
+  vl  : sel s0=1 s1=0
+### Eri_val  [ALL]
+  pre : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  ivl : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  s2v : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  vl  : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+### Eri_wid  [ALL]
+  pre : wid b=3
+  ivl : wid b=3
+  s2v : wid b=3
+  vl  : wid b=3
+### Esi_cmp  [ALL]
+  pre : cmp eq1=1 lt=0
+  ivl : cmp eq1=1 lt=0
+  s2v : cmp eq1=1 lt=0
+  vl  : cmp eq1=1 lt=0
+### Esi_gcs  [ALL]
+  pre : gcs one
+  ivl : gcs one
+  s2v : gcs one
+  vl  : gcs one
+### Esi_gif  [ALL]
+  pre : gif hit
+  ivl : gif hit
+  s2v : gif hit
+  vl  : gif hit
+### Esi_ovr  [ALL]
+  pre : ovr top.u P=1 b=32 | port top.u2 b=2
+  ivl : ovr top.u P=1 b=32 | port top.u2 b=2
+  s2v : ovr top.u P=1 b=32 | port top.u2 b=2
+  vl  : ovr top.u P=1 b=32 | port top.u2 b=2
+### Esi_sel  [PRE=some]
+  pre : sel s0=1 s1=0
+  ivl : sel s0=1 s1=0
+  s2v : !error: Malformed statement | !syntax error | rc=2
+  vl  : sel s0=1 s1=0
+### Esi_val  [ALL]
+  pre : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  ivl : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  s2v : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  vl  : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+### Esi_wid  [ALL]
+  pre : wid b=3
+  ivl : wid b=3
+  s2v : wid b=3
+  vl  : wid b=3
+### Ewe_val  [PRE!=all]
+  pre : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32
+  ivl : !error: 'E1' has already been imported into this scope from package 'pk'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:305:44 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: declaration of E1 conflicts with prior import of pk::E1 | rc=1
+  vl  : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+### Ewi_cmp  [PRE!=all]
+  pre : cmp eq1=0 lt=0
+  ivl : cmp eq1=1 lt=0
+  s2v : cmp eq1=1 lt=0
+  vl  : cmp eq1=1 lt=0
+### Ewi_gcs  [ALL]
+  pre : gcs one
+  ivl : gcs one
+  s2v : gcs one
+  vl  : gcs one
+### Ewi_gif  [ALL]
+  pre : gif hit
+  ivl : gif hit
+  s2v : gif hit
+  vl  : gif hit
+### Ewi_ovr  [PRE!=all]
+  pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+  ivl : ovr top.u P=1 b=32 | port top.u2 b=2
+  s2v : ovr top.u P=1 b=32 | port top.u2 b=2
+  vl  : ovr top.u P=1 b=32 | port top.u2 b=2
+### Ewi_sel  [PRE!=all]
+  pre : sel s0=0 s1=0
+  ivl : sel s0=1 s1=0
+  s2v : !error: Malformed statement | !syntax error | rc=2
+  vl  : sel s0=1 s1=0
+### Ewi_val  [PRE!=all]
+  pre : pc def | val E1=18446744073709551616 K=0 KW=18446744073709551616 wv=18446744073709551616 b=32
+  ivl : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  s2v : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+  vl  : pc one | val E1=1 K=1 KW=1 wv=1 b=32
+### Ewi_wid  [ALL]
+  pre : wid b=3
+  ivl : wid b=3
+  s2v : wid b=3
+  vl  : wid b=3
+### Gn_cmp  [ALL]
+  pre : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+### Gn_fn  [ALL]
+  pre : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+### Gn_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+### Gn_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+### Gn_ovr  [ALL]
+  pre : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+### Gn_sel  [ALL]
+  pre : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gn_val  [PRE=some]
+  pre : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gn_wid  [ALL]
+  pre : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gr_cmp  [ALL]
+  pre : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 2.500000
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 2.500000
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 2.500000
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 2.500000
+### Gr_fn  [PRE!=all]
+  pre : fn top.g[0] f=3 | fn top.g[1] f=3 | post 2.500000
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 2.500000
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post 2.500000
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 2.500000
+### Gr_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 2.500000
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 2.500000
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post 2.500000
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 2.500000
+### Gr_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 2.500000
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 2.500000
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post 2.500000
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 2.500000
+### Gr_ovr  [ALL]
+  pre : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 2.500000
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 2.500000
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 2.500000
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 2.500000
+### Gr_sel  [ALL]
+  pre : post 2.500000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 2.500000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 2.500000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post 2.500000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gr_val  [PRE=some]
+  pre : pc top.g[0] zero | pc top.g[1] one | post 2.500000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 2.500000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post 2.500000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 2.500000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gr_wid  [ALL]
+  pre : post 2.500000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 2.500000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 2.500000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post 2.500000 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gri_cmp  [ALL]
+  pre : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 4.000000
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 4.000000
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 4.000000
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 4.000000
+### Gri_fn  [PRE!=all]
+  pre : fn top.g[0] f=4 | fn top.g[1] f=4 | post 4.000000
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 4.000000
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post 4.000000
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 4.000000
+### Gri_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 4.000000
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 4.000000
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post 4.000000
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 4.000000
+### Gri_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 4.000000
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 4.000000
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post 4.000000
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 4.000000
+### Gri_ovr  [ALL]
+  pre : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 4.000000
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 4.000000
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 4.000000
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 4.000000
+### Gri_sel  [ALL]
+  pre : post 4.000000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 4.000000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 4.000000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post 4.000000 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gri_val  [PRE=some]
+  pre : pc top.g[0] zero | pc top.g[1] one | post 4.000000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 4.000000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post 4.000000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 4.000000 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gri_wid  [ALL]
+  pre : post 4.000000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 4.000000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 4.000000 | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post 4.000000 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gs_cmp  [PRE!=all]
+  pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post AB
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+### Gs_fn  [PRE!=all]
+  pre : fn top.g[0] f=16706 | fn top.g[1] f=16706 | post AB
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+### Gs_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+### Gs_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+### Gs_ovr  [PRE!=all]
+  pre : !VITA-E3009 undefined name `N` is not allowed in a constant range bound [in top.g[0].u2] | rc=1
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+### Gs_sel  [PRE!=all]
+  pre : post AB | sel top.g[0] s0=0 s1=1 | sel top.g[1] s0=0 s1=1
+  ivl : post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gs_val  [PRE!=all]
+  pre : pc top.g[0] def | pc top.g[1] def | post AB | val top.g[0] i=16706 K=0 KW=0 wv=16706 b=32 | val top.g[1] i=16706 K=1 KW=1 wv=16706 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gs_wid  [ALL]
+  pre : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gsi_cmp  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+  s2v : post AB
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post AB
+### Gsi_fn  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+  s2v : post AB
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post AB
+### Gsi_gcs  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+  s2v : post AB
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post AB
+### Gsi_gif  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+  s2v : post AB
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post AB
+### Gsi_ovr  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+  s2v : post AB
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post AB
+### Gsi_sel  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post AB
+  vl  : post AB | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gsi_val  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : post AB
+  vl  : pc top.g[0] zero | pc top.g[1] one | post AB | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gsi_wid  [PRE!=all]
+  pre : !VITA-E3010 undeclared net/variable `top.i` [in top] | rc=1
+  ivl : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post AB
+  vl  : post AB | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gw_cmp  [PRE!=all]
+  pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+### Gw_fn  [PRE!=all]
+  pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+### Gw_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+### Gw_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+### Gw_ovr  [PRE!=all]
+  pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+### Gw_sel  [PRE!=all]
+  pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gw_val  [PRE!=all]
+  pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gw_wid  [ALL]
+  pre : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gwa_val  [ALL]
+  pre : post 18446744073709551625 | val top.g[0] i=0 K=0 | val top.g[1] i=1 K=1
+  ivl : post 18446744073709551625 | val top.g[0] i=0 K=0 | val top.g[1] i=1 K=1
+  s2v : post 18446744073709551625 | val top.g[0] i=0 K=0 | val top.g[1] i=1 K=1
+  vl  : post 18446744073709551625 | val top.g[0] i=0 K=0 | val top.g[1] i=1 K=1
+### Gwb_gcs  [ALL]
+  pre : gcs top.b.g[0].z zero | gcs top.b.g[1].o one
+  ivl : gcs top.b.g[0].z zero | gcs top.b.g[1].o one
+  s2v : gcs top.b.g[0].z zero | gcs top.b.g[1].o one
+  vl  : gcs top.b.g[0].z zero | gcs top.b.g[1].o one
+### Gwb_val  [PRE!=all]
+  pre : post 18446744073709551625 | val top.b.g[0] i=18446744073709551625 K=9 b=32 | val top.b.g[1] i=18446744073709551625 K=9 b=32
+  ivl : post 18446744073709551625 | val top.b.g[0] i=0 K=0 b=2 | val top.b.g[1] i=1 K=1 b=2
+  s2v : post 18446744073709551625 | val top.b.g[0] i=0 K=0 b=32 | val top.b.g[1] i=1 K=1 b=32
+  vl  : post 18446744073709551625 | val top.b.g[0] i=0 K=0 b=32 | val top.b.g[1] i=1 K=1 b=32
+### Gwe_cmp  [PRE!=all]
+  pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+### Gwe_fn  [PRE!=all]
+  pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+### Gwe_gcs  [PRE=some]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+### Gwe_gif  [PRE=some]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+### Gwe_ovr  [PRE!=all]
+  pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+### Gwe_sel  [PRE!=all]
+  pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 18446744073709551625
+  vl  : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gwe_val  [PRE!=all]
+  pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : post 18446744073709551625
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gwe_wid  [PRE=some]
+  pre : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 18446744073709551625
+  vl  : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gwf_cmp  [ALL]
+  pre : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  s2v : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 9
+### Gwf_fn  [ALL]
+  pre : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  s2v : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 9
+### Gwf_gcs  [ALL]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  s2v : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 9
+### Gwf_gif  [ALL]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  s2v : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 9
+### Gwf_ovr  [ALL]
+  pre : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  s2v : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 9
+### Gwf_sel  [ALL]
+  pre : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  vl  : post 9 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gwf_val  [PRE=some]
+  pre : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 9 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gwf_wid  [ALL]
+  pre : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+  vl  : post 9 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gwi_cmp  [PRE!=all]
+  pre : cmp top.g[0] eq1=0 lt=0 | cmp top.g[1] eq1=0 lt=0 | post 18446744073709551625
+  ivl : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : cmp top.g[0] eq1=0 lt=1 | cmp top.g[1] eq1=1 lt=0 | post 18446744073709551625
+### Gwi_fn  [PRE!=all]
+  pre : fn top.g[0] f=9 | fn top.g[1] f=9 | post 18446744073709551625
+  ivl : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : fn top.g[0] f=0 | fn top.g[1] f=1 | post 18446744073709551625
+### Gwi_gcs  [PRE=some]
+  pre : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  ivl : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : gcs top.g[0].z zero | gcs top.g[1].o one | post 18446744073709551625
+### Gwi_gif  [PRE=some]
+  pre : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  ivl : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : gif top.g[0].e miss | gif top.g[1].t hit | post 18446744073709551625
+### Gwi_ovr  [PRE!=all]
+  pre : !VITA-E3009 `N` is wider than 64 bits, so it has no integral constant value for a width / range bound  | rc=1
+  ivl : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+  s2v : post 18446744073709551625
+  vl  : ovr top.g[0].u P=0 b=32 | ovr top.g[1].u P=1 b=32 | port top.g[0].u2 b=1 | port top.g[1].u2 b=2 | post 18446744073709551625
+### Gwi_sel  [PRE!=all]
+  pre : post 18446744073709551625 | sel top.g[0] s0=1 s1=0 | sel top.g[1] s0=1 s1=0
+  ivl : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+  s2v : post 18446744073709551625
+  vl  : post 18446744073709551625 | sel top.g[0] s0=0 s1=0 | sel top.g[1] s0=1 s1=0
+### Gwi_val  [PRE!=all]
+  pre : pc top.g[0] def | pc top.g[1] def | post 18446744073709551625 | val top.g[0] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32 | val top.g[1] i=18446744073709551625 K=9 KW=18446744073709551625 wv=18446744073709551625 b=32
+  ivl : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=2 | val top.g[1] i=1 K=1 KW=1 wv=1 b=2
+  s2v : post 18446744073709551625
+  vl  : pc top.g[0] zero | pc top.g[1] one | post 18446744073709551625 | val top.g[0] i=0 K=0 KW=0 wv=0 b=32 | val top.g[1] i=1 K=1 KW=1 wv=1 b=32
+### Gwi_wid  [PRE=some]
+  pre : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  ivl : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+  s2v : post 18446744073709551625
+  vl  : post 18446744073709551625 | wid top.g[0] b=2 | wid top.g[1] b=3
+### Gwn_val  [PRE!=all]
+  pre : post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=18446744073709551625 K=9 | val top.g[0].h[1] j=18446744073709551625 K=9 | val top.g[1].h[0] j=18446744073709551625 K=9 | val top.g[1].h[1] j=18446744073709551625 K=9
+  ivl : post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=0 K=0 | val top.g[0].h[1] j=1 K=1 | val top.g[1].h[0] j=0 K=0 | val top.g[1].h[1] j=1 K=1
+  s2v : post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=0 K=0 | val top.g[0].h[1] j=1 K=1 | val top.g[1].h[0] j=0 K=0 | val top.g[1].h[1] j=1 K=1
+  vl  : post top.g[0] 18446744073709551625 | post top.g[1] 18446744073709551625 | val top.g[0].h[0] j=0 K=0 | val top.g[0].h[1] j=1 K=1 | val top.g[1].h[0] j=0 K=0 | val top.g[1].h[1] j=1 K=1
+### Iaa_cmp  [PRE=some]
+  pre : cmp gt=0 eq3=1
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : cmp gt=0 eq3=1
+### Iaa_gcs  [PRE=some]
+  pre : gcs three
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : gcs three
+### Iaa_gif  [PRE=some]
+  pre : gif small
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : gif small
+### Iaa_ovr  [PRE!=all]
+  pre : ovr top.u P=3 b=32 | port sub2 b=1 | ~VITA-W3057
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : ovr top.u P=3 b=32 | port sub2 b=1
+### Iaa_pcs  [PRE=some]
+  pre : pcs three
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : pcs three
+### Iaa_sel  [PRE!=all]
+  pre : sel s0=1 s64=x lo=3
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : sel s0=1 s64=1 lo=3
+### Iaa_val  [PRE=some]
+  pre : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Iaa_wid  [PRE=some]
+  pre : wid b=4
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : wid b=4
+### Iab_cmp  [PRE=some]
+  pre : cmp gt=1 eq3=0
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : cmp gt=1 eq3=0
+### Iab_gcs  [PRE!=all]
+  pre : !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : gcs wide
+### Iab_gif  [PRE=some]
+  pre : gif big
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : gif big
+### Iab_ovr  [PRE!=all]
+  pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1
+### Iab_pcs  [PRE=some]
+  pre : pcs wide
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : pcs wide
+### Iab_sel  [PRE=some]
+  pre : sel s0=1 s64=1 lo=9
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : sel s0=1 s64=1 lo=9
+### Iab_val  [PRE=some]
+  pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Iab_wid  [PRE=some]
+  pre : wid b=10
+  ivl : !error: Ambiguous use of 'P'. It is exported by both 'pb' and by 'pa'. | rc=1
+  s2v : !  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package | CallStack (from HasCallStack): | sv2v: identifier "P" ambiguously refers to the definitions in any of pa, pb | rc=1
+  vl  : wid b=10
+### Icu_val  [PRE!=all]
+  pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Ien_cmp  [ALL]
+  pre : cmp gt=0 eq3=1
+  ivl : cmp gt=0 eq3=1
+  s2v : cmp gt=0 eq3=1
+  vl  : cmp gt=0 eq3=1
+### Ien_gcs  [ALL]
+  pre : gcs three
+  ivl : gcs three
+  s2v : gcs three
+  vl  : gcs three
+### Ien_gif  [ALL]
+  pre : gif small
+  ivl : gif small
+  s2v : gif small
+  vl  : gif small
+### Ien_ovr  [PRE!=all]
+  pre : ovr top.u P=3 b=32 | port sub2 b=1 | ~VITA-W3057
+  ivl : ovr top.u P=3 b=32 | port sub2 b=1
+  s2v : ovr top.u P=3 b=32 | port sub2 b=1
+  vl  : ovr top.u P=3 b=32 | port sub2 b=1
+### Ien_pcs  [ALL]
+  pre : pcs three
+  ivl : pcs three
+  s2v : pcs three
+  vl  : pcs three
+### Ien_sel  [PRE=iv=s2v]
+  pre : sel s0=1 s64=x lo=3
+  ivl : sel s0=1 s64=x lo=3
+  s2v : sel s0=1 s64=x lo=3
+  vl  : sel s0=1 s64=1 lo=3
+### Ien_val  [ALL]
+  pre : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  ivl : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  s2v : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  vl  : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Ien_wid  [ALL]
+  pre : wid b=4
+  ivl : wid b=4
+  s2v : wid b=4
+  vl  : wid b=4
+### Iew_cmp  [ALL]
+  pre : cmp gt=1 eq3=0
+  ivl : cmp gt=1 eq3=0
+  s2v : cmp gt=1 eq3=0
+  vl  : cmp gt=1 eq3=0
+### Iew_gcs  [PRE!=all]
+  pre : !VITA-E3010 generate-case scrutinee is not a constant [in top] | rc=1
+  ivl : gcs wide
+  s2v : gcs wide
+  vl  : gcs wide
+### Iew_gif  [ALL]
+  pre : gif big
+  ivl : gif big
+  s2v : gif big
+  vl  : gif big
+### Iew_ovr  [PRE!=all]
+  pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+  ivl : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1
+  s2v : ovr top.u P=18446744073709551625 b=32 | port sub2 b=1
+  vl  : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1
+### Iew_pcs  [ALL]
+  pre : pcs wide
+  ivl : pcs wide
+  s2v : pcs wide
+  vl  : pcs wide
+### Iew_sel  [ALL]
+  pre : sel s0=1 s64=1 lo=9
+  ivl : sel s0=1 s64=1 lo=9
+  s2v : sel s0=1 s64=1 lo=9
+  vl  : sel s0=1 s64=1 lo=9
+### Iew_val  [ALL]
+  pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Iew_wid  [ALL]
+  pre : wid b=10
+  ivl : wid b=10
+  s2v : wid b=10
+  vl  : wid b=10
+### Ihd_val  [PRE!=all]
+  pre : gif small | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Ilna_val  [ALL]
+  pre : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  ivl : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  s2v : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  vl  : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Ilnb_val  [ALL]
+  pre : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  ivl : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  s2v : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  vl  : gif small | val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Ilwa_val  [ALL]
+  pre : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Ilwb_val  [ALL]
+  pre : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : gif big | val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Inw_cmp  [PRE=iv=s2v]
+  pre : cmp gt=1 eq3=0
+  ivl : cmp gt=1 eq3=0
+  s2v : cmp gt=1 eq3=0
+  vl  : cmp gt=0 eq3=1
+### Inw_gcs  [PRE=some]
+  pre : gcs three
+  ivl : gcs wide
+  s2v : gcs wide
+  vl  : gcs three
+### Inw_gif  [PRE=some]
+  pre : gif small
+  ivl : gif big
+  s2v : gif big
+  vl  : gif small
+### Inw_ovr  [PRE!=all]
+  pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+  ivl : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1
+  s2v : ovr top.u P=18446744073709551625 b=32 | port sub2 b=1
+  vl  : ovr top.u P=3 b=32 | port sub2 b=1
+### Inw_pcs  [PRE=iv=s2v]
+  pre : pcs wide
+  ivl : pcs wide
+  s2v : pcs wide
+  vl  : pcs three
+### Inw_sel  [PRE=iv=s2v]
+  pre : sel s0=1 s64=1 lo=9
+  ivl : sel s0=1 s64=1 lo=9
+  s2v : sel s0=1 s64=1 lo=9
+  vl  : sel s0=1 s64=1 lo=3
+### Inw_val  [PRE=iv=s2v]
+  pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  ivl : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  s2v : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+  vl  : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+### Inw_wid  [PRE=some]
+  pre : wid b=4
+  ivl : wid b=10
+  s2v : wid b=10
+  vl  : wid b=4
+### Ipknw_val  [PRE!=all]
+  pre : !VITA-E3009 package-scoped call `pc::fz(...)` needs a body that references only its own formals/locals | rc=1
+  ivl : pk Z=18446744073709551625 Y=18446744073709551626 K=9 fz=18446744073709551625
+  s2v : pk Z=18446744073709551625 Y=18446744073709551626 K=9 fz=18446744073709551625
+  vl  : pk Z=3 Y=4 K=3 fz=3
+### Ipkwn_val  [PRE!=all]
+  pre : !VITA-E3009 package-scoped call `pc::fz(...)` needs a body that references only its own formals/locals | rc=1
+  ivl : pk Z=3 Y=4 K=3 fz=3
+  s2v : pk Z=3 Y=4 K=3 fz=3
+  vl  : pk Z=18446744073709551625 Y=18446744073709551626 K=9 fz=18446744073709551625
+### Iwn_cmp  [PRE=some]
+  pre : cmp gt=1 eq3=0
+  ivl : cmp gt=0 eq3=1
+  s2v : cmp gt=0 eq3=1
+  vl  : cmp gt=1 eq3=0
+### Iwn_gcs  [PRE=iv=s2v]
+  pre : gcs three
+  ivl : gcs three
+  s2v : gcs three
+  vl  : gcs wide
+### Iwn_gif  [PRE=iv=s2v]
+  pre : gif small
+  ivl : gif small
+  s2v : gif small
+  vl  : gif big
+### Iwn_ovr  [PRE!=all]
+  pre : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1 | ~VITA-W3057
+  ivl : ovr top.u P=3 b=32 | port sub2 b=1
+  s2v : ovr top.u P=3 b=32 | port sub2 b=1
+  vl  : ovr top.u P=18446744073709551625 b=65 | port sub2 b=1
+### Iwn_pcs  [PRE=some]
+  pre : pcs wide
+  ivl : pcs three
+  s2v : pcs three
+  vl  : pcs wide
+### Iwn_sel  [PRE=some]
+  pre : sel s0=1 s64=1 lo=9
+  ivl : sel s0=1 s64=x lo=3
+  s2v : sel s0=1 s64=x lo=3
+  vl  : sel s0=1 s64=1 lo=9
+### Iwn_val  [PRE!=all]
+  pre : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=32 sh=16
+  ivl : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  s2v : val P=3 K=3 KW=4 wv=3 b=32 sh=0
+  vl  : val P=18446744073709551625 K=9 KW=18446744073709551626 wv=18446744073709551625 b=65 sh=16
+### Iwn_wid  [PRE=iv=s2v]
+  pre : wid b=4
+  ivl : wid b=4
+  s2v : wid b=4
+  vl  : wid b=10
+### Ov_nw  [ALL]
+  pre : top.u P=18446744073709551625 b=65 | top.u.t big
+  ivl : top.u P=18446744073709551625 b=65 | top.u.t big
+  s2v : top.u P=18446744073709551625 b=65 | top.u.t big
+  vl  : top.u P=18446744073709551625 b=65 | top.u.t big
+### Ov_wn  [ALL]
+  pre : top.u P=3 b=65
+  ivl : top.u P=3 b=65
+  s2v : top.u P=3 b=65
+  vl  : top.u P=3 b=65

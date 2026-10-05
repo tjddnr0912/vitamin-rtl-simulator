@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__soundness__cells__FN1_gfn_noouter
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/soundness/cells/FN1_gfn_noouter.sv
+roadmap_row: §2 🆕 V
+set: r1/soundness/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre
+verdict: same
+verdict_source: s592/r3_x_lens_sound_pre.out:14
+notes: named at s592/r1/soundness/REPORT.md:36
+alias: g/lens/sound/FN1_gfn_noouter (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_sound_pre.out:14
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./FN1_gfn_noouter.iv.txt | 204 bytes
+FN1_gfn_noouter.sv:4: error: No function named `f' found in this context (top.gb).
+FN1_gfn_noouter.sv:3: error: Cannot evaluate  genvar case item expression: f('sd98)
+2 error(s) during elaboration.
+
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./FN1_gfn_noouter.vl.txt | 264 bytes
+%Error: FN1_gfn_noouter.sv:7:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: FN1_gfn_noouter.sv:4:7: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./FN1_gfn_noouter.vlb.txt | 938 bytes
+%Error: FN1_gfn_noouter.sv:7:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                               : ... note: In instance 'top'
+    7 |     function automatic integer f(input integer a); f = a + 1; endfunction
+      |                                ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: FN1_gfn_noouter.sv:4:7: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                              : ... note: In instance 'top'
+        FN1_gfn_noouter.sv:7:32: ... Location of non-constant FUNC 'f': Constant function called under generate
+        FN1_gfn_noouter.sv:4:7: ... Called from 'f()' with parameters:
+           a = ?32?h62
+    4 |       f(98): begin : g wire [7:0] w = 8'd200; initial #1 $display("@%m w=%0d bits=%0d", w, $bits(w)); end
+      |       ^
+%Error: Exiting due to 2 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./FN1_gfn_noouter.sv.txt | 212 bytes
+FN1_gfn_noouter.sv2v.v:9: error: No function named `f' found in this context (top.gb).
+FN1_gfn_noouter.sv2v.v:8: error: Cannot evaluate  genvar case item expression: f('sd98)
+2 error(s) during elaboration.
+
+rc=2
+=== block 5 | vita [post_b] | ./FN1_gfn_noouter.post_b.txt | 190 bytes
+@top.gb.g w=9 bits=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_c] | g/lens/sound/FN1_gfn_noouter.post_c.txt | 190 bytes | identical to block 5
+=== block 7 | vita [post_d] | ./FN1_gfn_noouter.post_d.txt | 190 bytes | identical to block 5
+=== block 8 | vita [postd2] | g/lens/sound/FN1_gfn_noouter.postd2.txt | 190 bytes | identical to block 5
+=== block 9 | vita [postd3] | g/lens/sound/FN1_gfn_noouter.postd3.txt | 190 bytes | identical to block 5
+=== block 10 | vita [postd4] | g/lens/sound/FN1_gfn_noouter.postd4.txt | 190 bytes | identical to block 5
+=== block 11 | vita [pre] | ./FN1_gfn_noouter.pre.txt | 190 bytes | identical to block 5
+=== end

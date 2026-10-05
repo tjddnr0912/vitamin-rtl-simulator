@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Gs_cae
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Gs_cae.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: LOUD->VALUE(NO ORACLE MATCH) post==ctrl.pre
+verdict_source: s591/plan/a1.cls:61
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Gs_cae.ivl | 83 bytes
+ae top.g[0].u6 W=x
+ae top.g[1].u6 W=x
+Gs_cae.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Gs_cae.vl | 376 bytes
+%Warning-WIDTHEXPAND: Gs_cae.sv:9:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+ae top.g[1].u6 W=x
+ae top.g[0].u6 W=x
+- Gs_cae.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Gs_cae.s2v | 87 bytes
+ae top.g[0].u6 W=x
+ae top.g[1].u6 W=x
+Gs_cae.s2v.v:11: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Gs_cae.dev3 | 428 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Gs_cae.sv:10:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: undefined name `N` is not a constant [in top.g[0].u6]
+Gs_cae.sv:10:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: undefined name `N` is not a constant [in top.g[1].u6]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./Gs_cae.posta | 428 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./Gs_cae.postb | 428 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./Gs_cae.pre | 428 bytes | identical to block 4
+=== block 8 | vita [PROTO2] | ./Gs_cae.post2 | 208 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+ae top.g[0].u6 W=0
+ae top.g[1].u6 W=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [PROTO2] | ./Gs_cae.post2.route | 16 bytes
+sae fae frame 0
+=== end

@@ -1,0 +1,44 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__diff__cells__R10_port_ref
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/diff/cells/R10_port_ref.sv
+roadmap_row: §2 🆕 U
+set: r2/diff/cells
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POSTA,POSTB,POSTB_SEP,PRE
+verdict: | R10 | port `[P-1:0]`, body import | b=3 P=3 | loud | b=3 P=3 | = | = | = |
+verdict_source: s591/r2/diff/REPORT.md:20
+notes: verbatim excerpt of the source line
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./R10_port_ref.ivl | 63 bytes
+r10 b=3 P=3
+R10_port_ref.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./R10_port_ref.vl | 238 bytes
+r10 b=3 P=3
+- R10_port_ref.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 1.724 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./R10_port_ref.s2v | 66 bytes
+r10 b=3 P=3
+R10_port_ref.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POSTA] | ./R10_port_ref.posta | 366 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R10_port_ref.sv:3:41: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `P` is not allowed in a constant range bound [in top]
+R10_port_ref.sv:5:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTB] | ./R10_port_ref.postb | 182 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r10 b=3 P=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [PRE] | ./R10_port_ref.pre | 182 bytes | identical to block 5
+=== end

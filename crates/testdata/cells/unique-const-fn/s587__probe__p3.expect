@@ -1,0 +1,38 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__probe__p3
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/probe/p3.sv
+roadmap_row: §3.b unique-const-fn
+set: probe
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST-a,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./p3.ivl | 78 bytes
+p3.sv:12: syntax error
+p3.sv:12: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./p3.vl | 494 bytes
+[1] %Error: p3.sv:4: Assertion failed in top.fu: unique case, but none matched for '32'h00000002'
+-Info: p3.sv:4: Verilog $stop, ignored due to +verilator+error+limit
+[2] %Error: p3.sv:8: Assertion failed in top.fp: priority case, but non-match found for '32'h00000002'
+x=7 y=7
+- p3.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 3ps; walltime 0.000 s; speed 28.302 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_p3.build | 0 bytes
+
+=== block 4 | vita [PRE] | ./p3.vita | 778 bytes
+p3.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+p3.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fu] [at time 1]
+p3.sv:8:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fp] [at time 2]
+x=7 y=7
+simulation ended (Finish) at time 3
+errors=0 warnings=3 notes=1
+rc=0
+=== end

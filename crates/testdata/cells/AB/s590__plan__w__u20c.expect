@@ -1,0 +1,58 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__plan__w__u20c
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/plan/w/u20c.sv
+roadmap_row: §2 🆕 AB
+set: plan/w
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,POSTDEV,P6,P5_SIDE,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: unrecorded
+verdict_source: unrecorded
+notes: absent from fin/axscan_fin.txt (lists moved cells only) and from PLAN.md tables
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 4
+=== block 1 | combined [verilator+iverilog|PRE+P6] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | p6/full_plw/u20c.out | 1017 bytes
+##### u20c
+=== verilator compile rc=0 run rc=0
+dut init
+top init
+f t=0 x=0 z=1 dnull=1 n=0
+t=1 dnull=0 r=10 n=1
+f t=1 x=0 z=1 dnull=0 n=1
+f t=1 x=0 z=1 dnull=0 n=2
+t=2 y=1
+f t=2 x=0 z=1 dnull=0 n=3
+f t=2 x=0 z=1 dnull=0 n=4
+- u20c.sv:29: Verilog $finish
+f t=3 x=0 z=1 dnull=0 n=5
+f t=3 x=0 z=1 dnull=0 n=6
+=== iverilog compile rc=0 msgs: u20c.sv:20: sorry: Nested member path not yet supported for class properties. run rc=-6
+internal error: 14vvp_wide_fun_t: recv_object(...) not implemented
+Assertion failed: (0), function recv_object, file vvp_net.cc, line 3360.
+dut init
+=== vita PRE (native=interp=vm)
+rc=1
+u20c.sv:20:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `obj.d.r` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+u20c.sv:20:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `obj.d.r` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== block 2 | vita [PRE+P5_SIDE] | p6/p5ref_plw/u20c.out | 453 bytes
+##### u20c
+=== vita PRE (native=interp=vm)
+rc=1
+u20c.sv:20:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `obj.d.r` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+u20c.sv:20:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `obj.d.r` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== block 3 | vita [PRE+P6] | p6/p6_plw/u20c.out | 453 bytes | identical to block 2
+=== block 4 | vita [PRE+POSTDEV] | p6/dev_plw/u20c.out | 453 bytes | identical to block 2
+=== end

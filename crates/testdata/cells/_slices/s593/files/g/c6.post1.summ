@@ -1,0 +1,162 @@
+### aliasG_ctl  [PRE!=all]
+  pre : Y=252 lt0=0 b=32
+  post1: Y=252 lt0=0 b=32
+  ivl : Y=252 lt0=0 b=8
+  s2v : Y=252 lt0=0 b=8
+  vl  : Y=252 lt0=0 b=8
+### aliasG_s8  [PRE!=all]
+  pre : Y=252 lt0=0 b=32
+  post1: Y=-4 lt0=1 b=32
+  ivl : Y=-4 lt0=1 b=8
+  s2v : Y=-4 lt0=1 b=8
+  vl  : Y=-4 lt0=1 b=8
+### aliasH_ctl  [ALL]
+  pre : Y=252 lt0=0 b=8
+  post1: Y=252 lt0=0 b=8
+  ivl : Y=252 lt0=0 b=8
+  s2v : Y=252 lt0=0 b=8
+  vl  : Y=252 lt0=0 b=8
+### aliasH_s8  [PRE!=all]
+  pre : Y=252 lt0=0 b=8
+  post1: Y=-4 lt0=1 b=8
+  ivl : Y=-4 lt0=1 b=8
+  s2v : Y=-4 lt0=1 b=8
+  vl  : Y=-4 lt0=1 b=8
+### aliasT_ctl  [ALL]
+  pre : Y=253 lt0=0
+  post1: Y=253 lt0=0
+  ivl : Y=253 lt0=0
+  s2v : Y=253 lt0=0
+  vl  : Y=253 lt0=0
+### aliasT_s8  [PRE!=all]
+  pre : Y=253 lt0=0
+  post1: Y=-3 lt0=1
+  ivl : Y=-3 lt0=1
+  s2v : Y=-3 lt0=1
+  vl  : Y=-3 lt0=1
+### alias_ctl  [ALL]
+  pre : Y=252 lt0=0 b=8
+  post1: Y=252 lt0=0 b=8
+  ivl : Y=252 lt0=0 b=8
+  s2v : Y=252 lt0=0 b=8
+  vl  : Y=252 lt0=0 b=8
+### alias_s8  [PRE!=all]
+  pre : Y=252 lt0=0 b=8
+  post1: Y=-4 lt0=1 b=8
+  ivl : Y=-4 lt0=1 b=8
+  s2v : Y=-4 lt0=1 b=8
+  vl  : Y=-4 lt0=1 b=8
+### castcat_ctl  [ALL]
+  pre : c=0 cat=fc0 hx=fc
+  post1: c=0 cat=fc0 hx=fc
+  ivl : c=0 cat=fc0 hx=fc
+  s2v : c=0 cat=fc0 hx=fc
+  vl  : c=0 cat=fc0 hx=fc
+### castcat_s8  [ALL]
+  pre : c=1 cat=fc0 hx=fc
+  post1: c=1 cat=fc0 hx=fc
+  ivl : c=1 cat=fc0 hx=fc
+  s2v : c=1 cat=fc0 hx=fc
+  vl  : c=1 cat=fc0 hx=fc
+### cfn_ctl  [ALL]
+  pre : R=252
+  post1: R=252
+  ivl : R=252
+  s2v : R=252
+  vl  : R=252
+### cfn_s8  [PRE!=all]
+  pre : R=252
+  post1: R=-4
+  ivl : R=-4
+  s2v : R=-4
+  vl  : R=-4
+### derive_ctl  [ALL]
+  pre : Y=253 Z=505
+  post1: Y=253 Z=505
+  ivl : Y=253 Z=505
+  s2v : Y=253 Z=505
+  vl  : Y=253 Z=505
+### derive_s8  [PRE!=all]
+  pre : Y=253 Z=505
+  post1: Y=-3 Z=-7
+  ivl : Y=-3 Z=-7
+  s2v : Y=-3 Z=-7
+  vl  : Y=-3 Z=-7
+### fn_ctl  [ALL]
+  pre : f=252 g=0
+  post1: f=252 g=0
+  ivl : f=252 g=0
+  s2v : f=252 g=0
+  vl  : f=252 g=0
+### fn_s8  [PRE!=all]
+  pre : f=252 g=0
+  post1: f=-4 g=1
+  ivl : f=-4 g=1
+  s2v : f=-4 g=1
+  vl  : f=-4 g=1
+### hierH_ctl  [ALL]
+  pre : ux=252 lt0=0
+  post1: ux=252 lt0=0
+  ivl : ux=252 lt0=0
+  s2v : ux=252 lt0=0
+  vl  : ux=252 lt0=0
+### hierH_s8  [PRE!=all]
+  pre : ux=252 lt0=0
+  post1: ux=-4 lt0=1
+  ivl : ux=-4 lt0=1
+  s2v : ux=-4 lt0=1
+  vl  : ux=-4 lt0=1
+### hier_ctl  [ALL]
+  pre : ux=252 lt0=0
+  post1: ux=252 lt0=0
+  ivl : ux=252 lt0=0
+  s2v : ux=252 lt0=0
+  vl  : ux=252 lt0=0
+### hier_s8  [PRE!=all]
+  pre : ux=252 lt0=0
+  post1: ux=-4 lt0=1
+  ivl : ux=-4 lt0=1
+  s2v : ux=-4 lt0=1
+  vl  : ux=-4 lt0=1
+### port_ctl  [PRE=some]
+  pre : ob=261
+  post1: ob=261
+  ivl : !2 error(s) during elaboration. | !error: Dimensions must be constant. | !error: Unable to bind parameter `X' in `top.u' | port_ctl.sv:2       : This MSB expression violates the rule: (X)+('sd8) | port_ctl.sv:3:      : A symbol with that name was declared here. Check for declaration after use. | port_ctl.sv:8:        : Padding 300 high bits of the expression. | port_ctl.sv:8: warning: Port 1 (o) of module sub expects 1 bit(s), given 301. | rc=2
+  s2v : ob=261 | port_ctl.s2v.v:8:        : Padding 40 high bits of the expression. | port_ctl.s2v.v:8: warning: Port 1 (o) of module sub expects 261 bit(s), given 301.
+  vl  : ob=261
+### port_s8  [PRE!=all]
+  pre : ob=261
+  post1: ob=5
+  ivl : !2 error(s) during elaboration. | !error: Dimensions must be constant. | !error: Unable to bind parameter `X' in `top.u' | port_s8.sv:2       : This MSB expression violates the rule: (X)+('sd8) | port_s8.sv:3:      : A symbol with that name was declared here. Check for declaration after use. | port_s8.sv:8:        : Padding 300 high bits of the expression. | port_s8.sv:8: warning: Port 1 (o) of module sub expects 1 bit(s), given 301. | rc=2
+  s2v : ob=5 | port_s8.s2v.v:8:        : Padding 296 high bits of the expression. | port_s8.s2v.v:8: warning: Port 1 (o) of module sub_2BA86 expects 5 bit(s), given 301.
+  vl  : ob=5
+### proc_ctl  [ALL]
+  pre : k=2580
+  post1: k=2580
+  ivl : k=2580
+  s2v : k=2580
+  vl  : k=2580
+### proc_s8  [PRE!=all]
+  pre : k=2580
+  post1: k=21
+  ivl : k=21
+  s2v : k=21
+  vl  : k=21
+### wid_s16  [PRE!=all]
+  pre : X=65532 lt0=0 b=16
+  post1: X=-4 lt0=1 b=16
+  ivl : X=-4 lt0=1 b=16
+  s2v : X=-4 lt0=1 b=16
+  vl  : X=-4 lt0=1 b=16
+### wid_s2  [ALL]
+  pre : X=0 lt0=0 b=2
+  post1: X=0 lt0=0 b=2
+  ivl : X=0 lt0=0 b=2
+  s2v : X=0 lt0=0 b=2
+  vl  : X=0 lt0=0 b=2
+### wid_s3  [PRE!=all]
+  pre : X=4 lt0=0 b=3
+  post1: X=-4 lt0=1 b=3
+  ivl : X=-4 lt0=1 b=3
+  s2v : X=-4 lt0=1 b=3
+  vl  : X=-4 lt0=1 b=3

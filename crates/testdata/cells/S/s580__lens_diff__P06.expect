@@ -1,0 +1,248 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P06
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P06.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: verilator
+vita_tags: POST,PRE,POST-interp,POST-vm,r2dbg,POST2
+verdict: CLEAN
+verdict_source: s580/lens_diff/REPORT.md:48
+notes: R4 cmp3_post4 bucket(s): pre×5 (s580/r4/cmp3_post4.txt)
+alias: lens_diff/st/P06 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-interp: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-vm: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 36
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./P06.vlc.txt | 370 bytes
+%Error: P06.sv:19:25: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 't'
+   19 |   case (4'b1100 inside {4'b1?00})
+      |                         ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./P06all.vl.txt | 365 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C01 1
+C02 1
+C21 1
+C06 1
+- P06v.sv:35: Verilog $finish
+C05 1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1us; walltime 0.000 s; speed 30.303 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 3 | vita [POST] | ./P06.post.txt | 202 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C18 one
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 4 | vita [POST] | ./P06_FIN.post.txt | 208 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C18 one
+C05 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST] | ./P06_FJ.post.txt | 208 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C18 one
+C06 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST] | ./P06_FRC.post.txt | 208 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C18 one
+C21 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [POST] | ./P06_IFC.post.txt | 214 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C01 1
+C02 1
+C18 one
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 8 | vita [POST] | ./P06all.post.txt | 232 bytes
+C08 2
+C09 2
+C10 3
+C11 1
+C11b 1
+C11c 1
+C12 3
+C13 1
+C15 1
+C16 1
+C19 8
+C20 1
+C22 9
+C23 1
+C24 1
+C25 1
+C26 4
+C29 1
+C33 1
+C34 1
+C01 1
+C02 1
+C18 one
+C21 1
+C06 1
+C05 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=0 notes=0
+rc=0
+=== block 9 | vita [POST] | ./be_P06_native.txt | 232 bytes | identical to block 8
+=== block 10 | vita [POST] | r2/lens/diff_P06.post.txt | 202 bytes | identical to block 3
+=== block 11 | vita [POST] | r2/lens/diff_P06.postq.txt | 202 bytes | identical to block 3
+=== block 12 | vita [POST] | r2/lens/diff_P06_FIN.post.txt | 208 bytes | identical to block 4
+=== block 13 | vita [POST] | r2/lens/diff_P06_FIN.postq.txt | 208 bytes | identical to block 4
+=== block 14 | vita [POST] | r2/lens/diff_P06_FJ.post.txt | 208 bytes | identical to block 5
+=== block 15 | vita [POST] | r2/lens/diff_P06_FJ.postq.txt | 208 bytes | identical to block 5
+=== block 16 | vita [POST] | r2/lens/diff_P06_FRC.post.txt | 208 bytes | identical to block 6
+=== block 17 | vita [POST] | r2/lens/diff_P06_FRC.postq.txt | 208 bytes | identical to block 6
+=== block 18 | vita [POST] | r2/lens/diff_P06_IFC.post.txt | 214 bytes | identical to block 7
+=== block 19 | vita [POST] | r2/lens/diff_P06_IFC.postq.txt | 214 bytes | identical to block 7
+=== block 20 | vita [POST-interp] | ./be_P06_interp.txt | 232 bytes | identical to block 8
+=== block 21 | vita [POST-vm] | ./be_P06_vm.txt | 232 bytes | identical to block 8
+=== block 22 | vita [POST2] | r2/lens/diff_P06.post2.txt | 202 bytes | identical to block 3
+=== block 23 | vita [POST2] | r2/lens/diff_P06.post2q.txt | 202 bytes | identical to block 3
+=== block 24 | vita [POST2] | r2/lens/diff_P06_FIN.post2.txt | 208 bytes | identical to block 4
+=== block 25 | vita [POST2] | r2/lens/diff_P06_FIN.post2q.txt | 208 bytes | identical to block 4
+=== block 26 | vita [POST2] | r2/lens/diff_P06_FJ.post2.txt | 208 bytes | identical to block 5
+=== block 27 | vita [POST2] | r2/lens/diff_P06_FJ.post2q.txt | 208 bytes | identical to block 5
+=== block 28 | vita [POST2] | r2/lens/diff_P06_FRC.post2.txt | 208 bytes | identical to block 6
+=== block 29 | vita [POST2] | r2/lens/diff_P06_FRC.post2q.txt | 208 bytes | identical to block 6
+=== block 30 | vita [POST2] | r2/lens/diff_P06_IFC.post2.txt | 214 bytes | identical to block 7
+=== block 31 | vita [POST2] | r2/lens/diff_P06_IFC.post2q.txt | 214 bytes | identical to block 7
+=== block 32 | vita [PRE] | ./P06.pre.txt | 303 bytes
+P06.sv:14:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LB` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+P06.sv:19:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 4'b1?00 has no constant-fold arm [in t]
+errors=2 warnings=0 notes=0
+rc=1
+=== block 33 | vita [PRE] | ./P06_FIN.pre.txt | 303 bytes | identical to block 32
+=== block 34 | vita [PRE] | ./P06_FJ.pre.txt | 303 bytes | identical to block 32
+=== block 35 | vita [PRE] | ./P06_FRC.pre.txt | 303 bytes | identical to block 32
+=== block 36 | vita [PRE] | ./P06_IFC.pre.txt | 303 bytes | identical to block 32
+=== end

@@ -1,0 +1,64 @@
+category	path_or_glob	count	bytes	reason
+slice-doc	./COMMIT_MSG.txt,FULL_MSG.txt	2	9543	slice doc / commit message (verdict source)
+slice-doc	./*.md	2	25883	slice doc / commit message (verdict source)
+rust-source-patch	attempt/*	3	33742	saved Rust tests/patch of the reverted attempt (SPEC exclude)
+cargo-gate-log	./*.log,*.rc	2	573	cargo build/test/clippy/mutation logs (SPEC exclude)
+run-transcript	c/batch*.txt	3	29572	concatenation of per-cell .out files (manifested individually)
+iverilog-compiled-image	c/w_*/*.vvp	41	101829	*.vvp iverilog compiled image (SPEC exclude)
+build-dir	c/w_*/o/*	20	81808	verilator --Mdir build tree (named o/)
+third-party-corpus	ibex*	3	9383	ibex corpus run (SPEC exclude: corpus = third-party)
+no-oracle-output	j/*.sv	1	194	SV with no oracle output anywhere (vita-only); not a cell
+cargo-gate-log	j/*.log,*.rc	3	5540	cargo build/test/clippy/mutation logs (SPEC exclude)
+rust-source-patch	m/*.orig	1	24894	saved Rust source (SPEC exclude)
+cargo-gate-log	m/*.log,*.rc	20	55672	cargo build/test/clippy/mutation logs (SPEC exclude)
+vita-staged-artefact	m/st/*	2	4748	*.vu/*.velab (SPEC exclude)
+vita-staged-artefact	m/sw/*/*.velab	54	50610	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	m/sw/*/*.vu	56	82563	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+no-oracle-output	m/sw/*/*.sv	10	4350	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	m/sw/*/*	19	24467	output of a vita-only SV (not a cell)
+no-oracle-output	m/sw/*/obs_*/*	36	30934	output of a vita-only SV (not a cell)
+iverilog-compiled-image	main/*.vvp	1	1953	iverilog compiled image (SPEC exclude)
+no-oracle-output	main/*.sv	2	648	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	plan/*.sv	9	4156	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	plan/*.vvp	1	1974	iverilog compiled image (SPEC exclude)
+no-oracle-output	plan/obs_*/*	10	9726	output of a vita-only SV (not a cell)
+no-oracle-output	plan/st_*/*	16	15713	output of a vita-only SV (not a cell)
+no-oracle-output	plan/st_*/*.sv	2	1866	SV with no oracle output anywhere (vita-only); not a cell
+slice-doc	r1/diff/*.md	1	8247	slice doc / commit message (verdict source)
+no-oracle-output	r1/diff/cells/*.sv	1	310	SV with no oracle output anywhere (vita-only); not a cell
+vita-staged-artefact	r1/diff/w/*/*.velab	9	18881	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	r1/diff/w/*/*.vu	9	36849	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+no-oracle-output	r1/diff/w/*/*.sv	8	4984	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	r1/diff/wiv/*.vvp	1	3682	iverilog compiled image (SPEC exclude)
+no-oracle-output	r1/diff/wt/*.sv	1	702	SV with no oracle output anywhere (vita-only); not a cell
+slice-doc	r1/sound/*.md	1	8927	slice doc / commit message (verdict source)
+no-oracle-output	r1/sound/cells/*.sv	4	1545	SV with no oracle output anywhere (vita-only); not a cell
+vita-staged-artefact	r1/sound/cells/st/*	7	6966	*.vu/*.velab (SPEC exclude)
+doc-draft	rm583/LOOPROMPT.before.md	1	10896	doc draft (SPEC exclude)
+doc-draft	rm583/ROADMAP.head.md	1	65209	doc draft (SPEC exclude)
+run-transcript	rm583/all.txt	1	10055	concatenation of the per-cell .out files (manifested individually)
+script	rm583/*	1	1403	helper script (not a runner/generator of a cell set)
+no-oracle-output	rm583/*	1	280	output of a vita-only SV (not a cell)
+no-oracle-output	rm583/*.sv	1	358	SV with no oracle output anywhere (vita-only); not a cell
+run-transcript	rm583/g/all.txt	1	7958	concatenation of the per-cell .out files (manifested individually)
+iverilog-compiled-image	rm583/g/w_*/*.vvp	8	21418	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	rm583/w_*/*.vvp	12	26377	*.vvp iverilog compiled image (SPEC exclude)
+build-dir	tgt-jit	830	304340979	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+repo-snapshot	pre-src	1386	22727580	repo snapshot copy pre-src (SPEC exclude)
+build-dir	plan/obj*	155	4577890	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	r1/diff/w/*/obj*	623	17878169	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	r1/sound/cells/vlobj*	131	3806390	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	m/vlobj*	230	6937563	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	j/obj*	25	755565	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	rm583/w_*/obj*	500	15253324	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	rm583/g/w_*/obj*	200	6173236	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+build-dir	c/w_*/obj*	978	29905487	verilator obj/vlobj/obj_vl build trees, cargo tgt-jit (SPEC exclude)
+built-binary	post-jit/vita	1	9164848	Mach-O binary (SPEC exclude)
+built-binary	pre-jit/vita	1	9164864	Mach-O binary (SPEC exclude)
+built-binary	post/vita	1	7321504	Mach-O binary (SPEC exclude)
+built-binary	pre/vita	1	7321504	Mach-O binary (SPEC exclude)
+build-dir	c/w_noassert/o/verilated_threads.o	1	22512	verilator build object in c/w_noassert/o
+build-dir	c/w_noassert/o/Vtop	1	314344	verilator build object in c/w_noassert/o
+build-dir	c/w_noassert/o/verilated.o	1	286048	verilator build object in c/w_noassert/o
+build-dir	c/w_noassert/o/Vtop__ALL.o	1	32056	verilator build object in c/w_noassert/o
+build-dir	c/w_noassert/o/verilated_timing.o	1	19856	verilator build object in c/w_noassert/o

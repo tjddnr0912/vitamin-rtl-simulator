@@ -1,0 +1,130 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c06_rec_ret_dis
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c06_rec_ret_dis.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE
+verdict: agree
+verdict_source: s583/r1/diff/REPORT.md:62
+alias: r1/diff/w/c06_rec_ret_dis/c06_rec_ret_dis (byte-identical source) verdict: agree verdict_source: s583/r1/diff/REPORT.md:62
+alias: r1/diff/wr/c06_rec_ret_dis/c06_rec_ret_dis (byte-identical source) verdict: agree verdict_source: s583/r1/diff/REPORT.md:62
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: POST/obs: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+vita_binary: PRE/obs: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+blocks: 5
+=== block 1 | combined [verilator+PRE+POST] verilator 5.052 (version captured in slice) | ./c06_rec_ret_dis.out | 1567 bytes
+##### c06_rec_ret_dis
+=== verilator compile rc=0 run rc=0
+[1] %Error: c06_rec_ret_dis.sv:4: Assertion failed in top.rt: 'unique if' statement violated
+t=1 rec miss
+t=2 rec hit
+t=3 return hit
+[4] %Error: c06_rec_ret_dis.sv:9: Assertion failed in top.tr: 'unique if' statement violated
+  after-chain in tr t=4
+t=4 return miss
+t=5 disable taken
+[6] %Error: c06_rec_ret_dis.sv:23: Assertion failed in top.blk2: 'unique if' statement violated
+  after disable-chain y2 t=6
+t=6 disable miss
+- c06_rec_ret_dis.sv:27: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 rec miss
+t=2 rec hit
+t=3 return hit
+  after-chain in tr t=4
+t=4 return miss
+t=5 disable taken
+  after disable-chain y2 t=6
+t=6 disable miss
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+c06_rec_ret_dis.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.rt] [at time 1]
+t=1 rec miss
+t=2 rec hit
+t=3 return hit
+c06_rec_ret_dis.sv:9:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tr] [at time 4]
+  after-chain in tr t=4
+t=4 return miss
+t=5 disable taken
+c06_rec_ret_dis.sv:23:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.blk2] [at time 6]
+  after disable-chain y2 t=6
+t=6 disable miss
+simulation ended (Finish) at time 7
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+--- staged vcmp=0 velab=0 vrun=0 W4031+stdout==one-shot: True
+=== block 2 | vita [POST/obs] | r1/diff/wr/c06_rec_ret_dis/obs_post/results.jsonl | 133 bytes
+{"v":1,"t":7,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":7,"errors":0,"warnings":4,"fatals":0}
+=== block 3 | vita [POST/obs] | r1/diff/wr/c06_rec_ret_dis/obs_post/run.json | 1769 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "c06_rec_ret_dis.sv", "blake3": "59d457bec42433d9387e14e8e49df963f195f47d145a7f974f3149ba2b906e87"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 4, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 0, "total": 2, "frame_bodies": 2, "reject_reasons": {"delay": 2, "disable": 1, "frame_call": 1}},
+  "wprog": {"asked": 11, "declined": 5, "reasons": {"frame_net": 5}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 2, "frame": 2, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": [
+    {"module": "top", "name": "rt", "kind": "task", "route": "frame", "sites": 3, "decl_file": "c06_rec_ret_dis.sv", "decl_line": 3, "decl_col": 18},
+    {"module": "top", "name": "tr", "kind": "task", "route": "frame", "sites": 2, "decl_file": "c06_rec_ret_dis.sv", "decl_line": 8, "decl_col": 18}
+  ]},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790940103,
+  "wall_s": 0.000682,
+  "elab_s": 0.000498,
+  "sim_s": 0.000179
+}
+=== block 4 | vita [PRE/obs] | r1/diff/wr/c06_rec_ret_dis/obs_pre/results.jsonl | 133 bytes
+{"v":1,"t":7,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":7,"errors":0,"warnings":1,"fatals":0}
+=== block 5 | vita [PRE/obs] | r1/diff/wr/c06_rec_ret_dis/obs_pre/run.json | 1769 bytes
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 34,
+  "seed": null,
+  "plusargs": [],
+  "source": {"name": "c06_rec_ret_dis.sv", "blake3": "59d457bec42433d9387e14e8e49df963f195f47d145a7f974f3149ba2b906e87"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 7,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 0, "total": 2, "frame_bodies": 2, "reject_reasons": {"delay": 2, "disable": 1, "frame_call": 1}},
+  "wprog": {"asked": 11, "declined": 5, "reasons": {"frame_net": 5}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 2, "frame": 2, "inlined": 0}, "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called", "uncounted": "class methods and hierarchical calls", "items": [
+    {"module": "top", "name": "rt", "kind": "task", "route": "frame", "sites": 3, "decl_file": "c06_rec_ret_dis.sv", "decl_line": 3, "decl_col": 18},
+    {"module": "top", "name": "tr", "kind": "task", "route": "frame", "sites": 2, "decl_file": "c06_rec_ret_dis.sv", "decl_line": 8, "decl_col": 18}
+  ]},
+  "processes": null,
+  "builtins": null,
+  "subroutine_calls": null,
+  "utc_unix_s": 1790940103,
+  "wall_s": 0.000604,
+  "elab_s": 0.000441,
+  "sim_s": 0.000158
+}
+=== end

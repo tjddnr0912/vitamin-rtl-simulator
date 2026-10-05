@@ -1,0 +1,78 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r4__sound__newcells__r4b_stale_final
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r4/sound/newcells/r4b_stale_final.sv
+roadmap_row: §2 🆕 AB
+set: r4/sound/newcells
+oracles_present: iverilog,verilator
+vita_tags: PRE3,POSTD,POSTE
+verdict: r4b final: POSTE `final w1=0 w2=x`; PRE3/POSTD `w2=0`; iverilog `w2=x`, verilator `w2=0`.
+verdict_source: s590/r4/sound/REPORT.md:11
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: POSTE: md5 e776d356844bcd7d5d1bd9079b6756f4 commit 75f46453
+blocks: 1
+=== block 1 | combined [iverilog+verilator|PRE3+POSTD+POSTE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r4/sound/out/r4b_stale_final.out | 1374 bytes
+##### r4b_stale_final
+=== iverilog run rc=0
+f t=0 x=0
+h t=0 x=1 w1=z
+f t=0 x=0
+final w1=0 w2=x
+
+=== verilator run rc=0
+f t=0 x=0
+f t=0 x=0
+h t=0 x=1 w1=0
+final w1=0 w2=0
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: end at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+
+=== PRE3 (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h t=0 x=x w1=z
+f t=0 x=x
+f t=0 x=x
+h t=0 x=x w1=x
+f t=0 x=x
+h t=0 x=x w1=x
+h t=0 x=1 w1=x
+f t=0 x=0
+h t=0 x=1 w1=x
+f t=0 x=0
+h t=0 x=1 w1=0
+h t=0 x=1 w1=0
+final w1=0 w2=0
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+
+=== POSTD (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h t=0 x=1 w1=z
+f t=0 x=0
+h t=0 x=1 w1=z
+h t=0 x=1 w1=z
+f t=0 x=0
+h t=0 x=1 w1=0
+h t=0 x=1 w1=0
+final w1=0 w2=0
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+
+=== POSTE (native=interp=vm)
+rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+h t=0 x=1 w1=z
+f t=0 x=0
+h t=0 x=1 w1=z
+f t=0 x=0
+final w1=0 w2=x
+simulation ended (Quiescent) at time 0
+errors=0 warnings=1 notes=0
+
+--- r4b_stale_final PRE3==POSTD:000 PRE3==POSTE:000 POSTD==POSTE:000 split=-
+=== end

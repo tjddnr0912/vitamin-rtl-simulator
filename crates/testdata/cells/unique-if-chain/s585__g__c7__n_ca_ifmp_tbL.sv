@@ -1,0 +1,27 @@
+interface I;
+  function logic [1:0] f(input logic x, input logic z);
+    logic [1:0] r; r = 0;
+    unique if (x) r = 1; else if (z) r = 2;
+    return r;
+  endfunction
+  modport mp(import f);
+endinterface
+module leaf(I.mp p, input logic a, input logic b, output logic [1:0] y);
+  assign y = p.f(a, b);
+endmodule
+module dut(input logic a, input logic b, output logic [1:0] y);
+  I i();
+  leaf l(.p(i), .a(a), .b(b), .y(y));
+endmodule
+module top;
+  logic a, b; logic [1:0] y;
+  dut u(.a(a), .b(b), .y(y));
+  initial begin
+    a = 0; b = 1;
+    #1 $display("t=%0t y=%0d", $time, y);
+    #1 b = 0;
+    #1 $display("t=%0t y=%0d", $time, y);
+    #1 $finish;
+  end
+  initial #100 $finish;
+endmodule

@@ -1,0 +1,58 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__Sg13
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/Sg13.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+notes: listed without a flag at s581/lens_diff/spg.out:92
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Sg13.iv.txt | 35 bytes
+@ovr 7
+@g1 hit
+@g0 def
+@gs 1
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Sg13.vl.txt | 324 bytes
+%Error: Sg13.sv:5:26: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Sg13.sv:6:26: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Sg13.sv:7:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Sg13.vlb.txt | 1248 bytes
+%Error: Sg13.sv:5:26: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+    5 |   case (1) (16'h00FF ==? 8'sb1???_????): begin : a initial $display("@g1 hit"); end default: begin : ad initial $display("@g1 def"); end endcase
+      |                          ^~~~~~~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Sg13.sv:6:26: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+    6 |   case (0) (16'h00FF ==? 8'sb1???_????): begin : b initial $display("@g0 hit"); end default: begin : bd initial $display("@g0 def"); end endcase
+      |                          ^~~~~~~~~~~~~
+%Error: Sg13.sv:7:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                    : ... note: In instance 'top'
+    7 |   case ((16'h00FF ==? 8'sb1???_????)) 1'b1: begin : e initial $display("@gs 1"); end 1'b0: begin : e2 initial $display("@gs 0"); end default: begin : ed initial $display("@gs def"); end endcase
+      |                       ^~~~~~~~~~~~~
+%Error: Exiting due to 3 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Sg13.sv.txt | 35 bytes | identical to block 1
+=== block 5 | vita [POST] | ./Sg13.post.txt | 402 bytes
+@ovr 7
+@g1 hit
+@g0 def
+@gs 1
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W3057] W-ELAB-AUTOTOP-AMBIGUOUS: auto-top selected 2 uninstantiated roots (m, top); all are elaborated as independent tops — pin one with `--top <module>` for a deterministic single top
+errors=0 warnings=2 notes=0
+
+rc=0
+=== block 6 | vita [POST-T] | ./Sg13.pt.txt | 402 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./Sg13.pre.txt | 402 bytes | identical to block 5
+=== end

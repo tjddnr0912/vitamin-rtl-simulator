@@ -1,0 +1,36 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r20_macro_gen
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r20_macro_gen.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:38
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r20_macro_gen.ivl | 60 bytes
+P=3 bw=4
+r20_macro_gen.sv:13: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r20_macro_gen.vl | 266 bytes
+%Error: r20_macro_gen.sv:8:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: r20_macro_gen.sv:9:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r20_macro_gen.build | 855 bytes
+%Error: r20_macro_gen.sv:8:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                             : ... note: In instance 'top'
+    8 |     function automatic int f(input int a); return 3; endfunction
+      |                            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: r20_macro_gen.sv:9:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                             : ... note: In instance 'top'
+        r20_macro_gen.sv:8:28: ... Location of non-constant FUNC 'f': Constant function called under generate
+        r20_macro_gen.sv:9:24: ... Called from 'f()' with parameters:
+           a = ?32?h2
+    9 |     localparam int P = f(2);
+      |                        ^
+%Error: Exiting due to 2 error(s)
+=== end

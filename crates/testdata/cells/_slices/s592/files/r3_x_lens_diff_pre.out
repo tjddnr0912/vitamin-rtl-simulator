@@ -1,0 +1,16 @@
+DI05m                        IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=outer | pre=inner | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+DM07                         IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=L1 | L2 | pre=NONE | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM07b                        IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=L1 | L501 | pre=NONE | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM08                         IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=L0 | L1 | pre=NONE | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM09                         IEEE:UP WRONG->LOUD  SVVL:UP WRONG->LOUD   | iv=then | pre=NONE | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM10                         IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=outer | pre=inner | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+DX03                         IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=top.u1.g.b outer | top.u2.g.b outer | pre=top.u1.g.a inner | top.u2.g.b outer | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+
+== pre -> post_d under IEEE (40 cells)
+    33 same                   
+     7 UP WRONG->LOUD         DI05m DM07 DM07b DM08 DM09 DM10 DX03
+== pre -> post_d under SVVL (40 cells)
+    33 same                   
+     3 DOWN OK->LOUD          DI05m DM10 DX03
+     3 n/a                    DM07 DM07b DM08
+     1 UP WRONG->LOUD         DM09

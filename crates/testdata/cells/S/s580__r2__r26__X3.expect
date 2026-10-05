@@ -1,0 +1,28 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__r2__r26__X3
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/r2/r26/X3.sv
+roadmap_row: §2 🆕 S
+set: r2/r26
+oracles_present: verilator
+vita_tags: r26-dbg2,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: verilator: build log only, run output not captured; R2-6 X cells: s580/REPORT.md:402;s580/REPORT.md:425;s580/REPORT.md:516; R4 cmp3_post4 bucket(s): pre×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./X3.vlc | 513 bytes
+%Error: X3.sv:4:32: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 't'
+    4 |   case (1'b1) (4'b1100 inside {4'b1?00}): begin : gc1 initial #1 $display("X3 gencase item"); end default: begin : gc2 initial #1 $display("X3 gencase default"); end endcase
+      |                                ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 2 | vita [POST2] | ./X3.post2.txt | 108 bytes
+X3 rep 0011
+X3 psel 11
+X3 gencase item
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== end

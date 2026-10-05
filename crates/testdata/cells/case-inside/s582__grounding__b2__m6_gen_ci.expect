@@ -1,0 +1,69 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m6_gen_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m6_gen_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: loud (not a case-inside refusal) — generate-region case inside: E2002, unchanged (illegal by A.4.1.2)
+verdict_source: s582/post/CENSUS.md:19
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b2/out_m6_gen_ci/iv.out | 1855 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:3: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:5: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:7: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:1: assert: pform.cc:1478: failed assertion lexical_scope == cur_module
+sh: line 1: 98285 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg262751d4d" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg62751d4d" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli62751d4d"
+     98286 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh62751d4d" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b2__m6_gen_ci/iv.out | 1851 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:3: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:5: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:7: error: Invalid module item.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:1: assert: pform.cc:1478: failed assertion lexical_scope == cur_module
+sh: line 1:  7862 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg27dfbb6c" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg7dfbb6c" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli7dfbb6c"
+      7863 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh7dfbb6c" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 3 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m6_gen_ci/vl.out | 274 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:3:12: syntax error, unexpected inside, expecting IDENTIFIER-for-type
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 4 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m6_gen_ci/vl_build.log | 421 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:3:12: syntax error, unexpected inside, expecting IDENTIFIER-for-type
+    3 |   case (P) inside
+      |            ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m6_gen_ci/sv.out | 220 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:3:12: Parse error: unexpected token 'inside' (KW_inside)
+rc=1
+=== block 6 | vita [POST] | post/census/grounding__b2__m6_gen_ci/post.out | 537 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in generate-case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '4'b1?00'
+errors=2 warnings=0 notes=0
+rc=1
+=== block 7 | vita [POST] | post2/cmp/grounding__b2__m6_gen_ci.sv/post.err | 532 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in generate-case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m6_gen_ci.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '4'b1?00'
+errors=2 warnings=0 notes=0
+=== block 8 | vita [POST] | post2/cmp/grounding__b2__m6_gen_ci.sv/post.out | 5 bytes
+rc=1
+=== block 9 | vita [POST2] | post2/cmp/grounding__b2__m6_gen_ci.sv/post2.err | 532 bytes | identical to block 7
+=== block 10 | vita [POST2] | post2/cmp/grounding__b2__m6_gen_ci.sv/post2.out | 5 bytes | identical to block 8
+=== block 11 | vita [POST2] | post3/cmp/grounding__b2__m6_gen_ci.sv/post2.err | 532 bytes | identical to block 7
+=== block 12 | vita [POST2] | post3/cmp/grounding__b2__m6_gen_ci.sv/post2.out | 5 bytes | identical to block 8
+=== block 13 | vita [POST3] | post3/cmp/grounding__b2__m6_gen_ci.sv/post3.err | 532 bytes | identical to block 7
+=== block 14 | vita [POST3] | post3/cmp/grounding__b2__m6_gen_ci.sv/post3.out | 5 bytes | identical to block 8
+=== block 15 | vita [PRE] | grounding/b2/out_m6_gen_ci/vita.out | 537 bytes | identical to block 6
+=== end

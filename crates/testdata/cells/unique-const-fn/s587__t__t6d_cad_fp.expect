@@ -1,0 +1,34 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t6d_cad_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t6d_cad_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t6d_cad_fp.ivl | 54 bytes
+w at 8
+t6d_cad_fp.sv:9: $finish called at 9 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t6d_cad_fp.vl | 337 bytes
+%Warning-ZERODLY: t6d_cad_fp.sv:7:10: Value of # delay control statically unknown. Assuming it can be #0.
+w at 8
+- t6d_cad_fp.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 9ps; walltime 0.000 s; speed 600.000 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t6d_cad_fp.build | 713 bytes
+%Warning-ZERODLY: t6d_cad_fp.sv:7:10: Value of # delay control statically unknown. Assuming it can be #0.
+                                    : ... If all # delays are non-zero at runtime,
+                                    : ... use '--no-sched-zero-delay' for improved performance.
+                                    : ... If a real #0 is expected at runtime,
+                                    : ... use '--sched-zero-delay' to suppress this warning.
+    7 |   assign #(f(2)) w = a;
+      |          ^
+                  ... For warning description see https://verilator.org/warn/ZERODLY?v=5.052
+                  ... Use "/* verilator lint_off ZERODLY */" and lint_on around source to disable this message.
+=== end

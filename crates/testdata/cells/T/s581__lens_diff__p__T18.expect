@@ -1,0 +1,69 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__T18
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/T18.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./T18.iv.txt | 276 bytes
+T18.sv:4: sorry: "inside" expressions not supported yet.
+T18.sv:6: sorry: "inside" expressions not supported yet.
+T18.sv:8: syntax error
+T18.sv:8: error: Invalid module item.
+T18.sv:8: syntax error
+T18.sv:8: error: Invalid module item.
+T18.sv:8: syntax error
+I give up.
+
+rc=8
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./T18.vl.txt | 321 bytes
+%Error: T18.sv:3:19: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T18.sv:5:22: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T18.sv:6:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./T18.vlb.txt | 1462 bytes
+%Error: T18.sv:3:19: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    3 |   case (1) (A ==? 4'b1?00): begin : a initial $display("@A hit"); end default: begin : ad initial $display("@A def"); end endcase
+      |                   ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: T18.sv:5:22: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    5 |   case (1'b1) (A !=? 4'b0?00): begin : e initial $display("@E hit"); end default: begin : ed initial $display("@E def"); end endcase
+      |                      ^~~~~~~
+%Error: T18.sv:6:23: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    6 |   case (1) (A inside {4'b11?1, 4'b1100}): begin : f initial $display("@F hit"); end default: begin : fd initial $display("@F def"); end endcase
+      |                       ^~~~~~~
+%Error: T18.sv:7:19: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    7 |   case (0) (A ==? 4'b0?00): begin : g initial $display("@G hit"); end default: begin : gd initial $display("@G def"); end endcase
+      |                   ^~~~~~~
+%Error: Exiting due to 4 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./T18.sv.txt | 66 bytes
+T18.sv:8:30: Parse error: unexpected token '$' (Sym_dollar)
+
+rc=1
+=== block 5 | vita [POST] | ./T18.post.txt | 214 bytes
+@A hit
+@C hit
+@E hit
+@F hit
+@G hit
+@H def
+simulation ended (Quiescent) at time 0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [POST-T] | ./T18.pt.txt | 214 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./T18.pre.txt | 214 bytes | identical to block 5
+=== end

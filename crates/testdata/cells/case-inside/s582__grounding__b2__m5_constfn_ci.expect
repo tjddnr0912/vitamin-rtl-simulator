@@ -1,0 +1,85 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m5_constfn_ci
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m5_constfn_ci.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: loud (not a case-inside refusal) — kept loud: the const-function interpreter has no case arm (a plain case too)
+verdict_source: s582/post/CENSUS.md:17
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/grounding__b2__m5_constfn_ci/iv.out | 965 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3: error: Malformed statement
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3: error: Incomprehensible case expression.
+rc=5
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m5_constfn_ci/vl.out | 813 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:5:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:6:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 3 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | grounding/b2/out_m5_constfn_ci/vl_build.log | 3281 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:5:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                                                                                                                                                                              : ... note: In instance 'top'
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:40: ... Location of non-constant INSIDERANGE: Unknown node type, perhaps missing visitor in SimulateVisitor
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:5:23: ... Called from 'f()' with parameters:
+           x = 4'h8
+    5 |   localparam int P1 = f(4'b1000);
+      |                       ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:6:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                                                                                                                                                                              : ... note: In instance 'top'
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:40: ... Location of non-constant INSIDERANGE: Unknown node type, perhaps missing visitor in SimulateVisitor
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:6:23: ... Called from 'f()' with parameters:
+           x = 4'h2
+    6 |   localparam int P2 = f(4'd2);
+      |                       ^
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                                                                                                                                                                              : ... note: In instance 'top'
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:40: ... Location of non-constant INSIDERANGE: Unknown node type, perhaps missing visitor in SimulateVisitor
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:7:23: ... Called from 'f()' with parameters:
+           x = 4'h6
+    7 |   localparam int P3 = f(4'd6);
+      |                       ^
+%Error: Exiting due to 3 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | grounding/b2/out_m5_constfn_ci/sv.out | 69 bytes
+P1=1 P2=2 P3=0 bits=4 rt=1
+sv2v.v:18: $finish called at 10 (1s)
+rc=0
+=== block 5 | vita [POST] | post/census/grounding__b2__m5_constfn_ci/post.out | 999 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:5:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P2` value is not a constant: `f(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:7:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P3` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=3 warnings=1 notes=0
+rc=1
+=== block 6 | vita [POST] | post2/cmp/grounding__b2__m5_constfn_ci.sv/post.err | 994 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:5:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P2` value is not a constant: `f(…)` has no constant-fold arm [in top]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:7:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P3` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=3 warnings=1 notes=0
+=== block 7 | vita [POST] | post2/cmp/grounding__b2__m5_constfn_ci.sv/post.out | 5 bytes
+rc=1
+=== block 8 | vita [POST2] | post2/cmp/grounding__b2__m5_constfn_ci.sv/post2.err | 994 bytes | identical to block 6
+=== block 9 | vita [POST2] | post2/cmp/grounding__b2__m5_constfn_ci.sv/post2.out | 5 bytes | identical to block 7
+=== block 10 | vita [POST2] | post3/cmp/grounding__b2__m5_constfn_ci.sv/post2.err | 994 bytes | identical to block 6
+=== block 11 | vita [POST2] | post3/cmp/grounding__b2__m5_constfn_ci.sv/post2.out | 5 bytes | identical to block 7
+=== block 12 | vita [POST3] | post3/cmp/grounding__b2__m5_constfn_ci.sv/post3.err | 994 bytes | identical to block 6
+=== block 13 | vita [POST3] | post3/cmp/grounding__b2__m5_constfn_ci.sv/post3.out | 5 bytes | identical to block 7
+=== block 14 | vita [PRE] | grounding/b2/out_m5_constfn_ci/vita.out | 1366 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:40: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m5_constfn_ci.sv:3:40: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+errors=3 warnings=1 notes=0
+rc=1
+=== end

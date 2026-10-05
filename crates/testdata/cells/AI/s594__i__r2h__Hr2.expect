@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__i__r2h__Hr2
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/i/r2h/Hr2.sv
+roadmap_row: §2 🆕 AI
+set: i/r2h
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Hr2.ivl | 51 bytes
+K=1 vb=3
+Hr2.sv:8: $finish called at 50 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Hr2.vl | 475 bytes
+%Warning-WIDTHTRUNC: Hr2.sv:4:69: Operator ASSIGN expects 1 bits on the Assign RHS, but Assign RHS's CONST '5'h1f' generates 5 bits.
+%Warning-WIDTHEXPAND: Hr2.sv:5:27: Operator ADD expects 32 bits on the LHS, but LHS's CONST '8'h0' generates 8 bits.
+K=1 vb=3
+- Hr2.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 50ns; walltime 0.000 s; speed 1.389 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Hr2.s2v | 54 bytes
+K=1 vb=3
+Hr2.s2v.v:12: $finish called at 50 (1s)
+rc=0
+=== block 4 | vita [pa] | ./Hr2.pa | 79 bytes
+K=1 vb=3
+simulation ended (Finish) at time 50
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [pb] | ./Hr2.pb | 81 bytes
+K=31 vb=33
+simulation ended (Finish) at time 50
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [pre] | ./Hr2.pre | 81 bytes | identical to block 5
+=== block 7 | vita [pre] | ./Hr2.pre.route | 12 bytes
+t f frame 0
+=== end

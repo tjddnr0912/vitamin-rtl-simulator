@@ -1,0 +1,8 @@
+('loud', 'same') 177
+('noora', 'same') 2
+('ok', 'same') 127
+('split', 'same') 4
+('wrong', 'ok') 111
+('wrong', 'same') 60
+('wrong', 'wrong') 1
+wrong->wrong	g_c5/rv558_ovr	P=255 b=32	P=15 b=32	P=15 b=4	P=15 b=4

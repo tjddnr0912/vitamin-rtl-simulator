@@ -1,0 +1,43 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a3__n6
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a3/n6.sv
+roadmap_row: §2 🆕 U
+set: plan/a3
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: not a POST_a mover (absent from impl/moves_audit.txt)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./n6.ivl | 155 bytes
+n6 body top.g[0] C=0 CW=0 bc=32
+n6 body top.g[1] C=1 CW=1 bc=32
+n6 post i=18446744073709551625 g1C=1 g1CW=1 g0i=0
+n6.sv:9: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./n6.vl | 129 bytes
+%Error: n6.sv:8:90: Genvar 'i' used outside generate for loop (IEEE 1800-2023 27.4)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./n6.s2v | 159 bytes
+n6 body top.g[0] C=0 CW=0 bc=32
+n6 body top.g[1] C=1 CW=1 bc=32
+n6 post i=18446744073709551625 g1C=1 g1CW=1 g0i=0
+n6.s2v.v:16: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./n6.dev3 | 266 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n6.sv:8:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `g[0].i` (no such cross-instance net or parameter)
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./n6.posta | 266 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./n6.postb | 266 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./n6.pre | 266 bytes | identical to block 4
+=== block 8 | vita [PROTO2] | ./n6.post2 | 266 bytes | identical to block 4
+=== end

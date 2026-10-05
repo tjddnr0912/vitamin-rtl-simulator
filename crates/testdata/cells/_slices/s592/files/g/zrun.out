@@ -1,0 +1,301 @@
+== Z0a_lrm2631_var
+         iv: px=1 bx=2
+         sv: px=z bx=2
+         vl: px=0 bx=2
+        pre: px=0 bx=2
+   probe_cache: px=0 bx=2
+   probe_p6: px=0 bx=2
+== Z0b_lrm2631_par
+         iv: l2 X=1 | l4 X=2
+         sv: l2 X=2 | l4 X=2
+         vl: l2 X=2 | l4 X=2
+        pre: l2 X=2 | l4 X=2
+   probe_cache: l2 X=2 | l4 X=2
+   probe_p6: l2 X=2 | l4 X=2
+== Z0c_lrm2631_par_case
+         iv: pkg 9 bits=4
+         sv: local 200 bits=8
+         vl: local 200 bits=8
+        pre: local 8 bits=4
+   probe_cache: pkg 9 bits=4
+   probe_p6: local 200 bits=8
+== Z1a2_scr_ae_bwd
+         iv: k P=xxxx bits=8
+         sv: k P=xxxx bits=8
+         vl: k P=xxxx bits=8
+        pre: k P=0000 bits=8
+   probe_cache: k P=0000 bits=8
+   probe_p6: k P=0000 bits=8
+== Z1a_scr_ae
+         iv: ERR:Z1a_scr_ae.sv:4: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: k P=xxxx bits=8
+         vl: k P=xxxx bits=8
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: k P=0000 bits=8
+== Z1b2_scr_ac_bwd
+         iv: k r=7f
+         sv: k r=7f
+         vl: k r=7f
+        pre: k r=00
+   probe_cache: k r=00
+   probe_p6: k r=00
+== Z1b_scr_ac
+         iv: ERR:Z1b_scr_ac.sv:4: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: k r=7f
+         vl: k r=7f
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: k r=00
+== Z1c_scr_hier
+         iv: ERR:Z1c_scr_hier.sv:3: error: Unable to bind parameter `S' in `top.gb'(rc2)
+         sv: h w=200 bits=4
+         vl: h w=200 bits=8
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: h w=200 bits=8
+== Z1d_lbl_inst
+         iv: ERR:Z1d_lbl_inst.sv:5: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k o=100
+         vl: k o=100
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].o` [in to(rc1)
+   probe_cache: def
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `Q` value is not a consta(rc1)
+== Z1e_lbl_inst_noread
+         iv: ERR:Z1e_lbl_inst_noread.sv:5: error: Unable to bind parameter `K' in `top.(rc2)
+         sv: k o=7
+         vl: k o=7
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].gk[0].o` [in to(rc1)
+   probe_cache: def
+   probe_p6: k o=7
+== Z1f_for_inst_sh
+         iv: top.gb.L[0].u P=10
+         sv: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+         vl: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+        pre: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+   probe_cache: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+   probe_p6: top.gb.L[0].u P=10 | top.gb.L[1].u P=11 | top.gb.L[2].u P=12
+== Z1g_for_ae_sh
+         iv: L0 w=10 P=xxxx
+         sv: L0 w=10 P=xxxx | L1 w=11 P=xxxx | L2 w=12 P=xxxx
+         vl: L0 w=10 P=xxxx | L1 w=11 P=xxxx | L2 w=12 P=xxxx
+        pre: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_cache: ERR:VITA-E3010:undeclared net/variable `top.gb[0].L[1].w` [in top(rc1)
+   probe_p6: L0 w=10 P=0000 | L1 w=11 P=0000 | L2 w=12 P=0000
+== Z1h_if_ac
+         iv: ERR:Z1h_if_ac.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc4)
+         sv: then r=7f
+         vl: then r=7f
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p6: then r=00
+== Z1i_v14b_ae
+         iv: ERR:Z1i_v14b_ae.sv:6: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k P=xxxx
+         vl: k P=xxxx
+        pre: k P=0000
+   probe_cache: NONE
+   probe_p6: k P=0000
+== Z2a_armerr_sh
+         iv: ERR:Z2a_armerr_sh.sv:6: error: Unable to bind parameter `Nope' in `top.gb.(rc2)
+         sv: k 200
+         vl: ERR:%Error: Z2a_armerr_sh.sv:6:32: Can't find definition of variable: 'Nop(rc1)
+        pre: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_cache: ERR:VITA-E3009:undefined name `Nope` is not allowed in a constant(rc1)
+   probe_p6: k 200
+== Z2b_armerr_sh_dup
+         iv: ERR:Z2b_armerr_sh_dup.sv:6: error: 'w' has already been declared in this s(rc1)
+         sv: k 200
+         vl: ERR:%Error: Z2b_armerr_sh_dup.sv:6:51: Duplicate declaration of signal: 'w(rc1)
+        pre: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+   probe_cache: ERR:VITA-E3009:net/variable `top.gb[0].g[0].w` redeclared (duplic(rc1)
+   probe_p6: k 200
+== Z2c_negrange_fwd
+         iv: ERR:Z2c_negrange_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z2d_xz_fwd_sh
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+        pre: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+== Z2e_div0_fwd_sh
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+        pre: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_cache: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+   probe_p6: ERR:VITA-E3009:generate-scope parameter `K` value is not a consta(rc1)
+== Z3a2_shl_bwd
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z3a_shl_fwd
+         iv: ERR:Z3a_shl_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: def 9 bits=4
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z3b2_add32_bwd
+         iv: def 9 bits=4
+         sv: def 9 bits=4
+         vl: zero 200 bits=8
+        pre: zero 200 bits=8
+   probe_cache: zero 200 bits=8
+   probe_p6: zero 200 bits=8
+== Z3b_add32_fwd
+         iv: ERR:Z3b_add32_fwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: def 9 bits=4
+         vl: zero 200 bits=8
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: zero 200 bits=8
+== Z3c2_widesgn_bwd
+         iv: k 200 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+        pre: k 200 bits=8
+   probe_cache: k 200 bits=8
+   probe_p6: k 200 bits=8
+== Z3c_widesgn_fwd
+         iv: ERR:Z3c_widesgn_fwd.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+        pre: k 8 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: k 200 bits=8
+== Z3d2_widesel_bwd
+         iv: k 200 bits=8
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant [in top.(rc1)
+== Z3d_widesel_fwd
+         iv: ERR:Z3d_widesel_fwd.sv:3: error: Unable to bind parameter `K['sd64:'sd0]' (rc2)
+         sv: k 200 bits=8
+         vl: k 200 bits=8
+        pre: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_cache: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+   probe_p6: ERR:VITA-E3010:generate-case scrutinee is not a constant: undefin(rc1)
+== Z3e2_negcmp_bwd
+         iv: neg 200 bits=8
+         sv: neg 200 bits=8
+         vl: neg 200 bits=8
+        pre: neg 200 bits=8
+   probe_cache: neg 200 bits=8
+   probe_p6: neg 200 bits=8
+== Z3e_negcmp_fwd
+         iv: ERR:Z3e_negcmp_fwd.sv:3: error: Unable to bind parameter `K' in `top.gb'(rc4)
+         sv: neg 200 bits=8
+         vl: neg 200 bits=8
+        pre: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_cache: ERR:VITA-E3010:generate-if condition is not a constant: undefined(rc1)
+   probe_p6: neg 200 bits=8
+== Z5a_procread_nosh
+         iv: ERR:Z5a_procread_nosh.sv:3: error: Unable to bind wire/reg/memory `K' in `(rc1)
+         sv: K=8
+         vl: K=8
+        pre: K=8
+   probe_cache: K=8
+   probe_p6: K=8
+== Z5b_inst_nosh
+         iv: ERR:Z5b_inst_nosh.sv:4: error: Unable to bind parameter `K' in `top.gb'(rc1)
+         sv: top.gb.u P=8
+         vl: top.gb.u P=8
+        pre: top.gb.u P=8
+   probe_cache: top.gb.u P=8
+   probe_p6: top.gb.u P=8
+== Z5c_varinit_nosh
+         iv: ERR:Z5c_varinit_nosh.sv:3: error: Unable to bind wire/reg/memory `K' in `t(rc1)
+         sv: v=8
+         vl: v=8
+        pre: v=8
+   probe_cache: v=8
+   probe_p6: v=8
+== Z5d_ca_nosh
+         iv: ERR:Z5d_ca_nosh.sv:4: error: Unable to bind wire/reg/memory `K' in `top.gb(rc2)
+         sv: w=8
+         vl: w=8
+        pre: w=8
+   probe_cache: w=8
+   probe_p6: w=8
+== Z5e_d1w
+         iv: a 200 bits=8
+         sv: a 200 bits=8
+         vl: a 200 bits=8
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z5f_lazy_label
+         iv: one 1 bits=8
+         sv: one 1 bits=8
+         vl: one 1 bits=8
+        pre: one 1 bits=8
+   probe_cache: one 1 bits=8
+   probe_p6: one 1 bits=8
+== Z5g_typo_label
+         iv: ERR:Z5g_typo_label.sv:4: error: Unable to bind parameter `NOPE' in `top.gb(rc2)
+         sv: ERR:Z5g_typo_label.sv2v.v:5: error: Unable to bind parameter `NOPE' in `to(rc2)
+         vl: ERR:%Error: Z5g_typo_label.sv:4:7: Can't find definition of variable: 'NOP(rc1)
+        pre: def 9 bits=4
+   probe_cache: def 9 bits=4
+   probe_p6: def 9 bits=4
+== Z5h_nested_encl_fwd_sh
+         iv: outer 9 bits=4
+         sv: inner 200 bits=8
+         vl: inner 200 bits=8
+        pre: inner 8 bits=4
+   probe_cache: outer 9 bits=4
+   probe_p6: inner 200 bits=8
+== Z5i_hier_sibling_later
+         iv: ga K=5
+         sv: ga K=5
+         vl: ga K=5
+        pre: ga K=5
+   probe_cache: ga K=5
+   probe_p6: ga K=5
+== Z5j_hier_self_before_decl
+         iv: self K=5
+         sv: self K=5
+         vl: self K=5
+        pre: self K=5
+   probe_cache: self K=5
+   probe_p6: self K=5
+== Z5k_region_hdr_collide
+         iv: ERR:Z5k_region_hdr_collide.sv:3: error: 'K' has already been declared in t(rc1)
+         sv: K=3
+         vl: ERR:%Error: Z5k_region_hdr_collide.sv:3:16: Duplicate declaration of signa(rc1)
+        pre: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+   probe_cache: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+   probe_p6: ERR:VITA-E3009:duplicate declaration of parameter `K`: this `loca(rc1)
+== Z5l_modlvl_procread_region_fwd
+         iv: ERR:Z5l_modlvl_procread_region_fwd.sv:2: error: Unable to bind wire/reg/me(rc1)
+         sv: K=5
+         vl: K=5
+        pre: K=5
+   probe_cache: K=5
+   probe_p6: K=5
+== Z5m_genfn_body_fwd_sh
+         iv: k f=4
+         sv: def
+         vl: def
+        pre: def
+   probe_cache: k f=8
+   probe_p6: def
+== Z5n_genfor_body_param_chain_sh
+         iv: L0 one 9 bits=4 P=1 | L1 other 200 bits=8 P=2
+         sv: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11
+         vl: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11
+        pre: L0 other 8 bits=4 P=10 | L1 other 200 bits=8 P=11
+   probe_cache: L0 one 9 bits=4 P=10 | L1 other 200 bits=8 P=11
+   probe_p6: L0 other 200 bits=8 P=10 | L1 other 200 bits=8 P=11

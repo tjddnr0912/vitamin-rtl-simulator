@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__impl__n__Egr_ex
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/impl/n/Egr_ex.sv
+roadmap_row: §2 🆕 U
+set: impl/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,POSTA,POSTB,PRE
+verdict: Iee_nw/wn/gif now E3009 (new); new probes impl/n: Egr_ex/Pee_lbl/Pee_nw/IFee E3009 (iverilog+sv2v refuse); Ecu_lbl/Ecu_imp/Egb_ex(split)/Icuee/IFe_lbl/Ilbl_wc = PRE.
+verdict_source: s591/IMPL.md:9
+notes: verbatim excerpt of the source line
+alias: impl/dump/273302c80c634870 (byte-identical source) verdict: Iee_nw/wn/gif now E3009 (new); new probes impl/n: Egr_ex/Pee_lbl/Pee_nw/IFee E3009 (iverilog+sv2v refuse); Ecu_lbl/Ecu_imp/Egb_ex(split)/Icuee/IFe_lbl/Ilbl_wc = PRE. verdict_source: s591/IMPL.md:9
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/273302c80c634870.ivl | 101 bytes
+273302c80c634870.sv:4: error: 'E1' has already been imported into this scope from package 'pk'.
+rc=1
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Egr_ex.ivl | 91 bytes
+Egr_ex.sv:4: error: 'E1' has already been imported into this scope from package 'pk'.
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/273302c80c634870.vl | 245 bytes
+egrx E1=1 K=1
+- 273302c80c634870.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./Egr_ex.vl | 234 bytes
+egrx E1=1 K=1
+- Egr_ex.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./Egr_ex.s2v | 171 bytes
+rc=1
+sv2v: declaration of E1 conflicts with prior import of pk::E1
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:305:44 in main:Convert.Package
+=== block 6 | vita [DEV1] | ./Egr_ex.dev1 | 580 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Egr_ex.sv:2:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from package `pk`) and is also declared locally — IEEE 1800 §26.3 forbids both [in top]
+Egr_ex.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: undefined name `E1` is not a constant [in top]
+Egr_ex.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.E1` [in top]
+errors=3 warnings=1 notes=0
+rc=1
+=== block 7 | vita [DEV2] | impl/dump/273302c80c634870.dev2 | 610 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+273302c80c634870.sv:2:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: `E1` has already been imported into this scope (explicit import from package `pk`) and is also declared locally — IEEE 1800 §26.3 forbids both [in top]
+273302c80c634870.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: undefined name `E1` is not a constant [in top]
+273302c80c634870.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.E1` [in top]
+errors=3 warnings=1 notes=0
+rc=1
+=== block 8 | vita [DEV3] | impl/dump/273302c80c634870.dev3 | 610 bytes | identical to block 7
+=== block 9 | vita [DEV3] | ./Egr_ex.dev3 | 580 bytes | identical to block 6
+=== block 10 | vita [POSTA] | ./Egr_ex.posta | 580 bytes | identical to block 6
+=== block 11 | vita [POSTB] | impl/dump/273302c80c634870.postb | 610 bytes | identical to block 7
+=== block 12 | vita [POSTB] | ./Egr_ex.postb | 580 bytes | identical to block 6
+=== block 13 | vita [PRE] | ./Egr_ex.pre | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+egrx E1=7 K=7
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 14 | vita [PRE] | ./Egr_ex.pre.route | 0 bytes
+
+=== end

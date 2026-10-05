@@ -1,0 +1,28 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r02_ia2d_shadow
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r02_ia2d_shadow.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:24
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r02_ia2d_shadow.ivl | 127 bytes
+r02_ia2d_shadow.sv:13: sorry: Multi-dimensional arrays of instances are not yet supported.
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r02_ia2d_shadow.vl | 235 bytes
+%Error: r02_ia2d_shadow.sv:13:23: Input port connection 'p' as part of a module instance array requires 4 or 8 bits, but connection's VARREF 'bus' generates 16 bits. (IEEE 1800-2023 23.3.3)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r02_ia2d_shadow.build | 457 bytes
+%Error: r02_ia2d_shadow.sv:13:23: Input port connection 'p' as part of a module instance array requires 4 or 8 bits, but connection's VARREF 'bus' generates 16 bits. (IEEE 1800-2023 23.3.3)
+                                : ... note: In instance 'top'
+   13 |   child u[1:0][1:0] (.p(bus));
+      |                       ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== end

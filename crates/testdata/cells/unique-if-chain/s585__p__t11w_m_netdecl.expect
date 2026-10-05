@@ -1,0 +1,122 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__p__t11w_m_netdecl
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/p/t11w_m_netdecl.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: p
+oracles_present: verilator
+vita_tags: PRE,PRE-H,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: PRE-H spelling; runs: g__t11w_m_netdecl t11w_m_netdecl
+aux: s585__p__t11w_m_netdecl.aux/p/t11w_m_netdecl_H.sv (origin s585/p/t11w_m_netdecl_H.sv)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: PRE-H: md5 unrecorded commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [verilator,PRE,PRE-H,POST] verilator 5.052 (version captured in slice) | g/out2/t11w_m_netdecl.out | 2869 bytes
+##### t11w_m_netdecl
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+- t11w_m_netdecl.sv:21: Verilog $finish
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+t11w_m_netdecl_H.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 't11w_m_netdecl.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 't11w_m_netdecl.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [verilator,PRE,PRE-H,POST2] verilator 5.052 (version captured in slice) | g/out3/g__t11w_m_netdecl.out | 2872 bytes
+##### g__t11w_m_netdecl
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+- t11w_m_netdecl.sv:21: Verilog $finish
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+t11w_m_netdecl_H.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 't11w_m_netdecl.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 't11w_m_netdecl.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 3 | combined [verilator,PRE,PRE-H,POSTC] verilator 5.052 (version captured in slice) | g/out/t11w_m_netdecl.out | 1776 bytes
+##### t11w_m_netdecl
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+- t11w_m_netdecl.sv:21: Verilog $finish
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: t11w_m_netdecl.sv:4: Assertion failed in top.u.g: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita PRE-H (native=interp=vm)
+rc=1
+t11w_m_netdecl_H.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+t11w_m_netdecl.sv:15:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: frame function/task `f` body uses an assignment to a net outside the function, which is outside the frame-call subset (only blocking assigns to its own locals, if/else/case/loops, and nested task calls are supported) [in top.u]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+=== end

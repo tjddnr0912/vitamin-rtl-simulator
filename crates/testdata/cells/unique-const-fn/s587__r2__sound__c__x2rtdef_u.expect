@@ -1,0 +1,25 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__sound__c__x2rtdef_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/sound/c/x2rtdef_u.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/sound/c
+oracles_present: verilator
+vita_tags: POST-c,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 7b33a009
+blocks: 2
+=== block 1 | oracle verilator 5.052 (version captured in slice) | ./vl_x2rtdef_u.build | 516 bytes
+%Warning-WIDTHEXPAND: x2rtdef_u.sv:6:27: Operator VAR 'P' expects 32 bits on the Initial value, but Initial value's FUNCREF 'f' generates 4 bits.
+                                       : ... note: In instance 'top'
+    6 |   localparam logic [31:0] P = f(2);
+      |                           ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 2 | vita [PRE] | ./x2rtdef_u.pre.txt | 601 bytes
+x2rtdef_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+x2rtdef_u.sv:6:31: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=1
+=== end

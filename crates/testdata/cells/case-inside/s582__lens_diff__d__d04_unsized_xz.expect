@@ -1,0 +1,82 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__d__d04_unsized_xz
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/d/d04_unsized_xz.sv
+roadmap_row: §3.b case-inside
+set: lens_diff/d
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST/default,POST/interp,POST/native,POST/staged,POST/vm,POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/default: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/interp: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/native: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/staged: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST/vm: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 24
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/d/out_d04_unsized_xz/iv.out | 1756 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:8: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:8: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:9: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:9: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:10: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:12: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:12: error: Incomprehensible case expression.
+rc=9
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/d/out_d04_unsized_xz/vl.out | 404 bytes
+m1=1 m2=1 m3=1 m4=1 m5=1 m6=0 m7=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | lens_diff/d/out_d04_unsized_xz/sv.out | 76 bytes
+m1=0 m2=0 m3=0 m4=0 m5=1 m6=0 m7=0
+sv2v.v:35: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [POST] | lens_diff/d/out_d04_unsized_xz/post.out | 104 bytes
+m1=1 m2=1 m3=1 m4=1 m5=0 m6=0 m7=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST] | lens_diff/r2/rescore/post_d04_unsized_xz.sv/out.txt | 104 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/lens_diff__d__d04_unsized_xz.sv/post.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 7 | vita [POST] | post2/cmp/lens_diff__d__d04_unsized_xz.sv/post.out | 76 bytes
+m1=1 m2=1 m3=1 m4=1 m5=0 m6=0 m7=1
+simulation ended (Finish) at time 0
+rc=0
+=== block 8 | vita [POST/default] | lens_diff/be/d04_unsized_xz/default/out.txt | 104 bytes | identical to block 4
+=== block 9 | vita [POST/interp] | lens_diff/be/d04_unsized_xz/interp/out.txt | 104 bytes | identical to block 4
+=== block 10 | vita [POST/native] | lens_diff/be/d04_unsized_xz/native/out.txt | 104 bytes | identical to block 4
+=== block 11 | vita [POST/staged] | lens_diff/be/d04_unsized_xz/staged/c.txt | 28 bytes | identical to block 6
+=== block 12 | vita [POST/staged] | lens_diff/be/d04_unsized_xz/staged/e.txt | 28 bytes | identical to block 6
+=== block 13 | vita [POST/staged] | lens_diff/be/d04_unsized_xz/staged/out.txt | 104 bytes | identical to block 4
+=== block 14 | vita [POST/vm] | lens_diff/be/d04_unsized_xz/vm/out.txt | 104 bytes | identical to block 4
+=== block 15 | vita [POST2] | lens_diff/r2/rescore/post2_d04_unsized_xz.sv/out.txt | 104 bytes | identical to block 4
+=== block 16 | vita [POST2] | lens_diff/r3/rescore/p2_d04_unsized_xz.sv/out.txt | 104 bytes | identical to block 4
+=== block 17 | vita [POST2] | post2/cmp/lens_diff__d__d04_unsized_xz.sv/post2.err | 28 bytes | identical to block 6
+=== block 18 | vita [POST2] | post2/cmp/lens_diff__d__d04_unsized_xz.sv/post2.out | 76 bytes | identical to block 7
+=== block 19 | vita [POST2] | post3/cmp/lens_diff__d__d04_unsized_xz.sv/post2.err | 28 bytes | identical to block 6
+=== block 20 | vita [POST2] | post3/cmp/lens_diff__d__d04_unsized_xz.sv/post2.out | 76 bytes | identical to block 7
+=== block 21 | vita [POST3] | lens_diff/r3/rescore/p3_d04_unsized_xz.sv/out.txt | 104 bytes | identical to block 4
+=== block 22 | vita [POST3] | post3/cmp/lens_diff__d__d04_unsized_xz.sv/post3.err | 28 bytes | identical to block 6
+=== block 23 | vita [POST3] | post3/cmp/lens_diff__d__d04_unsized_xz.sv/post3.out | 76 bytes | identical to block 7
+=== block 24 | vita [PRE] | lens_diff/d/out_d04_unsized_xz/pre.out | 2025 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found ''b?1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:7:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found ''b?1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:8:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found ''hx'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:8:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found ''hx'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:9:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found ''bz1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:9:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found ''bz1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '40'b?1'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/d/d04_unsized_xz.sv:12:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '40'b?1'
+errors=8 warnings=0 notes=0
+rc=1
+=== end

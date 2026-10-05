@@ -1,0 +1,152 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff2__Q5
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff2/Q5.sv
+roadmap_row: §2 🆕 S
+set: lens_diff2
+oracles_present: iverilog
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s580/lens_diff2/REPORT.md:53 without a class phrase; R4 cmp3_post4 bucket(s): post3×1,pre×4,both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Q5.iv.txt | 285 bytes
+U13 0
+U01 1
+U12 0
+U14 0
+U02 1
+U03 1
+U04 1
+U05 1
+U06 0
+U15 1
+U16 1
+U17 0
+F01 1
+F02 0
+F03 1
+F04 0
+F05 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:71: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Q5_rtt.iv.txt | 339 bytes
+U13 0
+U01 1
+U12 0
+U14 0
+U02 1
+U03 1
+U04 1
+U05 1
+U06 0
+U07 1
+U09 0
+U10 1
+U11 0
+U15 1
+U16 1
+U17 0
+F01 1
+F02 0
+F03 1
+F04 0
+F05 1
+K01 0
+K02 1
+K03 1
+K04 1
+U08 1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:59: $finish called at 2 (1s)
+rc=0
+=== block 3 | vita [POST] | ./Q5.post.txt | 676 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K02` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K03` value is not a constant: 'bx1 has no constant-fold arm [in t]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 4 | vita [POST] | ./Q5.postq.txt | 676 bytes | identical to block 3
+=== block 5 | vita [POST] | ./Q5_rtt.post.txt | 2913 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K02` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K03` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K04` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:46:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=8 warnings=1 notes=0
+rc=1
+=== block 6 | vita [POST] | ./Q5_rtt.postq.txt | 2913 bytes | identical to block 5
+=== block 7 | vita [POST2] | ./Q5.post2.txt | 270 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+U13 0
+U01 1
+U12 0
+U14 0
+U02 1
+U03 1
+U04 1
+U05 1
+U06 0
+U15 1
+U16 1
+U17 0
+F01 1
+F02 0
+F03 1
+F04 0
+F05 1
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [POST2] | ./Q5.post2q.txt | 270 bytes | identical to block 7
+=== block 9 | vita [POST2] | ./Q5_rtt.post2.txt | 2369 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K04` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:46:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=6 warnings=1 notes=0
+rc=1
+=== block 10 | vita [POST2] | ./Q5_rtt.post2q.txt | 2369 bytes | identical to block 9
+=== block 11 | vita [PRE] | ./Q5.pre.txt | 270 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+U13 0
+U01 0
+U12 0
+U14 0
+U02 0
+U03 0
+U04 0
+U05 0
+U06 0
+U15 0
+U16 0
+U17 0
+F01 0
+F02 0
+F03 0
+F04 0
+F05 0
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [PRE] | ./Q5.preq.txt | 676 bytes | identical to block 3
+=== block 13 | vita [PRE] | ./Q5_rtt.pre.txt | 2097 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:46:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_diff2/Q5.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) needs a constant right-hand pattern (a runtime pattern's x/z mask has no IR primitive; a compound const expression is not folded yet — use a literal or parameter) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 14 | vita [PRE] | ./Q5_rtt.preq.txt | 2913 bytes | identical to block 5
+=== end

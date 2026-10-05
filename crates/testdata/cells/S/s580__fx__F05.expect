@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__fx__F05
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/fx/F05.sv
+roadmap_row: §2 🆕 S
+set: fx
+oracles_present: sv2v
+vita_tags: fx-out,post-dbg-r1,post2dbg,postrel,PRE,fx-preout,r4new,r4post3,r4pre
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): post3×1 (s580/r4/cmp3_post4.txt)
+alias: ident/F05 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 2
+=== block 1 | oracle sv2v 0.0.13 (version captured in slice) | ./F05.iv.txt | 229 bytes
+lhs-x-at-wild 1
+lhs-z-at-wild 1
+lhs-x-compared x
+lhs-z-compared x
+lhs-x-under-msb-wild 1
+lhs-x-under-x-digit 1
+lhs-all-x-all-wild 1
+lhs-all-z-all-z 1
+lhs-x-definite-miss 0
+lhs-x-plain-element x
+F05.v:24: $finish called at 0 (1s)
+=== block 2 | vita [PRE] | ./F05.pre.txt | 263 bytes
+lhs-x-at-wild x
+lhs-z-at-wild x
+lhs-x-compared x
+lhs-z-compared x
+lhs-x-under-msb-wild x
+lhs-x-under-x-digit x
+lhs-all-x-all-wild x
+lhs-all-z-all-z x
+lhs-x-definite-miss 0
+lhs-x-plain-element x
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== end

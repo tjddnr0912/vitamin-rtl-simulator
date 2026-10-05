@@ -1,0 +1,200 @@
+category	path_or_glob	count	bytes	reason
+build-dir	docs_cells/obj_k1w_comb_display/**	25	764934	build dir (cargo target / verilator obj tree)
+build-dir	docs_cells/obj_k2bw_comb_assert/**	25	760932	build dir (cargo target / verilator obj tree)
+build-dir	g/w/**/obj/**	7017	203800680	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	g/w3/**/obj/**	596	16942693	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	r1/diff/**/obj/**	1059	30327411	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	r1/sound/**/obj/**	1220	35611986	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	r2/diff/**/obj/**	109	3149075	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	r2/sound/**/obj/**	275	8368165	verilator --Mdir obj build tree (incl. Vtop binaries, .o, .a)
+build-dir	tgt-jit/**	831	304429875	build dir (cargo target / verilator obj tree)
+build-dir	tgt-nodef/**	489	186919448	build dir (cargo target / verilator obj tree)
+build-dir	tgt-pre-nodef/**	489	187021378	build dir (cargo target / verilator obj tree)
+built-binary	post/vita	1	7338016	vita release binary (Mach-O); md5 in META binaries table
+built-binary	post2/vita	1	7338016	vita release binary (Mach-O); md5 in META binaries table
+built-binary	postc/vita	1	7338016	vita release binary (Mach-O); md5 in META binaries table
+built-binary	pre/vita	1	7338016	vita release binary (Mach-O); md5 in META binaries table
+cargo-gate-corpus-mutation-log	build/**/*.log	3	2820	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	build/**/*.rc	2	4	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	corpus/**/*.log	1	1620	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	corpus/**/*.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	fullgate/**/*.log	2	805784	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	fullgate/**/*.rc	2	4	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	fullgate/**/*.time	1	11	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate/**/*.log	6	1439342	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate/**/*.rc	4	8	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate/**/*.t0	3	33	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate/**/*.t1	3	33	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate2/**/*.log	3	718751	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate2/**/*.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate2/**/*.t0	1	11	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	gate2/**/*.t1	1	11	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	lanes/**/*.log	11	20723	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	lanes/**/*.rc	6	12	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	lanes2/**/*.log	3	699	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	lanes2/**/*.t0	3	27	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	lanes2/**/*.t1	3	27	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.log	5	3627939	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.rc	5	18	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.sh	1	2063	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut/**/*.txt	3	1949	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut2/**/*.log	4	2924874	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut2/**/*.rc	4	16	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut2/**/*.sh	1	2256	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	mut2/**/*.txt	2	2043	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	pre/**	1	41	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	pre/**/*.log	1	583	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	pre/**/*.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	r1/**/*.log	1	1200	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+cargo-gate-corpus-mutation-log	r1/**/*.rc	1	2	cargo build / nextest / clippy / gate / corpus / mutation logs and rc files
+doc-draft	docs_edit/**	5	209744	ROADMAP / PROBE_CATALOG / REMAINING_WORK drafts and edit script
+duplicate	g/cmp3_post2.txt	1	12142	byte-identical to g/cmp3_final.txt (manifested)
+harness-copy	g/w/**/*.sv	814	401817	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	g/w2/**/*.sv	949	481249	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	g/w3/**/*.f	3	66	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	g/w3/**/*.sv	1605	891774	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	g/w3/**/*.svh	12	918	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	lanes/n/**/*.sv	2	500	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/diff/w/**/*.f	1	22	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/diff/w/**/*.sv	90	62162	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/diff/w/**/*.svh	9	543	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/diff/w/eq/**/*.sv	299	157822	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/diff/w/lib/**/*.sv	4	1167	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/diff/w/obs/**/*.sv	299	157822	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/diff/w/q7/**/*.sv	1	1263	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/diff/w/vu/m_if_unique.sv	1	1029	control cell copy beside the corpus .vu snapshots
+harness-copy	r1/diff/w/vu/m_if_unique0.sv	1	1038	control cell copy beside the corpus .vu snapshots
+harness-copy	r1/sound/cells/q3vu/**/*.sv	4	6298	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/jit/**/*.sv	35	37455	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/sound/nonw/**/*.sv	317	167165	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r1/sound/obs/h/**/*.sv	2	2050	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/obs/p/**/*.sv	317	167165	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/obs/t/**/*.sv	1	257	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/obs/t/**/*.svh	1	125	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/obs/w/**/*.sv	317	167165	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r1/sound/w/**/*.sv	129	121698	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/diff/w/**/*.f	3	66	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/diff/w/**/*.sv	754	411013	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/diff/w/**/*.svh	9	543	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/diff/w/eq/**/*.sv	312	164797	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r2/sound/lanes/**/*.sv	58	49327	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/sound/nonw/**/*.sv	345	199038	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/sound/obs/p/**/*.sv	345	199038	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r2/sound/obs/w/**/*.sv	345	199038	byte-identical copy (md5) of a manifested sv/aux
+harness-copy	r2/sound/t0w/**/*.sv	350	200747	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/sound/w/**/*.sv	73	51704	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	r2/sound/w/**/*.svh	1	125	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+harness-copy	tests/h/**/*.sv	2	1130	byte-identical copy (md5) of a manifested sv/aux; harness run dir or lens copy
+no-oracle-output	docs_cells/k1w_comb_display.sv	1	497	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	docs_cells/k2bw_comb_assert.sv	1	470	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r1/diff/cells/eq/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r1/diff/w/deep/**	61	4787133	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/elim/**	2	269295	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/eq/**	36	24596	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/ivp/p2.sv	1	150	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r1/diff/w/jit/**	4	4214545	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/lib/**	10	1959	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/lib2/**	9	1790	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/msg/**	1	633	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/obs/**	11	7616	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/perf/**	3	1267	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/diff/w/q7b/**	5	1250	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/sound/cells/q3vu/post/**	2	254	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/sound/cells/q3vu/pre/**	2	254	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r1/sound/obs/**	13	3859	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r2/diff/out/**	3	3624	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r2/diff/w/**/*.vcd	21	16380	VCD of a vita-only run
+no-oracle-output	r2/diff/w/e1_comb_net/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r2/diff/w/e1_comb_net/st_POST/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r2/diff/w/e1_comb_net/st_PRE/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r2/diff/w/eq/**	36	24596	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	r2/diff/w/lt/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r2/diff/w/lt/e1_comb_net/e1_comb_net.sv	1	824	SV never run on an oracle (no raw oracle output captured anywhere)
+no-oracle-output	r2/sound/vu/**	6	9156	vita-only experiment or sweep: cells never run on an oracle and their vita outputs (see REPORT)
+no-oracle-output	tests/p0/m_if_priority0.sv	1	1056	SV never run on an oracle (no raw oracle output captured anywhere)
+progress-log	g/r2_all.log,g/r3_*.log	4	25593	"<cell> done" progress lines
+repo-copy	pre-src/**	1389	22834398	repo snapshot copy (Cargo.toml + crates/)
+run-metadata	g/q3_cells.txt	1	487	cell lists, timestamps, rc files, HEAD
+run-metadata	g/q4a.lst	1	813	cell lists, timestamps, rc files, HEAD
+run-metadata	g/q4ab.outs	1	1525	cell lists, timestamps, rc files, HEAD
+run-metadata	g/q4b.lst	1	588	cell lists, timestamps, rc files, HEAD
+run-metadata	g/q4c.lst	1	1107	cell lists, timestamps, rc files, HEAD
+run-metadata	g/q4d.outs	1	958	cell lists, timestamps, rc files, HEAD
+run-metadata	impl_start	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	p/batchC.lst	1	406	cell lists, timestamps, rc files, HEAD
+run-metadata	p/batchD.lst	1	206	cell lists, timestamps, rc files, HEAD
+run-metadata	p/d1a.t0	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	p/d1a.t1	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	plan_t0.txt	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	r1/diff/**/*.txt	1	41999	cell lists, timestamps, rc files, HEAD
+run-metadata	r1/sound/**/*.lst	2	49914	cell lists, timestamps, rc files, HEAD
+run-metadata	r1_sound_start.txt	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	r2/diff/**/*.txt	2	55991	cell lists, timestamps, rc files, HEAD
+run-metadata	r2/sound/**/*.lst	3	74245	cell lists, timestamps, rc files, HEAD
+run-metadata	r2/sound/**/*.txt	1	11	cell lists, timestamps, rc files, HEAD
+run-metadata	r2_start	1	11	cell lists, timestamps, rc files, HEAD
+rust-patch-or-test-draft	mut/**/*.patch	1	17834	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	mut/**/*.rs	2	77373	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	mut2/**/*.patch	1	17149	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	mut2/**/*.rs	5	182256	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	postc/**/*.patch	1	9151	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	slice.patch	1	17834	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	slice1_backup.patch	1	17834	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	slice2.patch	1	17149	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	slice2_tests/**/*.rs	2	67555	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	slice_tests/**/*.rs	2	65365	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	tests/**/*.part	1	3318	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	tests/**/*.py	2	2395	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	tests/**/*.r1	1	24674	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	tests/**/*.rs	1	53158	saved Rust patch / test source draft / test template
+rust-patch-or-test-draft	tests/**/*.tmpl	1	22568	saved Rust patch / test source draft / test template
+script	g/cmp2.py	1	4973	analysis / sweep script (not a runner or generator)
+script	g/cmp3.py	1	4532	analysis / sweep script (not a runner or generator)
+script	g/lanes3.py	1	2693	analysis / sweep script (not a runner or generator)
+script	g/summ.py	1	2178	analysis / sweep script (not a runner or generator)
+script	p/gain.py	1	2215	analysis / sweep script (not a runner or generator)
+script	p/residue.py	1	4303	analysis / sweep script (not a runner or generator)
+script	r1/diff/**/*.py	2	6137	analysis / sweep script (not a runner or generator)
+script	r1/sound/**/*.py	4	6178	analysis / sweep script (not a runner or generator)
+script	r1/sound/**/*.sh	1	1367	analysis / sweep script (not a runner or generator)
+script	r2/diff/**/*.py	1	3727	analysis / sweep script (not a runner or generator)
+script	r2/sound/**/*.py	4	7012	analysis / sweep script (not a runner or generator)
+superseded-log	g/q*.log	9	403031	every ##### section is byte-identical to, or a prefix of, g/out/<cell>.out (checked)
+third-party	r1/diff/w/vu/**	28	11190337	corpus workload: picorv32.v source copy / corpus .vu snapshots (ibex, aes, ...) / their vcmp logs
+third-party	r1/sound/vu_corpus/**	6	679434	corpus workload: picorv32.v source copy / corpus .vu snapshots (ibex, aes, ...) / their vcmp logs
+verilator-build-log	docs_cells/vl_*.log	2	8866	verilator c++ build log; no simulation output
+verilator-build-log	r1/diff/**/*.txt	1	4433	verilator c++ build log; no simulation output
+verilator-build-log	r1/sound/**/*.log	3	13299	verilator c++ build log; no simulation output
+vita-obs-json	r1/diff/w/**/*.json	1875	6372127	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r1/diff/w/**/*.jsonl	1875	249813	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r1/sound/obs/**/*.json	1780	3534080	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r1/sound/obs/**/*.jsonl	1780	236912	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r2/diff/w/**/*.json	1533	6052049	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r2/diff/w/**/*.jsonl	1533	204251	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r2/sound/obs/**/*.json	1888	3781705	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-obs-json	r2/sound/obs/**/*.jsonl	1888	251264	vita run.json / --obs-procs output of vita-only PRE/POST sweeps (obs.py, eq.py); results summarized in the lens REPORT.md
+vita-only-sweep-log	r1/diff/eq_all.log	1	23458	vita-only invariant / obs / rerun sweep log (PRE vs POST); results summarized in the lens REPORT.md
+vita-only-sweep-log	r1/diff/obs_all.log	1	6896	vita-only invariant / obs / rerun sweep log (PRE vs POST); results summarized in the lens REPORT.md
+vita-only-sweep-log	r1/sound/obs1.log	1	3924	vita-only invariant / obs / rerun sweep log (PRE vs POST); results summarized in the lens REPORT.md
+vita-only-sweep-log	r2/diff/eq2_all.log	1	25322	vita-only invariant / obs / rerun sweep log (PRE vs POST); results summarized in the lens REPORT.md
+vita-only-sweep-log	r2/diff/r1rerun.log	1	9110	vita-only invariant / obs / rerun sweep log (PRE vs POST); results summarized in the lens REPORT.md
+vita-staged	g/w/**/*.velab	350	347518	vita staged artefact
+vita-staged	g/w/**/*.vu	406	670964	vita staged artefact
+vita-staged	g/w2/**/*.velab	394	389230	vita staged artefact
+vita-staged	g/w2/**/*.vu	528	900317	vita staged artefact
+vita-staged	g/w3/**/*.velab	542	587819	vita staged artefact
+vita-staged	g/w3/**/*.vu	732	1413940	vita staged artefact
+vita-staged	r1/diff/**/*.velab	30	38576	vita staged artefact
+vita-staged	r1/diff/**/*.vu	38	90878	vita staged artefact
+vita-staged	r1/sound/**/*.velab	23	68499	vita staged artefact
+vita-staged	r1/sound/**/*.vu	28	167976	vita staged artefact
+vita-staged	r2/diff/**/*.velab	76	89761	vita staged artefact
+vita-staged	r2/diff/**/*.vu	90	206020	vita staged artefact
+vita-staged	r2/sound/**/*.velab	2	1461	vita staged artefact
+vita-staged	r2/sound/**/*.vu	6	20684	vita staged artefact
+vvp	docs_cells/k1w_comb_display.vvp	1	2894	iverilog compiled image
+vvp	docs_cells/k2bw_comb_assert.vvp	1	3041	iverilog compiled image
+vvp	g/w/**/*.vvp	74	197229	iverilog compiled image
+vvp	r1/diff/**/*.vvp	4	18188	iverilog compiled image
+vvp	r1/sound/**/*.vvp	18	58187	iverilog compiled image
+vvp	r2/sound/**/*.vvp	6	16662	iverilog compiled image

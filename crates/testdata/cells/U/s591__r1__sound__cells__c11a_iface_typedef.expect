@@ -1,0 +1,78 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r1__sound__cells__c11a_iface_typedef
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r1/sound/cells/c11a_iface_typedef.sv
+roadmap_row: §2 🆕 U
+set: r1/sound/cells
+oracles_present: iverilog,sv2v
+vita_tags: PRE,POSTA
+verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:12
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+alias: r2/sc/c11a_iface_typedef (byte-identical source) verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=- verdict_source: s591/r2/lens_delta.txt:12
+alias: r2/sound/cells/r1/c11a_iface_typedef (byte-identical source) verdict: pre=LOUD[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=- verdict_source: s591/r2/lens_delta.txt:12
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: POSTB_ST: md5 unrecorded commit unrecorded
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/sound/cells/w_c11a_iface_typedef/ivl.out | 43 bytes
+it E1=1
+t.sv:6: $finish called at 100 (1s)
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r2/sc/c11a_iface_typedef.ivl | 65 bytes
+it E1=1
+c11a_iface_typedef.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r2/sound/cells/r1/w_c11a_iface_typedef/ivl.out | 60 bytes
+it E1=1
+c11a_iface_typedef.sv:6: $finish called at 100 (1s)
+=== block 4 | oracle verilator 5.052 (version captured in slice) | r2/sc/c11a_iface_typedef.vl | 240 bytes
+it E1=1
+- c11a_iface_typedef.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 5.882 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | r1/sound/cells/w_c11a_iface_typedef/s2v.out | 45 bytes
+it E1=1
+s2v.v:10: $finish called at 100 (1s)
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | r2/sc/c11a_iface_typedef.s2v | 69 bytes
+it E1=1
+c11a_iface_typedef.s2v.v:10: $finish called at 100 (1s)
+rc=0
+=== block 7 | combined [iverilog+sv2v|PRE+POSTA] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | ./c11a_iface_typedef.res | 745 bytes
+PRE rc=1: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|t.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|t.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+POST rc=1: warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base|t.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|t.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+IVL rc=0: it E1=1|t.sv:6: $finish called at 100 (1s)|
+S2V rc=0: it E1=1|s2v.v:10: $finish called at 100 (1s)|
+=== block 8 | combined [iverilog+sv2v|PRE+POSTA+POSTB+POSTB_ST] iverilog 13.0 (version captured in slice) sv2v 0.0.13 (version captured in slice) | r2/sound/cells/r1/c11a_iface_typedef.res | 1063 bytes
+pre rc=1: c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+post_a rc=1: c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+post_b rc=1: c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+post_b-staged 0/1/-: c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]|c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]|
+IVL rc=0: it E1=1|
+S2V rc=0: it E1=1|
+=== block 9 | vita [DEV3] | r2/sc/c11a_iface_typedef.dev3 | 373 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]
+c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]
+errors=2 warnings=1 notes=0
+rc=1
+=== block 10 | vita [POSTA] | r1/sound/cells/w_c11a_iface_typedef/POST.out | 334 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]
+t.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]
+errors=2 warnings=1 notes=0
+=== block 11 | vita [POSTA] | r2/sc/c11a_iface_typedef.posta | 373 bytes | identical to block 9
+=== block 12 | vita [POSTA] | r2/sound/cells/r1/w_c11a_iface_typedef/post_a.out | 368 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+c11a_iface_typedef.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: typedefs inside an interface are outside the MVP [in top.i]
+c11a_iface_typedef.sv:4:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.i.E1` [in top.i]
+errors=2 warnings=1 notes=0
+=== block 13 | vita [POSTB] | r2/sc/c11a_iface_typedef.postb | 373 bytes | identical to block 9
+=== block 14 | vita [POSTB] | r2/sound/cells/r1/w_c11a_iface_typedef/post_b.out | 368 bytes | identical to block 12
+=== block 15 | vita [PRE] | r1/sound/cells/w_c11a_iface_typedef/PRE.out | 334 bytes | identical to block 10
+=== block 16 | vita [PRE] | r2/sc/c11a_iface_typedef.pre | 373 bytes | identical to block 9
+=== block 17 | vita [PRE] | r2/sound/cells/r1/w_c11a_iface_typedef/pre.out | 368 bytes | identical to block 12
+=== end

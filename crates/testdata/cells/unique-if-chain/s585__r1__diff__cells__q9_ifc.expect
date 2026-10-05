@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__q9_ifc
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/q9_ifc.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: residue verilator lines
+verdict_source: s585/g/cmp3_final.txt:6
+notes: runs: d__q9_ifc q9_ifc
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/q9_ifc.out | 1883 bytes
+q9_ifc | vl:1@q9_ifc.sv:4,2@q9_ifc.sv:8,3@q9_ifc.sv:14,4@q9_ifc.sv:31,5@q9_ifc.sv:26 | PRE:- rc=0 | POST:W4031:1@q9_ifc.sv:4:12,W4031:2@q9_ifc.sv:8:12,W4031:3@q9_ifc.sv:14:12,W4031:4@q9_ifc.sv:31:14,W4031:5@q9_ifc.sv:26:12 rc=0 | P==P:False
+##### q9_ifc
+=== verilator compile rc=0 run rc=0
+[1] %Error: q9_ifc.sv:4: Assertion failed in top.u.it: 'unique if' statement violated
+[2] %Error: q9_ifc.sv:8: Assertion failed in top.u.ifv: 'unique if' statement violated
+[3] %Error: q9_ifc.sv:14: Assertion failed in top.pp.pt: 'unique if' statement violated
+[4] %Error: q9_ifc.sv:31: Assertion failed in top.g.g.gv: 'unique if' statement violated
+[5] %Error: q9_ifc.sv:26: Assertion failed in top.fs: 'unique if' statement violated
+t=6 end
+- q9_ifc.sv:41: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 end
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q9_ifc.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.it] [at time 1]
+q9_ifc.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.ifv] [at time 2]
+q9_ifc.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.pp.pt] [at time 3]
+q9_ifc.sv:31:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.g.gv] [at time 4]
+q9_ifc.sv:26:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fs] [at time 5]
+t=6 end
+simulation ended (Finish) at time 7
+errors=0 warnings=6 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__q9_ifc.out | 926 bytes
+##### d__q9_ifc
+=== verilator compile rc=0 run rc=0
+[1] %Error: q9_ifc.sv:4: Assertion failed in top.u.it: 'unique if' statement violated
+[2] %Error: q9_ifc.sv:8: Assertion failed in top.u.ifv: 'unique if' statement violated
+[3] %Error: q9_ifc.sv:14: Assertion failed in top.pp.pt: 'unique if' statement violated
+[4] %Error: q9_ifc.sv:31: Assertion failed in top.g.g.gv: 'unique if' statement violated
+[5] %Error: q9_ifc.sv:26: Assertion failed in top.fs: 'unique if' statement violated
+t=6 end
+- q9_ifc.sv:41: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=6 end
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=6 end
+simulation ended (Finish) at time 7
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

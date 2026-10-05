@@ -1,0 +1,78 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Ewi_cae
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Ewi_cae.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: LOUD->VALUE(NO ORACLE MATCH) post==ctrl.pre
+verdict_source: s591/plan/a1.cls:6
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+alias: impl/dump/26460e7d1cb7dd2d (byte-identical source) verdict: LOUD->VALUE(NO ORACLE MATCH) post==ctrl.pre verdict_source: s591/plan/a1.cls:6
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 17
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/26460e7d1cb7dd2d.ivl | 69 bytes
+ae top.u6 W=x
+26460e7d1cb7dd2d.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Ewi_cae.ivl | 60 bytes
+ae top.u6 W=x
+Ewi_cae.sv:6: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/26460e7d1cb7dd2d.vl | 373 bytes
+%Warning-WIDTHEXPAND: 26460e7d1cb7dd2d.sv:9:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+ae top.u6 W=x
+- 26460e7d1cb7dd2d.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./Ewi_cae.vl | 354 bytes
+%Warning-WIDTHEXPAND: Ewi_cae.sv:9:75: Operator ADD expects 32 bits on the RHS, but RHS's VARREF 't' generates 8 bits.
+ae top.u6 W=x
+- Ewi_cae.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.500 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/26460e7d1cb7dd2d.s2v | 72 bytes
+ae top.u6 W=x
+26460e7d1cb7dd2d.s2v.v:4: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./Ewi_cae.s2v | 63 bytes
+ae top.u6 W=x
+Ewi_cae.s2v.v:4: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./Ewi_cae.dev1 | 275 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Ewi_cae.sv:10:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top.u6]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 8 | vita [DEV2] | impl/dump/26460e7d1cb7dd2d.dev2 | 284 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+26460e7d1cb7dd2d.sv:10:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top.u6]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 9 | vita [DEV3] | impl/dump/26460e7d1cb7dd2d.dev3 | 284 bytes | identical to block 8
+=== block 10 | vita [DEV3] | ./Ewi_cae.dev3 | 275 bytes | identical to block 7
+=== block 11 | vita [POSTA] | ./Ewi_cae.posta | 275 bytes | identical to block 7
+=== block 12 | vita [POSTB] | impl/dump/26460e7d1cb7dd2d.postb | 284 bytes | identical to block 8
+=== block 13 | vita [POSTB] | ./Ewi_cae.postb | 275 bytes | identical to block 7
+=== block 14 | vita [PRE] | impl/dump/26460e7d1cb7dd2d.pre | 284 bytes | identical to block 8
+=== block 15 | vita [PRE] | ./Ewi_cae.pre | 275 bytes | identical to block 7
+=== block 16 | vita [PROTO2] | ./Ewi_cae.post2 | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+ae top.u6 W=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 17 | vita [PROTO2] | ./Ewi_cae.post2.route | 16 bytes
+sae fae frame 0
+=== end

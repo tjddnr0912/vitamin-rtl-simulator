@@ -1,0 +1,29 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b2__m2b_pure_plaincase
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b2/m2b_pure_plaincase.sv
+roadmap_row: §3.b case-inside
+set: grounding/b2
+oracles_present: iverilog
+vita_tags: PRE
+verdict: once — needs the lower_case scrutinee hoist
+verdict_source: s582/grounding/REPORT.md:108
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 2
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b2/out_m2b_pure_plaincase/iv.out | 223 bytes
+f(3)
+A m=4
+f(7)
+C m=5
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b2/m2b_pure_plaincase.sv:9: $finish called at 10 (1s)
+rc=0
+=== block 2 | vita [PRE] | grounding/b2/out_m2b_pure_plaincase/vita.out | 191 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+f(3)
+A m=4
+f(7)
+C m=5
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

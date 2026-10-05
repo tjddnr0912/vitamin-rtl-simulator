@@ -1,0 +1,22 @@
+DM07c                        IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=L0 | L1 | L2 | post_c=L0 | L1 | L2 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM07d                        IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=L0 | L1 | L2 | post_c=L0 | L1 | L2 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+KA                           IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=o=9 | post_c=o=9 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KI                           IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.g.x.u P=9 | post_c=top.g.x.u P=9 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KN                           IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=w=9 bits=4 | post_c=w=9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KV                           IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=v=9 bits=4 | post_c=v=9 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXB                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=b | post_c=b | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXC                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=b | post_c=b | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXF                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=b | post_c=b | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXG                          IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=b | post_c=b | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXI                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=b | post_c=b | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+ONE                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=NONE | post_c=NONE | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+TWO                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=then | post_c=then | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+Z6a                          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=one | post_c=one | post_d=ERR:VITA-E3010:`B` is used before it is declared in this gen
+
+== post_c -> post_d under IEEE (28 cells)
+    14 DOWN OK->LOUD          DM07c DM07d KA KI KN KV NXB NXC NXF NXG NXI ONE TWO Z6a
+    14 same                   
+== post_c -> post_d under SVVL (28 cells)
+    14 same                   
+     9 UP WRONG->LOUD         KA KI NXB NXC NXF NXI ONE TWO Z6a
+     5 n/a                    DM07c DM07d KN KV NXG

@@ -1,0 +1,54 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff2__p__q1e
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff2/p/q1e.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff2/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./q1e.iv.txt | 929 bytes
+q1e.sv:8: syntax error
+q1e.sv:9: error: Invalid module item.
+q1e.sv:10: syntax error
+q1e.sv:12: error: Invalid module item.
+q1e.sv:12: syntax error
+q1e.sv:13: error: Invalid module item.
+q1e.sv:13: syntax error
+q1e.sv:14: error: Invalid module item.
+q1e.sv:14: syntax error
+q1e.sv:17: error: Invalid module item.
+q1e.sv:1: assert: pform.cc:1478: failed assertion lexical_scope == cur_module
+sh: line 1: 63884 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg23ffd491c" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg3ffd491c" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli3ffd491c"
+     63885 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh3ffd491c" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./q1e.vl.txt | 117 bytes
+%Error: q1e.sv:8:20: syntax error, unexpected STRENGTH keyword (strong1/etc)
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./q1e.vlb.txt | 277 bytes
+%Error: q1e.sv:8:20: syntax error, unexpected STRENGTH keyword (strong1/etc)
+    8 |   end else begin : small
+      |                    ^~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./q1e.sv.txt | 68 bytes
+q1e.sv:8:20: Parse error: unexpected token 'small' (KW_small)
+
+rc=1
+=== block 5 | vita [POST] | ./q1e.post.txt | 235 bytes
+q1e.sv:8:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'small'
+q1e.sv:8:20: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found keyword 'small'
+errors=2 warnings=0 notes=0
+
+rc=1
+=== block 6 | vita [POST2] | ./q1e.post2.txt | 235 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./q1e.pre.txt | 235 bytes | identical to block 5
+=== end

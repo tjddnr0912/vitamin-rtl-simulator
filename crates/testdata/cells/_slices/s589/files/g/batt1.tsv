@@ -1,0 +1,254 @@
+a_cast_ce_ctl	ok2	P=0	P=0	P=0	P=0
+a_cast_ce_fn	ok2	P=0	P=0	P=0	P=0
+a_cast_ce_fnpar	ok2	P=0	P=0	P=0	P=0
+a_cast_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+a_cast_ce_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+a_cast_rt_ctl	loud2	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+a_cast_rt_fn	WRONG2	v=-24	v=0	v=0	v=0
+a_cast_rt_fnpar	loud2	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+a_cast_rt_par	ok2	v=0	v=0	v=0	v=0
+a_cast_rt_pctl	ok2	v=0	v=0	v=0	v=0
+a_dflt_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	a_dflt_ce_ctl.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_ce_fn	WRONG2	P=1007	P=1003	P=1003	a_dflt_ce_fn.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_ce_fnpar	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	a_dflt_ce_fnpar.s2v.v:15: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_ce_par	WRONG2	P=1007	P=1003	P=1003	a_dflt_ce_par.s2v.v:12: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_ce_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	a_dflt_ce_pctl.s2v.v:11: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_rt_ctl	ok2	v=1003	v=1003	v=1003	a_dflt_rt_ctl.s2v.v:16: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_rt_fn	ok2	v=1003	v=1003	v=1003	a_dflt_rt_fn.s2v.v:24: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_rt_fnpar	ok2	v=1003	v=1003	v=1003	a_dflt_rt_fnpar.s2v.v:17: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_rt_par	ok2	v=1003	v=1003	v=1003	a_dflt_rt_par.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+a_dflt_rt_pctl	ok2	v=1003	v=1003	v=1003	a_dflt_rt_pctl.s2v.v:13: : Verilog doesn't allow passing empty parameters to functions.
+a_fml_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+a_fml_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+a_fml_ce_fnpar	WRONG2	P=1000	P=8	P=8	P=8
+a_fml_ce_par	WRONG2	P=232	P=8	P=8	P=8
+a_fml_ce_pctl	WRONG2	P=1000	P=8	P=8	P=8
+a_fml_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_fml_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+a_fml_rt_fnpar	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_fml_rt_par	WRONG2	v=232	v=8	v=8	v=8
+a_fml_rt_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+a_frloc_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+a_frloc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+a_frloc_ce_fnpar	WRONG2	P=1000	P=8	P=8	P=8
+a_frloc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+a_frloc_ce_pctl	WRONG2	P=1000	P=8	P=8	P=8
+a_frloc_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_frloc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+a_frloc_rt_fnpar	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_frloc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+a_frloc_rt_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+a_loc_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+a_loc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+a_loc_ce_fnpar	WRONG2	P=1000	P=8	P=8	P=8
+a_loc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+a_loc_ce_pctl	WRONG2	P=1000	P=8	P=8	P=8
+a_loc_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_loc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+a_loc_rt_fnpar	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_loc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+a_loc_rt_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top.$f]	v=8	v=8	v=8
+a_psel_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+a_psel_ce_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+a_psel_ce_fnpar	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+a_psel_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+a_psel_ce_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+a_psel_rt_ctl	WRONG2	v=00000001	v=0000000d	v=0000000d	v=0000000d
+a_psel_rt_fn	WRONG2	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+a_psel_rt_fnpar	WRONG2	v=00000001	v=0000000d	v=0000000d	v=0000000d
+a_psel_rt_par	ok2	v=0000000d	v=0000000d	v=0000000d	v=0000000d
+a_psel_rt_pctl	ok2	v=0000000d	v=0000000d	v=0000000d	v=0000000d
+a_rep_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+a_rep_ce_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+a_rep_ce_fnpar	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+a_rep_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+a_rep_ce_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+a_rep_rt_ctl	WRONG2	v=00000000	v=00000007	v=00000007	v=00000007
+a_rep_rt_fn	WRONG2	v=0000007f	v=00000007	v=00000007	v=00000007
+a_rep_rt_fnpar	WRONG2	v=00000000	v=00000007	v=00000007	v=00000007
+a_rep_rt_par	ok2	v=00000007	v=00000007	v=00000007	v=00000007
+a_rep_rt_pctl	ok2	v=00000007	v=00000007	v=00000007	v=00000007
+a_ret_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+a_ret_ce_fn	WRONG2	P=232	P=8	P=8	P=8
+a_ret_ce_fnpar	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+a_ret_ce_par	WRONG2	P=232	P=8	P=8	P=8
+a_ret_ce_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+a_ret_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_ret_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+a_ret_rt_fnpar	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+a_ret_rt_par	WRONG2	v=232	v=8	v=8	v=8
+a_ret_rt_pctl	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	v=8	v=8	v=8
+iimp_cast_ce_ctl	loud2	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$h]	P=0	P=0	P=0
+iimp_cast_ce_fn	ok2	P=0	P=0	P=0	P=0
+iimp_cast_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=0	P=0	P=0
+iimp_cast_rt_ctl	loud2	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$h]	v=0	v=0	v=0
+iimp_cast_rt_fn	WRONG2	v=-24	v=0	v=0	v=0
+iimp_cast_rt_par	ok2	v=0	v=0	v=0	v=0
+iimp_dflt_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=1003	P=1003	iimp_dflt_ce_ctl.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+iimp_dflt_ce_fn	WRONG2	P=1007	P=1003	P=1003	iimp_dflt_ce_fn.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+iimp_dflt_ce_par	WRONG2	P=1007	P=1003	P=1003	iimp_dflt_ce_par.s2v.v:12: : Verilog doesn't allow passing empty parameters to functions.
+iimp_dflt_rt_ctl	ok2	v=1003	v=1003	v=1003	iimp_dflt_rt_ctl.s2v.v:16: : Verilog doesn't allow passing empty parameters to functions.
+iimp_dflt_rt_fn	ok2	v=1003	v=1003	v=1003	iimp_dflt_rt_fn.s2v.v:24: : Verilog doesn't allow passing empty parameters to functions.
+iimp_dflt_rt_par	ok2	v=1003	v=1003	v=1003	iimp_dflt_rt_par.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+iimp_loc_ce_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	P=8	P=8	P=8
+iimp_loc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+iimp_loc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+iimp_loc_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+iimp_loc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+iimp_loc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+iimp_ret_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=8	P=8	P=8
+iimp_ret_ce_fn	WRONG2	P=232	P=8	P=8	P=8
+iimp_ret_ce_par	WRONG2	P=232	P=8	P=8	P=8
+iimp_ret_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+iimp_ret_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+iimp_ret_rt_par	WRONG2	v=232	v=8	v=8	v=8
+iwc_cast_ce_ctl	ok2	P=0	P=0	P=0	P=0
+iwc_cast_ce_fn	ok2	P=0	P=0	P=0	P=0
+iwc_cast_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `h(…)` has no constant-fold arm]	P=0	P=0	P=0
+iwc_cast_rt_ctl	ok2	v=0	v=0	v=0	v=0
+iwc_cast_rt_fn	WRONG2	v=-24	v=0	v=0	v=0
+iwc_cast_rt_par	ok2	v=0	v=0	v=0	v=0
+iwc_dflt_ce_ctl	ok2	P=1003	P=1003	P=1003	iwc_dflt_ce_ctl.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+iwc_dflt_ce_fn	WRONG2	P=1007	P=1003	P=1003	iwc_dflt_ce_fn.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+iwc_dflt_ce_par	WRONG2	P=1007	P=1003	P=1003	iwc_dflt_ce_par.s2v.v:12: : Verilog doesn't allow passing empty parameters to functions.
+iwc_dflt_rt_ctl	ok2	v=1003	v=1003	v=1003	iwc_dflt_rt_ctl.s2v.v:16: : Verilog doesn't allow passing empty parameters to functions.
+iwc_dflt_rt_fn	ok2	v=1003	v=1003	v=1003	iwc_dflt_rt_fn.s2v.v:24: : Verilog doesn't allow passing empty parameters to functions.
+iwc_dflt_rt_par	ok2	v=1003	v=1003	v=1003	iwc_dflt_rt_par.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+iwc_loc_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+iwc_loc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+iwc_loc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+iwc_loc_rt_ctl	ok2	v=8	v=8	v=8	v=8
+iwc_loc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+iwc_loc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+iwc_ret_ce_ctl	ok2	P=8	P=8	P=8	P=8
+iwc_ret_ce_fn	WRONG2	P=232	P=8	P=8	P=8
+iwc_ret_ce_par	WRONG2	P=232	P=8	P=8	P=8
+iwc_ret_rt_ctl	ok2	v=8	v=8	v=8	v=8
+iwc_ret_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+iwc_ret_rt_par	WRONG2	v=232	v=8	v=8	v=8
+s_cast_ce_ctl	ok2	P=0	P=0	P=0	P=0
+s_cast_ce_fn	ok2	P=0	P=0	P=0	P=0
+s_cast_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0	P=0	P=0
+s_cast_rt_ctl	loud2	LOUD[VITA-E3009:size cast width must be a positive constant expression [in top.$func$q]	v=0	v=0	v=0
+s_cast_rt_fn	WRONG2	v=-24	v=0	v=0	v=0
+s_cast_rt_par	ok2	v=0	v=0	v=0	v=0
+s_dflt_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=1003	P=1003	s_dflt_ce_ctl.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+s_dflt_ce_fn	WRONG2	P=1007	P=1003	P=1003	s_dflt_ce_fn.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+s_dflt_ce_par	WRONG2	P=1007	P=1003	P=1003	s_dflt_ce_par.s2v.v:12: : Verilog doesn't allow passing empty parameters to functions.
+s_dflt_rt_ctl	ok2	v=1003	v=1003	v=1003	s_dflt_rt_ctl.s2v.v:16: : Verilog doesn't allow passing empty parameters to functions.
+s_dflt_rt_fn	ok2	v=1003	v=1003	v=1003	s_dflt_rt_fn.s2v.v:24: : Verilog doesn't allow passing empty parameters to functions.
+s_dflt_rt_par	ok2	v=1003	v=1003	v=1003	s_dflt_rt_par.s2v.v:14: : Verilog doesn't allow passing empty parameters to functions.
+s_fml_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+s_fml_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+s_fml_ce_par	WRONG2	P=232	P=8	P=8	P=8
+s_fml_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+s_fml_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+s_fml_rt_par	WRONG2	v=232	v=8	v=8	v=8
+s_frloc_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+s_frloc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+s_frloc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+s_frloc_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+s_frloc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+s_frloc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+s_loc_ce_ctl	WRONG2	P=1000	P=8	P=8	P=8
+s_loc_ce_fn	WRONG2	P=1000	P=8	P=8	P=8
+s_loc_ce_par	WRONG2	P=232	P=8	P=8	P=8
+s_loc_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+s_loc_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+s_loc_rt_par	WRONG2	v=232	v=8	v=8	v=8
+s_psel_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+s_psel_ce_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+s_psel_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=0000000d	P=0000000d	P=0000000d
+s_psel_rt_ctl	WRONG2	v=00000001	v=0000000d	v=0000000d	v=0000000d
+s_psel_rt_fn	WRONG2	v=000000cd	v=0000000d	v=0000000d	v=0000000d
+s_psel_rt_par	ok2	v=0000000d	v=0000000d	v=0000000d	v=0000000d
+s_rep_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+s_rep_ce_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+s_rep_ce_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=00000007	P=00000007	P=00000007
+s_rep_rt_ctl	WRONG2	v=00000000	v=00000007	v=00000007	v=00000007
+s_rep_rt_fn	WRONG2	v=0000007f	v=00000007	v=00000007	v=00000007
+s_rep_rt_par	ok2	v=00000007	v=00000007	v=00000007	v=00000007
+s_ret_ce_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+s_ret_ce_fn	WRONG2	P=232	P=8	P=8	P=8
+s_ret_ce_par	WRONG2	P=232	P=8	P=8	P=8
+s_ret_rt_ctl	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	v=8
+s_ret_rt_fn	WRONG2	v=232	v=8	v=8	v=8
+s_ret_rt_par	WRONG2	v=232	v=8	v=8	v=8
+t_cast_ce_tctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+t_cast_ce_td	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8	P=8	P=8
+t_cast_rt_tctl	ok2	v=8	v=8	v=8	v=8
+t_cast_rt_td	ok2	v=8	v=8	v=8	v=8
+t_fml_ce_tctl	ok2	P=8	P=8	P=8	P=8
+t_fml_ce_td	ok2	P=8	P=8	P=8	P=8
+t_fml_rt_tctl	ok2	v=8	v=8	v=8	v=8
+t_fml_rt_td	ok2	v=8	v=8	v=8	v=8
+t_loc_ce_tctl	ok2	P=8	P=8	P=8	P=8
+t_loc_ce_td	ok2	P=8	P=8	P=8	P=8
+t_loc_rt_tctl	ok2	v=8	v=8	v=8	v=8
+t_loc_rt_td	ok2	v=8	v=8	v=8	v=8
+t_ret_ce_tctl	ok2	P=8	P=8	P=8	P=8
+t_ret_ce_td	ok2	P=8	P=8	P=8	P=8
+t_ret_rt_tctl	ok2	v=8	v=8	v=8	v=8
+t_ret_rt_td	ok2	v=8	v=8	v=8	v=8
+w_ctl_imp	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	B=4	B=4	B=4
+w_ctl_q	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	B=4	B=4	B=4
+w_fn_imp	WRONG2	B=8	B=4	B=4	B=4
+w_fn_q	WRONG2	B=8	B=4	B=4	B=4
+w_par_imp	WRONG2	B=8	B=4	B=4	B=4
+w_par_q	WRONG2	B=8	B=4	B=4	B=4
+w_pctl_imp	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	B=4	B=4	B=4
+w_pctl_q	loud2	LOUD[VITA-E3009:undefined name `W` is not allowed in a constant range bound [in top]]	B=4	B=4	B=4
+w_tctl_q	ok2	B=4	B=4	B=4	B=4
+w_td_q	ok2	B=4	B=4	B=4	B=4
+g_fn_ctl	loud1	LOUD[VITA-E3009:generate-scope parameter `P` value is not a constant: `f(…)` has no co]	P=3 bw=4	REF[%Error: g_fn_ctl.sv:3:28: Constant function may not be declared under generate (IEEE 1800-]	P=3 bw=4
+g_for_ret_par	WRONG2	P=232 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+g_ret_mod	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+g_ret_modpar	WRONG2	P=232 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+g_ret_par	loud1	LOUD[VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co]	P=8 v=8	REF[%Error: g_ret_par.sv:5:36: Constant function may not be declared under generate (IEEE 1800]	P=8 v=8
+h_dflt_fn	loud2	LOUD[VITA-E3009:hierarchical call `u.h` passes 1 argument(s) but the function takes 2]	v=1003	v=1003	h_dflt_fn.s2v.v:27: : Verilog doesn't allow passing empty parameters to functions.
+h_rt_ctl	ok2	v=8	v=8	v=8	v=8
+h_rt_par	ok2	v=8	v=8	v=8	v=8
+ia_lp	SPLIT	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=5	ia_lp.sv:1 : This MSB expression violates the rule: L | ia_lp.sv:1 : This MSB expression violates the rule: L | ia_lp.sv:1: : A symbol with that name was declared here. Check for declaration after use. | ia_lp.sv:1: : A symbol with that name was declared here. Check for declaration after use.	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a
+ia_par	ok2	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a
+ia_pkg	WRONG2	top.u[0] b=4 p=5 | top.u[1] b=4 p=5	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a
+ia_port_ctl	loud2	LOUD[VITA-E3009:instance array `u`: a child port width does not const-fold [in top]]	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a
+ia_port_noarr	ok2	top.u b=4 p=5	top.u b=4 p=5	top.u b=4 p=5	top.u b=4 p=5
+n_pkgimp	WRONG2	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+n_pkgpar_fn	loud2	LOUD[VITA-E3009:package parameter `K` value is not a foldable constant [in q]]	P=8 v=8	P=8 v=8	P=8 v=8
+n_pkgpar_own	loud2	LOUD[VITA-E3009:package parameter `K` value is not a foldable constant [in q]]	K=3	K=3	K=3
+n_scoped2	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+n_twolevel	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: `q.h(…)` has no constant-fold a]	P=8 v=8	P=8 v=8	P=8 v=8
+n_twolevel_g	WRONG2	P=232 v=232	P=8 v=8	P=8 v=8	P=8 v=8
+u_body_fn	WRONG2	v=1007 P=1007	v=1003 P=1003	v=1003 P=1003	v=1007 P=1007
+u_dflt_fn	WRONG1	v=1007 P=1007	v=1003 P=1003	REF[%Error: u_dflt_fn.sv:2:24: Duplicate declaration of function: 'h__Vtcwrap_2']	u_dflt_fn.s2v.v:18: : Verilog doesn't allow passing empty parameters to functions.
+u_loc_fn	WRONG2	v=232 P=1000	v=8 P=8	v=8 P=8	v=232 P=232
+u_ret_ctl	ok2	v=8 P=8	v=8 P=8	v=8 P=8	v=8 P=8
+u_ret_fn	WRONG2	v=232 P=232	v=8 P=8	v=8 P=8	v=232 P=232
+u_ret_par	WRONG2	v=232 P=232	v=8 P=8	v=8 P=8	v=232 P=232
+u_ret_pctl	ok2	v=8 P=8	v=8 P=8	v=8 P=8	v=8 P=8
+u_td_ret	ok2	v=8 P=8	v=8 P=8	v=8 P=8	v=232 P=232
+u_tdw	WRONG2	x=ff b=8	x=f b=4	x=f b=4	x=ff b=8
+x_bind_hdr	ok1	top.t.c W=3	REF[x_bind_hdr.sv:16: syntax error]	top.t.c W=3	REF[x_bind_hdr.sv:16:1: Parse error: unexpected token 'bind' (KW_bind)]
+x_bind_port	ok1	top.t.c b=4 s=a	REF[x_bind_port.sv:16: syntax error]	top.t.c b=4 s=a	REF[x_bind_port.sv:16:1: Parse error: unexpected token 'bind' (KW_bind)]
+x_cls_mod	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=232	v=232	REF[x_cls_mod.sv:6:3: Parse error: missing expected `endmodule`]
+x_cls_rt	loud2	LOUD[VITA-E2002:expected identifier, found '::']	v=8	v=8	REF[x_cls_rt.sv:3:3: Parse error: missing expected `endpackage`]
+x_cls_top	loud2	LOUD[VITA-E3009:a function call that does not fold to a constant is not allowed in a c]	v=8	v=8	REF[x_cls_top.sv:15:21: Parse error: unexpected token 'new' (KW_new)]
+x_gen_fn	WRONG1	P=7 bw=8	P=3 bw=4	REF[%Error: x_gen_fn.sv:7:28: Constant function may not be declared under generate (IEEE 1800-]	P=3 bw=4
+x_gen_fn_ret	loud1	LOUD[VITA-E3009:generate-scope parameter `P` value is not a constant: `h(…)` has no co]	P=8 v=8	REF[%Error: x_gen_fn_ret.sv:7:28: Constant function may not be declared under generate (IEEE 1]	P=8 v=8
+x_gen_hier	loud1	LOUD[VITA-E3009:unsupported hierarchical function call `g.h` (the callee must be a fra]	v=8	REF[%Error: x_gen_hier.sv:7:28: Constant function may not be declared under generate (IEEE 180]	v=8
+x_hier_rt	ok2	v=8	v=8	v=8	v=8
+x_hier_wq	loud2	LOUD[VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin]	B=4	B=4	REF[x_hier_wq.s2v.v:23: syntax error]
+x_ia_body	ok2	top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4	top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4	top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4	top.u[0] L=3 bq=4 | top.u[1] L=3 bq=4
+x_ia_hdr	WRONG2	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=5	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a	top.u[0] W=3 b=4 p=5 | top.u[1] W=3 b=4 p=a
+x_ia_port	WRONG2	top.u[0] b=4 p=5 | top.u[1] b=4 p=5	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a	top.u[0] b=4 p=5 | top.u[1] b=4 p=a
+x_if_ce	loud1	LOUD[VITA-E3009:parameter `P` value is not a constant: `i.h(…)` has no constant-fold a]	P=8	REF[%Error: x_if_ce.sv:11:24: Parameter values cannot call hierarchical functions (IEEE 1800-2]	REF[x_if_ce.s2v.v:22: error: No function named `i.h' found in this context (top).]
+x_if_own	ok2	bs=4 L=3	bs=4 L=3	bs=4 L=3	bs=4 L=3
+x_if_port	ok1	bs=4	REF[x_if_port.sv:5: syntax error]	bs=4	bs=4
+x_if_rt_ret	ok2	v=8	v=8	v=8	v=8
+x_if_wq	loud2	LOUD[VITA-E3009:$bits argument shape unsupported (nets, array views, and self-determin]	B=4	B=4	REF[x_if_wq.s2v.v:24: syntax error]
+x_inst_hdr	ok2	top.u W=3 b=4 p=5	top.u W=3 b=4 p=5	top.u W=3 b=4 p=5	top.u W=3 b=4 p=5
+x_pk_ce_body	ok2	P=1003	P=1003	P=1003	P=1003
+x_pk_param	ok2	b=8	b=8	b=8	b=8
+x_pk_task_loc	loud1	LOUD[VITA-E2002:expected '=' or '<=' after lvalue, found '::']	REF[x_pk_task_loc.sv:15: syntax error]	v=8	v=8
+x_pk_task_susp	loud1	LOUD[VITA-E2002:expected '=' or '<=' after lvalue, found '::']	REF[x_pk_task_susp.sv:15: syntax error]	v=8	v=8
+x_t11	WRONG2	top.u[0] b=4 p=a | top.u[1] b=4 p=a	top.u[0] b=4 p=a | top.u[1] b=4 p=5	top.u[0] b=4 p=a | top.u[1] b=4 p=5	top.u[0] b=4 p=a | top.u[1] b=4 p=5

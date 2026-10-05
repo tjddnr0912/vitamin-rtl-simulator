@@ -1,0 +1,393 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P01
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P01.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog
+vita_tags: POST,PRE,POST-interp,POST-vm,r2dbg,POST2
+verdict: CLEAN
+verdict_source: s580/lens_diff/REPORT.md:57
+notes: R4 cmp3_post4 bucket(s): post3×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-interp: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST-vm: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P01.iv.txt | 386 bytes
+N01 1
+N02 0
+N03 1
+N04 0
+N05 0
+N06 1
+N07 0
+N08 1
+N09 0
+N10 1
+N11 0
+N12 1
+N13 1
+N14 1
+N15 1
+N16 1
+N17 0
+N18 1
+N19 1
+N20 0
+N22 1
+N23 1
+N24 0
+K01 1
+K02 1
+K03 1
+K04 1
+K05 1
+K06 0
+K07 0
+K08 1
+K09 1
+K10 0
+K11 0
+K12 0
+K13 1
+W01 1
+W02 0
+W03 0
+W04 0
+W05 1
+W06 1
+W07 1
+W08 0
+W09 1
+W10 1
+W11 1
+W12 0
+W13 1
+W14 1
+X01 0
+X02 1
+X03 0
+X04 1
+X05 0
+Y01 x
+Y02 x
+P01.sv:28: $finish called at 1000 (1s)
+rc=0
+=== block 2 | vita [POST] | ./P01.post.txt | 513 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+N01 1
+N02 0
+N03 1
+N04 0
+N05 0
+N06 1
+N07 0
+N08 1
+N09 0
+N10 1
+N11 0
+N12 1
+N13 1
+N14 1
+N15 1
+N16 1
+N17 0
+N18 1
+N19 1
+N20 0
+N22 1
+N23 1
+N24 0
+K01 1
+K02 1
+K03 1
+K04 1
+K05 1
+K06 0
+K07 0
+K08 1
+K09 1
+K10 0
+K11 0
+K12 0
+K13 1
+W01 1
+W02 0
+W03 0
+W04 0
+W05 1
+W06 1
+W07 1
+W08 0
+W09 1
+W10 1
+W11 1
+W12 0
+W13 1
+W14 1
+X01 0
+X02 1
+X03 0
+X04 1
+X05 0
+Y01 x
+Y02 x
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 3 | vita [POST] | ./P01.postq.txt | 513 bytes | identical to block 2
+=== block 4 | vita [POST] | ./be_P01_native.txt | 414 bytes
+N01 1
+N02 0
+N03 1
+N04 0
+N05 0
+N06 1
+N07 0
+N08 1
+N09 0
+N10 1
+N11 0
+N12 1
+N13 1
+N14 1
+N15 1
+N16 1
+N17 0
+N18 1
+N19 1
+N20 0
+N22 1
+N23 1
+N24 0
+K01 1
+K02 1
+K03 1
+K04 1
+K05 1
+K06 0
+K07 0
+K08 1
+K09 1
+K10 0
+K11 0
+K12 0
+K13 1
+W01 1
+W02 0
+W03 0
+W04 0
+W05 1
+W06 1
+W07 1
+W08 0
+W09 1
+W10 1
+W11 1
+W12 0
+W13 1
+W14 1
+X01 0
+X02 1
+X03 0
+X04 1
+X05 0
+Y01 x
+Y02 x
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST] | r2/lens/diff_P01.post.txt | 513 bytes
+N01 1
+N02 0
+N03 1
+N04 0
+N05 0
+N06 1
+N07 0
+N08 1
+N09 0
+N10 1
+N11 0
+N12 1
+N13 1
+N14 1
+N15 1
+N16 1
+N17 0
+N18 1
+N19 1
+N20 0
+N22 1
+N23 1
+N24 0
+K01 1
+K02 1
+K03 1
+K04 1
+K05 1
+K06 0
+K07 0
+K08 1
+K09 1
+K10 0
+K11 0
+K12 0
+K13 1
+W01 1
+W02 0
+W03 0
+W04 0
+W05 1
+W06 1
+W07 1
+W08 0
+W09 1
+W10 1
+W11 1
+W12 0
+W13 1
+W14 1
+X01 0
+X02 1
+X03 0
+X04 1
+X05 0
+Y01 x
+Y02 x
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 6 | vita [POST] | r2/lens/diff_P01.postq.txt | 513 bytes | identical to block 5
+=== block 7 | vita [POST-interp] | ./be_P01_interp.txt | 414 bytes | identical to block 4
+=== block 8 | vita [POST-vm] | ./be_P01_vm.txt | 414 bytes | identical to block 4
+=== block 9 | vita [POST2] | r2/lens/diff_P01.post2.txt | 513 bytes | identical to block 5
+=== block 10 | vita [POST2] | r2/lens/diff_P01.post2q.txt | 513 bytes | identical to block 5
+=== block 11 | vita [PRE] | ./P01.pre.txt | 513 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+N01 x
+N02 0
+N03 x
+N04 0
+N05 0
+N06 x
+N07 0
+N08 x
+N09 0
+N10 x
+N11 0
+N12 x
+N13 x
+N14 x
+N15 x
+N16 x
+N17 0
+N18 x
+N19 x
+N20 0
+N22 x
+N23 x
+N24 0
+K01 x
+K02 x
+K03 x
+K04 x
+K05 x
+K06 0
+K07 0
+K08 x
+K09 x
+K10 0
+K11 0
+K12 0
+K13 x
+W01 x
+W02 0
+W03 0
+W04 0
+W05 x
+W06 x
+W07 x
+W08 0
+W09 x
+W10 x
+W11 x
+W12 0
+W13 x
+W14 x
+X01 x
+X02 1
+X03 x
+X04 1
+X05 x
+Y01 x
+Y02 x
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 12 | vita [PRE] | ./P01.preq.txt | 513 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+N01 0
+N02 0
+N03 0
+N04 0
+N05 0
+N06 0
+N07 0
+N08 0
+N09 0
+N10 0
+N11 0
+N12 0
+N13 0
+N14 0
+N15 1
+N16 0
+N17 0
+N18 0
+N19 0
+N20 0
+N22 0
+N23 0
+N24 0
+K01 0
+K02 0
+K03 0
+K04 0
+K05 0
+K06 0
+K07 0
+K08 0
+K09 0
+K10 0
+K11 0
+K12 0
+K13 0
+W01 0
+W02 0
+W03 0
+W04 0
+W05 0
+W06 0
+W07 0
+W08 0
+W09 0
+W10 0
+W11 0
+W12 0
+W13 0
+W14 0
+X01 1
+X02 1
+X03 1
+X04 1
+X05 1
+Y01 0
+Y02 0
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== end

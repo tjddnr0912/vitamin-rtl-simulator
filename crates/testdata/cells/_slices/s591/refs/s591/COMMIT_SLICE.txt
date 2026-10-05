@@ -1,0 +1,162 @@
+elaborate: an imported name keeps one binding in every map, and two §26.3 import conflicts are loud (§2 🆕 U, imports)
+
+§4.5.591 — §2 🆕 U, cut U-a (the import half; §4.5.581's review found
+the row). Oracles: iverilog 13.0 -g2012, verilator 5.052 --binary
+--timing, sv2v 0.0.13 -> iverilog. Verilator binds the first import of a
+name, explicit or wildcard (D21, D22, Iab_sel, D40, X1's `bits=32 hi=1`),
+where iverilog, sv2v and §26.3 let an explicit import win and refuse two
+wildcards, so it is set aside on import precedence.
+
+Bug: elaborate keeps a constant in one of several maps (`params`, ≤64
+bits with its declared range; `wide_param_bits`, >64 bits; a package
+variable alias), and the readers disagree on which to ask first: the
+run-time name route, the bit domain and a `localparam int` ask the wide
+map first, a generate-if/-case condition and a declared range ask
+`params`. Every import arm that unbound or replaced a wildcard's binding
+cleared only its own map, so one key held two declarations and each
+reader answered a different one:
+- `import pa::*; import pb::P;` (pa's P = 3, pb's P 65 bits): the value
+  printed was pb's, but the generate-if took `small` and `[P[3:0]:0]` was
+  4 bits (Inw_gif, Inw_wid, Icu_val, Ihd_val, X3, IFnw, IAi, q1g_gif);
+  iverilog and sv2v `gif big`, 10 bits. An explicit variable import over
+  a wildcard >64-bit constant kept the constant (Iev, Ivx
+  `W=18446744073709551625 b=8`; iverilog, sv2v `W=5 b=8`).
+- two adjacent wildcard imports, one offering a >64-bit constant or a
+  variable, bound the first package's (Iaa, Iab, Ivw, Iwv, Iaa_disp),
+  where iverilog says "Ambiguous use of 'P'. It is exported by both 'pa'
+  and by 'pb'." and sv2v "identifier "P" ambiguously refers to the
+  definitions in any of pa, pb"; a package body kept one import state
+  per import, so its pairs were never ambiguous (Ppnn_ref `ppnn Z=5`,
+  the second package's).
+- `import pa::P; import pb::P;` bound both (Iee_wn
+  `ee P=18446744073709551625 b=32`; iverilog "'P' has already been imported into this scope
+  from package 'pa'.", sv2v "import of pb::P conflicts with prior import
+  of pa::P"), and `import pk::E1; typedef enum {E0, E1} e_t;` bound the
+  import and the label (Ewe_val `E1=18446744073709551616 K=0`, Ewn `E1=1
+  K=1`; iverilog "'E1' has already been imported into this scope from
+  package 'pk'.", sv2v "declaration of E1 conflicts with prior import of
+  pk::E1").
+- a module's explicit >64-bit import left a `$unit` explicit narrow one
+  in `params` (n01, c01/m13 `small b=4`; all three oracles `big b=10`).
+
+Mechanism (`elaborate/src/package.rs` `apply_import_consts`, its three
+callers `instance.rs`, `iface_inst.rs`, `elaborate_package`, and
+`decl_collide.rs` `own_region_enum_labels`):
+- Position (§26.3: an import has one). `ImportSite { Unit, Module(seg),
+  Package(seg) }` records where each import is written; `seg` counts the
+  scope's own non-import items before it (`scope_item_starts`,
+  `import_segment`: header parameters, ports, body items and the items
+  of a bare generate region). The wildcard origin map is key -> (package,
+  seg), and `wildcard_prior` tells Fresh / SamePackage / Ambiguous /
+  Other{adjacent}.
+- An ambiguity arm (narrow, wide, variable) clears every map at the key
+  (`params`, `wide_param_bits`, the variable alias) when the two imports
+  are adjacent. With an item between, a reference there bound the first
+  package's name, which every oracle answers, so a module keeps its
+  pre-U arm (its own map) and a package body its per-import state.
+- An explicit import wins a wildcard: the explicit >64-bit arm unbinds
+  the losing narrow when a wildcard offered the key or a `$unit` explicit
+  import bound it, read before the import records itself; the explicit
+  variable arm removes a losing wildcard >64-bit constant.
+- Two §26.3 errors, VITA-E3009: an explicit import of a name the scope
+  declares as an enum label (`conflict_names` = the local names plus the
+  module body's and its bare generate regions' labels, `$unit`-copied
+  typedefs excluded by span, or the package's labels; the wildcard skip
+  set is unchanged), and a second explicit import of a value-carrying
+  name (constant, >64-bit constant, variable) from another package in
+  the same scope (an explicit-origin map key -> (package, same_scope));
+  the same package twice is idempotent and a `$unit` import never
+  collides.
+- One wildcard-origin / explicit-import state per package body, as a
+  module keeps one per instance.
+
+Held (U-b, §2 🆕 U stays, BLOCKED on 🆕 AE): every arm that replaces a
+>64-bit binding by a narrower one — a genvar and its generate-routine
+replay, an enum label in the wildcard skip set, an explicit narrow
+import over a wildcard or `$unit` wide. The grounding prototype fixed
+them (42 silent -> correct, 5 loud -> value) but handed the narrow value
+to the constant interpreter where PRE's wide one was refused: Gw_cae
+`W=0`/`W=1`, Iwn_kae `W=3`, Gw_kae, all three oracles `W=x` (🆕 AE's 0),
+through an override and a localparam alias, so no opt-in contains it.
+U-a takes only the arms whose survivor is the wider binding or none.
+
+Byte-identity: new code runs only (i) in an ambiguity arm, where another
+package already holds the key, (ii) in the explicit >64-bit / variable
+arm when a wildcard offered the key or a `$unit` explicit import bound
+it, (iii) for an explicit import naming one of the scope's enum labels,
+(iv) for a second same-scope explicit import of a value name from
+another package; segments are compared only between two imports of one
+name, and the package hoist differs only where two imports in one body
+offer one name. Measured: corpus vcmp + velab on 15 workloads (11 + 4
+examples), `.vu` and `.velab` 30/30 byte-identical to PRE; 1061 unique
+embedded test designs (`endmodule` with `genvar` or `import`) diff=0;
+an instrumented copy fires on 99 cell files and 0 times on the corpus.
+
+Measured (PRE ac965d29, cb2f7f1d release; POST 1d520f33, release):
+- 439 grounding and audit cells, PRE -> POST: 393 byte-identical, 46
+  movers: 11 silent -> correct (Icu_val, Ihd_val, X3, IFnw, Iev, Ivx,
+  q1g_gif, Icue_nw_gif = 3 oracles; Inw_gif, Inw_wid, IAi = iverilog,
+  sv2v), 34 silent -> loud (29 on designs iverilog and sv2v refuse; q1g
+  and Inw_gcs, a >64-bit generate-case scrutinee, loud by design as its
+  plain twin; Inw_pae, the interpreter's decline of the 65-bit argument,
+  as its plain twin, oracles `W=x`; Icuw_nw, Icuw_wn, where PRE bound
+  the `$unit` package's and the oracles the module's: the `$unit` scope
+  residue), 1 loud -> loud (Iab_gcs text); 0 loud -> value, 0 correct
+  -> loud. Every U-b cell (A1D, B2D, Egr, Iwn_*, Icue_wn, G*, E*) is
+  byte-identical to PRE.
+- 86 lens cells, PRE -> POST: 0 correct -> loud; 1 loud -> value, n10
+  (`import pa::*; localparam X = 1; import pb::P;` in a package: PRE's
+  false "conflicts with a local declaration", now `n10 X=1` = 3
+  oracles); n02 `Y=5` -> `Y=3` = 3 oracles.
+- Staged vcmp -> velab -> vrun == one-shot on 86/86 lens cells and 14/14
+  grounding cells.
+
+Review: 2 rounds, differential + soundness lenses.
+- Round 1: differential PASS with two doc fixes (the double-explicit
+  rule covers value-carrying names only, D19/D20; verilator takes the
+  first import, not the wildcard, D21). Soundness FAIL: BLOCKING, the
+  ambiguity arms cleared every map at import time, position-blind, so a
+  reference written between two wildcard imports went correct -> loud on
+  9 shapes (c22 c23 c24 c26 c27 c30 c33 c38 c39: module, header
+  parameter, port, interface, instance array, package; = PRE = all three
+  oracles); fixed by the adjacency rule above. MAJOR, the guard
+  `!p.is_empty()` (mutant M13) was not equivalent: c01 `$unit` `import pa::*;
+  import pb::*; import pn::P;` under a module `import pw::P;` kept pn's
+  narrow `P`; fixed at the root (the guard reads the wildcard origin or
+  a `$unit` explicit import before the insert), which also fixed n01 and
+  Icue_nw_gif. MAJOR doc: a `localparam int` asks the wide map first.
+- Round 2: both PASS (9/9 blocking cells and c01 = PRE / oracles, staged
+  = one-shot). MAJOR doc: the package position rule differs from the
+  module's (rewritten). MINOR: the package arm's per-import state returns
+  c07 `pr A=3 B=5`, c32 `pnw A=3 B=9`, D24 `d24 Z=3 Y=5` to PRE (round
+  1 had them loud; oracles B=3, Y=3), pinned KNOWN-WRONG; a bare
+  generate-region `if` as the separating item was unpinned (mutant N1
+  survived the workspace suite; c47 pinned).
+
+Tests: crates/cli/tests/import_one_binding_per_key.rs (oracle text above
+each pin): ambiguity, the position rule through header, port, generate
+region, interface and instance array, explicit-over-wildcard in every
+binder, the package body, both §26.3 errors and their edges, KNOWN-WRONG
+pins (n04, c07/c32, Ecu_lbl_gen) and U-b's HELD and MUST-STAY-LOUD pins
+(Gw_cae, Iwn_kae, Ewi_cae). generate_case_and_wildcard_prerequisites.rs:
+the module doc says P1's import half closed, and the X1 note says
+verilator takes the first import. Mutants: M1-M12, M8b, M14 (killed
+after the Ecu_lbl_gen pin), M15, R1-R6, R8-R15 killed; N1 survived the
+workspace suite, and c47 is now pinned; R7
+(drop the declaration-span filter) equivalent by census: copied `$unit`
+items precede the declaration, so they never fall between its imports.
+
+Out of scope (ROADMAP §2 "Scoping" unless noted): ambiguity decided by
+adjacency, not the reference (n04 `P=3` where iverilog and sv2v refuse;
+c25 two ≤64-bit constants with a reference between, E3010, oracles `rn
+A=3 P=3`; the package lane above); `$unit` and module imports as one
+scope (Icue_wn, c40, Icuw_nn, Icuw_nw/wn, n11-n14, Icuee); a string or
+real constant is no import candidate (Iasn, Iarn, c04, c05); a type or
+function name imported explicitly twice takes the second (D19, D20);
+an import arm's E3009 names the module header (§3.b E3009-anchor);
+Ecu_lbl_gen (`inject_cu_items`, PROBE_CATALOG); a static inline task's
+body-local label (Ef*_tk2, an oracle split). `elaborate/src/package.rs`
+is now 2250 lines (was 1932).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

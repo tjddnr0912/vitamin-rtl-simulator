@@ -1,0 +1,1010 @@
+{
+ "L01": {
+  "scrut": "2",
+  "label": "1 | 2"
+ },
+ "L02": {
+  "scrut": "3",
+  "label": "P"
+ },
+ "L03": {
+  "scrut": "4",
+  "label": "P + 1"
+ },
+ "L04": {
+  "scrut": "P16",
+  "label": "\"ab\""
+ },
+ "L05": {
+  "scrut": "16'h6162",
+  "label": "S1"
+ },
+ "L06": {
+  "scrut": "P",
+  "label": "\"a\" + 1"
+ },
+ "L07": {
+  "scrut": "16'h6163",
+  "label": "S1 + 1"
+ },
+ "L08": {
+  "scrut": "16'h6162",
+  "label": "SS"
+ },
+ "L09": {
+  "scrut": "1",
+  "label": "$clog2(2)"
+ },
+ "L10": {
+  "scrut": "3",
+  "label": "f(2)"
+ },
+ "L11": {
+  "scrut": "2",
+  "label": "E2"
+ },
+ "L12": {
+  "scrut": "1",
+  "label": "1.0"
+ },
+ "L13": {
+  "scrut": "1",
+  "label": "R"
+ },
+ "L14": {
+  "scrut": "3",
+  "label": "top.P"
+ },
+ "L15": {
+  "scrut": "1",
+  "label": "w"
+ },
+ "L16": {
+  "scrut": "5",
+  "label": "pk::K (8-bit pkg const)"
+ },
+ "L17": {
+  "scrut": "3",
+  "label": "W"
+ },
+ "L18": {
+  "scrut": "1",
+  "label": "W"
+ },
+ "L19": {
+  "scrut": "1",
+  "label": "65'h1_0000_0000_0000_0001"
+ },
+ "L20": {
+  "scrut": "1",
+  "label": "65'd1"
+ },
+ "L21": {
+  "scrut": "15",
+  "label": "P4"
+ },
+ "L22": {
+  "scrut": "-1",
+  "label": "PS"
+ },
+ "L23": {
+  "scrut": "15",
+  "label": "PS"
+ },
+ "L24": {
+  "scrut": "4'd15",
+  "label": "PS"
+ },
+ "L25": {
+  "scrut": "1",
+  "label": "g()"
+ },
+ "L26": {
+  "scrut": "8'h62",
+  "label": "\"a\" + 1"
+ },
+ "L27": {
+  "scrut": "2",
+  "label": "$bits(2'b00)"
+ },
+ "L28": {
+  "scrut": "1",
+  "label": "P > 0"
+ },
+ "L29": {
+  "scrut": "0",
+  "label": "W>>64 (=1) | 0"
+ },
+ "L30": {
+  "scrut": "1",
+  "label": "W >> 64"
+ },
+ "T1": {
+  "scrut": "1",
+  "label": "LPA"
+ },
+ "T2": {
+  "scrut": "1",
+  "label": "$isunknown(4'bx100 ==? 4'b1?00)"
+ },
+ "T3": {
+  "scrut": "0",
+  "label": "(4'bx100 ==? 4'b1?00) >> 1"
+ },
+ "T4": {
+  "scrut": "1",
+  "label": "4'b1100 inside {{2'b1?, 2'b00}}"
+ },
+ "C1": {
+  "scrut": "1",
+  "label": "(4'bx100 ==? 4'b1?00)"
+ },
+ "C2": {
+  "scrut": "1",
+  "label": "65'd1"
+ },
+ "C3": {
+  "scrut": "1",
+  "label": "4'bx"
+ },
+ "X01": {
+  "scrut": "4'b1100",
+  "label": "4'b1x00"
+ },
+ "X02": {
+  "scrut": "1",
+  "label": "1'bx | 1"
+ },
+ "X03": {
+  "scrut": "1",
+  "label": "4'bz"
+ },
+ "X04": {
+  "scrut": "4",
+  "label": "4'b1z00"
+ },
+ "X05": {
+  "scrut": "0",
+  "label": "4'b1x00 & 4'b0011"
+ },
+ "X06": {
+  "scrut": "1",
+  "label": "4'b1x00 == 4'b1100"
+ },
+ "X07": {
+  "scrut": "0",
+  "label": "4'b1x00 == 4'b0000"
+ },
+ "X08": {
+  "scrut": "1",
+  "label": "4'b1x00 === 4'b1x00"
+ },
+ "X09": {
+  "scrut": "1",
+  "label": "$isunknown(4'b1x00)"
+ },
+ "X10": {
+  "scrut": "1",
+  "label": "|4'b100x"
+ },
+ "X11": {
+  "scrut": "1",
+  "label": "(4'b1100 ==? 4'b1?00)"
+ },
+ "X12": {
+  "scrut": "0",
+  "label": "(4'b1100 ==? 4'b0?00)"
+ },
+ "X13": {
+  "scrut": "1",
+  "label": "4'b1100 inside {4'b1?00}"
+ },
+ "X14": {
+  "scrut": "1",
+  "label": "4'b1100 inside {4'b1100, 4'b0000}"
+ },
+ "X15": {
+  "scrut": "4'b1100",
+  "label": "PX"
+ },
+ "X16": {
+  "scrut": "0",
+  "label": "|4'b000x"
+ },
+ "X17": {
+  "scrut": "1",
+  "label": "{64'd0, 1'bx} | 1"
+ },
+ "X18": {
+  "scrut": "1",
+  "label": "65'bx | 1"
+ },
+ "X19": {
+  "scrut": "4'b1100",
+  "label": "{2'b11, 2'bx0} | 4'b0001 | 4'b1100"
+ },
+ "X20": {
+  "scrut": "1",
+  "label": "1'bx ? 1 : 1"
+ },
+ "X21": {
+  "scrut": "1",
+  "label": "(4'bx100 !=? 4'b1?00)"
+ },
+ "X22": {
+  "scrut": "0",
+  "label": "(4'b1100 ==? 4'b0?00) >> 1"
+ },
+ "X23": {
+  "scrut": "1",
+  "label": "4'b1100 inside {4'b11x0}"
+ },
+ "S01": {
+  "scrut": "1'bx",
+  "label": "1'bx"
+ },
+ "S02": {
+  "scrut": "65'd1",
+  "label": "1"
+ },
+ "S03": {
+  "scrut": "W",
+  "label": "W"
+ },
+ "S04": {
+  "scrut": "\"ab\"",
+  "label": "16'h6162"
+ },
+ "S05": {
+  "scrut": "-1",
+  "label": "-1"
+ },
+ "S06": {
+  "scrut": "-1",
+  "label": "32'hFFFFFFFF"
+ },
+ "S07": {
+  "scrut": "4'sb1111",
+  "label": "4'b1111"
+ },
+ "S08": {
+  "scrut": "4'sb1111",
+  "label": "-1"
+ },
+ "S09": {
+  "scrut": "4'b1111",
+  "label": "-1"
+ },
+ "S10": {
+  "scrut": "4'sb1111",
+  "label": "8'd255"
+ },
+ "S11": {
+  "scrut": "4'sb1111",
+  "label": "8'd15"
+ },
+ "S12": {
+  "scrut": "8'sb11111111",
+  "label": "4'sb1111"
+ },
+ "S13": {
+  "scrut": "64'hFFFF_FFFF_FFFF_FFFF",
+  "label": "-1"
+ },
+ "S14": {
+  "scrut": "64'hFFFF_FFFF_FFFF_FFFF",
+  "label": "-64'sd1"
+ },
+ "S15": {
+  "scrut": "-1",
+  "label": "64'hFFFF_FFFF_FFFF_FFFF"
+ },
+ "S16": {
+  "scrut": "32'hFFFFFFFF",
+  "label": "-1"
+ },
+ "S17": {
+  "scrut": "33'h1FFFFFFFF",
+  "label": "-1"
+ },
+ "S18": {
+  "scrut": "-33'sd1",
+  "label": "-1"
+ },
+ "S19": {
+  "scrut": "65'h1FFFFFFFFFFFFFFFF",
+  "label": "-1"
+ },
+ "S20": {
+  "scrut": "4'sb1000",
+  "label": "-8"
+ },
+ "S21": {
+  "scrut": "4'sb1000",
+  "label": "4'd8"
+ },
+ "S22": {
+  "scrut": "4'sb1000",
+  "label": "8"
+ },
+ "S23": {
+  "scrut": "4'd8",
+  "label": "4'sb1000"
+ },
+ "S24": {
+  "scrut": "4'd15",
+  "label": "8'sb11111111"
+ },
+ "S25": {
+  "scrut": "4'd15",
+  "label": "8'sb00001111"
+ },
+ "S26": {
+  "scrut": "-1",
+  "label": "33'h1FFFFFFFF"
+ },
+ "S27": {
+  "scrut": "-1",
+  "label": "33'h0FFFFFFFF"
+ },
+ "S28": {
+  "scrut": "$signed(4'b1111)",
+  "label": "4'b1111"
+ },
+ "S29": {
+  "scrut": "PI",
+  "label": "32'hFFFFFFFF"
+ },
+ "S30": {
+  "scrut": "UP",
+  "label": "4'b1111"
+ },
+ "S31": {
+  "scrut": "PU",
+  "label": "-1"
+ },
+ "S32": {
+  "scrut": "PS8",
+  "label": "8'hFF"
+ },
+ "S33": {
+  "scrut": "64'hFFFF_FFFF_FFFF_FFFF",
+  "label": "64'hFFFF_FFFF_FFFF_FFFF"
+ },
+ "S34": {
+  "scrut": "-64'sd1",
+  "label": "65'h1FFFFFFFFFFFFFFFF"
+ },
+ "S35": {
+  "scrut": "-64'sd1",
+  "label": "-65'sd1"
+ },
+ "S36": {
+  "scrut": "4'b1111",
+  "label": "UP"
+ },
+ "S37": {
+  "scrut": "4'b1111",
+  "label": "PS"
+ },
+ "S38": {
+  "scrut": "-1",
+  "label": "PI"
+ },
+ "S39": {
+  "scrut": "32'hFFFFFFFF",
+  "label": "PI"
+ },
+ "S40": {
+  "scrut": "8'sd127",
+  "label": "8'sd127"
+ },
+ "S41": {
+  "scrut": "P",
+  "label": "-1"
+ },
+ "S42": {
+  "scrut": "f(2)",
+  "label": "3"
+ },
+ "S43": {
+  "scrut": "f(2)",
+  "label": "65'd3"
+ },
+ "S44": {
+  "scrut": "f(2)",
+  "label": "$isunknown(4'bx100 ==? 4'b1?00) | 3"
+ },
+ "S45": {
+  "scrut": "UP",
+  "label": "4'sb1111"
+ },
+ "S46": {
+  "scrut": "U8",
+  "label": "-1"
+ },
+ "S47": {
+  "scrut": "f(2)",
+  "label": "{64'd0, 1'bx} | 3"
+ },
+ "O01": {
+  "scrut": "P",
+  "label": "parameter int P = 0 ov=-1 | 32'hFFFFFFFF"
+ },
+ "O02": {
+  "scrut": "P",
+  "label": "parameter logic signed [3:0] P = 0 ov=-1 | 4'b1111"
+ },
+ "O03": {
+  "scrut": "P",
+  "label": "parameter P = 0 ov=4'sb1111 | 4'b1111"
+ },
+ "O04": {
+  "scrut": "P",
+  "label": "parameter logic [7:0] P = 0 ov=-1 | -1"
+ },
+ "O05": {
+  "scrut": "P",
+  "label": "parameter P = 0 ov=8'hFF | -1"
+ },
+ "O06": {
+  "scrut": "P",
+  "label": "parameter [64:0] P = 0 ov=1 | 65'd1"
+ },
+ "O07": {
+  "scrut": "4'd3",
+  "label": "parameter int P = 0 ov=3 | P"
+ },
+ "O08": {
+  "scrut": "1",
+  "label": "parameter logic [64:0] P = 0 ov={1'b1, 64'd1} | P"
+ },
+ "O09": {
+  "scrut": "1",
+  "label": "parameter logic [64:0] P = 0 ov=65'd1 | P"
+ },
+ "O10": {
+  "scrut": "1",
+  "label": "parameter P = 0 ov=65'd1 | P"
+ },
+ "M01": {
+  "scrut": "2",
+  "label": "1, 2 | 2"
+ },
+ "M02": {
+  "scrut": "3",
+  "label": "1 | 3 | 3"
+ },
+ "M03": {
+  "scrut": "1",
+  "label": "default | 1"
+ },
+ "M04": {
+  "scrut": "1",
+  "label": "$isunknown(4'bx100 ==? 4'b1?00) | 1"
+ },
+ "M05": {
+  "scrut": "1",
+  "label": "1 | $isunknown(4'bx100 ==? 4'b1?00)"
+ },
+ "M06": {
+  "scrut": "0",
+  "label": "$isunknown(4'bx100 ==? 4'b1?00) | 0"
+ },
+ "M07": {
+  "scrut": "1",
+  "label": "1'bx, 1"
+ },
+ "M08": {
+  "scrut": "1",
+  "label": "65'd2, LPA"
+ },
+ "M09": {
+  "scrut": "1",
+  "label": "2"
+ },
+ "M10": {
+  "scrut": "0",
+  "label": "(4'bx100 ==? 4'b1?00), 0"
+ },
+ "M11": {
+  "scrut": "1",
+  "label": "1.0, 1"
+ },
+ "M12": {
+  "scrut": "1",
+  "label": "w, 1"
+ },
+ "N01": {
+  "scrut": "genvar i",
+  "label": "for i 0..2: case(i) 0/1/def"
+ },
+ "N02": {
+  "scrut": "2",
+  "label": "for i: localparam [64:0] L = 65'd1 + i; case(2) L"
+ },
+ "N03": {
+  "scrut": "7",
+  "label": "shadow: outer [64:0] L=5, inner [64:0] L=7"
+ },
+ "N04": {
+  "scrut": "7",
+  "label": "shadow: outer [64:0] L=5, inner logic[3:0] L=7"
+ },
+ "N05": {
+  "scrut": "5",
+  "label": "shadow: outer logic[3:0] L=5, inner [64:0] L=7"
+ },
+ "N06": {
+  "scrut": "2 (nested case)",
+  "label": "case(1) 1: case(2) 65'd2"
+ },
+ "N07": {
+  "scrut": "1",
+  "label": "for i: localparam [64:0] LG = i; case(1) LG"
+ },
+ "N08": {
+  "scrut": "i",
+  "label": "for i: case(i) {64'd0,1'b1}"
+ },
+ "N09": {
+  "scrut": "i",
+  "label": "for i: case(i) -1 / 32'hFFFFFFFF"
+ },
+ "N10": {
+  "scrut": "P (module param in gen block)",
+  "label": "gen-if: localparam logic signed [3:0] Q=-1; case(Q) 4'b1111"
+ },
+ "N11": {
+  "scrut": "i",
+  "label": "for i: localparam logic [3:0] Q = i; case(Q) -1+i... label i"
+ },
+ "Z01": {
+  "scrut": "1",
+  "label": "casez in generate"
+ },
+ "Z02": {
+  "scrut": "1",
+  "label": "casex in generate"
+ },
+ "W01": {
+  "scrut": "4'd15 + 4'd1",
+  "label": "0 | 16"
+ },
+ "W02": {
+  "scrut": "4'd15 + 4'd1",
+  "label": "4'd0 | 5'd16"
+ },
+ "W03": {
+  "scrut": "4'd15 + 4'd1",
+  "label": "4'd0"
+ },
+ "W04": {
+  "scrut": "4'sb1111",
+  "label": "-1 | 8'd0"
+ },
+ "W05": {
+  "scrut": "4'sb1111",
+  "label": "-1 | 8'sd0"
+ },
+ "W06": {
+  "scrut": "4'sb1111",
+  "label": "4'sb1111 | 8'd0"
+ },
+ "W07": {
+  "scrut": "4'sb1000",
+  "label": "8'sb11111000 | 4'd0"
+ },
+ "W08": {
+  "scrut": "5'd16",
+  "label": "4'd15 + 4'd1"
+ },
+ "W09": {
+  "scrut": "8'd0",
+  "label": "4'd15 + 4'd1"
+ },
+ "W10": {
+  "scrut": "P4 + 4'd1",
+  "label": "0 | 16"
+ },
+ "W11": {
+  "scrut": "P4 + 4'd1",
+  "label": "4'd0"
+ },
+ "W12": {
+  "scrut": "4'd15 + 4'd1",
+  "label": "4'd0 | f(1)"
+ },
+ "W13": {
+  "scrut": "4'sb1111",
+  "label": "8'sb11111111 | 4'd0"
+ },
+ "W14": {
+  "scrut": "4'sb1111",
+  "label": "4'd2 | -1"
+ },
+ "W15": {
+  "scrut": "~4'd0",
+  "label": "8'hFF | 4'hF"
+ },
+ "W16": {
+  "scrut": "~4'd0",
+  "label": "4'hF"
+ },
+ "W17": {
+  "scrut": "4'd8 >> 1",
+  "label": "5'd4"
+ },
+ "W18": {
+  "scrut": "4'd8 << 1",
+  "label": "5'd16 | 4'd0"
+ },
+ "W19": {
+  "scrut": "4'd8 << 1",
+  "label": "4'd0"
+ },
+ "W20": {
+  "scrut": "8'd200 + 8'd100",
+  "label": "9'd300 | 8'd44"
+ },
+ "E01": {
+  "scrut": "P",
+  "label": "A | B | C"
+ },
+ "E02": {
+  "scrut": "P",
+  "label": "A | B"
+ },
+ "E03": {
+  "scrut": "P",
+  "label": "32'hFFFFFFFF | B"
+ },
+ "E04": {
+  "scrut": "2'b10",
+  "label": "C | A"
+ },
+ "E05": {
+  "scrut": "P",
+  "label": "4'b1111"
+ },
+ "E06": {
+  "scrut": "4'b1111",
+  "label": "M"
+ },
+ "F01": {
+  "scrut": "4'b1111",
+  "label": "'1"
+ },
+ "F02": {
+  "scrut": "8'hFF",
+  "label": "'1"
+ },
+ "F03": {
+  "scrut": "4'b0000",
+  "label": "'0"
+ },
+ "F04": {
+  "scrut": "65'h1_FFFF_FFFF_FFFF_FFFF",
+  "label": "'1"
+ },
+ "F05": {
+  "scrut": "4'b1111",
+  "label": "'1 | 8'd0"
+ },
+ "F06": {
+  "scrut": "4'b1x00",
+  "label": "4'b1x00"
+ },
+ "F07": {
+  "scrut": "'1",
+  "label": "4'b1111"
+ },
+ "F08": {
+  "scrut": "4'sb1111",
+  "label": "8'sd255"
+ },
+ "F09": {
+  "scrut": "8'sd255",
+  "label": "-1"
+ },
+ "R01": {
+  "scrut": "M",
+  "label": "LPA"
+ },
+ "R02": {
+  "scrut": "M",
+  "label": "LPA | 1"
+ },
+ "R03": {
+  "scrut": "M",
+  "label": "0 | 1"
+ },
+ "R04": {
+  "scrut": "M",
+  "label": "32'hFFFFFFFF"
+ },
+ "R05": {
+  "scrut": "M",
+  "label": "\"a\" + 1"
+ },
+ "R06": {
+  "scrut": "P0 - 1",
+  "label": "32'hFFFFFFFF"
+ },
+ "R07": {
+  "scrut": "PI0 - 1",
+  "label": "32'hFFFFFFFF"
+ },
+ "R08": {
+  "scrut": "M",
+  "label": "$isunknown(4'bx100 ==? 4'b1?00) | 1"
+ },
+ "O11": {
+  "scrut": "P",
+  "label": "parameter P = 0 ov=-1 | 32'hFFFFFFFF"
+ },
+ "O12": {
+  "scrut": "P",
+  "label": "parameter P = 4'd0 ov=-1 | 32'hFFFFFFFF"
+ },
+ "O13": {
+  "scrut": "P",
+  "label": "parameter P = 0 ov=8'hFF | 8'hFF"
+ },
+ "O14": {
+  "scrut": "P",
+  "label": "parameter P = -1 ov=-1 | 4'b1111"
+ },
+ "O15": {
+  "scrut": "P",
+  "label": "parameter P = 4'sb1111 ov=4'd15 | -1"
+ },
+ "O16": {
+  "scrut": "P",
+  "label": "parameter P = 4'd15 ov=4'sb1111 | -1"
+ },
+ "O19": {
+  "scrut": "P",
+  "label": "parameter P = 8'd0 ov=4'sb1111 | -1"
+ },
+ "O20": {
+  "scrut": "4'b1111",
+  "label": "parameter P = 4'sb1111 ov=4'd15 | P"
+ },
+ "O21": {
+  "scrut": "4'b1111",
+  "label": "parameter P = 4'd15 ov=4'sb1111 | P"
+ },
+ "O22": {
+  "scrut": "1",
+  "label": "parameter P = 0 ov=65'd1 | P"
+ },
+ "O23": {
+  "scrut": "P",
+  "label": "parameter P = 0 ov=65'h1_0000_0000_0000_0001 | 65'h1_0000_0000_0000_0001"
+ },
+ "O17": {
+  "scrut": "P (defparam)",
+  "label": "parameter P = 4'd0; defparam u.P = 4'sb1111 | -1"
+ },
+ "O18": {
+  "scrut": "P (defparam)",
+  "label": "parameter logic [7:0] P = 0; defparam u.P = -1 | 8'hFF"
+ },
+ "Q01": {
+  "scrut": "S1",
+  "label": "\"ab\""
+ },
+ "Q02": {
+  "scrut": "16'h6162",
+  "label": "S1 | \"ab\""
+ },
+ "Q03": {
+  "scrut": "P",
+  "label": "\"ab\" | \"c\""
+ },
+ "Q04": {
+  "scrut": "8'h63",
+  "label": "\"c\" | \"ab\""
+ },
+ "Q05": {
+  "scrut": "24'h006263",
+  "label": "\"bc\""
+ },
+ "Q06": {
+  "scrut": "16'h6263",
+  "label": "\"\\0bc\""
+ },
+ "S48": {
+  "scrut": "f(2)",
+  "label": "W"
+ },
+ "P01": {
+  "scrut": "4'b1111",
+  "label": "pk::KS signed 4-bit -1"
+ },
+ "P02": {
+  "scrut": "4'b1111",
+  "label": "imported KS signed 4-bit -1"
+ },
+ "P03": {
+  "scrut": "4'b1111",
+  "label": "$unit US signed 4-bit -1"
+ },
+ "P04": {
+  "scrut": "1",
+  "label": "pk::KW 65-bit >> 64"
+ },
+ "P05": {
+  "scrut": "1",
+  "label": "imported KW 65-bit >> 64"
+ },
+ "P06": {
+  "scrut": "4'b1111",
+  "label": "pk::KU untyped 4'sb1111"
+ },
+ "G01": {
+  "scrut": "1",
+  "label": "module [64:0] i=9; for genvar i: case(1) i"
+ },
+ "G02": {
+  "scrut": "i",
+  "label": "module [64:0] i=9; for genvar i: case(i) 65 bit 9 / 1"
+ },
+ "G03": {
+  "scrut": "1",
+  "label": "module [64:0] W; gen block localparam W narrow; case(1) W >> 0"
+ },
+ "G04": {
+  "scrut": "i",
+  "label": "module signed [3:0] i=-1; for genvar i: case(i) 4b1111"
+ },
+ "NA01L": {
+  "scrut": "7",
+  "label": "7|label K, gen-if shadow narrow/narrow"
+ },
+ "NA01S": {
+  "scrut": "K",
+  "label": "K|scrutinee K, gen-if shadow narrow/narrow"
+ },
+ "NA01F": {
+  "scrut": "7",
+  "label": "7|label K forward ref (decl after case), shadow narrow/narrow"
+ },
+ "NA02L": {
+  "scrut": "7",
+  "label": "7|label K, gen-if shadow wide/wide"
+ },
+ "NA02S": {
+  "scrut": "K",
+  "label": "K|scrutinee K, gen-if shadow wide/wide"
+ },
+ "NA02F": {
+  "scrut": "7",
+  "label": "7|label K forward ref (decl after case), shadow wide/wide"
+ },
+ "NA03L": {
+  "scrut": "7",
+  "label": "7|label K, gen-if shadow narrow inner over wide outer"
+ },
+ "NA03S": {
+  "scrut": "K",
+  "label": "K|scrutinee K, gen-if shadow narrow inner over wide outer"
+ },
+ "NA03F": {
+  "scrut": "7",
+  "label": "7|label K forward ref (decl after case), shadow narrow inner over wide outer"
+ },
+ "NA04L": {
+  "scrut": "7",
+  "label": "7|label K, gen-if shadow wide inner over narrow outer"
+ },
+ "NA04S": {
+  "scrut": "K",
+  "label": "K|scrutinee K, gen-if shadow wide inner over narrow outer"
+ },
+ "NA04F": {
+  "scrut": "7",
+  "label": "7|label K forward ref (decl after case), shadow wide inner over narrow outer"
+ },
+ "NA06L": {
+  "scrut": "1",
+  "label": "1|label i: genvar under same-named wide constant"
+ },
+ "NA06S": {
+  "scrut": "i",
+  "label": "i|scrutinee i: genvar under same-named wide constant"
+ },
+ "NA07L": {
+  "scrut": "1",
+  "label": "1|label K: sibling gen blocks with same-named wide localparams"
+ },
+ "NA07S": {
+  "scrut": "K",
+  "label": "K|scrutinee K: sibling gen blocks, narrow"
+ },
+ "NA08L": {
+  "scrut": "1",
+  "label": "1|label L=i*2+j (65-bit) nested loops"
+ },
+ "NA08S": {
+  "scrut": "i*2+j",
+  "label": "i*2+j|scrutinee nested loops vs 65-bit labels"
+ },
+ "NA09L": {
+  "scrut": "7",
+  "label": "7|label K: gen-scope variable shadowing a module param (illegal)"
+ },
+ "NA09S": {
+  "scrut": "K",
+  "label": "K|scrutinee K: gen-scope variable shadowing a module param (illegal)"
+ },
+ "NA10L": {
+  "scrut": "7",
+  "label": "7|label K: block wildcard import beside module K"
+ },
+ "NA10E": {
+  "scrut": "7",
+  "label": "7|label K: block explicit import pk::K (no module K)"
+ },
+ "NA10T": {
+  "scrut": "7",
+  "label": "7|label K: block let K beside module K"
+ },
+ "NA11M": {
+  "scrut": "4'b1111",
+  "label": "4'b1111|label EM: module enum signed label"
+ },
+ "NA11G": {
+  "scrut": "4'b1111",
+  "label": "4'b1111|label EM: gen-scope enum beside module localparam EM"
+ },
+ "NA11S": {
+  "scrut": "EM",
+  "label": "EM|scrutinee EM: gen-scope enum"
+ },
+ "NA12": {
+  "scrut": "P",
+  "label": "P|instance-array element: sub case(1) P, top same-named P"
+ },
+ "NA12S": {
+  "scrut": "P",
+  "label": "P|instance-array element: sub case(P) signed narrow"
+ },
+ "NA13L": {
+  "scrut": "7",
+  "label": "7|label pk::K beside module K"
+ },
+ "NA13I": {
+  "scrut": "5",
+  "label": "5|label K: module K beside wildcard-imported pk::K (local wins)"
+ },
+ "NA13S": {
+  "scrut": "pk::K",
+  "label": "pk::K|scrutinee pk::KS signed beside module KS"
+ },
+ "L07T": {
+  "scrut": "16'h6164",
+  "label": "S1 + 1"
+ },
+ "L13T": {
+  "scrut": "2",
+  "label": "R"
+ },
+ "L14T": {
+  "scrut": "4",
+  "label": "top.P"
+ },
+ "X05T": {
+  "scrut": "1",
+  "label": "4'b1x00 & 4'b0011"
+ },
+ "X20T": {
+  "scrut": "0",
+  "label": "1'bx ? 1 : 1"
+ },
+ "L12T": {
+  "scrut": "2",
+  "label": "1.0"
+ }
+}

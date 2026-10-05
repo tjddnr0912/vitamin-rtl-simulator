@@ -1,0 +1,241 @@
+category	path_or_glob	count	bytes	reason
+binary	impl/dev1/**	1	7404336	Mach-O executable (vita, verilator sim)
+binary	impl/dev2/**	1	7404336	Mach-O executable (vita, verilator sim)
+binary	impl/dev3/**	1	7420864	Mach-O executable (vita, verilator sim)
+binary	post_a/sep/**	4	29617280	Mach-O executable (vita, verilator sim)
+binary	post_a/vita	1	7404336	Mach-O executable (vita, verilator sim)
+binary	post_b/sep/**	4	29683392	Mach-O executable (vita, verilator sim)
+binary	post_b/vita	1	7420864	Mach-O executable (vita, verilator sim)
+binary	pre/sep/**	4	29617216	Mach-O executable (vita, verilator sim)
+binary	pre/vita	1	7404336	Mach-O executable (vita, verilator sim)
+binary	proto1/vita	1	7420848	Mach-O executable (vita, verilator sim)
+binary	proto2/vita	1	7420944	Mach-O executable (vita, verilator sim)
+build-artifact	g/velab/**	60	14164876	compiled image / staged artefact / verilator build file
+build-artifact	impl/velab/**	30	7082438	compiled image / staged artefact / verilator build file
+build-artifact	inst/velab/**	30	7082438	compiled image / staged artefact / verilator build file
+build-artifact	r1/sound/**	13	9521	compiled image / staged artefact / verilator build file
+build-artifact	r1/sound/**	34	51986	iverilog compiled image
+build-artifact	r2/sound/**	54	34673	compiled image / staged artefact / verilator build file
+build-artifact	r2/sound/**	45	69200	iverilog compiled image
+build-artifact	r2/velab/**	30	7082438	compiled image / staged artefact / verilator build file
+build-dir	g/__pycache__/**	1	3032	build-or-thirdparty-dirname:__pycache__
+build-dir	r1/sound/cells/w_c01_m13/vl/obj/**	27	755735	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c03_bits_amb_nw/vl/obj/**	25	747860	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c04_str_amb/vl/obj/**	25	747860	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c05_real_amb/vl/obj/**	25	747859	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c07_pkg_ref_then_amb/vl/obj/**	25	747882	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c08_pkg_expl_then_wc/vl/obj/**	25	747859	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c17_gen_region_ee/vl/obj/**	25	747859	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c22_ref_between_nw/vl/obj/**	25	747879	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c23_header_ref_nw/vl/obj/**	25	747879	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c24_ref_between_wn/vl/obj/**	25	747997	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c25_ref_between_nn/vl/obj/**	25	747879	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c26_ref_between_var_wide/vl/obj/**	25	747879	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c27_ref_between_wide_var/vl/obj/**	25	747997	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c28_ref_then_explicit_wide/vl/obj/**	25	751657	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c29_ref_then_explicit_var/vl/obj/**	25	748002	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c30_header_ref_wn/vl/obj/**	25	751771	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c32_pkg_ref_between_nw/vl/obj/**	25	747883	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c33_pkg_ref_between_wn/vl/obj/**	25	748001	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c38_iface_ref_between_nw/vl/obj/**	28	752740	build-or-thirdparty-dirname:obj
+build-dir	r1/sound/cells/w_c39_inst_array_ref_between_nw/vl/obj/**	25	752081	build-or-thirdparty-dirname:obj
+build-dir	r2/sound/cells/w_c40_unit_expl_wide_mod_expl_var/vl/obj/**	27	754122	build-or-thirdparty-dirname:obj
+build-dir	r2/sound/cells/w_c42_include_ref/vl/obj/**	25	749928	build-or-thirdparty-dirname:obj
+build-dir	r2/sound/cells/w_c43_macro_ref/vl/obj/**	25	749767	build-or-thirdparty-dirname:obj
+build-dir	r2/sound/cells/w_c45_function_ref/vl/obj/**	25	750034	build-or-thirdparty-dirname:obj
+build-dir	r2/sound/cells/w_c47_genregion_if_ref/vl/obj/**	25	753714	build-or-thirdparty-dirname:obj
+build-dir	tgt-inst/**	489	188508735	build-or-thirdparty-dirname:tgt-inst
+build-dir	tgt-mut/**	5628	2962414065	build-or-thirdparty-dirname:tgt-mut
+corpus-run-outputs	g/velab/**	5	5587	corpus vcmp/velab artefacts and their json/log
+corpus-run-outputs	impl/velab/**	2	3239	corpus vcmp/velab artefacts and their json/log
+corpus-run-outputs	r1/diff/corpus/**	66	14171192	corpus-run-outputs
+corpus-run-outputs	r2/velab/**	3	3866	corpus vcmp/velab artefacts and their json/log
+doc	COMMIT_DOCS.txt	1	2393	slice record (quoted as verdict source, not copied)
+doc	COMMIT_SLICE.txt	1	10198	slice record (quoted as verdict source, not copied)
+doc	GROUNDING.md	1	24128	slice record (quoted as verdict source, not copied)
+doc	IMPL.md	1	12491	slice record (quoted as verdict source, not copied)
+doc	LENS_BRIEF.md	1	3074	slice record (quoted as verdict source, not copied)
+doc	PLAN.md	1	21303	slice record (quoted as verdict source, not copied)
+doc	merge.txt	1	554	slice record (quoted as verdict source, not copied)
+doc-draft	archive.md	1	2718058	ROADMAP drafts / archive copy
+doc-draft	rh.s	1	94655	ROADMAP drafts / archive copy
+doc-draft	rn.s	1	99266	ROADMAP drafts / archive copy
+doc-draft	roadmap_head.md	1	94655	ROADMAP drafts / archive copy
+git-worktree	impl/tokchk/**	22	339734	git-worktree
+log	build1.log	1	2850	cargo/gate/runner logs
+log	build1.rc	1	2	exit-code / marker file
+log	build2.log	1	236	cargo/gate/runner logs
+log	build2.rc	1	2	exit-code / marker file
+log	build_p1.log	1	608	cargo/gate/runner logs
+log	build_p1.rc	1	2	exit-code / marker file
+log	build_p2.log	1	608	cargo/gate/runner logs
+log	build_p2.rc	1	2	exit-code / marker file
+log	corpus_main.log	1	1620	cargo/gate/runner logs
+log	corpus_main.rc	1	2	exit-code / marker file
+log	g/c.log	1	0	cargo/gate/runner logs
+log	g/c.rc	1	2	exit-code / marker file
+log	g/c2.log	1	0	cargo/gate/runner logs
+log	g/c2.rc	1	2	exit-code / marker file
+log	g/c3.log	1	0	cargo/gate/runner logs
+log	g/c3.rc	1	2	exit-code / marker file
+log	g/c4.log	1	0	cargo/gate/runner logs
+log	g/c4.rc	1	2	exit-code / marker file
+log	g/velab/**	1	2	exit-code / marker file
+log	gate/doc.log	1	2387	cargo/gate/runner logs
+log	gate/doc.rc	1	2	exit-code / marker file
+log	gate/nt.log	1	809433	cargo/gate/runner logs
+log	gate/nt.rc	1	2	exit-code / marker file
+log	impl/a4.log	1	28	cargo/gate/runner logs
+log	impl/a4b.log	1	28	cargo/gate/runner logs
+log	impl/b1.log	1	3997	cargo/gate/runner logs
+log	impl/b1.rc	1	2	exit-code / marker file
+log	impl/b2.log	1	605	cargo/gate/runner logs
+log	impl/c0.log	1	1392	cargo/gate/runner logs
+log	impl/c0b.log	1	891	cargo/gate/runner logs
+log	impl/cl1.log	1	4598	cargo/gate/runner logs
+log	impl/cl2.log	1	232	cargo/gate/runner logs
+log	impl/cl3.log	1	603	cargo/gate/runner logs
+log	impl/cl4.log	1	603	cargo/gate/runner logs
+log	impl/crun.log	1	1933	cargo/gate/runner logs
+log	impl/crun.rc	1	2	exit-code / marker file
+log	impl/g1.end	1	11	exit-code / marker file
+log	impl/g1.log	1	718892	cargo/gate/runner logs
+log	impl/g1.rc	1	2	exit-code / marker file
+log	impl/g1.start	1	11	exit-code / marker file
+log	impl/g2.log	1	811498	cargo/gate/runner logs
+log	impl/g2.rc	1	2	exit-code / marker file
+log	impl/g3.log	1	719740	cargo/gate/runner logs
+log	impl/g3.rc	1	2	exit-code / marker file
+log	impl/g4.end	1	11	exit-code / marker file
+log	impl/g4.log	1	720110	cargo/gate/runner logs
+log	impl/g4.rc	1	2	exit-code / marker file
+log	impl/g4.start	1	11	exit-code / marker file
+log	impl/g5.end	1	11	exit-code / marker file
+log	impl/g5.log	1	809433	cargo/gate/runner logs
+log	impl/g5.rc	1	2	exit-code / marker file
+log	impl/g5.start	1	11	exit-code / marker file
+log	impl/t1.log	1	7242	cargo/gate/runner logs
+log	impl/t2.log	1	8020	cargo/gate/runner logs
+log	impl/t2.rc	1	2	exit-code / marker file
+log	impl/t3.log	1	2398	cargo/gate/runner logs
+log	impl/t4.log	1	2512	cargo/gate/runner logs
+log	impl/t5.log	1	5059	cargo/gate/runner logs
+log	impl/t6.log	1	3246	cargo/gate/runner logs
+log	impl/t7.log	1	5059	cargo/gate/runner logs
+log	inst/build.rc	1	2	exit-code / marker file
+log	mut/M13.ws.rc	1	4	exit-code / marker file
+log	mut/R7.ws.rc	1	2	exit-code / marker file
+log	mut/run.rc	1	2	exit-code / marker file
+log	mut/run2.rc	1	2	exit-code / marker file
+log	mut/run3.rc	1	5	exit-code / marker file
+log	plan/a1.log	1	0	cargo/gate/runner logs
+log	plan/a1.rc	1	2	exit-code / marker file
+log	plan/a23.log	1	0	cargo/gate/runner logs
+log	plan/a23.rc	1	2	exit-code / marker file
+log	plan/a4.log	1	46	cargo/gate/runner logs
+log	plan/a4.rc	1	2	exit-code / marker file
+log	plan/a5.log	1	0	cargo/gate/runner logs
+log	plan/a5.rc	1	2	exit-code / marker file
+log	r1/diff/**	3	0	cargo/gate/runner logs
+log	r1/diff/**	3	6	exit-code / marker file
+log	r1/sound/**	6	4130	cargo/gate/runner logs
+log	r1/sound/**	139	278	exit-code / marker file
+log	r2/base_all.log	1	0	cargo/gate/runner logs
+log	r2/base_all.rc	1	2	exit-code / marker file
+log	r2/diff/**	1	0	cargo/gate/runner logs
+log	r2/diff/**	1	2	exit-code / marker file
+log	r2/postb_all.log	1	5	cargo/gate/runner logs
+log	r2/postb_all.rc	1	2	exit-code / marker file
+log	r2/sound/**	2	821596	cargo/gate/runner logs
+log	r2/sound/**	2	4	exit-code / marker file
+mutation	inst/build.log	1	4102	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	inst/cells_fire.txt	1	5381	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	inst/velab/**	2	3239	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M1.log	1	5479	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M10.log	1	5553	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M11.log	1	7137	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M12.log	1	6792	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M13.keccak.log	1	1686	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M13.log	1	4229	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M13.ws.log	1	812605	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M14.log	1	5798	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M15.log	1	5962	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M2.log	1	8071	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M3.log	1	5530	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M4.log	1	5511	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M5.log	1	9856	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M6.log	1	5433	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M7.log	1	8131	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M8.log	1	5481	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M8b.log	1	5450	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/M9.log	1	5529	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/N1.log	1	6782	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R1.log	1	12250	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R10.log	1	9809	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R11.log	1	7163	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R12.log	1	8450	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R13.log	1	9442	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R14.log	1	6703	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R15.log	1	6490	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R2.log	1	11375	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R3.log	1	7723	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R4.log	1	6520	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R5.log	1	6788	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R6.log	1	6927	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R7.log	1	5077	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R7.ws.log	1	809451	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R8.log	1	6490	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/R9.log	1	7914	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/mutate.py	1	4400	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/mutate2.py	1	3574	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/restore.log	1	5077	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/run.out	1	0	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/run2.out	1	0	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/run3.out	1	0	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/runmut.sh	1	1177	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/runmut2.sh	1	1183	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/runws.sh	1	604	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/runws2.sh	1	606	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/verdicts.txt	1	3705	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	mut/verdicts2.txt	1	5051	instrumented copy / mutation battery (repo copies excluded as dirs)
+mutation	r1/sound/**	3	755	mutant output (M13 / N1)
+mutation	r2/sound/**	1	744	mutant output (M13 / N1)
+no-oracle-output	plan/a4/**	1064	382880	A4 test-source differential: embedded repo test sources run on vita only (PLAN.md:37-38)
+other	g/fire.txt	1	1522	instrumented-build firing census / design text dump / empty movers file
+other	impl/cells_dump.txt	1	19457	instrumented-build firing census / design text dump / empty movers file
+other	impl/moves_n.txt	1	18	instrumented-build firing census / design text dump / empty movers file
+other	r2/dc.list	1	543	not a cell file
+other	r2/n.list	1	263	not a cell file
+other	r2/sc.list	1	590	not a cell file
+repo-copy	inst/repo/**	1353	22916024	repo-copy
+repo-copy	mut/repo/**	1401	23111691	repo-copy
+runner-workdir-copy	r1/sound/**	49	13610	runner copy of the cell source in its w_ workdir
+runner-workdir-copy	r2/sound/**	46	12307	runner copy of the cell source in its w_ workdir
+rust-source-or-patch	impl/package_r1.rs	1	110189	Rust source copy, patch or diff
+rust-source-or-patch	impl/test_backup.rs	1	30031	Rust source copy, patch or diff
+rust-source-or-patch	impl/test_backup2.rs	1	42386	Rust source copy, patch or diff
+rust-source-or-patch	impl/test_r1.rs	1	31075	Rust source copy, patch or diff
+rust-source-or-patch	mut/pristine/**	3	249544	Rust source copy, patch or diff
+rust-source-or-patch	mut/pristine2/**	3	275007	Rust source copy, patch or diff
+rust-source-or-patch	post_a/md5.txt	1	247	freeze md5 lists / diffs
+rust-source-or-patch	post_a/wt.diff	1	57570	Rust source copy, patch or diff
+rust-source-or-patch	post_b/md5.txt	1	294	freeze md5 lists / diffs
+rust-source-or-patch	post_b/wt.diff	1	85949	Rust source copy, patch or diff
+rust-source-or-patch	post_b/wt_final.diff	1	87439	Rust source copy, patch or diff
+rust-source-or-patch	post_b/wt_final.diff.md5	1	33	freeze md5 lists / diffs
+rust-source-or-patch	proto2.patch	1	15350	Rust source copy, patch or diff
+script	census.awk	1	380	helper script (not a kept runner/generator)
+script	g/moves.py	1	2253	helper script (not a kept runner/generator)
+script	g/summ.py	1	2528	helper script (not a kept runner/generator)
+script	g/summ_norm.py	1	1557	helper script (not a kept runner/generator)
+script	impl/a4run_a.py	1	1739	helper script (not a kept runner/generator)
+script	impl/a4run_b.py	1	1739	helper script (not a kept runner/generator)
+script	impl/cmp2.py	1	1428	helper script (not a kept runner/generator)
+script	impl/movers.py	1	1577	helper script (not a kept runner/generator)
+script	plan/a4run.py	1	1739	helper script (not a kept runner/generator)
+script	plan/cls.py	1	2331	helper script (not a kept runner/generator)
+script	plan/extract.py	1	3079	helper script (not a kept runner/generator)
+script	plan/runall.sh	1	308	helper script (not a kept runner/generator)
+script	plan/show.py	1	705	helper script (not a kept runner/generator)
+script	r1/diff/**	1	575	helper script (not a kept runner/generator)
+script	r2/mv.py	1	1135	helper script (not a kept runner/generator)

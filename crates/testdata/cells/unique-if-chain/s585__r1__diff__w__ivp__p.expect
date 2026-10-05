@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__w__ivp__p
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/w/ivp/p.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/w/ivp
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: real gap
+verdict_source: s585/r1/diff/REPORT.md:56
+notes: iverilog raw quoted: `p.sv:4: syntax error` (s585/r1/diff/REPORT.md:56)
+blocks: 0
+=== end

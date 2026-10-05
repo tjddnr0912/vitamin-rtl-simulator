@@ -1,0 +1,8 @@
+cells: 396
+JIT (VITA_JIT=1) != POST2 native: 0 
+JIT cells with templates_compiled>0: 170; total activations: 516
+nodef != POST2 native: 4
+    g__dif_c03b_side_eff: PRE-nodef differs from PRE too=True | fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b), and this build carries no ot
+    g__dif_c03b_side_eff_H: PRE-nodef differs from PRE too=True | fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b), and this build carries no ot
+    g__vl_lines: PRE-nodef differs from PRE too=True | fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b), and this build carries no ot
+    d__q5_sidefx: PRE-nodef differs from PRE too=True | fatal[VITA-F4004] F-RUN-FATAL: backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b), and this build carries no ot

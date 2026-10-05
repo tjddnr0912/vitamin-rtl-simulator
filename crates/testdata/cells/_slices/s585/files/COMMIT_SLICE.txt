@@ -1,0 +1,102 @@
+parser: a `unique if … else if` chain in procedural code reports its no-match (§3.b unique-if-chain)
+
+§4.5.585 — ROADMAP §5.2 row 1, §3.b unique-if-chain (the external report;
+§4.5.583's attempt, reverted until §2 🆕 Z closed in §4.5.584). Oracles:
+verilator 5.052 --binary --timing --assert, run with
++verilator+error+limit+1000 (the oracle for `unique if`; silent on every
+`priority if`; no oracle for x, order or counts); iverilog 13.0 -g2012
+(rejects `unique if`; the oracle on the `unique case` twins and on order).
+
+Bug: `parse_unique_priority` (hdl-parser/src/assertions.rs) armed the
+no-match report only on a first `if` with no `else`, so
+`unique if (a) … else if (b) …` with no final `else` reported nothing when
+no condition held, where verilator reports `'unique if' statement violated`
+at the first `if`'s line.
+
+The rule:
+- The arm goes on the last `if` of the `else if` series and reports at the
+  first `if`'s span. The series is decided from the written tokens, never
+  the node kind: `parse_if` (stmt_ctl.rs) records in `Parser.else_if_at`
+  the span.lo of an `If` parsed right after `else` when the next token is a
+  bare `if` (attributes are stripped by the lexer). An immediate assert /
+  assume after `else` desugars to `Stmt::If` too (assertions.rs, its span
+  starts at the `assert` token) and ends the series, as does a begin…end, a
+  label, a delay / event / wait control, `;` or a `case`. A qualified
+  `unique|priority|unique0|priority0 if` after `else` is the series' final
+  `else` statement (IEEE 1800-2017 Syntax 12-2) and reports only by its own
+  qualifier.
+- Every function and task body keeps PRE's lone-`if` rule: `tf_body`
+  (functask.rs, the one body parser behind `parse_function_def` and
+  `parse_task_def`) sets `first_if_arm_only`. Armed: initial, always,
+  always_ff, always_comb, always_latch, final and the fork branches inside
+  them. Three measured reasons hold the arm back in subroutine bodies:
+  the constant-function interpreter refuses a call that reaches the arm
+  (E3009 where both oracles fold; §3.b unique-const-fn); a continuous assign
+  runs the function it calls once more at t0 on x, before the initial that
+  writes its inputs, and that run reaches whatever the function calls (a
+  class method through a handle, a void method through `this.`, a
+  constructor through `new`, a formal-less item `function void`), so an
+  armed miss there reports at t0 where both oracles are silent (§2 🆕 AB,
+  new); and the package-scoped call closure walk treats the synthesized
+  report as impure and refuses a legal `pk::f(…)` (§3.b unique-pkg-closure,
+  new). Each narrowing by declaration kind (class functions, then void
+  methods and constructors, then formal-less void functions) met the next
+  route in grounding, planning and review round 1, so the axis was cut at
+  the subroutine boundary instead.
+
+No AST, IR or format change (format_version 35). A design without a
+procedural `if` chain parses to the identical .vu (a design with chains in
+every subroutine kind: PRE .vu = POST .vu; the 11 corpus workloads' vcmp
+snapshots are byte-identical; no bench source has a `unique` / `priority`
+`if`).
+
+Measured (PRE = 75f255d4 release, POST = this commit; native = interp =
+vm, staged vcmp -> velab -> vrun, JIT with VITA_JIT=1, product build
+--no-default-features):
+- 396 cells: 118 verilator report lines gained in 67 cells (the external
+  report's repro included); no PRE report lost; no output change other than
+  W4031 lines; run.json routes and --obs-procs process counts identical; VCD
+  identical; JIT equal to native.
+- Reports POST adds at t0: a consumer-first always_comb chain (§2 🆕 AA, a
+  recorded split, now reached by chains too), a self-timed `always` written
+  before its driving initial (vita = iverilog's source order; verilator
+  starts the initial first: a new oracle-split line), and cells where
+  verilator also reports at t0 (initial first, program initial, an x
+  register).
+- Left silent where verilator reports (vita = PRE): chains in function and
+  task bodies; an outer series whose `else` is a qualified `if` (verilator
+  continues through `else unique0 if`; IEEE ends it there). An inner
+  `unique if` after `else` reports at its own line where verilator names the
+  outer one (IEEE gives the miss to the inner statement; PRE the same for a
+  lone inner `if`). `priority if` chains report (hand-IEEE §12.4.2).
+
+Review: 2 rounds, differential + soundness lenses.
+- Round 1, two BLOCKING: `priority if … else unique0 if` reported where
+  verilator, IEEE and PRE are silent (fixed: only a bare `if` continues the
+  series); a formal-less item `function void` called by a function reached
+  from a continuous assign reported at t0 (q6a, net-declaration, port,
+  interface and package variants) — the third §2 🆕 AB route found after two
+  narrowings, so subroutine bodies were cut out whole. Also round 1: a
+  package-scoped call reaching an armed void function was newly refused
+  (closed by the same cut; root recorded as unique-pkg-closure).
+- Round 2 (delta): both lenses PASS (314 + 365 cells; flag census: 3
+  writers, 1 reader, no return or procedural-block parse inside `tf_body`).
+
+Tests: crates/cli/tests/unique_if_chain.rs (verilator text above every
+pin; residue pins for subroutine bodies, qualified `else`, the t0 split
+cells), crates/hdl-parser/tests/unique_if_chain_shape.rs. Mutants killed:
+the walk removed; the flag unset in task bodies; a qualified `if`
+recorded; the else_if_at check dropped.
+
+Docs: manual 006 §1.4 (the rule and its residues) and a §3.1 row (a
+continuous assign's extra t0 run; workaround `always_comb y = f(a, b);`),
+manual 003, CHANGELOG.
+
+Out of scope (queued): §2 🆕 AB; §3.b unique-pkg-closure; the
+subroutine-body residue stays in unique-if-chain (BLOCKED on both and on
+unique-const-fn); unique-if-text (W4031 says `case statement`);
+unique-overlap-note. PROBE_CATALOG: vita accepts a function that calls a
+task (both tools refuse, IEEE §13.4).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

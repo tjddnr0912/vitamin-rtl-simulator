@@ -1,0 +1,96 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P5
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P5.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: CLEAN
+verdict_source: s580/lens_snd2/REPORT.md:34
+notes: R4 cmp3_post4 bucket(s): pre×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P5.ivd.txt | 294 bytes
+RE 1 1 0 1 1 0 1 0 1 0 0
+KE 1 1 0 1 1 0 1 0 1 0 0
+RW 1 0 1 1 1 0 1 0
+KW 1 0 1 1 1 0 1 0
+X 1 1 0 / 1 1 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:47: $finish called at 2 (1ns)
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | ./P5.iv.txt | 104 bytes
+rc=1 sv2v: src/Convert/Wildcard.hs:96:9-46: Non-exhaustive patterns in Based size signed base vals knds
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./P5.sv2v.err | 100 bytes
+sv2v: src/Convert/Wildcard.hs:96:9-46: Non-exhaustive patterns in Based size signed base vals knds
+
+=== block 4 | vita [POST] | ./P5.post.txt | 6824 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:8:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E1` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:9:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E2` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:10:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E3` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:11:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E4` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E5` value is not a constant: 'bx0 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E6` value is not a constant: 'b1x0 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E7` value is not a constant: 64'shFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E8` value is not a constant: 64'hFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:16:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E9` value is not a constant: 'x has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E11` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:19:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W1` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:20:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W2` value is not a constant: 32'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:21:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W3` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:22:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W4` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:23:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W5` value is not a constant: 'x has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:24:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W6` value is not a constant: the `?` operation has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:25:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W7` value is not a constant: 68'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:26:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W8` value is not a constant: the `?` operation has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:27:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X1` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:28:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X2` value is not a constant: 4'b1x00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:29:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X3` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:31:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N1` value is not a constant: 'bx0 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:32:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N2` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:33:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N3` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+errors=24 warnings=0 notes=0
+rc=1
+=== block 5 | vita [POST2] | ./P5.post2.txt | 189 bytes
+RE 1 1 0 1 1 0 1 0 1 0 0
+KE 1 1 0 1 1 0 1 0 1 0 0
+RW 1 0 1 1 1 0 1 0
+KW 1 0 1 1 1 0 1 0
+X 1 1 0 / 1 1 0
+N 1 1 1 / 1 1 1
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST2-interp] | ./P5.p2interp.txt | 189 bytes | identical to block 5
+=== block 7 | vita [POST2-vm] | ./P5.p2vm.txt | 189 bytes | identical to block 5
+=== block 8 | vita [PRE] | ./P5.pre.txt | 6547 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:8:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E1` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:9:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E2` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:10:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E3` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:11:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E4` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E5` value is not a constant: 'bx0 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E6` value is not a constant: 'b1x0 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E7` value is not a constant: 64'shFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E8` value is not a constant: 64'hFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:16:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E9` value is not a constant: 'x has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E11` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:19:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W1` value is not a constant: 'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:20:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W2` value is not a constant: 32'bx1 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:21:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W3` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:22:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W4` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:23:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W5` value is not a constant: 'x has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:24:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W6` value is not a constant: the `?` operation has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:25:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W7` value is not a constant: 68'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:26:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W8` value is not a constant: the `?` operation has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:27:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X1` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:28:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X2` value is not a constant: 4'b1x00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:29:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X3` value is not a constant: 4'bx100 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:32:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N2` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P5.sv:33:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N3` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+errors=23 warnings=0 notes=0
+rc=1
+=== end

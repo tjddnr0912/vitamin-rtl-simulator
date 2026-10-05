@@ -1,0 +1,76 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c6__v01_comb_const_t0_read
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c6/v01_comb_const_t0_read.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c6
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g__v01_comb_const_t0_read v01_comb_const_t0_read
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/v01_comb_const_t0_read.out | 912 bytes
+##### v01_comb_const_t0_read
+=== verilator compile rc=0 run rc=0
+init t=0 y=11 z=1
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+- v01_comb_const_t0_read.sv:12: Verilog $finish
+=== iverilog compile rc=0 msgs: v01_comb_const_t0_read.sv:5: warning: always_comb process has no sensitivities. run rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=xx z=x
+init#0#0 t=0 y=11 z=1
+v01_comb_const_t0_read.sv:12: $finish called at 1 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__v01_comb_const_t0_read.out | 915 bytes
+##### g__v01_comb_const_t0_read
+=== verilator compile rc=0 run rc=0
+init t=0 y=11 z=1
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+- v01_comb_const_t0_read.sv:12: Verilog $finish
+=== iverilog compile rc=0 msgs: v01_comb_const_t0_read.sv:5: warning: always_comb process has no sensitivities. run rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=xx z=x
+init#0#0 t=0 y=11 z=1
+v01_comb_const_t0_read.sv:12: $finish called at 1 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+init t=0 y=xx z=x
+init#0 t=0 y=11 z=1
+init#0#0 t=0 y=11 z=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/v01_comb_const_t0_read.out | 912 bytes | identical to block 1
+=== end

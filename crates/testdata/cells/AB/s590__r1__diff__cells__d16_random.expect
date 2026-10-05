@@ -1,0 +1,71 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__d16_random
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/d16_random.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,POSTC,PRE2_SEP,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: refused alike PRE2/POST (not exercised): d12 wand/tri1 (E3009), d13 assign strength (E2002), d16 seeded $random in function (E3009).
+verdict_source: s590/r1/diff/REPORT.md:11
+notes: verdict_class = verbatim excerpt of the source line
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o1/d16_random.out | 1047 bytes
+##### d16_random
+=== PRE2 (native=interp=vm)
+rc=1
+d16_random.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: seeded $random is supported only as the direct rhs of a blocking assignment (v7) [in top.$func$f]
+errors=1 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=1
+d16_random.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: seeded $random is supported only as the direct rhs of a blocking assignment (v7) [in top.$func$f]
+errors=1 warnings=1 notes=0
+--- PRE2==POST(all backends): True  POST split: False  VCD PRE2==POST(all): True
+=== iverilog run rc=0
+init r=-2146999808
+y=1181502348 seed=-965981971
+d16_random.sv:11: $finish called at 3 (1s)
+=== verilator compile rc=1
+%Error: Circular logic when ordering code (non-cutable edge loop)
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Internal Error: ../V3Graph.cpp:211: Loops detected in graph:   VERTEX=0x78f4c9d360\n ALWAYS r1 c1
+                        ... This fatal error may be caused by the earlier error(s); resolve those first.
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/d16_random.out | 1673 bytes
+##### d16_random
+=== PRE2 (native=interp=vm)
+rc=1
+d16_random.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: seeded $random is supported only as the direct rhs of a blocking assignment (v7) [in top.$func$f]
+errors=1 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=1
+d16_random.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: seeded $random is supported only as the direct rhs of a blocking assignment (v7) [in top.$func$f]
+errors=1 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=1
+d16_random.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: seeded $random is supported only as the direct rhs of a blocking assignment (v7) [in top.$func$f]
+errors=1 warnings=1 notes=0
+--- PRE2==POSTA True  POSTA==POSTC True  PRE2==POSTC True  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'd16_random.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=1
+rc=3
+error[VITA-E8005]: cannot read 'd16_random.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+init r=-2146999808
+y=1181502348 seed=-965981971
+d16_random.sv:11: $finish called at 3 (1s)
+=== verilator compile rc=1
+%Error: Circular logic when ordering code (non-cutable edge loop)
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Internal Error: ../V3Graph.cpp:211: Loops detected in graph:   VERTEX=0x7bb0c88000\n ALWAYS r1 c1
+                        ... This fatal error may be caused by the earlier error(s); resolve those first.
+=== end

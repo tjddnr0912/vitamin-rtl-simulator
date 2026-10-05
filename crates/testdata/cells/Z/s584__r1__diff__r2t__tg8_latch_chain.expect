@@ -1,0 +1,84 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s584__r1__diff__r2t__tg8_latch_chain
+slice: §4.5.584 (s584; details _slices/s584/)
+origin: s584/r1/diff/r2t/tg8_latch_chain.sv
+roadmap_row: §2 🆕 Z
+set: r1/diff/r2t
+oracles_present: iverilog,verilator
+vita_tags: A,POST2,POST3,POST4,PRE
+verdict: split (report presence) [sev: NOTE]
+verdict_source: s584/r1/diff/REPORT.md:54
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: A: md5 caef001a26e755f24510e4ec9f89e443 commit unrecorded
+vita_binary: POST2: md5 28f38a3e306640b2c59907c1ab0c5825 commit unrecorded
+vita_binary: POST3: md5 469298289bfacab02e755ec2d18fa855 commit unrecorded
+vita_binary: POST4: md5 7868871ac14c9a58eaa6f51b6f980ca5 commit unrecorded
+blocks: 8
+=== block 1 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./tg8_latch_chain.out | 825 bytes
+##### tg8_latch_chain
+=== iverilog
+compile rc=0 msgs: tg8_latch_chain.sv:8: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+WARNING: tg8_latch_chain.sv:8: value is unhandled for priority or unique case statement
+         Time: 0  Scope: top
+t=1 y=1 l=1
+tg8_latch_chain.sv:14: $finish called at 5 (1s)
+=== verilator
+compile rc=0
+run rc=0
+t=1 y=1 l=1
+- tg8_latch_chain.sv:14: Verilog $finish
+=== vita[pre-native pre-interp pre-vm a-native a-interp a-vm]
+rc=0
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== vita[post2-native post2-interp post2-vm]
+rc=0
+tg8_latch_chain.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=2 notes=0
+=== block 2 | combined [iverilog+verilator+PRE+A+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./tg8_latch_chain.out2 | 825 bytes | identical to block 1
+=== block 3 | combined [iverilog+verilator+PRE+POST3+POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | ./tg8_latch_chain.out3 | 837 bytes
+##### tg8_latch_chain
+=== iverilog
+compile rc=0 msgs: tg8_latch_chain.sv:8: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+run rc=0
+WARNING: tg8_latch_chain.sv:8: value is unhandled for priority or unique case statement
+         Time: 0  Scope: top
+t=1 y=1 l=1
+tg8_latch_chain.sv:14: $finish called at 5 (1s)
+=== verilator
+compile rc=0
+run rc=0
+t=1 y=1 l=1
+- tg8_latch_chain.sv:14: Verilog $finish
+=== vita[pre-native pre-interp pre-vm post3-native post3-interp post3-vm]
+rc=0
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== vita[post2-native post2-interp post2-vm]
+rc=0
+tg8_latch_chain.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=2 notes=0
+=== block 4 | vita [POST2] | r3run/post2/r1_diff_r2t__tg8_latch_chain.out | 256 bytes
+=== vita (native=interp=vm)
+rc=0
+tg8_latch_chain.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=2 notes=0
+=== block 5 | vita [POST3] | r3run/post3/r1_diff_r2t__tg8_latch_chain.out | 109 bytes
+=== vita (native=interp=vm)
+rc=0
+t=1 y=1 l=1
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== block 6 | vita [POST3] | r4run/post3/r1_diff_r2t__tg8_latch_chain.out | 109 bytes | identical to block 5
+=== block 7 | vita [POST4] | r4run/post4/r1_diff_r2t__tg8_latch_chain.out | 109 bytes | identical to block 5
+=== block 8 | vita [PRE] | r3run/pre/r1_diff_r2t__tg8_latch_chain.out | 109 bytes | identical to block 5
+=== end

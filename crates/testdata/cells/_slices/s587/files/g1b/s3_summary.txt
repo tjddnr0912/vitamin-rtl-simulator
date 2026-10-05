@@ -1,0 +1,76 @@
+b_cl_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/r
+b_cl_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/r
+b_cl_if_N              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/r
+b_cl_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/r
+b_dp_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in top]
+b_dp_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in top]
+b_dp_if_N              rc=0   W4031=0 sites=f:frame:0              out=[W=10 ] 
+b_dp_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in top]
+b_en_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: enum label `A` value is not a foldable constant [in top]
+b_en_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: enum label `A` value is not a foldable constant [in top]
+b_en_if_N              rc=0   W4031=0 sites=f:frame:0              out=[A=10 ] 
+b_en_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: enum label `A` value is not a foldable constant [in top]
+b_gc_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: `f(…)` has no constant-fold
+b_gc_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: `f(…)` has no constant-fold
+b_gc_if_N              rc=0   W4031=0 sites=f:frame:0              out=[gc=other ] 
+b_gc_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: `f(…)` has no constant-fold
+b_gf_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: `f(…)` has no constant-fold 
+b_gf_if_M              rc=0   W4031=0 sites=f:frame:0              out=[g6=6 ] 
+b_gf_if_N              rc=0   W4031=0 sites=f:frame:0              out=[g6=6 ] 
+b_gf_pif_M             rc=0   W4031=0 sites=f:frame:0              out=[g6=6 ] 
+b_gi_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: `f(…)` has no constant-fold a
+b_gi_if_M              rc=0   W4031=0 sites=f:frame:0              out=[gi=7 ] 
+b_gi_if_N              rc=0   W4031=0 sites=f:frame:0              out=[gi=other ] 
+b_gi_pif_M             rc=0   W4031=0 sites=f:frame:0              out=[gi=7 ] 
+b_gl_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `P` value is not a constant: `f(…)` has no co
+b_gl_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `P` value is not a constant: `f(…)` has no co
+b_gl_if_N              rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+b_gl_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `P` value is not a constant: `f(…)` has no co
+b_loop_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_loop_if_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_loop_if_N            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_loop_pif_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_nest_case_M          rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_nest_if_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_nest_if_N            rc=0   W4031=0 sites=f:frame:0,g:frame:1    out=[P=11 ] 
+b_nest_pif_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_ov_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `W` is not a constant, so the declared defau
+b_ov_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `W` is not a constant, so the declared defau
+b_ov_if_N              rc=0   W4031=0 sites=f:frame:0              out=[W=10 ] 
+b_ov_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `W` is not a constant, so the declared defau
+b_pa_case_M            rc=0   W4031=1 sites=f:frame:1              out=[A0=7 ] 
+b_pa_if_M              rc=0   W4031=1 sites=f:frame:1              out=[A0=7 ] 
+b_pa_if_N              rc=0   W4031=0 sites=f:frame:1              out=[A0=10 ] 
+b_pa_pif_M             rc=0   W4031=1 sites=f:frame:1              out=[A0=7 ] 
+b_pk_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `P` value is not a foldable constant [in pk]
+b_pk_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `P` value is not a foldable constant [in pk]
+b_pk_if_N              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `P` value is not a foldable constant [in pk]
+b_pk_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `P` value is not a foldable constant [in pk]
+b_pki_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pki_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pki_if_N             rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+b_pki_pif_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pkx_case_M           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `pk.f(…)` has no constant-fold 
+b_pkx_if_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `pk.f(…)` has no constant-fold 
+b_pkx_if_N             rc=0   W4031=0 sites=                       out=[P=10 ] 
+b_pkx_pif_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `pk.f(…)` has no constant-fold 
+b_pp_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pp_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pp_if_N              rc=0   W4031=0 sites=f:frame:0              out=[P=10 ] 
+b_pp_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_pr_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+b_pr_if_M              rc=0   W4031=0 sites=f:frame:0              out=[bits=8 ] 
+b_pr_if_N              rc=0   W4031=0 sites=f:frame:0              out=[bits=11 ] 
+b_pr_pif_M             rc=0   W4031=0 sites=f:frame:0              out=[bits=8 ] 
+b_pw_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+b_pw_if_M              rc=0   W4031=0 sites=f:frame:0              out=[pw=8 ] 
+b_pw_if_N              rc=0   W4031=0 sites=f:frame:0              out=[pw=11 ] 
+b_pw_pif_M             rc=0   W4031=0 sites=f:frame:0              out=[pw=8 ] 
+b_sf_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_sf_if_M              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_sf_if_N              rc=0   W4031=0 sites=f:frame:0              out=[P=4 ] 
+b_sf_pif_M             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+b_ur_case_M            rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a c
+b_ur_if_M              rc=0   W4031=0 sites=f:frame:0              out=[size=7 ] 
+b_ur_if_N              rc=0   W4031=0 sites=f:frame:0              out=[size=10 ] 
+b_ur_pif_M             rc=0   W4031=0 sites=f:frame:0              out=[size=7 ] 

@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a2__Iwv
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a2/Iwv.sv
+roadmap_row: §2 🆕 U
+set: plan/a2
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: correct->loud(oracle loud: ivl,s2v)
+verdict_source: s591/impl/moves_audit.txt:10
+notes: class PRE vs posta (POST_a), IMPL.md:14
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Iwv.ivl | 85 bytes
+Iwv.sv:6: error: Ambiguous use of 'W'. It is exported by both 'pa' and by 'pb'.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Iwv.vl | 224 bytes
+wv W=5
+- Iwv.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Iwv.s2v | 185 bytes
+rc=1
+sv2v: identifier "W" ambiguously refers to the definitions in any of pa, pb
+CallStack (from HasCallStack):
+  error, called at src/Convert/Package.hs:349:21 in main:Convert.Package
+=== block 4 | vita [DEV1] | ./Iwv.dev1 | 228 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Iwv.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.W` [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [DEV3] | ./Iwv.dev3 | 228 bytes | identical to block 4
+=== block 6 | vita [POSTA] | ./Iwv.posta | 228 bytes | identical to block 4
+=== block 7 | vita [POSTB] | ./Iwv.postb | 228 bytes | identical to block 4
+=== block 8 | vita [PRE] | ./Iwv.pre | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+wv W=5
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [PRE] | ./Iwv.pre.route | 0 bytes
+
+=== block 10 | vita [PROTO2] | ./Iwv.post2 | 228 bytes | identical to block 4
+=== end

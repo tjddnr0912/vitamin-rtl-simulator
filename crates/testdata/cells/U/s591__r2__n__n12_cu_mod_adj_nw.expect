@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__r2__n__n12_cu_mod_adj_nw
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/r2/n/n12_cu_mod_adj_nw.sv
+roadmap_row: §2 🆕 U
+set: r2/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,POSTA,POSTB,POSTB_SEP,PRE
+verdict: pre=val[-] posta=LOUD[-] postb=LOUD[-] = oracle_loud=-
+verdict_source: s591/r2/lens_delta.txt:84
+notes: lens delta row PRE/posta/postb (whitespace collapsed)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./n12_cu_mod_adj_nw.ivl | 83 bytes
+n12 P=18446744073709551625
+n12_cu_mod_adj_nw.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./n12_cu_mod_adj_nw.vl | 258 bytes
+n12 P=18446744073709551625
+- n12_cu_mod_adj_nw.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./n12_cu_mod_adj_nw.s2v | 86 bytes
+n12 P=18446744073709551625
+n12_cu_mod_adj_nw.s2v.v:6: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./n12_cu_mod_adj_nw.dev3 | 242 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n12_cu_mod_adj_nw.sv:6:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.P` [in top]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POSTA] | ./n12_cu_mod_adj_nw.posta | 242 bytes | identical to block 4
+=== block 6 | vita [POSTB] | ./n12_cu_mod_adj_nw.postb | 242 bytes | identical to block 4
+=== block 7 | vita [PRE] | ./n12_cu_mod_adj_nw.pre | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+n12 P=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [PRE] | ./n12_cu_mod_adj_nw.pre.route | 0 bytes
+
+=== end

@@ -1,0 +1,130 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__w__f1c_qual__f1c_qual
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/w/f1c_qual/f1c_qual.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/w/f1c_qual
+oracles_present: verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: POST2 W4031 lines PRE and verilator lack
+verdict_source: s585/g/cmp3_final.txt:8
+notes: runs: f1c_qual g__f1c_qual; only copy is the harness run dir (no authoring copy left)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | g/out2/f1c_qual.out | 2729 bytes
+##### f1c_qual
+=== verilator compile rc=1
+%Error: f1c_qual.sv:19:44: syntax error, unexpected if
+   19 |     #1 unique if (a) n = 1; else priority0 if (b) n = 2;
+      |                                            ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 C1 n=0
+t=2 C2 n=0
+f1c_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 C3 n=0
+t=4 C4 n=0
+t=5 C5 n=0
+f1c_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+t=6 C6 n=0
+t=7 C7 n=0
+t=8 C8 n=0
+t=9 C9 n=0
+t=10 C10 n=0
+t=11 C11 n=0
+t=12 C12 n=9
+t=13 C13 n=9
+simulation ended (Finish) at time 14
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f1c_qual.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 C1 n=0
+f1c_qual.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 C2 n=0
+f1c_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 C3 n=0
+f1c_qual.sv:11:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 C4 n=0
+t=5 C5 n=0
+f1c_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+t=6 C6 n=0
+f1c_qual.sv:19:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+t=7 C7 n=0
+f1c_qual.sv:21:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 8]
+t=8 C8 n=0
+f1c_qual.sv:23:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+t=9 C9 n=0
+t=10 C10 n=0
+f1c_qual.sv:27:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 11]
+t=11 C11 n=0
+t=12 C12 n=9
+f1c_qual.sv:31:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 13]
+t=13 C13 n=9
+simulation ended (Finish) at time 14
+errors=0 warnings=11 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/g__f1c_qual.out | 2450 bytes
+##### g__f1c_qual
+=== verilator compile rc=1
+%Error: f1c_qual.sv:19:44: syntax error, unexpected if
+   19 |     #1 unique if (a) n = 1; else priority0 if (b) n = 2;
+      |                                            ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 C1 n=0
+t=2 C2 n=0
+f1c_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 C3 n=0
+t=4 C4 n=0
+t=5 C5 n=0
+f1c_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+t=6 C6 n=0
+t=7 C7 n=0
+t=8 C8 n=0
+t=9 C9 n=0
+t=10 C10 n=0
+t=11 C11 n=0
+t=12 C12 n=9
+t=13 C13 n=9
+simulation ended (Finish) at time 14
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f1c_qual.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 C1 n=0
+t=2 C2 n=0
+f1c_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 C3 n=0
+f1c_qual.sv:11:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 C4 n=0
+t=5 C5 n=0
+f1c_qual.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+t=6 C6 n=0
+t=7 C7 n=0
+f1c_qual.sv:21:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 8]
+t=8 C8 n=0
+f1c_qual.sv:23:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 9]
+t=9 C9 n=0
+t=10 C10 n=0
+f1c_qual.sv:27:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 11]
+t=11 C11 n=0
+t=12 C12 n=9
+f1c_qual.sv:31:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 13]
+t=13 C13 n=9
+simulation ended (Finish) at time 14
+errors=0 warnings=9 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [verilator,PRE,POSTC] verilator 5.052 (version captured in slice) | g/out/f1c_qual.out | 2729 bytes | identical to block 1
+=== end

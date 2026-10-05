@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__s__s03_gen_case_label_d
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/s/s03_gen_case_label_d.sv
+roadmap_row: §2 🆕 AE
+set: g/s
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-m
+verdict: F: keep; D: silent->loud (3); s03 silent->correct
+verdict_source: s588/GROUNDING.md:291
+notes: GROUNDING Q4 A lane row naming s03 (covers _d and _p twins)
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-m: md5 4d5e17eba66eab7172f25593a4a8cb88 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./s03_gen_case_label_d.ivl | 65 bytes
+LD
+done
+s03_gen_case_label_d.sv:8: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./s03_gen_case_label_d.vl | 241 bytes
+LD
+done
+- s03_gen_case_label_d.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 58.823 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./s03_gen_case_label_d.s2v | 69 bytes
+LD
+done
+s03_gen_case_label_d.s2v.v:25: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [PRE] | ./s03_gen_case_label_d.PRE | 176 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+LD
+done
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-m] | ./s03_gen_case_label_d.PROBE | 176 bytes | identical to block 4
+=== end

@@ -1,0 +1,70 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__diff__cells__b06_pkg
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/diff/cells/b06_pkg.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: POST,PRE,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: r1/diff/iv/b06_pkg r1/diff/v/b06_pkg r1/diff/v2/b06_pkg r1/diff/vl/b06_pkg
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+blocks: 19
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/b06_pkg/cout | 72 bytes
+b06_pkg.sv:3: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/b06_pkg/crc | 2 bytes
+0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r1/diff/iv/b06_pkg/out | 49 bytes
+pick=1
+b06_pkg.sv:12: $finish called at 100 (1s)
+=== block 4 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b06_pkg/cout | 4982 bytes
+%Warning-CASEOVERLAP: b06_pkg.sv:5:7: Case conditions overlap (example pattern 0x3)
+                                    : ... note: In instance 'pk'
+    5 |       2'b1?: return 2;
+      |       ^~~~~
+                      b06_pkg.sv:4:7: ... Location of overlapping condition
+    4 |       2'b?1: return 1;
+      |       ^~~~~
+                      ... For warning description see https://verilator.org/warn/CASEOVERLAP?v=5.052
+                      ... Use "/* verilator lint_off CASEOVERLAP */" and lint_on around source to disable this message.
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vtop.cpp Vtop___024root__0.cpp Vtop__main.cpp Vtop___024root__Slow.cpp Vtop___024root__0__Slow.cpp Vtop__Syms__Slow.cpp > Vtop__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vtop__ALL.o Vtop__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vtop__ALL.a    -pthread -lpthread   -o Vtop
+rm Vtop__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.033 MB sources in 3 modules, into 0.031 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 2.020 s (elab=0.000, cvt=0.002, bld=2.014); cpu 0.007 s on 10 threads; allocated 10.484 MB
+=== block 5 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b06_pkg/crc | 2 bytes | identical to block 2
+=== block 6 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b06_pkg/out | 224 bytes
+pick=1
+- b06_pkg.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 4.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 7 | oracle verilator 5.052 (version captured in slice) | r1/diff/vl/b06_pkg/rc | 2 bytes | identical to block 2
+=== block 8 | vita [POST] | r1/diff/v/b06_pkg/post.err | 460 bytes
+b06_pkg.sv:3:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=1
+=== block 9 | vita [POST] | r1/diff/v/b06_pkg/post.out | 45 bytes
+pick=1
+simulation ended (Finish) at time 100
+=== block 10 | vita [POST] | r1/diff/v/b06_pkg/post.rc | 2 bytes | identical to block 2
+=== block 11 | vita [POST2] | r1/diff/v2/b06_pkg/post2.err | 460 bytes | identical to block 8
+=== block 12 | vita [POST2] | r1/diff/v2/b06_pkg/post2.out | 45 bytes | identical to block 9
+=== block 13 | vita [POST2] | r1/diff/v2/b06_pkg/post2.rc | 2 bytes | identical to block 2
+=== block 14 | vita [PRE] | r1/diff/v/b06_pkg/pre.err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 15 | vita [PRE] | r1/diff/v/b06_pkg/pre.out | 45 bytes | identical to block 9
+=== block 16 | vita [PRE] | r1/diff/v/b06_pkg/pre.rc | 2 bytes | identical to block 2
+=== block 17 | vita [PRE] | r1/diff/v2/b06_pkg/pre.err | 127 bytes | identical to block 14
+=== block 18 | vita [PRE] | r1/diff/v2/b06_pkg/pre.out | 45 bytes | identical to block 9
+=== block 19 | vita [PRE] | r1/diff/v2/b06_pkg/pre.rc | 2 bytes | identical to block 2
+=== end

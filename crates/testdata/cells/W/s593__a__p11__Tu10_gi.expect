@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p11__Tu10_gi
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p11/Tu10_gi.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p11
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,post1,pre
+verdict: PRE=some
+verdict_source: s593/a/p11.summ:15
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./Tu10_gi.ivl | 75 bytes
+Tu10_gi.sv:4: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./Tu10_gi.vl | 347 bytes
+%Warning-WIDTHEXPAND: Tu10_gi.sv:7:10: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+GI=then
+- Tu10_gi.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 172.414 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./Tu10_gi.s2v | 56 bytes
+GI=then
+Tu10_gi.s2v.v:20: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./Tu10_gi.cut | 77 bytes
+GI=else
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./Tu10_gi.cut.route | 0 bytes
+
+=== block 6 | vita [post1] | ./Tu10_gi.post1 | 77 bytes | identical to block 4
+=== block 7 | vita [post1] | ./Tu10_gi.post1.route | 0 bytes | identical to block 5
+=== block 8 | vita [pre] | ./Tu10_gi.pre | 77 bytes
+GI=then
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 9 | vita [pre] | ./Tu10_gi.pre.route | 0 bytes | identical to block 5
+=== end

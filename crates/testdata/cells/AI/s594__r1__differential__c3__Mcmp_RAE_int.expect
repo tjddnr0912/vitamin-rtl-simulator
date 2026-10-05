@@ -1,0 +1,41 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__differential__c3__Mcmp_RAE_int
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/differential/c3/Mcmp_RAE_int.sv
+roadmap_row: §2 🆕 AI
+set: r1/differential/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre594,stgpa,stgpb
+verdict: Descents found
+verdict_source: s594/PLAN.md:63
+notes: named at s594/PLAN.md:29
+alias: i/r2/lens/diff_c3/Mcmp_RAE_int (byte-identical source) verdict: Descents found verdict_source: s594/PLAN.md:63
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Mcmp_RAE_int.ivl | 58 bytes
+R: L=0
+Mcmp_RAE_int.sv:8: $finish called at 40 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Mcmp_RAE_int.vl | 232 bytes
+R: L=X
+- Mcmp_RAE_int.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ns; walltime 0.000 s; speed 1.333 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Mcmp_RAE_int.s2v | 61 bytes
+R: L=X
+Mcmp_RAE_int.s2v.v:13: $finish called at 40 (1s)
+rc=0
+=== block 4 | vita [d3] | i/r2/lens/diff_c3/Mcmp_RAE_int.d3 | 77 bytes
+R: L=0
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [pa] | ./Mcmp_RAE_int.post | 77 bytes | identical to block 4
+=== block 6 | vita [pb] | ./Mcmp_RAE_int.postb | 77 bytes | identical to block 4
+=== block 7 | vita [pre594] | ./Mcmp_RAE_int.pre | 77 bytes | identical to block 4
+=== end

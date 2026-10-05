@@ -1,0 +1,8 @@
+d_display_lp           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+d_display_rt           rc=0   W4031=0 sites=f:frame:2              out=[in f a=2 in f a=1 ] 
+d_error_lp             rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+d_error_rt             rc=1   W4031=0 sites=f:frame:2              out=[x=5 ] VITA-E4003] E-RUN-USER-ERROR: in f a=2 [in top.f] [at time 1]
+d_info_lp              rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+d_info_rt              rc=0   W4031=0 sites=f:frame:2              out=[x=5 ] 
+d_warning_lp           rc=1   W4031=0 sites=no-runjson             out=[] VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm
+d_warning_rt           rc=0   W4031=0 sites=f:frame:2              out=[x=5 ] 

@@ -1,0 +1,77 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__c02
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/c02.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG1,POST,POST2,POST3,PRE,unrecorded/c.log,unrecorded/default,unrecorded/e.log,unrecorded/interp,unrecorded/native,unrecorded/oneshot,unrecorded/r.log,unrecorded/staged,unrecorded/vm
+verdict: accept = sv2v = verilator
+verdict_source: s582/post/CENSUS.md:73
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG1: md5 2674c193c5cdb62f66e0a380149d04a7 commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/tests__sv__c02/iv.out | 908 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6: error: Incomprehensible case expression.
+rc=5
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/c02/vl.out | 414 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 250.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/c02/sv.out | 96 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+sv2v.v:27: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [DBG1] | tests/sv/out/c02/post.out | 124 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST] | post/census/tests__sv__c02/post.out | 124 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/tests__sv__c02.sv/post.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 7 | vita [POST] | post2/cmp/tests__sv__c02.sv/post.out | 96 bytes
+x=1000 y=1
+x=0010 y=2
+x=0110 y=0
+x=1100 y=1
+x=0011 y=2
+simulation ended (Finish) at time 5
+rc=0
+=== block 8 | vita [POST2] | post2/cmp/tests__sv__c02.sv/post2.err | 28 bytes | identical to block 6
+=== block 9 | vita [POST2] | post2/cmp/tests__sv__c02.sv/post2.out | 96 bytes | identical to block 7
+=== block 10 | vita [POST2] | post3/cmp/tests__sv__c02.sv/post2.err | 28 bytes | identical to block 6
+=== block 11 | vita [POST2] | post3/cmp/tests__sv__c02.sv/post2.out | 96 bytes | identical to block 7
+=== block 12 | vita [POST3] | post3/cmp/tests__sv__c02.sv/post3.err | 28 bytes | identical to block 6
+=== block 13 | vita [POST3] | post3/cmp/tests__sv__c02.sv/post3.out | 96 bytes | identical to block 7
+=== block 14 | vita [PRE] | tests/sv/out/c02/pre.out | 1310 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6:38: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '4'b1?00'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/c02.sv:6:38: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['
+errors=3 warnings=1 notes=0
+rc=1
+=== end

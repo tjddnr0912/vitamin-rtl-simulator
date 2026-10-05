@@ -1,0 +1,149 @@
+| cell | PRE | decider value | decider | PRE class | IEEE fn result | F0 | F1 | D |
+|---|---|---|---|---|---|---|---|---|
+| a01_x2a_ret4 | P=0000 | P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a02_ret4_never | P=0000 | P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a03_x2b_retint | P=0 | P=0 | vl+IEEE | correct | known | keep | keep | keep |
+| a04_d10_untyped_px | PX=0000 bx=4 | PX=xxxx bx=4 | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a05_d10_untyped_pi | PI=0 bi=32 | PI=x bi=32 | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a06_d10_ps_ctl | PS=-3 bs=6 neg=1 | PS=-3 bs=6 neg=1 | all | correct | known | keep | keep | keep |
+| a07_x2c_local4 | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a08_x2i_integer | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a09_x2l_bitwrite | P=0001 | P=xxx1 | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a10_x2d_rangewrite | LOUD(E3009) | P=xx11 | ivl+vl | loud | x-bearing | keep | keep | keep |
+| a11_ipwrite | P=0011 | P=xx11 | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a12_ret_bitwrite | P=0010 | P=xx1x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a13_ret_allbits | P=11100100 | P=11100100 | all | correct | known | keep | keep | keep |
+| a14_x2k_bound | b=1 | LOUD | ivl+vl refuse | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a15_x2j_bitlocal | P=7 | P=7 | ivl+vl | correct | known | keep | keep | keep |
+| a16_intlocal | P=5 | P=5 | ivl+vl | correct | known | keep | keep | keep |
+| a17_byte_short_long | P=3 | P=3 | ivl+vl | correct | known | keep | keep | keep |
+| a18_time_local | P=0000000000000000 | P=xxxxxxxxxxxxxxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a19_reg_local | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a20_signed_local | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a21_implicit_ret | P=0000 | P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a22_integer_ret | P=0 | P=x | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a23_else_only | P=0000 | P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a24_arg_2state_formal | P=1 | P=1 | ivl+IEEE | correct | known | keep | keep | keep |
+| a25_arg_4state_formal | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a26_ret_2state_type | P=0 | P=0 | ivl+IEEE | correct | known | keep | keep | keep |
+| a27_2state_local_from_x | P=0000 | P=0000 | ivl+IEEE | correct | known | keep | keep | keep |
+| a28_x2m_order | Q=7 P=0000 | Q=7 P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a29_x2g_sibling_int | P=7 | P=0 | IEEE (7+x=x, int<-x=0) | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a30_x2f_callee | P=0000 | P=xxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a31_ret_int_from_xret | P=0 | P=0 | IEEE (int<-x=0) | correct | x-bearing | keep | keep | correct->loud |
+| a32_local_int_lp_xlocal | P=0 | P=0 | ivl+IEEE | correct | x-bearing | keep | keep | correct->loud |
+| a33_bitlp_xlocal | P=0001 | P=0001 | ivl+IEEE | correct | x-bearing | keep | keep | correct->loud |
+| a34_blocklocal | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a35_loopvar_decl | P=0011 | P=0011 | all | correct | known | keep | keep | keep |
+| a36_struct_local | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a37_wide_ret70 | P=000000000000000000 | P=xxxxxxxxxxxxxxxxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a38_ret64 | P=0000000000000000 | P=xxxxxxxxxxxxxxxx | vl+IEEE | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a39_init_local_ctl | P=0011 | P=0011 | all | correct | known | keep | keep | keep |
+| a40_assigned_before_read_ctl | P=0011 | P=0011 | all | correct | known | keep | keep | keep |
+| a41_rmw_unbound | P=0 | P=2 | ivl+vl | silent-wrong | known | silent->loud | silent->loud | silent->loud |
+| a42_write_x_index | P=0001 | ? | split ivl 0001 / vl crash | no-oracle | known | keep | keep | keep |
+| a43_ret4_read_before | P=0001 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a44_ret2_read_before | P=1 | P=1 | ivl+vl | correct | known | keep | keep | keep |
+| a45_retbit_never | P=0000 | P=0000 | vl+IEEE | correct | known | keep | keep | keep |
+| a46_typedef_bit_local | P=0010 | P=0010 | ivl+vl | correct | known | keep | keep | keep |
+| a47_typedef_logic_local | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a48_typeparam_logic | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a49_typeparam_bit | P=0010 | P=0010 | ivl+vl | correct | known | keep | keep | keep |
+| a50_while_uninit_i | P=0011 | P=0000 | ivl+sv2v | silent-wrong | known | keep | silent->correct | silent->correct |
+| a51_accum_ret4 | P=0100 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a52_dead_self_assign | P=0011 | P=0011 | all | correct | known | keep | keep | keep |
+| a55_known_bit_after_partial | P=0001 | P=0001 | all | correct | known | keep | keep | keep |
+| a57_x_and_call | P=0000 | P=0000 | all | correct | known | keep | keep | keep |
+| a59_self_inc_local | P=0001 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a61_static_fn | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| a62_ret2_bitwrite | P=1 | P=1 | vl+IEEE (ivl X) | correct | known | keep | keep | keep |
+| a63_init_x_literal | P=0011 | P=0011 | all | correct | known | keep | keep | keep |
+| a64_int_from_x_and0 | P=0 | P=0 | ivl+sv2v | correct | known | keep | keep | keep |
+| a65_if_gt5 | P=0010 | P=0010 | all | correct | known | keep | keep | keep |
+| a66_int_sub_self | P=0 | P=0 | ivl | correct | known | keep | keep | keep |
+| a67_lp_int_retinteger | P=0 | P=0 | ivl | correct | x-bearing | keep | keep | correct->loud |
+| a68_byte_ret_x | LOUD(E3009) | P=5 | ivl | loud | known | keep | keep | keep |
+| b01_add | P=0001 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b02_sub | P=1111 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b03_mul0 | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b04_div | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b05_mod | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b06_and0 | P=0000 | P=0000 | all | correct | known | keep | keep | keep |
+| b07_and3 | P=0000 | P=00xx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b08_orF | P=1111 | P=1111 | all | correct | known | keep | keep | keep |
+| b09_or3 | P=0011 | P=xx11 | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b10_xor0 | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b11_not | P=1111 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b12_neg | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b13_pow | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b14_xnor | P=1111 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b15_shl1 | P=0000 | P=xxx0 | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b16_shr4 | P=0000 | P=0000 | all | correct | known | keep | keep | keep |
+| b17_shl_by_x | P=0001 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b18_ashr | P=0000 | P=0xxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b19_shl4 | P=0000 | P=0000 | all | correct | known | keep | keep | keep |
+| b20_tern_cond | P=0010 | P=00xx | ivl+sv2v (vl 0010) | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b21_tern_same | P=0101 | P=0101 | all | correct | known | keep | keep | keep |
+| b22_tern_arm | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b23_concat | P=0001 | P=xx01 | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b24_concat_whole | P=0100 | P=01xx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b25_repl | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b26_bitsel | P=0000 | P=000x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b27_partsel | P=0000 | P=00xx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b28_index_by_x | LOUD(E3009) | P=000x | IEEE (ivl 0000, vl crash) | loud | x-bearing | keep | keep | keep |
+| b29_sizecast | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b30_primcast_int | LOUD(E3009) | P=0000 | ivl | loud | known | keep | keep | keep |
+| b31_unsigned | LOUD(E3009) | P=xxxx | ivl+vl | loud | x-bearing | keep | keep | keep |
+| b32_clog2 | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b33_bits | LOUD(E3009) | P=0100 | all | loud | known | keep | keep | keep |
+| b34_self_inc | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b35_sub_self | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b36_xor_self | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b40_redand | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b41_redor | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b42_redxor | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b43_land0 | P=0 | P=0 | ivl+sv2v (vl x) | correct | known | keep | keep | keep |
+| b44_land1 | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b45_lorl | P=1 | P=1 | all | correct | known | keep | keep | keep |
+| b46_lor0 | P=0 | P=x | ivl+sv2v (vl 0) | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b47_lnot | P=1 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b48_lt | P=1 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b49_eq_self | P=1 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b50_eq0 | P=1 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b51_ne0 | P=0 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b52_ceq_self | P=1 | P=1 | all | correct | known | keep | keep | keep |
+| b53_ceq_x | LOUD(E3009) | P=1 | all | loud | known | keep | keep | keep |
+| b54_cne0 | P=0 | P=1 | all | silent-wrong | known | silent->correct | silent->correct | silent->correct |
+| b55_ge0 | P=1 | P=x | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b56_redand_masked | P=0 | P=0 | all | correct | known | keep | keep | keep |
+| b57_redor_masked | P=1 | P=1 | all | correct | known | keep | keep | keep |
+| b58_wildeq | LOUD(E3009) | P=1 | all | loud | known | keep | keep | keep |
+| b59_inside | P=1 | P=x | vl+IEEE (ivl sorry) | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b60_if_eq1 | P=0010 | P=0010 | all | correct | known | keep | keep | keep |
+| b61_if_eq0 | P=0001 | P=0010 | all | silent-wrong | known | silent->correct | silent->correct | silent->correct |
+| b62_if_t | P=0010 | P=0010 | all | correct | known | keep | keep | keep |
+| b63_if_not | P=0001 | P=0010 | all | silent-wrong | known | silent->correct | silent->correct | silent->correct |
+| b64_if_ceqx | LOUD(E3009) | P=0001 | all | loud | known | keep | keep | keep |
+| b65_if_ne0 | P=0010 | P=0010 | all | correct | known | keep | keep | keep |
+| b66_for_bound | P=0000 | P=0000 | all | correct | known | keep | keep | keep |
+| b67_while_t | P=0000 | P=0000 | ivl+sv2v (vl refuses) | correct | known | keep | keep | keep |
+| b68_while_lt | P=0101 | P=0000 | ivl+sv2v (vl refuses) | silent-wrong | known | keep | silent->correct | silent->correct |
+| b69_repeat_t | P=0000 | P=0000 | ivl+sv2v (vl refuses) | correct | known | keep | keep | keep |
+| b70_return_x | P=0000 | P=xxxx | ivl+vl | silent-wrong | x-bearing | keep | keep | silent->loud |
+| b71_if_ceq_self | P=0001 | P=0001 | all | correct | known | keep | keep | keep |
+| b72_loop_overwrite | P=1111 | P=1111 | all | correct | known | keep | keep | keep |
+| b73_if_land | P=0010 | P=0010 | all | correct | known | keep | keep | keep |
+| b74_if_lor | P=0001 | P=0001 | all | correct | known | keep | keep | keep |
+| b80_int_add | P=1 | P=0 | ivl (vl x) | silent-wrong | known | keep | silent->correct | silent->correct |
+| b81_int_or3 | P=3 | P=3 | ivl | correct | known | keep | keep | keep |
+| b82_int_and0 | P=0 | P=0 | all | correct | known | keep | keep | keep |
+| b83_int_concat | P=1 | P=1 | ivl | correct | known | keep | keep | keep |
+| b84_int_eq0 | P=1 | P=0 | ivl | silent-wrong | known | silent->correct | silent->correct | silent->correct |
+| b85_int_shl1 | P=0 | P=0 | ivl | correct | known | keep | keep | keep |
+| b86_int_not | P=-1 | P=-16 | ivl | silent-wrong | known | keep | silent->correct | silent->correct |
+| b87_int_tern | P=2 | P=0 | ivl (vl 2) | silent-wrong | known | keep | silent->correct | silent->correct |
+
+F0 {'keep': 137, 'silent->correct': 4, 'silent->loud': 1}
+F1 {'keep': 132, 'silent->correct': 9, 'silent->loud': 1}
+D {'correct->loud': 4, 'keep': 58, 'silent->correct': 9, 'silent->loud': 71}
+PRE classes {'silent-wrong': 80, 'correct': 52, 'loud': 9, 'no-oracle': 1} total 142

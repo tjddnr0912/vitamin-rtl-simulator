@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t2__t16_strrep
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t2/t16_strrep.sv
+roadmap_row: §3.b unique-const-fn
+set: t2
+oracles_present: none-on-this-copy
+vita_tags: POST-b,PRE-sep,POST-c
+verdict: unrecorded
+verdict_source: unrecorded
+notes: oracle outputs on alias copy
+alias: t2/t16_strrep_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/lanes2_work/t2_t16_strrep/t16_strrep (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/lanes2_work/t2_t16_strrep_u/t16_strrep_u (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t16_strrep_u.ivl | 96 bytes
+t16_strrep_u.sv:4: syntax error
+t16_strrep_u.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t16_strrep_u.vl | 232 bytes
+s=abab
+- t16_strrep_u.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 23.810 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t16_strrep_u.build | 0 bytes
+
+=== block 4 | vita [S8] | ./t16_strrep_u.s8 | 509 bytes
+t16_strrep_u.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+s=
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=1
+rc=0
+=== end

@@ -1,0 +1,413 @@
+### c60473_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_01
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_02
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_03
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_04
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_05
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_06
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_07
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60473_08
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60474_00
+  pre594 : pw=1
+  p3 : <missing>
+  pa : pw=5
+  ivl : pw=5
+  s2v : pw=5
+  vl : pw=5
+### c60474_01
+  pre594 : rep=0
+  p3 : <missing>
+  pa : rep=fff
+  ivl : rep=fff
+  s2v : rep=fff
+  vl : rep=fff
+### c60474_02
+  pre594 : pw=0
+  p3 : <missing>
+  pa : pw=2
+  ivl : pw=2
+  s2v : pw=2
+  vl : pw=2
+### c60474_03
+  pre594 : !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determin
+  p3 : <missing>
+  pa : ps=1
+  ivl : ps=1
+  s2v : ps=5
+  vl : ps=1
+### c60474_04
+  pre594 : !VITA-E3009 parameter `L` value is not a foldable constant expression [in t]
+  p3 : <missing>
+  pa : L=4
+  ivl : L=4
+  s2v : L=4
+  vl : L=4
+### c60474_05
+  pre594 : w=1 t=0
+  p3 : <missing>
+  pa : w=1 t=5
+  ivl : w=1 t=5
+  s2v : w=1 t=5
+  vl : w=1 t=0
+### c60474_06
+  pre594 : w=1 t=0
+  p3 : <missing>
+  pa : w=1 t=5
+  ivl : w=1 t=5
+  s2v : !c60474_06.sv:5:8: Parse error: unexpected token '#' (Sym_pound)
+  vl : w=1 t=0
+### c60474_07
+  pre594 : U=1 B=1
+  p3 : <missing>
+  pa : U=3 B=2
+  ivl : U=3 B=2
+  s2v : U=3 B=2
+  vl : U=3 B=2
+### c60474_08
+  pre594 : !VITA-E3009 parameter `U` value is not a constant: the `^` operation has no consta
+  p3 : <missing>
+  pa : U=ffffffffffffffffffff B=80
+  ivl : U=ffffffffffffffffffff B=80
+  s2v : U=ffffffffffffffffffff B=80
+  vl : U=ffffffffffffffffffff B=80
+### c60474_09
+  pre594 : P=1 B=32
+  p3 : <missing>
+  pa : P=1 B=40
+  ivl : P=1 B=41
+  s2v : P=1 B=40
+  vl : P=1 B=40
+### c60475_00
+  pre594 : GI=else
+  p3 : <missing>
+  pa : GI=then
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : GI=then
+  vl : GI=then
+### c60475_01
+  pre594 : vb=4
+  p3 : <missing>
+  pa : vb=5
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : vb=5
+  vl : vb=5
+### c60476_00
+  pre594 : L=4294967294 B=32
+  p3 : <missing>
+  pa : L=-2 B=8
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=126 B=8
+  vl : L=-2 B=8
+### c60476_01
+  pre594 : L=4294967292 lt0=0 B=32
+  p3 : <missing>
+  pa : L=-4 lt0=1 B=8
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=252 lt0=0 B=8
+  vl : L=-4 lt0=1 B=8
+### c60476_02
+  pre594 : L=1
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=1
+### c60476_03
+  pre594 : L=1
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=1
+### c60477_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60477_01
+  pre594 : L=0 V=4294967292 B=32
+  p3 : <missing>
+  pa : L=1 V=252 B=8
+  ivl : L=1 V=252 B=9
+  s2v : L=1 V=252 B=8
+  vl : L=1 V=252 B=8
+### c60477_02
+  pre594 : L=0 V=4294967292 B=32 vb=4
+  p3 : <missing>
+  pa : L=1 V=252 B=8 vb=5
+  ivl : L=1 V=252 B=9 vb=5
+  s2v : L=1 V=252 B=8 vb=5
+  vl : L=1 V=252 B=8 vb=5
+### c60477_03
+  pre594 : L=0 V=4294967292 B=32 vb=4
+  p3 : <missing>
+  pa : L=1 V=252 B=8 vb=5
+  ivl : L=1 V=252 B=9 vb=5
+  s2v : L=1 V=252 B=8 vb=5
+  vl : L=1 V=252 B=8 vb=5
+### c60477_04
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60478_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=0
+### c60478_01
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=0
+  vl : L=0
+### c60479_00
+  pre594 : L=4294967292 M=0 K=0 vb=4
+  p3 : <missing>
+  pa : L=252 M=1 K=1 vb=5
+  ivl : L=252 M=1 K=1 vb=5
+  s2v : L=252 M=1 K=1 vb=5
+  vl : L=252 M=1 K=1 vb=5
+### c60480_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### c60480_01
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### c60480_02
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### c60480_03
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### c60480_04
+  pre594 : L=1
+  p3 : <missing>
+  pa : L=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : !  error, called at src/Language/SystemVerilog/AST/Type.hs:118:14 in ma
+  vl : L=0
+### c60481_00
+  pre594 : P=0000000000000000fffffffffffffffc
+  p3 : <missing>
+  pa : P=fffffffffffffffffffffffffffffffc
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : P=000000000000000000000000000000fc
+  vl : P=fffffffffffffffffffffffffffffffc
+### c60481_01
+  pre594 : P=0000000000000000fffffffffffffffc
+  p3 : <missing>
+  pa : P=fffffffffffffffffffffffffffffffc
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : P=000000000000000000000000000000fc
+  vl : P=fffffffffffffffffffffffffffffffc
+### c60482_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60494_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60495_00
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the replication `{n{…}}` has no
+  p3 : <missing>
+  pa : !VITA-E3009 parameter `L` value is not a constant: the replication `{n{…}}` has no
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60495_01
+  pre594 : rep=0
+  p3 : <missing>
+  pa : rep=0
+  ivl : rep=fff
+  s2v : rep=fff
+  vl : rep=fff
+### c60504_00
+  pre594 : L=4294967295 B=32
+  p3 : <missing>
+  pa : L=255 B=8
+  ivl : L=84 B=8
+  s2v : L=84 B=8
+  vl : L=84 B=8
+### c60505_00
+  pre594 : L=65532
+  p3 : <missing>
+  pa : L=65532
+  ivl : L=252
+  s2v : L=252
+  vl : L=252
+### c60505_01
+  pre594 : pw=0
+  p3 : <missing>
+  pa : pw=0
+  ivl : pw=2
+  s2v : pw=2
+  vl : pw=2
+### c60505_02
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60510_00
+  pre594 : w=1 t=10
+  p3 : <missing>
+  pa : w=1 t=10
+  ivl : w=1 t=10
+  s2v : w=1 t=10
+  vl : w=0 t=0
+### c60521_00
+  pre594 : k=0
+  p3 : <missing>
+  pa : k=0
+  ivl : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 67986 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp | !rc=142
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 69653 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=2
+### c60531_00
+  pre594 : GI=else
+  p3 : <missing>
+  pa : GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl : GI=then
+### c60531_01
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### c60532_00
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  p3 : <missing>
+  pa : !VITA-E3009 parameter `L` value is not a constant: `$clog2(…)` has no constant-fol
+  ivl : L=x
+  s2v : L=x
+  vl : L=x
+### c60533_00
+  pre594 : L=1
+  p3 : <missing>
+  pa : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### c60533_01
+  pre594 : L=1
+  p3 : <missing>
+  pa : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1
+### c60538_00
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: `fr(…)` has no constant-fold ar
+  p3 : <missing>
+  pa : !VITA-E3009 parameter `L` value is not a constant: `fr(…)` has no constant-fold ar
+  ivl : L=x
+  s2v : L=x
+  vl : L=x
+### c60539_00
+  pre594 : L=0
+  p3 : <missing>
+  pa : L=0
+  ivl : L=0
+  s2v : L=X
+  vl : L=X
+### c60541_00
+  pre594 : k=0
+  p3 : <missing>
+  pa : k=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 69362 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=3
+### c60541_01
+  pre594 : k=0
+  p3 : <missing>
+  pa : k=0
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 69659 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=3

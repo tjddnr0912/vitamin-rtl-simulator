@@ -1,0 +1,305 @@
+category	path_or_glob	count	bytes	reason
+binary	./*vita_guard_noarm	1	33850760	Mach-O/ELF executable
+binary	lens_snd/*vita_mut_d	1	34121640	Mach-O/ELF executable
+binary	lens_snd/*vita_snap1	1	34122168	Mach-O/ELF executable
+binary	post/*vita	1	7304768	Mach-O/ELF executable
+binary	post2/*vita	1	7304768	Mach-O/ELF executable
+binary	post3/*vita	1	7304736	Mach-O/ELF executable
+binary	post3b/*vita	1	7304736	Mach-O/ELF executable
+binary	postT/*.refusal-build	1	7304752	Mach-O/ELF executable
+binary	postT/*vita	1	7304736	Mach-O/ELF executable
+binary	pre/*vita	1	7304736	Mach-O/ELF executable
+build-dir	census/__pycache__/	2	11548	cargo target / pycache
+build-dir	census/cells/obj_*/	4848	141550699	verilator build tree
+build-dir	dump/o_*/	207	6013984	verilator build tree (holds *.mk / verilated.*)
+build-dir	dump2/o_*/	46	1336190	verilator build tree (holds *.mk / verilated.*)
+build-dir	fin/o_*/	240	7077088	verilator build tree (holds *.mk / verilated.*)
+build-dir	lens_diff3/census_c/__pycache__/	1	6203	cargo target / pycache
+build-dir	lens_diff3/census_c/cells/obj_*/	4848	141550699	verilator build tree
+build-dir	lens_diff3/s2c/__pycache__/	1	5744	cargo target / pycache
+build-dir	lens_diff3/vl/*/	525	15780925	verilator build tree (holds *.mk / verilated.*)
+build-dir	lens_snd/probes/obj_*/	1067	31843291	verilator build tree
+build-dir	lens_snd2/probes/q1/vl_*/	127	3734684	verilator build tree (holds *.mk / verilated.*)
+build-dir	lens_snd2/probes/q2/vl_*/	25	757340	verilator build tree (holds *.mk / verilated.*)
+build-dir	lens_snd2/probes/q4/vl_*/	200	5961600	verilator build tree (holds *.mk / verilated.*)
+build-dir	me/*/	23	668633	verilator build tree (holds *.mk / verilated.*)
+build-dir	oc3w/*/	35	887493	verilator build tree (holds *.mk / verilated.*)
+build-dir	probes2/*/	48	1417574	verilator build tree (holds *.mk / verilated.*)
+build-dir	probes2/obj_*/	23	671083	verilator build tree
+build-dir	r1v/o_*/	121	3584130	verilator build tree (holds *.mk / verilated.*)
+build-dir	s2/__pycache__/	1	5732	cargo target / pycache
+build-dir	s2/cells/o_*/	3375	100519601	verilator build tree (holds *.mk / verilated.*)
+doc-draft	docs_edit/*.md	1	12325	doc edit drafts
+doc-draft	docs_edit/*.py	5	28122	doc edit drafts
+empty-marker	lens_diff3/*.txt	4	0	zero-byte error file
+example-run	ex/post/*.sv.out	4	1084	examples/ stdout + VCD, PRE vs POST (vita only, repo examples)
+example-run	ex/post/*.vcd	4	4688	examples/ stdout + VCD, PRE vs POST (vita only, repo examples)
+example-run	ex/pre/*.sv.out	4	1084	examples/ stdout + VCD, PRE vs POST (vita only, repo examples)
+example-run	ex/pre/*.vcd	4	4688	examples/ stdout + VCD, PRE vs POST (vita only, repo examples)
+gate-log	./*.log	10	56077	fmt/clippy/nextest/CI/mutation logs
+gate-log	./*.rc	1	2	fmt/clippy/nextest/CI/mutation logs
+gate-log	fin/*.log	3	2412	cargo build/clippy/nextest log
+gate-log	final_gate/*.log	10	820306	fmt/clippy/nextest/CI/mutation logs
+gate-log	final_gate/*.rc	10	20	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate/*.log	10	1106223	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate/*.rc	4	10	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate2/*.log	4	709248	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate2/*.rc	4	8	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate2/*t0	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate2/*t1	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate3/*.log	4	709166	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate3/*.rc	4	8	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate3/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate4/*.log	6	719743	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate4/*.rc	5	12	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate4/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate5/*.log	6	710378	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate5/*.rc	5	10	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate5/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate5/*t0	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate5/*t1	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate6/*.log	6	711706	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate6/*.rc	6	12	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate6/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate6/*t0	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate6/*t1	1	11	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate7/*.log	6	710342	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate7/*.rc	6	12	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate7/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate8/*.log	6	710662	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate8/*.rc	6	12	fmt/clippy/nextest/CI/mutation logs
+gate-log	gate8/*done	1	0	fmt/clippy/nextest/CI/mutation logs
+gate-log	mut/*.log	4	34143	fmt/clippy/nextest/CI/mutation logs
+gate-log	mut/*.md5	1	33	fmt/clippy/nextest/CI/mutation logs
+gate-log	mut/*.py	1	586	fmt/clippy/nextest/CI/mutation logs
+harness-translation	oc3w/*.log	1	4616	index-numbered sv2v translations of cells held elsewhere (oc3.py / ocheck.py); results kept in lens_pp3_oracle.txt / ocheck/post*.txt
+harness-translation	oc3w/*.v	71	58764	index-numbered sv2v translations of cells held elsewhere (oc3.py / ocheck.py); results kept in lens_pp3_oracle.txt / ocheck/post*.txt
+harness-translation	ocheck/w/*.v	215	191711	index-numbered sv2v translations of cells held elsewhere (oc3.py / ocheck.py); results kept in lens_pp3_oracle.txt / ocheck/post*.txt
+instrument-dump	./*.txt	1	234452	TEMP VITA_GCX instrument output over the census (REPORT.md:52); not a per-cell oracle record
+lens-harness	lens_snd/*.done	2	10	lens mutation logs / scripts
+lens-harness	lens_snd/*.log	7	5556191	lens mutation logs / scripts
+lens-harness	lens_snd/*.rc	7	86	lens mutation logs / scripts
+lens-harness	lens_snd/*.sh	2	2704	lens mutation logs / scripts
+lens-harness	lens_snd2/*.done	1	5	lens mutation logs / scripts
+lens-harness	lens_snd2/*.log	4	3175149	lens mutation logs / scripts
+lens-harness	lens_snd2/*.rc	4	198	lens mutation logs / scripts
+lens-harness	lens_snd2/*.sh	2	3515	lens mutation logs / scripts
+lens-harness	lens_snd3/*.done	1	5	lens mutation logs / scripts
+lens-harness	lens_snd3/*.log	3	2378453	lens mutation logs / scripts
+lens-harness	lens_snd3/*.rc	3	12	lens mutation logs / scripts
+lens-harness	lens_snd3/*.sh	1	1154	lens mutation logs / scripts
+lens-harness	lens_snd3/*.txt	1	447	lens mutation logs / scripts
+lens-harness	lens_snd3/*.wall	2	7	lens mutation logs / scripts
+no-oracle-output	dump/{d99934_0.sv,d99935_0.sv,d99935_1.sv,d99935_2.sv,d99935_3.sv,d99935_4.sv,d99936_0.sv,d99936_1.sv,d99937_0.sv,d99938_0.sv,d99939_0.sv,d99940_0.sv,d99941_0.sv,d99942_0.sv} (SV + its outputs)	28	28620	SV with no oracle output and no doc quote
+no-oracle-output	dump2/{d3328_0.sv,d3329_0.sv,d3330_0.sv,d3341_0.sv,d3342_0.sv,d3342_1.sv,d3343_0.sv,d3344_0.sv,d3345_0.sv} (SV + its outputs)	9	12282	SV with no oracle output and no doc quote
+no-oracle-output	dump3/{d72036_0.sv,d72037_0.sv,d72038_0.sv,d72039_0.sv,d72039_1.sv,d72040_0.sv,d72041_0.sv,d72043_0.sv,d72044_0.sv,d72045_0.sv,d72062_0.sv,noinside.sv} (SV + its outputs)	14	21642	SV with no oracle output and no doc quote
+no-oracle-output	lens_diff/p/{R_eval.sv,S02c.sv,gchk.sv} (SV + its outputs)	3	14995	SV with no oracle output and no doc quote
+no-oracle-output	lens_diff3/smoke/{s.sv} (SV + its outputs)	2	487	SV with no oracle output and no doc quote
+no-oracle-output	lens_snd/probes/{C1.sv,C10.sv,C11.sv,C12.sv,C2.sv,C3.sv,C4.sv,C5.sv,C6.sv,C7.sv,C8.sv,C9.sv,E1.sv,E10.sv,E11.sv,E12.sv,E2.sv,E3.sv,E4.sv,E5.sv,E6.sv,E7.sv,E8.sv,E9.sv,G10.sv,G2.sv,MB1.sv} (SV + its outputs)	79	9297	SV with no oracle output and no doc quote
+no-oracle-output	lens_snd2/probes/q3/{C2.sv,G2.sv,I1.sv,L3.sv,U1.sv} (SV + its outputs)	15	4356	SV with no oracle output and no doc quote
+no-oracle-output	me/{m1.sv,m1q.sv,m2.sv,ov1.sv,ov2.sv,r3a.sv,r3b.sv} (SV + its outputs)	8	3164	SV with no oracle output and no doc quote
+no-oracle-output	probes/{c1.sv,c2.sv,c3.sv,lpa.sv,t1.sv,t2.sv,t3.sv,t4.sv} (SV + its outputs)	15	4444	SV with no oracle output and no doc quote
+no-oracle-output	probes2/{kw.sv,n09me.sv,na11u.sv,s.sv,s13p.sv,s2.sv,s47.sv,w06p.sv} (SV + its outputs)	9	3372	SV with no oracle output and no doc quote
+no-oracle-output	r2v/{I2.sv,Q6.sv,res.sv,res_noinside.sv,sx.sv} (SV + its outputs)	8	3541	SV with no oracle output and no doc quote
+orphan-translation	me/*.v	1	211	sv2v output whose source file is not named
+orphan-translation	probes2/*.v	1	1314	sv2v output whose source file is not named
+repo-copy	lens_diff/src_post/	146	4713526	partial repo source snapshot (crates/elaborate)
+repo-copy	lens_diff2/src/	146	4718288	partial repo source snapshot (crates/elaborate)
+repo-copy	lens_snd/mut_a/	1420	28188729	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/mut_b/	1420	28188849	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/mut_c/	1420	28188854	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/mut_d/	1420	28188877	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/src/	1414	28185081	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/srcP/	1412	28147398	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd/srcT/	1414	28176418	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/mut_m1/	1421	62385670	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/mut_m2/	1421	62385634	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/mut_m5/	1421	62385651	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/mut_m8/	1421	62385662	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd2/src/	1414	28196635	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd3/mut_a/	1419	28165750	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd3/mut_b/	1419	28165676	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd3/pre_src/	1412	28147398	listed in repocopies.txt/wtlist.txt
+repo-copy	lens_snd3/src/	1413	28161930	listed in repocopies.txt/wtlist.txt
+run-log	census/*.log	1	9	census batch run log/rc
+run-log	census/*.rc	3	6	census batch run log/rc
+run-log	lens_diff3/census_c/*.log	1	9	census batch run log/rc
+run-log	lens_diff3/census_c/*.rc	3	6	census batch run log/rc
+run-log	lens_diff3/s2c/*.done	1	0	census batch run log/rc
+run-log	s2/*.done	1	0	census batch run log/rc
+rust-source-or-patch	./*.T.rs	1	7179	saved Rust source / patch
+rust-source-or-patch	./*.clean.rs	1	7179	saved Rust source / patch
+rust-source-or-patch	./*.patch	6	142003	saved Rust source / patch
+rust-source-or-patch	./*.rs	2	6890	saved Rust source / patch
+rust-source-or-patch	./*.s.rs	2	28025	saved Rust source / patch
+rust-source-or-patch	T_new_files/	2	29344	saved Rust source
+rust-source-or-patch	mut/*.rs.orig	1	9849	saved Rust source / patch
+rust-source-or-patch	snap/	2	31095	saved Rust source
+scratch-output	./*.txt	7	2632	worktree / git-status notes
+scratch-output	./*t0	1	11	worktree / git-status notes
+script	./*.py	5	9292	helper script (not a cell generator/runner)
+script	./*.sh	1	782	helper script (not a cell generator/runner)
+script	census/*.py	2	4214	helper script (not a cell generator/runner)
+script	lens_diff/*.py	2	3089	helper script (not a cell generator/runner)
+script	lens_diff2/*.py	2	3874	helper script (not a cell generator/runner)
+script	lens_diff3/*.py	2	2530	helper script (not a cell generator/runner)
+script	lens_diff3/census_c/*.py	4	36775	helper script (not a cell generator/runner)
+script	lens_diff3/s2c/*.py	3	9692	helper script (not a cell generator/runner)
+script	lens_snd/*.py	1	1867	helper script (not a cell generator/runner)
+script	lens_snd2/*.py	2	2571	helper script (not a cell generator/runner)
+script	ocheck/*.py	1	2599	helper script (not a cell generator/runner)
+script	s2/*.py	1	1462	helper script (not a cell generator/runner)
+slice-doc-verdict-source	./*.md	8	66303	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	./*.txt	6	11354	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff/*.md	1	10201	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff2/*.md	1	6486	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_diff3/*.md	1	18133	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd/*.md	1	13303	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd2/*.md	1	9239	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+slice-doc-verdict-source	lens_snd3/*.md	1	4064	slice doc (verdict_source / doc-quote source of CELLS.tsv; not a cell file)
+third-party-corpus-output	lens_diff2/velab/	66	14170443	corpus (ibex, verilog-axi, ...) + examples IR identity runs: .vu/.velab/logs, vita only
+third-party-corpus-output	velab/	226	49591894	corpus (ibex, verilog-axi, ...) + examples IR identity runs: .vu/.velab/logs, vita only
+vvp-image	blk/*.vvp	4	6461	iverilog compiled image
+vvp-image	census/cells/*.s.vvp	240	301209	iverilog compiled image
+vvp-image	census/cells/*.vvp	234	289185	iverilog compiled image
+vvp-image	dump/*.svvp	14	35938	iverilog compiled image
+vvp-image	dump/*.vvp	14	34721	iverilog compiled image
+vvp-image	dump2/*.svvp	2	3744	iverilog compiled image
+vvp-image	dump2/*.vvp	2	3567	iverilog compiled image
+vvp-image	dump3/*.svvp	1	3012	iverilog compiled image
+vvp-image	dump3/*.vvp	1	2608	iverilog compiled image
+vvp-image	fin/*.s.vvp	13	20173	iverilog compiled image
+vvp-image	fin/*.vvp	11	17350	iverilog compiled image
+vvp-image	ladder/*.s.vvp	18	30426	iverilog compiled image
+vvp-image	ladder/*.vvp	12	20317	iverilog compiled image
+vvp-image	lens_diff/p/*.s.vvp	179	369255	iverilog compiled image
+vvp-image	lens_diff/p/*.vvp	261	1162231	iverilog compiled image
+vvp-image	lens_diff2/p/*.s.vvp	40	94634	iverilog compiled image
+vvp-image	lens_diff2/p/*.vvp	35	84939	iverilog compiled image
+vvp-image	lens_diff3/smoke/*.vvp	2	2613	iverilog compiled image
+vvp-image	lens_diff3/v/*.i.vvp	292	423233	iverilog compiled image
+vvp-image	lens_diff3/v/*.s2v.s.vvp	360	516068	iverilog compiled image
+vvp-image	lens_diff3/v2/*.i.vvp	32	46319	iverilog compiled image
+vvp-image	lens_diff3/v2/*.s2v.s.vvp	59	86292	iverilog compiled image
+vvp-image	lens_diff3/v3/*.i.vvp	40	55407	iverilog compiled image
+vvp-image	lens_diff3/v3/*.s2v.s.vvp	44	62710	iverilog compiled image
+vvp-image	lens_diff3/v4/*.s2v.s.vvp	20	29754	iverilog compiled image
+vvp-image	lens_snd/probes/*.s.vvp	82	111147	iverilog compiled image
+vvp-image	lens_snd/probes/*.vvp	76	103540	iverilog compiled image
+vvp-image	lens_snd2/probes/q1/*.ivvp	4	6106	iverilog compiled image
+vvp-image	lens_snd2/probes/q1/*.svvp	4	5283	iverilog compiled image
+vvp-image	lens_snd2/probes/q2/*.ivvp	1	3160	iverilog compiled image
+vvp-image	lens_snd2/probes/q2/*.svvp	1	3267	iverilog compiled image
+vvp-image	lens_snd2/probes/q3/*.ivvp	10	18781	iverilog compiled image
+vvp-image	lens_snd2/probes/q3/*.svvp	11	21236	iverilog compiled image
+vvp-image	lens_snd2/probes/q4/*.ivvp	10	11767	iverilog compiled image
+vvp-image	lens_snd2/probes/q4/*.svvp	11	12829	iverilog compiled image
+vvp-image	lens_snd3/p/kb/*.vvp	3	3240	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/B1/*.vvp	1	1214	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/B3/*.vvp	1	1215	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C01/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C02/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C03/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C04/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C05/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C06/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C07/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C08/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C09/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C10/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C11/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C14/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C15/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C16/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C18/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C19/*.vvp	1	2287	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C20/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C25/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C26/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C27/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C28/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C29/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C30/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C31/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/C32/*.vvp	1	2283	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F1/*.vvp	1	1528	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F10/*.vvp	1	1531	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F11/*.vvp	1	1432	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F12/*.vvp	1	1432	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F3/*.vvp	1	1429	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F4/*.vvp	1	1432	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F5/*.vvp	1	1466	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F6/*.vvp	1	1466	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/F7/*.vvp	1	1627	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/G1/*.vvp	1	1377	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/G1L/*.vvp	1	1259	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/G2/*.vvp	1	1380	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/G3/*.vvp	1	1382	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/R1/*.vvp	1	1355	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/R2/*.vvp	1	1336	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/R5/*.vvp	1	1362	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/R6/*.vvp	1	1362	iverilog compiled image
+vvp-image	lens_snd3/p/run/iv/R7/*.vvp	1	1385	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/B1/*.vvp	1	1212	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/B2/*.vvp	1	1211	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/B3/*.vvp	1	1211	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C01/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C02/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C03/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C04/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C05/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C06/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C07/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C08/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C09/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C10/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C11/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C14/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C15/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C16/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C18/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C19/*.vvp	1	2222	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C20/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C25/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C26/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C27/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C28/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C29/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C30/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C31/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/C32/*.vvp	1	2218	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F1/*.vvp	1	1524	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F10/*.vvp	1	1536	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F11/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F12/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F13/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F2/*.vvp	1	1524	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F3/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F4/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F5/*.vvp	1	1427	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F6/*.vvp	1	1427	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F7/*.vvp	1	1625	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F8/*.vvp	1	1435	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/F9/*.vvp	1	1427	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/G1/*.vvp	1	1376	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/G1L/*.vvp	1	1255	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/G2/*.vvp	1	1376	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/G3/*.vvp	1	1379	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/R1/*.vvp	1	1351	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/R2/*.vvp	1	1332	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/R5/*.vvp	1	1358	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/R6/*.vvp	1	1358	iverilog compiled image
+vvp-image	lens_snd3/p/run/sv/R7/*.vvp	1	1381	iverilog compiled image
+vvp-image	me/*.vvp	4	6053	iverilog compiled image
+vvp-image	oc3w/*.s.vvp	71	137324	iverilog compiled image
+vvp-image	oc3w/*.vvp	42	78995	iverilog compiled image
+vvp-image	ocheck/w/*.s.vvp	191	515011	iverilog compiled image
+vvp-image	ocheck/w/*.vvp	105	253566	iverilog compiled image
+vvp-image	probes/*.s.vvp	7	8628	iverilog compiled image
+vvp-image	probes/*.vvp	7	8621	iverilog compiled image
+vvp-image	probes2/*.vvp	6	13266	iverilog compiled image
+vvp-image	r1v/*.s.vvp	5	7885	iverilog compiled image
+vvp-image	r1v/*.vvp	6	12908	iverilog compiled image
+vvp-image	r2v/*.vvp	6	8361	iverilog compiled image
+vvp-image	s2/cells/*.s.vvp	167	199330	iverilog compiled image
+vvp-image	s2/cells/*.vvp	113	131677	iverilog compiled image

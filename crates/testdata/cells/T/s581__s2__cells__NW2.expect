@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__s2__cells__NW2
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/s2/cells/NW2.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: s2
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST2,POST3,POST,PRE
+verdict: unchanged
+verdict_source: s581/S2_matrix.tsv:124
+alias: lens_diff3/s2c/cells/NW2 (byte-identical source) verdict: unchanged verdict_source: s581/S2_matrix.tsv:124
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST2: md5 ed69d5ae6fa11e12d4220550f6391b42 commit 9bd5cd65
+vita_binary: POST3: md5 33067d7744033c67c45ad43be49d95da commit eb9d3b69
+vita_binary: POST3b: md5 6aab206f39960ecfd78a576159ed811c commit eb9d3b69
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./NW2.iv.txt | 100 bytes
+NW2.sv:4: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./NW2.vl.txt | 92 bytes
+%Error: Internal Error: NW2.sv:4:39: ../V3Number.cpp:1120: toString with 4-state 1'bx
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./NW2.vlb | 365 bytes
+%Error: Internal Error: NW2.sv:4:39: ../V3Number.cpp:1120: toString with 4-state 1'bx
+                                   : ... note: In instance 't'
+    4 |   initial #1 $display("NW2 %b", s ==? 'x);
+      |                                       ^~
+                        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./NW2.sv.txt | 106 bytes
+sv2v: src/Convert/Wildcard.hs:96:9-46: Non-exhaustive patterns in Based size signed base vals knds
+
+
+rc=1
+=== block 5 | vita [POST] | ./NW2.post.txt | 243 bytes
+NW2.sv:4:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=0 notes=0
+
+rc=1
+=== block 6 | vita [POST2] | ./NW2.p2.txt | 243 bytes | identical to block 5
+=== block 7 | vita [POST3] | ./NW2.p3.txt | 243 bytes | identical to block 5
+=== block 8 | vita [POST3b] | lens_diff3/s2c/cells/NW2.post3b.txt | 243 bytes | identical to block 5
+=== block 9 | vita [PRE] | ./NW2.pre.txt | 243 bytes | identical to block 5
+=== end

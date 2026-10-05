@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c4__f1d_prio0
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c4/f1d_prio0.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c4
+oracles_present: verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: f1d_prio0 g__f1d_prio0
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | g/out2/f1d_prio0.out | 1258 bytes
+##### f1d_prio0
+=== verilator compile rc=1
+%Error: f1d_prio0.sv:5:44: syntax error, unexpected if
+    5 |     #1 unique if (a) n = 1; else priority0 if (b) n = 2;
+      |                                            ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: f1d_prio0.sv:7:46: syntax error, unexpected if
+    7 |     #1 priority if (a) n = 1; else priority0 if (b) n = 2; else if (c) n = 3;
+      |                                              ^~
+%Error: Exiting due to 2 error(s)
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 D1 n=0
+t=2 D2 n=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f1d_prio0.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+t=1 D1 n=0
+f1d_prio0.sv:7:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 D2 n=0
+simulation ended (Finish) at time 3
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/g__f1d_prio0.out | 978 bytes
+##### g__f1d_prio0
+=== verilator compile rc=1
+%Error: f1d_prio0.sv:5:44: syntax error, unexpected if
+    5 |     #1 unique if (a) n = 1; else priority0 if (b) n = 2;
+      |                                            ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: f1d_prio0.sv:7:46: syntax error, unexpected if
+    7 |     #1 priority if (a) n = 1; else priority0 if (b) n = 2; else if (c) n = 3;
+      |                                              ^~
+%Error: Exiting due to 2 error(s)
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 D1 n=0
+t=2 D2 n=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 D1 n=0
+t=2 D2 n=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [verilator,PRE,POSTC] verilator 5.052 (version captured in slice) | g/out/f1d_prio0.out | 1258 bytes | identical to block 1
+=== end

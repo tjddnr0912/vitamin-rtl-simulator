@@ -1,0 +1,69 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__AE4_width_fx
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/AE4_width_fx.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p4,probe_p5,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st,probe_p6_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: probe_p4: md5 2bdc82586352e76a4a51e8c8ea2293ff commit 75f46453
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./AE4_width_fx.iv.txt | 410 bytes
+AE4_width_fx.sv:4: error: Unable to bind parameter `K' in `top.gb'
+AE4_width_fx.sv:6:      : A symbol with that name was declared here. Check for declaration after use.
+AE4_width_fx.sv:4: error: Dimensions must be constant.
+AE4_width_fx.sv:4       : This MSB expression violates the rule: (K)-('sd1)
+AE4_width_fx.sv:5: error: Unable to bind wire/reg/memory `K' in `top.gb'
+3 error(s) during elaboration.
+
+rc=3
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./AE4_width_fx.vl.txt | 143 bytes
+%Error: AE4_width_fx.sv:4:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./AE4_width_fx.vlb.txt | 349 bytes
+%Error: AE4_width_fx.sv:4:12: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+                            : ... note: In instance 'top'
+    4 |     wire [K-1:0] w = '1;
+      |            ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./AE4_width_fx.sv.txt | 67 bytes
+@bits=x K=x
+AE4_width_fx.sv2v.v:20: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_a] | ./AE4_width_fx.post.txt | 265 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+AE4_width_fx.sv:4:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `K` is not allowed in a constant range bound [in top.gb]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_b] | ./AE4_width_fx.post_b.txt | 265 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./AE4_width_fx.post_c.txt | 265 bytes | identical to block 5
+=== block 8 | vita [post_d] | ./AE4_width_fx.post_d.txt | 265 bytes | identical to block 5
+=== block 9 | vita [postd] | ./AE4_width_fx.postd.txt | 265 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./AE4_width_fx.postd2.txt | 265 bytes | identical to block 5
+=== block 11 | vita [postd3] | ./AE4_width_fx.postd3.txt | 265 bytes | identical to block 5
+=== block 12 | vita [postd4] | ./AE4_width_fx.postd4.txt | 265 bytes | identical to block 5
+=== block 13 | vita [pre] | ./AE4_width_fx.pre.txt | 265 bytes | identical to block 5
+=== block 14 | vita [probe_p4] | ./AE4_width_fx.probe_p4.txt | 181 bytes
+@bits=4 K=4
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== end

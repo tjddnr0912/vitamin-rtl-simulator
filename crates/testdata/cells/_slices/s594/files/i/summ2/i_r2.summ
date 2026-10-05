@@ -1,0 +1,119 @@
+### C0
+  pre594 : L=1
+  pa : L=1
+  pb : L=1
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### C1
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### C10
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### C10f
+  pre594 : L=0 M=0
+  pa : L=1 M=1
+  pb : L=0 M=0
+  ivl : L=1 M=1
+  s2v : L=1 M=1
+  vl : L=1 M=1
+### C10g
+  pre594 : GI=else
+  pa : GI=then
+  pb : GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl : GI=then
+### C11
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### C11c
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### C2
+  pre594 : GI=else
+  pa : GI=then
+  pb : GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl : GI=then
+### C3
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=0
+  s2v : L=x
+  vl : L=x
+### C3c
+  pre594 : L=0
+  pa : L=1
+  pb : L=0
+  ivl : L=1
+  s2v : L=1
+  vl : L=1
+### C4
+  pre594 : k=0
+  pa : k=0
+  pb : k=0
+  ivl : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 38698 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp | !rc=142
+  s2v : /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 39951 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp | !rc=142
+  vl : k=1
+### C5
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: undefined name `AS` is not a co
+  pa : !VITA-E3009 parameter `L` value is not a constant: undefined name `AS` is not a co
+  pb : !VITA-E3009 parameter `L` value is not a constant: undefined name `AS` is not a co
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=x
+  vl : L=x
+### C6
+  pre594 : L=8 K=8
+  pa : L=8 K=8
+  pb : L=8 K=8
+  ivl : L=0 K=8
+  s2v : L=x K=8
+  vl : L=x K=8
+### C8
+  pre594 : !VITA-E3009 parameter `L` value is not a constant: the `+` operation has no consta
+  pa : L=2 K=2
+  pb : !VITA-E3009 parameter `L` value is not a constant: the `+` operation has no consta
+  ivl : L=0 K=2
+  s2v : L=x K=2
+  vl : L=x K=2
+### C8k
+  pre594 : K=2
+  pa : K=2
+  pb : K=2
+  ivl : K=2
+  s2v : K=2
+  vl : K=2
+### C9
+  pre594 : vb=4
+  pa : vb=5
+  pb : vb=4
+  ivl : vb=1
+  s2v : vb=x
+  vl : !%Error: C9.sv:5:45: left side of bit range isn't a two-state constant (IEEE 1800
+### Mx1d
+  pre594 : L=0
+  pa : L=1
+  pb : L=1
+  ivl : !sorry: unpacked array parameters are not supported yet.
+  s2v : L=1
+  vl : L=1

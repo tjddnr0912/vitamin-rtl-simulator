@@ -1,0 +1,63 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__k01c
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/k01c.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG1,POST,POST2,POST3,PRE,unrecorded/default,unrecorded/native
+verdict: loud (not a case-inside refusal) — kept loud: the const-function interpreter has no case arm (a plain case too)
+verdict_source: s582/post/CENSUS.md:81
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG1: md5 2674c193c5cdb62f66e0a380149d04a7 commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 15
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/tests__sv__k01c/iv.out | 555 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5: error: Incomprehensible case expression.
+rc=3
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/k01c/vl.out | 284 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/k01c/vl_build.log | 1128 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                                                                                                                                                                 : ... note: In instance 't'
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5:21: ... Location of non-constant INSIDERANGE: Unknown node type, perhaps missing visitor in SimulateVisitor
+        /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: ... Called from 'f()' with parameters:
+           x = 4'h2
+    7 |   localparam int P1 = f(4'd2);
+      |                       ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/k01c/sv.out | 46 bytes
+P1=1
+sv2v.v:16: $finish called at 0 (1s)
+rc=0
+=== block 5 | vita [DBG1] | tests/sv/out/k01c/post.out | 307 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST] | post/census/tests__sv__k01c/post.out | 307 bytes | identical to block 5
+=== block 7 | vita [POST] | post2/cmp/tests__sv__k01c.sv/post.err | 302 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f(…)` has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+=== block 8 | vita [POST] | post2/cmp/tests__sv__k01c.sv/post.out | 5 bytes
+rc=1
+=== block 9 | vita [POST2] | post2/cmp/tests__sv__k01c.sv/post2.err | 302 bytes | identical to block 7
+=== block 10 | vita [POST2] | post2/cmp/tests__sv__k01c.sv/post2.out | 5 bytes | identical to block 8
+=== block 11 | vita [POST2] | post3/cmp/tests__sv__k01c.sv/post2.err | 302 bytes | identical to block 7
+=== block 12 | vita [POST2] | post3/cmp/tests__sv__k01c.sv/post2.out | 5 bytes | identical to block 8
+=== block 13 | vita [POST3] | post3/cmp/tests__sv__k01c.sv/post3.err | 302 bytes | identical to block 7
+=== block 14 | vita [POST3] | post3/cmp/tests__sv__k01c.sv/post3.out | 5 bytes | identical to block 8
+=== block 15 | vita [PRE] | tests/sv/out/k01c/pre.out | 853 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:7:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P1` value is not a constant: `f(…)` has no constant-fold arm [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `t.$func$f.inside` [in t.$func$f]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/k01c.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order) [in t.$func$f]
+errors=3 warnings=0 notes=0
+rc=1
+=== end

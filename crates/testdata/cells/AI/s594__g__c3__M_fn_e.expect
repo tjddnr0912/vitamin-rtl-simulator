@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__g__c3__M_fn_e
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/g/c3/M_fn_e.sv
+roadmap_row: §2 🆕 AI
+set: g/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p0,p1,p2,p3,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p0: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: p1: md5 dacc7564ecc78ac928fbf9e333392537 commit 75f46453
+vita_binary: p2: md5 486ea9c8753d10ba904873b618814856 commit 75f46453
+vita_binary: p3: md5 147bbb984b327e4e83aa5a8346c73470 commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./M_fn_e.ivl | 74 bytes
+M_fn_e.sv:3: sorry: unpacked array parameters are not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./M_fn_e.vl | 461 bytes
+%Warning-WIDTHEXPAND: M_fn_e.sv:4:56: Operator ADD expects 32 bits on the LHS, but LHS's ARRAYSEL generates 8 bits.
+%Warning-WIDTHEXPAND: M_fn_e.sv:4:56: Operator ADD expects 32 bits on the RHS, but RHS's CONST '8'h0' generates 8 bits.
+L=252
+- M_fn_e.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 20ns; walltime 0.000 s; speed 1.667 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./M_fn_e.s2v | 54 bytes
+L=252
+M_fn_e.s2v.v:11: $finish called at 20 (1s)
+rc=0
+=== block 4 | vita [d1] | ./M_fn_e.d1 | 167 bytes
+M_fn_e.sv:5:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `g(…)` has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [d3] | ./M_fn_e.d3 | 167 bytes | identical to block 4
+=== block 6 | vita [p0] | ./M_fn_e.p0 | 167 bytes | identical to block 4
+=== block 7 | vita [p1] | ./M_fn_e.p1 | 167 bytes | identical to block 4
+=== block 8 | vita [p2] | ./M_fn_e.p2 | 167 bytes | identical to block 4
+=== block 9 | vita [p3] | ./M_fn_e.p3 | 167 bytes | identical to block 4
+=== block 10 | vita [pa] | ./M_fn_e.pa | 167 bytes | identical to block 4
+=== block 11 | vita [pb] | ./M_fn_e.pb | 167 bytes | identical to block 4
+=== block 12 | vita [pre] | ./M_fn_e.pre | 167 bytes | identical to block 4
+=== block 13 | vita [pre594] | ./M_fn_e.pre594 | 167 bytes | identical to block 4
+=== end

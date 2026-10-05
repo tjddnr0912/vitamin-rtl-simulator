@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Gx_ciar
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Gx_ciar.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: same(=ivl,s2v,vl)
+verdict_source: s591/plan/a1.cls:219
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Gx_ciar.ivl | 115 bytes
+leaf top.g[0].u5.lf[0]
+leaf top.g[1].u5.lf[0]
+leaf top.g[1].u5.lf[1]
+Gx_ciar.sv:5: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Gx_ciar.vl | 290 bytes
+leaf top.g[1].u5.lf[0]
+leaf top.g[1].u5.lf[1]
+leaf top.g[0].u5.lf[0]
+- Gx_ciar.sv:5: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 5.263 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Gx_ciar.s2v | 119 bytes
+leaf top.g[0].u5.lf[0]
+leaf top.g[1].u5.lf[0]
+leaf top.g[1].u5.lf[1]
+Gx_ciar.s2v.v:10: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Gx_ciar.dev3 | 239 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+leaf top.g[0].u5.lf[0]
+leaf top.g[1].u5.lf[1]
+leaf top.g[1].u5.lf[0]
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./Gx_ciar.dev3.route | 0 bytes
+
+=== block 6 | vita [POSTA] | ./Gx_ciar.posta | 239 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./Gx_ciar.posta.route | 0 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./Gx_ciar.postb | 239 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./Gx_ciar.postb.route | 0 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./Gx_ciar.pre | 239 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./Gx_ciar.pre.route | 0 bytes | identical to block 5
+=== block 12 | vita [PROTO2] | ./Gx_ciar.post2 | 239 bytes | identical to block 4
+=== block 13 | vita [PROTO2] | ./Gx_ciar.post2.route | 0 bytes | identical to block 5
+=== end

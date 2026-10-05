@@ -1,0 +1,16 @@
+ty_bits_ctl	ok2	P=8 b=4	P=8 b=4	P=8 b=4	P=8 b=4
+ty_bits_fn	ok2	P=8 b=4	P=8 b=4	P=8 b=4	P=8 b=4
+ty_bits_par	ok2	P=8 b=4	P=8 b=4	P=8 b=4	P=8 b=4
+ty_bits_pctl	ok2	P=8 b=4	P=8 b=4	P=8 b=4	P=8 b=4
+ty_cat_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the concatenation `{…}` has no ]	P=00000080	P=00000080	P=00000080
+ty_cat_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the concatenation `{…}` has no ]	P=00000080	P=00000080	P=00000080
+ty_cat_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the concatenation `{…}` has no ]	P=00000080	P=00000080	P=00000080
+ty_cat_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the concatenation `{…}` has no ]	P=00000080	P=00000080	P=00000080
+ty_cnt_ctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no]	P=000000ff	P=000000ff	P=000000ff
+ty_cnt_fn	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no]	P=000000ff	P=000000ff	P=000000ff
+ty_cnt_par	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no]	P=000000ff	P=000000ff	P=000000ff
+ty_cnt_pctl	loud2	LOUD[VITA-E3009:parameter `P` value is not a constant: the replication `{n{…}}` has no]	P=000000ff	P=000000ff	P=000000ff
+ty_sgn_ctl	ok2	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+ty_sgn_fn	ok2	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+ty_sgn_par	ok2	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4
+ty_sgn_pctl	ok2	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4	P=-1 P2=-1 b=4

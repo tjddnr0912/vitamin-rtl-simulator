@@ -1,0 +1,14 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c22c_case_only
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c22c_case_only.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: BLOCKING
+verdict_source: s583/r1/diff/REPORT.md:31
+notes: oracle text quoted at r1/diff/REPORT.md:35
+alias: r1/diff/wiv/c22c_case_only (byte-identical source) verdict: BLOCKING verdict_source: s583/r1/diff/REPORT.md:31
+blocks: 0
+=== end

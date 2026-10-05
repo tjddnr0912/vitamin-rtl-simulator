@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p5__iso_PSEL
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p5/iso_PSEL.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./iso_PSEL.ivl | 52 bytes
+PSEL x
+iso_PSEL.sv:4: $finish called at 3 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./iso_PSEL.vl | 132 bytes
+%Error: Internal Error: iso_PSEL.sv:3:84: ../V3Number.cpp:1063: toUInt with 4-state 32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./iso_PSEL.s2v | 55 bytes
+PSEL x
+iso_PSEL.s2v.v:6: $finish called at 3 (1s)
+rc=0
+=== block 4 | vita [cut] | ./iso_PSEL.cut | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+PSEL 1
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [cut] | ./iso_PSEL.cut.route | 0 bytes
+
+=== block 6 | vita [pre] | ./iso_PSEL.pre | 175 bytes | identical to block 4
+=== block 7 | vita [pre] | ./iso_PSEL.pre.route | 0 bytes | identical to block 5
+=== end

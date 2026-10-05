@@ -1,0 +1,27 @@
+category	path_or_glob	count	bytes	reason
+binary	g/tools/*	1	8731824	built binary (Mach-O/ELF)
+binary	pre/*	1	7338016	built binary (Mach-O/ELF)
+binary	pre/sep/*	4	29352000	built binary (Mach-O/ELF)
+doc-draft	docs/*.md	4	267511	docs-commit drafts (ROADMAP/REMAINING_WORK copies) and their edit scripts
+doc-draft	docs/*.py	6	19166	docs-commit drafts (ROADMAP/REMAINING_WORK copies) and their edit scripts
+iverilog-image	plan/*.vvp	1	4690	iverilog compiled image
+log	g/*.log	12	815945	cargo nextest / corpus / build log
+log	g/*.rc	12	26	build/gate/harness run log or exit-code marker
+log	plan/*.log	1	0	build/gate/harness run log or exit-code marker
+log	plan/*.rc	1	2	build/gate/harness run log or exit-code marker
+log	plan/*.txt	1	0	empty pgrep marker
+log	s0/*.log	1	0	build/gate/harness run log or exit-code marker
+log	s0/*.rc	1	2	build/gate/harness run log or exit-code marker
+log	s0e/*.log	1	0	build/gate/harness run log or exit-code marker
+log	s0e/*.rc	1	2	build/gate/harness run log or exit-code marker
+no-oracle-output	plan/* (1 vita-only .sv + their outputs)	1	774	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	s0/* (31 vita-only .sv + their outputs)	62	18536	vita-only cells: no oracle output anywhere (SPEC cell rule)
+no-oracle-output	s0e/* (10 vita-only .sv + their outputs)	20	5501	vita-only cells: no oracle output anywhere (SPEC cell rule)
+probe-log	g/*.log	4	181250	probe-binary instrumentation log (aggregate, not a per-cell output)
+rust-patch	g/*.patch	1	6963	saved patch/diff of the Rust source
+script	g/*.py	2	9665	helper script (not a generator/runner of a kept set)
+script	g/*.sh	1	223	helper script (not a generator/runner of a kept set)
+slice-record-doc	*.md	3	78597	slice record / report doc (verdict source; not a cell file)
+slice-record-doc	*.txt	1	6012	commit message draft (verdict source; not a cell file)
+vita-staged-artefact	g/staged/*.velab	4	2214	staged artefact / compiled image
+vita-staged-artefact	g/staged/*.vu	4	3398	staged artefact / compiled image

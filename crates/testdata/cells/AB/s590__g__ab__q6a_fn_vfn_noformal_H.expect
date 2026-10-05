@@ -1,0 +1,76 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__g__ab__q6a_fn_vfn_noformal_H
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/g/ab/q6a_fn_vfn_noformal_H.sv
+roadmap_row: §2 🆕 AB
+set: g/ab
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,P1,P2,P3,P4_MODE_A,P4_MODE_B,P4_MODE_C,P5_SIDE,P5,POSTDEV,P6,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: rep:neither->neither
+verdict_source: s590/fin/axscan_fin.txt:8
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P1: md5 9110afe64059dca4da785a6099ac97f8 commit 303703f9
+vita_binary: P2: md5 dd968f69042f73e4e78a7c7e1395a057 commit 303703f9
+vita_binary: P3: md5 6cecfd4586bbe8a2d6f81be6c48f9036 commit 303703f9
+vita_binary: P4_MODE_A: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P4_MODE_B: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P4_MODE_C: md5 c17b310f64af2b0e6064127c12e86626 commit 303703f9
+vita_binary: P5: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 11
+=== block 1 | combined [verilator+iverilog|PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out_ab/q6a_fn_vfn_noformal_H.out | 1628 bytes
+##### q6a_fn_vfn_noformal_H
+=== verilator compile rc=0 run rc=0
+t=1 y=1
+[2] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[2] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+t=3 y=0
+[3] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[3] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+- q6a_fn_vfn_noformal_H.sv:19: Verilog $finish
+[4] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+[4] %Error: q6a_fn_vfn_noformal_H.sv:3: Assertion failed in top.u.g: 'unique if' statement violated
+=== iverilog compile rc=2
+q6a_fn_vfn_noformal_H.sv:3: syntax error
+q6a_fn_vfn_noformal_H.sv:3: error: Malformed statement
+=== vita PRE (native=interp=vm)
+rc=0
+q6a_fn_vfn_noformal_H.sv:3:19: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+q6a_fn_vfn_noformal_H.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.g] [at time 0]
+t=1 y=1
+q6a_fn_vfn_noformal_H.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.g] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=1
+=== block 2 | vita [PRE+P1] | g/p1_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes
+##### q6a_fn_vfn_noformal_H
+=== vita PRE (native=interp=vm)
+rc=0
+q6a_fn_vfn_noformal_H.sv:3:19: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+q6a_fn_vfn_noformal_H.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.g] [at time 0]
+t=1 y=1
+q6a_fn_vfn_noformal_H.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.g] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=3 notes=1
+=== vita POST (native=interp=vm)
+rc=0
+q6a_fn_vfn_noformal_H.sv:3:19: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+t=1 y=1
+q6a_fn_vfn_noformal_H.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.g] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=2 notes=1
+--- PRE==POST (all backends): False
+=== block 3 | vita [PRE+P2] | g/p2_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 4 | vita [PRE+P3] | g/p3_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 5 | vita [PRE+P4_MODE_A] | g/p4a_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 6 | vita [PRE+P4_MODE_B] | g/p4b_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 7 | vita [PRE+P4_MODE_C] | g/p4c_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 8 | vita [PRE+P5] | g/p5a_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 9 | vita [PRE+P5_SIDE] | g/p5_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 10 | vita [PRE+P6] | p6/p6_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== block 11 | vita [PRE+POSTDEV] | p6/dev_ab/q6a_fn_vfn_noformal_H.out | 1466 bytes | identical to block 2
+=== end

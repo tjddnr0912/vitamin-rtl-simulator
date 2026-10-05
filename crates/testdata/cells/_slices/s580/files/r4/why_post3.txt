@@ -1,0 +1,185 @@
+## s580/census/A.sv  :: A02 x | A03 x | A05 x | A07 x | A08 x | A09 x
+## s580/census/A_2s.sv  :: A02 x | A03 x | A05 x | A07 x | A08 x | A09 x
+## s580/census/S.sv  :: S01 x | S02 x | S03 x | S05 x | S09 x | S13 x
+## s580/census/S_2s.sv  :: S01 x | S02 x | S03 x | S05 x | S09 x | S13 x
+## s580/census/S_wq.sv  :: S01q 0 | S02q 0 | S03q 0 | S08q 0 | S09q 0 | S11q 1
+## s580/census/V_2s.sv  :: V09 x
+## s580/census/Vr.sv  :: V09 x
+## s580/census/W.sv  :: W8a x | W8b x | W8e x | W16a x | W16b x | W16e x
+## s580/census/W_2s.sv  :: W8a x | W8b x | W8e x | W16a x | W16b x | W16e x
+## s580/census/X.sv  :: X01 x | X04 x | X06 x | X07 x | X08 x | X11 x
+## s580/census/e/E01.sv  :: E01 x
+## s580/census/e/E02.sv  :: E02 x
+## s580/census/e/E04.sv  :: E04 x
+## s580/census/e/E05.sv  :: E05 0
+## s580/census/e/E07.sv  :: E07 x
+## s580/census/e/E10.sv  :: E10 x
+## s580/census/e/E11.sv  :: E11 x
+## s580/census/e/E15.sv  :: E15 x
+## s580/census/e/E40.sv  :: E40 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E41.sv  :: E41 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E42.sv  :: E42 x
+## s580/census/e/E43.sv  :: E43 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E44.sv  :: E44 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E45.sv  :: E45 0 | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E46.sv  :: E46 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E47.sv  :: E47 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E72.sv  :: E72 x
+## s580/census/e/E73.sv  :: E73 x
+## s580/census/e/E74.sv  :: E74 x
+## s580/census/e/E75.sv  :: E75 x
+## s580/census/e/E76.sv  :: E76 0
+## s580/census/e/E77.sv  :: E77 0000000x
+## s580/census/e/E78.sv  :: E78 x
+## s580/census/e/E79.sv  :: E79 x
+## s580/census/e/E80.sv  :: E80 x
+## s580/census/e/E82.sv  :: E82 x | simulation ended (Finish) at time 1 | errors=0 warnings=0 notes=0 | rc=0
+## s580/census/e/E83.sv  :: E83 x
+## s580/census/e/E84.sv  :: E84 x
+## s580/census/e/E85.sv  :: E85 x
+## s580/census/e/E87.sv  :: E87 x
+## s580/census/e/Q1.sv  :: E05q 0
+## s580/census/c/C01.sv  :: C01 else
+## s580/census/c/C02.sv  :: C02 0X
+## s580/census/c/C03.sv  :: C03 x
+## s580/census/c/C04.sv  :: C04 0000000x
+## s580/census/c/C05.sv  :: C05 x
+## s580/census/c/C06.sv  :: C06 x
+## s580/census/c/C07.sv  :: C07 x
+## s580/census/c/C08.sv  :: C08 x
+## s580/census/c/C14.sv  :: C14 default
+## s580/census/c/C15.sv  :: 
+## s580/census/c/C16.sv  :: C16 fail
+## s580/census/c/C17.sv  :: C17 fail 1 | C17 fail 3 | C17 fail 5
+## s580/census/c/C20.sv  :: C20 x
+## s580/census/c/C21.sv  :: C21 1000
+## s580/census/c/C22.sv  :: C22 0
+## s580/census/c/C23.sv  :: C23 X
+## s580/census/c/C25.sv  :: C25 x
+## s580/census/c/C26.sv  :: C26 x
+## s580/census/c/C32.sv  :: C32 x
+## s580/census/c/C34.sv  :: C34 xx x xx | C34 xx x 01
+## s580/census/z/Z01.sv  :: Z01a x | Z01c x | Z01d x | Z01f x | Z01h x | Z01i x
+## s580/census/z/Z02.sv  :: Z02 x
+## s580/census/z/Z06.sv  :: 
+## s580/census/z/Z07.sv  :: Z07  X
+## s580/fx/F01.sv  :: b x | c x | e x | g else
+## s580/fx/F02.sv  :: x-digit x | z-digit x | msb-q x | msb-x x | msb-z x | lsb-q x
+## s580/fx/F03.sv  :: w33-hit x | w33-narrow-el x | w64-hit x | w64-narrow-el x | w65-hit x | w65-narrow-el x
+## s580/fx/F04.sv  :: ss-narrow-pat-msb1 x | ss-narrow-pat-msbq x | ss-narrow-pat-msbq-pos x | ss-narrow-pat-msbx x | ss-narrow-pat-msbz x | ss-narrow-lhs-sext x
+## s580/fx/F05.sv  :: lhs-x-at-wild x | lhs-z-at-wild x | lhs-x-under-msb-wild x | lhs-x-under-x-digit x | lhs-all-x-all-wild x | lhs-all-z-all-z x
+## s580/fx/F06.sv  :: range-then-wild x | not-hit x | third-element x | one-or-x x | fill-x-element x | concat-of-insides x0
+## s580/fx/F06n.sv  :: range-then-wild x | not-hit x | third-element x | one-or-x x | concat-of-insides x0 | arith x
+## s580/fx/F07.sv  :: unsized-known-msb x | unsized-x-msb-hit x | unsized-q x | unsized-hex-q x | unsized-x-msb-wide-lhs 0 | fill-x x
+## s580/fx/F07n.sv  :: unsized-known-msb x | unsized-x-msb-hit x | unsized-q x | unsized-hex-q x | unsized-x-msb-wide-lhs 0
+## s580/fx/F08.sv  :: if else | ternary 0X | case default | assert fail | while 1000 | for 0
+## s580/fx/F08b.sv  :: 
+## s580/fx/F09.sv  :: cont x 0000000x X comb x star X
+## s580/fx/F10.sv  :: frame x inlined x task x pkg x cont-frame x cont-inlined xx | frame 0 inlined 0 task 0 pkg 0 cont-frame 0 cont-inlined xx
+## s580/fx/F10b.sv  :: method x queue-elem x
+## s580/fx/F11.sv  :: property fail 1 | property fail 3 | property fail 5
+## s580/fx/F16.sv  :: weq-narrow-pat-msb1 0 | weq-narrow-pat-msbq 0 | weq-narrow-pat-msbq-pos 0 | weq-narrow-pat-known 0 | weq-narrow-lhs-sext 0 | weq-narrow-lhs-zero-pat 1
+## s580/fx/Ffill.sv  :: fill-x-element x | fill-x x | fill-z x | fill-x-second x
+## s580/fx/L1.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L2.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L3.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L4.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L5.sv  :: r 0 | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L6.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L7.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/fx/L8.sv  :: r x | simulation ended (Finish) at time 0 | errors=0 warnings=0 notes=0 | rc=0
+## s580/probes/repro_inside_op.sv  :: b 1100 inside {4'b1?00}         = x (expect 1) | c 1000 inside {4'b1?00}         = x (expect 1) | e 1100 inside {4'b0000,4'b1?00} = x (expect 1) | g else-branch taken    (expect the if-branch)
+## s580/probes/repro_inside_op.sv -DTWO_STATE :: b 1100 inside {4'b1?00}         = x (expect 1) | c 1000 inside {4'b1?00}         = x (expect 1) | e 1100 inside {4'b0000,4'b1?00} = x (expect 1) | g else-branch taken    (expect the if-branch)
+## s580/r2/OR1.sv -DIV :: OR1.sv:8:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | OR1.sv:8:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | OR1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR1.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR1.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR1.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o
+## s580/r2/OR2.sv -DIV :: OR2.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR2.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR2.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR2.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR2.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | OR2.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o
+## s580/r2/fx2/H04.sv  :: H04.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | H04.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | errors=2 warnings=0 notes=0
+## s580/r2/fx2/H05.sv  :: let-unsized 0 direct 0 | let-sized x direct x | let-weq 0
+## s580/r2/fx2/H05w.sv  :: direct-weq 0 1
+## s580/r2/fx2/H06.sv  :: sc 00000010 00000001 xxxxxxxx
+## s580/r4/fx/K07.sv  :: R x x x x x 1 0 1 x | more x 1 x x
+## s580/lens_snd/probes/P3.sv  :: W1=0 W2=0 W3=0 W4=0 W5=1 W6=0 W7=0 W8=1 W9=1 | I1=x I2=x I3=x I4=x I5=x I6=x I7=x I8=x I9=0 | SC3=xxxxxxxx
+## s580/lens_snd/probes/P3.sv -DNO_INSIDE :: W1=0 W2=0 W3=0 W4=0 W5=1 W6=0 W7=0 W8=1 W9=1
+## s580/lens_snd/probes/P9.sv  :: c1=x c2=x c3=0 c4=xx c5=x | q1=0 q2=0 q3=0 q4=ff
+## s580/lens_snd/probes/P9.sv -DNO_INSIDE :: q1=0 q2=0 q3=0 q4=ff
+## s580/lens_diff/P01.sv  :: N01 x | N03 x | N06 x | N08 x | N10 x | N12 x
+## s580/lens_diff/P01.sv -DIV :: N01 0 | N03 0 | N06 0 | N08 0 | N10 0 | N12 0
+## s580/lens_diff/P02.sv  :: A01 x | A04 x | A07 x | A08 x | A09 x | A10 x
+## s580/lens_diff/P02.sv -DIV :: A01 0 | A04 0 | A07 0 | A08 0 | A09 0 | A10 0
+## s580/lens_diff/P04.sv  :: D01 x | D02 x | D03 x | D04 x | D05 0 | D06 0
+## s580/lens_diff/P04.sv -DIV :: D03 0 | D05 0 | D06 0 | D07 0 | D08 0 | D09 0
+## s580/lens_diff/P05.sv -DK5 :: K5a x | K5b 0
+## s580/lens_diff/P05g.sv -DK5 :: K5a x | K5b 0
+## s580/lens_diff/P07.sv -DLETT :: K5a x | K5b 0 | K5c 0
+## s580/lens_diff/P08.sv  :: W01 0 | W02 0 | W03 0 | W04 0 | W05 x | W06 0
+## s580/lens_diff/P08.sv -DIV :: P08.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | P08.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o
+## s580/lens_diff/P08b.sv  :: W01 0 | W02 0 | W03 0 | W05 x | W06 0 | W07 x
+## s580/lens_diff/P09.sv  :: A1 0 | A2 x | P1 0 | P2 x | P3 x | P4 1
+## s580/lens_diff/P09.sv -DNOP :: A1 0 | A2 x | P3 x | P4 1 | simulation ended (Finish) at time 1000 | errors=0 warnings=1 notes=0
+## s580/lens_diff/P09.sv -DIV :: P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P09.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | P09.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o | P09.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o
+## s580/lens_diff/P09.sv -DNOP -DIV :: P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P09.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left o
+## s580/lens_diff/P10c.sv  :: R30 x | R31 x | R32 x | R33 x | G30 x
+## s580/lens_diff/P11.sv  :: S01 0000000x | S02 xxxxxxxx | S03 xxxxxxxx | S04 xxxxxxxx | S05 0000xxxx | S06 0000000x
+## s580/lens_diff2/Q2.sv  :: R41 x | R42 x | R43 x | R44 x | R45 x | R46 x
+## s580/lens_diff2/Q2.sv -DIV :: R41 0 | R42 0 | R43 0 | R44 0 | R45 0 | R46 0
+## s580/lens_diff2/Q4.sv  :: Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | errors=2 warnings=1 notes=0
+## s580/lens_diff2/Q4.sv -DSTM :: Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | errors=5 warnings=1 notes=0
+## s580/lens_diff2/Q4.sv -DIV :: Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff2/Q4.sv -DSTM -DIV :: Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff2/Q5.sv  :: U01 0 | U02 0 | U03 0 | U04 0 | U05 0 | U15 0
+## s580/lens_diff2/Q7.sv  :: Z1 x | Z3 x | Z4 0
+## s580/lens_diff2/Q7.sv -DIV :: Z1 0 | Z3 0 | Z4 0
+## s580/lens_snd2/probes/P1.sv  :: P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P1.sv -DONLYC :: I1 0 0 0 | I2 0 x | C1 0 0 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/lens_snd2/probes/P1.sv -DNO_INSIDE :: P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P2.sv -DNOK :: RI x x x x x | RQ 0 1 0 1
+## s580/lens_snd2/probes/P2.sv -DNOK -DNO_INSIDE :: RQ 0 1 0 1
+## s580/lens_snd2/probes/P3.sv  :: P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P3.sv -DNO_INSIDE :: P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P4.sv  :: R 0 0 0 0 | C 0 0 00000000 00000000 0 0 | F 0 0 0 0 | M 0 0 | T 0 0 | G 0 0
+## s580/lens_snd2/probes/P4.sv -DNOCLASS :: R 0 0 0 0 | C 0 0 00000000 00000000 0 0 | F 0 0 0 0 | T 0 0 | G 0 0 | N 1 1
+## s580/lens_snd2/probes/P7.sv  :: P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P7.sv -DU :: P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P7.sv -DNO_INSIDE :: P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P7.sv -DU -DNO_INSIDE :: P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P8.sv  :: M 0 0 0 0
+## s580/lens_snd2/probes/P8.sv -DREALI :: RI 0 0 | simulation ended (Finish) at time 2 | errors=0 warnings=0 notes=0 | rc=0
+## s580/lens_snd2/probes/P8.sv -DREALQ :: P8.sv:13:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P9.sv -DSFMT :: P9.sv:12:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd2/probes/P9.sv -DSTRV :: P9.sv:10:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op | P9.sv:10:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H1.sv -DH1 :: H1.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H1.sv -DH2 :: H2 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH2I :: H2I x | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH3 :: H3 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH4 :: H4 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH6 :: H6 0
+## s580/lens_diff3/H1.sv -DH8 :: H8 0 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH1 -DIV :: H1.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H1.sv -DH2 -DIV :: H2 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH2I -DIV :: H2I 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH3 -DIV :: H3 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH4 -DIV :: H4 1 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H1.sv -DH6 -DIV :: H6 0
+## s580/lens_diff3/H1.sv -DH8 -DIV :: H8 0 | simulation ended (Finish) at time 2 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_diff3/H2.sv -DR01 :: R01 0
+## s580/lens_diff3/H2.sv -DR02 :: R02 0
+## s580/lens_diff3/H2.sv -DR03 :: R03 0
+## s580/lens_diff3/H2.sv -DR04 :: R04 0
+## s580/lens_diff3/H2.sv -DR05 :: R05 0
+## s580/lens_diff3/H2.sv -DR06 :: H2.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H2.sv -DR07 :: H2.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H2.sv -DR10 :: H2.sv:41:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/H2.sv -DR11 :: H2.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_diff3/P1.sv  :: B01 0 | B02 0 | B03 0 | B04 0 | B05 0 | B06 0
+## s580/lens_diff3/P1.sv -DIV :: B01 0 | B02 0 | B03 0 | B04 0 | B05 0 | B06 0
+## s580/lens_diff3/P3.sv -DIV :: C01 0 | C02 1 | C03 0
+## s580/lens_snd3/p/p1.sv  :: X01 0 | X09 0 | X12 0 | X13 0 | X16 0 | X18 0
+## s580/lens_snd3/p/p1.sv -DNOC :: X01 0 | X09 0 | X12 0 | X13 0 | X16 0 | X18 0
+## s580/lens_snd3/p/p1.sv -DNOI :: X01 0 | X09 0 | X12 0 | X13 0 | X16 0 | X18 0
+## s580/lens_snd3/p/p4.sv -DK1 :: p4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd3/p/p4.sv -DK2 :: p4.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd3/p/p4.sv -DK3 :: p4.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd3/p/p4.sv -DK5 :: p4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd3/p/p4.sv -DK6 :: K6 x | simulation ended (Finish) at time 100 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_snd3/p/p4.sv -DK7 :: K7 0 | simulation ended (Finish) at time 100 | errors=0 warnings=1 notes=0 | rc=0
+## s580/lens_snd3/p/p4.sv -DK8 :: p4.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op
+## s580/lens_snd3/p/p4.sv -DK9 :: p4.sv:43:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left op

@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c8__L_in_s8
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c8/L_in_s8.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c8
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: PRE!=all
+verdict_source: s593/g/c8.p5.summ:407
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./L_in_s8.ivl | 117 bytes
+L_in_s8.sv:4: sorry: "inside" expressions not supported yet.
+L_in_s8.sv:4: error: localparam must have a value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./L_in_s8.vl | 369 bytes
+%Warning-WIDTHEXPAND: L_in_s8.sv:4:21: Operator INSIDE expects 8 bits on the Inside Item, but Inside Item's CONST '4'sb1z00' generates 4 bits.
+R=1
+- L_in_s8.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ns; walltime 0.000 s; speed 10.000 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./L_in_s8.s2v | 53 bytes
+R=1
+L_in_s8.s2v.v:9: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./L_in_s8.post1 | 172 bytes
+L_in_s8.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [post2] | ./L_in_s8.post2 | 75 bytes
+R=1
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [post2] | ./L_in_s8.post2.route | 0 bytes
+
+=== block 7 | vita [post3] | ./L_in_s8.post3 | 75 bytes
+R=0
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 8 | vita [post3] | ./L_in_s8.post3.route | 0 bytes | identical to block 6
+=== block 9 | vita [post5] | ./L_in_s8.post5 | 75 bytes | identical to block 5
+=== block 10 | vita [post5] | ./L_in_s8.post5.route | 0 bytes | identical to block 6
+=== block 11 | vita [pre] | ./L_in_s8.pre | 75 bytes | identical to block 7
+=== block 12 | vita [pre] | ./L_in_s8.pre.route | 0 bytes | identical to block 6
+=== block 13 | vita [pre] | ./L_in_s8.prevo | 75 bytes | identical to block 7
+=== end

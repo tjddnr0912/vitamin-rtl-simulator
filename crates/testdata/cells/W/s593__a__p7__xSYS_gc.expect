@@ -1,0 +1,38 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p7__xSYS_gc
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p7/xSYS_gc.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p7
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE=some
+verdict_source: s593/a/p7.summ:511
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./xSYS_gc.ivl | 66 bytes
+xSYS_gc.sv:5: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./xSYS_gc.vl | 154 bytes
+%Error: xSYS_gc.sv:5:35: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./xSYS_gc.s2v | 55 bytes
+GC=def
+xSYS_gc.s2v.v:20: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./xSYS_gc.cut | 77 bytes
+GC=item
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./xSYS_gc.cut.route | 13 bytes
+t fx frame 0
+=== block 6 | vita [pre] | ./xSYS_gc.pre | 76 bytes
+GC=def
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [pre] | ./xSYS_gc.pre.route | 13 bytes | identical to block 5
+=== end

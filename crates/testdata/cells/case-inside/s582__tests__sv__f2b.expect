@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__f2b
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/f2b.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG3,POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG3: md5 159907e8a9b77d85a93b90c2f89bf7e3 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | tests/sv/out/f2b/iv5.out | 160 bytes
+../../f2b.sv:4: syntax error
+../../f2b.sv:4: error: Invalid module instantiation
+../../f2b.sv:7: syntax error
+../../f2b.sv:7: error: Incomprehensible for loop.
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/f2b/vl.out | 233 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7:14: syntax error, unexpected inside
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/f2b/vl_build.log | 473 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7:14: syntax error, unexpected inside
+    7 |     for (int inside = 6; inside < 7; inside++) begin case (x) inside + 1: m = 1; default: m = 0; endcase end
+      |              ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/f2b/sv.out | 210 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7:14: Parse error: unexpected token 'inside' (KW_inside)
+rc=1
+=== block 5 | vita [DBG3] | tests/sv/out/f2b/post.out | 508 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7:54: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7); IEEE 1800-2017 reserves `inside` [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST2] | post3/cmp/tests__sv__f2b.sv/post2.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 7 | vita [POST2] | post3/cmp/tests__sv__f2b.sv/post2.out | 52 bytes
+forvar m=0
+simulation ended (Finish) at time 0
+rc=0
+=== block 8 | vita [POST3] | post3/cmp/tests__sv__f2b.sv/post3.err | 503 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7:54: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2b.sv:7); IEEE 1800-2017 reserves `inside` [in t]
+errors=1 warnings=0 notes=0
+=== block 9 | vita [POST3] | post3/cmp/tests__sv__f2b.sv/post3.out | 5 bytes
+rc=1
+=== block 10 | vita [PRE] | post3/cmp/tests__sv__f2b.sv/pre.out | 80 bytes
+forvar m=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [PRE] | tests/sv/out/f2b/pre.out | 80 bytes | identical to block 10
+=== end

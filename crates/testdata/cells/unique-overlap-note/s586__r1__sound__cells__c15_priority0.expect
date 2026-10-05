@@ -1,0 +1,13 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__r1__sound__cells__c15_priority0
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/r1/sound/cells/c15_priority0.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: r1/sound/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: oracle raw quoted: iverilog 'syntax error' and verilator 5.052 'syntax error, unexpected case' on 'priority0 case' (s586/r1/sound/REPORT.md:43)
+blocks: 0
+=== end

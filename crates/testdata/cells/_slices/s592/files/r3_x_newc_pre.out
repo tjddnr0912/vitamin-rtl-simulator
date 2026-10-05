@@ -1,0 +1,26 @@
+DM07c                        IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=L0 | L1 | L2 | pre=L0 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM07d                        IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=L0 | L1 | L2 | pre=NONE | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM10c                        IEEE:UP ACCEPT->LOUDok  SVVL:DOWN OK->LOUD   | iv=ERR:DM10c.sv:4: error: Unable to bind parameter `K' in `top. | pre=inner | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KA                           IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=o=9 | pre=o=200 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KI                           IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=top.g.x.u P=9 | pre=top.g.x.u P=200 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KN                           IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=w=9 bits=4 | pre=w=8 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+KV                           IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=v=9 bits=4 | pre=v=8 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+MSG2                         IEEE:UP ACCEPT->LOUDok  SVVL:DOWN OK->LOUD   | iv=ERR:MSG2.sv:5: error: Unable to bind parameter `K' in `top.g | pre=x | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+MSG3                         IEEE:UP ACCEPT->LOUDok  SVVL:DOWN OK->LOUD   | iv=ERR:MSG3.sv:6: error: Unable to bind parameter `K' in `top.g | pre=x | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXB                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=b | pre=a | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXC                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=b | pre=a | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXF                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=b | pre=a | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXG                          IEEE:UP WRONG->LOUD  SVVL:n/a   | iv=b | pre=a | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+NXI                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=b | pre=a | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+ONE                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=NONE | pre=then | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+TWO                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=then | pre=NONE | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+Z6a                          IEEE:UP WRONG->LOUD  SVVL:DOWN OK->LOUD   | iv=one | pre=hundred | post_d=ERR:VITA-E3010:`B` is used before it is declared in this gen
+
+== pre -> post_d under IEEE (28 cells)
+    14 UP WRONG->LOUD         DM07c DM07d KA KI KN KV NXB NXC NXF NXG NXI ONE TWO Z6a
+    11 same                   
+     3 UP ACCEPT->LOUDok      DM10c MSG2 MSG3
+== pre -> post_d under SVVL (28 cells)
+    12 DOWN OK->LOUD          DM10c KA KI MSG2 MSG3 NXB NXC NXF NXI ONE TWO Z6a
+    11 same                   
+     5 n/a                    DM07c DM07d KN KV NXG

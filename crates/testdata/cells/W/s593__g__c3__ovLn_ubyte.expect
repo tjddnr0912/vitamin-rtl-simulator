@@ -1,0 +1,44 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c3__ovLn_ubyte
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c3/ovLn_ubyte.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post5,pre
+verdict: ALL
+verdict_source: s593/g/c3.p5.summ:883
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./ovLn_ubyte.ivl | 75 bytes
+X=252 lt0=0 b=8 shr=126
+ovLn_ubyte.sv:12: $finish called at 100 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./ovLn_ubyte.vl | 249 bytes
+X=252 lt0=0 b=8 shr=126
+- ovLn_ubyte.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ns; walltime 0.000 s; speed 7.143 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./ovLn_ubyte.s2v | 76 bytes
+X=252 lt0=0 b=8 shr=126
+ovLn_ubyte.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | ./ovLn_ubyte.post1 | 95 bytes
+X=252 lt0=0 b=8 shr=126
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./ovLn_ubyte.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./ovLn_ubyte.post2 | 95 bytes | identical to block 4
+=== block 7 | vita [post2] | ./ovLn_ubyte.post2.route | 0 bytes | identical to block 5
+=== block 8 | vita [post5] | ./ovLn_ubyte.post5 | 95 bytes | identical to block 4
+=== block 9 | vita [post5] | ./ovLn_ubyte.post5.route | 0 bytes | identical to block 5
+=== block 10 | vita [pre] | ./ovLn_ubyte.pre | 95 bytes | identical to block 4
+=== block 11 | vita [pre] | ./ovLn_ubyte.pre.route | 0 bytes | identical to block 5
+=== end

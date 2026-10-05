@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__r3__d__r3e_inc
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/r3/d/r3e_inc.v
+roadmap_row: §3.b case-inside
+set: lens_diff/r3/d
+oracles_present: iverilog,verilator
+vita_tags: POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: aux: lens_diff/r3/d/r3e_decl.vh
+aux: s582__lens_diff__r3__d__r3e_inc.aux/lens_diff/r3/d/r3e_decl.vh (origin s582/lens_diff/r3/d/r3e_decl.vh)
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | lens_diff/r3/d/out_r3e_inc/iv.out | 384 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_inc.v:4: Include file r3e_decl.vh not found
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_inc.v:3: syntax error
+I give up.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | lens_diff/r3/d/out_r3e_inc/vl.out | 250 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_inc.v:3:12: Cannot find include file: 'r3e_decl.vh'
+%Error: Exiting due to 1 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | lens_diff/r3/d/out_r3e_inc/vl_build.log | 901 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_inc.v:3:12: Cannot find include file: 'r3e_decl.vh'
+    3 |   `include "r3e_decl.vh"
+      |            ^~~~~~~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+        ... This may be because there's no search path specified with -I<dir>.
+        ... Looked in:
+             r3e_decl.vh
+             r3e_decl.vh.v
+             r3e_decl.vh.sv
+             obj_dir/r3e_decl.vh
+             obj_dir/r3e_decl.vh.v
+             obj_dir/r3e_decl.vh.sv
+        ... With current working directory '/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/out_r3e_inc'
+%Error: Exiting due to 1 error(s)
+=== block 4 | vita [POST3] | lens_diff/r3/d/out_r3e_inc/post3.out | 530 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_inc.v:5:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_diff/r3/d/r3e_decl.vh:1); IEEE 1800-2017 reserves `inside` [in top]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [PRE] | lens_diff/r3/d/out_r3e_inc/pre.out | 81 bytes
+include m=1
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== end

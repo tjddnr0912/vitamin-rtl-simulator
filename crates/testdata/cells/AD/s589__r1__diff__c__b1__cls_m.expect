@@ -1,0 +1,64 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__diff__c__b1__cls_m
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/diff/c/b1/cls_m.sv
+roadmap_row: §2 🆕 AD
+set: r1/diff/c/b1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-a-sep,PRE,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/r1/diff/REPORT.md:56
+alias: r2/diff/c/b1/cls_m (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r3/diff/c/b1/cls_m (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_b/lens/diff_b1/cls_m (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_c/r2/r2_diff_b1/cls_m (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 21
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./cls_m.ivl | 71 bytes
+cls_m.sv:11: syntax error
+cls_m.sv:11: error: Malformed statement
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./cls_m.vl | 224 bytes
+v=15
+- cls_m.sv:11: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 71.429 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./cls_m.s2v | 62 bytes
+rc=1
+cls_m.sv:3:3: Parse error: missing expected `endpackage`
+=== block 4 | vita [POST-a] | ./cls_m.post | 872 bytes
+cls_m.sv:4:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'localparam'
+cls_m.sv:5:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+cls_m.sv:5:40: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+cls_m.sv:5:51: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+cls_m.sv:11:28: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '::'
+cls_m.sv:11:28: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '::'
+errors=6 warnings=0 notes=0
+rc=1
+=== block 5 | vita [POST-a-sep] | ./cls_m.posts | 872 bytes | identical to block 4
+=== block 6 | vita [POST-b] | post_b/lens/diff_b1/cls_m.pb | 872 bytes | identical to block 4
+=== block 7 | vita [POST-b] | post_b/lens/diff_b1/cls_m.postb | 872 bytes | identical to block 4
+=== block 8 | vita [POST-b] | post_c/r2/r2_diff_b1/cls_m.postb | 872 bytes | identical to block 4
+=== block 9 | vita [POST-b] | r2/diff/c/b1/cls_m.pb | 872 bytes | identical to block 4
+=== block 10 | vita [POST-b] | r3/diff/c/b1/cls_m.pb | 872 bytes | identical to block 4
+=== block 11 | vita [POST-b-sep] | post_b/lens/diff_b1/cls_m.spostb | 872 bytes | identical to block 4
+=== block 12 | vita [POST-b-sep] | post_c/r2/r2_diff_b1/cls_m.spostb | 872 bytes | identical to block 4
+=== block 13 | vita [POST-b-sep] | r2/diff/c/b1/cls_m.pbs | 872 bytes | identical to block 4
+=== block 14 | vita [POST-b-sep] | r3/diff/c/b1/cls_m.pbs | 872 bytes | identical to block 4
+=== block 15 | vita [POST-c] | post_b/lens/diff_b1/cls_m.postc | 872 bytes | identical to block 4
+=== block 16 | vita [POST-c] | post_c/r2/r2_diff_b1/cls_m.postc | 872 bytes | identical to block 4
+=== block 17 | vita [POST-c] | r3/diff/c/b1/cls_m.pc | 872 bytes | identical to block 4
+=== block 18 | vita [POST-c-sep] | post_b/lens/diff_b1/cls_m.spostc | 872 bytes | identical to block 4
+=== block 19 | vita [POST-c-sep] | post_c/r2/r2_diff_b1/cls_m.spostc | 872 bytes | identical to block 4
+=== block 20 | vita [POST-c-sep] | r3/diff/c/b1/cls_m.pcs | 872 bytes | identical to block 4
+=== block 21 | vita [PRE] | ./cls_m.pre | 872 bytes | identical to block 4
+=== end

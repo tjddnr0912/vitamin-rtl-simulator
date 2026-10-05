@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__d__d04b_hoisted_signed_call
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/d/d04b_hoisted_signed_call.sv
+roadmap_row: §3.b case-inside
+set: lens_sound/d
+oracles_present: verilator,sv2v
+vita_tags: POST,POST2,POST3
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+blocks: 15
+=== block 1 | oracle verilator 5.052 (version captured in slice) | lens_sound/d/out_d04b_hoisted_signed_call/vl.out | 459 bytes
+A case f(-1) inside [-2:1] m=0 cnt=1
+A2 case f(-1) inside [-2:1],7 m=0 cnt=2
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/lens_sound/d/d04b_hoisted_signed_call.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 25.641 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in slice) | lens_sound/d/out_d04b_hoisted_signed_call/sv.out | 118 bytes
+A case f(-1) inside [-2:1] m=1 cnt=1
+A2 case f(-1) inside [-2:1],7 m=1 cnt=2
+sv2v.v:32: $finish called at 1 (1s)
+rc=0
+=== block 3 | vita [POST] | lens_sound/d/out_d04b_hoisted_signed_call/post.out | 463 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+A case f(-1) inside [-2:1] m=1 cnt=1
+A2 case f(-1) inside [-2:1],7 m=1 cnt=2
+simulation ended (Finish) at time 1
+errors=0 warnings=2 notes=0
+rc=0
+=== block 4 | vita [POST] | lens_sound/r2/rerun/d04b_hoisted_signed_call.post | 463 bytes | identical to block 3
+=== block 5 | vita [POST] | post2/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post.err | 345 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+errors=0 warnings=2 notes=0
+=== block 6 | vita [POST] | post2/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post.out | 118 bytes
+A case f(-1) inside [-2:1] m=1 cnt=1
+A2 case f(-1) inside [-2:1],7 m=1 cnt=2
+simulation ended (Finish) at time 1
+rc=0
+=== block 7 | vita [POST2] | lens_sound/r2/rerun/d04b_hoisted_signed_call.post2 | 463 bytes | identical to block 3
+=== block 8 | vita [POST2] | lens_sound/r3/rerun/d04b_hoisted_signed_call.post2 | 463 bytes | identical to block 3
+=== block 9 | vita [POST2] | post2/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post2.err | 345 bytes | identical to block 5
+=== block 10 | vita [POST2] | post2/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post2.out | 118 bytes | identical to block 6
+=== block 11 | vita [POST2] | post3/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post2.err | 345 bytes | identical to block 5
+=== block 12 | vita [POST2] | post3/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post2.out | 118 bytes | identical to block 6
+=== block 13 | vita [POST3] | lens_sound/r3/rerun/d04b_hoisted_signed_call.post3 | 463 bytes | identical to block 3
+=== block 14 | vita [POST3] | post3/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post3.err | 345 bytes | identical to block 5
+=== block 15 | vita [POST3] | post3/cmp/lens_sound__d__d04b_hoisted_signed_call.sv/post3.out | 118 bytes | identical to block 6
+=== end

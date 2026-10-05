@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s588__g__a2__a45_retbit_never
+slice: §4.5.588 (s588; details _slices/s588/)
+origin: s588/g/a2/a45_retbit_never.sv
+roadmap_row: §2 🆕 AE
+set: g/a2
+oracles_present: iverilog,sv2v,verilator
+vita_tags: PRE,PROBE-a
+verdict: correct
+verdict_source: s588/GROUNDING.md:171
+notes: GROUNDING Q3 "PRE class" column
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: PROBE-a: md5 2249f265256c275bcf5f3eda7b0d10f0 commit unrecorded
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./a45_retbit_never.ivl | 118 bytes
+a45_retbit_never.sv:5: error: Unable to evaluate parameter P value: top.f(32'sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./a45_retbit_never.vl | 236 bytes
+P=0000
+- a45_retbit_never.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 31.250 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./a45_retbit_never.s2v | 121 bytes
+a45_retbit_never.s2v.v:7: error: Unable to evaluate parameter P value: top.f(32'sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [PRE] | ./a45_retbit_never.PRE | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=0000
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [PROBE-a] | ./a45_retbit_never.PROBE | 175 bytes | identical to block 4
+=== end

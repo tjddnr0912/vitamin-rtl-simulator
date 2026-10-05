@@ -1,0 +1,64 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s581__lens_diff__p__T10
+slice: §4.5.581 (s581; details _slices/s581/)
+origin: s581/lens_diff/p/T10.sv
+roadmap_row: §2 🆕 T; §2 🆕 S (a)
+set: lens_diff/p
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,POST-T
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST: md5 1e41978f78724cc11b691cf6babfe911 commit e350ef79
+vita_binary: POST-T: md5 37d2b613f937979ade730b6808175e22 commit d4dc9c26
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit e54fa74a
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./T10.iv.txt | 27 bytes
+@X 10x0
+@Z 1z00
+@L 8
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./T10.vl.txt | 319 bytes
+%Error: T10.sv:2:9: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T10.sv:2:70: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+%Error: T10.sv:3:9: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./T10.vlb.txt | 2596 bytes
+%Error: T10.sv:2:9: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 'top'
+    2 |   case (4'b10x0) 4'b1000: begin : a initial $display("@X 1000"); end 4'b10x0: begin : b initial $display("@X 10x0"); end default: begin : d initial $display("@X def"); end endcase
+      |         ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: T10.sv:2:70: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    2 |   case (4'b10x0) 4'b1000: begin : a initial $display("@X 1000"); end 4'b10x0: begin : b initial $display("@X 10x0"); end default: begin : d initial $display("@X def"); end endcase
+      |                                                                      ^~~~~~~
+%Error: T10.sv:3:9: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                  : ... note: In instance 'top'
+    3 |   case (4'b1z00) 4'b1000: begin : a2 initial $display("@Z 1000"); end 4'b1z00: begin : b2 initial $display("@Z 1z00"); end default: begin : d2 initial $display("@Z def"); end endcase
+      |         ^~~~~~~
+%Error: T10.sv:3:71: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    3 |   case (4'b1z00) 4'b1000: begin : a2 initial $display("@Z 1000"); end 4'b1z00: begin : b2 initial $display("@Z 1z00"); end default: begin : d2 initial $display("@Z def"); end endcase
+      |                                                                       ^~~~~~~
+%Error: T10.sv:4:12: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    4 |   case (8) 4'b1x00: begin : a3 initial $display("@L 1x00"); end 4'b1?00: begin : b3 initial $display("@L 1?00"); end 8: begin : c3 initial $display("@L 8"); end default: begin : d3 initial $display("@L def"); end endcase
+      |            ^~~~~~~
+%Error: T10.sv:4:65: Use of x/? constant in generate case statement, (no such thing as 'generate casez')
+                   : ... note: In instance 'top'
+    4 |   case (8) 4'b1x00: begin : a3 initial $display("@L 1x00"); end 4'b1?00: begin : b3 initial $display("@L 1?00"); end 8: begin : c3 initial $display("@L 8"); end default: begin : d3 initial $display("@L def"); end endcase
+      |                                                                 ^~~~~~~
+%Error: Exiting due to 6 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./T10.sv.txt | 27 bytes | identical to block 1
+=== block 5 | vita [POST] | ./T10.post.txt | 411 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+T10.sv:2:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 4'b10x0 has no constant-fold arm [in top]
+T10.sv:3:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 4'b1z00 has no constant-fold arm [in top]
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [POST-T] | ./T10.pt.txt | 411 bytes | identical to block 5
+=== block 7 | vita [PRE] | ./T10.pre.txt | 411 bytes | identical to block 5
+=== end

@@ -1,0 +1,103 @@
+docs: record §4.5.592 — 🆕 V reverted whole after three rounds: refusing or replaying a decision the walks disagree on each descends while later walks read the previous walk's binding; BLOCKED on the "Scoping" later-walk reads line and 🆕 AE
+
+§4.5.592 was reverted whole and nothing of the attempt lands, so this
+commit is its record. Oracles: iverilog 13.0 -g2012, verilator 5.052
+--binary --timing, sv2v 0.0.13 -> iverilog.
+
+- Bug (§2 🆕 V): each of the four GenPhase walks (`instance.rs` Nets,
+  VarInit, Logic, Instances) re-runs `generate.rs` `elaborate_gen_item`
+  (`GenItem::Case`, `elaborate_gen_if`, `GenItem::For`). A
+  generate-scope parameter is bound at its position in every walk, is
+  re-bound in every walk and is never unbound (`(_, ModuleItem::Param)`).
+  So a walk after Nets reads the previous walk's inner binding of a
+  parameter declared after the reference, where Nets read the outer
+  object or none, and a forward reference mixes arms: nets from the
+  Nets arm, processes and instances from a later one. V04x PRE
+  `k 8 bits=6`, iverilog `one 1 bits=6`; I4 `then` / `else`; F3
+  `L0 L1 L2` / `L0`; Z0c `local 8 bits=4` / `pkg 9 bits=4`; d1p
+  `k 8 bits=4`, which iverilog refuses.
+- Grounding discarded two cuts. A scope-wide decision view accepted 16
+  designs iverilog refuses and sent F1 and Z1g loud -> silent-wrong
+  (Z1g through 🆕 AE). Caching the Nets decision turned accidental
+  louds into a silent default (AE7, V14b, V17, Z1d, Z1e). Built
+  instead: record the Nets decision per construct instance (prefix,
+  kind, span) and verify it in each later walk. Corpus and examples
+  stayed byte-identical (.vu / .velab, every round) and elaboration
+  time within ±3% (round 1); what failed was the policy for a mismatch.
+- Three mismatch policies, one per review round; the mismatch axis drew
+  BLOCKING in each round (LOOPROMPT §4, ER §3.6):
+  1. E3010 on every mismatch (round 1) refuses legal designs PRE prints
+     right: DL01, DL06, DL08 `@bits=4`, DL03 `@Q=10`, DL11
+     `@w=9 bits=4`, all = iverilog.
+  2. A silent replay where the Nets walk read every input, E3010 only
+     for an unread label (round 2), exposes 🆕 AE: Z1g, PRE loud (an
+     undeclared-net cascade), replay `L0 w=10 P=0000`, iverilog
+     `L0 w=10 P=xxxx`.
+  3. A silent replay where neither arm builds anything, E3010 otherwise
+     (round 3). Every walk still re-binds the arm's parameters (SN6:
+     iverilog, sv2v, verilator and PRE `P=1`, replay `P=9`). The replay
+     drops the range report each walk makes (R3q: PRE and 3 oracles
+     refuse `localparam [Nope:0] Q`, replay `@bits=4`). Its refusal
+     half still refuses R3a, R3b and R3m, where PRE = iverilog.
+- Mechanism of the failure: the walks disagree because they read
+  different bindings. Refusing the mismatch catches legal designs whose
+  arms print alike. Replaying the Nets decision leaves every later
+  walk's other reads (the arm's parameters, its range reports, the
+  interpreter's 0) on the later binding. Root fix: bind each generate
+  level's own parameters by position in every walk after Nets (restore
+  the level's own keys at its entry), so the walks agree by
+  construction. A decision that fix moves can reach 🆕 AE's 0 (Z1g).
+- Oracle ruling (kept; it outlives the revert): IEEE 1800-2017 §26.3
+  decides forward references in a generate scope. A reference other
+  than a call binds a declaration before it, else in the next outer
+  scope, else it is illegal (Example 1). iverilog follows it. sv2v and
+  verilator bind scope-wide and contradict the example (Z0a: iverilog
+  `px=1 bx=2`, sv2v `px=z bx=2`, verilator `px=0 bx=2`), so they are
+  disqualified on this axis. It is recorded in ROADMAP §2 "Oracle
+  splits", because §0 admits only iverilog defects.
+- ROADMAP §2:
+  - 🆕 V: BLOCKED on the "Scoping" later-walk reads line, and on 🆕 AE
+    for a decision it moves (Z1g; AE5–AE9 under a scope-wide pre-bind).
+    The row records the mechanism and the three policies with their
+    cells. Its oracles become iverilog + hand-IEEE.
+  - New "Scoping" line (OPEN; iverilog + hand-IEEE): a later walk reads
+    a later-declared generate parameter (N2 `K=8 bits=4 w=15`, B1, Q65
+    `P=11 bits=3`, P1c, W2, Z0b `l2 X=2`, SN7 `P=9`; iverilog
+    `K=4 bits=4 w=15`, `P=2 bits=3`, `l2 X=1`, `P=1`). With no outer
+    object the read is accepted (Z5a–Z5d), and an override read steers
+    a child's arm (DO02). Fix: restore each level's own keys at its
+    entry in every walk after Nets; a decision it moves declines a run
+    that reads a never-assigned 4-state variable.
+  - 🆕 T stays BLOCKED on 🆕 U's held half and 🆕 V. It gains the
+    unbound-label cells (Z5g undeclared; V14, V27, V30b, Z2c and Z3a
+    declared later; all `def 9 bits=4` where iverilog refuses) and a
+    note on its design: an unbound label must refuse, not take no match
+    (round 3 reached this skip: R3q).
+  - 🆕 AE now holds 🆕 V's moved decisions. "Oracle splits" gains the
+    ruling line.
+- ROADMAP §5.2: 🆕 V's row is removed. New order: 6 🆕 AI, 7 🆕 W with
+  🆕 S (a)'s i64 half, 8 🆕 T then 🆕 S (a)'s wide half (now after
+  🆕 U's held half and 🆕 V), 9 the "Size cast" enum lines, 10 the
+  new-design census, 11 hygiene. The order prose and every
+  `§5.2 row N` cite in docs/ follow.
+- Summary recounted by line census: §2 start-order 37/9/28 ->
+  37/8/29, §2 recorded 206/107/99 -> 208/108/100; total open
+  475 -> 477, startable 276 -> 276, blocked 199 -> 201. `next` is now
+  §2 1, 3, 4, 6–8 and 2, 9; §3.b 5; study/03 10.
+- REMAINING_WORK §D: the 🆕 V line becomes the positional-binding
+  prerequisite, which blocks 🆕 V and through it 🆕 T. The 4-state
+  result channel also blocks 🆕 V. Row cites follow.
+- PROBE_CATALOG, five new rows:
+  - module-scope names are visible before their declaration (V01m,
+    N2m, N2m2, Z5l);
+  - §26.3 Example 1's variable form prints Z0a `px=0`, iverilog `px=1`;
+  - a hierarchical label into a later block is skipped (V15);
+  - a >64-bit select scrutinee is refused (Z3d2; 3 oracles
+    `k 200 bits=8`);
+  - a constant call in a generate region binds the `$unit` function
+    (DF04 `@unit`; 3 oracles `@region`).
+  E02 joins the §4.5.568 outer-object class. The §4.5.565 class and
+  the §4.5.570 split are re-read under the ruling.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HAr27VrgNncHijTzpEMNSt

@@ -1,0 +1,232 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff3__G3
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff3/G3.sv
+roadmap_row: §2 🆕 S
+set: lens_diff3
+oracles_present: iverilog,sv2v
+vita_tags: POST,POST2,POST3,PRE
+verdict: F1 BLOCKING (rule: POST2 loud -> POST3 silent) | F2 BLOCKING (rule: PRE loud -> POST3 silent)
+verdict_source: s580/lens_diff3/REPORT.md:24;s580/lens_diff3/REPORT.md:28
+notes: R4 cmp3_post4 bucket(s): both×22,pre×2 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST3: md5 76ad4738a0ec5a26cc7718c675467a9e commit e6c9cc8d
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 54
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./G3_M1.iv.txt | 49 bytes
+M1 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./G3_M10.iv.txt | 50 bytes
+M10 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./G3_M2.iv.txt | 49 bytes
+M2 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./G3_M4.iv.txt | 49 bytes
+M4 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./G3_M4P.iv.txt | 50 bytes
+M4P item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./G3_M6.iv.txt | 49 bytes
+M6 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 7 | oracle iverilog 13.0 (version captured in slice) | ./G3_M7.iv.txt | 49 bytes
+M7 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 8 | oracle iverilog 13.0 (version captured in slice) | ./G3_M9.iv.txt | 49 bytes
+M9 item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 9 | oracle iverilog 13.0 (version captured in slice) | ./G3_M9P.iv.txt | 50 bytes
+M9P item
+G3.sv:43: $finish called at 5 (1s)
+
+rc=0
+=== block 10 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M1.sv.txt | 56 bytes
+M1 item
+G3_M1.sv2v.v:13: $finish called at 5 (1s)
+
+rc=0
+=== block 11 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M10.sv.txt | 58 bytes
+M10 item
+G3_M10.sv2v.v:16: $finish called at 5 (1s)
+
+rc=0
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M2.sv.txt | 56 bytes
+M2 item
+G3_M2.sv2v.v:13: $finish called at 5 (1s)
+
+rc=0
+=== block 13 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M4.sv.txt | 56 bytes
+M4 item
+G3_M4.sv2v.v:17: $finish called at 5 (1s)
+
+rc=0
+=== block 14 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M4P.sv.txt | 58 bytes
+M4P item
+G3_M4P.sv2v.v:13: $finish called at 5 (1s)
+
+rc=0
+=== block 15 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M6.sv.txt | 56 bytes
+M6 item
+G3_M6.sv2v.v:13: $finish called at 5 (1s)
+
+rc=0
+=== block 16 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M7.sv.txt | 56 bytes
+M7 item
+G3_M7.sv2v.v:13: $finish called at 5 (1s)
+
+rc=0
+=== block 17 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M9.sv.txt | 56 bytes
+M9 item
+G3_M9.sv2v.v:14: $finish called at 5 (1s)
+
+rc=0
+=== block 18 | oracle sv2v 0.0.13 (version captured in slice) | ./G3_M9P.sv.txt | 58 bytes
+M9P item
+G3_M9P.sv2v.v:14: $finish called at 5 (1s)
+
+rc=0
+=== block 19 | vita [POST] | ./G3_M1.post.txt | 177 bytes
+M1 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 20 | vita [POST] | ./G3_M10.post.txt | 177 bytes
+M10 one
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 21 | vita [POST] | ./G3_M2.post.txt | 177 bytes
+M2 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 22 | vita [POST] | ./G3_M4.post.txt | 177 bytes
+M4 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 23 | vita [POST] | ./G3_M4P.post.txt | 178 bytes
+M4P dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 24 | vita [POST] | ./G3_M6.post.txt | 177 bytes
+M6 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 25 | vita [POST] | ./G3_M7.post.txt | 177 bytes
+M7 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 26 | vita [POST] | ./G3_M9.post.txt | 281 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:3:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LP` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 27 | vita [POST] | ./G3_M9P.post.txt | 178 bytes
+M9P dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 28 | vita [POST2] | ./G3_M1.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:13:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 29 | vita [POST2] | ./G3_M10.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:41:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 30 | vita [POST2] | ./G3_M2.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:17:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 31 | vita [POST2] | ./G3_M4.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:23:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 32 | vita [POST2] | ./G3_M4P.post2.txt | 178 bytes | identical to block 23
+=== block 33 | vita [POST2] | ./G3_M6.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:29:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 34 | vita [POST2] | ./G3_M7.post2.txt | 398 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+G3.sv:32:12: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant value here — its result is x, or its x/z pattern is not a single literal [in t]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 35 | vita [POST2] | ./G3_M9.post2.txt | 177 bytes
+M9 dflt
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 36 | vita [POST2] | ./G3_M9P.post2.txt | 178 bytes | identical to block 27
+=== block 37 | vita [POST3] | ./G3_M1.post3.txt | 177 bytes | identical to block 19
+=== block 38 | vita [POST3] | ./G3_M10.post3.txt | 177 bytes | identical to block 20
+=== block 39 | vita [POST3] | ./G3_M2.post3.txt | 177 bytes | identical to block 21
+=== block 40 | vita [POST3] | ./G3_M4.post3.txt | 177 bytes | identical to block 22
+=== block 41 | vita [POST3] | ./G3_M4P.post3.txt | 178 bytes | identical to block 23
+=== block 42 | vita [POST3] | ./G3_M6.post3.txt | 177 bytes | identical to block 24
+=== block 43 | vita [POST3] | ./G3_M7.post3.txt | 177 bytes | identical to block 25
+=== block 44 | vita [POST3] | ./G3_M9.post3.txt | 177 bytes | identical to block 35
+=== block 45 | vita [POST3] | ./G3_M9P.post3.txt | 178 bytes | identical to block 27
+=== block 46 | vita [PRE] | ./G3_M1.pre.txt | 177 bytes | identical to block 19
+=== block 47 | vita [PRE] | ./G3_M10.pre.txt | 177 bytes | identical to block 20
+=== block 48 | vita [PRE] | ./G3_M2.pre.txt | 177 bytes | identical to block 21
+=== block 49 | vita [PRE] | ./G3_M4.pre.txt | 177 bytes | identical to block 22
+=== block 50 | vita [PRE] | ./G3_M4P.pre.txt | 178 bytes | identical to block 23
+=== block 51 | vita [PRE] | ./G3_M6.pre.txt | 177 bytes | identical to block 24
+=== block 52 | vita [PRE] | ./G3_M7.pre.txt | 177 bytes | identical to block 25
+=== block 53 | vita [PRE] | ./G3_M9.pre.txt | 281 bytes | identical to block 26
+=== block 54 | vita [PRE] | ./G3_M9P.pre.txt | 178 bytes | identical to block 27
+=== end

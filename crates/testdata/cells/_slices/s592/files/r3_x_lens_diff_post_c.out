@@ -1,0 +1,15 @@
+DI05m                        IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=outer | post_c=outer | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+DM07                         IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=L1 | L2 | post_c=L1 | L2 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM07b                        IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=L1 | L501 | post_c=L1 | L501 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM08                         IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=L0 | L1 | post_c=L0 | L1 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM09                         IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=then | post_c=then | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+DM10                         IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=outer | post_c=outer | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+DX03                         IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.u1.g.b outer | top.u2.g.b outer | post_c=top.u1.g.b outer | top.u2.g.b outer | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+
+== post_c -> post_d under IEEE (40 cells)
+    33 same                   
+     7 DOWN OK->LOUD          DI05m DM07 DM07b DM08 DM09 DM10 DX03
+== post_c -> post_d under SVVL (40 cells)
+    33 same                   
+     4 UP WRONG->LOUD         DI05m DM09 DM10 DX03
+     3 n/a                    DM07 DM07b DM08

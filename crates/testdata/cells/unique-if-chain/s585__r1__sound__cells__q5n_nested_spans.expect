@@ -1,0 +1,115 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q5n_nested_spans
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q5n_nested_spans.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2,NODEF2
+verdict: gained verilator lines | residue verilator lines | unique-if-chain
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6 | s585/DOCS_ROWS.md:22
+notes: runs: q5n_nested_spans s__q5n_nested_spans
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+vita_binary: NODEF2: md5 f97f67cf3a0daeea5a19c81925570a42 commit unrecorded
+blocks: 5
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/sound/out/q5n_nested_spans.out | 2180 bytes
+##### q5n_nested_spans
+=== verilator compile rc=0 run rc=0
+[1] %Error: q5n_nested_spans.sv:7: Assertion failed in top.t: 'unique if' statement violated
+[1] %Error: q5n_nested_spans.sv:7: Assertion failed in top.t: 'unique if' statement violated
+t=1 do-while k=2
+[2] %Error: q5n_nested_spans.sv:11: Assertion failed in top: 'unique if' statement violated
+t=2 nested-in-member
+[3] %Error: q5n_nested_spans.sv:13: Assertion failed in top: 'unique if' statement violated
+[3] %Error: q5n_nested_spans.sv:13: Assertion failed in top: 'unique if' statement violated
+t=3 two-macro-one-line
+[4] %Error: q5n_nested_spans.sv:15: Assertion failed in top: 'unique if' statement violated
+t=4 mixed-qualifiers
+- q5n_nested_spans.sv:17: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 do-while k=2
+t=2 nested-in-member
+t=3 two-macro-one-line
+t=4 mixed-qualifiers
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+q5n_nested_spans.sv:7:21: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.t] [at time 1]
+q5n_nested_spans.sv:7:21: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.t] [at time 1]
+t=1 do-while k=2
+q5n_nested_spans.sv:11:57: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 nested-in-member
+q5n_nested_spans.sv:13:8: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q5n_nested_spans.sv:13:18: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 two-macro-one-line
+q5n_nested_spans.sv:15:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+t=4 mixed-qualifiers
+simulation ended (Finish) at time 5
+errors=0 warnings=7 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/s__q5n_nested_spans.out | 1734 bytes
+##### s__q5n_nested_spans
+=== verilator compile rc=0 run rc=0
+[1] %Error: q5n_nested_spans.sv:7: Assertion failed in top.t: 'unique if' statement violated
+[1] %Error: q5n_nested_spans.sv:7: Assertion failed in top.t: 'unique if' statement violated
+t=1 do-while k=2
+[2] %Error: q5n_nested_spans.sv:11: Assertion failed in top: 'unique if' statement violated
+t=2 nested-in-member
+[3] %Error: q5n_nested_spans.sv:13: Assertion failed in top: 'unique if' statement violated
+[3] %Error: q5n_nested_spans.sv:13: Assertion failed in top: 'unique if' statement violated
+t=3 two-macro-one-line
+[4] %Error: q5n_nested_spans.sv:15: Assertion failed in top: 'unique if' statement violated
+t=4 mixed-qualifiers
+- q5n_nested_spans.sv:17: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 do-while k=2
+t=2 nested-in-member
+t=3 two-macro-one-line
+t=4 mixed-qualifiers
+simulation ended (Finish) at time 5
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 do-while k=2
+q5n_nested_spans.sv:11:57: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 nested-in-member
+q5n_nested_spans.sv:13:8: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q5n_nested_spans.sv:13:18: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 two-macro-one-line
+t=4 mixed-qualifiers
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | vita [JIT2] | r2/sound/lanes/q5n_nested_spans.jit | 645 bytes
+t=1 do-while k=2
+q5n_nested_spans.sv:11:57: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 nested-in-member
+q5n_nested_spans.sv:13:8: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q5n_nested_spans.sv:13:18: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 two-macro-one-line
+t=4 mixed-qualifiers
+JITBODY templates_compiled=1 refused=0 activations=1
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== block 4 | vita [NODEF2] | r2/sound/lanes/q5n_nested_spans.nod | 592 bytes
+t=1 do-while k=2
+q5n_nested_spans.sv:11:57: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+t=2 nested-in-member
+q5n_nested_spans.sv:13:8: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+q5n_nested_spans.sv:13:18: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+t=3 two-macro-one-line
+t=4 mixed-qualifiers
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== block 5 | vita [POST2] | r2/sound/lanes/q5n_nested_spans.def | 592 bytes | identical to block 4
+=== end

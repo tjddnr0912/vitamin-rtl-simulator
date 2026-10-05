@@ -1,0 +1,140 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c__b02_frame_lanes
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c/b02_frame_lanes.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2,JIT1,NODEF1,JIT2,NODEF2
+verdict: residue verilator lines | ARMED
+verdict_source: s585/g/cmp3_final.txt:6 | s585/p/PINS.txt:196
+notes: runs: b02_frame_lanes g__b02_frame_lanes
+alias: lanes/n/b02_frame_lanes (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+vita_binary: JIT2: md5 3f20e9a0eaccc99539e71cf1f19d35d4 commit unrecorded
+vita_binary: NODEF2: md5 f97f67cf3a0daeea5a19c81925570a42 commit unrecorded
+blocks: 7
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/b02_frame_lanes.out | 2272 bytes
+##### b02_frame_lanes
+=== verilator compile rc=0 run rc=0
+[1] %Error: b02_frame_lanes.sv:7: Assertion failed in top.fchain: 'unique if' statement violated
+t=1 fchain done
+[2] %Error: b02_frame_lanes.sv:13: Assertion failed in top.fsingle: 'unique if' statement violated
+t=2 fsingle done
+[3] %Error: b02_frame_lanes.sv:18: Assertion failed in top.tchain: 'unique if' statement violated
+t=3 tchain done
+[4] %Error: b02_frame_lanes.sv:22: Assertion failed in top.tsingle: 'unique if' statement violated
+t=4 tsingle done
+- b02_frame_lanes.sv:29: Verilog $finish
+=== iverilog compile rc=12
+b02_frame_lanes.sv:7: syntax error
+b02_frame_lanes.sv:7: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:7: syntax error
+b02_frame_lanes.sv:7: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:13: syntax error
+b02_frame_lanes.sv:13: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:18: syntax error
+b02_frame_lanes.sv:18: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+b02_frame_lanes.sv:18:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tchain] [at time 3]
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__b02_frame_lanes.out | 2119 bytes
+##### g__b02_frame_lanes
+=== verilator compile rc=0 run rc=0
+[1] %Error: b02_frame_lanes.sv:7: Assertion failed in top.fchain: 'unique if' statement violated
+t=1 fchain done
+[2] %Error: b02_frame_lanes.sv:13: Assertion failed in top.fsingle: 'unique if' statement violated
+t=2 fsingle done
+[3] %Error: b02_frame_lanes.sv:18: Assertion failed in top.tchain: 'unique if' statement violated
+t=3 tchain done
+[4] %Error: b02_frame_lanes.sv:22: Assertion failed in top.tsingle: 'unique if' statement violated
+t=4 tsingle done
+- b02_frame_lanes.sv:29: Verilog $finish
+=== iverilog compile rc=12
+b02_frame_lanes.sv:7: syntax error
+b02_frame_lanes.sv:7: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:7: syntax error
+b02_frame_lanes.sv:7: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:13: syntax error
+b02_frame_lanes.sv:13: Syntax in assignment statement l-value.
+b02_frame_lanes.sv:18: syntax error
+b02_frame_lanes.sv:18: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/b02_frame_lanes.out | 2272 bytes | identical to block 1
+=== block 4 | vita [JIT2] | r2/sound/lanes/b02_frame_lanes.jit | 495 bytes
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+JITBODY templates_compiled=1 refused=0 activations=1
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+=== block 5 | vita [NODEF2] | r2/sound/lanes/b02_frame_lanes.nod | 442 bytes
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=3 notes=0
+=== block 6 | vita [POST] | r1/sound/jit/b02_frame_lanes.def | 597 bytes
+t=1 fchain done
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+t=2 fsingle done
+b02_frame_lanes.sv:18:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tchain] [at time 3]
+t=3 tchain done
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+t=4 tsingle done
+simulation ended (Finish) at time 5
+errors=0 warnings=4 notes=0
+=== block 7 | vita [POST2] | r2/sound/lanes/b02_frame_lanes.def | 442 bytes | identical to block 5
+=== end

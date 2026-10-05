@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__u__r17_gen_hdr
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/u/r17_gen_hdr.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: N6 NON-BLOCKING
+verdict_source: s587/r2/diff/REPORT.md:53
+notes: findings line naming `r17`
+alias: r2/diff/a/lanes/r17_gen_hdr (byte-identical source) verdict: N6 NON-BLOCKING verdict_source: s587/r2/diff/REPORT.md:53
+vita_binary: POST-c-jit: md5 f1cd245ccf95b589f4e8c123ec824a24 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r17_gen_hdr.ivl | 94 bytes
+r17_gen_hdr.sv:4: syntax error
+r17_gen_hdr.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r17_gen_hdr.vl | 245 bytes
+g taken
+blk 0
+blk 1
+- r17_gen_hdr.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 71.428 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r17_gen_hdr.build | 0 bytes
+
+=== block 4 | vita [POST-c-jit] | r2/diff/a/lanes/r17_gen_hdr.jit | 764 bytes
+r17_gen_hdr.sv:4:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+r17_gen_hdr.sv:6:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: `f(…)` has no constant-fold arm [in top]
+r17_gen_hdr.sv:10:22: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-for condition is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=2 warnings=1 notes=1
+rc=1
+=== end

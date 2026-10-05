@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__f2a
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/f2a.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG3,POST2,POST3,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG3: md5 159907e8a9b77d85a93b90c2f89bf7e3 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | tests/sv/out/f2a/iv5.out | 50 bytes
+up m=1
+../../f2a.sv:11: $finish called at 1 (1ns)
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/f2a/vl.out | 427 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8:18: syntax error, unexpected inside
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8:41: syntax error, unexpected inside
+%Error: Exiting due to 2 error(s)
+rc=9
+=== block 3 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/f2a/vl_build.log | 767 bytes
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8:18: syntax error, unexpected inside
+    8 |   function [3:0] inside; input [3:0] v; inside = v + 4'd1; endfunction
+      |                  ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8:41: syntax error, unexpected inside
+    8 |   function [3:0] inside; input [3:0] v; inside = v + 4'd1; endfunction
+      |                                         ^~~~~~
+%Error: Exiting due to 2 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/f2a/sv.out | 210 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8:18: Parse error: unexpected token 'inside' (KW_inside)
+rc=1
+=== block 5 | vita [DBG3] | tests/sv/out/f2a/post.out | 510 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:4:27: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8); IEEE 1800-2017 reserves `inside` [in t.u]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 6 | vita [POST2] | post3/cmp/tests__sv__f2a.sv/post2.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 7 | vita [POST2] | post3/cmp/tests__sv__f2a.sv/post2.out | 48 bytes
+up m=0
+simulation ended (Finish) at time 1
+rc=0
+=== block 8 | vita [POST3] | post3/cmp/tests__sv__f2a.sv/post3.err | 505 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:4:27: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported in a design that also uses `inside` as a name (first at /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:8); IEEE 1800-2017 reserves `inside` [in t.u]
+errors=1 warnings=0 notes=0
+=== block 9 | vita [POST3] | post3/cmp/tests__sv__f2a.sv/post3.out | 5 bytes
+rc=1
+=== block 10 | vita [PRE] | post3/cmp/tests__sv__f2a.sv/pre.out | 275 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/f2a.sv:4:27: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: call to undeclared function `inside` [in t.u]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 11 | vita [PRE] | tests/sv/out/f2a/pre.out | 275 bytes | identical to block 10
+=== end

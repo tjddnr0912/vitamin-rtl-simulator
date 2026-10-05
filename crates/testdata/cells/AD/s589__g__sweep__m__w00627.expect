@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__g__sweep__m__w00627
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/g/sweep/m/w00627.sv
+roadmap_row: §2 🆕 AD
+set: g/sweep/m
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1b,PRE
+verdict: loud1
+verdict_source: s589/g/sw_pre.tsv:1
+notes: g/sw_pre.tsv col 2 (PRE vs oracles)
+alias: g/sweep/c/w00627 (byte-identical source) verdict: loud1 verdict_source: s589/g/sw_pre.tsv:1
+alias: post_a/sweep/w00627 (byte-identical source) verdict: loud1 verdict_source: s589/g/sw_pre.tsv:1
+vita_binary: P1b: md5 5cc22f1b9af4e7bd984e3c5c901a0a62 commit unrecorded
+vita_binary: P1c: md5 6713f2d3bfb536af8f51224832a86651 commit unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./w00627.ivl | 84 bytes
+w00627.sv:8: syntax error
+w00627.sv:8: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./w00627.vl | 119 bytes
+%Error: w00627.sv:3:26: Duplicate declaration of function: 'h__Vtcwrap_2'
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./w00627.s2v | 209 bytes
+w00627.s2v.v:22: error: The function q_h has been called with missing/empty parameters.
+w00627.s2v.v:22:      : Verilog doesn't allow passing empty parameters to functions.
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [P1b] | ./w00627.p2 | 514 bytes
+w00627.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=1003 v=1003
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=1
+rc=0
+=== block 5 | vita [P1c] | g/sweep/c/w00627.p3 | 514 bytes | identical to block 4
+=== block 6 | vita [P1d] | g/sweep/c/w00627.p4 | 514 bytes | identical to block 4
+=== block 7 | vita [POST-a] | post_a/sweep/w00627.post | 603 bytes
+w00627.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+w00627.sv:10:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `q.h(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=1
+rc=1
+=== block 8 | vita [POST-b] | post_a/sweep/w00627.pb | 603 bytes | identical to block 7
+=== block 9 | vita [POST-b] | post_a/sweep/w00627.postb | 603 bytes | identical to block 7
+=== block 10 | vita [POST-c] | post_a/sweep/w00627.postc | 603 bytes | identical to block 7
+=== block 11 | vita [PRE] | ./w00627.pre | 603 bytes | identical to block 7
+=== block 12 | vita [S5] | post_a/sweep/w00627.s5 | 603 bytes | identical to block 7
+=== end

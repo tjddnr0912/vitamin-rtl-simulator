@@ -1,0 +1,80 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c5__l08_S
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c5/l08_S.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c5
+oracles_present: iverilog,verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g__l08_S l08_S
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out2/l08_S.out | 1400 bytes
+##### l08_S
+=== verilator compile rc=0 run rc=0
+P0=0 P1=1
+- l08_S.sv:8: Verilog $finish
+=== iverilog compile rc=2
+l08_S.sv:4: syntax error
+l08_S.sv:4: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=1
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'l08_S.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'l08_S.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/g__l08_S.out | 1403 bytes
+##### g__l08_S
+=== verilator compile rc=0 run rc=0
+P0=0 P1=1
+- l08_S.sv:8: Verilog $finish
+=== iverilog compile rc=2
+l08_S.sv:4: syntax error
+l08_S.sv:4: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=1
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'l08_S.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'l08_S.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 3 | combined [iverilog,verilator,PRE,POSTC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out/l08_S.out | 1400 bytes | identical to block 1
+=== end

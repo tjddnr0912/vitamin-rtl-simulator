@@ -1,0 +1,109 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_snd2__probes__P8
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_snd2/probes/P8.sv
+roadmap_row: §2 🆕 S
+set: lens_snd2
+oracles_present: iverilog,sv2v
+vita_tags: POST2-interp,POST2-vm,POST,POST2,PRE
+verdict: FINDING D (BLOCKING, new in round 2)
+verdict_source: s580/lens_snd2/REPORT.md:39
+notes: R4 cmp3_post4 bucket(s): post3×3,both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-interp: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: POST2-vm: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 32
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P8_MIX.ivd.txt | 829 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:19: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:19: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:19: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:19: sorry: "inside" expressions not supported yet.
+rc=4
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P8_REALI.ivd.txt | 417 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:15: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:15: sorry: "inside" expressions not supported yet.
+rc=2
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./P8_REALL.ivd.txt | 417 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:17: sorry: "inside" expressions not supported yet.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:17: sorry: "inside" expressions not supported yet.
+rc=2
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./P8_REALQ.ivd.txt | 248 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:13: error: ==? operator may only have INTEGRAL operands.
+1 error(s) during elaboration.
+rc=1
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_MIX.iv.txt | 208 bytes
+M 0 0 0 0
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_MIX.sv2v.v:14: $finish called at 2 (1s)
+rc=0 
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_MIX.sv2v.err | 0 bytes
+
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALI.iv.txt | 467 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_REALI.sv2v.v:12: error: | operator may not have REAL operands.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_REALI.sv2v.v:12: error: | operator may not have REAL operands.
+2 error(s) during elaboration.
+rc=2 
+=== block 8 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALI.sv2v.err | 0 bytes | identical to block 6
+=== block 9 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALL.iv.txt | 467 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_REALL.sv2v.v:12: error: | operator may not have REAL operands.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_REALL.sv2v.v:12: error: | operator may not have REAL operands.
+2 error(s) during elaboration.
+rc=2 
+=== block 10 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALL.sv2v.err | 0 bytes | identical to block 6
+=== block 11 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALQ.iv.txt | 252 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8_REALQ.sv2v.v:12: error: | operator may not have REAL operands.
+1 error(s) during elaboration.
+rc=1 
+=== block 12 | oracle sv2v 0.0.13 (version captured in slice) | ./P8_REALQ.sv2v.err | 0 bytes | identical to block 6
+=== block 13 | vita [POST] | ./P8_MIX.post.txt | 79 bytes
+M 1 1 1 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 14 | vita [POST] | ./P8_REALI.post.txt | 747 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=2 warnings=0 notes=0
+rc=1
+=== block 15 | vita [POST] | ./P8_REALL.post.txt | 76 bytes
+RL 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 16 | vita [POST] | ./P8_REALQ.post.txt | 390 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:13:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 17 | vita [POST2] | ./P8_MIX.post2.txt | 79 bytes | identical to block 13
+=== block 18 | vita [POST2] | ./P8_REALI.post2.txt | 76 bytes
+RI 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 19 | vita [POST2] | ./P8_REALL.post2.txt | 76 bytes | identical to block 15
+=== block 20 | vita [POST2] | ./P8_REALQ.post2.txt | 74 bytes
+RQ 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 21 | vita [POST2-interp] | ./P8_MIX.p2interp.txt | 79 bytes | identical to block 13
+=== block 22 | vita [POST2-interp] | ./P8_REALI.p2interp.txt | 76 bytes | identical to block 18
+=== block 23 | vita [POST2-interp] | ./P8_REALL.p2interp.txt | 76 bytes | identical to block 15
+=== block 24 | vita [POST2-interp] | ./P8_REALQ.p2interp.txt | 74 bytes | identical to block 20
+=== block 25 | vita [POST2-vm] | ./P8_MIX.p2vm.txt | 79 bytes | identical to block 13
+=== block 26 | vita [POST2-vm] | ./P8_REALI.p2vm.txt | 76 bytes | identical to block 18
+=== block 27 | vita [POST2-vm] | ./P8_REALL.p2vm.txt | 76 bytes | identical to block 15
+=== block 28 | vita [POST2-vm] | ./P8_REALQ.p2vm.txt | 74 bytes | identical to block 20
+=== block 29 | vita [PRE] | ./P8_MIX.pre.txt | 79 bytes
+M 0 0 0 0
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 30 | vita [PRE] | ./P8_REALI.pre.txt | 76 bytes | identical to block 18
+=== block 31 | vita [PRE] | ./P8_REALL.pre.txt | 76 bytes | identical to block 15
+=== block 32 | vita [PRE] | ./P8_REALQ.pre.txt | 352 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s580/lens_snd2/probes/P8.sv:13:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?) on a left operand of unsizable width is unsupported (the pattern mask must cover it) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== end

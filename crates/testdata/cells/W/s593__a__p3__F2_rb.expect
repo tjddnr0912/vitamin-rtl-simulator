@@ -1,0 +1,35 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__F2_rb
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/F2_rb.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:325
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 5
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./F2_rb.ivl | 48 bytes
+vb=4
+F2_rb.sv:6: $finish called at 5 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./F2_rb.vl | 350 bytes
+%Warning-WIDTHEXPAND: F2_rb.sv:4:23: Operator EQWILD expects 64 bits on the RHS, but RHS's CONST '4'sb1z00' generates 4 bits.
+vb=4
+- F2_rb.sv:6: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ns; walltime 0.000 s; speed 500.002 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./F2_rb.s2v | 50 bytes
+vb=4
+F2_rb.s2v.v:6: $finish called at 5 (1s)
+rc=0
+=== block 4 | vita [cut] | ./F2_rb.cut | 174 bytes
+F2_rb.sv:4:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$signed` that is not a constant here is not allowed in a constant range bound [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [pre] | ./F2_rb.pre | 174 bytes | identical to block 4
+=== end

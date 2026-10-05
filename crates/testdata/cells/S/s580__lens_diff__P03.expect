@@ -1,0 +1,462 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__lens_diff__P03
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/lens_diff/P03.sv
+roadmap_row: §2 🆕 S
+set: lens_diff
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,PRE,r2dbg,POST2
+verdict: F1 BLOCKING | class: real gap; new in slice (inside), pre-existing (==?)
+verdict_source: s580/lens_diff/REPORT.md:7;s580/lens_diff/REPORT.md:19
+notes: R4 cmp3_post4 bucket(s): pre×4,neither×1,both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: POST: md5 65a8ab183a63664b3b26ac4607967a2c commit e5147442
+vita_binary: POST2: md5 09ab4bd248b02f4675f532e2d342282e commit cf5076ef
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 31
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./P03.iv.txt | 230 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+W09 1
+W14 1
+W12 1
+P03.sv:56: $finish called at 1000 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./P03_b.iv.txt | 269 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+L01 1
+L02 0
+L07 1
+L08 1
+L13 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+G01 then
+W09 1
+W14 1
+W12 1
+P03.sv:56: $finish called at 1000 (1s)
+rc=0
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./P03_r.iv.txt | 235 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+LR 0
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+W09 1
+W14 1
+W12 1
+P03.sv:56: $finish called at 1000 (1s)
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./P03.vl.txt | 403 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+R01 0
+R02 0
+R01v 0
+R02v 0
+R03 0
+R07 1
+R08 0
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+W09 1
+W14 1
+W12 1
+- P03.sv:56: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ns; walltime 0.000 s; speed 47.619 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle verilator 5.052 (version captured in slice) | ./P03.vlc.txt | 4409 bytes
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.036 MB sources in 2 modules, into 0.032 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.107 s (elab=0.001, cvt=0.003, bld=4.100); cpu 0.007 s on 1 threads; allocated 10.391 MB
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./P03.sv.txt | 234 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+W09 1
+W14 1
+W12 1
+P03.sv2v.v:54: $finish called at 1000 (1s)
+rc=0
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | ./P03.sv2v.err | 0 bytes
+
+=== block 8 | vita [POST] | ./P03.post.txt | 357 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L03 0
+L04 1
+L05 1
+L06 1
+L09 0
+L10 0
+L11 1
+L12 0
+L14 0
+L15 0
+L17 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 else
+G03 else
+W09 1
+W14 1
+W12 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 9 | vita [POST] | ./P03.postq.txt | 357 bytes | identical to block 8
+=== block 10 | vita [POST] | ./P03_b.post.txt | 947 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L01` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+P03.sv:30:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L02` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+P03.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L07` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+P03.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L08` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+P03.sv:53:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb?100 has no constant-fold arm [in t]
+errors=6 warnings=1 notes=0
+rc=1
+=== block 11 | vita [POST] | ./P03_b.postq.txt | 542 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L07` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+P03.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L08` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+errors=3 warnings=1 notes=0
+rc=1
+=== block 12 | vita [POST] | ./P03_r.post.txt | 288 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:39:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LR` value is not a constant: `R` is a real, which has no integral constant value here [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 13 | vita [POST] | ./P03_r.postq.txt | 288 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:37:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LR` value is not a constant: `R` is a real, which has no integral constant value here [in t]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 14 | vita [POST] | r2/lens/diff_P03.post.txt | 357 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 0
+L10 0
+L11 1
+L12 0
+L14 0
+L15 0
+L17 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 else
+G03 else
+W09 1
+W14 1
+W12 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 15 | vita [POST] | r2/lens/diff_P03.postq.txt | 357 bytes | identical to block 14
+=== block 16 | vita [POST] | r2/lens/diff_P03_b.post.txt | 947 bytes | identical to block 10
+=== block 17 | vita [POST] | r2/lens/diff_P03_b.postq.txt | 542 bytes | identical to block 11
+=== block 18 | vita [POST] | r2/lens/diff_P03_r.post.txt | 288 bytes | identical to block 12
+=== block 19 | vita [POST] | r2/lens/diff_P03_r.postq.txt | 288 bytes | identical to block 13
+=== block 20 | vita [POST2] | r2/lens/diff_P03.post2.txt | 357 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+W09 1
+W14 1
+W12 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 21 | vita [POST2] | r2/lens/diff_P03.post2q.txt | 357 bytes | identical to block 20
+=== block 22 | vita [POST2] | r2/lens/diff_P03_b.post2.txt | 396 bytes
+L03 0
+L04 1
+L05 1
+L06 1
+L09 1
+L10 1
+L11 1
+L12 1
+L14 1
+L15 0
+L17 1
+L01 1
+L02 0
+L07 1
+L08 1
+L13 1
+R01 1
+R02 0
+R01v 1
+R02v 0
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 then
+G03 else
+G01 then
+W09 1
+W14 1
+W12 1
+simulation ended (Finish) at time 1000
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 23 | vita [POST2] | r2/lens/diff_P03_b.post2q.txt | 396 bytes | identical to block 22
+=== block 24 | vita [POST2] | r2/lens/diff_P03_r.post2.txt | 288 bytes | identical to block 12
+=== block 25 | vita [POST2] | r2/lens/diff_P03_r.post2q.txt | 288 bytes | identical to block 13
+=== block 26 | vita [PRE] | ./P03.pre.txt | 1517 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:18:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L04` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:19:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L05` value is not a constant: 4'b?100 has no constant-fold arm [in t]
+P03.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L06` value is not a constant: 8'b0000_?100 has no constant-fold arm [in t]
+P03.sv:21:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L09` value is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+P03.sv:22:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 8'b0001_111? has no constant-fold arm [in t]
+P03.sv:23:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 4'b000? has no constant-fold arm [in t]
+P03.sv:24:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L12` value is not a constant: 8'b1111_11?0 has no constant-fold arm [in t]
+P03.sv:25:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L14` value is not a constant: 8'b0001_0?00 has no constant-fold arm [in t]
+P03.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 64'h0000_0000_0000_000? has no constant-fold arm [in t]
+P03.sv:48:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+errors=10 warnings=1 notes=0
+rc=1
+=== block 27 | vita [PRE] | ./P03.preq.txt | 357 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+L03 0
+L04 1
+L05 1
+L06 1
+L09 0
+L10 0
+L11 1
+L12 0
+L14 0
+L15 0
+L17 1
+R01 0
+R02 1
+R01v 0
+R02v 1
+R03 0
+R07 1
+R08 1
+R09 1
+R09v 1
+R10v 1
+R12v 1
+R14v 1
+R13 1
+G09 else
+G03 else
+W09 1
+W14 1
+W12 1
+simulation ended (Finish) at time 1000
+errors=0 warnings=1 notes=0
+rc=0
+=== block 28 | vita [PRE] | ./P03_b.pre.txt | 2198 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:18:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L04` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:19:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L05` value is not a constant: 4'b?100 has no constant-fold arm [in t]
+P03.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L06` value is not a constant: 8'b0000_?100 has no constant-fold arm [in t]
+P03.sv:21:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L09` value is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+P03.sv:22:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 8'b0001_111? has no constant-fold arm [in t]
+P03.sv:23:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 4'b000? has no constant-fold arm [in t]
+P03.sv:24:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L12` value is not a constant: 8'b1111_11?0 has no constant-fold arm [in t]
+P03.sv:25:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L14` value is not a constant: 8'b0001_0?00 has no constant-fold arm [in t]
+P03.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 64'h0000_0000_0000_000? has no constant-fold arm [in t]
+P03.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L01` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+P03.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L07` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+P03.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L08` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+P03.sv:48:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+P03.sv:53:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb?100 has no constant-fold arm [in t]
+errors=15 warnings=1 notes=0
+rc=1
+=== block 29 | vita [PRE] | ./P03_b.preq.txt | 542 bytes | identical to block 11
+=== block 30 | vita [PRE] | ./P03_r.pre.txt | 1673 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P03.sv:18:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L04` value is not a constant: 8'b0000_1?00 has no constant-fold arm [in t]
+P03.sv:19:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L05` value is not a constant: 4'b?100 has no constant-fold arm [in t]
+P03.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L06` value is not a constant: 8'b0000_?100 has no constant-fold arm [in t]
+P03.sv:21:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L09` value is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+P03.sv:22:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 8'b0001_111? has no constant-fold arm [in t]
+P03.sv:23:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 4'b000? has no constant-fold arm [in t]
+P03.sv:24:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L12` value is not a constant: 8'b1111_11?0 has no constant-fold arm [in t]
+P03.sv:25:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L14` value is not a constant: 8'b0001_0?00 has no constant-fold arm [in t]
+P03.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 64'h0000_0000_0000_000? has no constant-fold arm [in t]
+P03.sv:39:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LR` value is not a constant: `R` is a real, which has no integral constant value here [in t]
+P03.sv:48:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 8'b0001_?000 has no constant-fold arm [in t]
+errors=11 warnings=1 notes=0
+rc=1
+=== block 31 | vita [PRE] | ./P03_r.preq.txt | 288 bytes | identical to block 13
+=== end

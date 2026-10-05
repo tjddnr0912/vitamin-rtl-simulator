@@ -1,0 +1,68 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__impl__n__Egb_ex
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/impl/n/Egb_ex.sv
+roadmap_row: §2 🆕 U
+set: impl/n
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,POSTA,POSTB,PRE
+verdict: by span, excludes unlabelled gen begin/end = oracle split Egb_ex).
+verdict_source: s591/IMPL.md:8
+notes: verbatim excerpt of the source line
+alias: impl/dump/eb59cbdb6b305884 (byte-identical source) verdict: by span, excludes unlabelled gen begin/end = oracle split Egb_ex). verdict_source: s591/IMPL.md:8
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+blocks: 18
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/eb59cbdb6b305884.ivl | 194 bytes
+eb59cbdb6b305884.sv:4: error: 'E1' has already been imported into this scope from package 'pk'.
+eb59cbdb6b305884.sv:4: warning: Anachronistic use of begin/end to surround generate schemes.
+rc=1
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Egb_ex.ivl | 174 bytes
+Egb_ex.sv:4: error: 'E1' has already been imported into this scope from package 'pk'.
+Egb_ex.sv:4: warning: Anachronistic use of begin/end to surround generate schemes.
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/eb59cbdb6b305884.vl | 244 bytes
+egbx E1=1 K=1
+- eb59cbdb6b305884.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./Egb_ex.vl | 234 bytes
+egbx E1=1 K=1
+- Egb_ex.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 9.091 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/eb59cbdb6b305884.s2v | 72 bytes
+egbx E1=7 K=7
+eb59cbdb6b305884.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./Egb_ex.s2v | 62 bytes
+egbx E1=7 K=7
+Egb_ex.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./Egb_ex.dev1 | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+egbx E1=7 K=7
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV1] | ./Egb_ex.dev1.route | 0 bytes
+
+=== block 9 | vita [DEV2] | impl/dump/eb59cbdb6b305884.dev2 | 184 bytes | identical to block 7
+=== block 10 | vita [DEV2] | impl/dump/eb59cbdb6b305884.dev2.route | 0 bytes | identical to block 8
+=== block 11 | vita [DEV3] | ./Egb_ex.dev3 | 184 bytes | identical to block 7
+=== block 12 | vita [DEV3] | ./Egb_ex.dev3.route | 0 bytes | identical to block 8
+=== block 13 | vita [POSTA] | ./Egb_ex.posta | 184 bytes | identical to block 7
+=== block 14 | vita [POSTA] | ./Egb_ex.posta.route | 0 bytes | identical to block 8
+=== block 15 | vita [POSTB] | ./Egb_ex.postb | 184 bytes | identical to block 7
+=== block 16 | vita [POSTB] | ./Egb_ex.postb.route | 0 bytes | identical to block 8
+=== block 17 | vita [PRE] | ./Egb_ex.pre | 184 bytes | identical to block 7
+=== block 18 | vita [PRE] | ./Egb_ex.pre.route | 0 bytes | identical to block 8
+=== end

@@ -1,0 +1,92 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__g__c2__x_bind_port
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/g/c2/x_bind_port.sv
+roadmap_row: §2 🆕 AD
+set: g/c2
+oracles_present: iverilog,sv2v,verilator
+vita_tags: OFF-LANE,P1,P1b,P1c,P1d,PRE,ROUTE,PRE-sep,STG2
+verdict: ok1
+verdict_source: s589/g/preA.tsv:232
+notes: g/preA.tsv col 2 (PRE vs oracles, grounding)
+alias: g/sweep/c/w00674 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: post_a/cells/g_c2/x_bind_port (byte-identical source) verdict: ok1 verdict_source: s589/g/preA.tsv:232
+alias: post_a/sweep/w00674 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/g_c2/x_bind_port (byte-identical source) verdict: ok1 verdict_source: s589/g/preA.tsv:232
+vita_binary: P1: md5 79431e6c00fea58e276a13c071d518b7 commit unrecorded
+vita_binary: P1b: md5 5cc22f1b9af4e7bd984e3c5c901a0a62 commit unrecorded
+vita_binary: P1c: md5 6713f2d3bfb536af8f51224832a86651 commit unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 33
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./x_bind_port.ivl | 48 bytes
+x_bind_port.sv:16: syntax error
+I give up.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./x_bind_port.vl | 399 bytes
+%Warning-WIDTHTRUNC: x_bind_port.sv:16:18: Input port connection 's' expects 4 bits on the pin connection, but pin connection's VARREF 's' generates 8 bits.
+top.t.c b=4 s=a
+- x_bind_port.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 142.857 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./x_bind_port.s2v | 73 bytes
+rc=1
+x_bind_port.sv:16:1: Parse error: unexpected token 'bind' (KW_bind)
+=== block 4 | vita [P1] | ./x_bind_port.p1 | 184 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+top.t.c b=4 s=a
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [P1] | ./x_bind_port.p1off | 184 bytes | identical to block 4
+=== block 6 | vita [P1b] | ./x_bind_port.p2 | 184 bytes | identical to block 4
+=== block 7 | vita [P1b] | ./x_bind_port.p2off | 184 bytes | identical to block 4
+=== block 8 | vita [P1c] | ./x_bind_port.p3 | 184 bytes | identical to block 4
+=== block 9 | vita [P1d] | ./x_bind_port.p4 | 184 bytes | identical to block 4
+=== block 10 | vita [P1d] | ./x_bind_port.p4off | 184 bytes | identical to block 4
+=== block 11 | vita [POST-a] | post_a/cells/g_c2/x_bind_port.post | 184 bytes | identical to block 4
+=== block 12 | vita [POST-a] | post_a/sweep/w00674.post | 184 bytes | identical to block 4
+=== block 13 | vita [POST-a] | r2/diff/impl/g_c2/x_bind_port.post | 184 bytes | identical to block 4
+=== block 14 | vita [POST-a-sep] | post_a/cells/g_c2/x_bind_port.spost | 240 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+top.t.c b=4 s=a
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 15 | vita [POST-b] | post_a/cells/g_c2/x_bind_port.pb | 184 bytes | identical to block 4
+=== block 16 | vita [POST-b] | post_a/cells/g_c2/x_bind_port.postb | 184 bytes | identical to block 4
+=== block 17 | vita [POST-b] | post_a/sweep/w00674.pb | 184 bytes | identical to block 4
+=== block 18 | vita [POST-b] | post_a/sweep/w00674.postb | 184 bytes | identical to block 4
+=== block 19 | vita [POST-b] | r2/diff/impl/g_c2/x_bind_port.pb | 184 bytes | identical to block 4
+=== block 20 | vita [POST-b-sep] | post_a/cells/g_c2/x_bind_port.spostb | 240 bytes | identical to block 14
+=== block 21 | vita [POST-c] | post_a/cells/g_c2/x_bind_port.postc | 184 bytes | identical to block 4
+=== block 22 | vita [POST-c] | post_a/sweep/w00674.postc | 184 bytes | identical to block 4
+=== block 23 | vita [POST-c] | r2/diff/impl/g_c2/x_bind_port.pc | 184 bytes | identical to block 4
+=== block 24 | vita [POST-c-sep] | post_a/cells/g_c2/x_bind_port.spostc | 240 bytes | identical to block 14
+=== block 25 | vita [PRE] | ./x_bind_port.pre | 184 bytes | identical to block 4
+=== block 26 | vita [S2] | post_a/cells/g_c2/x_bind_port.s2 | 184 bytes | identical to block 4
+=== block 27 | vita [S2-sep] | post_a/cells/g_c2/x_bind_port.ss2 | 240 bytes | identical to block 14
+=== block 28 | vita [S3] | post_a/cells/g_c2/x_bind_port.s3 | 184 bytes | identical to block 4
+=== block 29 | vita [S4] | post_a/cells/g_c2/x_bind_port.s4 | 184 bytes | identical to block 4
+=== block 30 | vita [S5] | post_a/cells/g_c2/x_bind_port.s5 | 184 bytes | identical to block 4
+=== block 31 | vita [S5] | post_a/sweep/w00674.s5 | 184 bytes | identical to block 4
+=== block 32 | vita [S5-sep] | post_a/cells/g_c2/x_bind_port.ss5 | 240 bytes | identical to block 14
+=== block 33 | vita [W0] | post_a/cells/g_c2/x_bind_port.w0 | 184 bytes | identical to block 4
+=== end

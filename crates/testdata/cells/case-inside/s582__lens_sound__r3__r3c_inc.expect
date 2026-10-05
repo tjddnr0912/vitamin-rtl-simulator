@@ -1,0 +1,14 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_sound__r3__r3c_inc
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_sound/r3/r3c_inc.v
+roadmap_row: §3.b case-inside
+set: lens_sound/r3
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: oracle text quoted at lens_sound/REPORT.md:126; aux: lens_sound/r3/r3c_inc.vh
+aux: s582__lens_sound__r3__r3c_inc.aux/lens_sound/r3/r3c_inc.vh (origin s582/lens_sound/r3/r3c_inc.vh)
+blocks: 0
+=== end

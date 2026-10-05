@@ -1,0 +1,61 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__sound__c__b3__c18_pk2d_ret_outer
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/sound/c/b3/c18_pk2d_ret_outer.sv
+roadmap_row: §2 🆕 AD
+set: r1/sound/c/b3
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-a,POST-b,POST-c,PRE,POST-a-sep,POST-b-sep,POST-c-sep
+verdict: silent->correct
+verdict_source: s589/r1/sound/REPORT.md:27
+notes: class word nearest `c18` (line starts with it)
+alias: post_b/lens/sound_b3/c18_pk2d_ret_outer (byte-identical source) verdict: silent->correct verdict_source: s589/r1/sound/REPORT.md:27
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 10
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./c18_pk2d_ret_outer.ivl | 67 bytes
+v=255 b=8
+c18_pk2d_ret_outer.sv:9: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./c18_pk2d_ret_outer.vl | 390 bytes
+%Warning-WIDTHEXPAND: c18_pk2d_ret_outer.sv:8:19: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's FUNCREF 'h' generates 8 bits.
+v=255 b=8
+- c18_pk2d_ret_outer.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 3.571 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./c18_pk2d_ret_outer.s2v | 71 bytes
+v=255 b=8
+c18_pk2d_ret_outer.s2v.v:16: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [POST-a] | ./c18_pk2d_ret_outer.post | 180 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=255 b=8
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-a-sep] | ./c18_pk2d_ret_outer.sposta | 236 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=255 b=8
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 6 | vita [POST-b] | ./c18_pk2d_ret_outer.postb | 180 bytes | identical to block 4
+=== block 7 | vita [POST-b-sep] | ./c18_pk2d_ret_outer.spostb | 236 bytes | identical to block 5
+=== block 8 | vita [POST-c] | ./c18_pk2d_ret_outer.postc | 180 bytes | identical to block 4
+=== block 9 | vita [POST-c-sep] | ./c18_pk2d_ret_outer.spostc | 236 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./c18_pk2d_ret_outer.pre | 183 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=65535 b=16
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== end

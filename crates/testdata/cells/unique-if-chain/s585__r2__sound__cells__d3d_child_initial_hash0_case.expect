@@ -1,0 +1,24 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r2__sound__cells__d3d_child_initial_hash0_case
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r2/sound/cells/d3d_child_initial_hash0_case.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r2/sound/cells
+oracles_present: iverilog
+vita_tags: PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: d3d_child_initial_hash0_case
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+blocks: 1
+=== block 1 | combined [iverilog,PRE] iverilog 13.0 (version captured in slice) | r2/sound/out/d3d_child_initial_hash0_case.out | 354 bytes
+##### d3d_child_initial_hash0_case
+=== iverilog compile rc=0 msgs: d3d_child_initial_hash0_case.sv:3: vvp.tgt sorry: Case unique/unique0 qualities are ignored. run rc=0
+chk t=0 r=2
+d3d_child_initial_hash0_case.sv:8: $finish called at 1 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+chk t=0 r=2
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== end

@@ -1,0 +1,43 @@
+a2/Iee_nw: silent->loud(oracle loud: ivl,s2v)
+    pre : ee P=18446744073709551625 b=65
+    post: !VITA-E3009 `P` has already been imported into this scope from package `pa` (explicit import from pack | rc=1
+a2/Iee_wn: silent->loud(oracle loud: ivl,s2v)
+    pre : ee P=18446744073709551625 b=32
+    post: !VITA-E3009 `P` has already been imported into this scope from package `pb` (explicit import from pack | rc=1
+a2/Ivx: silent->correct(=ivl,s2v)
+    pre : vx W=18446744073709551625 b=8
+    post: vx W=5 b=8
+a2/Iwv: correct->loud(oracle loud: ivl,s2v)
+    pre : wv W=5
+    post: !VITA-E3010 undeclared net/variable `top.W` [in top] | rc=1
+a5/Ewn: correct->loud(oracle loud: ivl,s2v)
+    pre : ewn E1=1 K=1
+    post: !VITA-E3009 `E1` has already been imported into this scope (explicit import from package `pk`) and is  | rc=1
+a5/Iaa_cacr: silent->loud(oracle loud: ivl,s2v)
+    pre : acr top.u8 r=00000000 b=4
+    post: !VITA-E3009 the override of parameter `N` is not a constant, so the declared default would be used ins | ~VITA-W3056 | rc=1
+a5/Iaa_cae: silent->loud(oracle loud: ivl,s2v)
+    pre : ae top.u6 W=3
+    post: !VITA-E3009 the override of parameter `N` is not a constant, so the declared default would be used ins | ~VITA-W3056 | rc=1
+a5/Iaa_kae: silent->loud(oracle loud: ivl,s2v)
+    pre : ae top.u6 W=3
+    post: !VITA-E3009 parameter `KW` value is not a constant: undefined name `P` is not a constant [in top] | rc=1
+a5/Iaa_pae: silent->loud(oracle loud: ivl,s2v)
+    pre : pae W=3
+    post: !VITA-E3009 parameter `W` value is not a constant: undefined name `P` is not a constant [in top] | rc=1
+a5/Icuw_nw: silent->loud
+    pre : cuwnw P=3 K=3
+    post: !VITA-E3009 parameter `K` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3010 undeclared net/variable `top.P` [in top] | rc=1
+a5/Icuw_wn: silent->loud
+    pre : cuwwn P=18446744073709551625 K=9 b=65
+    post: !VITA-E3009 $bits argument shape unsupported (nets, array views, and self-determined expressions fold; | !VITA-E3009 parameter `K` value is not a constant: undefined name `P` is not a constant [in top] | !VITA-E3010 undeclared net
+a5/Inw_pae: silent->loud
+    pre : pae W=3
+    post: !VITA-E3009 parameter `W` value is not a constant: `fae(…)` has no constant-fold arm [in top] | rc=1
+a6/Iee_gif: correct->loud(oracle loud: ivl,s2v)
+    pre : eeg small
+    post: !VITA-E3009 `P` has already been imported into this scope from package `pa` (explicit import from pack | rc=1
+a6/q1g_gif: silent->correct(=ivl,s2v)
+    pre : @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65
+    post: @ P=18446744073709551625 Q=18446744073709551626 w=18446744073709551625 sh=16 N=5 b=65 | @ big
+COUNTS {'same': 154, 'silent->loud': 9, 'silent->correct': 2, 'correct->loud': 3} total 168

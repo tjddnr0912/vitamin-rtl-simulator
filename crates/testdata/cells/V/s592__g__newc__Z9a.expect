@@ -1,0 +1,64 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__newc__Z9a
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/newc/Z9a.sv
+roadmap_row: §2 🆕 V
+set: g/newc
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_c,post_d,post_d_st,pre
+verdict: same
+verdict_source: s592/r3_x_newc_pre.out:21
+notes: named at s592/IMPL.md:113
+alias: g/c2/Z9a (byte-identical source) verdict: same verdict_source: s592/r3_x_newc_pre.out:21
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 8
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Z9a.iv.txt | 102 bytes
+Z9a.sv:7: error: Unable to evaluate parameter S value: $random()
+1 error(s) during elaboration.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Z9a.vl.txt | 287 bytes
+%Error: Z9a.sv:7:20: Expecting expression to be constant, but can't convert a RAND to constant.
+%Error: Z9a.sv:4:21: Expecting expression to be constant, but variable isn't const: 'S'
+%Error-UNSUPPORTED: Z9a.sv:4:5: Unsupported: Can't unroll generate for; non-constant initializer
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Z9a.vlb.txt | 1082 bytes
+%Error: Z9a.sv:7:20: Expecting expression to be constant, but can't convert a RAND to constant.
+                   : ... note: In instance 'top'
+    7 |     localparam S = $random;
+      |                    ^~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Z9a.sv:4:21: Expecting expression to be constant, but variable isn't const: 'S'
+                   : ... note: In instance 'top'
+    4 |     for (genvar i = S; i < 2; i++) begin : L
+      |                     ^
+%Error-UNSUPPORTED: Z9a.sv:4:5: Unsupported: Can't unroll generate for; non-constant initializer
+                              : ... note: In instance 'top'
+    4 |     for (genvar i = S; i < 2; i++) begin : L
+      |     ^~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error: Z9a.sv:4:5: For loop doesn't have genvar index, or is malformed
+                  : ... note: In instance 'top'
+    4 |     for (genvar i = S; i < 2; i++) begin : L
+      |     ^~~
+%Error: Exiting due to 4 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Z9a.sv.txt | 208 bytes
+Z9a.sv2v.v:6: error: Unable to evaluate parameter S value: $random()
+Z9a.sv2v.v:7: error: Generate "loop" initialization expression cannot have undefined bits. given (S).
+2 error(s) during elaboration.
+
+rc=2
+=== block 5 | vita [post_b] | ./Z9a.post_b.txt | 290 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z9a.sv:7:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `S` value is not a constant: `$random(…)` has no constant-fold arm [in top.gb]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_c] | ./Z9a.post_c.txt | 290 bytes | identical to block 5
+=== block 7 | vita [post_d] | ./Z9a.post_d.txt | 290 bytes | identical to block 5
+=== block 8 | vita [pre] | ./Z9a.pre.txt | 290 bytes | identical to block 5
+=== end

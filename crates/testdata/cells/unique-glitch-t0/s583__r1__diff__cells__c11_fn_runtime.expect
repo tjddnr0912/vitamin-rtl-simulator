@@ -1,0 +1,47 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s583__r1__diff__cells__c11_fn_runtime
+slice: §4.5.583 (s583; details _slices/s583/)
+origin: s583/r1/diff/cells/c11_fn_runtime.sv
+roadmap_row: §3.b unique-glitch-t0 + §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: POST,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+alias: r1/diff/w/c11_fn_runtime/c11_fn_runtime (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: PRE: md5 2492e1c5c52c7081a6c0997fe194af40 commit bf7f3e0d
+vita_binary: POST: md5 41566ca6a6c8eaf9a232bf5741a7058c commit bf7f3e0d
+blocks: 1
+=== block 1 | combined [verilator+PRE+POST] verilator 5.052 (version captured in slice) | ./c11_fn_runtime.out | 2729 bytes
+##### c11_fn_runtime
+=== verilator compile rc=0 run rc=0
+[1] %Error: c11_fn_runtime.sv:22: Assertion failed in top.fv: 'unique if' statement violated
+t=1 fvoid
+[2] %Error: c11_fn_runtime.sv:25: Assertion failed in top.fi: 'unique if' statement violated
+t=2 fint v=0
+[3] %Error: c11_fn_runtime.sv:4: Assertion failed in pk.pf: 'unique if' statement violated
+t=3 pkgfn v=0
+[4] %Error: c11_fn_runtime.sv:11: Assertion failed in $unit.K.m: 'unique if' statement violated
+t=4 classfn
+t=5 class-static prio v=0
+- c11_fn_runtime.sv:35: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+c11_fn_runtime.sv:13:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+c11_fn_runtime.sv:14:12: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'q'
+c11_fn_runtime.sv:15:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'priority'
+c11_fn_runtime.sv:15:28: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'else'
+c11_fn_runtime.sv:16:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+c11_fn_runtime.sv:17:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+errors=6 warnings=0 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+c11_fn_runtime.sv:13:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a plain data member or method (N7 MVP does not support rand/randc/static/const/constraint/pure/extern class members), found identifier 'static'
+c11_fn_runtime.sv:14:12: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'q'
+c11_fn_runtime.sv:15:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'priority'
+c11_fn_runtime.sv:15:28: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'else'
+c11_fn_runtime.sv:16:5: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found identifier 'return'
+c11_fn_runtime.sv:17:3: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected class member (data member or `function`/`task` method), found keyword 'endfunction'
+errors=6 warnings=0 notes=0
+--- PRE==POST (all backends): True
+=== end

@@ -1,0 +1,525 @@
+### E_gi_int  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### E_gi_p12  [PRE!=all]
+  pre : GI=then
+  post1: GI=then
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### E_gi_s64  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### E_gi_s8  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### E_gi_u8  [ALL]
+  pre : GI=else
+  post1: GI=else
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### E_in_int  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### E_in_p12  [PRE=some]
+  pre : R=0
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### E_in_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### E_in_s8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### E_in_u8  [PRE=some]
+  pre : R=0
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### E_rt_int  [ALL]
+  pre : RT=1
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### E_rt_p12  [ALL]
+  pre : RT=0
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### E_rt_s64  [ALL]
+  pre : RT=1
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### E_rt_s8  [ALL]
+  pre : RT=1
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### E_rt_u8  [ALL]
+  pre : RT=0
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### E_w4_int  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### E_w4_p12  [PRE!=all]
+  pre : R=1 RN=0
+  post1: R=1 RN=0
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### E_w4_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### E_w4_s8  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### E_w4_u8  [ALL]
+  pre : R=0 RN=1
+  post1: R=0 RN=1
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### E_wu_int  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### E_wu_p12  [ALL]
+  pre : R=1
+  post1: R=1
+  post2: R=1
+  ivl : R=1
+  s2v : R=1
+  vl  : R=1
+### E_wu_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### E_wu_s8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### E_wu_u8  [ALL]
+  pre : R=0
+  post1: R=0
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### H_gi_int  [PRE!=all]
+  pre : GI=else
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### H_gi_p12  [PRE!=all]
+  pre : GI=then
+  post1: GI=then
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### H_gi_s64  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### H_gi_s8  [PRE!=all]
+  pre : GI=else
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### H_gi_u8  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: GI=else
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### H_in_int  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### H_in_p12  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### H_in_s64  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### H_in_s8  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### H_in_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### H_rt_int  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### H_rt_p12  [PRE!=all]
+  pre : RT=1
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### H_rt_s64  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### H_rt_s8  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### H_rt_u8  [PRE!=all]
+  pre : RT=1
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### H_w4_int  [PRE!=all]
+  pre : R=0 RN=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### H_w4_p12  [PRE!=all]
+  pre : R=1 RN=0
+  post1: R=1 RN=0
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### H_w4_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### H_w4_s8  [PRE!=all]
+  pre : R=0 RN=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### H_w4_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0 RN=1
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### H_wu_int  [PRE=iv=s2v]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### H_wu_p12  [ALL]
+  pre : R=1
+  post1: R=1
+  post2: R=1
+  ivl : R=1
+  s2v : R=1
+  vl  : R=1
+### H_wu_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### H_wu_s8  [PRE=iv=s2v]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### H_wu_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### L_gi_int  [PRE!=all]
+  pre : GI=else
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### L_gi_p12  [PRE!=all]
+  pre : GI=then
+  post1: GI=then
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### L_gi_s64  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### L_gi_s8  [PRE!=all]
+  pre : GI=else
+  post1: !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: GI=then
+  ivl : GI=then
+  s2v : GI=then
+  vl  : GI=then
+### L_gi_u8  [PRE!=all]
+  pre : !VITA-E3010 generate-if condition is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: GI=else
+  post2: GI=else
+  ivl : GI=else
+  s2v : GI=else
+  vl  : GI=else
+### L_in_int  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### L_in_p12  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### L_in_s64  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### L_in_s8  [PRE!=all]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=1
+  vl  : R=1
+### L_in_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : !error: localparam must have a value. | !sorry: "inside" expressions not supported yet. | rc=2
+  s2v : R=0
+  vl  : R=0
+### L_rt_int  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### L_rt_p12  [PRE!=all]
+  pre : RT=1
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### L_rt_s64  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### L_rt_s8  [PRE!=all]
+  pre : RT=0
+  post1: RT=1
+  post2: RT=1
+  ivl : RT=1
+  s2v : RT=1
+  vl  : RT=1
+### L_rt_u8  [PRE!=all]
+  pre : RT=1
+  post1: RT=0
+  post2: RT=0
+  ivl : RT=0
+  s2v : RT=0
+  vl  : RT=0
+### L_w4_int  [PRE!=all]
+  pre : R=0 RN=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### L_w4_p12  [PRE!=all]
+  pre : R=1 RN=0
+  post1: R=1 RN=0
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### L_w4_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### L_w4_s8  [PRE!=all]
+  pre : R=0 RN=1
+  post1: !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=1 RN=0
+  ivl : R=1 RN=0
+  s2v : R=1 RN=0
+  vl  : R=1 RN=0
+### L_w4_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `RN` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | !VITA-E3009 parameter `R` value is not a constant: 4'sb1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0 RN=1
+  post2: R=0 RN=1
+  ivl : R=0 RN=1
+  s2v : R=0 RN=1
+  vl  : R=0 RN=1
+### L_wu_int  [PRE=iv=s2v]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### L_wu_p12  [ALL]
+  pre : R=1
+  post1: R=1
+  post2: R=1
+  ivl : R=1
+  s2v : R=1
+  vl  : R=1
+### L_wu_s64  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### L_wu_s8  [PRE=iv=s2v]
+  pre : R=0
+  post1: !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0
+### L_wu_u8  [PRE!=all]
+  pre : !VITA-E3009 parameter `R` value is not a constant: 4'b1?00 has no constant-fold arm [in top.u] | rc=1
+  post1: R=0
+  post2: R=0
+  ivl : R=0
+  s2v : R=0
+  vl  : R=0

@@ -1,0 +1,392 @@
+flag totals over 47 cells:
+  D=E: True 40  False: d19_delay_chain e01_tri_md f06_held_delayed_after_t0 f07_rchain_random_probe g01_hu_body_read_later_wave g02_hu_md_across_waves g05_hu_self_read
+  P3=E: True 16  False: d06_finish_in_f d07_finish_in_initial d09_cycle d10_port_in d11_port_out d14_force d18_gen_chain d19_delay_chain e01_tri_md e02_vec_chain e03_const_in_init_read e04b_const_in_edges e08_cfg_tie f01_force_held_after_t0 f02_force_input_of_held f03_force_t0_release_later f05_md_group_after_t0 f06_held_delayed_after_t0 f07_rchain_random_probe g01_hu_body_read_later_wave g02_hu_md_across_waves g03_hu_in_cycle g05_hu_self_read k01_cycle_tails k02_chain_and_cycle k03_kahn_net_indeg k04_closure_nonheld k05_release_vs_source k06_fatal_wave2 k07_finish_in_cycle k09_func_reads_global
+  splitE: True 2  False: d01_clk_gate d02_rst d03_comb_input d04_nba_input d05_hash0_input d06_finish_in_f d07_finish_in_initial d08_strobe_monitor d09_cycle d10_port_in d11_port_out d12_tri_md d13_strength d14_force d15_vcd d16_random d17_star_comb d18_gen_chain d21_dbg_cpu e01_tri_md e02_vec_chain e03_const_in_init_read e04_const_in_events e04b_const_in_edges e07_supply e08_cfg_tie f01_force_held_after_t0 f02_force_input_of_held f03_force_t0_release_later f04_held_then_clocked f05_md_group_after_t0 f07_rchain_random_probe g01_hu_body_read_later_wave g02_hu_md_across_waves g03_hu_in_cycle g05_hu_self_read k01_cycle_tails k02_chain_and_cycle k03_kahn_net_indeg k04_closure_nonheld k05_release_vs_source k06_fatal_wave2 k07_finish_in_cycle k08_zsens_ring k09_func_reads_global
+  vcdDE: True 47  False: 
+  jit=E: True 47  False: 
+  prod=E: True 45  False: d19_delay_chain f06_held_delayed_after_t0
+  stE: True 42  False: d12_tri_md d13_strength d16_random e04_const_in_events e07_supply
+  stPair: True 47  False: 
+##### MOVER d19_delay_chain: removed 6 added 0 E-subsequence-of-D True | t0 calls PRE3 33 D 24 E 18
+  removed: f x=1 t=0 | f x=1 t=0 | f x=1 t=0 | f x=1 t=0 | f x=1 t=0 | f x=1 t=0
+##### MOVER e01_tri_md: removed 2 added 0 E-subsequence-of-D True | t0 calls PRE3 7 D 5 E 3
+  removed: f x=1 t=0 | f x=1 t=0
+##### MOVER f06_held_delayed_after_t0: removed 9 added 0 E-subsequence-of-D True | t0 calls PRE3 21 D 15 E 6
+  removed: f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1 | f t=0 x=1
+##### MOVER f07_rchain_random_probe: removed 59 added 29 E-subsequence-of-D False | t0 calls PRE3 30 D 42 E 12
+  ADDED: g t=0 x=0 r=1189058957 | g t=0 x=1 r=-1295874971 | g t=0 x=1 r=-2071669239 | g t=0 x=1 r=512609597 | g t=1 x=0 r=-1143836041 | g t=1 x=0 r=-411658546 | g t=1 x=0 r=-487095099 | g t=1 x=0 r=1206705039 | g t=1 x=0 r=1993627629 | g t=1 x=0 r=2097015289 | g t=1 x=1 r=-1993157102 | g t=1 x=1 r=-201295128 | g t=1 x=1 r=-482925370 | g t=1 x=1 r=-720121174 | g t=1 x=1 r=1177417612 | g t=1 x=1 r=2033215986 | g t=2 x=0 r=-1297668507 | g t=2 x=0 r=-490058043 | g t=2 x=0 r=-561108803 | g t=2 x=0 r=-825439075 | g t=2 x=0 r=274997536 | g t=2 x=0 r=91457290 | g t=2 x=1 r=-1069866368 | g t=2 x=1 r=-1309711773
+  REMOVED: g t=0 x=0 r=-1069866368 | g t=0 x=0 r=-1295874971 | g t=0 x=0 r=-1297668507 | g t=0 x=0 r=-1309711773 | g t=0 x=0 r=-1993157102 | g t=0 x=0 r=-201295128 | g t=0 x=0 r=-2034485235 | g t=0 x=0 r=-2071669239 | g t=0 x=0 r=-487095099 | g t=0 x=0 r=-490058043 | g t=0 x=0 r=-561108803 | g t=0 x=0 r=-887079274 | g t=0 x=0 r=1433945514 | g t=0 x=0 r=1924134885 | g t=0 x=0 r=1993627629 | g t=0 x=0 r=2033215986 | g t=0 x=0 r=2097015289 | g t=0 x=0 r=512609597 | g t=0 x=0 r=899669355 | g t=0 x=1 r=-1143836041 | g t=0 x=1 r=-1448618413 | g t=0 x=1 r=-1767155667 | g t=0 x=1 r=-1987856365 | g t=0 x=1 r=-358
+  ORACLES: === iverilog run rc=0 | g t=0 x=0 r=303379748 | g t=0 x=1 r=-1064739199 | g t=0 x=0 r=-2071669239 | g t=0 x=1 r=-1309649309 | g t=0 x=0 r=112818957 | g t=0 x=1 r=1189058957 | t1 w5=0 rnd=-1295874971 | f07_rchain_random_probe.sv:13: $finish called at 2 (1s) | === verilator run rc=0 | g t=0 x=0 r=1604469840 | g t=0 x=1 r=612369497 | g t=0 x=0 r=-41050761 | g t=0 x=1 r=-1222506707 | g t=0 x=0 r=608244723 | g t=0 x=1 r=2003761928 | t1 w5=0 rnd=-1959092748 | - f07_rchain_random_probe.sv:13: Verilog $finish | - S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### MOVER g01_hu_body_read_later_wave: removed 9 added 3 E-subsequence-of-D False | t0 calls PRE3 24 D 15 E 7
+  ADDED: ev u=0 t=1 | gd t=1 v=1 | gr t=1 v=1 g1=1
+  REMOVED: ev u=0 t=0 | gd t=0 v=1 | gr t=0 v=1 g1=1 | gr t=0 v=1 g1=1 | gr t=0 v=1 g1=1 | gr t=0 v=1 g1=1 | gr t=0 v=1 g1=1 | gr t=0 v=1 g1=z | gr t=0 v=1 g1=z
+  ORACLES: === iverilog run rc=0 | f1 t=0 v=0 | gr t=0 v=1 g1=z | f2 t=0 v=1 | f3 t=0 v=0 | gd t=0 v=1 | t1 g1=1 u=x u2=0 | t4 u=x | g01_hu_body_read_later_wave.sv:24: $finish called at 4 (1s) | === verilator run rc=0 | f1 t=0 v=0 | f2 t=0 v=1 | f3 t=0 v=0 | gd t=0 v=1 | gr t=0 v=1 g1=1 | ev u=0 t=0 | t1 g1=1 u=0 u2=0 | f1 t=1 v=0 | f2 t=1 v=1 | f3 t=1 v=0 | gd t=1 v=1 | gr t=1 v=1 g1=1 | f1 t=3 v=0 | f2 t=3 v=1 | f3 t=3 v=0 | gd t=3 v=1 | gr t=3 v=1 g1=1 | t4 u=0 | - g01_hu_body_read_later_wave.sv:24: Verilog $finish | f1 t=4 v=0 | f2 t=4 v=1 | f3 t=4 v=0 | gd t=4 v=1 | gr t=4 v=1 g1=1
+##### MOVER g02_hu_md_across_waves: removed 2 added 0 E-subsequence-of-D True | t0 calls PRE3 15 D 8 E 6
+  removed: gr t=0 v=1 | gr t=0 v=1
+##### MOVER g05_hu_self_read: removed 2 added 0 E-subsequence-of-D True | t0 calls PRE3 13 D 6 E 4
+  removed: gr t=0 v=1 | gr t=0 v=1
+##### g01_hu_body_read_later_wave
+[PRE3]
+rc=0
+f1 t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f2 t=0 v=x
+f3 t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+gr t=0 v=x g1=x
+gd t=0 v=x
+f1 t=0 v=0
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f2 t=0 v=1
+gr t=0 v=1 g1=x
+gd t=0 v=x
+f3 t=0 v=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+ev u=0 t=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f3 t=0 v=0
+gr t=0 v=1 g1=1
+gr t=0 v=1 g1=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=0 v=1 g1=1
+gd t=0 v=1
+ev u=0 t=0
+gr t=0 v=1 g1=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+[POSTE]
+rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gd t=0 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+t1 g1=1 u=0 u2=0
+ev u=0 t=1
+gr t=1 v=1 g1=1
+gd t=1 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=3 v=1 g1=1
+gd t=3 v=1
+gr t=4 v=1 g1=1
+gd t=4 v=1
+t4 u=0
+gr t=4 v=1 g1=1
+gd t=4 v=1
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f1 t=0 v=0
+gr t=0 v=1 g1=z
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+t1 g1=1 u=x u2=0
+t4 u=x
+g01_hu_body_read_later_wave.sv:24: $finish called at 4 (1s)
+=== verilator run rc=0
+f1 t=0 v=0
+f2 t=0 v=1
+f3 t=0 v=0
+gd t=0 v=1
+gr t=0 v=1 g1=1
+ev u=0 t=0
+t1 g1=1 u=0 u2=0
+f1 t=1 v=0
+f2 t=1 v=1
+f3 t=1 v=0
+gd t=1 v=1
+gr t=1 v=1 g1=1
+f1 t=3 v=0
+f2 t=3 v=1
+f3 t=3 v=0
+gd t=3 v=1
+gr t=3 v=1 g1=1
+t4 u=0
+- g01_hu_body_read_later_wave.sv:24: Verilog $finish
+f1 t=4 v=0
+f2 t=4 v=1
+f3 t=4 v=0
+gd t=4 v=1
+gr t=4 v=1 g1=1
+##### g02_hu_md_across_waves
+[PRE3]
+rc=0
+f1 t=0 v=x
+f2 t=0 v=x
+f9 t=0 v=z
+gr t=0 v=x
+f2 t=0 v=x
+f9 t=0 v=x
+gr t=0 v=x
+gr t=0 v=x
+f1 t=0 v=1
+gr t=0 v=1
+f2 t=0 v=0
+f9 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+ev w=1 t=0
+gr t=0 v=1
+gr t=1 v=1
+t1 w=1 y=0
+gr t=1 v=1
+gr t=2 v=1
+t3 w=1 y=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f1 t=0 v=1
+f2 t=0 v=0
+gr t=0 v=1
+gr t=0 v=1
+f9 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+ev w=1 t=0
+gr t=0 v=1
+gr t=1 v=1
+t1 w=1 y=0
+gr t=1 v=1
+gr t=2 v=1
+t3 w=1 y=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+[POSTE]
+rc=0
+f1 t=0 v=1
+f2 t=0 v=0
+gr t=0 v=1
+gr t=0 v=1
+f9 t=0 v=1
+ev w=1 t=0
+gr t=0 v=1
+gr t=1 v=1
+t1 w=1 y=0
+gr t=1 v=1
+gr t=2 v=1
+t3 w=1 y=0
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+gr t=0 v=1
+f1 t=0 v=1
+f9 t=0 v=z
+f2 t=0 v=0
+f9 t=0 v=1
+ev w=1 t=0
+t1 w=1 y=0
+f9 t=2 v=1
+ev w=1 t=2
+t3 w=1 y=0
+g02_hu_md_across_waves.sv:19: $finish called at 3 (1s)
+=== verilator run rc=0
+gr t=0 v=1
+f1 t=0 v=1
+f2 t=0 v=0
+f9 t=0 v=1
+ev w=1 t=0
+t1 w=1 y=0
+gr t=1 v=1
+f1 t=1 v=1
+f2 t=1 v=0
+f9 t=1 v=1
+f1 t=2 v=1
+f2 t=2 v=0
+f9 t=2 v=1
+t3 w=1 y=0
+- g02_hu_md_across_waves.sv:19: Verilog $finish
+f1 t=3 v=1
+f2 t=3 v=0
+f9 t=3 v=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### g03_hu_in_cycle
+[PRE3]
+rc=0
+f4 t=0 v=z
+gr t=0 v=z
+f2 t=0 v=x
+f1 t=0 v=x
+f4 t=0 v=x
+gr t=0 v=x
+f2 t=0 v=x
+gr t=0 v=x
+gr t=0 v=x
+f1 t=0 v=0
+gr t=0 v=x
+f2 t=0 v=1
+gr t=0 v=0
+f4 t=0 v=1
+gr t=0 v=0
+f2 t=0 v=1
+gr t=0 v=0
+gr t=1 v=0
+t1 c0=0 c1=1 o1=0
+gr t=1 v=0
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f1 t=0 v=0
+f4 t=0 v=z
+gr t=0 v=z
+f2 t=0 v=1
+f4 t=0 v=x
+gr t=0 v=0
+f2 t=0 v=1
+f4 t=0 v=1
+gr t=0 v=0
+f2 t=0 v=1
+gr t=0 v=0
+gr t=1 v=0
+t1 c0=0 c1=1 o1=0
+gr t=1 v=0
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+[POSTE] = POSTD
+=== iverilog run rc=0
+f1 t=0 v=0
+f4 t=0 v=x
+f2 t=0 v=1
+gr t=0 v=0
+f4 t=0 v=1
+t1 c0=0 c1=1 o1=0
+g03_hu_in_cycle.sv:17: $finish called at 1 (1s)
+=== verilator run rc=0
+f1 t=0 v=0
+f2 t=0 v=1
+gr t=0 v=0
+f4 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=0
+f4 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=0
+f4 t=0 v=1
+t1 c0=0 c1=1 o1=0
+- g03_hu_in_cycle.sv:17: Verilog $finish
+f1 t=1 v=0
+f2 t=1 v=1
+gr t=1 v=0
+f4 t=1 v=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+##### g05_hu_self_read
+[PRE3]
+rc=0
+gr t=0 v=z
+f1 t=0 v=x
+f2 t=0 v=x
+gr t=0 v=x
+f2 t=0 v=x
+gr t=0 v=x
+gr t=0 v=x
+gr t=0 v=x
+f1 t=0 v=1
+gr t=0 v=x
+f2 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=1 v=1
+t1 s=11 q=11
+gr t=1 v=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+[POSTD]
+rc=0
+f1 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=1 v=1
+t1 s=11 q=11
+gr t=1 v=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+[POSTE]
+rc=0
+f1 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=1 v=1
+t1 s=11 q=11
+gr t=1 v=1
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+=== iverilog run rc=0
+f1 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=1
+t1 s=11 q=11
+g05_hu_self_read.sv:17: $finish called at 1 (1s)
+=== verilator run rc=0
+gr t=0 v=0
+f1 t=0 v=1
+f2 t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+gr t=0 v=1
+t1 s=11 q=11
+- g05_hu_self_read.sv:17: Verilog $finish
+f1 t=1 v=1
+f2 t=1 v=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05

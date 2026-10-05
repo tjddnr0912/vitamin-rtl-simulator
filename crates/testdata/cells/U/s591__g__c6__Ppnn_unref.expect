@@ -1,0 +1,74 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__g__c6__Ppnn_unref
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/g/c6/Ppnn_unref.sv
+roadmap_row: §2 🆕 U
+set: g/c6
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO1,PROTO2,POSTA,POSTB,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: not a POST_a mover (absent from impl/moves_ground.txt); no summ tag
+alias: impl/dump/32680ee210251b0b (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO1: md5 a13d0926875851b4933406e9670426a5 commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 22
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Ppnn_unref.ivl | 59 bytes
+ppnu Z=3
+Ppnn_unref.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | impl/dump/32680ee210251b0b.ivl | 65 bytes
+ppnu Z=3
+32680ee210251b0b.sv:10: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Ppnn_unref.vl | 234 bytes
+ppnu Z=3
+- Ppnn_unref.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | impl/dump/32680ee210251b0b.vl | 240 bytes
+ppnu Z=3
+- 32680ee210251b0b.sv:10: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | ./Ppnn_unref.s2v | 61 bytes
+ppnu Z=3
+Ppnn_unref.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/32680ee210251b0b.s2v | 67 bytes
+ppnu Z=3
+32680ee210251b0b.s2v.v:8: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./Ppnn_unref.dev1 | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+ppnu Z=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV1] | ./Ppnn_unref.dev1.route | 0 bytes
+
+=== block 9 | vita [DEV2] | impl/dump/32680ee210251b0b.dev2 | 179 bytes | identical to block 7
+=== block 10 | vita [DEV2] | impl/dump/32680ee210251b0b.dev2.route | 0 bytes | identical to block 8
+=== block 11 | vita [DEV3] | ./Ppnn_unref.dev3 | 179 bytes | identical to block 7
+=== block 12 | vita [DEV3] | ./Ppnn_unref.dev3.route | 0 bytes | identical to block 8
+=== block 13 | vita [POSTA] | ./Ppnn_unref.posta | 179 bytes | identical to block 7
+=== block 14 | vita [POSTA] | ./Ppnn_unref.posta.route | 0 bytes | identical to block 8
+=== block 15 | vita [POSTB] | ./Ppnn_unref.postb | 179 bytes | identical to block 7
+=== block 16 | vita [POSTB] | ./Ppnn_unref.postb.route | 0 bytes | identical to block 8
+=== block 17 | vita [PRE] | ./Ppnn_unref.pre | 179 bytes | identical to block 7
+=== block 18 | vita [PRE] | ./Ppnn_unref.pre.route | 0 bytes | identical to block 8
+=== block 19 | vita [PROTO1] | ./Ppnn_unref.post1 | 179 bytes | identical to block 7
+=== block 20 | vita [PROTO1] | ./Ppnn_unref.post1.route | 0 bytes | identical to block 8
+=== block 21 | vita [PROTO2] | ./Ppnn_unref.post2 | 179 bytes | identical to block 7
+=== block 22 | vita [PROTO2] | ./Ppnn_unref.post2.route | 0 bytes | identical to block 8
+=== end

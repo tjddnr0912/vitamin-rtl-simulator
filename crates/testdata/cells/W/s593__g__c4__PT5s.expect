@@ -1,0 +1,53 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c4__PT5s
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c4/PT5s.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c4
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: ALL
+verdict_source: s593/g/c4.p5.summ:57
+notes: source md5-identical to s581/lens_diff3/v2/PT5s.sv (§4.5.581 lens cell); oracle runs are s593 run4.sh runs
+alias: g/c14/v2_PT5s (byte-identical source) verdict: ALL verdict_source: s593/g/c4.p5.summ:57
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 16
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./PT5s.ivl | 47 bytes
+R=1
+PT5s.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./PT5s.vl | 223 bytes
+R=1
+- PT5s.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 10.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./PT5s.s2v | 50 bytes
+R=1
+PT5s.s2v.v:9: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [post1] | g/c14/v2_PT5s.p1vo | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+R=1
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [post1] | ./PT5s.post1 | 174 bytes | identical to block 4
+=== block 6 | vita [post1] | ./PT5s.post1.route | 0 bytes
+
+=== block 7 | vita [post2] | ./PT5s.post2 | 174 bytes | identical to block 4
+=== block 8 | vita [post2] | ./PT5s.post2.route | 0 bytes | identical to block 6
+=== block 9 | vita [post3] | ./PT5s.post3 | 174 bytes | identical to block 4
+=== block 10 | vita [post3] | ./PT5s.post3.route | 0 bytes | identical to block 6
+=== block 11 | vita [post5] | g/c14/v2_PT5s.p5vo | 174 bytes | identical to block 4
+=== block 12 | vita [post5] | ./PT5s.post5 | 174 bytes | identical to block 4
+=== block 13 | vita [post5] | ./PT5s.post5.route | 0 bytes | identical to block 6
+=== block 14 | vita [pre] | g/c14/v2_PT5s.prevo | 174 bytes | identical to block 4
+=== block 15 | vita [pre] | ./PT5s.pre | 174 bytes | identical to block 4
+=== block 16 | vita [pre] | ./PT5s.pre.route | 0 bytes | identical to block 6
+=== end

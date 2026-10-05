@@ -1,0 +1,42 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r2__cells__sd07r_two_level_rev
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r2/cells/sd07r_two_level_rev.sv
+roadmap_row: §2 🆕 AB
+set: r2/cells
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTB,POSTA,PRE2_SEP,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE,POST_UNREC,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: POST_UNREC: md5 unrecorded commit unrecorded
+blocks: 1
+=== block 1 | combined [verilator+iverilog|PRE+POST_UNREC] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/out_cells/sd07r_two_level_rev.out | 570 bytes
+##### sd07r_two_level_rev
+=== verilator compile rc=0 run rc=0
+f t=0 x=0
+PV t=0 v=1
+V t=0 v=1
+- sd07r_two_level_rev.sv:14: Verilog $finish
+=== iverilog compile rc=0 run rc=0
+f t=0 x=0
+NV t=0 v=0
+V t=0 v=0
+sd07r_two_level_rev.sv:14: $finish called at 10 (1s)
+=== vita PRE (native=interp=vm)
+rc=0
+f t=0 x=x
+f t=0 x=0
+NV t=0 v=0
+V t=0 v=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+f t=0 x=0
+NV t=0 v=0
+V t=0 v=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== end

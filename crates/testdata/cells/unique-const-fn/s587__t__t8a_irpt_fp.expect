@@ -1,0 +1,26 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t8a_irpt_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t8a_irpt_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t8a_irpt_fp.ivl | 58 bytes
+x=5 t=13
+t8a_irpt_fp.sv:8: $finish called at 13 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t8a_irpt_fp.vl | 120 bytes
+%Error-UNSUPPORTED: t8a_irpt_fp.sv:8:21: Unsupported: repeat event control
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t8a_irpt_fp.build | 349 bytes
+%Error-UNSUPPORTED: t8a_irpt_fp.sv:8:21: Unsupported: repeat event control
+    8 |   initial begin x = repeat (f(2)) @(posedge clk) y; $display("x=%0d t=%0t", x, $time); $finish; end
+      |                     ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=5.052
+%Error: Exiting due to 1 error(s)
+=== end

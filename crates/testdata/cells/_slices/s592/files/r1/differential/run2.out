@@ -1,0 +1,72 @@
+== DL01
+         iv: bits=4
+         sv: bits=4
+         vl: ERR:%Error: DL01.sv:11:46: Can't find definition of 'b'(rc1)
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: bits=4
+== DL03
+         iv: Q=10
+         sv: Q=10
+         vl: ERR:%Error: DL03.sv:11:37: Can't find definition of 'b'(rc1)
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: Q=10
+== DL06
+         iv: bits=4
+         sv: bits=4
+         vl: ERR:%Error: DL06.sv:10:46: Can't find definition of 'd'(rc1)
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: bits=4
+== DL08
+         iv: bits=4
+         sv: bits=4
+         vl: bits=4
+       post: ERR:VITA-E3010:`N` is used before it is declared in this generate(rc1)
+        pre: bits=4
+== DL11
+         iv: w=9 bits=4
+         sv: ERR:DL11.sv2v.v:14: error: Net g.b.w is not defined in this context.(rc2)
+         vl: ERR:%Error: DL11.sv:11:14: Can't find definition of 'b'(rc1)
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: w=9 bits=4
+== DM07
+         iv: L1 | L2
+         sv: ERR:DM07.sv2v.v:7: error: Generate "loop" initialization expression cannot(rc1)
+         vl: L0 | L1 | L2
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: NONE
+== DM08
+         iv: L0 | L1
+         sv: ERR:DM08.sv2v.v:7: error: Generate "loop" conditional expression cannot ha(rc1)
+         vl: L0
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: NONE
+== DM09
+         iv: then
+         sv: else
+         vl: else
+       post: ERR:VITA-E3010:`S` is used before it is declared in this generate(rc1)
+        pre: NONE
+== DR01
+         iv: y=1
+         sv: y=1
+         vl: y=1
+       post: ERR:VITA-E3009:recursive module instantiation of `tree` (cycle: t(rc1)
+        pre: ERR:VITA-E3009:recursive module instantiation of `tree` (cycle: t(rc1)
+== DS01
+         iv: g1 K=1 | g2 outer
+         sv: g1 K=1 | g2 outer
+         vl: g1 K=1 | g2 outer
+       post: g1 K=1 | g2 outer
+        pre: g1 K=1 | g2 outer
+== DT01
+         iv: a | sub top.a.v 2 | sub top.u 2
+         sv: a | sub top.a.v 2 | sub top.u 2
+         vl: a | sub top.a.v 2 | sub top.u 2
+       post: a | sub top.a.v 2 | sub top.u 2
+        pre: a | sub top.a.v 2 | sub top.u 2
+== DX03
+         iv: top.u1.g.b outer | top.u2.g.b outer
+         sv: top.u1.g.a inner | top.u2.g.b outer
+         vl: top.u1.g.a inner | top.u2.g.b outer
+       post: ERR:VITA-E3010:`K` is used before it is declared in this generate(rc1)
+        pre: top.u1.g.a inner | top.u2.g.b outer

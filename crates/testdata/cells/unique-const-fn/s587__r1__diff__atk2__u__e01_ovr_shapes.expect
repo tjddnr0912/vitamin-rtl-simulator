@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r1__diff__atk2__u__e01_ovr_shapes
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r1/diff/atk2/u/e01_ovr_shapes.sv
+roadmap_row: §3.b unique-const-fn
+set: r1/diff/atk2/u
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r1/diff/REPORT.md:23
+alias: r1/diff/atk2/lanes/e01_ovr_shapes (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/re/atk2/u/e01_ovr_shapes (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST-b-jit: md5 f5f5cb52283f4a87701adf9a3b1b8d4d commit unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./e01_ovr_shapes.ivl | 100 bytes
+e01_ovr_shapes.sv:8: syntax error
+e01_ovr_shapes.sv:8: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./e01_ovr_shapes.vl | 798 bytes
+%Warning-WIDTHTRUNC: e01_ovr_shapes.sv:1:62: Operator VAR 'S' expects 8 bits on the Initial value, but Initial value's CONST '32'h7' generates 32 bits.
+%Warning-WIDTHEXPAND: e01_ovr_shapes.sv:2:33: Operator VAR 'WD' expects 100 bits on the Initial value, but Initial value's CONST '32'h7' generates 32 bits.
+top.g R=1.00 S=00 U=0 bU=32 WD=0 STR=x I=7
+top.e R=1.00 S=00 U=0 bU=32 WD=0 STR=yes I=0
+top.d R=1.00 S=00 U=0 bU=32 WD=7 STR=x I=0
+top.c R=1.00 S=00 U=7 bU=32 WD=0 STR=x I=0
+top.b R=1.00 S=07 U=0 bU=32 WD=0 STR=x I=0
+top.a R=10.50 S=00 U=0 bU=32 WD=0 STR=x I=0
+- e01_ovr_shapes.sv:17: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5ps; walltime 0.000 s; speed 294.117 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_e01_ovr_shapes.build | 1054 bytes
+%Warning-WIDTHTRUNC: e01_ovr_shapes.sv:1:62: Operator VAR 'S' expects 8 bits on the Initial value, but Initial value's CONST '32'h7' generates 32 bits.
+    1 | module child #(parameter real R = 1.0, parameter logic [7:0] S = 0, parameter U = 0,
+      |                                                              ^
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: e01_ovr_shapes.sv:2:33: Operator VAR 'WD' expects 100 bits on the Initial value, but Initial value's CONST '32'h7' generates 32 bits.
+    2 |                parameter [99:0] WD = 0, parameter string STR = "x", parameter int I = 0) ();
+      |                                 ^~
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 4 | vita [POST-b-jit] | r1/diff/atk2/lanes/e01_ovr_shapes.jit | 2568 bytes
+e01_ovr_shapes.sv:8:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+e01_ovr_shapes.sv:5:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: defparam: a non-constant override value is unsupported [in top]
+e01_ovr_shapes.sv:5:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `R` is not a constant; default kept [in top]
+e01_ovr_shapes.sv:10:27: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `R` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.a]
+e01_ovr_shapes.sv:10:27: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of real parameter `R` is not a constant (a real override cannot be folded) — the declared default would be used silently [in top.a]
+e01_ovr_shapes.sv:5:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `S` is not a constant; default kept [in top]
+e01_ovr_shapes.sv:11:21: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `S` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.b]
+e01_ovr_shapes.sv:5:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `U` is not a constant; default kept [in top]
+e01_ovr_shapes.sv:12:21: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `U` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.c]
+e01_ovr_shapes.sv:5:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `WD` is not a constant; default kept [in top]
+e01_ovr_shapes.sv:13:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `WD` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.d]
+e01_ovr_shapes.sv:5:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `STR` is not a constant; default kept [in top]
+e01_ovr_shapes.sv:14:43: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `STR` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.e]
+errors=7 warnings=6 notes=1
+rc=1
+=== block 5 | vita [S7] | ./e01_ovr_shapes.s7 | 2568 bytes | identical to block 4
+=== block 6 | vita [S8] | ./e01_ovr_shapes.s8 | 2568 bytes | identical to block 4
+=== end

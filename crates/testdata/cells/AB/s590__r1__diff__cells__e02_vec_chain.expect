@@ -1,0 +1,248 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__e02_vec_chain
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/e02_vec_chain.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTC,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP
+verdict: later steps; per-net wave order (d18 18, both oracles 6; e02 9, iverilog 10, verilator 13); a cycle released whole (k01 `f6 t=0 v=z`); body reads missing from the read set (r2h2 `f2 t=0 x=1 w1=z`, then `w1=0`); k06, a `$fatal` latched by an assign's call does not stop the rest of that t0 settle (PRE the same).
+verdict_source: s590/COMMIT_SLICE.txt:162
+notes: verdict_class = verbatim excerpt of the source line (wrapped commit-message lines joined)
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+vita_binary: POSTA_SEP: md5 6bfa9a6d22f153ae49a38b3a23fa3bb1 commit unrecorded
+blocks: 2
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/e02_vec_chain.out | 1806 bytes
+##### e02_vec_chain
+=== PRE2 (native=interp=vm)
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+--- PRE2==POSTA False  POSTA==POSTC True  PRE2==POSTC False  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+f x=1 t=0
+f x=0 t=0
+f x=z t=0
+f x=z t=0
+f x=z t=0
+f x=1 t=0
+f x=x t=0
+f x=x t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+e02_vec_chain.sv:15: $finish called at 3 (1s)
+=== verilator run rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+- e02_vec_chain.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+PRE2_SEP+POSTA_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o2/e02_vec_chain.out | 1508 bytes
+##### e02_vec_chain
+=== PRE2 (native=interp=vm)
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=1 notes=0
+--- PRE2==POST(all backends): False  POST split: False  VCD PRE2==POST(all): True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+=== staged POST vcmp=0 velab=0
+rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+simulation ended (Finish) at time 3
+errors=0 warnings=0 notes=0
+=== iverilog run rc=0
+f x=1 t=0
+f x=0 t=0
+f x=z t=0
+f x=z t=0
+f x=z t=0
+f x=1 t=0
+f x=x t=0
+f x=x t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+e02_vec_chain.sv:15: $finish called at 3 (1s)
+=== verilator run rc=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+f x=0 t=0
+f x=1 t=0
+c=01010
+- e02_vec_chain.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== end

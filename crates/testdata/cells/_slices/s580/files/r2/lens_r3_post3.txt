@@ -1,0 +1,896 @@
+## lens_diff/P08.sv 
+   BASE: W01 1
+   BASE: W02 1
+   BASE: W03 1
+   BASE: W04 0
+   BASE: W05 1
+   BASE: W06 1
+   BASE: W07 1
+   BASE: W08 1
+   BASE: Q01 1
+   BASE: Q02 1
+   BASE: H01 0
+   BASE: H02 1
+   BASE: H03 0
+   BASE: H04 0
+   BASE: H05 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P08.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : P08.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : errors=2 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff/P08.sv -DIV
+   BASE: W01 1
+   BASE: W02 1
+   BASE: W03 1
+   BASE: W04 0
+   BASE: W05 1
+   BASE: W06 1
+   BASE: W07 1
+   BASE: W08 1
+   BASE: Q01 1
+   BASE: Q02 1
+   BASE: H01 0
+   BASE: H02 1
+   BASE: H03 0
+   BASE: H04 0
+   BASE: H05 1
+   BASE: L01 1
+   BASE: L02 0
+   BASE: L20 0
+   BASE: L09 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P08.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : P08.sv:40:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : errors=2 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff/P09.sv 
+   BASE: A1 0
+   BASE: A2 1
+   BASE: P1 0
+   BASE: P2 1
+   BASE: P3 1
+   BASE: P4 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : P09.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : errors=4 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff/P09.sv -DNOP
+   BASE: A1 0
+   BASE: A2 1
+   BASE: P3 1
+   BASE: P4 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=2 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff/P09.sv -DIV
+   BASE: A1 0
+   BASE: A2 1
+   BASE: P1 0
+   BASE: P2 1
+   BASE: P3 1
+   BASE: P4 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : P09.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : P09.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : errors=5 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff/P09.sv -DNOP -DIV
+   BASE: A1 0
+   BASE: A2 1
+   BASE: P3 1
+   BASE: P4 1
+   BASE: simulation ended (Finish) at time 1000
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:7:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P09.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the patter
+   NEW : errors=3 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q1.sv 
+   BASE: R41 0
+   BASE: R42 0
+   NEW : R41 1
+   NEW : R42 1
+## lens_diff2/Q1.sv -DIV
+   BASE: R41 0
+   BASE: R42 0
+   NEW : R41 1
+   NEW : R42 1
+## lens_diff2/Q2.sv 
+   BASE: R41 0
+   BASE: R42 0
+   BASE: R43 0
+   BASE: R44 0
+   BASE: R46 0
+   BASE: R47 0
+   BASE: R48 1
+   BASE: R49 0
+   BASE: R52 0
+   NEW : R41 1
+   NEW : R42 1
+   NEW : R43 1
+   NEW : R44 1
+   NEW : R46 1
+   NEW : R47 1
+   NEW : R48 0
+   NEW : R49 1
+   NEW : R52 1
+## lens_diff2/Q2.sv -DCONSTS
+   BASE: R41 0
+   BASE: R42 0
+   BASE: R43 0
+   BASE: R44 0
+   BASE: R46 0
+   BASE: R47 0
+   BASE: R48 1
+   BASE: R49 0
+   BASE: R52 0
+   NEW : R41 1
+   NEW : R42 1
+   NEW : R43 1
+   NEW : R44 1
+   NEW : R46 1
+   NEW : R47 1
+   NEW : R48 0
+   NEW : R49 1
+   NEW : R52 1
+## lens_diff2/Q2.sv -DIV
+   BASE: R41 0
+   BASE: R42 0
+   BASE: R43 0
+   BASE: R44 0
+   BASE: R46 0
+   BASE: R47 0
+   BASE: R48 1
+   BASE: R49 0
+   BASE: R52 0
+   NEW : R41 1
+   NEW : R42 1
+   NEW : R43 1
+   NEW : R44 1
+   NEW : R46 1
+   NEW : R47 1
+   NEW : R48 0
+   NEW : R49 1
+   NEW : R52 1
+## lens_diff2/Q2.sv -DCONSTS -DIV
+   BASE: R41 0
+   BASE: R42 0
+   BASE: R43 0
+   BASE: R44 0
+   BASE: R46 0
+   BASE: R47 0
+   BASE: R48 1
+   BASE: R49 0
+   BASE: R52 0
+   NEW : R41 1
+   NEW : R42 1
+   NEW : R43 1
+   NEW : R44 1
+   NEW : R46 1
+   NEW : R47 1
+   NEW : R48 0
+   NEW : R49 1
+   NEW : R52 1
+## lens_diff2/Q3.sv -DXBEFORE
+   BASE: Q3.sv:46:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : G1 then
+   NEW : GS then
+   NEW : GC1 one
+   NEW : GL lab1
+   NEW : GB one
+   NEW : OV1 1 1
+   NEW : OVS 1 1
+   NEW : OV0 0 1
+   NEW : PK1 1
+   NEW : PK0 0
+   NEW : LF1 1
+   NEW : LF0 0
+   NEW : LT1 1
+   NEW : LG 0
+   NEW : RB1 4
+   NEW : RB0 2
+   NEW : RBS 4
+   NEW : AD1 4
+   NEW : ADS 4
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q3.sv -DXBEFORE -DIV
+   BASE: Q3.sv:46:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : G1 then
+   NEW : GS then
+   NEW : GC1 one
+   NEW : GL lab1
+   NEW : GB one
+   NEW : OV1 1 1
+   NEW : OVS 1 1
+   NEW : OV0 0 1
+   NEW : PK1 1
+   NEW : PK0 0
+   NEW : LF1 1
+   NEW : LF0 0
+   NEW : LT1 1
+   NEW : LG 0
+   NEW : RB1 4
+   NEW : RB0 2
+   NEW : RBS 4
+   NEW : AD1 4
+   NEW : ADS 4
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q4.sv 
+   BASE: H01 0
+   BASE: H02 1
+   BASE: H03 0
+   BASE: H04 1
+   BASE: H05 1
+   BASE: H06 0
+   BASE: H07 1
+   BASE: H08 0
+   BASE: H09 1
+   BASE: H10 1
+   BASE: H14 1
+   BASE: H15 0
+   BASE: H16 0
+   BASE: H17 1
+   BASE: H18 1
+   BASE: H19 1
+   BASE: H20 1
+   BASE: H21 0
+   BASE: H22 1
+   BASE: H23 x
+   BASE: H24 0
+   BASE: H25 1
+   BASE: H26 x
+   BASE: H27 1
+   BASE: H28 x
+   BASE: H29 1
+   BASE: H30 0
+   BASE: H31 1
+   BASE: H32 0
+   BASE: H33 0
+   BASE: H34 1
+   BASE: H35 1
+   BASE: H36 1
+   BASE: H37 1
+   BASE: H38 1
+   BASE: H39 1
+   BASE: UP1 0
+   BASE: UP2 1
+   BASE: simulation ended (Finish) at time 4
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:35:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:36:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:37:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:50:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:51:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:52:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:53:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:54:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:55:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:56:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:58:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:59:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:63:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:65:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:66:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:67:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:68:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:69:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:70:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:71:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=39 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q4.sv -DSTM
+   BASE: errors=3 warnings=1 notes=0
+   NEW : Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:35:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:36:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:37:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:42:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:45:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:50:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:51:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:52:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:53:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:54:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:55:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:56:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:58:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:59:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:63:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:65:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:66:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:67:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:68:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:69:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:70:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:71:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=45 warnings=1 notes=0
+## lens_diff2/Q4.sv -DIV
+   BASE: H01 0
+   BASE: H02 1
+   BASE: H03 0
+   BASE: H04 1
+   BASE: H05 1
+   BASE: H06 0
+   BASE: H07 1
+   BASE: H08 0
+   BASE: H09 1
+   BASE: H10 1
+   BASE: H14 1
+   BASE: H15 0
+   BASE: H16 0
+   BASE: H17 1
+   BASE: H18 1
+   BASE: H19 1
+   BASE: H20 1
+   BASE: H21 0
+   BASE: H22 1
+   BASE: H23 x
+   BASE: H24 0
+   BASE: H25 1
+   BASE: H26 x
+   BASE: H27 1
+   BASE: H28 x
+   BASE: H29 1
+   BASE: H30 0
+   BASE: H31 1
+   BASE: H32 0
+   BASE: H33 0
+   BASE: H34 1
+   BASE: H35 1
+   BASE: H36 1
+   BASE: H37 1
+   BASE: H38 1
+   BASE: H39 1
+   BASE: UP1 0
+   BASE: UP2 1
+   BASE: simulation ended (Finish) at time 4
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:35:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:36:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:37:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:50:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:51:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:52:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:53:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:54:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:55:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:56:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:58:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:59:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:63:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:65:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:66:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:67:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:68:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:69:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:70:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:71:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=40 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q4.sv -DSTM -DIV
+   BASE: errors=3 warnings=1 notes=0
+   NEW : Q4.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:30:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:32:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:33:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:35:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:36:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:37:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:39:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:42:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:45:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:47:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:48:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:49:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:50:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:51:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:52:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:53:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:54:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:55:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:56:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:57:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:58:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:59:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:60:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:61:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:62:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:63:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:64:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:65:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:66:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:67:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:68:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:69:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:70:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:71:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:72:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q4.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=46 warnings=1 notes=0
+## lens_diff2/Q6.sv -DXB
+   BASE: Q6.sv:16:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : XB one
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q6.sv -DXI
+   BASE: Q6.sv:22:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : XI one
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q6.sv -DXB -DIV
+   BASE: Q6.sv:16:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : XB one
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q6.sv -DXI -DIV
+   BASE: Q6.sv:22:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no consta
+   BASE: errors=1 warnings=1 notes=0
+   BASE: rc=1
+   NEW : XI one
+   NEW : simulation ended (Finish) at time 3
+   NEW : errors=0 warnings=1 notes=0
+   NEW : rc=0
+## lens_diff2/Q7.sv 
+   BASE: Z1 0
+   BASE: Z3 0
+   BASE: Z4 0
+   NEW : Z1 1
+   NEW : Z3 1
+   NEW : Z4 1
+## lens_diff2/Q7.sv -DIV
+   BASE: Z1 0
+   BASE: Z3 0
+   BASE: Z4 0
+   NEW : Z1 1
+   NEW : Z3 1
+   NEW : Z4 1
+## lens_diff2/Q8.sv 
+   BASE: K1 0
+   BASE: K2 1
+   BASE: K3 0
+   BASE: K4 1
+   BASE: K5 0
+   BASE: K6 1
+   BASE: K7 1
+   BASE: IU2 0
+   BASE: IU3 1
+   BASE: IU4 1
+   BASE: IU5 0
+   BASE: IU6 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=5 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q8.sv -DIU
+   BASE: Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with an unsized pattern whose leftmost digit is x/z, on a left o
+   BASE: errors=1 warnings=1 notes=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=6 warnings=1 notes=0
+## lens_diff2/Q8.sv -DRR
+   BASE: K1 0
+   BASE: K2 1
+   BASE: K3 0
+   BASE: K4 1
+   BASE: K5 0
+   BASE: K6 1
+   BASE: K7 1
+   BASE: IU2 0
+   BASE: IU3 1
+   BASE: IU4 1
+   BASE: IU5 0
+   BASE: IU6 1
+   BASE: RR1 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=6 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q8.sv -DIV
+   BASE: K1 0
+   BASE: K2 1
+   BASE: K3 0
+   BASE: K4 1
+   BASE: K5 0
+   BASE: K6 1
+   BASE: K7 1
+   BASE: IU2 0
+   BASE: IU3 1
+   BASE: IU4 1
+   BASE: IU5 0
+   BASE: IU6 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=5 warnings=1 notes=0
+   NEW : rc=1
+## lens_diff2/Q8.sv -DIU -DIV
+   BASE: Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with an unsized pattern whose leftmost digit is x/z, on a left o
+   BASE: errors=1 warnings=1 notes=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:34:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=6 warnings=1 notes=0
+## lens_diff2/Q8.sv -DRR -DIV
+   BASE: K1 0
+   BASE: K2 1
+   BASE: K3 0
+   BASE: K4 1
+   BASE: K5 0
+   BASE: K6 1
+   BASE: K7 1
+   BASE: IU2 0
+   BASE: IU3 1
+   BASE: IU4 1
+   BASE: IU5 0
+   BASE: IU6 1
+   BASE: RR1 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=1 notes=0
+   BASE: rc=0
+   NEW : Q8.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:26:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:27:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:28:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:29:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : Q8.sv:31:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=6 warnings=1 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P1.sv 
+   BASE: F1 0 0 1
+   BASE: F2 0 0 0
+   BASE: F3 1 0
+   BASE: L1 1 1 0
+   BASE: I1 0 0 0
+   BASE: I2 0 1
+   BASE: C1 0 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=11 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P1.sv -DNO_INSIDE
+   BASE: F1 0 0 1
+   BASE: F2 0 0 0
+   BASE: F3 1 0
+   BASE: L1 1 1 0
+   BASE: C1 0 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=8 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P1.sv -DONLYC
+   BASE: I1 0 0 0
+   BASE: I2 0 1
+   BASE: C1 0 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P1.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=3 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P2.sv 
+   BASE: RI 0 0 0 0 0
+   BASE: RQ 0 0 0 0
+   NEW : RI 1 1 1 1 1
+   NEW : RQ 1 1 1 1
+## lens_snd2/probes/P2.sv -DNOK
+   BASE: RI 0 0 0 0 0
+   BASE: RQ 0 0 0 0
+   NEW : RI 1 1 1 1 1
+   NEW : RQ 1 1 1 1
+## lens_snd2/probes/P2.sv -DNO_INSIDE
+   BASE: RQ 0 0 0 0
+   NEW : RQ 1 1 1 1
+## lens_snd2/probes/P3.sv 
+   BASE: H1 1 0 0 1
+   BASE: H2 1 1 0 0
+   BASE: H3 x 1 x 1
+   BASE: H4 1 1 1
+   BASE: H5 1 0 1
+   BASE: I1 1 1 x 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:21:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=22 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P3.sv -DNO_INSIDE
+   BASE: H1 1 0 0 1
+   BASE: H2 1 1 0 0
+   BASE: H3 x 1 x 1
+   BASE: H4 1 1 1
+   BASE: H5 1 0 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:18:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P3.sv:19:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=18 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P6.sv -DXI
+   BASE: P6.sv:8:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant
+   BASE: errors=1 warnings=0 notes=0
+   BASE: rc=1
+   NEW : G1 default
+   NEW : simulation ended (Finish) at time 1
+   NEW : errors=0 warnings=0 notes=0
+   NEW : rc=0
+## lens_snd2/probes/P6.sv -DXV
+   BASE: P6.sv:6:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has no constant
+   BASE: errors=1 warnings=0 notes=0
+   BASE: rc=1
+   NEW : G1 default
+   NEW : simulation ended (Finish) at time 1
+   NEW : errors=0 warnings=0 notes=0
+   NEW : rc=0
+## lens_snd2/probes/P7.sv 
+   BASE: A 0
+   BASE: D 1 1
+   BASE: H 0 0 0 1
+   BASE: AI 0 DI 1 HI 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=9 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P7.sv -DNO_INSIDE
+   BASE: A 0
+   BASE: D 1 1
+   BASE: H 0 0 0 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=6 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P7.sv -DU
+   BASE: P7.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) with an unsized pattern whose leftmost digit is x/z, on a left o
+   BASE: errors=1 warnings=0 notes=0
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:10:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:20:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:22:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P7.sv:25:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=10 warnings=0 notes=0
+## lens_snd2/probes/P8.sv -DREALI
+   BASE: RI 0 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P8.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P8.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=2 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P8.sv -DREALQ
+   BASE: RQ 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P8.sv:13:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=1 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P9.sv -DSFMT
+   BASE: SFMT 1
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P9.sv:12:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=1 warnings=0 notes=0
+   NEW : rc=1
+## lens_snd2/probes/P9.sv -DSTRV
+   BASE: STRV 1 0
+   BASE: simulation ended (Finish) at time 2
+   BASE: errors=0 warnings=0 notes=0
+   BASE: rc=0
+   NEW : P9.sv:10:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : P9.sv:10:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (the pattern
+   NEW : errors=2 warnings=0 notes=0
+   NEW : rc=1
+variants 201 changed 47

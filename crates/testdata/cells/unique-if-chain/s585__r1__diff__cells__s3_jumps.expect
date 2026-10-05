@@ -1,0 +1,181 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__s3_jumps
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/s3_jumps.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: d__s3_jumps s3_jumps
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/s3_jumps.out | 9284 bytes
+s3_jumps | vl:1@s3_jumps.sv:18,1@s3_jumps.sv:18,1@s3_jumps.sv:18,2@s3_jumps.sv:24,2@s3_jumps.sv:24,3@s3_jumps.sv:7,4@s3_jumps.sv:29,5@s3_jumps.sv:33,5@s3_jumps.sv:33,6@s3_jumps.sv:12,7@s3_jumps.sv:35,7@s3_jumps.sv:35,8@s3_jumps.sv:36,8@s3_jumps.sv:36 | PRE:E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:36,E3010:elab@s3_jumps.sv:35:80,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3009:elab@s3_jumps.sv:35:17,E3009:elab@s3_jumps.sv:35:17 rc=1 | POST:E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:36,E3010:elab@s3_jumps.sv:35:80,E3010:elab@s3_jumps.sv:35:8,E3010:elab@s3_jumps.sv:35:8,E3009:elab@s3_jumps.sv:35:17,E3009:elab@s3_jumps.sv:35:17 rc=1 | P==P:True
+##### s3_jumps
+=== verilator compile rc=0 run rc=0
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=0 t=1
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=1 t=1
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=2 t=1
+[2] %Error: s3_jumps.sv:24: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s3_jumps.sv:24: Assertion failed in top: 'unique if' statement violated
+[3] %Error: s3_jumps.sv:7: Assertion failed in top.tr: 'unique if' statement violated
+tr after t=3
+[4] %Error: s3_jumps.sv:29: Assertion failed in top.blk: 'unique if' statement violated
+blk after t=4
+[5] %Error: s3_jumps.sv:33: Assertion failed in top: 'unique if' statement violated
+[5] %Error: s3_jumps.sv:33: Assertion failed in top: 'unique if' statement violated
+[6] %Error: s3_jumps.sv:12: Assertion failed in top.fr: 'unique if' statement violated
+fr after t=6
+[7] %Error: s3_jumps.sv:35: Assertion failed in top.unnamedblk1: 'unique if' statement violated
+fe k=0
+[7] %Error: s3_jumps.sv:35: Assertion failed in top.unnamedblk1: 'unique if' statement violated
+fe k=2
+[8] %Error: s3_jumps.sv:36: Assertion failed in top: 'unique if' statement violated
+[8] %Error: s3_jumps.sv:36: Assertion failed in top: 'unique if' statement violated
+t=9 end
+- s3_jumps.sv:38: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 's3_jumps.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 's3_jumps.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__s3_jumps.out | 8489 bytes
+##### d__s3_jumps
+=== verilator compile rc=0 run rc=0
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=0 t=1
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=1 t=1
+[1] %Error: s3_jumps.sv:18: Assertion failed in top: 'unique if' statement violated
+for body i=2 t=1
+[2] %Error: s3_jumps.sv:24: Assertion failed in top: 'unique if' statement violated
+[2] %Error: s3_jumps.sv:24: Assertion failed in top: 'unique if' statement violated
+[3] %Error: s3_jumps.sv:7: Assertion failed in top.tr: 'unique if' statement violated
+tr after t=3
+[4] %Error: s3_jumps.sv:29: Assertion failed in top.blk: 'unique if' statement violated
+blk after t=4
+[5] %Error: s3_jumps.sv:33: Assertion failed in top: 'unique if' statement violated
+[5] %Error: s3_jumps.sv:33: Assertion failed in top: 'unique if' statement violated
+[6] %Error: s3_jumps.sv:12: Assertion failed in top.fr: 'unique if' statement violated
+fr after t=6
+[7] %Error: s3_jumps.sv:35: Assertion failed in top.unnamedblk1: 'unique if' statement violated
+fe k=0
+[7] %Error: s3_jumps.sv:35: Assertion failed in top.unnamedblk1: 'unique if' statement violated
+fe k=2
+[8] %Error: s3_jumps.sv:36: Assertion failed in top: 'unique if' statement violated
+[8] %Error: s3_jumps.sv:36: Assertion failed in top: 'unique if' statement violated
+t=9 end
+- s3_jumps.sv:38: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 's3_jumps.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:36: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:80: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_k_946` [in top]
+s3_jumps.sv:35:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.__foreach_st_946` [in top]
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.first` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+s3_jumps.sv:35:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: enum method `q.next` is unavailable: the enum type of `q` was not registered, which happens when a label's value is not a parse-time constant (an overridable `parameter`, or a sized literal). Give the labels plain decimal `localparam` / literal values — the VALUES themselves are correct either way, it is only the methods that are lost
+errors=9 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 's3_jumps.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== end

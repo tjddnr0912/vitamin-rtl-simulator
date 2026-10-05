@@ -1,0 +1,85 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__g__c5__rv562_gshadow
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/g/c5/rv562_gshadow.sv
+roadmap_row: §2 🆕 AD
+set: g/c5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: OFF-LANE,P1b,P1c,P1d,PRE,ROUTE,PRE-sep,STG2
+verdict: ok2
+verdict_source: s589/g/preA.tsv:357
+notes: g/preA.tsv col 2 (PRE vs oracles, grounding)
+alias: post_a/cells/g_c5/rv562_gshadow (byte-identical source) verdict: ok2 verdict_source: s589/g/preA.tsv:357
+alias: r2/diff/impl/g_c5/rv562_gshadow (byte-identical source) verdict: ok2 verdict_source: s589/g/preA.tsv:357
+vita_binary: P1b: md5 5cc22f1b9af4e7bd984e3c5c901a0a62 commit unrecorded
+vita_binary: P1c: md5 6713f2d3bfb536af8f51224832a86651 commit unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 27
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./rv562_gshadow.ivl | 55 bytes
+P=15
+rv562_gshadow.sv:9: $finish called at 2 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./rv562_gshadow.vl | 382 bytes
+%Warning-WIDTHEXPAND: rv562_gshadow.sv:6:20: Operator VAR 'P' expects 32 bits on the Initial value, but Initial value's FUNCREF 'g' generates 4 bits.
+P=15
+- rv562_gshadow.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 166.666 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./rv562_gshadow.s2v | 59 bytes
+P=15
+rv562_gshadow.s2v.v:16: $finish called at 2 (1s)
+rc=0
+=== block 4 | vita [P1b] | ./rv562_gshadow.p2 | 173 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+P=15
+simulation ended (Finish) at time 2
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [P1b] | ./rv562_gshadow.p2off | 173 bytes | identical to block 4
+=== block 6 | vita [P1c] | ./rv562_gshadow.p3 | 173 bytes | identical to block 4
+=== block 7 | vita [P1d] | ./rv562_gshadow.p4 | 173 bytes | identical to block 4
+=== block 8 | vita [P1d] | ./rv562_gshadow.p4off | 173 bytes | identical to block 4
+=== block 9 | vita [POST-a] | post_a/cells/g_c5/rv562_gshadow.post | 173 bytes | identical to block 4
+=== block 10 | vita [POST-a] | r2/diff/impl/g_c5/rv562_gshadow.post | 173 bytes | identical to block 4
+=== block 11 | vita [POST-a-sep] | post_a/cells/g_c5/rv562_gshadow.spost | 229 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+P=15
+simulation ended (Finish) at time 2
+errors=0 warnings=0 notes=0
+rc=0
+=== block 12 | vita [POST-b] | post_a/cells/g_c5/rv562_gshadow.pb | 173 bytes | identical to block 4
+=== block 13 | vita [POST-b] | post_a/cells/g_c5/rv562_gshadow.postb | 173 bytes | identical to block 4
+=== block 14 | vita [POST-b] | r2/diff/impl/g_c5/rv562_gshadow.pb | 173 bytes | identical to block 4
+=== block 15 | vita [POST-b-sep] | post_a/cells/g_c5/rv562_gshadow.spostb | 229 bytes | identical to block 11
+=== block 16 | vita [POST-c] | post_a/cells/g_c5/rv562_gshadow.postc | 173 bytes | identical to block 4
+=== block 17 | vita [POST-c] | r2/diff/impl/g_c5/rv562_gshadow.pc | 173 bytes | identical to block 4
+=== block 18 | vita [POST-c-sep] | post_a/cells/g_c5/rv562_gshadow.spostc | 229 bytes | identical to block 11
+=== block 19 | vita [PRE] | ./rv562_gshadow.pre | 173 bytes | identical to block 4
+=== block 20 | vita [PRE] | ./rv562_gshadow.pre.route | 14 bytes
+top g frame 0
+=== block 21 | vita [S2] | post_a/cells/g_c5/rv562_gshadow.s2 | 173 bytes | identical to block 4
+=== block 22 | vita [S2-sep] | post_a/cells/g_c5/rv562_gshadow.ss2 | 229 bytes | identical to block 11
+=== block 23 | vita [S3] | post_a/cells/g_c5/rv562_gshadow.s3 | 173 bytes | identical to block 4
+=== block 24 | vita [S4] | post_a/cells/g_c5/rv562_gshadow.s4 | 173 bytes | identical to block 4
+=== block 25 | vita [S5] | post_a/cells/g_c5/rv562_gshadow.s5 | 173 bytes | identical to block 4
+=== block 26 | vita [S5-sep] | post_a/cells/g_c5/rv562_gshadow.ss5 | 229 bytes | identical to block 11
+=== block 27 | vita [W0] | post_a/cells/g_c5/rv562_gshadow.w0 | 173 bytes | identical to block 4
+=== end

@@ -1,0 +1,32 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r10_x_fold_ok
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r10_x_fold_ok.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:28
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r10_x_fold_ok.ivl | 120 bytes
+r10_x_fold_ok.sv:18: error: Unable to evaluate parameter S2 value: top.fbit(32'sd2)
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r10_x_fold_ok.vl | 389 bytes
+%Warning-WIDTHTRUNC: r10_x_fold_ok.sv:4:47: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'i' generates 32 bits.
+S1=0010 S2=0000 S3=5
+- r10_x_fold_ok.sv:20: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 83.334 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r10_x_fold_ok.build | 545 bytes
+%Warning-WIDTHTRUNC: r10_x_fold_ok.sv:4:47: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'i' generates 32 bits.
+                                          : ... note: In instance 'top'
+    4 |     for (int i = 0; i < 4; i++) if (i == a) t = i;
+      |                                               ^
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+=== end

@@ -1,0 +1,27 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__p__r06_x_compound
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/p/r06_x_compound.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/p
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:25
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r06_x_compound.ivl | 617 bytes
+r06_x_compound.sv:10: assert: net_func_eval.cc:408: failed assertion lval_const
+sh: line 1: 30912 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg21ef701f2" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg1ef701f2" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli1ef701f2"
+     30913 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh1ef701f2" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r06_x_compound.vl | 244 bytes
+PA=xxxx PB=xxxx
+- r06_x_compound.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 76.923 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r06_x_compound.build | 0 bytes
+
+=== end

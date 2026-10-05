@@ -1,0 +1,14 @@
+package q;
+  function automatic int f(input int a); return 3; endfunction
+  function automatic logic [f(2):0] h(input int x); return x; endfunction
+endpackage
+module top;
+  function automatic int f(input int a);
+    if (a == 1) return 1;
+    else if (a == 3) return 3;
+    return 7;
+  endfunction
+  localparam int P = q::h(1000);
+  int v;
+  initial begin v = q::h(1000); $display("P=%0d B=%0d v=%0d", P, $bits(q::h(0)), v); #1 $finish; end
+endmodule

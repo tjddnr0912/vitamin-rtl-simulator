@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__r1__soundness__cells__U8i_condA_wide65
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/r1/soundness/cells/U8i_condA_wide65.sv
+roadmap_row: §2 🆕 V
+set: r1/soundness/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_b,post_d,pre
+verdict: same
+verdict_source: s592/r3_x_lens_sound_pre.out:14
+alias: g/lens/sound/U8i_condA_wide65 (byte-identical source) verdict: same verdict_source: s592/r3_x_lens_sound_pre.out:14
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./U8i_condA_wide65.iv.txt | 87 bytes
+@top.b.g[0] w=0
+@top.b.g[1] w=1
+U8i_condA_wide65.sv:10: $finish called at 5 (1s)
+
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./U8i_condA_wide65.vl.txt | 190 bytes
+%Error: U8i_condA_wide65.sv:4:5: Unrolling generate loop took too long; probably this is an infinite loop, otherwise set '--unroll-limit' above 16384
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./U8i_condA_wide65.vlb.txt | 420 bytes
+%Error: U8i_condA_wide65.sv:4:5: Unrolling generate loop took too long; probably this is an infinite loop, otherwise set '--unroll-limit' above 16384
+                               : ... note: In instance 'top'
+    4 |     for (genvar i = 0; i < A; i = i + 1) begin : g
+      |     ^~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./U8i_condA_wide65.sv.txt | 157 bytes
+U8i_condA_wide65.sv2v.v:7: error: Probable infinite loop detected in generate "loop". It has run for 500001 iterations.
+1 error(s) during elaboration.
+
+rc=1
+=== block 5 | vita [post_b] | ./U8i_condA_wide65.post_b.txt | 201 bytes
+@top.b.g[0] w=0
+@top.b.g[1] w=1
+simulation ended (Finish) at time 5
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+rc=0
+=== block 6 | vita [post_c] | g/lens/sound/U8i_condA_wide65.post_c.txt | 201 bytes | identical to block 5
+=== block 7 | vita [post_d] | ./U8i_condA_wide65.post_d.txt | 201 bytes | identical to block 5
+=== block 8 | vita [postd2] | g/lens/sound/U8i_condA_wide65.postd2.txt | 201 bytes | identical to block 5
+=== block 9 | vita [postd3] | g/lens/sound/U8i_condA_wide65.postd3.txt | 201 bytes | identical to block 5
+=== block 10 | vita [postd4] | g/lens/sound/U8i_condA_wide65.postd4.txt | 201 bytes | identical to block 5
+=== block 11 | vita [pre] | ./U8i_condA_wide65.pre.txt | 201 bytes | identical to block 5
+=== end

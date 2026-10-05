@@ -1,0 +1,198 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__a__rc3_selfhdr_mod
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/a/rc3_selfhdr_mod.sv
+roadmap_row: §2 🆕 AD
+set: a
+oracles_present: iverilog,sv2v,verilator
+vita_tags: P1d,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s589/IMPL.md:7
+alias: post_a/cells/a/rc3_selfhdr_mod (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: r2/diff/impl/a/rc3_selfhdr_mod (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: P1d: md5 4735f1b5e03f5224f7f16b2cec6c4891 commit unrecorded
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+vita_binary: S2: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S2-sep: md5 1c79631658602fd72150f6bb8781d34d commit unrecorded
+vita_binary: S3: md5 6578a07516815e024ef2a44520750e96 commit unrecorded
+vita_binary: S4: md5 20931a5b7b1bbd951f5eef91d9c16119 commit unrecorded
+vita_binary: S5: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: S5-sep: md5 d2fd35b7d72e417a438d0cb2f75a8c3e commit unrecorded
+vita_binary: W0: md5 97f2c2108601d29f8e0eabca1c3c9cc3 commit unrecorded
+blocks: 26
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./rc3_selfhdr_mod.ivl | 607 bytes
+rc3_selfhdr_mod.sv:2: assert: elab_expr.cc:2927: failed assertion def
+sh: line 1: 40175 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg2283e8b9b" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg283e8b9b" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli283e8b9b"
+     40176 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh283e8b9b" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./rc3_selfhdr_mod.vl | 253 bytes
+%Error: Verilator internal fault, sorry. Suggest trying --debug --gdbbt
+%Error: Command Failed /opt/homebrew/Cellar/verilator/5.052/bin/verilator_bin --binary --timing --assert -Wno-fatal --Mdir vl_rc3_selfhdr_mod -o sim rc3_selfhdr_mod.sv
+build_rc=139
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./rc3_selfhdr_mod.s2v | 610 bytes
+rc3_selfhdr_mod.s2v.v:2: assert: elab_expr.cc:2927: failed assertion def
+sh: line 1: 40187 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg228419f6f" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg28419f6f" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli28419f6f"
+     40188 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh28419f6f" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 4 | vita [P1d] | ./rc3_selfhdr_mod.p4 | 262 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 8: 40171 Abort trap: 6           $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 5 | vita [P1d] | ./rc3_selfhdr_mod.p4nb | 283 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 9: 40172 Abort trap: 6           VITA_PROTO_OFF=ibody $S/s589/g/post4/vita $b.sv
+rc=134
+=== block 6 | vita [POST-a] | post_a/cells/a/rc3_selfhdr_mod.post | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 22049 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 7 | vita [POST-a] | r2/diff/impl/a/rc3_selfhdr_mod.post | 414 bytes | identical to block 6
+=== block 8 | vita [POST-a-sep] | post_a/cells/a/rc3_selfhdr_mod.spost | 473 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runs.sh: line 7: 23818 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $P/velab "$b.$TAG.vu" -o "$b.$TAG.velab"
+rc=134
+=== block 9 | vita [POST-b] | post_a/cells/a/rc3_selfhdr_mod.pb | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 33126 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 10 | vita [POST-b] | post_a/cells/a/rc3_selfhdr_mod.postb | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 74998 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 11 | vita [POST-b] | r2/diff/impl/a/rc3_selfhdr_mod.pb | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/r2/diff/runb.sh: line 4: 61286 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $B $b.sv
+rc=134
+=== block 12 | vita [POST-b-sep] | post_a/cells/a/rc3_selfhdr_mod.spostb | 473 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runs.sh: line 7: 76778 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $P/velab "$b.$TAG.vu" -o "$b.$TAG.velab"
+rc=134
+=== block 13 | vita [POST-c] | post_a/cells/a/rc3_selfhdr_mod.postc | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 27445 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 14 | vita [POST-c] | r2/diff/impl/a/rc3_selfhdr_mod.pc | 415 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/r3/diff/impl3.sh: line 5: 75875 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $C $b.sv
+rc=134
+=== block 15 | vita [POST-c-sep] | post_a/cells/a/rc3_selfhdr_mod.spostc | 473 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runs.sh: line 7: 29378 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $P/velab "$b.$TAG.vu" -o "$b.$TAG.velab"
+rc=134
+=== block 16 | vita [PRE] | ./rc3_selfhdr_mod.pre | 258 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+./run.sh: line 7: 40170 Abort trap: 6           $S/s589/pre/vita $b.sv
+rc=134
+=== block 17 | vita [PRE] | post_a/cells/a/rc3_selfhdr_mod.pre | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 78948 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 18 | vita [PRE] | post_a/cells/a/rc3_selfhdr_mod.pre2 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 80549 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 19 | vita [PRE] | r2/diff/impl/a/rc3_selfhdr_mod.pre | 414 bytes | identical to block 17
+=== block 20 | vita [S2] | post_a/cells/a/rc3_selfhdr_mod.s2 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 30105 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 21 | vita [S2-sep] | post_a/cells/a/rc3_selfhdr_mod.ss2 | 473 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runs.sh: line 7: 31882 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $P/velab "$b.$TAG.vu" -o "$b.$TAG.velab"
+rc=134
+=== block 22 | vita [S3] | post_a/cells/a/rc3_selfhdr_mod.s3 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 37744 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 23 | vita [S4] | post_a/cells/a/rc3_selfhdr_mod.s4 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 39187 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 24 | vita [S5] | post_a/cells/a/rc3_selfhdr_mod.s5 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 40282 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== block 25 | vita [S5-sep] | post_a/cells/a/rc3_selfhdr_mod.ss5 | 473 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runs.sh: line 7: 43236 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' $P/velab "$b.$TAG.vu" -o "$b.$TAG.velab"
+rc=134
+=== block 26 | vita [W0] | post_a/cells/a/rc3_selfhdr_mod.w0 | 414 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+
+thread 'vita-main' has overflowed its stack
+fatal runtime error: stack overflow
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s589/post_a/runc.sh: line 7: 79549 Abort trap: 6           perl -e 'alarm 20; exec @ARGV' "$V" "$f"
+rc=134
+=== end

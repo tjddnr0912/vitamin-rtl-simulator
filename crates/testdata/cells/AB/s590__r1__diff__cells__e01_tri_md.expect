@@ -1,0 +1,288 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__r1__diff__cells__e01_tri_md
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/r1/diff/cells/e01_tri_md.sv
+roadmap_row: §2 🆕 AB
+set: r1/diff/cells
+oracles_present: iverilog,verilator
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTC,POSTC_SEP,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,PRE3,POSTD,POSTD_JIT,POSTD_NODEF,PRE3_SEP,POSTD_SEP,POSTC_NODEF,POSTC_JIT,POSTE,POSTE_JIT,POSTE_NODEF,POSTE_SEP,R5DEV
+verdict: 22 -> 18 (both 6), d19 11 -> 8 (iverilog 1, verilator 3), e01 7 -> 5 (both 1). VCD: the one cell with `$dumpvars` (d15) records the held wires' initial values as `z`, then `x` / `1` at #0, where PRE and iverilog record `x` then `1`; the end-of-#0 values agree.
+verdict_source: s590/COMMIT_SLICE.txt:94
+notes: verdict_class = verbatim excerpt of the source line (wrapped commit-message lines joined)
+vita_binary: PRE2: md5 8684cc7c872b0af01f295797911c1998 commit cb2f7f1d
+vita_binary: POSTA: md5 fab0a3a1d8b5e8c90e967e89563bb825 commit cb2f7f1d
+vita_binary: POSTC: md5 2607d4ced62f799b233e901bd70bed3a commit cb2f7f1d
+vita_binary: PRE2_SEP: md5 c555292fcf4a6f6269246689a1eed156 commit cb2f7f1d
+vita_binary: POSTC_SEP: unresolved (no row in the slice META binaries table)
+vita_binary: POSTA_SEP: md5 6bfa9a6d22f153ae49a38b3a23fa3bb1 commit unrecorded
+vita_binary: PRE3: md5 9b616218bc6893e44e6aeca46841e1eb commit 75f46453
+vita_binary: POSTD: md5 c68477f5e3a54ca9ea1eedc513a45575 commit 75f46453
+vita_binary: R5DEV: md5 8c800916aaa11d72c15fbd5031167f33 commit unrecorded
+blocks: 3
+=== block 1 | combined [iverilog+verilator|PRE2+POSTA+POSTC+PRE2_SEP+POSTC_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r2/diff/o/e01_tri_md.out | 1652 bytes
+##### e01_tri_md
+=== PRE2 (native=interp=vm)
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== POSTA (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== POSTC (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+--- PRE2==POSTA False  POSTA==POSTC True  PRE2==POSTC False  POSTC split False  VCD POSTA==POSTC True  VCD PRE2==POSTC True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+=== staged POSTC vcmp=0 velab=0
+rc=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+--- staged POSTC==native False  staged PRE2==native False
+=== iverilog run rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+w=0 t=2
+v=1 t=2
+e01_tri_md.sv:16: $finish called at 4 (1s)
+=== verilator run rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+f x=1 t=1
+w=0 t=2
+v=1 t=2
+- e01_tri_md.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 2 | combined [iverilog+verilator|PRE2+POSTA+PRE2_SEP+POSTA_SEP] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/o2/e01_tri_md.out | 1329 bytes
+##### e01_tri_md
+=== PRE2 (native=interp=vm)
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== POST (native=interp=vm)
+rc=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+--- PRE2==POST(all backends): False  POST split: False  VCD PRE2==POST(all): True
+=== staged PRE2 vcmp=0 velab=0
+rc=0
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+=== staged POST vcmp=0 velab=0
+rc=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+errors=0 warnings=0 notes=0
+=== iverilog run rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+w=0 t=2
+v=1 t=2
+e01_tri_md.sv:16: $finish called at 4 (1s)
+=== verilator run rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+f x=1 t=1
+w=0 t=2
+v=1 t=2
+- e01_tri_md.sv:16: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+=== block 3 | combined [iverilog+verilator|PRE3+POSTD+R5DEV] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r5/movers/e01_tri_md.txt | 922 bytes
+##### e01_tri_md  (/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s590/r1/diff/cells/e01_tri_md.sv)
+=== PRE3 rc=0 native=interp=vm:True
+f x=x t=0
+f x=x t=0
+f x=x t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+=== post_d rc=0 native=interp=vm:True
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+=== post_e rc=0 native=interp=vm:True
+f x=1 t=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+f x=1 t=0
+f x=1 t=1
+#1 w=1 v=0
+f x=1 t=1
+f x=1 t=2
+w=0 t=2
+v=1 t=2
+simulation ended (Finish) at time 4
+=== iverilog rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+w=0 t=2
+v=1 t=2
+=== verilator rc=0
+f x=1 t=0
+w=1 t=0
+v=0 t=0
+#1 w=1 v=0
+f x=1 t=1
+w=0 t=2
+v=1 t=2
+=== end

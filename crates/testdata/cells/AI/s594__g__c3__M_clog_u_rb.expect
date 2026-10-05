@@ -1,0 +1,55 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__g__c3__M_clog_u_rb
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/g/c3/M_clog_u_rb.sv
+roadmap_row: §2 🆕 AI
+set: g/c3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p0,p1,p2,p3,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p0: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: p1: md5 dacc7564ecc78ac928fbf9e333392537 commit 75f46453
+vita_binary: p2: md5 486ea9c8753d10ba904873b618814856 commit 75f46453
+vita_binary: p3: md5 147bbb984b327e4e83aa5a8346c73470 commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./M_clog_u_rb.ivl | 153 bytes
+M_clog_u_rb.sv:3: sorry: unpacked array parameters are not supported yet.
+M_clog_u_rb.sv:4: sorry: unpacked array parameters are not supported yet.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./M_clog_u_rb.vl | 231 bytes
+vb=9
+- M_clog_u_rb.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 20ns; walltime 0.000 s; speed 740.741 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./M_clog_u_rb.s2v | 170 bytes
+M_clog_u_rb.s2v.v:6: syntax error
+M_clog_u_rb.s2v.v:6: error: Invalid module item.
+M_clog_u_rb.s2v.v:8: syntax error
+M_clog_u_rb.s2v.v:8: error: Malformed statement
+rc=4
+=== block 4 | vita [d1] | ./M_clog_u_rb.d1 | 75 bytes
+vb=9
+simulation ended (Finish) at time 20
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./M_clog_u_rb.d3 | 75 bytes | identical to block 4
+=== block 6 | vita [p0] | ./M_clog_u_rb.p0 | 75 bytes | identical to block 4
+=== block 7 | vita [p1] | ./M_clog_u_rb.p1 | 75 bytes | identical to block 4
+=== block 8 | vita [p2] | ./M_clog_u_rb.p2 | 75 bytes | identical to block 4
+=== block 9 | vita [p3] | ./M_clog_u_rb.p3 | 75 bytes | identical to block 4
+=== block 10 | vita [pa] | ./M_clog_u_rb.pa | 75 bytes | identical to block 4
+=== block 11 | vita [pb] | ./M_clog_u_rb.pb | 75 bytes | identical to block 4
+=== block 12 | vita [pre] | ./M_clog_u_rb.pre | 75 bytes | identical to block 4
+=== block 13 | vita [pre] | ./M_clog_u_rb.pre.route | 0 bytes
+
+=== block 14 | vita [pre594] | ./M_clog_u_rb.pre594 | 75 bytes | identical to block 4
+=== end

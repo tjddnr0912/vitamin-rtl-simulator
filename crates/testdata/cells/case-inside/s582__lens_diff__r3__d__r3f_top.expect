@@ -1,0 +1,14 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__lens_diff__r3__d__r3f_top
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/lens_diff/r3/d/r3f_top.v
+roadmap_row: §3.b case-inside
+set: lens_diff/r3/d
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: unrecorded
+verdict_source: unrecorded
+notes: oracle text quoted at lens_diff/REPORT.md:123; aux: lens_diff/r3/d/r3f_child.v
+aux: s582__lens_diff__r3__d__r3f_top.aux/lens_diff/r3/d/r3f_child.v (origin s582/lens_diff/r3/d/r3f_child.v)
+blocks: 0
+=== end

@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__x1__cls_rt_u
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/x1/cls_rt_u.sv
+roadmap_row: §3.b unique-const-fn
+set: x1
+oracles_present: iverilog,verilator
+vita_tags: POST-b,PRE-sep,POST-c,S5,S6,S7,S8
+verdict: LOUD in both / no data
+verdict_source: s587/IMPL.md:142
+notes: IMPL X1(c) census; class is the plain twin on PRE vs both oracles
+vita_binary: S5: md5 9a5525108f2cf61ee3ce0279ba55bd5f commit unrecorded
+vita_binary: S6: md5 8a62233bbe50d76b03c2c28c63e17ae2 commit unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./cls_rt_u.ivl | 90 bytes
+cls_rt_u.sv:10: syntax error
+cls_rt_u.sv:10: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./cls_rt_u.vl | 504 bytes
+%Warning-WIDTHTRUNC: cls_rt_u.sv:4:45: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+%Warning-WIDTHEXPAND: cls_rt_u.sv:14:28: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's METHODCALL 'm' generates 4 bits.
+v=8
+- cls_rt_u.sv:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 66.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_cls_rt_u.build | 1108 bytes
+%Warning-WIDTHTRUNC: cls_rt_u.sv:4:45: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.
+                                     : ... note: In instance 'top'
+    4 |     function logic [f(2):0] m(input int x); return x; endfunction
+      |                                             ^~~~~~
+                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.052
+                     ... Use "/* verilator lint_off WIDTHTRUNC */" and lint_on around source to disable this message.
+%Warning-WIDTHEXPAND: cls_rt_u.sv:14:28: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's METHODCALL 'm' generates 4 bits.
+                                       : ... note: In instance 'top'
+   14 |   initial begin c = new; v = c.m(1000); $display("v=%0d", v); #1 $finish; end
+      |                            ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.052
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+=== block 4 | vita [S5] | ./cls_rt_u.s5 | 355 bytes
+cls_rt_u.sv:12:4: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found '::'
+cls_rt_u.sv:12:4: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '(' before port connections, found '::'
+cls_rt_u.sv:12:6: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after instantiation, found identifier 'C'
+errors=3 warnings=0 notes=0
+rc=1
+=== block 5 | vita [S6] | ./cls_rt_u.s6 | 355 bytes | identical to block 4
+=== block 6 | vita [S7] | ./cls_rt_u.s7 | 355 bytes | identical to block 4
+=== block 7 | vita [S8] | ./cls_rt_u.s8 | 355 bytes | identical to block 4
+=== end

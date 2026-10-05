@@ -1,0 +1,87 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r1__sound__c__c15b_impfn_task
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r1/sound/c/c15b_impfn_task.sv
+roadmap_row: §2 🆕 AD
+set: r1/sound/c
+oracles_present: none-on-this-copy
+vita_tags: POST-b,POST-c,POST-a-sep,POST-b-sep,POST-c-sep
+verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12)
+verdict_source: s589/r1/sound/REPORT.md:55
+notes: findings table row naming `c15b`; oracle outputs on alias copy
+alias: r1/sound/c/st/c15b_impfn_task (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+alias: post_b/lens/sound/c15b_impfn_task (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+alias: post_b/lens/sound_st/c15b_impfn_task (byte-identical source) verdict: S1 | BLOCKING | new instance; root pre-existing (imported routine filed under importer runs body in importer, c12) verdict_source: s589/r1/sound/REPORT.md:55
+vita_binary: POST-a: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-a-sep: md5 f13c0978e2ae4ae9ee26979a3e0e5bd6 commit 6b25f2ffbff4d3c6214d932d753004cd
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-b-sep: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 20
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post_b/lens/sound/c15b_impfn_task.ivl | 60 bytes
+v=15
+c15b_impfn_task.sv:15: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | post_b/lens/sound_st/c15b_impfn_task.ivl | 60 bytes | identical to block 1
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | r1/sound/c/st/c15b_impfn_task.ivl | 60 bytes | identical to block 1
+=== block 4 | oracle verilator 5.052 (version captured in slice) | post_b/lens/sound/c15b_impfn_task.vl | 379 bytes
+%Warning-WIDTHEXPAND: c15b_impfn_task.sv:8:62: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 4 bits.
+v=15
+- c15b_impfn_task.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 3.125 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle verilator 5.052 (version captured in slice) | post_b/lens/sound_st/c15b_impfn_task.vl | 379 bytes
+%Warning-WIDTHEXPAND: c15b_impfn_task.sv:8:62: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 4 bits.
+v=15
+- c15b_impfn_task.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 2.857 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 6 | oracle verilator 5.052 (version captured in slice) | r1/sound/c/st/c15b_impfn_task.vl | 379 bytes | identical to block 5
+=== block 7 | oracle sv2v 0.0.13 (version captured in slice) | post_b/lens/sound/c15b_impfn_task.s2v | 63 bytes
+v=15
+c15b_impfn_task.s2v.v:21: $finish called at 100 (1s)
+rc=0
+=== block 8 | oracle sv2v 0.0.13 (version captured in slice) | post_b/lens/sound_st/c15b_impfn_task.s2v | 63 bytes | identical to block 7
+=== block 9 | oracle sv2v 0.0.13 (version captured in slice) | r1/sound/c/st/c15b_impfn_task.s2v | 63 bytes | identical to block 7
+=== block 10 | vita [POST-a] | post_b/lens/sound/c15b_impfn_task.pa | 177 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=1023
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 11 | vita [POST-a] | post_b/lens/sound_st/c15b_impfn_task.pa | 177 bytes | identical to block 10
+=== block 12 | vita [POST-a] | r1/sound/c/st/c15b_impfn_task.post | 177 bytes | identical to block 10
+=== block 13 | vita [POST-a-sep] | ./c15b_impfn_task.sposta | 233 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=1023
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 14 | vita [POST-b] | ./c15b_impfn_task.postb | 175 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=15
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 15 | vita [POST-b-sep] | ./c15b_impfn_task.spostb | 231 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=15
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 16 | vita [POST-c] | ./c15b_impfn_task.postc | 175 bytes | identical to block 14
+=== block 17 | vita [POST-c-sep] | ./c15b_impfn_task.spostc | 231 bytes | identical to block 15
+=== block 18 | vita [PRE] | post_b/lens/sound/c15b_impfn_task.pre | 175 bytes | identical to block 14
+=== block 19 | vita [PRE] | post_b/lens/sound_st/c15b_impfn_task.pre | 175 bytes | identical to block 14
+=== block 20 | vita [PRE] | r1/sound/c/st/c15b_impfn_task.pre | 175 bytes | identical to block 14
+=== end

@@ -1,0 +1,39 @@
+== E1
+  PRE: t.u1 L=1 M=0
+  PRE: t.u2 L=1 M=0
+  PRE: t.u3 L=0 M=0
+  POST: t.u1 L=1 M=0
+  POST: t.u2 L=1 M=0
+  POST: t.u3 L=0 M=0
+  IVL: E1.sv:2: sorry: unpacked array parameters are not supported yet.
+  IVL: rc=1
+  VL: t.u3 L=0 M=0
+  VL: t.u2 L=0 M=0
+  VL: t.u1 L=1 M=0
+  S2V: t.u1 L=0 M=0
+  S2V: t.u2 L=0 M=0
+  S2V: t.u3 L=0 M=0
+== R1
+  PRE: R1.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: this sub-expression has no constant-fold arm [in t]
+  PRE: errors=1 warnings=1 notes=0
+  PRE: rc=1
+  POST: R1.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: this sub-expression has no constant-fold arm [in t]
+  POST: errors=1 warnings=1 notes=0
+  POST: rc=1
+  IVL: R1.sv:5: warning: Choosing typ expression.
+  IVL: L=0 K=0
+  VL: L=X K=X
+  S2V: R1.s2v.v:9: warning: Choosing typ expression.
+  S2V: L=X K=X
+== R2
+  PRE: R2.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+  PRE: R2.sv:6:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+  PRE: errors=2 warnings=1 notes=0
+  PRE: rc=1
+  POST: R2.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+  POST: R2.sv:6:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: the concatenation `{…}` has no constant-fold arm [in t]
+  POST: errors=2 warnings=1 notes=0
+  POST: rc=1
+  IVL: L=0 K=0
+  VL: L=X K=X
+  S2V: L=X K=X

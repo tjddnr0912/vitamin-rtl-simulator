@@ -1,0 +1,201 @@
+category	path_or_glob	count	bytes	reason
+slice-doc	./*.md,COMMIT_*.txt	7	91351	slice docs (verdict sources)
+rust-source-patch	./*.bak	1	25745	saved Rust source / patches (SPEC exclude)
+repo-snapshot	a_snapshot/*	1067	19357947	repo crates/ snapshot (SPEC exclude)
+cargo-gate-log	*.log,*.rc (slice root)	50	7260559	cargo build/test/clippy/corpus logs (SPEC exclude)
+script	c1/*	1	2103	helper/analysis script
+iverilog-compiled-image	c1/w_*/*.vvp	22	59785	*.vvp iverilog compiled image (SPEC exclude)
+script	c10/*	1	1207	helper/analysis script
+run-transcript	c10/run.log	1	1841	runner transcript / rc marker
+iverilog-compiled-image	c10/w_*/*.vvp	3	8391	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	c11/w_*/*.vvp	1	1971	*.vvp iverilog compiled image (SPEC exclude)
+script	c12/*	1	2566	helper/analysis script
+run-transcript	c12/run.log	1	3275	runner transcript / rc marker
+iverilog-compiled-image	c12/w_*/*.vvp	7	15981	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	c13/w_*/*.vvp	1	1681	*.vvp iverilog compiled image (SPEC exclude)
+script	c14/*	1	1462	helper/analysis script
+run-transcript	c14/run.log	1	1177	runner transcript / rc marker
+iverilog-compiled-image	c14/w_*/*.vvp	4	8067	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	c1t/w_*/*.vvp	3	8502	*.vvp iverilog compiled image (SPEC exclude)
+script	c2/*	1	9693	helper/analysis script
+iverilog-compiled-image	c2/w_*/*.vvp	54	141477	*.vvp iverilog compiled image (SPEC exclude)
+script	c3/*	3	4563	helper/analysis script
+iverilog-compiled-image	c3/orig/w_*/*.vvp	100	259172	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	c3/sp/R1/*	65	20421	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R1/*.sv	65	21552	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R2/*	115	31961	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R2/*.sv	115	58462	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R2r/*	114	31690	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R2r/*.sv	114	58019	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R3/*	115	30903	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R3/*.sv	115	53742	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R3f/*	114	30622	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R3f/*.sv	114	53304	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R4/*	115	31847	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R4/*.sv	115	53742	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R4f/*	115	31842	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R4f/*.sv	115	53742	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c3/sp/R4t/*	115	30807	output of a vita-only SV (not a cell)
+no-oracle-output	c3/sp/R4t/*.sv	115	53742	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R2/*.sv	2	616	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R2r/*.sv	2	616	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R3/*	2	261	output of a vita-only SV (not a cell)
+no-oracle-output	c4/sp/R3/*.sv	2	536	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R3f/*.sv	2	536	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R4/*	2	261	output of a vita-only SV (not a cell)
+no-oracle-output	c4/sp/R4/*.sv	2	536	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R4f/*	2	261	output of a vita-only SV (not a cell)
+no-oracle-output	c4/sp/R4f/*.sv	2	536	SV with no oracle output anywhere (vita-only); not a cell
+no-oracle-output	c4/sp/R4t/*.sv	2	536	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	c4/w_*/*.vvp	3	5418	*.vvp iverilog compiled image (SPEC exclude)
+no-oracle-output	c5/*.sv	2	543	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	c5/w_*/*.vvp	3	6729	*.vvp iverilog compiled image (SPEC exclude)
+script	c6/*	1	10720	helper/analysis script
+run-transcript	c6/run.rc	1	2	runner transcript / rc marker
+run-transcript	c6/run_*.log	2	19158	runner transcript
+no-oracle-output	c6/sp/*	25	4652	output of a vita-only SV (not a cell)
+no-oracle-output	c6/sp/*.sv	25	9463	SV with no oracle output anywhere (vita-only); not a cell
+iverilog-compiled-image	c6/w_*/*.vvp	25	52182	*.vvp iverilog compiled image (SPEC exclude)
+script	c7/*	1	2467	helper/analysis script
+run-transcript	c7/run.log	1	5414	runner transcript / rc marker
+iverilog-compiled-image	c7/w_*/*.vvp	14	35332	*.vvp iverilog compiled image (SPEC exclude)
+script	c8/*	1	5064	helper/analysis script
+run-transcript	c8/run.log	1	4544	runner transcript / rc marker
+iverilog-compiled-image	c8/w_*/*.vvp	11	24924	*.vvp iverilog compiled image (SPEC exclude)
+script	c9/*	1	3447	helper/analysis script
+run-transcript	c9/run.log	1	8724	runner transcript / rc marker
+iverilog-compiled-image	c9/w_*/*.vvp	9	24468	*.vvp iverilog compiled image (SPEC exclude)
+third-party-corpus	corpus/*	197	240646	corpus-runner / ibex outputs (SPEC exclude: corpus = third-party)
+doc-draft	docs/*	6	305029	doc drafts (SPEC exclude)
+script	./*	6	12992	helper/analysis script
+cargo-gate-log	gate/*	15	1724765	gate/suite logs (SPEC exclude)
+third-party-corpus	ibex/*	506	5422942	corpus-runner / ibex outputs (SPEC exclude: corpus = third-party)
+third-party-corpus	ibex_cmd.txt	1	2790	corpus-runner / ibex outputs (SPEC exclude: corpus = third-party)
+script	jitlane/*	4	9562	jit lane scripts
+cargo-gate-log	mut/*	15	5179980	mutation logs (SPEC exclude)
+rust-source-patch	./*.rs	1	6569	saved Rust source / patches (SPEC exclude)
+perf	perf/*	8	1475277	perf timing cells/scripts (vita-only timing; no oracle)
+third-party-corpus	perf/*	23	99557	corpus-runner / ibex outputs (SPEC exclude: corpus = third-party)
+rust-source-patch	./*.patch	9	959669	saved Rust source / patches (SPEC exclude)
+slice-doc	r1/diff/*.md,COMMIT_*.txt	1	11149	slice docs (verdict sources)
+run-transcript	r1/diff/b1/all.log	1	12037	runner transcript / rc marker
+run-transcript	r1/diff/b1/all.rc	1	2	runner transcript / rc marker
+vcd-unmapped	r1/diff/b1/*.vcd	1	359	VCD not attributable to a cell
+iverilog-compiled-image	r1/diff/b1/w_*/*.vvp	17	42047	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	r1/diff/b2/all.log	1	9348	runner transcript / rc marker
+run-transcript	r1/diff/b2/all.rc	1	2	runner transcript / rc marker
+iverilog-compiled-image	r1/diff/b2/w_*/*.vvp	13	26161	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	r1/diff/b3/all.log	1	6320	runner transcript / rc marker
+run-transcript	r1/diff/b3/all.rc	1	2	runner transcript / rc marker
+iverilog-compiled-image	r1/diff/b3/w_*/*.vvp	4	7718	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	r1/diff/b4/all.log	1	1078	runner transcript / rc marker
+run-transcript	r1/diff/b4/all.rc	1	2	runner transcript / rc marker
+iverilog-compiled-image	r1/diff/b4/w_*/*.vvp	2	4056	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	r1/diff/r2_new.log	1	11672	runner transcript / rc marker
+run-transcript	r1/diff/r2_new.rc	1	2	runner transcript / rc marker
+run-transcript	r1/diff/r2_new2.log	1	1905	runner transcript / rc marker
+run-transcript	r1/diff/r2_new2.rc	1	2	runner transcript / rc marker
+run-transcript	r1/diff/r2_new3.log	1	1478	runner transcript / rc marker
+run-transcript	r1/diff/r2_new3.rc	1	2	runner transcript / rc marker
+run-transcript	r1/diff/r2_rescore.log	1	28766	runner transcript / rc marker
+run-transcript	r1/diff/r2_rescore.rc	1	2	runner transcript / rc marker
+vita-staged-artefact	r1/diff/r2stg/*.velab	6	8726	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	r1/diff/r2stg/*.vu	6	13613	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+iverilog-compiled-image	r1/diff/r2t/w_*/*.vvp	13	34849	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	r1/diff/r2u/w_*/*.vvp	9	21382	*.vvp iverilog compiled image (SPEC exclude)
+run-transcript	r1/diff/r3_new.log	1	0	runner transcript / rc marker
+run-transcript	r1/diff/r3_new.rc	1	2	runner transcript / rc marker
+run-transcript	r1/diff/r3_new2.log	1	0	runner transcript / rc marker
+run-transcript	r1/diff/r3_new2.rc	1	2	runner transcript / rc marker
+run-transcript	r1/diff/r3_rescore.log	1	0	runner transcript / rc marker
+run-transcript	r1/diff/r3_rescore.rc	1	2	runner transcript / rc marker
+iverilog-compiled-image	r1/diff/r3c/w_*/*.vvp	10	31528	*.vvp iverilog compiled image (SPEC exclude)
+iverilog-compiled-image	r1/diff/res/w_*/*.vvp	4	11520	*.vvp iverilog compiled image (SPEC exclude)
+rust-source-patch	r1/sound/*.diff	4	351048	saved Rust source / patches (SPEC exclude)
+slice-doc	r1/sound/*.md,COMMIT_*.txt	1	13170	slice docs (verdict sources)
+no-oracle-output	r1/sound/cells/*.sv	9	2559	SV with no oracle output anywhere (vita-only); not a cell
+script	r1/sound/*	4	4661	helper/analysis script
+source-freeze-meta	r1/sound/*.txt	4	3912	source status/diff at review start/end
+iverilog-compiled-image	r1/sound/w/*/*.vvp	26	52932	*.vvp iverilog compiled image (SPEC exclude)
+vita-output-unmapped	r1/sound/w/*.out,*.err	37	6184	vita perf/obs runs (t_*, o1_*) not attributable to one cell by name
+vita-output-unmapped	r1/sound/w/**/*	12	29767	vita observability outputs not attributable to one cell by name
+runner-input-list	r2/cells.txt	1	5407	cell list fed to a re-score runner
+run-transcript	r2/run.log	1	127	runner transcript / rc marker
+run-transcript	r2/run.rc	1	2	runner transcript / rc marker
+runner-input-list	r2run/cells.tsv	1	68732	cell list fed to a re-score runner
+script	r2run/*	2	4708	helper/analysis script
+no-oracle-output	r2run/post2/*	1	271	output of a vita-only SV (not a cell)
+no-oracle-output	r2run/pre/*	1	271	output of a vita-only SV (not a cell)
+no-oracle-output	r2run/r1a/*	1	271	output of a vita-only SV (not a cell)
+runner-input-list	r3/cells.txt	1	5265	cell list fed to a re-score runner
+runner-input-list	r3run/cells.tsv	1	75276	cell list fed to a re-score runner
+script	r3run/*	2	4717	helper/analysis script
+no-oracle-output	r3run/post2/*	3	537	output of a vita-only SV (not a cell)
+no-oracle-output	r3run/post3/*	3	537	output of a vita-only SV (not a cell)
+no-oracle-output	r3run/pre/*	3	561	output of a vita-only SV (not a cell)
+runner-input-list	r4run/cells.tsv	1	76840	cell list fed to a re-score runner
+no-oracle-output	r4run/post3/*	3	537	output of a vita-only SV (not a cell)
+no-oracle-output	r4run/post4/*	3	537	output of a vita-only SV (not a cell)
+run-transcript	s3b/run.log	1	9	runner transcript / rc marker
+run-transcript	s3dbg/run.log	1	9	runner transcript / rc marker
+run-transcript	s3dbg2/run.log	1	9	runner transcript / rc marker
+run-transcript	s3rel/run.log	1	9	runner transcript / rc marker
+run-transcript	s3relb/run.log	1	9	runner transcript / rc marker
+vita-staged-artefact	staged/*.velab	3	2561	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged/*.vu	3	4072	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged/*	2	2552	*.vu/*.velab (SPEC exclude)
+vita-staged-artefact	staged2/*.velab	5	3782	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged2/*.vu	5	5798	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-output-unmapped	staged*/o.out,s.out	6	813	one-shot / staged vita outputs not named after a cell
+vita-staged-artefact	staged3/*.velab	4	3256	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged3/*.vu	4	5009	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged_b/*.velab	4	3151	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+vita-staged-artefact	staged_b/*.vu	4	5073	*.vu/*.velab/lib.toml vita staged artefact (SPEC exclude)
+cargo-gate-log	suite/*	8	2407022	gate/suite logs (SPEC exclude)
+build-dir	tgt-jit	4781	1776898650	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	tgt-proto	117859	9579837020	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	tgt-post	133032	13101093485	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	__pycache__	2	19658	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	tgt-exp	489	187831908	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	tgt-gate	120387	10769869275	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c14/w_*/obj*	92	2731492	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c13/w_*/obj*	25	751896	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c7/w_*/obj*	350	10593526	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c9/w_*/obj*	225	6845301	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c12/w_*/obj*	161	4746637	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c8/w_*/obj*	275	8321150	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c1/w_*/obj*	850	26059634	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c6/w_*/obj*	644	19485159	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/__pycache__	1	7888	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/res/w_*/obj*	100	3054475	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/b2/w_*/obj*	394	11920933	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/b3/w_*/obj*	100	3023637	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/b4/w_*/obj*	50	1511339	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/r2t/w_*/obj*	350	10628097	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/b1/w_*/obj*	459	13758782	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/r2u/w_*/obj*	226	6832470	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/diff/r3c/w_*/obj*	250	7584842	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	r1/sound/w/*/obj*	790	23831932	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c3/__pycache__	1	8123	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c3/orig/w_*/obj*	3028	92756589	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c4/w_*/obj*	75	2268098	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c10/w_*/obj*	75	2259587	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c2/w_*/obj*	1375	42189633	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c1t/w_*/obj*	275	8421373	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+build-dir	c11/w_*/obj*	25	752116	verilator obj/obj_vl and cargo tgt-* build trees (SPEC exclude)
+built-binary	proto_rel_vita	1	7338032	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	exp_bin/vita_e3	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	exp_bin/vita_e4	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	exp_bin/vita_e1	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post/vita	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post/vita_ab	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post/vita_a	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	r1/vita_pre	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	r1/vita_ab	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	r1/vita_a	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	pre/vita	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post2/vita	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post3/vita	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	post4/vita	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	r3/vita_post3	1	7338016	Mach-O binary (SPEC exclude); md5 in META binaries table
+built-binary	r2/vita_post2	1	7321504	Mach-O binary (SPEC exclude); md5 in META binaries table

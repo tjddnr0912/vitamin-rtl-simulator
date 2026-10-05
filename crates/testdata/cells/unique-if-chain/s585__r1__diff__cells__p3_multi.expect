@@ -1,0 +1,128 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__p3_multi
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/p3_multi.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: gained verilator lines | residue verilator lines
+verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6
+notes: extra source; run sidecar; runs: d__p3_multi p3_multi
+alias: r1/diff/cells/p3f_filelist (byte-identical source) verdict: gained verilator lines | residue verilator lines verdict_source: s585/g/cmp3_final.txt:5 | s585/g/cmp3_final.txt:6
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3_lib.sv (origin s585/r1/diff/cells/p3_lib.sv)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3_multi.files (origin s585/r1/diff/cells/p3_multi.files)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3_multi.srcs (origin s585/r1/diff/cells/p3_multi.srcs)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/fl.f (origin s585/r1/diff/cells/fl.f)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3f_filelist.files (origin s585/r1/diff/cells/p3f_filelist.files)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3f_filelist.srcs (origin s585/r1/diff/cells/p3f_filelist.srcs)
+aux: s585__r1__diff__cells__p3_multi.aux/r1/diff/cells/p3f_filelist.vargs (origin s585/r1/diff/cells/p3f_filelist.vargs)
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 4
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/p3_multi.out | 1341 bytes
+p3_multi | vl:2@p3_lib.sv:14,3@p3_lib.sv:4,4@p3_lib.sv:8 | PRE:- rc=0 | POST:W4031:2@p3_lib.sv:14:12,W4031:3@p3_lib.sv:4:12,W4031:4@p3_lib.sv:8:12 rc=0 | P==P:False
+##### p3_multi
+=== verilator compile rc=0 run rc=0
+sub b t=0
+[2] %Error: p3_lib.sv:14: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: p3_lib.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+[4] %Error: p3_lib.sv:8: Assertion failed in pk.tk: 'unique if' statement violated
+t=5 end
+- p3_multi.sv:12: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+p3_lib.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p3_lib.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fv] [at time 3]
+p3_lib.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tk] [at time 4]
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/p3f_filelist.out | 1204 bytes
+p3f_filelist | vl:2@p3_lib.sv:14,3@p3_lib.sv:4,4@p3_lib.sv:8 | PRE:- rc=0 | POST:W4031:2@p3_lib.sv:14:12,W4031:3@p3_lib.sv:4:12,W4031:4@p3_lib.sv:8:12 rc=0 | P==P:False
+##### p3f_filelist
+=== verilator compile rc=0 run rc=0
+sub b t=0
+[2] %Error: p3_lib.sv:14: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: p3_lib.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+[4] %Error: p3_lib.sv:8: Assertion failed in pk.tk: 'unique if' statement violated
+t=5 end
+- p3_multi.sv:12: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+p3_lib.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+p3_lib.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fv] [at time 3]
+p3_lib.sv:8:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tk] [at time 4]
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+=== block 3 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__p3_multi.out | 897 bytes
+##### d__p3_multi
+=== verilator compile rc=0 run rc=0
+sub b t=0
+[2] %Error: p3_lib.sv:14: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: p3_lib.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+[4] %Error: p3_lib.sv:8: Assertion failed in pk.tk: 'unique if' statement violated
+t=5 end
+- p3_multi.sv:12: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+p3_lib.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 4 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__p3f_filelist.out | 1135 bytes
+##### d__p3f_filelist
+=== verilator compile rc=0 run rc=0
+sub b t=0
+[2] %Error: p3_lib.sv:14: Assertion failed in top.u: 'unique if' statement violated
+[3] %Error: p3_lib.sv:4: Assertion failed in pk.fv: 'unique if' statement violated
+[4] %Error: p3_lib.sv:8: Assertion failed in pk.tk: 'unique if' statement violated
+t=5 end
+- p3_multi.sv:12: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=0
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+p3_lib.sv:14:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u] [at time 2]
+t=5 end
+simulation ended (Finish) at time 6
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E0001]: unknown flag '-f.vu'
+rc=3
+error[VITA-E0001]: unknown flag '-f.velab'
+--- PRE staged vcmp=0 velab=3 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E0001]: unknown flag '-f.vu'
+rc=3
+error[VITA-E0001]: unknown flag '-f.velab'
+=== end

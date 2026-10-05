@@ -1,0 +1,37 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__a__p3__A6_rb
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/a/p3/A6_rb.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: a/p3
+oracles_present: iverilog,verilator,sv2v
+vita_tags: cut,pre
+verdict: PRE!=all
+verdict_source: s593/a/p3.summ:241
+vita_binary: cut: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 6
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./A6_rb.ivl | 64 bytes
+A6_rb.sv:4: sorry: "inside" expressions not supported yet.
+rc=1
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./A6_rb.vl | 141 bytes
+%Error: A6_rb.sv:4:34: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./A6_rb.s2v | 185 bytes
+A6_rb.s2v.v:7: error: Dimensions must be constant.
+A6_rb.s2v.v:7       : This MSB expression violates the rule: (((fr('sd2))|(4'd4))==(4'd4))+('sd3)
+1 error(s) during elaboration.
+rc=1
+=== block 4 | vita [cut] | ./A6_rb.cut | 74 bytes
+vb=5
+simulation ended (Finish) at time 5
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [cut] | ./A6_rb.cut.route | 13 bytes
+t fr frame 0
+=== block 6 | vita [pre] | ./A6_rb.pre | 264 bytes
+A6_rb.sv:4:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (the function is undefined, or its body is outside the constant-function subset) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== end

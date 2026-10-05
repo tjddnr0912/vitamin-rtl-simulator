@@ -1,0 +1,62 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__plan__probe__q1_wide_sel
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/plan/probe/q1_wide_sel.sv
+roadmap_row: §3.b case-inside
+set: plan/probe
+oracles_present: iverilog,verilator,sv2v
+vita_tags: POST,POST2,POST3
+verdict: refused (clause 3 sign)
+verdict_source: s582/post/CENSUS.md:68
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/plan__probe__q1_wide_sel/iv.out | 960 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:7: Syntax in assignment statement l-value.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:7: error: Incomprehensible case expression.
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:15: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:16: error: Incomprehensible case expression.
+rc=5
+=== block 2 | oracle verilator 5.052 (version captured in slice) | plan/probe/out_q1_wide_sel/vl.out | 540 bytes
+A v=0000000000000002 m=1
+A v=0000000000000007 m=2
+A v=0000000000000005 m=0
+A v=ffffffffffffffff m=0
+A v=0000000100000002 m=0
+B v=00000000ffffffff m=0
+B v=ffffffffffffffff m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:27: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | plan/probe/out_q1_wide_sel/sv.out | 216 bytes
+A v=0000000000000002 m=1
+A v=0000000000000007 m=2
+A v=0000000000000005 m=0
+A v=ffffffffffffffff m=0
+A v=0000000100000002 m=0
+B v=00000000ffffffff m=3
+B v=ffffffffffffffff m=0
+sv2v.v:38: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [POST] | post/census/plan__probe__q1_wide_sel/post.out | 632 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: items of mixed signedness against a signed case expression, or a narrow signed item in an unsigned comparison: the sizing rules of §12.5 and §11.4.13 give different answers here and the reference tools disagree (IEEE 1800-2017 §12.5.4) [in top.$func$t2]
+errors=1 warnings=1 notes=0
+rc=1
+=== block 5 | vita [POST] | post2/cmp/plan__probe__q1_wide_sel.sv/post.err | 627 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/plan/probe/q1_wide_sel.sv:16:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: items of mixed signedness against a signed case expression, or a narrow signed item in an unsigned comparison: the sizing rules of §12.5 and §11.4.13 give different answers here and the reference tools disagree (IEEE 1800-2017 §12.5.4) [in top.$func$t2]
+errors=1 warnings=1 notes=0
+=== block 6 | vita [POST] | post2/cmp/plan__probe__q1_wide_sel.sv/post.out | 5 bytes
+rc=1
+=== block 7 | vita [POST2] | post2/cmp/plan__probe__q1_wide_sel.sv/post2.err | 627 bytes | identical to block 5
+=== block 8 | vita [POST2] | post2/cmp/plan__probe__q1_wide_sel.sv/post2.out | 5 bytes | identical to block 6
+=== block 9 | vita [POST2] | post3/cmp/plan__probe__q1_wide_sel.sv/post2.err | 627 bytes | identical to block 5
+=== block 10 | vita [POST2] | post3/cmp/plan__probe__q1_wide_sel.sv/post2.out | 5 bytes | identical to block 6
+=== block 11 | vita [POST3] | post3/cmp/plan__probe__q1_wide_sel.sv/post3.err | 627 bytes | identical to block 5
+=== block 12 | vita [POST3] | post3/cmp/plan__probe__q1_wide_sel.sv/post3.out | 5 bytes | identical to block 6
+=== end

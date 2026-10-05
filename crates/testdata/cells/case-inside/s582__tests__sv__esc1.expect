@@ -1,0 +1,57 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__esc1
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/esc1.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG3,POST2,POST3,POST3/default,POST3/interp,POST3/native,POST3/staged,POST3/vm,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG3: md5 159907e8a9b77d85a93b90c2f89bf7e3 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/default: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/interp: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/native: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/staged: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: POST3/vm: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | tests/sv/out/esc1/iv5.out | 83 bytes
+../../esc1.sv:4: syntax error
+../../esc1.sv:4: error: Invalid module instantiation
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/esc1/vl.out | 364 bytes
+esc m1=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/esc1.sv:9: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/esc1/sv.out | 50 bytes
+esc m1=1
+sv2v.v:15: $finish called at 0 (1s)
+rc=0
+=== block 4 | vita [DBG3] | tests/sv/out/esc1/post.out | 78 bytes
+esc m1=1
+simulation ended (Finish) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [POST2] | post3/cmp/tests__sv__esc1.sv/post2.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 6 | vita [POST2] | post3/cmp/tests__sv__esc1.sv/post2.out | 50 bytes
+esc m1=1
+simulation ended (Finish) at time 0
+rc=0
+=== block 7 | vita [POST3] | post3/cmp/tests__sv__esc1.sv/post3.err | 28 bytes | identical to block 5
+=== block 8 | vita [POST3] | post3/cmp/tests__sv__esc1.sv/post3.out | 50 bytes | identical to block 6
+=== block 9 | vita [POST3/default] | post3/be/esc1.sv.default | 45 bytes
+esc m1=1
+simulation ended (Finish) at time 0
+=== block 10 | vita [POST3/interp] | post3/be/esc1.sv.interp | 45 bytes | identical to block 9
+=== block 11 | vita [POST3/native] | post3/be/esc1.sv.native | 45 bytes | identical to block 9
+=== block 12 | vita [POST3/staged] | post3/be/esc1.sv.staged | 45 bytes | identical to block 9
+=== block 13 | vita [POST3/vm] | post3/be/esc1.sv.vm | 45 bytes | identical to block 9
+=== block 14 | vita [PRE] | tests/sv/out/esc1/pre.out | 78 bytes | identical to block 4
+=== end

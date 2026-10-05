@@ -1,0 +1,46 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t1b_priority0
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t1b_priority0.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: verilator
+vita_tags: POST-b,PRE-sep,POST-c,S7,S8,T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+alias: t/t1b_priority0_fp (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: S7: md5 623b248e41eb8c68551a6a00e1842b93 commit unrecorded
+vita_binary: S8: md5 804aecd712956ae7ab7bb07cdb4ad9f9 commit unrecorded
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t1b_priority0_fp.ivl | 104 bytes
+t1b_priority0_fp.sv:4: syntax error
+t1b_priority0_fp.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t1b_priority0.vl | 104 bytes
+%Error: t1b_priority0.sv:4:15: syntax error, unexpected if
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./t1b_priority0_fp.vl | 107 bytes
+%Error: t1b_priority0_fp.sv:4:15: syntax error, unexpected if
+%Error: Exiting due to 1 error(s)
+build_rc=1
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./vl_t1b_priority0.build | 261 bytes
+%Error: t1b_priority0.sv:4:15: syntax error, unexpected if
+    4 |     priority0 if (a == 1) p0 = 10;
+      |               ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 5 | oracle verilator 5.052 (version captured in slice) | ./vl_t1b_priority0_fp.build | 264 bytes
+%Error: t1b_priority0_fp.sv:4:15: syntax error, unexpected if
+    4 |     priority0 if (a == 1) p0 = 10;
+      |               ^~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 6 | vita [S7] | ./t1b_priority0.s7 | 172 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+K=7
+simulation ended (Finish) at time 1
+errors=0 warnings=1 notes=0
+rc=0
+=== block 7 | vita [S8] | ./t1b_priority0.s8 | 172 bytes | identical to block 6
+=== end

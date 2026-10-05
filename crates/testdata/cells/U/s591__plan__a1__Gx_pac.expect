@@ -1,0 +1,52 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a1__Gx_pac
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a1/Gx_pac.sv
+roadmap_row: §2 🆕 U
+set: plan/a1
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: same(wrong)
+verdict_source: s591/plan/a1.cls:223
+notes: class PRE vs proto2 (prototype incl. U-b, not shipped)
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Gx_pac.ivl | 93 bytes
+pac top.g[0] r=00000111
+pac top.g[1] r=00011111
+Gx_pac.sv:7: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Gx_pac.vl | 372 bytes
+%Error: Gx_pac.sv:3:32: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: Gx_pac.sv:4:21: Expecting expression to be constant, but can't determine constant for FUNCREF 'fc'
+%Error-ZEROREPL: Gx_pac.sv:4:26: Replication value of 0 is only legal under a concatenation (IEEE 1800-2023 11.4.12.1)
+%Error: Exiting due to 3 error(s)
+build_rc=1
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Gx_pac.s2v | 97 bytes
+pac top.g[0] r=00000111
+pac top.g[1] r=00011111
+Gx_pac.s2v.v:20: $finish called at 100 (1s)
+rc=0
+=== block 4 | vita [DEV3] | ./Gx_pac.dev3 | 218 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+pac top.g[0] r=00000000
+pac top.g[1] r=00000000
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [DEV3] | ./Gx_pac.dev3.route | 40 bytes
+top g[0]$fc frame 1
+top g[1]$fc frame 1
+=== block 6 | vita [POSTA] | ./Gx_pac.posta | 218 bytes | identical to block 4
+=== block 7 | vita [POSTA] | ./Gx_pac.posta.route | 40 bytes | identical to block 5
+=== block 8 | vita [POSTB] | ./Gx_pac.postb | 218 bytes | identical to block 4
+=== block 9 | vita [POSTB] | ./Gx_pac.postb.route | 40 bytes | identical to block 5
+=== block 10 | vita [PRE] | ./Gx_pac.pre | 218 bytes | identical to block 4
+=== block 11 | vita [PRE] | ./Gx_pac.pre.route | 40 bytes | identical to block 5
+=== block 12 | vita [PROTO2] | ./Gx_pac.post2 | 218 bytes | identical to block 4
+=== block 13 | vita [PROTO2] | ./Gx_pac.post2.route | 40 bytes | identical to block 5
+=== end

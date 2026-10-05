@@ -1,0 +1,81 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__q9_classes
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/q9_classes.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells
+oracles_present: verilator
+vita_tags: PRE,POST2,POST,JIT2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: d__q9_classes q9_classes
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | r1/diff/out/q9_classes.out | 1849 bytes
+q9_classes | vl:1@q9_classes.sv:4,2@q9_classes.sv:9,3@q9_classes.sv:22,4@q9_classes.sv:28 | PRE:- rc=1 | POST:- rc=1 | P==P:True
+##### q9_classes
+=== verilator compile rc=0 run rc=0
+[1] %Error: q9_classes.sv:4: Assertion failed in pk.P.pf: 'unique if' statement violated
+[2] %Error: q9_classes.sv:9: Assertion failed in pk.P.pt: 'unique if' statement violated
+[3] %Error: q9_classes.sv:22: Assertion failed in $unit.D.vt: 'unique if' statement violated
+[4] %Error: q9_classes.sv:28: Assertion failed in $unit.Q__N2.qt: 'unique if' statement violated
+t=5 end v=0
+- q9_classes.sv:44: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q9_classes.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q9_classes.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/d__q9_classes.out | 1723 bytes
+##### d__q9_classes
+=== verilator compile rc=0 run rc=0
+[1] %Error: q9_classes.sv:4: Assertion failed in pk.P.pf: 'unique if' statement violated
+[2] %Error: q9_classes.sv:9: Assertion failed in pk.P.pt: 'unique if' statement violated
+[3] %Error: q9_classes.sv:22: Assertion failed in $unit.D.vt: 'unique if' statement violated
+[4] %Error: q9_classes.sv:28: Assertion failed in $unit.Q__N2.qt: 'unique if' statement violated
+t=5 end v=0
+- q9_classes.sv:44: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q9_classes.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+error[VITA-E3009] E-ELAB-UNSUPPORTED: only parameters/typedefs/functions/tasks/variables are supported in a package body (v7/A2b-prereq) [in pk]
+errors=1 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q9_classes.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== end

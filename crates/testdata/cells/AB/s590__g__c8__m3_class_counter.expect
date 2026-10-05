@@ -1,0 +1,63 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s590__g__c8__m3_class_counter
+slice: §4.5.590 (s590; details _slices/s590/)
+origin: s590/g/c8/m3_class_counter.sv
+roadmap_row: §2 🆕 AB
+set: g/c8
+oracles_present: verilator,iverilog
+vita_tags: PRE2,POSTA,PRE2_SEP,POSTA_SEP,POSTA_NODEF,POSTA_JIT,PRE,P3,P5_SIDE,POSTDEV,P6,POSTB,POSTB_SEP,POSTB_NODEF,POSTB_JIT,POSTC,POSTC_SEP,POSTC_NODEF,POSTC_JIT,PRE3,POSTD,PRE3_SEP,POSTD_SEP,POSTD_NODEF,POSTD_JIT,POSTE,POSTE_SEP,POSTE_NODEF,POSTE_JIT
+verdict: rep:neither->neither
+verdict_source: s590/fin/axscan_fin.txt:69
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 303703f9
+vita_binary: P3: md5 6cecfd4586bbe8a2d6f81be6c48f9036 commit 303703f9
+vita_binary: P5_SIDE: md5 86da1d4bcf565e6a499d22e4f2ed5622 commit 303703f9
+vita_binary: P6: md5 698f7070c7eaeed0f56bb3cc93895ff1 commit 303703f9
+vita_binary: POSTDEV: md5 81a9dea8c79208f82ef1f62cde6da8cf commit 303703f9
+blocks: 5
+=== block 1 | combined [verilator+iverilog|PRE] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out_c8/m3_class_counter.out | 652 bytes
+##### m3_class_counter
+=== verilator compile rc=0 run rc=0
+t=1 y=1 n=1
+t=2 y=3 n=3
+- m3_class_counter.sv:17: Verilog $finish
+=== iverilog compile rc=0 run rc=-6
+internal error: 14vvp_wide_fun_t: recv_object(...) not implemented
+Assertion failed: (0), function recv_object, file vvp_net.cc, line 3360.
+=== vita PRE (native=interp=vm)
+rc=1
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (read X) [at time 0]
+fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0 (zero-delay loop / combinational oscillation) [at time 0]
+simulation ended (DeltaLimit) at time 0
+errors=1 warnings=2 notes=0
+=== block 2 | vita [PRE+P3] | g/p3_c8/m3_class_counter.out | 670 bytes
+##### m3_class_counter
+=== vita PRE (native=interp=vm)
+rc=1
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (read X) [at time 0]
+fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0 (zero-delay loop / combinational oscillation) [at time 0]
+simulation ended (DeltaLimit) at time 0
+errors=1 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0 (zero-delay loop / combinational oscillation) [at time 0]
+simulation ended (DeltaLimit) at time 0
+errors=1 warnings=1 notes=0
+--- PRE==POST (all backends): False
+=== block 3 | vita [PRE+P5_SIDE] | g/p5_c8/m3_class_counter.out | 761 bytes
+##### m3_class_counter
+=== vita PRE (native=interp=vm)
+rc=1
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (read X) [at time 0]
+fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0 (zero-delay loop / combinational oscillation) [at time 0]
+simulation ended (DeltaLimit) at time 0
+errors=1 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+warning[VITA-W4020] W-RUN-DYN-DEGRADE: null/X class handle dereference (read X) [at time 0]
+fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0 (zero-delay loop / combinational oscillation) [at time 0]
+simulation ended (DeltaLimit) at time 0
+errors=1 warnings=2 notes=0
+--- PRE==POST (all backends): True
+=== block 4 | vita [PRE+P6] | p6/p6_c8/m3_class_counter.out | 670 bytes | identical to block 2
+=== block 5 | vita [PRE+POSTDEV] | p6/dev_c8/m3_class_counter.out | 670 bytes | identical to block 2
+=== end

@@ -1,0 +1,53 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__a__cells__Cnet_R5
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/a/cells/Cnet_R5.sv
+roadmap_row: §2 🆕 AI
+set: a/cells
+oracles_present: iverilog,verilator,sv2v
+vita_tags: d1,d3,p3r,pa,pb,pre,pre594,stgpa,stgpb,stgpre,stgpre2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: named at s594/PLAN.md:105
+vita_binary: d1: md5 203a0a0da96b27168d2feeb5996c0a72 commit 1da347bc
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: p3r: md5 ca572e0c4873c3903ceb48545e4d814b commit 75f46453
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Cnet_R5.ivl | 54 bytes
+w=1 t=5
+Cnet_R5.sv:7: $finish called at 40 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Cnet_R5.vl | 345 bytes
+%Warning-WIDTHEXPAND: Cnet_R5.sv:5:13: Operator ADD expects 8 bits on the RHS, but RHS's REPLICATE generates 2 bits.
+w=1 t=0
+- Cnet_R5.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 40ns; walltime 0.000 s; speed 2.857 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Cnet_R5.s2v | 67 bytes
+rc=1
+Cnet_R5.sv:5:8: Parse error: unexpected token '#' (Sym_pound)
+=== block 4 | vita [d1] | ./Cnet_R5.d1 | 78 bytes
+w=1 t=5
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [d3] | ./Cnet_R5.d3 | 78 bytes | identical to block 4
+=== block 6 | vita [p3r] | ./Cnet_R5.p3r | 78 bytes | identical to block 4
+=== block 7 | vita [p3r] | ./Cnet_R5.p3r.route | 0 bytes
+
+=== block 8 | vita [pa] | ./Cnet_R5.pa | 78 bytes | identical to block 4
+=== block 9 | vita [pb] | ./Cnet_R5.pb | 78 bytes | identical to block 4
+=== block 10 | vita [pre] | ./Cnet_R5.pre | 78 bytes
+w=1 t=0
+simulation ended (Finish) at time 40
+errors=0 warnings=0 notes=0
+rc=0
+=== block 11 | vita [pre] | ./Cnet_R5.pre.route | 0 bytes | identical to block 7
+=== block 12 | vita [pre594] | ./Cnet_R5.pre594 | 78 bytes | identical to block 10
+=== end

@@ -1,0 +1,46 @@
+w00627	WRONG1	P=1003 v=1003	w00627.sv:8: Syntax in assignment statement l-value.	REF[%Error: w00627.sv:3:26: Duplicate declaration of function: 'h__Vtcwrap_2']	w00627.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+w00628	SPLIT	v=8	w00628.sv:8: Syntax in assignment statement l-value.	v=8	v=8
+w00631	SPLIT	P=8	w00631.sv:9: Syntax in assignment statement l-value.	P=8	P=8
+w00633	ok1	P=1003 v=1003	P=1003 v=1003	REF[%Error: w00633.sv:3:26: Duplicate declaration of function: 'h__Vtcwrap_2']	w00633.s2v.v:22: : Verilog doesn't allow passing empty parameters to functions.
+w00634	ok2	v=8	v=8	v=8	v=8
+w00637	ok2	P=8	P=8	P=8	P=8
+w00639	ok2	v=00000007	v=00000007	v=00000007	v=00000007
+w00641	SPLIT	P=8	w00641.sv:8: Syntax in assignment statement l-value.	P=8	P=8
+w00642	SPLIT	v=8	w00642.sv:9: Syntax in assignment statement l-value.	v=8	v=8
+w00650	SPLIT	v=00000007	w00650.sv:8: Syntax in assignment statement l-value.	v=00000007	v=00000007
+w00651	ok2	P=8	P=8	P=8	P=8
+w00654	ok2	v=8	v=8	v=8	v=8
+w00659	ok2	B=4	B=4	B=4	B=4
+w00662	ok2	P=8	P=8	P=8	P=8
+w00668	ok2	v=8	v=8	v=8	v=8
+w00670	SPLIT	v=0	w00670.sv:8: Syntax in assignment statement l-value.	v=0	v=0
+w00671	SPLIT	v=8	w00671.sv:13: Syntax in assignment statement l-value.	v=8	v=8
+w00675	SPLIT	B=4	w00675.sv:8: Syntax in assignment statement l-value.	B=4	B=4
+w00677	SPLIT	P=8	w00677.sv:8: Syntax in assignment statement l-value.	P=8	P=8
+w00680	SPLIT	v=8	w00680.sv:8: Syntax in assignment statement l-value.	v=8	v=8
+w00684	ok2	v=0	v=0	v=0	v=0
+w00685	ok2	v=8	v=8	v=8	v=8
+w00687	ok2	P=8	P=8	P=8	P=8
+w00690	ok2	v=0000000d	v=0000000d	v=0000000d	v=0000000d
+w00691	SPLIT	P=8 v=8	w00691.sv:4: Syntax in assignment statement l-value.	P=8 v=8	P=8 v=8
+w00695	ok2	v=8	v=8	v=8	v=8
+w00696	SPLIT	P=8	w00696.sv:8: Syntax in assignment statement l-value.	P=8	P=8
+w00700	SPLIT	v=0000000d	w00700.sv:8: Syntax in assignment statement l-value.	v=0000000d	v=0000000d
+w00701	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+w00705	SPLIT	v=8	w00705.sv:8: Syntax in assignment statement l-value.	v=8	v=8
+w01611	SPLIT	v=8 P=8	w01611.sv:9: Syntax in assignment statement l-value.	v=8 P=8	v=8 P=8
+w01637	ok2	v=8 P=8	v=8 P=8	v=8 P=8	v=8 P=8
+w05615	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+w05616	ok2	P=8 B=4 v=8	P=8 B=4 v=8	P=8 B=4 v=8	P=8 B=4 v=8
+w05618	ok2	P=15 B=4 v=15	P=15 B=4 v=15	P=15 B=4 v=15	P=15 B=4 v=15
+w05619	ok1	P=8 v=8	REF[w05619.sv:7: syntax error]	P=8 v=8	P=8 v=8
+w05620	ok1	P=8 B=4 v=8	REF[w05620.sv:7: syntax error]	P=8 B=4 v=8	P=8 B=4 v=8
+w05621	ok2	P=8 B=4 v=8	P=8 B=4 v=8	P=8 B=4 v=8	P=8 B=4 v=8
+w05622	ok1	P=8 B=4 v=8	REF[w05622.sv:7: syntax error]	P=8 B=4 v=8	P=8 B=4 v=8
+w05626	ok1	P=0 v=0	REF[w05626.sv:7: syntax error]	P=0 v=0	P=0 v=0
+w05629	ok1	P=8 v=8	REF[w05629.sv:3: syntax error]	P=8 v=8	P=8 v=8
+w05631	ok1	P=8 v=8	REF[w05631.sv:7: syntax error]	P=8 v=8	P=8 v=8
+w05635	ok2	P=0 v=0	P=0 v=0	P=0 v=0	P=0 v=0
+w05637	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+w05639	ok2	P=8 v=8	P=8 v=8	P=8 v=8	P=8 v=8
+w05641	ok1	P=8 Q=7 bw=8 B=4 v=8	REF[w05641.sv:7: syntax error]	P=8 Q=7 bw=8 B=4 v=8	P=8 Q=7 bw=8 B=4 v=8

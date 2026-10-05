@@ -1,0 +1,25 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t8b_sizd_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t8b_sizd_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t8b_sizd_fp.ivl | 161 bytes
+ERROR: t8b_sizd_fp.sv:7: $size argument must be a dynamic array, queue or string, given a vpiMemory.
+ERROR: t8b_sizd_fp.sv:7: $size has too many arguments.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t8b_sizd_fp.vl | 229 bytes
+sz=4
+- t8b_sizd_fp.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 71.428 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t8b_sizd_fp.build | 0 bytes
+
+=== end

@@ -1,0 +1,20 @@
+B1_bind_fwd                  IEEE:UP ACCEPT->LOUDok  SVVL:n/a   | iv=ERR:B1_bind_fwd.sv:15: syntax error(rc2) | post_c=top.c.gb.g w=1 bits=4 | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+F15_zero_nets_iter           IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=NONE | post_c=NONE | post_d=ERR:VITA-E3010:`N` is used before it is declared in this gen
+F3i_iarr_two_mismatch        IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.u[0].gb.x x | top.u[1].gb.x x | post_c=top.u[0].gb.x x | top.u[1].gb.x x | post_d=ERR:VITA-E3010:`K` is used before it is declared in this gen
+F6_samecount_vals            IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.b.g[1] | top.b.g[2] | post_c=top.b.g[1] | top.b.g[2] | post_d=ERR:VITA-E3010:`A` is used before it is declared in this gen
+M12c_chain_wide65            IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:this generate for depends on a parameter decl
+M12e_chain_u64max            IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:this generate for depends on a parameter decl
+MSG1_blame_innocent          IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.b.x x | post_c=top.b.x x | post_d=ERR:VITA-E3010:`A` is used before it is declared in this gen
+NEG1_step_neg                IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+STALL1_step_zero             IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[0] w=0 | top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:`S` is used before it is declared in this gen
+U8_initA_wide                IEEE:DOWN OK->LOUD  SVVL:UP WRONG->LOUD   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:`A` is used before it is declared in this gen
+U8e_initA_u64max             IEEE:DOWN OK->LOUD  SVVL:n/a   | iv=top.b.g[1] w=1 | top.b.g[2] w=2 | post_c=top.b.g[1] w=1 | top.b.g[2] w=2 | post_d=ERR:VITA-E3010:`A` is used before it is declared in this gen
+
+== post_c -> post_d under IEEE (45 cells)
+    34 same                   
+    10 DOWN OK->LOUD          F15_zero_nets_iter F3i_iarr_two_mismatch F6_samecount_vals M12c_chain_wide65 M12e_chain_u64max MSG1_blame_innocent NEG1_step_neg STALL1_step_zero U8_initA_wide U8e_initA_u64max
+     1 UP ACCEPT->LOUDok      B1_bind_fwd
+== post_c -> post_d under SVVL (45 cells)
+    34 same                   
+     6 UP WRONG->LOUD         F15_zero_nets_iter F3i_iarr_two_mismatch F6_samecount_vals M12c_chain_wide65 MSG1_blame_innocent U8_initA_wide
+     5 n/a                    B1_bind_fwd M12e_chain_u64max NEG1_step_neg STALL1_step_zero U8e_initA_u64max

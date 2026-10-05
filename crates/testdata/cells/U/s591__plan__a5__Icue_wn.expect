@@ -1,0 +1,71 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s591__plan__a5__Icue_wn
+slice: §4.5.591 (s591; details _slices/s591/)
+origin: s591/plan/a5/Icue_wn.sv
+roadmap_row: §2 🆕 U
+set: plan/a5
+oracles_present: iverilog,sv2v,verilator
+vita_tags: DEV1,DEV3,PROTO2,POSTA,POSTB,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: not a POST_a mover (absent from impl/moves_audit.txt)
+alias: impl/dump/97b1025d95defa85 (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: DEV1: md5 20f68f5da75efca36a878ad94abd410a commit cb2f7f1d
+vita_binary: DEV2: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: DEV3: md5 aa1db460fdfd686fd3dfd947cbedc2ee commit unrecorded
+vita_binary: POSTA: md5 732fb809ebad55f14fd214d72925c960 commit cb2f7f1d
+vita_binary: POSTB: md5 1d520f3399f0cd76ed243b6a24cd86cb commit cb2f7f1d
+vita_binary: PRE: md5 ac965d2938f4b5bbbda4291ecd64d1dc commit cb2f7f1d
+vita_binary: PROTO2: md5 cd260e909d4d618c673d63572ec4deaf commit cb2f7f1d
+blocks: 20
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | impl/dump/97b1025d95defa85.ivl | 74 bytes
+cuewn P=3 K=3 b=32
+97b1025d95defa85.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./Icue_wn.ivl | 65 bytes
+cuewn P=3 K=3 b=32
+Icue_wn.sv:8: $finish called at 100 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | impl/dump/97b1025d95defa85.vl | 250 bytes
+cuewn P=3 K=3 b=32
+- 97b1025d95defa85.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 11.111 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | ./Icue_wn.vl | 240 bytes
+cuewn P=3 K=3 b=32
+- Icue_wn.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 8.333 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | impl/dump/97b1025d95defa85.s2v | 77 bytes
+cuewn P=3 K=3 b=32
+97b1025d95defa85.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | ./Icue_wn.s2v | 68 bytes
+cuewn P=3 K=3 b=32
+Icue_wn.s2v.v:7: $finish called at 100 (1s)
+rc=0
+=== block 7 | vita [DEV1] | ./Icue_wn.dev1 | 227 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+cuewn P=18446744073709551625 K=18446744073709551625 b=32
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [DEV1] | ./Icue_wn.dev1.route | 0 bytes
+
+=== block 9 | vita [DEV2] | impl/dump/97b1025d95defa85.dev2 | 227 bytes | identical to block 7
+=== block 10 | vita [DEV2] | impl/dump/97b1025d95defa85.dev2.route | 0 bytes | identical to block 8
+=== block 11 | vita [DEV3] | ./Icue_wn.dev3 | 227 bytes | identical to block 7
+=== block 12 | vita [DEV3] | ./Icue_wn.dev3.route | 0 bytes | identical to block 8
+=== block 13 | vita [POSTA] | ./Icue_wn.posta | 227 bytes | identical to block 7
+=== block 14 | vita [POSTA] | ./Icue_wn.posta.route | 0 bytes | identical to block 8
+=== block 15 | vita [POSTB] | ./Icue_wn.postb | 227 bytes | identical to block 7
+=== block 16 | vita [POSTB] | ./Icue_wn.postb.route | 0 bytes | identical to block 8
+=== block 17 | vita [PRE] | ./Icue_wn.pre | 227 bytes | identical to block 7
+=== block 18 | vita [PRE] | ./Icue_wn.pre.route | 0 bytes | identical to block 8
+=== block 19 | vita [PROTO2] | ./Icue_wn.post2 | 227 bytes | identical to block 7
+=== block 20 | vita [PROTO2] | ./Icue_wn.post2.route | 0 bytes | identical to block 8
+=== end

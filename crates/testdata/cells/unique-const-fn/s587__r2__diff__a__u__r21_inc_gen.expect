@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__r2__diff__a__u__r21_inc_gen
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/r2/diff/a/u/r21_inc_gen.sv
+roadmap_row: §3.b unique-const-fn
+set: r2/diff/a/u
+oracles_present: iverilog,verilator
+vita_tags: POST-c,POST-b,PRE-sep
+verdict: unrecorded
+verdict_source: unrecorded
+notes: no class word; first mention s587/r2/diff/REPORT.md:38
+alias: r2/diff/a/lanes/r21_inc_gen (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+aux: s587__r2__diff__a__u__r21_inc_gen.aux/r2/diff/a/u/r21_gbody.svh (origin s587/r2/diff/a/u/r21_gbody.svh)
+vita_binary: POST-c-jit: md5 f1cd245ccf95b589f4e8c123ec824a24 commit unrecorded
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r21_inc_gen.ivl | 94 bytes
+r21_inc_gen.sv:4: syntax error
+r21_inc_gen.sv:4: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r21_inc_gen.vl | 260 bytes
+%Error: r21_gbody.svh:1:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+%Error: r21_gbody.svh:2:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+%Error: Exiting due to 2 error(s)
+build_rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_r21_inc_gen.build | 991 bytes
+%Error: r21_gbody.svh:1:28: Constant function may not be declared under generate (IEEE 1800-2023 13.4.3)
+                          : ... note: In instance 'top'
+    1 |     function automatic int f(input int a); return 3; endfunction
+      |                            ^
+        r21_inc_gen.sv:8:1: ... note: In file included from 'r21_inc_gen.sv'
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: r21_gbody.svh:2:24: Expecting expression to be constant, but can't determine constant for FUNCREF 'f'
+                          : ... note: In instance 'top'
+        r21_gbody.svh:1:28: ... Location of non-constant FUNC 'f': Constant function called under generate
+        r21_gbody.svh:2:24: ... Called from 'f()' with parameters:
+           a = ?32?h2
+    2 |     localparam int P = f(2);
+      |                        ^
+        r21_inc_gen.sv:8:1: ... note: In file included from 'r21_inc_gen.sv'
+%Error: Exiting due to 2 error(s)
+=== block 4 | vita [POST-c-jit] | r2/diff/a/lanes/r21_inc_gen.jit | 146 bytes
+r21_inc_gen.sv:7:25: error[VITA-E1001] E-PP-INCLUDE-NOT-FOUND: `include "r21_gbody.svh" not found on search path
+errors=1 warnings=0 notes=0
+rc=1
+=== end

@@ -1,0 +1,27 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s587__t__t1_params_fp
+slice: §4.5.587 (s587; details _slices/s587/)
+origin: s587/t/t1_params_fp.sv
+roadmap_row: §3.b unique-const-fn
+set: t
+oracles_present: iverilog,verilator
+vita_tags: T-RUN
+verdict: unrecorded
+verdict_source: unrecorded
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./t1_params_fp.ivl | 98 bytes
+t1_params_fp.sv:40: syntax error
+t1_params_fp.sv:40: Syntax in assignment statement l-value.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./t1_params_fp.vl | 285 bytes
+A=7 B=7 C=3 D=8 E=3 F=7 G=7
+H=7 bH=4 I=3 J=7 N=10 L=7
+W=7
+- t1_params_fp.sv:60: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 166.667 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./vl_t1_params_fp.build | 0 bytes
+
+=== end

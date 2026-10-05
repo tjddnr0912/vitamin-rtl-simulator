@@ -1,0 +1,1524 @@
+both     s580/census/A.sv 
+both     s580/census/A_2s.sv 
+both     s580/census/A_wq.sv 
+both     s580/census/S.sv 
+both     s580/census/S_2s.sv 
+both     s580/census/S_wq.sv 
+both     s580/census/V.sv 
+both     s580/census/V_2s.sv 
+both     s580/census/Vr.sv 
+both     s580/census/W.sv 
+both     s580/census/W_2s.sv 
+both     s580/census/W_wq.sv 
+both     s580/census/X.sv 
+both     s580/census/X_wq.sv 
+both     s580/census/e/E01.sv 
+both     s580/census/e/E02.sv 
+both     s580/census/e/E03.sv 
+both     s580/census/e/E04.sv 
+both     s580/census/e/E05.sv 
+both     s580/census/e/E06.sv 
+both     s580/census/e/E07.sv 
+both     s580/census/e/E10.sv 
+both     s580/census/e/E11.sv 
+both     s580/census/e/E12.sv 
+both     s580/census/e/E13.sv 
+both     s580/census/e/E14.sv 
+both     s580/census/e/E15.sv 
+both     s580/census/e/E20.sv 
+both     s580/census/e/E21.sv 
+both     s580/census/e/E22.sv 
+both     s580/census/e/E23.sv 
+both     s580/census/e/E24.sv 
+both     s580/census/e/E25.sv 
+both     s580/census/e/E26.sv 
+both     s580/census/e/E30.sv 
+both     s580/census/e/E31.sv 
+both     s580/census/e/E40.sv 
+both     s580/census/e/E41.sv 
+both     s580/census/e/E42.sv 
+both     s580/census/e/E43.sv 
+both     s580/census/e/E44.sv 
+both     s580/census/e/E45.sv 
+both     s580/census/e/E46.sv 
+both     s580/census/e/E47.sv 
+both     s580/census/e/E50.sv 
+both     s580/census/e/E60.sv 
+both     s580/census/e/E61.sv 
+both     s580/census/e/E62.sv 
+both     s580/census/e/E63.sv 
+both     s580/census/e/E64.sv 
+both     s580/census/e/E65.sv 
+both     s580/census/e/E70.sv 
+both     s580/census/e/E71.sv 
+both     s580/census/e/E72.sv 
+both     s580/census/e/E73.sv 
+both     s580/census/e/E74.sv 
+both     s580/census/e/E75.sv 
+both     s580/census/e/E76.sv 
+both     s580/census/e/E77.sv 
+both     s580/census/e/E78.sv 
+both     s580/census/e/E79.sv 
+both     s580/census/e/E80.sv 
+both     s580/census/e/E81.sv 
+both     s580/census/e/E82.sv 
+both     s580/census/e/E83.sv 
+both     s580/census/e/E84.sv 
+both     s580/census/e/E85.sv 
+both     s580/census/e/E86.sv 
+both     s580/census/e/E87.sv 
+both     s580/census/e/E88.sv 
+both     s580/census/e/Q.sv 
+both     s580/census/e/Q1.sv 
+both     s580/census/c/C01.sv 
+both     s580/census/c/C02.sv 
+both     s580/census/c/C03.sv 
+both     s580/census/c/C04.sv 
+both     s580/census/c/C05.sv 
+both     s580/census/c/C06.sv 
+both     s580/census/c/C07.sv 
+both     s580/census/c/C08.sv 
+both     s580/census/c/C09.sv 
+post3    s580/census/c/C10.sv 
+post3    s580/census/c/C11.sv 
+post3    s580/census/c/C12.sv 
+post3    s580/census/c/C13.sv 
+both     s580/census/c/C14.sv 
+both     s580/census/c/C15.sv 
+both     s580/census/c/C16.sv 
+both     s580/census/c/C17.sv 
+both     s580/census/c/C18.sv 
+both     s580/census/c/C19.sv 
+both     s580/census/c/C20.sv 
+both     s580/census/c/C21.sv 
+both     s580/census/c/C22.sv 
+both     s580/census/c/C23.sv 
+both     s580/census/c/C24.sv 
+both     s580/census/c/C25.sv 
+both     s580/census/c/C26.sv 
+both     s580/census/c/C27.sv 
+post3    s580/census/c/C28.sv 
+both     s580/census/c/C28b.sv 
+post3    s580/census/c/C29.sv 
+both     s580/census/c/C30.sv 
+post3    s580/census/c/C31.sv 
+both     s580/census/c/C32.sv 
+both     s580/census/c/C33.sv 
+both     s580/census/c/C34.sv 
+both     s580/census/cq/C09q.sv 
+both     s580/census/cq/C10q.sv 
+both     s580/census/cq/C11q.sv 
+both     s580/census/cq/C12q.sv 
+both     s580/census/cq/C13q.sv 
+both     s580/census/cq/C27q.sv 
+both     s580/census/cq/C28q.sv 
+both     s580/census/cq/C29q.sv 
+both     s580/census/cq/C30q.sv 
+both     s580/census/cq/C31q.sv 
+both     s580/census/z/Z01.sv 
+both     s580/census/z/Z02.sv 
+both     s580/census/z/Z03.sv 
+post3    s580/census/z/Z04.sv 
+post3    s580/census/z/Z05.sv 
+both     s580/census/z/Z06.sv 
+both     s580/census/z/Z07.sv 
+both     s580/fx/F01.sv 
+both     s580/fx/F02.sv 
+both     s580/fx/F03.sv 
+both     s580/fx/F04.sv 
+both     s580/fx/F05.sv 
+both     s580/fx/F06.sv 
+both     s580/fx/F06n.sv 
+both     s580/fx/F07.sv 
+both     s580/fx/F07n.sv 
+both     s580/fx/F08.sv 
+both     s580/fx/F08b.sv 
+both     s580/fx/F09.sv 
+both     s580/fx/F10.sv 
+both     s580/fx/F10b.sv 
+both     s580/fx/F11.sv 
+post3    s580/fx/F12.sv 
+both     s580/fx/F14.sv 
+both     s580/fx/F15.sv 
+both     s580/fx/F16.sv 
+post3    s580/fx/F17a.sv 
+pre      s580/fx/F17b.sv 
+both     s580/fx/F18.sv 
+both     s580/fx/Ffill.sv 
+pre      s580/fx/G1.sv 
+post3    s580/fx/G2.sv 
+both     s580/fx/G2q.sv 
+both     s580/fx/L1.sv 
+both     s580/fx/L2.sv 
+both     s580/fx/L3.sv 
+both     s580/fx/L4.sv 
+both     s580/fx/L5.sv 
+both     s580/fx/L6.sv 
+both     s580/fx/L7.sv 
+both     s580/fx/L8.sv 
+both     s580/probes/repro_inside_op.sv 
+both     s580/probes/repro_inside_op.sv -DTWO_STATE
+both     s580/probes/var_el.sv 
+both     s580/ident/I01.sv 
+both     s580/ident/I02.sv 
+both     s580/ident/I03.sv 
+both     s580/ident/I04.sv 
+both     s580/ident/I05.sv 
+both     s580/ident/I06.sv 
+both     s580/ident/I10.sv 
+both     s580/ident/I11.sv 
+both     s580/ident/I12.sv 
+both     s580/ident/I13.sv 
+post3    s580/r2/CD1.sv 
+both     s580/r2/OR1.sv 
+both     s580/r2/OR1.sv -DIV
+both     s580/r2/OR2.sv 
+both     s580/r2/OR2.sv -DIV
+pre      s580/r2/SL1.sv 
+pre      s580/r2/SL1q.sv 
+post3    s580/r2/fx2/H01.sv 
+neither  s580/r2/fx2/H02.sv 
+         NEW  H02.sv:11:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `Q6` value is not a constant: 4'b0?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  H02.sv:14:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `I2` value is not a constant: 4'b1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=2 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  H02.sv:13:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `I1` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+         PRE  errors=3 warnings=0 notes=0
+         POST3 gen-q then
+         POST3 Q 1 1 0 1 0 1 0 I 1 1 bits 2
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+pre      s580/r2/fx2/H02q.sv 
+neither  s580/r2/fx2/H03.sv 
+         NEW  L 0 0 0 bits 2 2 1 size 2   [!PRE !POST3]
+         PRE  L 0 0 0 bits 1 1 1 size x
+         POST3 L 0 0 0 bits 2 2 2 size 2
+both     s580/r2/fx2/H04.sv 
+both     s580/r2/fx2/H05.sv 
+both     s580/r2/fx2/H05w.sv 
+both     s580/r2/fx2/H06.sv 
+post3    s580/r2/fx2/H07.sv 
+post3    s580/r2/fx2/H08.sv 
+post3    s580/r2/r26/S01A.sv 
+post3    s580/r2/r26/S01B.sv 
+post3    s580/r2/r26/S01G.sv 
+post3    s580/r2/r26/S01L.sv 
+post3    s580/r2/r26/S01O.sv 
+post3    s580/r2/r26/S02A.sv 
+post3    s580/r2/r26/S02B.sv 
+post3    s580/r2/r26/S02G.sv 
+post3    s580/r2/r26/S02L.sv 
+post3    s580/r2/r26/S02O.sv 
+post3    s580/r2/r26/S03A.sv 
+post3    s580/r2/r26/S03B.sv 
+post3    s580/r2/r26/S03G.sv 
+post3    s580/r2/r26/S03L.sv 
+post3    s580/r2/r26/S03O.sv 
+pre      s580/r2/r26/S04A.sv 
+pre      s580/r2/r26/S04B.sv 
+pre      s580/r2/r26/S04G.sv 
+pre      s580/r2/r26/S04L.sv 
+pre      s580/r2/r26/S04O.sv 
+pre      s580/r2/r26/S05A.sv 
+pre      s580/r2/r26/S05B.sv 
+both     s580/r2/r26/S05G.sv 
+both     s580/r2/r26/S05L.sv 
+both     s580/r2/r26/S05O.sv 
+both     s580/r2/r26/S06A.sv 
+both     s580/r2/r26/S06B.sv 
+both     s580/r2/r26/S06G.sv 
+both     s580/r2/r26/S06L.sv 
+both     s580/r2/r26/S06O.sv 
+pre      s580/r2/r26/S07A.sv 
+pre      s580/r2/r26/S07B.sv 
+both     s580/r2/r26/S07G.sv 
+both     s580/r2/r26/S07L.sv 
+both     s580/r2/r26/S07O.sv 
+pre      s580/r2/r26/S08A.sv 
+pre      s580/r2/r26/S08B.sv 
+both     s580/r2/r26/S08G.sv 
+both     s580/r2/r26/S08L.sv 
+both     s580/r2/r26/S08O.sv 
+both     s580/r2/r26/S09A.sv 
+both     s580/r2/r26/S09B.sv 
+both     s580/r2/r26/S09G.sv 
+both     s580/r2/r26/S09L.sv 
+both     s580/r2/r26/S09O.sv 
+both     s580/r2/r26/S10A.sv 
+both     s580/r2/r26/S10B.sv 
+both     s580/r2/r26/S10G.sv 
+both     s580/r2/r26/S10L.sv 
+both     s580/r2/r26/S10O.sv 
+post3    s580/r2/r26/S11A.sv 
+post3    s580/r2/r26/S11B.sv 
+post3    s580/r2/r26/S11G.sv 
+post3    s580/r2/r26/S11L.sv 
+post3    s580/r2/r26/S11O.sv 
+both     s580/r2/r26/S12A.sv 
+both     s580/r2/r26/S12B.sv 
+both     s580/r2/r26/S12G.sv 
+both     s580/r2/r26/S12L.sv 
+both     s580/r2/r26/S12O.sv 
+pre      s580/r2/r26/S13A.sv 
+pre      s580/r2/r26/S13B.sv 
+pre      s580/r2/r26/S13G.sv 
+pre      s580/r2/r26/S13L.sv 
+pre      s580/r2/r26/S13O.sv 
+pre      s580/r2/r26/S14A.sv 
+pre      s580/r2/r26/S14B.sv 
+both     s580/r2/r26/S14G.sv 
+both     s580/r2/r26/S14L.sv 
+both     s580/r2/r26/S14O.sv 
+post3    s580/r2/r26/S15A.sv 
+post3    s580/r2/r26/S15B.sv 
+post3    s580/r2/r26/S15G.sv 
+post3    s580/r2/r26/S15L.sv 
+post3    s580/r2/r26/S15O.sv 
+both     s580/r2/r26/S16A.sv 
+both     s580/r2/r26/S16B.sv 
+both     s580/r2/r26/S16G.sv 
+both     s580/r2/r26/S16L.sv 
+both     s580/r2/r26/S16O.sv 
+both     s580/r2/r26/S17A.sv 
+both     s580/r2/r26/S17B.sv 
+both     s580/r2/r26/S17G.sv 
+both     s580/r2/r26/S17L.sv 
+both     s580/r2/r26/S17O.sv 
+both     s580/r2/r26/S18A.sv 
+both     s580/r2/r26/S18B.sv 
+both     s580/r2/r26/S18G.sv 
+both     s580/r2/r26/S18L.sv 
+both     s580/r2/r26/S18O.sv 
+pre      s580/r2/r26/X1.sv 
+both     s580/r2/r26/X2.sv 
+post3    s580/r2/r26/X3.sv 
+pre      s580/r2/r26/X4.sv 
+post3    s580/r4/fx/H07C.sv 
+neither  s580/r4/fx/I12.sv 
+         NEW  I12.sv:6:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `I2` value is not a constant: 4'b1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  I12.sv:7:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `Q6` value is not a constant: 4'b0?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=2 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  I12.sv:5:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `I1` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+         PRE  errors=3 warnings=0 notes=0
+         POST3 I 1 1 1
+         POST3 simulation ended (Finish) at time 0
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+neither  s580/r4/fx/K02.sv 
+         NEW  gen-q then   [!PRE !POST3]
+         NEW  case-label item   [!PRE !POST3]
+         NEW  case-compound default   [=PRE !POST3]
+         NEW  Q 1 1 0 1 0 0   [!PRE !POST3]
+         NEW  bits 2 2 2 1 1 1 size 2 x   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 2   [=PRE !POST3]
+         NEW  errors=0 warnings=0 notes=0   [=PRE !POST3]
+         NEW  rc=0   [=PRE !POST3]
+         PRE  gen-q else
+         PRE  case-label default
+         PRE  Q 0 0 1 0 1 1
+         PRE  bits 1 1 1 1 1 1 size x x
+         POST3 K02.sv:15:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+         POST3 K02.sv:16:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+         POST3 K02.sv:18:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x
+         POST3 K02.sv:26:5: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern
+         POST3 errors=4 warnings=0 notes=0
+         POST3 rc=1
+pre      s580/r4/fx/K02q.sv 
+both     s580/r4/fx/K07.sv 
+post3    s580/lens_snd/probes/P1.sv 
+post3    s580/lens_snd/probes/P1.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P2a.sv 
+post3    s580/lens_snd/probes/P2b.sv 
+post3    s580/lens_snd/probes/P2c.sv 
+both     s580/lens_snd/probes/P3.sv 
+both     s580/lens_snd/probes/P3.sv -DNO_INSIDE
+neither  s580/lens_snd/probes/P4a.sv 
+         NEW  rbs=2 rbu=2 rb2=1 rb1=2   [!PRE !POST3]
+         NEW  rbsq=2 rbuq=2 rb2q=1   [!PRE !POST3]
+         PRE  rbs=1 rbu=1 rb2=1 rb1=1
+         PRE  rbsq=2 rbuq=1 rb2q=1
+         POST3 rbs=2 rbu=2 rb2=2 rb1=2
+         POST3 rbsq=2 rbuq=2 rb2q=2
+neither  s580/lens_snd/probes/P4a.sv -DNO_INSIDE
+         NEW  rbsq=2 rbuq=2 rb2q=1   [!PRE !POST3]
+         PRE  rbsq=2 rbuq=1 rb2q=1
+         POST3 rbsq=2 rbuq=2 rb2q=2
+both     s580/lens_snd/probes/P4b.sv 
+both     s580/lens_snd/probes/P4b.sv -DNO_INSIDE
+neither  s580/lens_snd/probes/P5.sv 
+         NEW  P5.sv:8:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LWQ` value is not a constant: 4'b000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=1 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P5.sv:6:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LN` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  errors=2 warnings=1 notes=0
+         POST3 LW=0 LN=0 F1=1 F2=1 F3=1
+         POST3 LWQ=0 FQ=1
+         POST3 simulation ended (Finish) at time 1
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+pre      s580/lens_snd/probes/P5.sv -DNO_INSIDE
+post3    s580/lens_snd/probes/P7.sv 
+post3    s580/lens_snd/probes/P7.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P8.sv 
+both     s580/lens_snd/probes/P8.sv -DNO_INSIDE
+both     s580/lens_snd/probes/P9.sv 
+both     s580/lens_snd/probes/P9.sv -DNO_INSIDE
+both     s580/lens_diff/P01.sv 
+both     s580/lens_diff/P01.sv -DIV
+both     s580/lens_diff/P02.sv 
+both     s580/lens_diff/P02.sv -DIV
+post3    s580/lens_diff/P03.sv 
+post3    s580/lens_diff/P03.sv -DB
+post3    s580/lens_diff/P03.sv -DRL
+post3    s580/lens_diff/P03.sv -DIV
+post3    s580/lens_diff/P03.sv -DB -DIV
+both     s580/lens_diff/P03.sv -DRL -DIV
+both     s580/lens_diff/P04.sv 
+both     s580/lens_diff/P04.sv -DIV
+both     s580/lens_diff/P05.sv 
+both     s580/lens_diff/P05.sv -DK1
+both     s580/lens_diff/P05.sv -DK2
+both     s580/lens_diff/P05.sv -DK3
+both     s580/lens_diff/P05.sv -DK4
+both     s580/lens_diff/P05.sv -DK5
+both     s580/lens_diff/P05.sv -DK7
+both     s580/lens_diff/P05.sv -DK8
+both     s580/lens_diff/P05.sv -DK9
+both     s580/lens_diff/P05.sv -DIV
+both     s580/lens_diff/P05.sv -DK1 -DIV
+both     s580/lens_diff/P05.sv -DK2 -DIV
+both     s580/lens_diff/P05.sv -DK3 -DIV
+both     s580/lens_diff/P05.sv -DK4 -DIV
+both     s580/lens_diff/P05.sv -DK5 -DIV
+both     s580/lens_diff/P05.sv -DK7 -DIV
+both     s580/lens_diff/P05.sv -DK8 -DIV
+both     s580/lens_diff/P05.sv -DK9 -DIV
+both     s580/lens_diff/P05g.sv 
+both     s580/lens_diff/P05g.sv -DK1
+both     s580/lens_diff/P05g.sv -DK2
+both     s580/lens_diff/P05g.sv -DK3
+both     s580/lens_diff/P05g.sv -DK4
+both     s580/lens_diff/P05g.sv -DK5
+both     s580/lens_diff/P05g.sv -DK7
+both     s580/lens_diff/P05g.sv -DK8
+both     s580/lens_diff/P05g.sv -DK9
+both     s580/lens_diff/P05g.sv -DIV
+both     s580/lens_diff/P05g.sv -DK1 -DIV
+both     s580/lens_diff/P05g.sv -DK2 -DIV
+both     s580/lens_diff/P05g.sv -DK3 -DIV
+both     s580/lens_diff/P05g.sv -DK4 -DIV
+both     s580/lens_diff/P05g.sv -DK5 -DIV
+both     s580/lens_diff/P05g.sv -DK7 -DIV
+both     s580/lens_diff/P05g.sv -DK8 -DIV
+both     s580/lens_diff/P05g.sv -DK9 -DIV
+post3    s580/lens_diff/P06.sv 
+post3    s580/lens_diff/P06.sv -DFIN
+post3    s580/lens_diff/P06.sv -DFJ
+post3    s580/lens_diff/P06.sv -DFRC
+post3    s580/lens_diff/P06.sv -DIFC
+post3    s580/lens_diff/P06v.sv 
+post3    s580/lens_diff/P06v.sv -DFIN
+post3    s580/lens_diff/P06v.sv -DFJ
+post3    s580/lens_diff/P06v.sv -DFRC
+post3    s580/lens_diff/P06v.sv -DIFC
+post3    s580/lens_diff/P06v.sv -DNOGC
+both     s580/lens_diff/P07.sv 
+both     s580/lens_diff/P07.sv -DARR
+both     s580/lens_diff/P07.sv -DLETT
+both     s580/lens_diff/P07.sv -DIV
+both     s580/lens_diff/P07.sv -DARR -DIV
+both     s580/lens_diff/P07.sv -DLETT -DIV
+both     s580/lens_diff/P08.sv 
+both     s580/lens_diff/P08.sv -DIV
+both     s580/lens_diff/P08b.sv 
+post3    s580/lens_diff/P08b.sv -DIV
+both     s580/lens_diff/P09.sv 
+both     s580/lens_diff/P09.sv -DNOP
+both     s580/lens_diff/P09.sv -DIV
+both     s580/lens_diff/P09.sv -DNOP -DIV
+both     s580/lens_diff/P10.sv 
+both     s580/lens_diff/P10.sv -DIV
+post3    s580/lens_diff/P10b.sv 
+post3    s580/lens_diff/P10b.sv -DIV
+both     s580/lens_diff/P10c.sv 
+post3    s580/lens_diff/P10c.sv -DIV
+both     s580/lens_diff/P11.sv 
+neither  s580/lens_diff2/Q1.sv 
+         NEW  Q1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 5'sb0?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 8'b0000_111? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L15` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:34:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L16` value is not a constant: 64'h8000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 129'h1_0000_0000_0000_0000_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L18` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:48:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L30` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:52:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L31` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:54:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L33` value is not a constant: 66'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:55:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L34` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:56:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L35` value is not a constant: 66'sh0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:57:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L36` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:58:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L37` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:61:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L40` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:64:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M01` value is not a constant: 5'b1?000 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=15 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  Q1.sv:19:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L01` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L02` value is not a constant: 5'b1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:21:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L03` value is not a constant: 5'b1111? has no constant-fold arm [in t]
+         PRE  Q1.sv:22:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L04` value is not a constant: 8'b1111_111? has no constant-fold arm [in t]
+         PRE  Q1.sv:23:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L05` value is not a constant: 8'b1111_111? has no constant-fold arm [in t]
+         PRE  Q1.sv:25:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L07` value is not a constant: 9'b0_0001_000? has no constant-fold arm [in t]
+         PRE  Q1.sv:26:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L08` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:30:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L12` value is not a constant: 5'b0?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 'b1?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L14` value is not a constant: 3'b1?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L19` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L21` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:40:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L22` value is not a constant: 8'sb1111_11?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:41:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L23` value is not a constant: 8'b0000_011? has no constant-fold arm [in t]
+         PRE  Q1.sv:42:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L24` value is not a constant: 8'sb0000_001? has no constant-fold arm [in t]
+         PRE  Q1.sv:44:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L26` value is not a constant: 'bx_1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:60:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L39` value is not a constant: 4'b011? has no constant-fold arm [in t]
+         PRE  Q1.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L41` value is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q1.sv:63:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L42` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=34 warnings=1 notes=0
+         POST3 L01 1
+         POST3 R01 1
+         POST3 L02 1
+         POST3 R02 1
+         POST3 L03 1
+         POST3 R03 1
+         POST3 L04 1
+         POST3 R04 1
+         POST3 L05 1
+         POST3 R05 1
+         POST3 L06 0
+         POST3 R06 0
+         POST3 L07 1
+         POST3 R07 1
+         POST3 L08 1
+         POST3 R08 1
+         POST3 L09 0
+         POST3 R09 0
+         POST3 L10 1
+         POST3 R10 1
+         POST3 L11 1
+         POST3 R11 1
+         POST3 L12 1
+         POST3 R12 1
+         POST3 L13 1
+         POST3 R13 1
+         POST3 L14 1
+         POST3 R14 1
+         POST3 L15 1
+         POST3 R15 1
+         POST3 L16 1
+         POST3 R16 1
+         POST3 L17 1
+         POST3 R17 1
+         POST3 L18 1
+         POST3 R18 1
+         POST3 L19 1
+         POST3 R19 1
+         POST3 L20 0
+         POST3 R20 0
+         POST3 L21 1
+         POST3 R21 1
+         POST3 L22 1
+         POST3 R22 1
+         POST3 L23 1
+         POST3 R23 1
+         POST3 L24 1
+         POST3 R24 1
+         POST3 L25 0
+         POST3 R25 0
+         POST3 L26 1
+         POST3 R26 1
+         POST3 L27 0
+         POST3 R27 0
+         POST3 L28 1
+         POST3 R28 1
+         POST3 L29 0
+         POST3 R29 0
+         POST3 L30 1
+         POST3 R30 1
+         POST3 L31 1
+         POST3 R31 1
+         POST3 L32 0
+         POST3 R32 0
+         POST3 L33 1
+         POST3 R33 1
+         POST3 L34 1
+         POST3 R34 1
+         POST3 L35 1
+         POST3 R35 1
+         POST3 L36 1
+         POST3 R36 1
+         POST3 L37 1
+         POST3 R37 1
+         POST3 L38 0
+         POST3 R38 0
+         POST3 L39 1
+         POST3 R39 1
+         POST3 L40 1
+         POST3 R40 1
+         POST3 L41 1
+         POST3 R41 1
+         POST3 L42 1
+         POST3 R42 1
+         POST3 M01 1
+         POST3 RM01 1
+         POST3 M02 1
+         POST3 RM02 1
+         POST3 M03 1
+         POST3 RM03 1
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+neither  s580/lens_diff2/Q1.sv -DWX
+         NEW  Q1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 5'sb0?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 8'b0000_111? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L15` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:34:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L16` value is not a constant: 64'h8000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 129'h1_0000_0000_0000_0000_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L18` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:48:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L30` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:52:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L31` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:54:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L33` value is not a constant: 66'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:55:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L34` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:56:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L35` value is not a constant: 66'sh0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:57:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L36` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:58:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L37` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:61:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L40` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:64:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M01` value is not a constant: 5'b1?000 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=34 warnings=1 notes=0   [!PRE !POST3]
+         PRE  Q1.sv:19:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L01` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L02` value is not a constant: 5'b1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:21:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L03` value is not a constant: 5'b1111? has no constant-fold arm [in t]
+         PRE  Q1.sv:22:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L04` value is not a constant: 8'b1111_111? has no constant-fold arm [in t]
+         PRE  Q1.sv:23:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L05` value is not a constant: 8'b1111_111? has no constant-fold arm [in t]
+         PRE  Q1.sv:25:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L07` value is not a constant: 9'b0_0001_000? has no constant-fold arm [in t]
+         PRE  Q1.sv:26:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L08` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:30:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L12` value is not a constant: 5'b0?000 has no constant-fold arm [in t]
+         PRE  Q1.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 'b1?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L14` value is not a constant: 3'b1?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L19` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L21` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:40:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L22` value is not a constant: 8'sb1111_11?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:41:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L23` value is not a constant: 8'b0000_011? has no constant-fold arm [in t]
+         PRE  Q1.sv:42:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L24` value is not a constant: 8'sb0000_001? has no constant-fold arm [in t]
+         PRE  Q1.sv:44:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L26` value is not a constant: 'bx_1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:60:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L39` value is not a constant: 4'b011? has no constant-fold arm [in t]
+         PRE  Q1.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L41` value is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q1.sv:63:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L42` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=53 warnings=1 notes=0
+         POST3 errors=19 warnings=1 notes=0
+neither  s580/lens_diff2/Q1.sv -DIV
+         NEW  Q1.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L09` value is not a constant: 5'b1?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 5'sb0?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 8'b0000_111? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L15` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:34:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L16` value is not a constant: 64'h8000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 129'h1_0000_0000_0000_0000_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L18` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:47:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L29` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:48:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L30` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:52:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L31` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:53:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L32` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:54:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L33` value is not a constant: 66'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:55:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L34` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:56:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L35` value is not a constant: 66'sh0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:57:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L36` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:58:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L37` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:61:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L40` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:64:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M01` value is not a constant: 5'b0?001 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:65:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M02` value is not a constant: 5'b0?001 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:66:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M03` value is not a constant: 65'h0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=20 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  Q1.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 'b1?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L19` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:38:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L20` value is not a constant: 8'b1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L21` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:40:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L22` value is not a constant: 8'sb1111_11?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:41:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L23` value is not a constant: 8'b0000_011? has no constant-fold arm [in t]
+         PRE  Q1.sv:43:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L25` value is not a constant: 'b1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:44:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L26` value is not a constant: 'bx_1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:59:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L38` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  Q1.sv:60:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L39` value is not a constant: 4'b011? has no constant-fold arm [in t]
+         PRE  Q1.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L41` value is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q1.sv:63:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L42` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=32 warnings=1 notes=0
+         POST3 L01 1
+         POST3 R01 1
+         POST3 L02 1
+         POST3 R02 1
+         POST3 L03 1
+         POST3 R03 1
+         POST3 L04 1
+         POST3 R04 1
+         POST3 L05 1
+         POST3 R05 1
+         POST3 L06 0
+         POST3 R06 0
+         POST3 L07 1
+         POST3 R07 1
+         POST3 L08 1
+         POST3 R08 1
+         POST3 L09 0
+         POST3 R09 0
+         POST3 L10 1
+         POST3 R10 1
+         POST3 L11 1
+         POST3 R11 1
+         POST3 L12 1
+         POST3 R12 1
+         POST3 L13 1
+         POST3 R13 1
+         POST3 L14 1
+         POST3 R14 1
+         POST3 L15 1
+         POST3 R15 1
+         POST3 L16 1
+         POST3 R16 1
+         POST3 L17 1
+         POST3 R17 1
+         POST3 L18 1
+         POST3 R18 1
+         POST3 L19 1
+         POST3 R19 1
+         POST3 L20 0
+         POST3 R20 0
+         POST3 L21 1
+         POST3 R21 1
+         POST3 L22 1
+         POST3 R22 1
+         POST3 L23 1
+         POST3 R23 1
+         POST3 L24 1
+         POST3 R24 1
+         POST3 L25 0
+         POST3 R25 0
+         POST3 L26 1
+         POST3 R26 1
+         POST3 L27 0
+         POST3 R27 0
+         POST3 L28 1
+         POST3 R28 1
+         POST3 L29 0
+         POST3 R29 0
+         POST3 L30 1
+         POST3 R30 1
+         POST3 L31 1
+         POST3 R31 1
+         POST3 L32 0
+         POST3 R32 0
+         POST3 L33 1
+         POST3 R33 1
+         POST3 L34 1
+         POST3 R34 1
+         POST3 L35 1
+         POST3 R35 1
+         POST3 L36 1
+         POST3 R36 1
+         POST3 L37 1
+         POST3 R37 1
+         POST3 L38 0
+         POST3 R38 0
+         POST3 L39 1
+         POST3 R39 1
+         POST3 L40 1
+         POST3 R40 1
+         POST3 L41 1
+         POST3 R41 1
+         POST3 L42 1
+         POST3 R42 1
+         POST3 M01 1
+         POST3 RM01 1
+         POST3 M02 1
+         POST3 RM02 1
+         POST3 M03 1
+         POST3 RM03 1
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+neither  s580/lens_diff2/Q1.sv -DWX -DIV
+         NEW  Q1.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L09` value is not a constant: 5'b1?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L10` value is not a constant: 5'sb0?010 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L11` value is not a constant: 8'b0000_111? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:33:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L15` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:34:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L16` value is not a constant: 64'h8000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L17` value is not a constant: 129'h1_0000_0000_0000_0000_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L18` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:47:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L29` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:48:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L30` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:52:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L31` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:53:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L32` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:54:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L33` value is not a constant: 66'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:55:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L34` value is not a constant: 66'sh3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:56:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L35` value is not a constant: 66'sh0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:57:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L36` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:58:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L37` value is not a constant: 66'h3_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:61:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L40` value is not a constant: 65'h0_FFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:64:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M01` value is not a constant: 5'b0?001 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:65:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M02` value is not a constant: 5'b0?001 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  Q1.sv:66:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `M03` value is not a constant: 65'h0_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=39 warnings=1 notes=0   [!PRE !POST3]
+         PRE  Q1.sv:31:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L13` value is not a constant: 'b1?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L19` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:38:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L20` value is not a constant: 8'b1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L21` value is not a constant: 8'sb1111_11?0 has no constant-fold arm [in t]
+         PRE  Q1.sv:40:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L22` value is not a constant: 8'sb1111_11?1 has no constant-fold arm [in t]
+         PRE  Q1.sv:41:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L23` value is not a constant: 8'b0000_011? has no constant-fold arm [in t]
+         PRE  Q1.sv:43:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L25` value is not a constant: 'b1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:44:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L26` value is not a constant: 'bx_1?010 has no constant-fold arm [in t]
+         PRE  Q1.sv:59:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L38` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  Q1.sv:60:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L39` value is not a constant: 4'b011? has no constant-fold arm [in t]
+         PRE  Q1.sv:62:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L41` value is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q1.sv:63:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L42` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=51 warnings=1 notes=0
+         POST3 errors=19 warnings=1 notes=0
+both     s580/lens_diff2/Q2.sv 
+post3    s580/lens_diff2/Q2.sv -DCONSTS
+both     s580/lens_diff2/Q2.sv -DIV
+post3    s580/lens_diff2/Q2.sv -DCONSTS -DIV
+post3    s580/lens_diff2/Q3.sv 
+post3    s580/lens_diff2/Q3.sv -DADT
+post3    s580/lens_diff2/Q3.sv -DFBODY
+neither  s580/lens_diff2/Q3.sv -DFNRX
+         NEW  G1 then   [!PRE !POST3]
+         NEW  GS then   [!PRE !POST3]
+         NEW  GC1 one   [!PRE !POST3]
+         NEW  GL lab1   [!PRE !POST3]
+         NEW  FNRX 1   [!PRE !POST3]
+         NEW  OV1 1 1   [!PRE !POST3]
+         NEW  OVS 1 1   [!PRE !POST3]
+         NEW  OV0 0 1   [!PRE !POST3]
+         NEW  PK1 1   [!PRE !POST3]
+         NEW  PK0 0   [!PRE !POST3]
+         NEW  LF1 1   [!PRE !POST3]
+         NEW  LF0 0   [!PRE !POST3]
+         NEW  LT1 1   [!PRE !POST3]
+         NEW  LG 0   [!PRE !POST3]
+         NEW  RB1 4   [!PRE !POST3]
+         NEW  RB0 2   [!PRE !POST3]
+         NEW  RBS 4   [!PRE !POST3]
+         NEW  AD1 4   [!PRE !POST3]
+         NEW  ADS 4   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 3   [!PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=0   [!PRE !POST3]
+         PRE  error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+         PRE  Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+         PRE  errors=11 warnings=3 notes=0
+         PRE  rc=1
+         POST3 Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_diff2/Q3.sv -DGA
+post3    s580/lens_diff2/Q3.sv -DGFOR
+post3    s580/lens_diff2/Q3.sv -DPSEL
+neither  s580/lens_diff2/Q3.sv -DRBB
+         NEW  Q3.sv:37:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in t]   [=PRE !POST3]
+         NEW  errors=1 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+         PRE  Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+         PRE  errors=12 warnings=3 notes=0
+         POST3 G1 then
+         POST3 GS then
+         POST3 GC1 one
+         POST3 GL lab1
+         POST3 RBB 2
+         POST3 OV1 1 1
+         POST3 OVS 1 1
+         POST3 OV0 0 1
+         POST3 PK1 1
+         POST3 PK0 0
+         POST3 LF1 1
+         POST3 LF0 0
+         POST3 LT1 1
+         POST3 LG 0
+         POST3 RB1 4
+         POST3 RB0 2
+         POST3 RBS 4
+         POST3 AD1 4
+         POST3 ADS 4
+         POST3 simulation ended (Finish) at time 3
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+post3    s580/lens_diff2/Q3.sv -DRBT
+post3    s580/lens_diff2/Q3.sv -DREPX
+both     s580/lens_diff2/Q3.sv -DSTX
+neither  s580/lens_diff2/Q3.sv -DTDX
+         NEW  G1 then   [!PRE !POST3]
+         NEW  GS then   [!PRE !POST3]
+         NEW  GC1 one   [!PRE !POST3]
+         NEW  GL lab1   [!PRE !POST3]
+         NEW  TDX 1   [!PRE !POST3]
+         NEW  OV1 1 1   [!PRE !POST3]
+         NEW  OVS 1 1   [!PRE !POST3]
+         NEW  OV0 0 1   [!PRE !POST3]
+         NEW  PK1 1   [!PRE !POST3]
+         NEW  PK0 0   [!PRE !POST3]
+         NEW  LF1 1   [!PRE !POST3]
+         NEW  LF0 0   [!PRE !POST3]
+         NEW  LT1 1   [!PRE !POST3]
+         NEW  LG 0   [!PRE !POST3]
+         NEW  RB1 4   [!PRE !POST3]
+         NEW  RB0 2   [!PRE !POST3]
+         NEW  RBS 4   [!PRE !POST3]
+         NEW  AD1 4   [!PRE !POST3]
+         NEW  ADS 4   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 3   [!PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=0   [!PRE !POST3]
+         PRE  error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PK1` value is not a foldable constant [in pk]
+         PRE  Q3.sv:20:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LF1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:22:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `LT1` value is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:29:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:31:9: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case scrutinee is not a constant: 5'b1?000 has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:26:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u1]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u2]
+         PRE  Q3.sv:14:75: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `PD` value is not a constant: 5'b1?000 has no constant-fold arm [in t.u3]
+         PRE  errors=11 warnings=3 notes=0
+         PRE  rc=1
+         POST3 Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_diff2/Q3.sv -DXBEFORE
+post3    s580/lens_diff2/Q3.sv -DIV
+post3    s580/lens_diff2/Q3.sv -DADT -DIV
+post3    s580/lens_diff2/Q3.sv -DFBODY -DIV
+neither  s580/lens_diff2/Q3.sv -DFNRX -DIV
+         NEW  G1 then   [!PRE !POST3]
+         NEW  GS then   [!PRE !POST3]
+         NEW  GC1 one   [!PRE !POST3]
+         NEW  GL lab1   [!PRE !POST3]
+         NEW  FNRX 1   [!PRE !POST3]
+         NEW  OV1 1 1   [!PRE !POST3]
+         NEW  OVS 1 1   [!PRE !POST3]
+         NEW  OV0 0 1   [!PRE !POST3]
+         NEW  PK1 1   [!PRE !POST3]
+         NEW  PK0 0   [!PRE !POST3]
+         NEW  LF1 1   [!PRE !POST3]
+         NEW  LF0 0   [!PRE !POST3]
+         NEW  LT1 1   [!PRE !POST3]
+         NEW  LG 0   [!PRE !POST3]
+         NEW  RB1 4   [!PRE !POST3]
+         NEW  RB0 2   [!PRE !POST3]
+         NEW  RBS 4   [!PRE !POST3]
+         NEW  AD1 4   [!PRE !POST3]
+         NEW  ADS 4   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 3   [!PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=0   [!PRE !POST3]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  errors=2 warnings=2 notes=0
+         PRE  rc=1
+         POST3 Q3.sv:58:29: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_diff2/Q3.sv -DGA -DIV
+post3    s580/lens_diff2/Q3.sv -DGFOR -DIV
+post3    s580/lens_diff2/Q3.sv -DPSEL -DIV
+neither  s580/lens_diff2/Q3.sv -DRBB -DIV
+         NEW  Q3.sv:37:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a `$bits` that is not a constant here is not allowed in a constant range bound [in t]   [=PRE !POST3]
+         NEW  errors=1 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  errors=3 warnings=2 notes=0
+         POST3 G1 then
+         POST3 GS then
+         POST3 GC1 one
+         POST3 GL lab1
+         POST3 RBB 2
+         POST3 OV1 1 1
+         POST3 OVS 1 1
+         POST3 OV0 0 1
+         POST3 PK1 1
+         POST3 PK0 0
+         POST3 LF1 1
+         POST3 LF0 0
+         POST3 LT1 1
+         POST3 LG 0
+         POST3 RB1 4
+         POST3 RB0 2
+         POST3 RBS 4
+         POST3 AD1 4
+         POST3 ADS 4
+         POST3 simulation ended (Finish) at time 3
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+post3    s580/lens_diff2/Q3.sv -DRBT -DIV
+post3    s580/lens_diff2/Q3.sv -DREPX -DIV
+both     s580/lens_diff2/Q3.sv -DSTX -DIV
+neither  s580/lens_diff2/Q3.sv -DTDX -DIV
+         NEW  G1 then   [!PRE !POST3]
+         NEW  GS then   [!PRE !POST3]
+         NEW  GC1 one   [!PRE !POST3]
+         NEW  GL lab1   [!PRE !POST3]
+         NEW  TDX 1   [!PRE !POST3]
+         NEW  OV1 1 1   [!PRE !POST3]
+         NEW  OVS 1 1   [!PRE !POST3]
+         NEW  OV0 0 1   [!PRE !POST3]
+         NEW  PK1 1   [!PRE !POST3]
+         NEW  PK0 0   [!PRE !POST3]
+         NEW  LF1 1   [!PRE !POST3]
+         NEW  LF0 0   [!PRE !POST3]
+         NEW  LT1 1   [!PRE !POST3]
+         NEW  LG 0   [!PRE !POST3]
+         NEW  RB1 4   [!PRE !POST3]
+         NEW  RB0 2   [!PRE !POST3]
+         NEW  RBS 4   [!PRE !POST3]
+         NEW  AD1 4   [!PRE !POST3]
+         NEW  ADS 4   [!PRE !POST3]
+         NEW  simulation ended (Finish) at time 3   [!PRE !POST3]
+         NEW  errors=0 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=0   [!PRE !POST3]
+         PRE  Q3.sv:30:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: 4'sb111? has no constant-fold arm [in t]
+         PRE  Q3.sv:17:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `P` is not a constant; default kept [in t]
+         PRE  Q3.sv:27:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `P` is not a constant, so the declared default would be used instead — that is a different de
+         PRE  errors=2 warnings=2 notes=0
+         PRE  rc=1
+         POST3 Q3.sv:49:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits that has no constant value — its result is x,
+         POST3 errors=1 warnings=1 notes=0
+         POST3 rc=1
+post3    s580/lens_diff2/Q3.sv -DXBEFORE -DIV
+both     s580/lens_diff2/Q4.sv 
+both     s580/lens_diff2/Q4.sv -DSTM
+both     s580/lens_diff2/Q4.sv -DIV
+both     s580/lens_diff2/Q4.sv -DSTM -DIV
+both     s580/lens_diff2/Q5.sv 
+pre      s580/lens_diff2/Q5.sv -DCMP
+both     s580/lens_diff2/Q5.sv -DRTT
+post3    s580/lens_diff2/Q5.sv -DIV
+post3    s580/lens_diff2/Q5.sv -DCMP -DIV
+post3    s580/lens_diff2/Q5.sv -DRTT -DIV
+both     s580/lens_diff2/Q6.sv 
+both     s580/lens_diff2/Q6.sv -DPSEE
+both     s580/lens_diff2/Q6.sv -DPSEL
+both     s580/lens_diff2/Q6.sv -DREPE
+both     s580/lens_diff2/Q6.sv -DREPX
+pre      s580/lens_diff2/Q6.sv -DSTR
+both     s580/lens_diff2/Q6.sv -DXB
+both     s580/lens_diff2/Q6.sv -DXE
+both     s580/lens_diff2/Q6.sv -DXI
+both     s580/lens_diff2/Q6.sv -DIV
+both     s580/lens_diff2/Q6.sv -DPSEE -DIV
+both     s580/lens_diff2/Q6.sv -DPSEL -DIV
+both     s580/lens_diff2/Q6.sv -DREPE -DIV
+both     s580/lens_diff2/Q6.sv -DREPX -DIV
+pre      s580/lens_diff2/Q6.sv -DSTR -DIV
+both     s580/lens_diff2/Q6.sv -DXB -DIV
+both     s580/lens_diff2/Q6.sv -DXE -DIV
+both     s580/lens_diff2/Q6.sv -DXI -DIV
+both     s580/lens_diff2/Q7.sv 
+both     s580/lens_diff2/Q7.sv -DIV
+post3    s580/lens_diff2/Q8.sv 
+post3    s580/lens_diff2/Q8.sv -DIU
+post3    s580/lens_diff2/Q8.sv -DRR
+post3    s580/lens_diff2/Q8.sv -DIV
+post3    s580/lens_diff2/Q8.sv -DIU -DIV
+post3    s580/lens_diff2/Q8.sv -DRR -DIV
+post3    s580/lens_diff2/Q9.sv 
+post3    s580/lens_diff2/Q9.sv -DIV
+both     s580/lens_snd2/probes/P1.sv 
+both     s580/lens_snd2/probes/P1.sv -DONLYC
+both     s580/lens_snd2/probes/P1.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P1.sv -DONLYC -DNO_INSIDE
+post3    s580/lens_snd2/probes/P10.sv 
+post3    s580/lens_snd2/probes/P10.sv -DNO_INSIDE
+neither  s580/lens_snd2/probes/P2.sv 
+         NEW  P2.sv:16:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KW` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P2.sv:21:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KWq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=2 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P2.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KA` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KB` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KC` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KD` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KAq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:19:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KBq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:20:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KCq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  errors=9 warnings=0 notes=0
+         POST3 RI 1 1 1 1 1
+         POST3 KI 1 1 1 1 1
+         POST3 RQ 1 1 1 1
+         POST3 KQ 1 1 1 1
+         POST3 RZ 1 0
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+both     s580/lens_snd2/probes/P2.sv -DNOK
+neither  s580/lens_snd2/probes/P2.sv -DNO_INSIDE
+         NEW  P2.sv:21:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KWq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=1 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P2.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KAq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:19:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KBq` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P2.sv:20:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `KCq` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  errors=4 warnings=0 notes=0
+         POST3 RQ 1 1 1 1
+         POST3 KQ 1 1 1 1
+         POST3 RZ 1 0
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+both     s580/lens_snd2/probes/P2.sv -DNOK -DNO_INSIDE
+both     s580/lens_snd2/probes/P3.sv 
+both     s580/lens_snd2/probes/P3.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P4.sv 
+both     s580/lens_snd2/probes/P4.sv -DNOCLASS
+neither  s580/lens_snd2/probes/P5.sv 
+         NEW  P5.sv:16:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E9` value is not a constant: 'x has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:19:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W1` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:20:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W2` value is not a constant: 32'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:21:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W3` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:22:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W4` value is not a constant: 4'sb?100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:23:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W5` value is not a constant: 'x has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:24:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W6` value is not a constant: the `?` operation has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:25:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W7` value is not a constant: 68'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:26:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W8` value is not a constant: the `?` operation has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:27:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X1` value is not a constant: 4'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:28:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X2` value is not a constant: 4'b1x00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:29:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X3` value is not a constant: 4'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:32:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N2` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:33:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `N3` value is not a constant: 4'sb?100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=14 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P5.sv:8:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E1` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P5.sv:9:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E2` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+         PRE  P5.sv:10:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E3` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+         PRE  P5.sv:11:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E4` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  P5.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E5` value is not a constant: 'bx0 has no constant-fold arm [in t]
+         PRE  P5.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E6` value is not a constant: 'b1x0 has no constant-fold arm [in t]
+         PRE  P5.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E7` value is not a constant: 64'shFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+         PRE  P5.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E8` value is not a constant: 64'hFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+         PRE  P5.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E11` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=23 warnings=0 notes=0
+         POST3 RE 1 1 0 1 1 0 1 0 1 0 0
+         POST3 KE 1 1 0 1 1 0 1 0 1 0 0
+         POST3 RW 1 0 1 1 1 0 1 0
+         POST3 KW 1 0 1 1 1 0 1 0
+         POST3 X 1 1 0 / 1 1 0
+         POST3 N 1 1 1 / 1 1 1
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+neither  s580/lens_snd2/probes/P5.sv -DNO_INSIDE
+         NEW  P5.sv:16:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E9` value is not a constant: 'x has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:19:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W1` value is not a constant: 'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:20:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W2` value is not a constant: 32'bx1 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:21:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W3` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:22:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W4` value is not a constant: 4'sb?100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:23:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W5` value is not a constant: 'x has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:24:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W6` value is not a constant: the `?` operation has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:25:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W7` value is not a constant: 68'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:26:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `W8` value is not a constant: the `?` operation has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:27:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X1` value is not a constant: 4'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:28:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X2` value is not a constant: 4'b1x00 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P5.sv:29:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `X3` value is not a constant: 4'bx100 has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=12 warnings=0 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P5.sv:8:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E1` value is not a constant: 4'sb1?00 has no constant-fold arm [in t]
+         PRE  P5.sv:9:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E2` value is not a constant: 4'sb?100 has no constant-fold arm [in t]
+         PRE  P5.sv:10:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E3` value is not a constant: 4'b1?00 has no constant-fold arm [in t]
+         PRE  P5.sv:11:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E4` value is not a constant: 64'hFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  P5.sv:12:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E5` value is not a constant: 'bx0 has no constant-fold arm [in t]
+         PRE  P5.sv:13:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E6` value is not a constant: 'b1x0 has no constant-fold arm [in t]
+         PRE  P5.sv:14:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E7` value is not a constant: 64'shFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+         PRE  P5.sv:15:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E8` value is not a constant: 64'hFFFF_FFFF_FFFF_FF?8 has no constant-fold arm [in t]
+         PRE  P5.sv:18:24: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `E11` value is not a constant: 64'shFFFF_FFFF_FFFF_FFF? has no constant-fold arm [in t]
+         PRE  errors=21 warnings=0 notes=0
+         POST3 RE 1 1 0 1 1 0 1 0 1 0 0
+         POST3 KE 1 1 0 1 1 0 1 0 1 0 0
+         POST3 RW 1 0 1 1 1 0 1 0
+         POST3 KW 1 0 1 1 1 0 1 0
+         POST3 X 1 1 0 / 1 1 0
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=0 notes=0
+         POST3 rc=0
+both     s580/lens_snd2/probes/P6.sv 
+both     s580/lens_snd2/probes/P6.sv -DXI
+both     s580/lens_snd2/probes/P6.sv -DXV
+both     s580/lens_snd2/probes/P7.sv 
+both     s580/lens_snd2/probes/P7.sv -DU
+both     s580/lens_snd2/probes/P7.sv -DNO_INSIDE
+both     s580/lens_snd2/probes/P7.sv -DU -DNO_INSIDE
+both     s580/lens_snd2/probes/P8.sv 
+both     s580/lens_snd2/probes/P8.sv -DREALI
+both     s580/lens_snd2/probes/P8.sv -DREALL
+both     s580/lens_snd2/probes/P8.sv -DREALQ
+both     s580/lens_snd2/probes/P9.sv 
+both     s580/lens_snd2/probes/P9.sv -DQUEUE
+both     s580/lens_snd2/probes/P9.sv -DSFMT
+both     s580/lens_snd2/probes/P9.sv -DSTRI
+both     s580/lens_snd2/probes/P9.sv -DSTRV
+both     s580/lens_snd2/probes/P9.sv -DUARR
+both     s580/lens_diff3/G1.sv 
+both     s580/lens_diff3/G1.sv -DL1
+both     s580/lens_diff3/G1.sv -DL10
+both     s580/lens_diff3/G1.sv -DL10P
+both     s580/lens_diff3/G1.sv -DL11
+both     s580/lens_diff3/G1.sv -DL12
+both     s580/lens_diff3/G1.sv -DL1P
+pre      s580/lens_diff3/G1.sv -DL2
+both     s580/lens_diff3/G1.sv -DL2P
+pre      s580/lens_diff3/G1.sv -DL3
+pre      s580/lens_diff3/G1.sv -DL4
+both     s580/lens_diff3/G1.sv -DL4P
+pre      s580/lens_diff3/G1.sv -DL5
+pre      s580/lens_diff3/G1.sv -DL5N
+pre      s580/lens_diff3/G1.sv -DL6
+both     s580/lens_diff3/G1.sv -DL7
+both     s580/lens_diff3/G1.sv -DL8
+both     s580/lens_diff3/G1.sv -DL8P
+pre      s580/lens_diff3/G1.sv -DL9
+both     s580/lens_diff3/G1.sv -DIV
+both     s580/lens_diff3/G1.sv -DL1 -DIV
+both     s580/lens_diff3/G1.sv -DL10 -DIV
+both     s580/lens_diff3/G1.sv -DL10P -DIV
+both     s580/lens_diff3/G1.sv -DL11 -DIV
+both     s580/lens_diff3/G1.sv -DL12 -DIV
+both     s580/lens_diff3/G1.sv -DL1P -DIV
+pre      s580/lens_diff3/G1.sv -DL2 -DIV
+both     s580/lens_diff3/G1.sv -DL2P -DIV
+pre      s580/lens_diff3/G1.sv -DL3 -DIV
+pre      s580/lens_diff3/G1.sv -DL4 -DIV
+both     s580/lens_diff3/G1.sv -DL4P -DIV
+pre      s580/lens_diff3/G1.sv -DL5 -DIV
+pre      s580/lens_diff3/G1.sv -DL5N -DIV
+pre      s580/lens_diff3/G1.sv -DL6 -DIV
+both     s580/lens_diff3/G1.sv -DL7 -DIV
+both     s580/lens_diff3/G1.sv -DL8 -DIV
+both     s580/lens_diff3/G1.sv -DL8P -DIV
+pre      s580/lens_diff3/G1.sv -DL9 -DIV
+pre      s580/lens_diff3/G2.sv 
+pre      s580/lens_diff3/G2.sv -DM1
+pre      s580/lens_diff3/G2.sv -DM10
+pre      s580/lens_diff3/G2.sv -DM2
+pre      s580/lens_diff3/G2.sv -DM3
+pre      s580/lens_diff3/G2.sv -DM4
+pre      s580/lens_diff3/G2.sv -DM4P
+pre      s580/lens_diff3/G2.sv -DM6
+pre      s580/lens_diff3/G2.sv -DM7
+pre      s580/lens_diff3/G2.sv -DM8
+pre      s580/lens_diff3/G2.sv -DM9
+pre      s580/lens_diff3/G2.sv -DIV
+pre      s580/lens_diff3/G2.sv -DM1 -DIV
+pre      s580/lens_diff3/G2.sv -DM10 -DIV
+pre      s580/lens_diff3/G2.sv -DM2 -DIV
+pre      s580/lens_diff3/G2.sv -DM3 -DIV
+pre      s580/lens_diff3/G2.sv -DM4 -DIV
+pre      s580/lens_diff3/G2.sv -DM4P -DIV
+pre      s580/lens_diff3/G2.sv -DM6 -DIV
+pre      s580/lens_diff3/G2.sv -DM7 -DIV
+pre      s580/lens_diff3/G2.sv -DM8 -DIV
+pre      s580/lens_diff3/G2.sv -DM9 -DIV
+both     s580/lens_diff3/G3.sv 
+both     s580/lens_diff3/G3.sv -DM1
+both     s580/lens_diff3/G3.sv -DM10
+both     s580/lens_diff3/G3.sv -DM2
+both     s580/lens_diff3/G3.sv -DM3
+both     s580/lens_diff3/G3.sv -DM4
+both     s580/lens_diff3/G3.sv -DM4P
+both     s580/lens_diff3/G3.sv -DM6
+both     s580/lens_diff3/G3.sv -DM7
+both     s580/lens_diff3/G3.sv -DM8
+pre      s580/lens_diff3/G3.sv -DM9
+both     s580/lens_diff3/G3.sv -DM9P
+both     s580/lens_diff3/G3.sv -DIV
+both     s580/lens_diff3/G3.sv -DM1 -DIV
+both     s580/lens_diff3/G3.sv -DM10 -DIV
+both     s580/lens_diff3/G3.sv -DM2 -DIV
+both     s580/lens_diff3/G3.sv -DM3 -DIV
+both     s580/lens_diff3/G3.sv -DM4 -DIV
+both     s580/lens_diff3/G3.sv -DM4P -DIV
+both     s580/lens_diff3/G3.sv -DM6 -DIV
+both     s580/lens_diff3/G3.sv -DM7 -DIV
+both     s580/lens_diff3/G3.sv -DM8 -DIV
+pre      s580/lens_diff3/G3.sv -DM9 -DIV
+both     s580/lens_diff3/G3.sv -DM9P -DIV
+both     s580/lens_diff3/H1.sv 
+both     s580/lens_diff3/H1.sv -DH1
+both     s580/lens_diff3/H1.sv -DH2
+both     s580/lens_diff3/H1.sv -DH2I
+both     s580/lens_diff3/H1.sv -DH2U
+both     s580/lens_diff3/H1.sv -DH3
+both     s580/lens_diff3/H1.sv -DH3U
+both     s580/lens_diff3/H1.sv -DH4
+both     s580/lens_diff3/H1.sv -DH5
+both     s580/lens_diff3/H1.sv -DH6
+both     s580/lens_diff3/H1.sv -DH7
+both     s580/lens_diff3/H1.sv -DH8
+both     s580/lens_diff3/H1.sv -DIV
+both     s580/lens_diff3/H1.sv -DH1 -DIV
+both     s580/lens_diff3/H1.sv -DH2 -DIV
+both     s580/lens_diff3/H1.sv -DH2I -DIV
+both     s580/lens_diff3/H1.sv -DH2U -DIV
+both     s580/lens_diff3/H1.sv -DH3 -DIV
+both     s580/lens_diff3/H1.sv -DH3U -DIV
+both     s580/lens_diff3/H1.sv -DH4 -DIV
+both     s580/lens_diff3/H1.sv -DH5 -DIV
+both     s580/lens_diff3/H1.sv -DH6 -DIV
+both     s580/lens_diff3/H1.sv -DH7 -DIV
+both     s580/lens_diff3/H1.sv -DH8 -DIV
+both     s580/lens_diff3/H2.sv 
+both     s580/lens_diff3/H2.sv -DR01
+both     s580/lens_diff3/H2.sv -DR02
+both     s580/lens_diff3/H2.sv -DR03
+both     s580/lens_diff3/H2.sv -DR04
+both     s580/lens_diff3/H2.sv -DR05
+both     s580/lens_diff3/H2.sv -DR06
+both     s580/lens_diff3/H2.sv -DR07
+both     s580/lens_diff3/H2.sv -DR08
+both     s580/lens_diff3/H2.sv -DR09
+both     s580/lens_diff3/H2.sv -DR10
+both     s580/lens_diff3/H2.sv -DR11
+both     s580/lens_diff3/P1.sv 
+neither  s580/lens_diff3/P1.sv -DCONSTS
+         NEW  P1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K11` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K12` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K27` value is not a constant: 8'sb1110_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=3 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P1.sv:26:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K01` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]
+         PRE  P1.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K02` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]
+         PRE  P1.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K16` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K23` value is not a constant: 'sb0?11_1111_1111_1111_1111_1111_1111_1101 has no constant-fold arm [in t]
+         PRE  P1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K24` value is not a constant: 8'sb?110_0000 has no constant-fold arm [in t]
+         PRE  P1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K39` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  errors=9 warnings=1 notes=0
+         POST3 B01 1
+         POST3 B02 1
+         POST3 B03 1
+         POST3 B04 1
+         POST3 B05 1
+         POST3 B06 1
+         POST3 B07 1
+         POST3 B08 1
+         POST3 B09 1
+         POST3 B10 0
+         POST3 B11 1
+         POST3 B12 0
+         POST3 B13 0
+         POST3 B14 0
+         POST3 B15 0
+         POST3 B16 1
+         POST3 B17 1
+         POST3 B18 1
+         POST3 B19 1
+         POST3 B20 1
+         POST3 B21 1
+         POST3 B22 1
+         POST3 B23 0
+         POST3 B24 1
+         POST3 B25 1
+         POST3 B26 0
+         POST3 B27 1
+         POST3 B28 0
+         POST3 B29 0
+         POST3 B30 0
+         POST3 B31 0
+         POST3 B32 1
+         POST3 B33 1
+         POST3 B34 1
+         POST3 B35 1
+         POST3 B36 1
+         POST3 B37 1
+         POST3 B38 1
+         POST3 B39 1
+         POST3 B40 0
+         POST3 K01 1
+         POST3 K02 1
+         POST3 K11 1
+         POST3 K12 0
+         POST3 K13 0
+         POST3 K14 0
+         POST3 K16 1
+         POST3 K18 1
+         POST3 K21 1
+         POST3 K23 0
+         POST3 K24 1
+         POST3 K27 1
+         POST3 K28 0
+         POST3 K39 1
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+both     s580/lens_diff3/P1.sv -DKF
+both     s580/lens_diff3/P1.sv -DIV
+neither  s580/lens_diff3/P1.sv -DCONSTS -DIV
+         NEW  P1.sv:28:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K11` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P1.sv:29:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K12` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P1.sv:37:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K27` value is not a constant: 8'sb0110_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  P1.sv:38:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K28` value is not a constant: 8'b1110_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=4 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  P1.sv:26:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K01` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]
+         PRE  P1.sv:27:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K02` value is not a constant: 8'sb1100_000? has no constant-fold arm [in t]
+         PRE  P1.sv:32:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K16` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  P1.sv:35:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K23` value is not a constant: 'sb0?11_1111_1111_1111_1111_1111_1111_1101 has no constant-fold arm [in t]
+         PRE  P1.sv:36:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K24` value is not a constant: 8'sb?110_0000 has no constant-fold arm [in t]
+         PRE  P1.sv:39:20: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K39` value is not a constant: 8'sb1111_1?00 has no constant-fold arm [in t]
+         PRE  errors=10 warnings=1 notes=0
+         POST3 B01 1
+         POST3 B02 1
+         POST3 B03 1
+         POST3 B04 1
+         POST3 B05 1
+         POST3 B06 1
+         POST3 B07 1
+         POST3 B08 1
+         POST3 B09 1
+         POST3 B10 0
+         POST3 B11 1
+         POST3 B12 0
+         POST3 B13 0
+         POST3 B14 0
+         POST3 B15 0
+         POST3 B16 1
+         POST3 B17 1
+         POST3 B18 1
+         POST3 B19 1
+         POST3 B20 1
+         POST3 B21 1
+         POST3 B22 1
+         POST3 B23 0
+         POST3 B24 1
+         POST3 B25 1
+         POST3 B26 0
+         POST3 B27 1
+         POST3 B28 0
+         POST3 B29 0
+         POST3 B30 0
+         POST3 B31 0
+         POST3 B32 1
+         POST3 B33 1
+         POST3 B34 1
+         POST3 B35 1
+         POST3 B36 1
+         POST3 B37 1
+         POST3 B38 1
+         POST3 B39 1
+         POST3 B40 0
+         POST3 K01 1
+         POST3 K02 1
+         POST3 K11 1
+         POST3 K12 0
+         POST3 K13 0
+         POST3 K14 0
+         POST3 K16 1
+         POST3 K18 1
+         POST3 K21 1
+         POST3 K23 0
+         POST3 K24 1
+         POST3 K27 1
+         POST3 K28 0
+         POST3 K39 1
+         POST3 simulation ended (Finish) at time 2
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+both     s580/lens_diff3/P1.sv -DKF -DIV
+both     s580/lens_diff3/P3.sv 
+both     s580/lens_diff3/P3.sv -DIV
+both     s580/lens_snd3/p/p1.sv 
+both     s580/lens_snd3/p/p1.sv -DNOC
+both     s580/lens_snd3/p/p1.sv -DNOI
+both     s580/lens_snd3/p/p3.sv 
+pre      s580/lens_snd3/p/p3.sv -DG1
+neither  s580/lens_snd3/p/p3.sv -DG2
+         NEW  G2 default   [!PRE !POST3]
+         PRE  G2 item
+         POST3 G2 item
+pre      s580/lens_snd3/p/p3.sv -DG3
+pre      s580/lens_snd3/p/p3.sv -DG4
+pre      s580/lens_snd3/p/p3.sv -DG5
+pre      s580/lens_snd3/p/p3.sv -DG6
+neither  s580/lens_snd3/p/p3.sv -DG7
+         NEW  G7 default   [!PRE !POST3]
+         PRE  G7 item
+         POST3 G7 item
+both     s580/lens_snd3/p/p3.sv -DG8
+pre      s580/lens_snd3/p/p3.sv -DG9
+neither  s580/lens_snd3/p/p3.sv -DLV
+         NEW  p3.sv:61:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L1` value is not a constant: 68'h8_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  p3.sv:62:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L2` value is not a constant: 4'b1?00 has no constant-fold arm [in t]   [!PRE !POST3]
+         NEW  p3.sv:63:25: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L6` value is not a constant: 65'h1_0000_0000_0000_000? has no constant-fold arm [in t]   [=PRE !POST3]
+         NEW  errors=3 warnings=1 notes=0   [!PRE !POST3]
+         NEW  rc=1   [=PRE !POST3]
+         PRE  errors=2 warnings=1 notes=0
+         POST3 L1 1
+         POST3 L2 1
+         POST3 L6 1
+         POST3 R6 1
+         POST3 simulation ended (Finish) at time 100
+         POST3 errors=0 warnings=1 notes=0
+         POST3 rc=0
+both     s580/lens_snd3/p/p4.sv 
+both     s580/lens_snd3/p/p4.sv -DK1
+both     s580/lens_snd3/p/p4.sv -DK2
+both     s580/lens_snd3/p/p4.sv -DK3
+both     s580/lens_snd3/p/p4.sv -DK4
+both     s580/lens_snd3/p/p4.sv -DK5
+both     s580/lens_snd3/p/p4.sv -DK6
+both     s580/lens_snd3/p/p4.sv -DK7
+both     s580/lens_snd3/p/p4.sv -DK8
+both     s580/lens_snd3/p/p4.sv -DK9
+both     s580/lens_snd3/p/p5.sv 
+both     s580/lens_snd3/p/p5.sv -DFN
+pre      s580/lens_snd3/p/p5.sv -DH1
+pre      s580/lens_snd3/p/p5.sv -DH2
+pre      s580/lens_snd3/p/p5.sv -DH3
+pre      s580/lens_snd3/p/p5.sv -DH4
+both     s580/lens_snd3/p/p5.sv -DH5
+both     s580/lens_snd3/p/p5.sv -DH6
+pre      s580/lens_snd3/p/p5.sv -DH7
+both     s580/lens_snd3/p/p5.sv -DH8
+both     s580/lens_snd3/p/p5.sv -DNOI
+both     s580/lens_snd3/p/p6.sv 
+pre      s580/lens_snd3/p/p6.sv -DJ1
+pre      s580/lens_snd3/p/p6.sv -DJ2
+pre      s580/lens_snd3/p/p6.sv -DJ3
+both     s580/lens_snd3/p/p6.sv -DJ4
+pre      s580/lens_snd3/p/p6.sv -DJ5
+pre      s580/lens_snd3/p/p6.sv -DJ6
+both     s580/lens_snd3/p/p6.sv -DJ7
+both     s580/lens_snd3/p/p6.sv -DJ8
+both     s580/lens_snd3/p/p6.sv -DJ9
+pre      s580/lens_snd3/p/p6.sv -DJV
+both     f2/w65.sv 
+{'both': 452, 'pre': 85, 'post3': 103, 'neither': 26}

@@ -1,0 +1,22 @@
+cells=3269 movers pa->pb: 21
+g/c1/Bfn_lp                        pa[L=1] pb[L=0] =PRE
+g/c2/Grl_lp                        pa[L=1] pb[L=0] =PRE
+i/probe/Mfn_cntE                   pa[L=1] pb[L=0] =PRE
+i/r2/C1                            pa[L=1] pb[L=0] =PRE
+i/r2/C10                           pa[L=1] pb[L=0] =PRE
+i/r2/C10f                          pa[L=1 M=1] pb[L=0 M=0] =PRE
+i/r2/C10g                          pa[GI=then] pb[GI=else] =PRE
+i/r2/C11                           pa[L=1] pb[L=0] =PRE
+i/r2/C11c                          pa[L=1] pb[L=0] =PRE
+i/r2/C2                            pa[GI=then] pb[GI=else] =PRE
+i/r2/C3                            pa[L=1] pb[L=0] =PRE
+i/r2/C3c                           pa[L=1] pb[L=0] =PRE
+i/r2/C8                            pa[L=2 K=2] pb[C8.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the `+` ope] =PRE
+i/r2/C8k                           pa[<missing>] pb[K=2] !=PRE
+i/r2/C9                            pa[vb=5] pb[vb=4] =PRE
+i/r2/lens/sound/C1                 pa[L=1] pb[L=0] =PRE
+i/r2/lens/sound/C2                 pa[GI=then] pb[GI=else] =PRE
+i/r2/lens/sound/C3                 pa[L=1] pb[L=0] =PRE
+i/r2/lens/sound/C3c                pa[L=1] pb[L=0] =PRE
+i/r2/lens/sound/C8                 pa[L=2 K=2] pb[C8.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: the `+` ope] =PRE
+i/r2/lens/sound/C9                 pa[vb=5] pb[vb=4] =PRE

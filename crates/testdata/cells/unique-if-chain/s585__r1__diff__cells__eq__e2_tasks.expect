@@ -1,0 +1,247 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__diff__cells__eq__e2_tasks
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/diff/cells/eq/e2_tasks.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/diff/cells/eq
+oracles_present: iverilog,verilator
+vita_tags: PRE,POST2,unrecorded,POST2-staged,PRE-staged,POST,JIT2
+verdict: residue verilator lines
+verdict_source: s585/g/cmp3_final.txt:6
+notes: runs: d__e2_tasks e2_tasks
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 2
+=== block 1 | combined [iverilog,verilator,PRE,POST] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | r1/diff/out/e2_tasks.out | 4836 bytes
+e2_tasks | vl:0@e2_tasks.sv:7,5@e2_tasks.sv:7,15@e2_tasks.sv:7,40@e2_tasks.sv:7,50@e2_tasks.sv:7,70@e2_tasks.sv:7,75@e2_tasks.sv:7,85@e2_tasks.sv:7,95@e2_tasks.sv:7,120@e2_tasks.sv:7 | iv:REJ | PRE:- rc=0 | POST:W4031:5@e2_tasks.sv:12:14,W4031:85@e2_tasks.sv:12:14 rc=0 | P==P:False
+##### e2_tasks
+=== verilator compile rc=0 run rc=0
+-Info: e2_tasks.sv:20: $dumpvar ignored, as Verilated without --trace
+[0] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=0 c=0 o1=0 o2=0 acc=0
+[5] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=5 c=1 o1=0 o2=0 acc=0
+t=10 c=1 o1=0 o2=6 acc=0
+t=15 c=1 o1=0 o2=6 acc=1
+[15] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=15 c=2 o1=0 o2=6 acc=1
+t=20 c=2 o1=0 o2=e acc=1
+t=25 c=2 o1=0 o2=e acc=3
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=3 o1=5 o2=e acc=4
+t=35 c=4 o1=6 o2=e acc=4
+[40] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=40 c=4 o1=6 o2=0 acc=4
+t=45 c=4 o1=6 o2=0 acc=8
+t=45 c=5 o1=7 o2=0 acc=8
+[50] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=55 c=5 o1=7 o2=0 acc=9
+t=55 c=6 o1=e o2=0 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=6 o1=e o2=5 acc=b
+t=65 c=7 o1=e o2=5 acc=b
+[70] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=70 c=7 o1=e o2=0 acc=b
+t=75 c=7 o1=e o2=0 acc=c
+[75] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=75 c=0 o1=0 o2=0 acc=c
+t=80 c=0 o1=0 o2=7 acc=c
+[85] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=85 c=1 o1=0 o2=7 acc=c
+t=90 c=1 o1=0 o2=6 acc=c
+t=95 c=1 o1=0 o2=6 acc=d
+[95] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=95 c=2 o1=0 o2=6 acc=d
+t=100 c=2 o1=0 o2=e acc=d
+t=105 c=2 o1=0 o2=e acc=f
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=3 o1=5 o2=e acc=0
+t=115 c=4 o1=6 o2=e acc=0
+- e2_tasks.sv:22: Verilog $finish
+[120] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=120 c=4 o1=6 o2=0 acc=0
+=== iverilog compile rc=12
+e2_tasks.sv:7: syntax error
+e2_tasks.sv:7: Syntax in assignment statement l-value.
+e2_tasks.sv:8: syntax error
+e2_tasks.sv:8: Syntax in assignment statement l-value.
+e2_tasks.sv:9: syntax error
+e2_tasks.sv:9: Syntax in assignment statement l-value.
+e2_tasks.sv:12: syntax error
+e2_tasks.sv:12: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+e2_tasks.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `c` has a declaration initializer AND is written by `always_ff`; xcelium rejects this as two drivers (*E,MULAXX, IEEE §9.2.2.4) while verilator and synthesis accept the initializer as the power-on value — drop the initializer or reset explicitly [in top]
+t=0 c=0 o1=1 o2=x acc=0
+t=5 c=1 o1=2 o2=x acc=0
+t=10 c=1 o1=2 o2=6 acc=0
+t=15 c=2 o1=3 o2=6 acc=1
+t=20 c=2 o1=3 o2=e acc=1
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=4 o1=6 o2=e acc=4
+t=40 c=4 o1=6 o2=2 acc=4
+t=45 c=5 o1=7 o2=2 acc=8
+t=50 c=5 o1=7 o2=1 acc=8
+t=55 c=6 o1=e o2=1 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=7 o1=e o2=5 acc=b
+t=70 c=7 o1=e o2=3 acc=b
+t=75 c=0 o1=1 o2=3 acc=c
+t=80 c=0 o1=1 o2=7 acc=c
+t=85 c=1 o1=2 o2=7 acc=c
+t=90 c=1 o1=2 o2=6 acc=c
+t=95 c=2 o1=3 o2=6 acc=d
+t=100 c=2 o1=3 o2=e acc=d
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=4 o1=6 o2=e acc=0
+t=120 c=4 o1=6 o2=2 acc=0
+simulation ended (Finish) at time 120
+errors=0 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+e2_tasks.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `c` has a declaration initializer AND is written by `always_ff`; xcelium rejects this as two drivers (*E,MULAXX, IEEE §9.2.2.4) while verilator and synthesis accept the initializer as the power-on value — drop the initializer or reset explicitly [in top]
+t=0 c=0 o1=1 o2=x acc=0
+e2_tasks.sv:12:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.accum] [at time 5]
+t=5 c=1 o1=2 o2=x acc=0
+t=10 c=1 o1=2 o2=6 acc=0
+t=15 c=2 o1=3 o2=6 acc=1
+t=20 c=2 o1=3 o2=e acc=1
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=4 o1=6 o2=e acc=4
+t=40 c=4 o1=6 o2=2 acc=4
+t=45 c=5 o1=7 o2=2 acc=8
+t=50 c=5 o1=7 o2=1 acc=8
+t=55 c=6 o1=e o2=1 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=7 o1=e o2=5 acc=b
+t=70 c=7 o1=e o2=3 acc=b
+t=75 c=0 o1=1 o2=3 acc=c
+t=80 c=0 o1=1 o2=7 acc=c
+e2_tasks.sv:12:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.accum] [at time 85]
+t=85 c=1 o1=2 o2=7 acc=c
+t=90 c=1 o1=2 o2=6 acc=c
+t=95 c=2 o1=3 o2=6 acc=d
+t=100 c=2 o1=3 o2=e acc=d
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=4 o1=6 o2=e acc=0
+t=120 c=4 o1=6 o2=2 acc=0
+simulation ended (Finish) at time 120
+errors=0 warnings=4 notes=0
+--- PRE==POST (all backends): False
+=== block 2 | combined [iverilog,verilator,PRE,POST2] iverilog 13.0 (version captured in slice) verilator 5.052 (version captured in slice) | g/out3/d__e2_tasks.out | 4405 bytes
+##### d__e2_tasks
+=== verilator compile rc=0 run rc=0
+-Info: e2_tasks.sv:20: $dumpvar ignored, as Verilated without --trace
+[0] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=0 c=0 o1=0 o2=0 acc=0
+[5] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=5 c=1 o1=0 o2=0 acc=0
+t=10 c=1 o1=0 o2=6 acc=0
+t=15 c=1 o1=0 o2=6 acc=1
+[15] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=15 c=2 o1=0 o2=6 acc=1
+t=20 c=2 o1=0 o2=e acc=1
+t=25 c=2 o1=0 o2=e acc=3
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=3 o1=5 o2=e acc=4
+t=35 c=4 o1=6 o2=e acc=4
+[40] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=40 c=4 o1=6 o2=0 acc=4
+t=45 c=4 o1=6 o2=0 acc=8
+t=45 c=5 o1=7 o2=0 acc=8
+[50] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=55 c=5 o1=7 o2=0 acc=9
+t=55 c=6 o1=e o2=0 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=6 o1=e o2=5 acc=b
+t=65 c=7 o1=e o2=5 acc=b
+[70] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=70 c=7 o1=e o2=0 acc=b
+t=75 c=7 o1=e o2=0 acc=c
+[75] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=75 c=0 o1=0 o2=0 acc=c
+t=80 c=0 o1=0 o2=7 acc=c
+[85] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=85 c=1 o1=0 o2=7 acc=c
+t=90 c=1 o1=0 o2=6 acc=c
+t=95 c=1 o1=0 o2=6 acc=d
+[95] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=95 c=2 o1=0 o2=6 acc=d
+t=100 c=2 o1=0 o2=e acc=d
+t=105 c=2 o1=0 o2=e acc=f
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=3 o1=5 o2=e acc=0
+t=115 c=4 o1=6 o2=e acc=0
+- e2_tasks.sv:22: Verilog $finish
+[120] %Error: e2_tasks.sv:7: Assertion failed in top.sel: 'unique if' statement violated
+t=120 c=4 o1=6 o2=0 acc=0
+=== iverilog compile rc=12
+e2_tasks.sv:7: syntax error
+e2_tasks.sv:7: Syntax in assignment statement l-value.
+e2_tasks.sv:8: syntax error
+e2_tasks.sv:8: Syntax in assignment statement l-value.
+e2_tasks.sv:9: syntax error
+e2_tasks.sv:9: Syntax in assignment statement l-value.
+e2_tasks.sv:12: syntax error
+e2_tasks.sv:12: Syntax in assignment statement l-value.
+=== vita PRE (native=interp=vm)
+rc=0
+e2_tasks.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `c` has a declaration initializer AND is written by `always_ff`; xcelium rejects this as two drivers (*E,MULAXX, IEEE §9.2.2.4) while verilator and synthesis accept the initializer as the power-on value — drop the initializer or reset explicitly [in top]
+t=0 c=0 o1=1 o2=x acc=0
+t=5 c=1 o1=2 o2=x acc=0
+t=10 c=1 o1=2 o2=6 acc=0
+t=15 c=2 o1=3 o2=6 acc=1
+t=20 c=2 o1=3 o2=e acc=1
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=4 o1=6 o2=e acc=4
+t=40 c=4 o1=6 o2=2 acc=4
+t=45 c=5 o1=7 o2=2 acc=8
+t=50 c=5 o1=7 o2=1 acc=8
+t=55 c=6 o1=e o2=1 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=7 o1=e o2=5 acc=b
+t=70 c=7 o1=e o2=3 acc=b
+t=75 c=0 o1=1 o2=3 acc=c
+t=80 c=0 o1=1 o2=7 acc=c
+t=85 c=1 o1=2 o2=7 acc=c
+t=90 c=1 o1=2 o2=6 acc=c
+t=95 c=2 o1=3 o2=6 acc=d
+t=100 c=2 o1=3 o2=e acc=d
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=4 o1=6 o2=e acc=0
+t=120 c=4 o1=6 o2=2 acc=0
+simulation ended (Finish) at time 120
+errors=0 warnings=2 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+e2_tasks.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `c` has a declaration initializer AND is written by `always_ff`; xcelium rejects this as two drivers (*E,MULAXX, IEEE §9.2.2.4) while verilator and synthesis accept the initializer as the power-on value — drop the initializer or reset explicitly [in top]
+t=0 c=0 o1=1 o2=x acc=0
+t=5 c=1 o1=2 o2=x acc=0
+t=10 c=1 o1=2 o2=6 acc=0
+t=15 c=2 o1=3 o2=6 acc=1
+t=20 c=2 o1=3 o2=e acc=1
+t=25 c=3 o1=5 o2=e acc=3
+t=35 c=4 o1=6 o2=e acc=4
+t=40 c=4 o1=6 o2=2 acc=4
+t=45 c=5 o1=7 o2=2 acc=8
+t=50 c=5 o1=7 o2=1 acc=8
+t=55 c=6 o1=e o2=1 acc=9
+t=60 c=6 o1=e o2=5 acc=9
+t=65 c=7 o1=e o2=5 acc=b
+t=70 c=7 o1=e o2=3 acc=b
+t=75 c=0 o1=1 o2=3 acc=c
+t=80 c=0 o1=1 o2=7 acc=c
+t=85 c=1 o1=2 o2=7 acc=c
+t=90 c=1 o1=2 o2=6 acc=c
+t=95 c=2 o1=3 o2=6 acc=d
+t=100 c=2 o1=3 o2=e acc=d
+t=105 c=3 o1=5 o2=e acc=f
+t=115 c=4 o1=6 o2=e acc=0
+t=120 c=4 o1=6 o2=2 acc=0
+simulation ended (Finish) at time 120
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

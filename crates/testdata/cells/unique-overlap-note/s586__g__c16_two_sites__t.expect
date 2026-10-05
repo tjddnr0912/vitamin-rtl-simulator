@@ -1,0 +1,195 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s586__g__c16_two_sites__t
+slice: §4.5.586 (s586; details _slices/s586/)
+origin: s586/g/c16_two_sites/t.sv
+roadmap_row: §5.2 row 1 / §3.b unique-overlap-note
+set: g/c16_two_sites
+oracles_present: iverilog,verilator
+vita_tags: PROBE,PRE,PRE-SEP,POST,POST-JIT,POST-PRODUCT,POST-SEP,POST2,POST2-JIT,POST2-PRODUCT,POST2-SEP
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: g/c16_two_sites lanes/post/def48 lanes/post/interp lanes/post/jit lanes/post/mc lanes/post/native lanes/post/obs lanes/post/prod lanes/post/prodi lanes/post/q lanes/post/sep lanes/post/vm lanes/post/wno lanes/post2/def48 lanes/post2/interp lanes/post2/jit lanes/post2/mc lanes/post2/native lanes/post2/obs lanes/post2/prod lanes/post2/prodi lanes/post2/q lanes/post2/sep lanes/post2/vm lanes/post2/wno lanes/pre/def48 lanes/pre/interp lanes/pre/mc lanes/pre/native lanes/pre/obs lanes/pre/q lanes/pre/sep lanes/pre/vm lanes/pre/wno
+alias: g/c41_lanes/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+alias: g/c48_lanes2/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: POST: md5 9c9c64f700f72ccdf4410659484ff720 commit fc1fc07e
+vita_binary: POST-JIT: md5 470b2c97068c96af87e4f2295aafaa74 commit unrecorded
+vita_binary: POST-PRODUCT: md5 cbd9d0ed66fc183f4075646a5b04bc34 commit unrecorded
+vita_binary: POST2: md5 9d5134826d5c2e971c6ca7bf1e841a86 commit 71224f4b
+vita_binary: POST2-JIT: md5 d3bdc20c00d464fb4d9c58bf6817270c commit unrecorded
+vita_binary: POST2-PRODUCT: md5 4abff645289421a05c6e5f9ae8b5274b commit unrecorded
+vita_binary: PRE: md5 8d33349579ca773389265f7a888fd17e commit fc1fc07e
+vita_binary: PROBE: md5 9d6736b579a0bb7e6c27a7e58aeaeda1 commit fc1fc07e
+blocks: 125
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./iv.cerr | 133 bytes
+t.sv:6: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+t.sv:10: vvp.tgt sorry: Case unique/unique0 qualities are ignored.
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | ./iv.cout | 0 bytes
+
+=== block 3 | oracle iverilog 13.0 (version captured in slice) | ./iv.crc | 2 bytes
+0
+=== block 4 | oracle iverilog 13.0 (version captured in slice) | ./iv.err | 0 bytes | identical to block 2
+=== block 5 | oracle iverilog 13.0 (version captured in slice) | ./iv.out | 42 bytes
+y=1 z=1
+t.sv:15: $finish called at 2 (1s)
+=== block 6 | oracle iverilog 13.0 (version captured in slice) | ./iv.rc | 2 bytes | identical to block 3
+=== block 7 | oracle verilator 5.052 (version captured in slice) | ./vl.cerr | 1089 bytes
+%Warning-CASEOVERLAP: t.sv:8:7: Case conditions overlap (example pattern 0x3)
+    8 |       2'b1?: y = 2;
+      |       ^~~~~
+                      t.sv:7:7: ... Location of overlapping condition
+    7 |       2'b?1: y = 1;
+      |       ^~~~~
+                      ... For warning description see https://verilator.org/warn/CASEOVERLAP?v=5.052
+                      ... Use "/* verilator lint_off CASEOVERLAP */" and lint_on around source to disable this message.
+%Warning-CASEINCOMPLETE: t.sv:6:12: Case values incompletely covered (example pattern 0x0)
+    6 |     unique casez (r)
+      |            ^~~~~
+                         ... For warning description see https://verilator.org/warn/CASEINCOMPLETE?v=5.052
+                         ... Use "/* verilator lint_off CASEINCOMPLETE */" and lint_on around source to disable this message.
+%Warning-CASEOVERLAP: t.sv:12:7: Case conditions overlap (example pattern 0x3)
+   12 |       2'b1?: z = 2;
+      |       ^~~~~
+                      t.sv:11:7: ... Location of overlapping condition
+   11 |       2'b?1: z = 1;
+      |       ^~~~~
+=== block 8 | oracle verilator 5.052 (version captured in slice) | ./vl.crc | 2 bytes | identical to block 3
+=== block 9 | oracle verilator 5.052 (version captured in slice) | ./vl.err | 0 bytes | identical to block 2
+=== block 10 | oracle verilator 5.052 (version captured in slice) | ./vl.out | 476 bytes
+[1] %Error: t.sv:6: Assertion failed in t: unique case, but multiple matches found for '2'h3'
+-Info: t.sv:6: Verilog $stop, ignored due to +verilator+error+limit
+[1] %Error: t.sv:10: Assertion failed in t: unique0 case, but multiple matches found for '2'h3'
+y=1 z=1
+- t.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 38.462 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+=== block 11 | oracle verilator 5.052 (version captured in slice) | ./vl.rc | 2 bytes | identical to block 3
+=== block 12 | vita [POST] | lanes/post/def48/err | 454 bytes
+t.sv:6:5: info[VITA-I2021] I-PARSE-UNIQUE-OVERLAP-UNCHECKED: `unique` / `unique0` overlaps are not checked: when more than one case item or `if` condition matches, the first one runs and no violation is reported, where IEEE 1800-2017 §12.4.2 and §12.5.3 require one. Printed once, at the first such statement in source order
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=1
+=== block 13 | vita [POST] | lanes/post/def48/out | 44 bytes
+y=1 z=1
+simulation ended (Finish) at time 2
+=== block 14 | vita [POST] | lanes/post/def48/rc | 2 bytes | identical to block 3
+=== block 15 | vita [POST] | lanes/post/interp/err | 454 bytes | identical to block 12
+=== block 16 | vita [POST] | lanes/post/interp/out | 44 bytes | identical to block 13
+=== block 17 | vita [POST] | lanes/post/interp/rc | 2 bytes | identical to block 3
+=== block 18 | vita [POST] | lanes/post/mc/err | 454 bytes | identical to block 12
+=== block 19 | vita [POST] | lanes/post/mc/out | 0 bytes | identical to block 2
+=== block 20 | vita [POST] | lanes/post/mc/rc | 2 bytes | identical to block 3
+=== block 21 | vita [POST] | lanes/post/mc/velab.err | 28 bytes
+errors=0 warnings=0 notes=0
+=== block 22 | vita [POST] | lanes/post/mc/velab.out | 0 bytes | identical to block 2
+=== block 23 | vita [POST] | lanes/post/mc/velab.rc | 2 bytes | identical to block 3
+=== block 24 | vita [POST] | lanes/post/mc/vrun.err | 28 bytes | identical to block 21
+=== block 25 | vita [POST] | lanes/post/mc/vrun.out | 44 bytes | identical to block 13
+=== block 26 | vita [POST] | lanes/post/mc/vrun.rc | 2 bytes | identical to block 3
+=== block 27 | vita [POST] | lanes/post/native/err | 454 bytes | identical to block 12
+=== block 28 | vita [POST] | lanes/post/native/out | 44 bytes | identical to block 13
+=== block 29 | vita [POST] | lanes/post/native/rc | 2 bytes | identical to block 3
+=== block 30 | vita [POST] | lanes/post/obs/err | 454 bytes | identical to block 12
+=== block 31 | vita [POST] | lanes/post/obs/out | 44 bytes | identical to block 13
+=== block 32 | vita [POST] | lanes/post/obs/rc | 2 bytes | identical to block 3
+=== block 33 | vita [POST] | lanes/post/q/err | 454 bytes | identical to block 12
+=== block 34 | vita [POST] | lanes/post/q/out | 0 bytes | identical to block 2
+=== block 35 | vita [POST] | lanes/post/q/rc | 2 bytes | identical to block 3
+=== block 36 | vita [POST] | lanes/post/vm/err | 454 bytes | identical to block 12
+=== block 37 | vita [POST] | lanes/post/vm/out | 44 bytes | identical to block 13
+=== block 38 | vita [POST] | lanes/post/vm/rc | 2 bytes | identical to block 3
+=== block 39 | vita [POST] | lanes/post/wno/err | 127 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+=== block 40 | vita [POST] | lanes/post/wno/out | 44 bytes | identical to block 13
+=== block 41 | vita [POST] | lanes/post/wno/rc | 2 bytes | identical to block 3
+=== block 42 | vita [POST-JIT] | lanes/post/jit/err | 454 bytes | identical to block 12
+=== block 43 | vita [POST-JIT] | lanes/post/jit/out | 44 bytes | identical to block 13
+=== block 44 | vita [POST-JIT] | lanes/post/jit/rc | 2 bytes | identical to block 3
+=== block 45 | vita [POST-PRODUCT] | lanes/post/prod/err | 454 bytes | identical to block 12
+=== block 46 | vita [POST-PRODUCT] | lanes/post/prod/out | 44 bytes | identical to block 13
+=== block 47 | vita [POST-PRODUCT] | lanes/post/prod/rc | 2 bytes | identical to block 3
+=== block 48 | vita [POST-PRODUCT] | lanes/post/prodi/err | 175 bytes
+error[VITA-E0001]: '--backend' takes only 'native' in this build — the oracle executors ('vm', 'interp') are compiled out. Rebuild with the `oracle` feature to select them.
+=== block 49 | vita [POST-PRODUCT] | lanes/post/prodi/out | 0 bytes | identical to block 2
+=== block 50 | vita [POST-PRODUCT] | lanes/post/prodi/rc | 2 bytes
+3
+=== block 51 | vita [POST2] | lanes/post2/def48/err | 454 bytes | identical to block 12
+=== block 52 | vita [POST2] | lanes/post2/def48/out | 44 bytes | identical to block 13
+=== block 53 | vita [POST2] | lanes/post2/def48/rc | 2 bytes | identical to block 3
+=== block 54 | vita [POST2] | lanes/post2/interp/err | 454 bytes | identical to block 12
+=== block 55 | vita [POST2] | lanes/post2/interp/out | 44 bytes | identical to block 13
+=== block 56 | vita [POST2] | lanes/post2/interp/rc | 2 bytes | identical to block 3
+=== block 57 | vita [POST2] | lanes/post2/mc/err | 454 bytes | identical to block 12
+=== block 58 | vita [POST2] | lanes/post2/mc/out | 0 bytes | identical to block 2
+=== block 59 | vita [POST2] | lanes/post2/mc/rc | 2 bytes | identical to block 3
+=== block 60 | vita [POST2] | lanes/post2/mc/velab.err | 28 bytes | identical to block 21
+=== block 61 | vita [POST2] | lanes/post2/mc/velab.out | 0 bytes | identical to block 2
+=== block 62 | vita [POST2] | lanes/post2/mc/velab.rc | 2 bytes | identical to block 3
+=== block 63 | vita [POST2] | lanes/post2/mc/vrun.err | 28 bytes | identical to block 21
+=== block 64 | vita [POST2] | lanes/post2/mc/vrun.out | 44 bytes | identical to block 13
+=== block 65 | vita [POST2] | lanes/post2/mc/vrun.rc | 2 bytes | identical to block 3
+=== block 66 | vita [POST2] | lanes/post2/native/err | 454 bytes | identical to block 12
+=== block 67 | vita [POST2] | lanes/post2/native/out | 44 bytes | identical to block 13
+=== block 68 | vita [POST2] | lanes/post2/native/rc | 2 bytes | identical to block 3
+=== block 69 | vita [POST2] | lanes/post2/obs/err | 454 bytes | identical to block 12
+=== block 70 | vita [POST2] | lanes/post2/obs/out | 44 bytes | identical to block 13
+=== block 71 | vita [POST2] | lanes/post2/obs/rc | 2 bytes | identical to block 3
+=== block 72 | vita [POST2] | lanes/post2/q/err | 454 bytes | identical to block 12
+=== block 73 | vita [POST2] | lanes/post2/q/out | 0 bytes | identical to block 2
+=== block 74 | vita [POST2] | lanes/post2/q/rc | 2 bytes | identical to block 3
+=== block 75 | vita [POST2] | lanes/post2/vm/err | 454 bytes | identical to block 12
+=== block 76 | vita [POST2] | lanes/post2/vm/out | 44 bytes | identical to block 13
+=== block 77 | vita [POST2] | lanes/post2/vm/rc | 2 bytes | identical to block 3
+=== block 78 | vita [POST2] | lanes/post2/wno/err | 127 bytes | identical to block 39
+=== block 79 | vita [POST2] | lanes/post2/wno/out | 44 bytes | identical to block 13
+=== block 80 | vita [POST2] | lanes/post2/wno/rc | 2 bytes | identical to block 3
+=== block 81 | vita [POST2-JIT] | lanes/post2/jit/err | 454 bytes | identical to block 12
+=== block 82 | vita [POST2-JIT] | lanes/post2/jit/out | 44 bytes | identical to block 13
+=== block 83 | vita [POST2-JIT] | lanes/post2/jit/rc | 2 bytes | identical to block 3
+=== block 84 | vita [POST2-PRODUCT] | lanes/post2/prod/err | 454 bytes | identical to block 12
+=== block 85 | vita [POST2-PRODUCT] | lanes/post2/prod/out | 44 bytes | identical to block 13
+=== block 86 | vita [POST2-PRODUCT] | lanes/post2/prod/rc | 2 bytes | identical to block 3
+=== block 87 | vita [POST2-PRODUCT] | lanes/post2/prodi/err | 175 bytes | identical to block 48
+=== block 88 | vita [POST2-PRODUCT] | lanes/post2/prodi/out | 0 bytes | identical to block 2
+=== block 89 | vita [POST2-PRODUCT] | lanes/post2/prodi/rc | 2 bytes | identical to block 50
+=== block 90 | vita [PRE] | ./vita.err | 127 bytes | identical to block 39
+=== block 91 | vita [PRE] | ./vita.out | 44 bytes | identical to block 13
+=== block 92 | vita [PRE] | ./vita.rc | 2 bytes | identical to block 3
+=== block 93 | vita [PRE] | lanes/pre/def48/err | 127 bytes | identical to block 39
+=== block 94 | vita [PRE] | lanes/pre/def48/out | 44 bytes | identical to block 13
+=== block 95 | vita [PRE] | lanes/pre/def48/rc | 2 bytes | identical to block 3
+=== block 96 | vita [PRE] | lanes/pre/interp/err | 127 bytes | identical to block 39
+=== block 97 | vita [PRE] | lanes/pre/interp/out | 44 bytes | identical to block 13
+=== block 98 | vita [PRE] | lanes/pre/interp/rc | 2 bytes | identical to block 3
+=== block 99 | vita [PRE] | lanes/pre/mc/err | 127 bytes | identical to block 39
+=== block 100 | vita [PRE] | lanes/pre/mc/out | 0 bytes | identical to block 2
+=== block 101 | vita [PRE] | lanes/pre/mc/rc | 2 bytes | identical to block 3
+=== block 102 | vita [PRE] | lanes/pre/mc/velab.err | 28 bytes | identical to block 21
+=== block 103 | vita [PRE] | lanes/pre/mc/velab.out | 0 bytes | identical to block 2
+=== block 104 | vita [PRE] | lanes/pre/mc/velab.rc | 2 bytes | identical to block 3
+=== block 105 | vita [PRE] | lanes/pre/mc/vrun.err | 28 bytes | identical to block 21
+=== block 106 | vita [PRE] | lanes/pre/mc/vrun.out | 44 bytes | identical to block 13
+=== block 107 | vita [PRE] | lanes/pre/mc/vrun.rc | 2 bytes | identical to block 3
+=== block 108 | vita [PRE] | lanes/pre/native/err | 127 bytes | identical to block 39
+=== block 109 | vita [PRE] | lanes/pre/native/out | 44 bytes | identical to block 13
+=== block 110 | vita [PRE] | lanes/pre/native/rc | 2 bytes | identical to block 3
+=== block 111 | vita [PRE] | lanes/pre/obs/err | 127 bytes | identical to block 39
+=== block 112 | vita [PRE] | lanes/pre/obs/out | 44 bytes | identical to block 13
+=== block 113 | vita [PRE] | lanes/pre/obs/rc | 2 bytes | identical to block 3
+=== block 114 | vita [PRE] | lanes/pre/q/err | 127 bytes | identical to block 39
+=== block 115 | vita [PRE] | lanes/pre/q/out | 0 bytes | identical to block 2
+=== block 116 | vita [PRE] | lanes/pre/q/rc | 2 bytes | identical to block 3
+=== block 117 | vita [PRE] | lanes/pre/vm/err | 127 bytes | identical to block 39
+=== block 118 | vita [PRE] | lanes/pre/vm/out | 44 bytes | identical to block 13
+=== block 119 | vita [PRE] | lanes/pre/vm/rc | 2 bytes | identical to block 3
+=== block 120 | vita [PRE] | lanes/pre/wno/err | 217 bytes
+error[VITA-E0001]: unknown diagnostic code 'I2021' in '-Wno-' — a code is its mnemonic (`W-ELAB-FEATURE-LIMIT`), its printed number (`VITA-W3056`), or that number bare (`W3056`); `vita explain <CODE>` describes one
+=== block 121 | vita [PRE] | lanes/pre/wno/out | 0 bytes | identical to block 2
+=== block 122 | vita [PRE] | lanes/pre/wno/rc | 2 bytes | identical to block 50
+=== block 123 | vita [PROBE] | ./probe.err | 355 bytes
+t.sv:6:5: note[VITA-I2021] I-PARSE-UNIQUE-UNCHECKED: `unique` / `unique0` overlaps (more than one matching item or condition) are not checked; only a missing match is reported. This is the first such site; others are not listed
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=1
+=== block 124 | vita [PROBE] | ./probe.out | 44 bytes | identical to block 13
+=== block 125 | vita [PROBE] | ./probe.rc | 2 bytes | identical to block 3
+=== end

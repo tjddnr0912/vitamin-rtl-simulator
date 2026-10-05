@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__tests__sv__l10
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/tests/sv/l10.sv
+roadmap_row: §3.b case-inside
+set: tests/sv
+oracles_present: iverilog,verilator,sv2v
+vita_tags: DBG1,POST,POST2,POST3,PRE,unrecorded/default,unrecorded/native
+verdict: refused (clause 1 string)
+verdict_source: s582/post/CENSUS.md:93
+notes: design of crates/cli/tests/case_inside*.rs (tests/designs.py); tests/sv/out post.out binary tag DBG1/2/3 inferred from file mtime vs tests/vita_dbg* mtime
+vita_binary: DBG1: md5 2674c193c5cdb62f66e0a380149d04a7 commit unrecorded
+vita_binary: POST: md5 f285440f37b22c9cdf32eeb8ebb1e721 commit unrecorded
+vita_binary: POST2: md5 f491ab7b4921b912baa27b9828641232 commit unrecorded
+vita_binary: POST3: md5 9b0c1623e3acb71130efe3acb7713a89 commit unrecorded
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 14
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | post/census/tests__sv__l10/iv.out | 361 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7: error: Incomprehensible case expression.
+rc=2
+=== block 2 | oracle verilator 5.052 (version captured in slice) | tests/sv/out/l10/vl.out | 364 bytes
+sf(1)
+m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | tests/sv/out/l10/sv.out | 689 bytes
+Assertion failed: (ivl_expr_value(expr) == IVL_VT_BOOL || ivl_expr_value(expr) == IVL_VT_VECTOR), function draw_eval_vec4, file eval_vec4.c, line 1360.
+sh: line 1: 57233 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg239552549" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg39552549" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli39552549"
+     57234 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh39552549" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 4 | vita [DBG1] | tests/sv/out/l10/post.out | 368 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a `string` operand outside value items of a `string` case expression (IEEE 1800-2017 §12.5.4) [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 5 | vita [POST] | post/census/tests__sv__l10/post.out | 368 bytes | identical to block 4
+=== block 6 | vita [POST] | post2/cmp/tests__sv__l10.sv/post.err | 363 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: `case … inside` is not supported here: a `string` operand outside value items of a `string` case expression (IEEE 1800-2017 §12.5.4) [in t]
+errors=1 warnings=0 notes=0
+=== block 7 | vita [POST] | post2/cmp/tests__sv__l10.sv/post.out | 5 bytes
+rc=1
+=== block 8 | vita [POST2] | post2/cmp/tests__sv__l10.sv/post2.err | 363 bytes | identical to block 6
+=== block 9 | vita [POST2] | post2/cmp/tests__sv__l10.sv/post2.out | 5 bytes | identical to block 7
+=== block 10 | vita [POST2] | post3/cmp/tests__sv__l10.sv/post2.err | 363 bytes | identical to block 6
+=== block 11 | vita [POST2] | post3/cmp/tests__sv__l10.sv/post2.out | 5 bytes | identical to block 7
+=== block 12 | vita [POST3] | post3/cmp/tests__sv__l10.sv/post3.err | 363 bytes | identical to block 6
+=== block 13 | vita [POST3] | post3/cmp/tests__sv__l10.sv/post3.out | 5 bytes | identical to block 7
+=== block 14 | vita [PRE] | tests/sv/out/l10/pre.out | 500 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ':' in case item, found '"b"'
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/tests/sv/l10.sv:7:25: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '"b"'
+errors=2 warnings=0 notes=0
+rc=1
+=== end

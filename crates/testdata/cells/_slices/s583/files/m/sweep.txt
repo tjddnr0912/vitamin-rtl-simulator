@@ -1,0 +1,426 @@
+##### c/a00_repro  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a00p_repro_initfirst_pure  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a00s_repro_initfirst  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a00t_repro_trace  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a01_comb_hash0_glitch  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a02_star_hash0_glitch  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a03_atr_hash0_glitch  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a04_latch_hash0_glitch  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a05_posedge_double  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a06_initial_two_writes  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a07_nba_chain  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a08_comb_chain  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a08b_comb_chain_rev  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a09_comb_persist  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a10_resume_event  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a10w_resume_wait  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a11_same_proc_hash0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a12_func_two_procs  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a13_initial_x_t0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a14_comb_t0_nba_init  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/a15_comb_t0_hash0_init  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/b00_repro  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 chain r=0
+t=2 single r=0
+t=3 prio r=0
+simulation ended (Finish) at time 4
+--stderr
+b00_repro.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+b00_repro.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+=== POST native
+rc=0
+--stdout
+t=1 chain r=0
+t=2 single r=0
+t=3 prio r=0
+simulation ended (Finish) at time 4
+--stderr
+b00_repro.sv:7:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+b00_repro.sv:10:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+b00_repro.sv:13:14: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+##### c/b01_nested_qual  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 else-unique0-if done
+t=2 else-unique-if done
+t=3 else-priority-if done
+t=4 u0-else-unique-if done
+t=5 else-labeled-if done
+t=6 chain3-dup done
+simulation ended (Finish) at time 7
+--stderr
+b01_nested_qual.sv:7:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+b01_nested_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+b01_nested_qual.sv:11:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+=== POST native
+rc=0
+--stdout
+t=1 else-unique0-if done
+t=2 else-unique-if done
+t=3 else-priority-if done
+t=4 u0-else-unique-if done
+t=5 else-labeled-if done
+t=6 chain3-dup done
+simulation ended (Finish) at time 7
+--stderr
+b01_nested_qual.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+b01_nested_qual.sv:7:41: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+b01_nested_qual.sv:9:43: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+b01_nested_qual.sv:11:42: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+b01_nested_qual.sv:15:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+##### c/b02_frame_lanes  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 fchain done
+t=2 fsingle done
+t=3 tchain done
+t=4 tsingle done
+simulation ended (Finish) at time 5
+--stderr
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+=== POST native
+rc=0
+--stdout
+t=1 fchain done
+t=2 fsingle done
+t=3 tchain done
+t=4 tsingle done
+simulation ended (Finish) at time 5
+--stderr
+b02_frame_lanes.sv:13:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.fsingle] [at time 2]
+b02_frame_lanes.sv:18:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tchain] [at time 3]
+b02_frame_lanes.sv:22:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.tsingle] [at time 4]
+##### c/b03_chain_comb_t0  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+eval t=0 ab=xx
+eval t=0 ab=10
+eval t=2 ab=00
+eval t=2 ab=01
+eval t=3 ab=00
+simulation ended (Finish) at time 4
+--stderr
+
+=== POST native
+rc=0
+--stdout
+eval t=0 ab=xx
+eval t=0 ab=10
+eval t=2 ab=00
+eval t=2 ab=01
+eval t=3 ab=00
+simulation ended (Finish) at time 4
+--stderr
+b03_chain_comb_t0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 0]
+b03_chain_comb_t0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+b03_chain_comb_t0.sv:6:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+##### c/b04_single_comb_t0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/f01_finish_same_step  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/f02_finish_after_hash0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/m_case_priority  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/m_case_unique  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/m_case_unique0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/m_if_priority  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+--stderr
+m_if_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+m_if_priority.sv:17:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+=== POST native
+rc=0
+--stdout
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+--stderr
+m_if_priority.sv:5:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+m_if_priority.sv:7:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+m_if_priority.sv:9:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+m_if_priority.sv:15:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+m_if_priority.sv:17:17: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+##### c/m_if_unique  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+--stderr
+m_if_unique.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+m_if_unique.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+=== POST native
+rc=0
+--stdout
+t=1 if1 done
+t=2 chain2 done
+t=3 chain3 done
+t=4 chain-else done
+t=5 else-begin-if done
+t=6 nested-in-then done
+t=7 dangling-else done
+t=8 chain-match done
+t=9 chain-match2 done
+simulation ended (Finish) at time 10
+--stderr
+m_if_unique.sv:5:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+m_if_unique.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+m_if_unique.sv:9:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+m_if_unique.sv:15:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 6]
+m_if_unique.sv:17:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+##### c/m_if_unique0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o01_t0_hash0hash0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o02_t0_hash0x3  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o03_t0_hash0_then_nba  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o04_t0_always_hash0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o05_t0_assign  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o06_t0_initial_display  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/o07_three_combs  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/r01_order  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/v01_comb_const_t0_read  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/v02_comb_const_initial_first  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/v03_latch_t0  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### c/v04_selftimed_always_order  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### j/J1  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+simulation ended (Finish) at time 4
+--stderr
+
+=== POST native
+rc=0
+--stdout
+simulation ended (Finish) at time 4
+--stderr
+J1.sv:2:33: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+J1.sv:2:33: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+##### j/J1_H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### m/ctl_else  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### m/p0_chain  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 p0 chain2 done
+t=2 p0 chain3 done
+t=3 else-priority0-if done
+simulation ended (Finish) at time 4
+--stderr
+
+=== POST native
+rc=0
+--stdout
+t=1 p0 chain2 done
+t=2 p0 chain3 done
+t=3 else-priority0-if done
+simulation ended (Finish) at time 4
+--stderr
+p0_chain.sv:9:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+##### plan/b02H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/b03H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/ca_H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/fold_H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/fold_P  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l07f_H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l07f_P  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l07f_S  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l08_Cs  changed=- post_backend_split=False staged_ok=False runjson_eq=False
+=== staged vrun
+rc=3
+--stdout
+--stderr
+error[VITA-E8005]: cannot read 'l08_Cs.velab': No such file or directory (os error 2)
+=== one-shot native
+rc=1
+--stdout
+--stderr
+l08_Cs.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+##### plan/l08_H  changed=- post_backend_split=False staged_ok=False runjson_eq=False
+=== staged vrun
+rc=3
+--stdout
+--stderr
+error[VITA-E8005]: cannot read 'l08_H.velab': No such file or directory (os error 2)
+=== one-shot native
+rc=1
+--stdout
+--stderr
+l08_H.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+##### plan/l08_Hm  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l08_P  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/l08_S  changed=- post_backend_split=False staged_ok=False runjson_eq=False
+=== staged vrun
+rc=3
+--stdout
+--stderr
+error[VITA-E8005]: cannot read 'l08_S.velab': No such file or directory (os error 2)
+=== one-shot native
+rc=1
+--stdout
+--stderr
+l08_S.sv:6:23: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P0` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+##### plan/lt_H  changed=- post_backend_split=False staged_ok=True runjson_eq=True
+##### plan/lt_P  changed=['native', 'interp', 'vm'] post_backend_split=False staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 static task done
+t=2 pkg task done
+t=3 class task done
+t=4 fork child done
+simulation ended (Finish) at time 5
+--stderr
+
+=== POST native
+rc=0
+--stdout
+t=1 static task done
+t=2 pkg task done
+t=3 class task done
+t=4 fork child done
+simulation ended (Finish) at time 5
+--stderr
+lt_P.sv:9:78: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.st] [at time 1]
+lt_P.sv:2:78: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.pt] [at time 2]
+lt_P.sv:5:48: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.K.m] [at time 3]
+lt_P.sv:16:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+lt_P.sv:19:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+##### plan/vl_lines  changed=['native', 'interp', 'vm'] post_backend_split=True staged_ok=True runjson_eq=True
+=== PRE native
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+=== POST native
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this design (a subroutine that WRITES a net outside its own frame: S3b); ran on `vm` instead — the result is unaffected, the speed is
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+=== PRE interp
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+=== POST interp
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]
+=== PRE vm
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+=== POST vm
+rc=0
+--stdout
+t=1 multiline done
+t=2 split else-unique-if done
+t=3 split else-unique0-if done
+t=4 split middle-unique chain3 done
+t=5 split middle-unique0 chain3 done
+t=6 explicit null else done
+t=7 side-effect n=2
+t=8 side-effect match n=2 r=2
+t=9 matched-then inner-miss done
+simulation ended (Finish) at time 10
+--stderr
+vl_lines.sv:7:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 1]
+vl_lines.sv:12:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 2]
+vl_lines.sv:14:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 3]
+vl_lines.sv:18:20: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 4]
+vl_lines.sv:21:15: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 5]
+vl_lines.sv:27:22: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top] [at time 7]

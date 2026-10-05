@@ -1,0 +1,99 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__g__c7__n_comb_objf2_tbL
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/g/c7/n_comb_objf2_tbL.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: g/c7
+oracles_present: verilator
+vita_tags: PRE,POSTC,POST,POST2
+verdict: residue verilator lines
+verdict_source: s585/g/cmp3_final.txt:6
+notes: runs: g__n_comb_objf2_tbL n_comb_objf2_tbL
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST: md5 6328a971c02b99269f42a1b39f545fda commit ce8e4ae7879e48cbc652a6ac1fcdd818
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+vita_binary: POSTC: md5 17b7d988696c0f5b38b7e94b845e2df9 commit 75f255d4
+blocks: 3
+=== block 1 | combined [verilator,PRE,POST] verilator 5.052 (version captured in slice) | g/out2/n_comb_objf2_tbL.out | 1114 bytes
+##### n_comb_objf2_tbL
+=== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+- n_comb_objf2_tbL.sv:20: Verilog $finish
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 2 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/g__n_comb_objf2_tbL.out | 1117 bytes
+##### g__n_comb_objf2_tbL
+=== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+- n_comb_objf2_tbL.sv:20: Verilog $finish
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== block 3 | combined [verilator,PRE,POSTC] verilator 5.052 (version captured in slice) | g/out/n_comb_objf2_tbL.out | 1269 bytes
+##### n_comb_objf2_tbL
+=== verilator compile rc=0 run rc=0
+t=1 y=2
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[2] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+t=3 y=0
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[3] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+- n_comb_objf2_tbL.sv:20: Verilog $finish
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+[4] %Error: n_comb_objf2_tbL.sv:4: Assertion failed in $unit.C.f: 'unique if' statement violated
+=== vita PRE (native=interp=vm)
+rc=0
+t=1 y=2
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=0
+t=1 y=2
+n_comb_objf2_tbL.sv:4:12: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique case statement [in top.u.C.f] [at time 2]
+t=3 y=0
+simulation ended (Finish) at time 4
+errors=0 warnings=2 notes=0
+--- PRE==POST (all backends): False
+--- POST staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+--- PRE staged vcmp=0 velab=0 vrun=0 W4031/E4003+stdout==one-shot: True
+=== end

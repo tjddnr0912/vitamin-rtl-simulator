@@ -1,0 +1,93 @@
+category	path_or_glob	count	bytes	reason
+binary	bin_p5/**	1	7570176	Mach-O executable (vita / probe / mutant build)
+binary	bin_p6/**	1	7619792	Mach-O executable (vita / probe / mutant build)
+binary	instr_i0/**	1	28512304	Mach-O executable (vita / probe / mutant build)
+binary	post_a/**	5	37187376	Mach-O executable (vita / probe / mutant build)
+binary	post_b/**	5	37187376	Mach-O executable (vita / probe / mutant build)
+binary	post_c/**	5	37187312	Mach-O executable (vita / probe / mutant build)
+binary	post_d/**	5	37187312	Mach-O executable (vita / probe / mutant build)
+binary	postd/**	1	28489840	Mach-O executable (vita / probe / mutant build)
+binary	postd2/**	1	28521376	Mach-O executable (vita / probe / mutant build)
+binary	postd3/**	1	28494128	Mach-O executable (vita / probe / mutant build)
+binary	postd4/**	1	28518496	Mach-O executable (vita / probe / mutant build)
+binary	pre/**	5	37104256	Mach-O executable (vita / probe / mutant build)
+binary	probe_p1/**	1	7420896	Mach-O executable (vita / probe / mutant build)
+binary	probe_p2/**	1	7437456	Mach-O executable (vita / probe / mutant build)
+binary	probe_p3/**	1	7453968	Mach-O executable (vita / probe / mutant build)
+binary	probe_p4/**	1	7453968	Mach-O executable (vita / probe / mutant build)
+binary	r1/soundness/mut/**	3	85469616	Mach-O executable (vita / probe / mutant build)
+binary	r3/soundness/mut/**	2	57027648	Mach-O executable (vita / probe / mutant build)
+binary-wrapper	probe_cache/**	1	193	binary dir content (wrapper script / staged bins)
+binary-wrapper	probe_d1/**	1	179	binary dir content (wrapper script / staged bins)
+binary-wrapper	probe_p5/**	1	202	binary dir content (wrapper script / staged bins)
+binary-wrapper	probe_p6/**	1	218	binary dir content (wrapper script / staged bins)
+build-dir	g/__pycache__/**	1	9167	build tree
+build-dir	r1/differential/__pycache__/**	1	8639	build tree
+build-test-log	*	2	10	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	*.log	49	3782976	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	*.out	5	4057578	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	*.rc	31	76	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	g/*.log	3	2145812	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	g/*.rc	2	4	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	r1/soundness/*.rc	1	2	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+build-test-log	r3/soundness/*.rc	1	2	cargo/nextest/clippy/fmt/gate/build/test logs and rc markers
+corpus	*.log	4	16163	corpus/examples vita outputs, elab timing, corpus logs
+corpus	*.out	3	3241	corpus/examples vita outputs, elab timing, corpus logs
+corpus	*.rc	1	2	corpus/examples vita outputs, elab timing, corpus logs
+corpus	g/*.log	1	2325206	corpus/examples vita outputs, elab timing, corpus logs
+corpus	g/*.py	3	5852	corpus/examples vita outputs, elab timing, corpus logs
+corpus	g/ab_tmp/**	11	1474627	corpus/examples vita outputs, elab timing, corpus logs
+corpus	g/velab/**	240	56659444	corpus/examples vita outputs, elab timing, corpus logs
+corpus	r1/differential/*.log	3	1665	corpus/examples vita outputs, elab timing, corpus logs
+corpus	r1/differential/*.py	1	1831	corpus/examples vita outputs, elab timing, corpus logs
+corpus	r1/differential/*.rc	1	2	corpus/examples vita outputs, elab timing, corpus logs
+corpus	r1/differential/velab/**	60	14164876	corpus/examples vita outputs, elab timing, corpus logs
+doc-or-list	*.txt	1	1477	doc draft / list file
+empty	*.out	8	0	zero-byte harness output (misquoted shell arg)
+example-run-output	g/exrun/**	4	4688	VCDs of repo examples/ runs (not cells)
+mutation	mut/**	42	1789853	mutation battery logs / scripts
+mutation	mut2/**	60	1079484	mutation battery logs / scripts
+mutation	mut3/**	93	1320664	mutation battery logs / scripts
+mutation	r1/soundness/mut/**	7	2443582	mutation battery logs / scripts
+mutation	r3/soundness/mut/**	6	1635557	mutation battery logs / scripts
+no-oracle-output	g/c3/*.sv	1	298	SV source with no oracle output captured
+no-oracle-output	g/x/**	1	109	SV source with no oracle output captured
+rust-patch	*.patch	8	148419	saved Rust source diff
+rust-patch	mut/**	4	156333	saved Rust source / diff
+rust-patch	mut2/**	2	79487	saved Rust source / diff
+rust-patch	mut3/**	2	83593	saved Rust source / diff
+rust-patch	post_a/**	1	64542	saved Rust source diff
+rust-patch	post_b/**	1	64542	saved Rust source diff
+rust-patch	post_c/**	1	73791	saved Rust source diff
+rust-patch	post_d/**	1	94229	saved Rust source diff
+rust-patch	r1/soundness/mut/**	2	78385	saved Rust source / diff
+rust-patch	r3/soundness/mut/**	1	24631	saved Rust source / diff
+script	*.py	2	18144	helper script (not a generator or per-set runner)
+script	g/*.py	6	7080	helper script (not a generator or per-set runner)
+third-party-document	lrm/**	4	18863130	IEEE 1800-2017 PDF, extracted text and extraction script
+vita-staged-artefact	g/staged/*.velab	79	35516	vita staged artefact
+vita-staged-artefact	g/staged/*.vu	103	105545	vita staged artefact
+vita-staged-artefact	g/staged2/post/*.velab	56	24519	vita staged artefact
+vita-staged-artefact	g/staged2/post/*.vu	149	151217	vita staged artefact
+vita-staged-artefact	g/staged2/post_b/*.velab	56	24519	vita staged artefact
+vita-staged-artefact	g/staged2/post_b/*.vu	149	151217	vita staged artefact
+vita-staged-artefact	g/staged2/post_c/*.velab	75	32455	vita staged artefact
+vita-staged-artefact	g/staged2/post_c/*.vu	149	151217	vita staged artefact
+vita-staged-artefact	g/staged2/post_d/*.velab	56	24519	vita staged artefact
+vita-staged-artefact	g/staged2/post_d/*.vu	149	151217	vita staged artefact
+vita-staged-artefact	g/staged2/pre/*.velab	101	45013	vita staged artefact
+vita-staged-artefact	g/staged2/pre/*.vu	149	151217	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/post/*.velab	15	7725	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/post/*.vu	40	34397	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/postd/*.velab	23	10651	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/postd/*.vu	50	43091	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/pre/*.velab	33	13880	vita staged artefact
+vita-staged-artefact	r1/differential/staged2/pre/*.vu	50	43091	vita staged artefact
+vita-staged-artefact	r1/soundness/st/*.post_b.velab	2	1017	vita staged artefact
+vita-staged-artefact	r1/soundness/st/*.post_b.vu	11	10196	vita staged artefact
+vita-staged-artefact	r1/soundness/st/*.pre.velab	10	4278	vita staged artefact
+vita-staged-artefact	r1/soundness/st/*.pre.vu	11	10196	vita staged artefact
+vita-staged-artefact	r3/soundness/st/*.post_d.velab	3	1053	vita staged artefact
+vita-staged-artefact	r3/soundness/st/*.post_d.vu	5	3928	vita staged artefact
+vita-staged-artefact	r3/soundness/st/*.pre.velab	5	1754	vita staged artefact
+vita-staged-artefact	r3/soundness/st/*.pre.vu	5	3928	vita staged artefact

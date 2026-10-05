@@ -1,0 +1,33 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s582__grounding__b3__s2_strfx_plaincase
+slice: §4.5.582 (s582; details _slices/s582/)
+origin: s582/grounding/b3/s2_strfx_plaincase.sv
+roadmap_row: §3.b case-inside
+set: grounding/b3
+oracles_present: iverilog,verilator
+vita_tags: PRE
+verdict: PRE PRE-EXISTING SILENT-WRONG (1 oracle) in plain case; `t = sf(1); case (t)` = 3 and `if (sf(1) inside {..})` = 3 (sf x3) on PRE
+verdict_source: s582/grounding/REPORT.md:173
+vita_binary: PRE: md5 4ace7617440041d0d16aee5309fded10 commit 60c70e05
+blocks: 3
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | grounding/b3/out_s2_strfx_plaincase/iv.out | 689 bytes
+Assertion failed: (ivl_expr_value(expr) == IVL_VT_BOOL || ivl_expr_value(expr) == IVL_VT_VECTOR), function draw_eval_vec4, file eval_vec4.c, line 1360.
+sh: line 1: 20217 Done                    /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivlpp -L -F"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg214403a21" -f"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlg14403a21" -p"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrli14403a21"
+     20218 Abort trap: 6           | /opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/ivl -C"/var/folders/pm/fxr_mw3x7sj0dkh9qqhsvwg00000gn/T//ivrlh14403a21" -C"/opt/homebrew/Cellar/icarus-verilog/13.0/lib/ivl/vvp.conf" -- -
+rc=134
+=== block 2 | oracle verilator 5.052 (version captured in slice) | grounding/b3/out_s2_strfx_plaincase/vl.out | 388 bytes
+sf(1)
+m=3
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s582/grounding/b3/s2_strfx_plaincase.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 10ps; walltime 0.000 s; speed 344.828 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | vita [PRE] | grounding/b3/out_s2_strfx_plaincase/vita.out | 179 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+sf(1)
+m=0
+simulation ended (Finish) at time 10
+errors=0 warnings=1 notes=0
+rc=0
+=== end

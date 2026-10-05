@@ -1,0 +1,1 @@
+case (-1) 32'hFFFFFFFF: begin wire [7:0] w = 8'd200; initial #1 $display("I a %0d bits=%0d", w, $bits(w)); end 0: begin wire [7:0] w = 8'd2; initial #1 $display("I k %0d", w); end default: begin wire [3:0] w = 4'd9; initial #1 $display("I def %0d bits=%0d", w, $bits(w)); end endcase

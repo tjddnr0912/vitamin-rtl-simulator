@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s592__g__c__Z2b_armerr_sh_dup
+slice: §4.5.592 (s592; details _slices/s592/)
+origin: s592/g/c/Z2b_armerr_sh_dup.sv
+roadmap_row: §2 🆕 V
+set: g/c
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post_a,post_b,post_c,post_d,postd,postd2,postd3,postd4,pre,probe_cache,probe_d1,probe_p6,pre_st,post_a_st,post_b_st,post_c_st,post_d_st
+verdict: same
+verdict_source: s592/r3_x_c_pre.out:55
+notes: named at s592/IMPL.md:26
+vita_binary: post_a: md5 881bf309c47b1a7178b2ed3a26c28a0c commit 75f46453
+vita_binary: post_b: md5 020de73fcf94cad012aff0f7a3a7db62 commit unrecorded
+vita_binary: post_c: md5 1ce7d9540a91385f8ee589e6695cc5a2 commit unrecorded
+vita_binary: post_d: md5 5119bb026cab5cde3875b0c7b2208722 commit unrecorded
+vita_binary: postd: md5 76b2b13078ecad068ec05bdd9c7b1b84 commit unrecorded
+vita_binary: postd2: md5 534fa528f45f4d94fe871ba7022d8b4c commit unrecorded
+vita_binary: postd3: md5 2d391961cf3a4fbd6c76d54b63e1c3df commit unrecorded
+vita_binary: postd4: md5 8a1578b182ee208f1ba81f977e6598ec commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 13
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Z2b_armerr_sh_dup.iv.txt | 144 bytes
+Z2b_armerr_sh_dup.sv:6: error: 'w' has already been declared in this scope.
+Z2b_armerr_sh_dup.sv:6:      : It was declared here as a net.
+
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Z2b_armerr_sh_dup.vl.txt | 112 bytes
+%Error: Z2b_armerr_sh_dup.sv:6:51: Duplicate declaration of signal: 'w'
+%Error: Exiting due to 1 error(s)
+
+rc=1
+=== block 3 | oracle verilator 5.052 (version captured in slice) | ./Z2b_armerr_sh_dup.vlb.txt | 572 bytes
+%Error: Z2b_armerr_sh_dup.sv:6:51: Duplicate declaration of signal: 'w'
+    6 |       default: begin : g wire [3:0] w; wire [3:0] w; initial #1 $display("@def"); end
+      |                                                   ^
+        Z2b_armerr_sh_dup.sv:6:37: ... Location of original declaration
+    6 |       default: begin : g wire [3:0] w; wire [3:0] w; initial #1 $display("@def"); end
+      |                                     ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: Exiting due to 1 error(s)
+=== block 4 | oracle sv2v 0.0.13 (version captured in slice) | ./Z2b_armerr_sh_dup.sv.txt | 67 bytes
+@k 200
+Z2b_armerr_sh_dup.sv2v.v:21: $finish called at 5 (1s)
+
+rc=0
+=== block 5 | vita [post_a] | ./Z2b_armerr_sh_dup.post.txt | 615 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z2b_armerr_sh_dup.sv:6:40: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.gb[0].g[0].w` redeclared (duplicate declaration) [in top.gb.g]
+Z2b_armerr_sh_dup.sv:5:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 8:28), so vita's elaboration passes choose different case items here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference — declare it above the generate case [in top.gb]
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 6 | vita [post_b] | ./Z2b_armerr_sh_dup.post_b.txt | 615 bytes | identical to block 5
+=== block 7 | vita [post_c] | ./Z2b_armerr_sh_dup.post_c.txt | 279 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z2b_armerr_sh_dup.sv:6:40: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.gb[0].g[0].w` redeclared (duplicate declaration) [in top.gb.g]
+errors=1 warnings=1 notes=0
+
+rc=1
+=== block 8 | vita [post_d] | ./Z2b_armerr_sh_dup.post_d.txt | 576 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+Z2b_armerr_sh_dup.sv:6:40: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.gb[0].g[0].w` redeclared (duplicate declaration) [in top.gb.g]
+Z2b_armerr_sh_dup.sv:5:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `K` is used before it is declared in this generate block (declared at 8:28), so vita's elaboration passes choose different case items here; IEEE 1800-2017 §26.3 binds a name only to declarations before the reference [in top.gb]
+errors=2 warnings=1 notes=0
+
+rc=1
+=== block 9 | vita [postd] | ./Z2b_armerr_sh_dup.postd.txt | 615 bytes | identical to block 5
+=== block 10 | vita [postd2] | ./Z2b_armerr_sh_dup.postd2.txt | 279 bytes | identical to block 7
+=== block 11 | vita [postd3] | ./Z2b_armerr_sh_dup.postd3.txt | 279 bytes | identical to block 7
+=== block 12 | vita [postd4] | ./Z2b_armerr_sh_dup.postd4.txt | 576 bytes | identical to block 8
+=== block 13 | vita [pre] | ./Z2b_armerr_sh_dup.pre.txt | 279 bytes | identical to block 7
+=== end

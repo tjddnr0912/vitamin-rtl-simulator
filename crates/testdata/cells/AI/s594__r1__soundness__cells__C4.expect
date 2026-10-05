@@ -1,0 +1,72 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__soundness__cells__C4
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/soundness/cells/C4.sv
+roadmap_row: §2 🆕 AI
+set: r1/soundness/cells
+oracles_present: doc-quote
+vita_tags: unrecorded
+verdict: no move
+verdict_source: s594/r1/soundness/REPORT.md:23
+notes: oracle raw lines quoted at s594/r1/soundness/cells/cbatch.out:31; named at s594/r1/soundness/REPORT.md:23
+alias: r2/soundness/cells/C4 (byte-identical source) verdict: no move verdict_source: s594/r1/soundness/REPORT.md:23
+alias: i/r2/C4 (byte-identical source) verdict: no move verdict_source: s594/r1/soundness/REPORT.md:23
+alias: i/r2/lens/sound/C4 (byte-identical source) verdict: no move verdict_source: s594/r1/soundness/REPORT.md:23
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 18
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | i/r2/C4.ivl | 235 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 38698 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp
+rc=142
+=== block 2 | oracle iverilog 13.0 (version captured in slice) | i/r2/lens/sound/C4.ivl | 235 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 17: 40699 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.vvp
+rc=142
+=== block 3 | oracle verilator 5.052 (version captured in slice) | i/r2/C4.vl | 336 bytes
+%Warning-WIDTHEXPAND: C4.sv:6:31: Operator ADD expects 32 bits on the LHS, but LHS's FUNCREF 'fl' generates 8 bits.
+k=1
+- C4.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 3.030 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 4 | oracle verilator 5.052 (version captured in slice) | i/r2/lens/sound/C4.vl | 336 bytes
+%Warning-WIDTHEXPAND: C4.sv:6:31: Operator ADD expects 32 bits on the LHS, but LHS's FUNCREF 'fl' generates 8 bits.
+k=1
+- C4.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 7.143 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version captured in slice) | i/r2/C4.s2v | 239 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 39951 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp
+rc=142
+=== block 6 | oracle sv2v 0.0.13 (version captured in slice) | i/r2/lens/sound/C4.s2v | 239 bytes
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/d07b7e3f-083c-4d58-9fce-b42df268e9c8/scratchpad/s594/a/run4w.sh: line 19: 42635 Alarm clock: 14         perl -e "alarm 15; exec @ARGV" vvp -n $b.s2v.vvp
+rc=142
+=== block 7 | vita [d3] | i/r2/C4.d3 | 174 bytes
+k=0
+simulation ended (Finish) at time 100
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+rc=0
+=== block 8 | vita [d3] | i/r2/lens/sound/C4.d3 | 174 bytes | identical to block 7
+=== block 9 | vita [pa] | i/r2/C4.pa | 174 bytes | identical to block 7
+=== block 10 | vita [pa] | i/r2/lens/sound/C4.pa | 174 bytes | identical to block 7
+=== block 11 | vita [pb] | i/r2/C4.pb | 174 bytes | identical to block 7
+=== block 12 | vita [pb] | i/r2/lens/sound/C4.pb | 174 bytes | identical to block 7
+=== block 13 | vita [pre] | i/r2/C4.pre | 174 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+k=0
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 14 | vita [pre] | i/r2/C4.pre.route | 13 bytes
+t fl frame 1
+=== block 15 | vita [pre] | i/r2/lens/sound/C4.pre | 174 bytes | identical to block 13
+=== block 16 | vita [pre] | i/r2/lens/sound/C4.pre.route | 13 bytes | identical to block 14
+=== block 17 | vita [pre594] | i/r2/C4.pre594 | 174 bytes | identical to block 7
+=== block 18 | vita [pre594] | i/r2/lens/sound/C4.pre594 | 174 bytes | identical to block 7
+=== end

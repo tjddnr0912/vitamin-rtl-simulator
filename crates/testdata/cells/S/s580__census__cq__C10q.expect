@@ -1,0 +1,22 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s580__census__cq__C10q
+slice: §4.5.580 (s580; details _slices/s580/)
+origin: s580/census/cq/C10q.sv
+roadmap_row: §2 🆕 S
+set: census/cq
+oracles_present: iverilog
+vita_tags: post-dbg-r1,post2dbg,postrel,PRE
+verdict: unrecorded
+verdict_source: unrecorded
+notes: R4 cmp3_post4 bucket(s): both×1 (s580/r4/cmp3_post4.txt)
+vita_binary: PRE: md5 9d37b3cdbd7f325fe273241dfbb3f465 commit 00c3d76d963f28e4ecc403bd5eba0807abcdbb40
+blocks: 2
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./C10q.ivd.txt | 44 bytes
+C10q 1
+C10q.sv:4: $finish called at 1 (1ns)
+=== block 2 | vita [PRE] | ./C10q.pre.txt | 76 bytes
+C10q 1
+simulation ended (Finish) at time 1
+errors=0 warnings=0 notes=0
+rc=0
+=== end

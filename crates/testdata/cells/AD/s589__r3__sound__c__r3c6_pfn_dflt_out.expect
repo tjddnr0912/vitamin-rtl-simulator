@@ -1,0 +1,51 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s589__r3__sound__c__r3c6_pfn_dflt_out
+slice: §4.5.589 (s589; details _slices/s589/)
+origin: s589/r3/sound/c/r3c6_pfn_dflt_out.sv
+roadmap_row: §2 🆕 AD
+set: r3/sound/c
+oracles_present: iverilog,sv2v,verilator
+vita_tags: POST-b,POST-c,PRE,POST-c-sep
+verdict: unrecorded
+verdict_source: unrecorded
+vita_binary: POST-b: md5 bea240591388d3ef7c91a47c9c052ac6 commit aac91c75b291432bf44ae5c9a5077a58
+vita_binary: POST-c: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: POST-c-sep: md5 e31d955b047ad8bbca74dd6b563d2f6f commit ab107c9ece519a49a5957e6660f87d99
+vita_binary: PRE: md5 e1e7e57148bb83ad35d2c4f68247a290 commit 2f2d3f2d
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./r3c6_pfn_dflt_out.ivl | 180 bytes
+r3c6_pfn_dflt_out.sv:4: error: Function p.f port o is not an input port.
+r3c6_pfn_dflt_out.sv:4:      : Function arguments must be input ports.
+1 error(s) during elaboration.
+rc=1
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./r3c6_pfn_dflt_out.vl | 240 bytes
+v=3 r=3
+- r3c6_pfn_dflt_out.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 100ps; walltime 0.000 s; speed 3.704 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./r3c6_pfn_dflt_out.s2v | 387 bytes
+r3c6_pfn_dflt_out.s2v.v:14: error: Function top.p_f port o is not an input port.
+r3c6_pfn_dflt_out.s2v.v:14:      : Function arguments must be input ports.
+r3c6_pfn_dflt_out.s2v.v:23: error: The function p_f has been called with missing/empty parameters.
+r3c6_pfn_dflt_out.s2v.v:23:      : Verilog doesn't allow passing empty parameters to functions.
+2 error(s) during elaboration.
+rc=2
+=== block 4 | vita [POST-b] | ./r3c6_pfn_dflt_out.postb | 178 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+v=3 r=3
+simulation ended (Finish) at time 100
+errors=0 warnings=1 notes=0
+rc=0
+=== block 5 | vita [POST-c] | ./r3c6_pfn_dflt_out.postc | 178 bytes | identical to block 4
+=== block 6 | vita [POST-c-sep] | ./r3c6_pfn_dflt_out.spostc | 234 bytes
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+errors=0 warnings=0 notes=0
+v=3 r=3
+simulation ended (Finish) at time 100
+errors=0 warnings=0 notes=0
+rc=0
+=== block 7 | vita [PRE] | ./r3c6_pfn_dflt_out.pre | 178 bytes | identical to block 4
+=== end

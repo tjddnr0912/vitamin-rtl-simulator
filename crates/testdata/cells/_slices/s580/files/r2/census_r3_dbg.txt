@@ -1,0 +1,43 @@
+## r2/fx2/H04.sv
+  POST : cont 0 1
+  POST : hier 0 1 1
+  POST : signed 1 1 1 0
+  POST : xz 1 x 0
+  POST : weq 0 0
+  POST : simulation ended (Finish) at time 1
+  POST : errors=0 warnings=0 notes=0
+  POST : rc=0
+  NEW  : H04.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t
+  NEW  : H04.sv:6:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (t
+  NEW  : H04.sv:14:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:14:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:15:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:16:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : H04.sv:17:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: wildcard equality (==?/!=?, or an `inside` element with x/z bits) on a left operand of unsizable width is unsupported (
+  NEW  : errors=13 warnings=0 notes=0
+  NEW  : rc=1
+## r2/r26/X1.sv
+  POST : X1.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has 
+  NEW  : X1.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern 
+## r2/r26/X2.sv
+  POST : X2.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has 
+  POST : errors=1 warnings=0 notes=0
+  POST : rc=1
+  NEW  : X2 rep 0000
+  NEW  : X2 psel 1
+  NEW  : X2 gencase default
+  NEW  : simulation ended (Finish) at time 2
+  NEW  : errors=0 warnings=0 notes=0
+  NEW  : rc=0
+## r2/r26/X4.sv
+  POST : X4.sv:3:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has 
+  POST : X4.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits has 
+  NEW  : X4.sv:3:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern 
+  NEW  : X4.sv:4:15: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-case item is not a constant: a wildcard comparison (`==?`, `!=?` or an `inside` element) whose x/z pattern 
+files 264 changed 4

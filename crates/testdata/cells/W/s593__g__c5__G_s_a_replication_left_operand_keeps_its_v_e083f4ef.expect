@@ -1,0 +1,45 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s593__g__c5__G_s_a_replication_left_operand_keeps_its_v_e083f4ef
+slice: §4.5.593 (s593; details _slices/s593/)
+origin: s593/g/c5/G_s_a_replication_left_operand_keeps_its_v_e083f4ef.sv
+roadmap_row: §2 🆕 W (+ 🆕 S (a) i64 half)
+set: g/c5
+oracles_present: iverilog,verilator,sv2v
+vita_tags: post1,post2,post3,post5,pre
+verdict: ALL
+verdict_source: s593/g/c5.p5.summ:232
+notes: design dumped from repo pin test files (g/pindump.patch instrumentation; s593/GROUNDING.md Q1)
+alias: g/pins/generate_case_and_wildcard_prerequisites__s_a_replication_left_operand_keeps_its_value__28545_6 (byte-identical source) verdict: ALL verdict_source: s593/g/c5.p5.summ:232
+vita_binary: post1: md5 ffe70ae34ca91c690d9420e8c52ada65 commit unrecorded
+vita_binary: post2: md5 c710901bf34b80701170e6b7a6dd3cc8 commit eb9d3b69
+vita_binary: post3: md5 18f6ab435e59fb29c92e7c20d1b1e00b commit eb9d3b69
+vita_binary: post5: md5 ebfa0e02afb30e373f6804b242ee8aad commit unrecorded
+vita_binary: pre: md5 86a2d84a21d0329c57541e51ae9eb4d2 commit 75f46453
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version at preservation) | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.ivl | 9 bytes
+R=1
+rc=0
+=== block 2 | oracle verilator 5.052 (version at preservation) | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.vl | 185 bytes
+R=1
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: end at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.s2v | 9 bytes | identical to block 1
+=== block 4 | vita [post1] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post1 | 76 bytes
+R=1
+simulation ended (Quiescent) at time 0
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [post1] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post1.route | 0 bytes
+
+=== block 6 | vita [post2] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post2 | 216 bytes
+G_s_a_replication_left_operand_keeps_its_v_e083f4ef.sv:4:18: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `R` value is not a constant: 8'b1?00_1100 has no constant-fold arm [in t]
+errors=1 warnings=0 notes=0
+rc=1
+=== block 7 | vita [post3] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post3 | 216 bytes | identical to block 6
+=== block 8 | vita [post5] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post5 | 76 bytes | identical to block 4
+=== block 9 | vita [post5] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.post5.route | 0 bytes | identical to block 5
+=== block 10 | vita [pre] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.pre | 76 bytes | identical to block 4
+=== block 11 | vita [pre] | ./G_s_a_replication_left_operand_keeps_its_v_e083f4ef.pre.route | 0 bytes | identical to block 5
+=== end

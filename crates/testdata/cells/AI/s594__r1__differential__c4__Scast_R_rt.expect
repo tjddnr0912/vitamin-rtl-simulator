@@ -1,0 +1,40 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s594__r1__differential__c4__Scast_R_rt
+slice: §4.5.594 (s594; details _slices/s594/)
+origin: s594/r1/differential/c4/Scast_R_rt.sv
+roadmap_row: §2 🆕 AI
+set: r1/differential/c4
+oracles_present: iverilog,verilator,sv2v
+vita_tags: pa,pb,pre594,stgpa,stgpb
+verdict: unrecorded
+verdict_source: unrecorded
+alias: i/r2/lens/diff_c4/Scast_R_rt (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: d3: md5 59edf134e9810dd210bc3f4622d104be commit unrecorded
+vita_binary: pa: md5 4b3afc99cfeb6a2bc5bb94cfdeca3596 commit 1da347bc
+vita_binary: pb: md5 511dffa2f0fdcb6953a4aa9b241ec74b commit unrecorded
+vita_binary: pre594: md5 fc478eb9778be05e6d4ef7afa884443e commit 1da347bc
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version captured in slice) | ./Scast_R_rt.ivl | 59 bytes
+R: RT=252
+Scast_R_rt.sv:7: $finish called at 20 (1ns)
+rc=0
+=== block 2 | oracle verilator 5.052 (version captured in slice) | ./Scast_R_rt.vl | 235 bytes
+R: RT=252
+- Scast_R_rt.sv:7: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 20ns; walltime 0.000 s; speed 500.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version captured in slice) | ./Scast_R_rt.s2v | 62 bytes
+R: RT=252
+Scast_R_rt.s2v.v:12: $finish called at 20 (1s)
+rc=0
+=== block 4 | vita [d3] | i/r2/lens/diff_c4/Scast_R_rt.d3 | 80 bytes
+R: RT=252
+simulation ended (Finish) at time 20
+errors=0 warnings=0 notes=0
+rc=0
+=== block 5 | vita [pa] | ./Scast_R_rt.post | 80 bytes | identical to block 4
+=== block 6 | vita [pb] | ./Scast_R_rt.postb | 80 bytes | identical to block 4
+=== block 7 | vita [pre594] | ./Scast_R_rt.pre | 80 bytes | identical to block 4
+=== end

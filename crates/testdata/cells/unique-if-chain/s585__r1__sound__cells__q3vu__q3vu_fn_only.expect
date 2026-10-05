@@ -1,0 +1,59 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: s585__r1__sound__cells__q3vu__q3vu_fn_only
+slice: §4.5.585 (s585; details _slices/s585/)
+origin: s585/r1/sound/cells/q3vu/q3vu_fn_only.sv
+roadmap_row: §5.2 row 1 / §3.b unique-if-chain
+set: r1/sound/cells/q3vu
+oracles_present: verilator
+vita_tags: PRE,POST2
+verdict: unrecorded
+verdict_source: unrecorded
+notes: runs: s__q3vu_fn_only
+vita_binary: PRE: md5 c766b8d59edabaef96436e7b46e75dc6 commit 75f255d4
+vita_binary: POST2: md5 6f9c776f1e234a5dd04609f67302000f commit 4a3813a5b19e49d893826896d55c0ccc
+blocks: 1
+=== block 1 | combined [verilator,PRE,POST2] verilator 5.052 (version captured in slice) | g/out3/s__q3vu_fn_only.out | 3984 bytes
+##### s__q3vu_fn_only
+=== verilator compile rc=0 run rc=0 [run by r3]
+[0] %Error: q3vu_fn_only.sv:14: Assertion failed in $unit.C.new: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:36: Assertion failed in top.fn: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:37: Assertion failed in top.fn.unnamedblk1: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:37: Assertion failed in top.fn.unnamedblk1: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:4: Assertion failed in pk.pf: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:6: Assertion failed in pk.pf: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:8: Assertion failed in pk.pf: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:17: Assertion failed in $unit.C.f: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:18: Assertion failed in $unit.C.f: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:27: Assertion failed in top.i.fi: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:21: Assertion failed in $unit.C.v: 'unique if' statement violated
+[0] %Error: q3vu_fn_only.sv:22: Assertion failed in $unit.C.v: 'unique if' statement violated
+q=2
+- q3vu_fn_only.sv:47: Verilog $finish
+=== vita PRE (native=interp=vm)
+rc=1
+q3vu_fn_only.sv:40:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `fn(…)` has no constant-fold arm [in top]
+q3vu_fn_only.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::pf(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pk::*` and call `pf` by its bare name instead [in top]
+errors=2 warnings=1 notes=0
+=== vita POST (native=interp=vm)
+rc=1
+q3vu_fn_only.sv:40:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `fn(…)` has no constant-fold arm [in top]
+q3vu_fn_only.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::pf(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pk::*` and call `pf` by its bare name instead [in top]
+errors=2 warnings=1 notes=0
+--- PRE==POST (all backends): True
+--- POST staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+q3vu_fn_only.sv:40:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `fn(…)` has no constant-fold arm [in top]
+q3vu_fn_only.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::pf(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pk::*` and call `pf` by its bare name instead [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q3vu_fn_only.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+--- PRE staged vcmp=0 velab=1 vrun=3 W4031/E4003+stdout==one-shot: False
+errors=0 warnings=1 notes=0
+q3vu_fn_only.sv:40:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `fn(…)` has no constant-fold arm [in top]
+q3vu_fn_only.sv:44:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: package-scoped call `pk::pf(...)` needs a body that references only its own formals/locals, same-package constants, variables and subroutines — this one names something else (a name the package does not declare, or a construct outside the subset); `import pk::*` and call `pf` by its bare name instead [in top]
+errors=2 warnings=0 notes=0
+rc=3
+error[VITA-E8005]: cannot read 'q3vu_fn_only.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
+=== end

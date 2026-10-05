@@ -1,0 +1,1 @@
+case (-1) KB: begin : x2 wire [7:0] w = 8'd200; initial #1 $display("@2 a %0d bits=%0d", w, $bits(w)); end default: begin : x2 wire [3:0] w = 4'd9; initial #1 $display("@2 def %0d bits=%0d", w, $bits(w)); end endcase
