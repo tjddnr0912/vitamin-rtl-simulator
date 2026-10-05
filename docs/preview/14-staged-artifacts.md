@@ -56,14 +56,14 @@ deserialized. A bad magic, a short file or an undecodable header is `E-ART-FORMA
 
 | # | Field | Type | What the producers write |
 |---|---|---|---|
-| 1 | `format_version` | `u32` | `CURRENT_FORMAT_VERSION` = **31** |
+| 1 | `format_version` | `u32` | `CURRENT_FORMAT_VERSION` = **35** |
 | 2 | `schema_hash` | `[u8; 32]` | `.vu`: `schema_hash::<hdl_ast::SourceUnit>()`. `.velab`: `schema_hash::<sim_ir::SimIr>()` |
 | 3 | `composite_input_hash` | `[u8; 32]` | The upstream digest (§2 RULE V). `vcmp`: blake3 over the concatenated raw source text plus the `-D`/`-I` surface. `velab`: blake3 of the whole consumed `.vu` file. `velab -L`: blake3 over every consumed compilation-unit blob, concatenated |
 | 4 | `global_time_precision` | `i64` | The resolved design-wide precision exponent (`-9` = 1 ns) |
 | 5 | `consumed` | `Vec<(String, [u8; 32])>` | Written empty. Reserved: the live consumption record rides trailer ⑨ |
 | 6 | `worklib_manifest_hash` | `[u8; 32]` | Written all-zero. Reserved, same reason |
 | 7 | `uses_dump` | `bool` | Written `false` |
-| 8 | `tool_semver_major` | `u32` | `CARGO_PKG_VERSION_MAJOR` = **0** (workspace version 0.2.0) |
+| 8 | `tool_semver_major` | `u32` | `CARGO_PKG_VERSION_MAJOR` = **0** (workspace version 0.2.1) |
 | 9 | `provenance` | `Provenance` | Captured at run time from build-time environment |
 
 Fields 5, 6 and 7 are carried through unchanged and are gate-neutral: the gate never reads them.
@@ -932,7 +932,7 @@ caught. A match is refused: `output '<out>' would overwrite an input file`, exit
 
 ## 7. `format_version` discipline
 
-`CURRENT_FORMAT_VERSION` is **31**. It is the container format version, shared by `.vu` and
+`CURRENT_FORMAT_VERSION` is **35**. It is the container format version, shared by `.vu` and
 `.velab`, and it guards the on-disk wire layout: the header field layout, and everything in the
 out-of-band trailer and tail segments that the schema hash cannot see. The schema hash covers only
 the type shape of the golden frame.
@@ -956,9 +956,10 @@ rather than a mid-file postcard failure or, worse, a successful mis-decode.
 | an engine-facing table synthesized from run options or from elaborate output | no | it rides out of band and never touches the golden shape |
 
 **What is not versioned by it.** The work-library manifest carries its own `format_version = 1`,
-unrelated to the container number. The `sim-ir` golden hash is unchanged across the recent
-container versions, all of which are trailer or tail changes only; the two numbers are not the same
-thing and must not be read as one.
+unrelated to the container number. The `sim-ir` golden hash moves independently of it: of the
+bumps since v29, only v33 and v34 (new `SysFuncId` variants in the frozen IR) re-pinned the golden
+hash; v30–v32 were trailer changes, and v35 changed what an existing value means with no wire-shape
+change. The two numbers are not the same thing and must not be read as one.
 
 The version-by-version record lives in the doc comment on `CURRENT_FORMAT_VERSION` in
 `crates/vita-artifact/src/header.rs`, and in [../history/README.md](../history/README.md). This

@@ -217,7 +217,7 @@ The schemas are specified in
 
 | | |
 |---|---|
-| Version | 0.2.0. The major stays at 0 because it is a hard artifact-staleness key: bumping it invalidates every `.vu` and `.velab` in existence |
+| Version | 0.2.1. The major stays at 0 because it is a hard artifact-staleness key: bumping it invalidates every `.vu` and `.velab` in existence |
 | Toolchain | rustc/cargo 1.85.0 is the floor, pinned in `rust-toolchain.toml`; vita's own crates are edition 2021. `--locked` is required |
 | Workspace | 17 member crates, plus a vendored `third_party/libm` held outside the workspace |
 | Platforms | Linux and macOS. CI builds and tests on ubuntu-latest, macos-latest and a RHEL 9 / UBI 9 container, and fetches and runs the workload corpus on all three. Windows is not a target |

@@ -42,8 +42,8 @@ Constants:
 |---|---|
 | OBS `schema_ver` | `1` |
 | `tool` | `"vita"` |
-| `version` | `"0.2.0"` (the workspace version) |
-| `format_version` | `32` (the frozen artifact format this build emits) |
+| `version` | `"0.2.1"` (the workspace version) |
+| `format_version` | `35` (the frozen artifact format this build emits) |
 | Exit codes | `0` OK · `1` RTL or user error · `2` stale artifact · `3` CLI misuse |
 | Every OBS flag diagnostic | `VITA-E0001` (`E-CLI-BAD-FLAG`) |
 | `$vita_stage` elaborate errors | `VITA-E3009` (`E-ELAB-UNSUPPORTED`) |
@@ -939,8 +939,8 @@ on a design with one `always #5 clk`, two instances of a module holding one `alw
 {
   "schema_ver": 1,
   "tool": "vita",
-  "version": "0.2.0",
-  "format_version": 32,
+  "version": "0.2.1",
+  "format_version": 35,
   "seed": null,
   "plusargs": ["STAGE_TRACE"],
   "source": {"name": "d.sv", "blake3": "476800d8e8b05f12865dba0227b12bae7f9a83863c4472b431c3809e0d0a3c59"},

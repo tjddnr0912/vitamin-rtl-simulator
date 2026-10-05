@@ -9,6 +9,31 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-05
+
+**A 30,000-line SystemVerilog core runs.** lowRISC's Ibex RV32 core joins the workload corpus as its
+first SystemVerilog design and runs to Verilator's pinned digest, so the corpus is 11/11. Most of
+the release is what that took: imports and package routines that bind each name once and in the
+scope that declares it, parameters and type parameters that keep their declared type and width
+through overrides and constant folds, generate-scope names and `%m` that print what both reference
+tools print, and assignment patterns typed by their target.
+
+The other theme is time zero and event order, checked against Icarus Verilog and Verilator: an
+`always_comb` / `always_latch` implicit pass waits for its inputs, a continuous assign's function
+runs once after the `initial` blocks, processes due at one time resume in the order they were
+scheduled, and `$finish` ends the run at the end of its time step. On the native backend, programs
+of one instruction skip the interpreter, and `run.json` says why an expression left the compiled
+lane.
+
+Since 0.2.0: 400 commits, `format_version` 29 → 35, 71 diagnostic codes (was 68). The version
+bump itself is not an artifact gate — `verify_header` compares the semver MAJOR only — but the
+`format_version` change means every `.velab`/`.vu` written by 0.2.0 is refused and must be
+regenerated. Three changes can alter an existing run's outcome: two drivers on a variable written
+by `always_comb` or `always_ff` are an error (`VITA-E3001`) wherever both reference tools reject
+the design; a known out-of-range array index is a warning, so such a run exits 0; and several
+printed hierarchical names changed (see "Changed — hierarchical names printed by this release").
+The MAJOR stays 0 while [docs/ROADMAP.md](docs/ROADMAP.md) §2/§3 carry open correctness items.
+
 ### Fixed — a continuous assign's function runs once at time 0, after the `initial` blocks
 
 - A function reached from a continuous assign ran at time 0 before any `initial` had written its

@@ -17,7 +17,7 @@ numbered documents that follow.
 | Platforms | Linux and macOS, x86_64 and aarch64 |
 | Build | `cargo build --workspace --locked`; no `build.rs` in any vitamin crate, no C or C++ dependency |
 | Licence | `MIT OR Apache-2.0` |
-| Version | 0.2.0; artifact `format_version` 31 |
+| Version | 0.2.1; artifact `format_version` 35 |
 
 ## The three design goals
 

@@ -209,7 +209,7 @@ and DPI-C.
 | Targets | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` |
 | Windows | Not supported: not a build target in `rust-toolchain.toml`, and not exercised in CI |
 | Rust toolchain | 1.85.0, pinned by `rust-toolchain.toml`; vitamin's own crates are edition 2021 |
-| Version | 0.2.0 across all workspace crates |
+| Version | 0.2.1 across all workspace crates |
 | Licence | MIT OR Apache-2.0, at your option |
 
 CI runs the full suite on `ubuntu-latest`, on `macos-latest`, and inside a `redhat/ubi9`

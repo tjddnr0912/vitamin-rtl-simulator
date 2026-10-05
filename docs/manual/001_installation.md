@@ -209,7 +209,7 @@ Check the binary answers:
 
 ```console
 $ vita --version
-vita 0.2.0
+vita 0.2.1
 ```
 
 Run a design end to end:

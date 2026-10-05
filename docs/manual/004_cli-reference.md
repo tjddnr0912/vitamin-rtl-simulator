@@ -55,7 +55,7 @@ vita vcmp design.sv     # subcommand form, identical behaviour
 
 1. Applet resolution, as above.
 2. `--help` or `-h` **anywhere** in the arguments prints help and exits 0.
-3. `--version` or `-V` anywhere prints `<applet> 0.2.0` and exits 0. `-V` is version; `-v` is
+3. `--version` or `-V` anywhere prints `<applet> 0.2.1` and exits 0. `-V` is version; `-v` is
    verbosity. They are different flags.
 4. Filelist expansion (`-f` / `-F`), at argument level, for every applet.
 5. Applet dispatch. For one-shot `vita`, a first argument of `explain` routes to the diagnostic
@@ -128,7 +128,7 @@ One parser serves all four applets. In the table below, **yes** means parsed and
 | `-l`, `--log` | path, or `-` for stderr | — | yes | yes | yes | yes | tee every sink event to one writer in emission order. Truncates by default |
 | `--log-append` | none | truncate | yes | yes | yes | yes | append to the `--log` file instead of truncating. Ignored for `-` |
 | `-h`, `--help` | none | — | yes | yes | yes | yes | print help and exit 0 |
-| `-V`, `--version` | none | — | yes | yes | yes | yes | print `<applet> 0.2.0` and exit 0 |
+| `-V`, `--version` | none | — | yes | yes | yes | yes | print `<applet> 0.2.1` and exit 0 |
 
 ### 3.1 Attached-value spellings
 
@@ -466,7 +466,7 @@ file and the filter.
 
 The VCD `$timescale` unit string is derived from the resolved design-wide precision and clamped to
 the range VCD can express, from `1fs` to `100s`. FST metadata carries the version string
-`vitamin-sim 0.2.0`.
+`vitamin-sim 0.2.1`.
 
 ---
 
@@ -628,7 +628,7 @@ Hand-written JSON with a fixed key order, one top-level field per line. `schema_
 |---|---|---|
 | `schema_ver` | int | `1`. Bumped only for a record-envelope change, never for an added field |
 | `tool` | string | `"vita"` |
-| `version` | string | the tool version, `"0.2.0"` |
+| `version` | string | the tool version, `"0.2.1"` |
 | `format_version` | int | the artifact format this build emits, `35` |
 | `seed` | null | always null; there is no `--seed` flag |
 | `plusargs` | array of string | runtime plusargs in command order, leading `+` stripped |
@@ -1240,7 +1240,7 @@ running tool was built with, before a single body byte is deserialized:
 | stamp | what it means |
 |---|---|
 | **`format_version`** | the on-disk container layout, including everything in the out-of-band trailers that the schema hash cannot see. The value in this build is `35` |
-| **`tool_semver_major`** | the major version of the tool that wrote the artifact. The workspace version is `0.2.0`, so this is `0` |
+| **`tool_semver_major`** | the major version of the tool that wrote the artifact. The workspace version is `0.2.1`, so this is `0` |
 | **`schema_hash`** | a structural hash of the **shape** of the serialized types: the front-end source unit for a `.vu`, the sim-IR for a `.velab`. Adding, removing, reordering or retyping a field flips it. It is computed identically on Linux and macOS, so the same source yields byte-identical artifacts on both |
 
 The policy is refuse-and-rebuild, never silent migration: artifacts are cheap to regenerate from
