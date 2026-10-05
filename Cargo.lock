@@ -126,6 +126,7 @@ name = "cli"
 version = "0.2.1"
 dependencies = [
  "blake3",
+ "corpus-runner",
  "diag",
  "elaborate",
  "fst-reader",

@@ -44,13 +44,15 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cells;
 mod corpus;
 mod fetch;
+mod grade;
 mod run;
 
 pub use corpus::{coverage, Expect, Origin, Shape, Workload, CORPUS};
 pub use fetch::{plan_fetch, FetchStep};
+pub use grade::{grade, grade_expect, Grade};
 pub use run::{
-    grade, job_for, measure, prepare_iverilog, resolve_bench_root, Grade, Job, Measurement,
-    Outcome, Tool,
+    job_for, measure, prepare_iverilog, resolve_bench_root, Job, Measurement, Outcome, Run, Tool,
 };

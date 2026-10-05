@@ -127,6 +127,20 @@ fn every_pinned_refusal_names_a_reason() {
     }
 }
 
+/// `Expect::KnownWrong` is an oracle cell's expectation. A workload whose digest misses
+/// is a regression, and `Split` — which names a ruling — is the only way to pin one;
+/// pinning a bare wrong digest here would be the licence `Split`'s doc forbids.
+#[test]
+fn no_workload_pins_a_known_wrong_answer() {
+    for w in CORPUS {
+        assert!(
+            !matches!(w.expect, Expect::KnownWrong { .. }),
+            "{}: a workload cannot be pinned known-wrong",
+            w.name
+        );
+    }
+}
+
 /// The corpus exists to contain designs vita does not run. If this ever reads
 /// `n == total`, the corpus has stopped doing its job — either every gap really did
 /// close (in which case add harder designs) or the refusals were quietly dropped.

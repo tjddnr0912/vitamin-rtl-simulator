@@ -53,8 +53,12 @@ impl Shape {
 /// outside — a *known* gap (not a failure, and the count is the coverage metric), a
 /// *new* refusal on a design that used to run (a regression, red), and a design that
 /// started running (a slice landed; the tool says so and asks for the row to move).
+///
+/// Generic over the string type only so the oracle-cell manifest (`cells`), which is
+/// read from a file at run time, carries the same expectation and the same grading as
+/// this `static` table. Every workload row uses the default, `&'static str`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Expect {
+pub enum Expect<S = &'static str> {
     /// Runs to completion and prints [`Workload::digest`], exiting with `exit`.
     ///
     /// The exit code lives HERE rather than beside it as a free field, because a
@@ -69,7 +73,7 @@ pub enum Expect {
     /// Declines at parse or elaborate. `diag` is a distinctive fragment of the message —
     /// matched as a substring so rewording a diagnostic does not break the gate,
     /// which is the same reason the compliance corpus asserts on message codes.
-    Refused { diag: &'static str },
+    Refused { diag: S },
     /// Runs to completion, and its digest DISAGREES with the oracle's on an axis
     /// that has been measured and RULED — the oracle cannot arbitrate it.
     ///
@@ -85,9 +89,27 @@ pub enum Expect {
     /// `Regression`, and the two agreeing again is a `Promoted`.
     Split {
         /// vita's own answer, pinned so its answer is still frozen.
-        vita: &'static str,
+        vita: S,
         /// Where the ruling is written down.
-        why: &'static str,
+        why: S,
+    },
+    /// Runs to completion, exiting with `exit`, and prints a value the oracles agree
+    /// is WRONG: vita's answer `vita` is pinned beside the oracle's.
+    ///
+    /// The counterpart of `Refused` for a silent-wrong, and the expectation of an oracle
+    /// cell (`cells`), not of a workload: a corpus row whose digest misses is a
+    /// regression, and `Split` is the only way to pin one, with a ruling
+    /// (`tests/manifest.rs` holds the workload table to that). It exists so a gate can
+    /// tell three moves apart that a bare mismatch merges — the wrong answer turning
+    /// into the oracle's (`Promoted`), into another wrong one (`Drifted`), and a cell
+    /// that was right going wrong (`Runs`, then `Regression`).
+    ///
+    /// The exit code lives here for the reason it lives on `Runs`: a run is checked
+    /// against the exit it pinned, and no other variant can carry one.
+    KnownWrong {
+        exit: i32,
+        /// vita's wrong answer at the time it was pinned.
+        vita: S,
     },
 }
 

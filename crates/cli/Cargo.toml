@@ -74,6 +74,9 @@ elaborate = { path = "../elaborate" }
 sim-ir = { path = "../sim-ir" }
 sim-engine = { path = "../sim-engine" }
 diag = { path = "../diag" }
+# The oracle-cell manifest (crates/testdata/cells/MANIFEST.txt), graded against this
+# crate's own `vita` by tests/oracle_cells.rs.
+corpus-runner = { path = "../corpus-runner" }
 
 # `deny`, not the workspace's `forbid`: one module of this crate opts out with
 # `#![allow(unsafe_code)]` (CONTRIBUTING.md, "`unsafe`").

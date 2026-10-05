@@ -4,6 +4,9 @@
 //! cargo run -p corpus-runner -- list
 //! cargo run -p corpus-runner -- fetch [--run]
 //! cargo run -p corpus-runner -- run [--filter <substr>] [--reps N] [--compare]
+//! cargo run -p corpus-runner -- cells run [--vita PATH] [--filter <substr>] [--jobs N] [--cells DIR]
+//! cargo run -p corpus-runner -- cells pin --vita PATH [--label TEXT] [--jobs N] [--cells DIR] [--rows R,R]
+//!                                          [--accept CELL,CELL] [--accept-file FILE]
 //! ```
 
 use std::path::PathBuf;
@@ -56,6 +59,7 @@ fn main() -> ExitCode {
             let compare = args.iter().any(|a| a == "--compare");
             run_corpus(&root, filter.as_deref(), reps, compare)
         }
+        "cells" => cells(&root, &args[1..]),
         "-h" | "--help" | "help" => {
             eprintln!("{}", USAGE);
             ExitCode::SUCCESS
@@ -78,8 +82,181 @@ corpus-runner — the vitamin workload corpus
                                discarded as cache warm-up). Default 3.
                                --compare also times iverilog on the same workloads.
 
+    cells run [--vita PATH] [--filter S] [--jobs N] [--cells DIR]
+                               grade every oracle cell in crates/testdata/cells/MANIFEST.txt
+                               against PATH (default target/release/vita, else debug),
+                               two runs per cell; any move from the manifest fails
+    cells pin --vita PATH [--label TEXT] [--jobs N] [--cells DIR] [--rows R,R]
+                               regenerate MANIFEST.txt and MANIFEST.excluded.tsv: admit
+                               the seed rows' cells whose oracles agree, classify each
+                               under PATH. TEXT names the binary in the header.
+                               --cells DIR reads and writes another cells directory.
+                               Every move against the existing manifest is printed; a
+                               move in the regression direction is written only when
+                               its cell is named with --accept CELL,CELL or
+                               --accept-file FILE (one path per line); otherwise
+                               nothing is written and the exit is 1
+
 exit: 0 = every present workload matched  ·  1 = a mismatch or crash
       2 = nothing present (run `fetch` first)  ·  3 = usage";
+
+/// `cells run` / `cells pin`.
+fn cells(root: &std::path::Path, args: &[String]) -> ExitCode {
+    use corpus_runner::cells;
+    let sub = args.first().map(String::as_str).unwrap_or("");
+    for f in [
+        "--vita",
+        "--filter",
+        "--jobs",
+        "--label",
+        "--cells",
+        "--rows",
+        "--accept",
+        "--accept-file",
+    ] {
+        if args.iter().any(|a| a == f) && flag_value(args, f).is_none() {
+            eprintln!("corpus-runner: {f} expects a value");
+            return ExitCode::from(3);
+        }
+    }
+    let jobs = match flag_value(args, "--jobs") {
+        None => cells::default_jobs(),
+        Some(v) => match v.parse::<usize>() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                eprintln!("corpus-runner: --jobs expects a positive count, got {v:?}");
+                return ExitCode::from(3);
+            }
+        },
+    };
+    let dir = flag_value(args, "--cells").map_or_else(|| cells::cells_dir(root), PathBuf::from);
+    // Absolute: each cell runs with its own working directory, where a relative
+    // `./target/…` would name nothing and every row would grade as a crash.
+    let vita = flag_value(args, "--vita").map(|v| {
+        let p = PathBuf::from(v);
+        std::fs::canonicalize(&p).unwrap_or(p)
+    });
+    match sub {
+        "run" => {
+            let vita = vita.unwrap_or_else(|| vita_binary(root));
+            if !vita.is_file() {
+                eprintln!("corpus-runner: no vita binary at {}", vita.display());
+                return ExitCode::from(3);
+            }
+            let all = match cells::load_manifest(&dir) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("corpus-runner: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            let filter = flag_value(args, "--filter");
+            let selected: Vec<&cells::Cell> = all
+                .iter()
+                .filter(|c| filter.as_deref().is_none_or(|f| c.path.contains(f)))
+                .collect();
+            if selected.is_empty() {
+                eprintln!("corpus-runner: no cell matched");
+                return ExitCode::from(2);
+            }
+            // The cells are committed, not fetched: a missing source is a broken
+            // checkout, never an `absent` row.
+            if let Some(c) = selected.iter().find(|c| !dir.join(&c.path).is_file()) {
+                eprintln!(
+                    "corpus-runner: the manifest names {} and it is not here",
+                    c.path
+                );
+                return ExitCode::from(2);
+            }
+            let t0 = std::time::Instant::now();
+            let graded = cells::run_manifest(&dir, &selected, &vita, jobs, cells::BUDGET);
+            let failures = cells::print_table(&selected, &graded);
+            println!(
+                "wall {:.1}s · {} · {jobs} jobs",
+                t0.elapsed().as_secs_f64(),
+                vita.display()
+            );
+            if failures > 0 {
+                eprintln!("\ncorpus-runner: {failures} failing");
+                return ExitCode::from(1);
+            }
+            ExitCode::SUCCESS
+        }
+        "pin" => {
+            let Some(vita) = vita.filter(|v| v.is_file()) else {
+                eprintln!("corpus-runner: cells pin needs --vita PATH, an existing binary");
+                return ExitCode::from(3);
+            };
+            let label = flag_value(args, "--label").unwrap_or_else(|| "unlabelled".into());
+            let rows_arg = flag_value(args, "--rows");
+            let rows: Vec<&str> = match &rows_arg {
+                Some(r) => r.split(',').filter(|r| !r.is_empty()).collect(),
+                None => cells::SEED_ROWS.to_vec(),
+            };
+            let pinned = match cells::pin(&dir, &rows, &vita, jobs) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("corpus-runner: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            // The guard: compare with the manifest already there before writing.
+            let mut accept: std::collections::BTreeSet<String> = flag_value(args, "--accept")
+                .map(|a| {
+                    a.split(',')
+                        .filter(|c| !c.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if let Some(f) = flag_value(args, "--accept-file") {
+                match std::fs::read_to_string(&f) {
+                    Ok(t) => accept.extend(cells::guard::parse_accept_file(&t)),
+                    Err(e) => {
+                        eprintln!("corpus-runner: --accept-file {f}: {e}");
+                        return ExitCode::from(3);
+                    }
+                }
+            }
+            if dir.join(cells::MANIFEST_FILE).exists() {
+                let old =
+                    cells::load_manifest(&dir).and_then(|c| Ok((c, cells::load_excluded(&dir)?)));
+                let (old_cells, old_excluded) = match old {
+                    Ok(o) => o,
+                    Err(e) => {
+                        eprintln!("corpus-runner: the existing manifest does not read ({e}); nothing written");
+                        return ExitCode::from(1);
+                    }
+                };
+                let moves = cells::guard::compare(&old_cells, &old_excluded, &pinned);
+                cells::guard::print_moves(&moves, &accept);
+                let blocked = cells::guard::blocked(&moves, &accept);
+                if !blocked.is_empty() {
+                    eprintln!(
+                        "corpus-runner: {} regression-direction moves are not named; nothing written. \
+                         Name each with --accept CELL,CELL or --accept-file FILE.",
+                        blocked.len()
+                    );
+                    return ExitCode::from(1);
+                }
+            } else {
+                println!("pin: no existing manifest; writing the first one");
+            }
+            if let Err(e) = cells::write_pinned(&dir, &label, &rows, &pinned) {
+                eprintln!("corpus-runner: {e}");
+                return ExitCode::from(1);
+            }
+            for line in cells::header(&label, &rows, &pinned).iter().skip(3) {
+                println!("{line}");
+            }
+            ExitCode::SUCCESS
+        }
+        other => {
+            eprintln!("corpus-runner: cells expects `run` or `pin`, got {other:?}\n\n{USAGE}");
+            ExitCode::from(3)
+        }
+    }
+}
 
 fn flag_value(args: &[String], name: &str) -> Option<String> {
     let i = args.iter().position(|a| a == name)?;
@@ -100,6 +277,7 @@ fn list() {
             Expect::Runs { .. } => "runs",
             Expect::Refused { .. } => "refused",
             Expect::Split { .. } => "split",
+            Expect::KnownWrong { .. } => "known-wrong",
         };
         println!(
             "{:<18} {:<7} {:<9} {lic:<12} {state:<9} {}",
@@ -119,6 +297,7 @@ fn list() {
         match w.expect {
             Expect::Refused { diag } => println!("  {:<18} refused: {diag}", w.name),
             Expect::Split { why, .. } => println!("  {:<18} ruled split: {why}", w.name),
+            Expect::KnownWrong { vita, .. } => println!("  {:<18} known-wrong: {vita}", w.name),
             Expect::Runs { .. } => {}
         }
     }
@@ -272,7 +451,10 @@ fn run_corpus(
         } else {
             match (&g, &m.outcome) {
                 (Grade::Regression(why), _) => why.clone(),
-                (Grade::Drifted { got }, _) => format!("expected a different refusal; got {got}"),
+                (Grade::Drifted { got }, _) => match w.expect {
+                    Expect::KnownWrong { .. } => format!("the pinned wrong answer moved: {got}"),
+                    _ => format!("expected a different refusal; got {got}"),
+                },
                 (Grade::Promoted, _) => "now runs — move its manifest row to Expect::Runs".into(),
                 (Grade::RuledSplit, _) => match w.expect {
                     Expect::Split { why, .. } => format!("ruled split — {why}"),

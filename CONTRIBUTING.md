@@ -234,6 +234,12 @@ from the `--help` text.
   stdout. It skips with a printed notice when neither tool is on `PATH`, and CI
   has neither — so it is a developer-machine gate, and a design still runs
   through vita when it skips.
+- `crates/cli/tests/oracle_cells.rs` grades every cell in
+  `crates/testdata/cells/MANIFEST.txt` against the tree's own `vita`, and any move
+  from the manifest fails — a fix (`PROMOTED`) too, until it is re-pinned with
+  `cargo run -p corpus-runner --locked -- cells pin --vita target/release/vita --label <binary>`,
+  which writes a move in the regression direction only for a cell named with `--accept`.
+  The grades and the manifest format are in that directory's README.
 - Where no external tool accepts the construct — SVA, classes, constrained
   random, parameterized classes, virtual interfaces — pin the expected value
   from the IEEE 1364/1800 text and state in the test header why there is no tool
