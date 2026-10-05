@@ -9,6 +9,34 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a continuous assign's function runs once at time 0, after the `initial` blocks
+
+- A function reached from a continuous assign ran at time 0 before any `initial` had written its
+  inputs, on `x`, and then again on the written values: `assign y = f(a, b);` beside
+  `initial begin a = 0; b = 1; … end` printed `f t=0 x=x z=x` before `f t=0 x=0 z=1`; a `unique` /
+  `priority` miss in it, or in anything it calls (a class method through a handle included),
+  reported `VITA-W4031` at time 0; an immediate `assert` failed with `VITA-E4003` and the run exited
+  1; a `$fatal` ended the run at time 0. Icarus Verilog and Verilator call it once at time 0, on the
+  written values. Now such an assign (one whose function reaches a system task, `$random` or a body
+  vitamin cannot follow, or that reads a class handle) and every assign reading its output wait
+  until every `initial` and `always` has run its first time-0 slice, then run in dependency order:
+  one call on the written values, no report, exit 0.
+- An `initial` reading such an assign's output before its first delay now reads `z` on a net and `x`
+  on a variable, where it read the value computed from the declared defaults; Icarus Verilog reads
+  `z`, Verilator either (manual 006 §3.2). An assign whose arguments are all constants keeps its
+  place before the processes, as Verilator runs it. A delayed assign held this way drives `x` until
+  its first write.
+- The native backend ends the run at the time a continuous assign's call reaches `$fatal`, as the
+  other backends and both reference tools do; it ended one step later.
+- Unchanged: an assign whose function is pure (no system task, no `$random`, no class handle) and
+  every design without such an assign run as before. Still open (ROADMAP §2 🆕 AB, manual 006
+  §3.1): an assign vitamin cannot evaluate once per input change (a `$random` or `$time` read, a
+  class method through a handle, a delayed or multiply driven assign) is still re-evaluated on every
+  settle pass, and at time 0 a chain of them is evaluated more often than before (a six-link
+  `$random` chain: 42 calls, before 30, both tools 6), so a drawn `$random` value moves; a chain
+  whose links share one vector or array net, a ring of such assigns, and a function that reads a
+  net in its body rather than through an argument can still run on the undriven value first.
+
 ### Fixed — an imported name has one binding
 
 - IEEE 1800-2017 §26.3: two wildcard imports offering one name make it ambiguous. Where one of
