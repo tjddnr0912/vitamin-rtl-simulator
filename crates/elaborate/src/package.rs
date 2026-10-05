@@ -295,6 +295,168 @@ pub(crate) fn pkg_lvalue_pure(
     }
 }
 
+/// An import scope's explicitly imported names: key → (package, written in this
+/// scope rather than `$unit`). See [`Elaborator::apply_import_consts`].
+pub(crate) type ExplicitImports = BTreeMap<String, (String, bool)>;
+
+/// An import scope's wildcard-bound names: key → (origin package, the binding
+/// import's position segment). The package is `""` once two wildcards of different
+/// packages offered the name (ambiguous). The segment is [`ImportSite::seg`] (`None`
+/// for a `$unit` import). See [`Elaborator::apply_import_consts`].
+pub(crate) type WildcardOrigins = BTreeMap<String, (String, Option<usize>)>;
+
+/// Where an import is written, for [`Elaborator::apply_import_consts`].
+#[derive(Clone, Copy)]
+pub(crate) enum ImportSite {
+    /// A compilation-unit import: an OUTER scope of the importing one (a local
+    /// declaration shadows it — explicit or wildcard — with no error, both oracles;
+    /// §26.3's collision rule is for one scope).
+    Unit,
+    /// Written in a module or interface (its header, its body, or a bare `generate`
+    /// region), at this position segment ([`import_segment`]).
+    Module(usize),
+    /// Written in a package body, at this position segment.
+    Package(usize),
+}
+
+impl ImportSite {
+    fn seg(self) -> Option<usize> {
+        match self {
+            ImportSite::Unit => None,
+            ImportSite::Module(g) | ImportSite::Package(g) => Some(g),
+        }
+    }
+}
+
+/// What a wildcard import finds already recorded for a key ([`wildcard_prior`]).
+enum WildcardPrior {
+    /// Nothing: the import binds the name.
+    Fresh,
+    /// Already ambiguous: the name stays unbound.
+    Ambiguous,
+    /// The same package (a re-import): idempotent.
+    SamePackage,
+    /// Another package's wildcard bound it: ambiguous from here on. `adjacent` =
+    /// no item of the scope lies between the two imports ([`imports_adjacent`]).
+    Other { adjacent: bool },
+}
+
+/// IEEE 1800 §26.3 gives an import a POSITION: a name referenced between two wildcard
+/// imports is bound by the first one, and the later import no longer makes it
+/// ambiguous. Two imports in the same position segment (no item of the scope between
+/// them) are told apart from two with an item between; a `$unit` import has no
+/// segment and counts as adjacent (its spans are not compared, see
+/// [`scope_item_starts`]).
+fn imports_adjacent(first: Option<usize>, second: Option<usize>) -> bool {
+    !matches!((first, second), (Some(a), Some(b)) if a != b)
+}
+
+/// The wildcard state a wildcard import of package `pkg` at `site` meets at `key`.
+/// In a PACKAGE body an earlier wildcard across an item counts as `Fresh`: the package
+/// kept one state per import before §2 🆕 U, so the second import bound the name over
+/// the first, and across an item that is kept exactly — the LATER package wins, right
+/// only where the values agree (`import pa::*; localparam int A = P; import pb::*;
+/// localparam int B = P;`: both `P = 3` gives `A=3 B=3` as PRE and all three oracles;
+/// `pb::P = 5` gives `B=5` where all three oracles print `B=3`). A module keeps its
+/// per-instance state and the first package's binding, see
+/// [`Elaborator::apply_import_consts`].
+fn wildcard_prior(
+    wc_origin: &WildcardOrigins,
+    key: &str,
+    pkg: &str,
+    site: ImportSite,
+) -> WildcardPrior {
+    let Some((prev, prev_seg)) = wc_origin.get(key) else {
+        return WildcardPrior::Fresh;
+    };
+    let adjacent = imports_adjacent(*prev_seg, site.seg());
+    if !adjacent && matches!(site, ImportSite::Package(_)) {
+        WildcardPrior::Fresh
+    } else if prev.is_empty() {
+        WildcardPrior::Ambiguous
+    } else if prev == pkg {
+        WildcardPrior::SamePackage
+    } else {
+        WildcardPrior::Other { adjacent }
+    }
+}
+
+/// The start offset of one module item, for [`scope_item_starts`].
+fn module_item_lo(it: &ast::ModuleItem) -> u32 {
+    use ast::ModuleItem as M;
+    match it {
+        M::NetVar(d) => d.span.lo,
+        M::Param(p) => p.span.lo,
+        M::PortDecl(d) => d.span.lo,
+        M::ContAssign(c) => c.span.lo,
+        M::Proc(p) => p.span.lo,
+        M::Instance(i) => i.span.lo,
+        M::Generate(g) => g.span.lo,
+        M::Genvar { span, .. } => span.lo,
+        M::Func(f) => f.span.lo,
+        M::Task(t) => t.span.lo,
+        M::Defparam(d) => d.span.lo,
+        M::Typedef(t) => t.span.lo,
+        M::Import(i) => i.span.lo,
+        M::Modport(m) => m.span.lo,
+        M::SequenceDecl(d) => d.span.lo,
+        M::PropertyDecl(d) => d.span.lo,
+        M::Covergroup(c) => c.span.lo,
+        M::CoverInstance(c) => c.span.lo,
+        M::Class(c) => c.span.lo,
+        M::LetDecl(l) => l.span.lo,
+        M::DefaultDisableIff(e) => e.span.lo,
+        M::Clocking(c) => c.span.lo,
+        M::Error(span) => span.lo,
+    }
+}
+
+/// §2 🆕 U, §26.3 position: the sorted start offsets of a scope's OWN non-import
+/// items — its header parameters, its ports, its body items, and the direct items of
+/// a bare `generate … endgenerate` region (not a scope, §27.3; its imports are the
+/// scope's). An import's position segment is the number of these that start before
+/// it. An item the parser copied in from the compilation unit (`inject_cu_items`)
+/// lies outside the declaration's span and is left out, so every offset compared
+/// comes from the one preprocessed buffer that holds this declaration.
+pub(crate) fn scope_item_starts(decl: &ast::ModuleDecl) -> Vec<u32> {
+    let mut v: Vec<u32> = decl.params.iter().map(|p| p.span.lo).collect();
+    match &decl.ports {
+        ast::PortList::Ansi(ps) => v.extend(ps.iter().map(|p| p.span.lo)),
+        ast::PortList::NonAnsi(ns) => v.extend(ns.iter().map(|n| n.span.lo)),
+        ast::PortList::None => {}
+    }
+    for it in &decl.body {
+        match it {
+            ast::ModuleItem::Import(_) => {}
+            ast::ModuleItem::Generate(g) => {
+                for gi in &g.items {
+                    match gi {
+                        ast::GenItem::Item(b) => {
+                            if !matches!(**b, ast::ModuleItem::Import(_)) {
+                                v.push(module_item_lo(b));
+                            }
+                        }
+                        ast::GenItem::For { span, .. }
+                        | ast::GenItem::If { span, .. }
+                        | ast::GenItem::Case { span, .. }
+                        | ast::GenItem::Block { span, .. } => v.push(span.lo),
+                    }
+                }
+            }
+            other => v.push(module_item_lo(other)),
+        }
+    }
+    v.retain(|&lo| lo >= decl.span.lo && lo < decl.span.hi);
+    v.sort_unstable();
+    v
+}
+
+/// The position segment of an import written in a scope whose
+/// [`scope_item_starts`] are `starts`.
+pub(crate) fn import_segment(starts: &[u32], imp: &ast::ImportDecl) -> usize {
+    starts.partition_point(|&lo| lo < imp.span.lo)
+}
+
 /// What `push_pkg_consts_*` hands back for the unwind: the previous `params` and
 /// `param_meta` entries of every constant it injected, newest last.
 type SavedPkgConsts = (
@@ -555,6 +717,31 @@ impl Elaborator<'_> {
                 _ => Vec::new(),
             })
             .collect();
+        // §2 🆕 U: …plus the package's own enum LABELS, for the explicit-import
+        // conflict only (see `apply_import_consts`' `conflict_names`).
+        let pkg_conflict_names: std::collections::BTreeSet<String> = pkg_local_names
+            .iter()
+            .cloned()
+            .chain(decl_collide::own_region_enum_labels(pm, UnitKind::Package))
+            .collect();
+        // §2 🆕 U: ONE wildcard-origin / explicit-import state per package body, as the
+        // module scope keeps one per instance (`instance.rs`). Per-import state made
+        // every import its own scope: `import pa::*; import pb::*;` never saw the
+        // ambiguity, so `localparam int Z = P;` read the second package's `P` (`Z=5`)
+        // where iverilog says "Ambiguous use of 'P'. It is exported by both 'pa' and
+        // by 'pb'." and sv2v "identifier "P" ambiguously refers to the definitions in
+        // any of pa, pb". `pkg_seg` is each import's position segment (the package
+        // items before it). The adjacency test is the module's, but the arm for two
+        // wildcards with an item between is not: a package falls back to PRE's
+        // per-import binding there (`wildcard_prior`), so the LATER package's name
+        // wins — wrong wherever the two values differ (`import pa::*; localparam int A
+        // = P; import pb::*; localparam int B = P;`: `pr A=3 B=5`, all three oracles
+        // `B=3`), where a module keeps the first package's binding. The module's arm
+        // is not used here because it unbinds two narrow constants, which turned the
+        // same shape with equal values (`n03 A=3 B=3`, PRE and all three oracles) loud.
+        let mut wc_origin: WildcardOrigins = BTreeMap::new();
+        let mut explicit: ExplicitImports = BTreeMap::new();
+        let mut pkg_seg: usize = 0;
         // ROADMAP §2 🆕 L ⓢ, package half: the package body is ONE declarative
         // region, so a parameter name is declared in it once — the same walk the
         // module/interface scope uses (`param_dup.rs`). The loop's own guard below
@@ -567,6 +754,10 @@ impl Elaborator<'_> {
             &Self::transparent_region_rule("package"),
         );
         for item in &pm.body {
+            // §26.3 position (see `pkg_seg` above).
+            if !matches!(item, ast::ModuleItem::Import(_)) {
+                pkg_seg += 1;
+            }
             match item {
                 ast::ModuleItem::Param(p) => {
                     self.check_param_decl_range(p);
@@ -849,21 +1040,19 @@ impl Elaborator<'_> {
                     // elaborate in declaration order — so `pkg_consts[base]` exists). TYPES
                     // are already resolved by the parser's unit-global typedef map, which is
                     // why a `base::byte8_t`-typed decl in `derived` parses. The
-                    // wildcard-origin maps are package-loop-local; imported consts ride
+                    // wildcard-origin maps are package-body-wide; imported consts ride
                     // `saved` for restore at the package's end. A package-INTERNAL call to
                     // an imported ROUTINE stays a follow-on (routine resolution runs at the
                     // external call site, not here) → loud (correct-or-loud); imported types
                     // + consts now work.
-                    let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
-                    let mut explicit: std::collections::BTreeSet<String> =
-                        std::collections::BTreeSet::new();
                     self.apply_import_consts(
                         imp,
                         &mut saved,
                         &mut wc_origin,
                         &mut explicit,
                         &pkg_local_names,
-                        true,
+                        &pkg_conflict_names,
+                        ImportSite::Package(pkg_seg),
                     );
                     // §4.5.440 (review B G1 e5): the imported package's FUNCTIONS join this
                     // package's own set, so a package function calling an imported one
@@ -1167,19 +1356,46 @@ impl Elaborator<'_> {
     /// the import's). An EXPLICIT import of a locally declared name stays the
     /// conflict it is (loud in `add_net`).
     ///
-    /// `same_scope` = the import is written IN the importing scope (a module/interface
-    /// body or header, a package body). A compilation-unit import is an OUTER scope:
-    /// a local declaration shadows it — explicit or wildcard — with no error (both
-    /// oracles; §26.3's collision rule is for one scope).
+    /// `conflict_names` = `local_names` plus the enum LABELS the scope declares in its
+    /// own region ([`decl_collide::own_region_enum_labels`]) — read ONLY by the
+    /// explicit-import conflict below, never by the wildcard skip. A wildcard that
+    /// skipped a label would take a >64-bit or string constant off a key the label
+    /// then answers narrow (§2 🆕 U's held half: the corrected value reaches the
+    /// constant interpreter where the wide one was refused — §2 🆕 AE).
+    ///
+    /// `site` = where the import is written ([`ImportSite`]); `same_scope` below = it
+    /// is written IN the importing scope (a module/interface body or header, a package
+    /// body), not in the compilation unit.
+    ///
+    /// `explicit_imports` = key → (package, `same_scope`) of every name an explicit
+    /// import bound in this import scope: membership makes a wildcard skip the name,
+    /// and the package is what tells a second explicit import of the same name from
+    /// another package (§26.3 conflict, loud) from a repeated one (idempotent).
+    ///
+    /// One current binding per key (§2 🆕 U, ER §5.5): an arm that unbinds or replaces
+    /// a wildcard's binding clears it from EVERY map it can live in (`params` with its
+    /// range, `wide_param_bits`, the variable alias), where the survivor is the wider
+    /// binding or none. The arm that would replace a >64-bit binding by a NARROW one
+    /// (an explicit narrow import over a wildcard wide) still leaves the wide entry —
+    /// held behind §2 🆕 AE. The AMBIGUITY arms clear every map only for two wildcard
+    /// imports with no item of the scope between them ([`imports_adjacent`]): with an
+    /// item between, a reference there bound the first package's name (§26.3), which
+    /// every oracle then answers, so the arm keeps what it did before §2 🆕 U — in a
+    /// module the clearing of its own map only, in a package a fresh binding
+    /// ([`wildcard_prior`]).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_import_consts(
         &mut self,
         imp: &ast::ImportDecl,
         saved_params: &mut Vec<(String, Option<i64>)>,
-        wc_origin: &mut BTreeMap<String, String>,
-        explicit_imports: &mut std::collections::BTreeSet<String>,
+        wc_origin: &mut WildcardOrigins,
+        explicit_imports: &mut ExplicitImports,
         local_names: &std::collections::BTreeSet<String>,
-        same_scope: bool,
+        conflict_names: &std::collections::BTreeSet<String>,
+        site: ImportSite,
     ) {
+        let same_scope = !matches!(site, ImportSite::Unit);
+        let scope_seg = site.seg();
         let pkg = imp.pkg.name.as_str();
         let Some(consts) = self.pkg_consts.get(pkg) else {
             self.error(
@@ -1221,12 +1437,12 @@ impl Elaborator<'_> {
                     }
                     let key = self.fq(&name);
                     // An explicit import of this name always wins — skip the wildcard.
-                    if explicit_imports.contains(&key) {
+                    if explicit_imports.contains_key(&key) {
                         continue;
                     }
-                    match wc_origin.get(&key).map(String::as_str) {
+                    match wildcard_prior(wc_origin, &key, pkg, site) {
                         // "" sentinel = already ambiguous: stays unbound.
-                        Some("") => continue,
+                        WildcardPrior::Ambiguous => continue,
                         // A different package already wildcard-bound this name ⇒
                         // ambiguous. Unbind it (save the prior value for restore) so a
                         // reference is loud-undefined, and mark it ambiguous.
@@ -1235,17 +1451,28 @@ impl Elaborator<'_> {
                         // prior binding may live in either map; unbind both sides
                         // (the alias-guarded symbols removal never touches a real
                         // net: only keys this import machinery inserted).
-                        Some(prev) if prev != pkg => {
+                        // §2 🆕 U: …and the >64-bit map. An earlier wildcard WIDE `P`
+                        // stayed in `wide_param_bits` here, and the readers that ask
+                        // that map first (`bare_ident_route`, `wide_name_bits`)
+                        // answered the first package's `P` where iverilog and sv2v
+                        // refuse the ambiguous name. Only for ADJACENT imports: with
+                        // an item between (`import pb::*; localparam [64:0] A = P;
+                        // import pa::*;`) the first package's wide `P` is the binding
+                        // every oracle answers (`A=18446744073709551625`).
+                        WildcardPrior::Other { adjacent } => {
                             let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
                             if self.pkg_var_aliases.remove(&key).is_some() {
                                 self.symbols.remove(&key);
                             }
-                            wc_origin.insert(key, String::new());
+                            if adjacent {
+                                self.wide_param_bits.remove(&key);
+                            }
+                            wc_origin.insert(key, (String::new(), scope_seg));
                         }
                         // Same package re-import: idempotent, keep the binding.
-                        Some(_) => {}
-                        None => {
+                        WildcardPrior::SamePackage => {}
+                        WildcardPrior::Fresh => {
                             saved_params.push((key.clone(), self.bind_param_value(key.clone(), v)));
                             if let Some(m) = meta {
                                 self.param_meta.insert(key.clone(), m);
@@ -1260,7 +1487,7 @@ impl Elaborator<'_> {
                             if let Some(ty) = pkg_labels.get(&name) {
                                 self.enum_label_types.insert(key.clone(), ty.clone());
                             }
-                            wc_origin.insert(key, pkg.to_string());
+                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1278,17 +1505,31 @@ impl Elaborator<'_> {
                         continue;
                     }
                     let key = self.fq(&name);
-                    if explicit_imports.contains(&key) {
+                    if explicit_imports.contains_key(&key) {
                         continue;
                     }
-                    match wc_origin.get(&key).map(String::as_str) {
-                        Some("") => continue,
-                        Some(prev) if prev != pkg => {
+                    match wildcard_prior(wc_origin, &key, pkg, site) {
+                        WildcardPrior::Ambiguous => continue,
+                        // Ambiguous: unbind the prior package's binding in every map
+                        // it can live in (§2 🆕 U) — a NARROW `P` of the first
+                        // package stayed in `params` here, which every reader
+                        // answered (`aa P=3`) while the name was ambiguous. Only for
+                        // ADJACENT imports: with an item between (`import pa::*;
+                        // localparam int A = P; import pb::*;`) the first package's
+                        // `P` is the binding every oracle answers (`rp A=3 P=3`).
+                        WildcardPrior::Other { adjacent } => {
                             self.wide_param_bits.remove(&key);
-                            wc_origin.insert(key, String::new());
+                            if adjacent {
+                                let prev_val = self.unbind_param(&key);
+                                saved_params.push((key.clone(), prev_val));
+                                if self.pkg_var_aliases.remove(&key).is_some() {
+                                    self.symbols.remove(&key);
+                                }
+                            }
+                            wc_origin.insert(key, (String::new(), scope_seg));
                         }
-                        Some(_) => {}
-                        None => {
+                        WildcardPrior::SamePackage => {}
+                        WildcardPrior::Fresh => {
                             self.wide_param_bits.insert(key.clone(), cv);
                             if let Some(m) = self
                                 .pkg_const_meta
@@ -1298,7 +1539,7 @@ impl Elaborator<'_> {
                             {
                                 self.param_meta.insert(key.clone(), m);
                             }
-                            wc_origin.insert(key, pkg.to_string());
+                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1316,21 +1557,26 @@ impl Elaborator<'_> {
                         continue;
                     }
                     let key = self.fq(&name);
-                    if explicit_imports.contains(&key) {
+                    if explicit_imports.contains_key(&key) {
                         continue;
                     }
-                    match wc_origin.get(&key).map(String::as_str) {
-                        Some("") => continue,
-                        Some(prev) if prev != pkg => {
+                    match wildcard_prior(wc_origin, &key, pkg, site) {
+                        WildcardPrior::Ambiguous => continue,
+                        // Ambiguous: every map, the >64-bit one included (§2 🆕 U),
+                        // for ADJACENT imports only (see the constant loop above).
+                        WildcardPrior::Other { adjacent } => {
                             let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
                             if self.pkg_var_aliases.remove(&key).is_some() {
                                 self.symbols.remove(&key);
                             }
-                            wc_origin.insert(key, String::new());
+                            if adjacent {
+                                self.wide_param_bits.remove(&key);
+                            }
+                            wc_origin.insert(key, (String::new(), scope_seg));
                         }
-                        Some(_) => {}
-                        None => {
+                        WildcardPrior::SamePackage => {}
+                        WildcardPrior::Fresh => {
                             // Never clobber a symbols entry this machinery did
                             // not create (e.g. an interface-port alias): the
                             // existing binding wins, like a local declaration.
@@ -1347,7 +1593,7 @@ impl Elaborator<'_> {
                             self.symbols.insert(key.clone(), net);
                             self.pkg_var_aliases
                                 .insert(key.clone(), (pkg.to_string(), false));
-                            wc_origin.insert(key, pkg.to_string());
+                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1365,7 +1611,16 @@ impl Elaborator<'_> {
                 // A VARIABLE collision was already loud below; one funnel now.
                 // (review A F1: a compilation-unit explicit import is shadowed by the
                 // local declaration in silence, like a wildcard — both oracles.)
-                if local_names.contains(&sym.name) {
+                // §2 🆕 U: the scope's own enum LABELS are local declarations too
+                // (§6.19 declares them in the scope holding the typedef), but only for
+                // this error — `conflict_names` — never for the wildcard skip above:
+                // `import pk::E1; typedef enum {E0, E1} e_t;` bound both and answered
+                // the import's value (`E1=18446744073709551616`) where iverilog says
+                // "'E1' has already been imported into this scope from package 'pk'."
+                // and sv2v "declaration of E1 conflicts with prior import of pk::E1".
+                if local_names.contains(&sym.name)
+                    || (same_scope && conflict_names.contains(&sym.name))
+                {
                     if same_scope {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -1379,16 +1634,76 @@ impl Elaborator<'_> {
                     }
                     return;
                 }
+                // §2 🆕 U: two explicit imports of one name from two packages, in ONE
+                // scope, are the same §26.3 conflict. Both bound — the narrow into
+                // `params`, the >64-bit one into `wide_param_bits` — and each reader
+                // answered whichever map it asks first (`import pa::P; import pb::P;`
+                // printed `P=18446744073709551625 b=32`), where iverilog says "'P' has
+                // already been imported into this scope from package 'pa'." and sv2v
+                // "import of pb::P conflicts with prior import of pa::P". The same
+                // package twice stays idempotent (all three tools run it), and a
+                // `$unit` import is an outer scope this one's import replaces, never a
+                // collision (the recorded `same_scope` flag).
+                let key = self.fq(&sym.name);
+                let offers_value = self
+                    .pkg_wide_bits
+                    .get(pkg)
+                    .is_some_and(|m| m.contains_key(&sym.name))
+                    || consts.contains_key(&sym.name)
+                    || self
+                        .pkg_vars
+                        .get(pkg)
+                        .is_some_and(|m| m.contains_key(&sym.name));
+                if same_scope && offers_value {
+                    if let Some((prev, true)) = explicit_imports.get(&key) {
+                        if prev != pkg {
+                            let prev = prev.clone();
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                &format!(
+                                    "`{}` has already been imported into this scope from \
+                                     package `{prev}` (explicit import from package \
+                                     `{pkg}`) — IEEE 1800 §26.3 forbids two explicit \
+                                     imports of one name",
+                                    sym.name
+                                ),
+                            );
+                            return;
+                        }
+                    }
+                }
                 if let Some(cv) = self
                     .pkg_wide_bits
                     .get(pkg)
                     .and_then(|m| m.get(&sym.name))
                     .cloned()
                 {
-                    let key = self.fq(&sym.name);
-                    explicit_imports.insert(key.clone());
+                    // §2 🆕 U: the explicit import WINS a wildcard (§26.3) and
+                    // replaces a `$unit` explicit import (an outer scope), so the
+                    // loser's NARROW binding leaves `params` with it. It stayed, and
+                    // the readers that ask `params` first (the generate-if/-case
+                    // condition, a declared range) answered it beside this >64-bit
+                    // value (`import pa::*; import pb::P;`: `gif small`, iverilog and
+                    // sv2v `gif big`). The key's `params` entry is an import's when
+                    // a wildcard offered the name — bound, ambiguous and then re-bound
+                    // by a later `$unit` explicit import (`$unit` `import pa::*;
+                    // import pb::*; import pn::P;` under a module `import pw::P;`
+                    // answered pn's `P = 3`: `m13 small b=4`, all three oracles `m13
+                    // big b=10`), or left by an ambiguity with an item between — or
+                    // when a `$unit` explicit import bound it (`$unit` `import pn::P;`
+                    // alone: the same `small b=4`, all three oracles `big b=10`). A
+                    // local declaration of the name never reaches here (the
+                    // `local_names` conflict above). Read before this import records
+                    // itself.
+                    let import_bound = wc_origin.contains_key(&key)
+                        || explicit_imports.get(&key).is_some_and(|(_, same)| !*same);
+                    explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
                     if self.pkg_var_aliases.remove(&key).is_some() {
                         self.symbols.remove(&key);
+                    }
+                    if import_bound && self.params.contains_key(&key) {
+                        let prev = self.unbind_param(&key);
+                        saved_params.push((key.clone(), prev));
                     }
                     if let Some(m) = self
                         .pkg_const_meta
@@ -1400,8 +1715,7 @@ impl Elaborator<'_> {
                     }
                     self.wide_param_bits.insert(key, cv);
                 } else if let Some(&v) = consts.get(&sym.name) {
-                    let key = self.fq(&sym.name);
-                    explicit_imports.insert(key.clone());
+                    explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
                     // A2b-prereq S4 (symmetric): an explicit CONST import wins
                     // over a prior wildcard VARIABLE binding (§26.8) — drop the
                     // now-dead alias so no write path can still reach it.
@@ -1439,8 +1753,7 @@ impl Elaborator<'_> {
                     // same conflict, just discovered in the other order — but a
                     // prior WILDCARD binding (const or var, S4) is not a local
                     // declaration: the explicit import wins (§26.8).
-                    let key = self.fq(&sym.name);
-                    let wildcard_bound = wc_origin.get(&key).is_some_and(|p| !p.is_empty());
+                    let wildcard_bound = wc_origin.get(&key).is_some_and(|(p, _)| !p.is_empty());
                     if (self.params.contains_key(&key) && !wildcard_bound)
                         || (self.symbols.contains_key(&key)
                             && !self.pkg_var_aliases.contains_key(&key))
@@ -1456,12 +1769,17 @@ impl Elaborator<'_> {
                         );
                     } else {
                         if wildcard_bound {
-                            // unbind the losing wildcard (either namespace).
+                            // unbind the losing wildcard (every namespace: §2 🆕 U
+                            // added the >64-bit one, whose value the readers that
+                            // ask `wide_param_bits` first answered over this
+                            // variable — `W=18446744073709551625 b=8` where iverilog
+                            // and sv2v print the variable's `W=5 b=8`).
                             let prev = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev));
                             self.pkg_var_aliases.remove(&key);
+                            self.wide_param_bits.remove(&key);
                         }
-                        explicit_imports.insert(key.clone());
+                        explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
                         self.symbols.insert(key.clone(), net);
                         self.pkg_var_aliases.insert(key, (pkg.to_string(), true));
                     }

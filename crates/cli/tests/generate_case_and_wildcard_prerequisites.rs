@@ -8,7 +8,11 @@
 //! - The KNOWN-WRONG cells are the witnesses of the prerequisites the reviews found:
 //!   P1 one current binding per key, P2 a generate-case arm chosen identically in every
 //!   elaboration phase, P3 the sign of a constant typed by an overridden type parameter,
-//!   and the 🆕 T label cells those three hold back.
+//!   and the 🆕 T label cells those three hold back. P1 is §2 🆕 U: its import half
+//!   (ambiguity, an explicit import winning a wildcard, the §26.3 conflicts) closed in
+//!   §4.5.591 (`import_one_binding_per_key.rs`); its wide→narrow half (U-b: a genvar, a
+//!   label or an explicit narrow import over a >64-bit constant, `A1D` below) is held
+//!   behind §2 🆕 AE.
 //! - The PRE-RIGHT cells guard the regressions the attempt's reviews found (a stale wide
 //!   entry read first, the opposite choice of entry, a width the i64 routine declined, a
 //!   parameter-count replication as the left operand); a re-attempt must keep them.
@@ -176,9 +180,9 @@ fn p1_a_genvar_under_a_wide_constant() {
 /// whenever a narrow one shares its key read 5.
 /// - iverilog: `W=10000000000000007 D=10000000000000008 bits=65 hi=1`.
 /// - sv2v → iverilog: `W=10000000000000007 D=10000000000000008 bits=65 hi=1`.
-/// - verilator: `W=00000005 D=00000000000000006 bits=32 hi=1` (it binds the wildcard
-///   import's `W` over the explicit one; the two other oracles and the LRM's explicit
-///   import precedence agree with vita).
+/// - verilator: `W=00000005 D=00000000000000006 bits=32 hi=1` (it binds the FIRST
+///   import of the name, here the wildcard's `W`; the two other oracles and the LRM's
+///   explicit import precedence agree with vita).
 #[test]
 fn p1_an_explicit_import_beside_a_wildcard_one() {
     check(

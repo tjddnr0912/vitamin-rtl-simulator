@@ -540,6 +540,45 @@ fn collect_gen_items<'a>(
     }
 }
 
+/// The enum LABELS of the `typedef`s written directly in `unit`'s body or directly in
+/// a `generate … endgenerate` region of it (§27.2: not a scope), minus the `$unit`
+/// typedefs the parser prepends to `body` (outside the unit's span: an outer scope's
+/// labels, a §26.4 shadow, not a declaration here). The explicit-import conflict
+/// reads it (`apply_import_consts`' `conflict_names`): IEEE §6.19 declares a label in
+/// the scope that holds its typedef, so `import pk::E1;` beside
+/// `typedef enum {E0, E1} e_t;` is the §26.3 collision iverilog and sv2v refuse.
+///
+/// ⚠️ Narrower than the collision walk on purpose: a typedef inside an UNLABELLED
+/// `begin … end` of a generate region is an oracle split for this question —
+/// iverilog refuses the import ("'E1' has already been imported into this scope"),
+/// sv2v answers the import (`E1=7`), verilator the label (`E1=1`) — so it keeps the
+/// route it had.
+pub(crate) fn own_region_enum_labels(unit: &ast::ModuleDecl, kind: UnitKind) -> BTreeSet<String> {
+    let mut sites: Vec<DeclSite<'_>> = Vec::new();
+    for it in &unit.body {
+        match it {
+            ast::ModuleItem::Typedef(_) => collect_item(it, kind, false, &mut sites),
+            ast::ModuleItem::Generate(g) => {
+                for gi in &g.items {
+                    if let ast::GenItem::Item(b) = gi {
+                        if let ast::ModuleItem::Typedef(_) = b.as_ref() {
+                            collect_item(b.as_ref(), kind, true, &mut sites);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    sites
+        .into_iter()
+        .filter(|s| {
+            s.kind == DeclKind::EnumLabel && s.span.lo >= unit.span.lo && s.span.hi <= unit.span.hi
+        })
+        .map(|s| s.name.to_string())
+        .collect()
+}
+
 impl Elaborator<'_> {
     /// Refuse every name this unit declares twice with two different binders.
     ///

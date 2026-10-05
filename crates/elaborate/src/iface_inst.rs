@@ -209,9 +209,20 @@ impl Elaborator<'_> {
                 // net, and it reads `self.local_decl_names`; installing four of the five
                 // would admit more bodies to the hoist while still resolving the
                 // collision against the parent's names.
-                let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
-                let mut explicit_imports: std::collections::BTreeSet<String> =
-                    std::collections::BTreeSet::new();
+                let mut wc_origin: crate::package::WildcardOrigins = BTreeMap::new();
+                // §26.3 position (`instance.rs`' twin).
+                let item_starts = crate::package::scope_item_starts(&decl);
+                let site_of = |i: usize, imp: &ast::ImportDecl| {
+                    if i < n_cu {
+                        crate::package::ImportSite::Unit
+                    } else {
+                        crate::package::ImportSite::Module(crate::package::import_segment(
+                            &item_starts,
+                            imp,
+                        ))
+                    }
+                };
+                let mut explicit_imports: crate::package::ExplicitImports = BTreeMap::new();
                 let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
                 // §3.b: the constant-interpreter half of the routine import, mirroring
                 // `instance.rs`'s (3a.5). Without it a `localparam W = g(40)` in an
@@ -243,7 +254,11 @@ impl Elaborator<'_> {
                             &mut wc_origin,
                             &mut explicit_imports,
                             &local_names,
-                            i >= n_cu,
+                            // No enum labels: an interface `typedef` is refused
+                            // outright (outside the MVP), so `local_names` is the
+                            // whole conflict set here.
+                            &local_names,
+                            site_of(i, imp),
                         );
                         self.apply_import_const_funcs(
                             imp,
@@ -267,7 +282,8 @@ impl Elaborator<'_> {
                             &mut wc_origin,
                             &mut explicit_imports,
                             &local_names,
-                            i >= n_cu,
+                            &local_names,
+                            site_of(i, imp),
                         );
                         self.apply_import_const_funcs(
                             imp,

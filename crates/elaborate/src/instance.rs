@@ -498,16 +498,40 @@ impl Elaborator<'_> {
         // site (never a silent last-wins value), while an UNUSED ambiguous name is
         // no error — exactly IEEE's "ambiguous only when referenced".
         let saved_scope_imports = std::mem::replace(&mut self.scope_imports, import_list.clone());
-        let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
-        let mut explicit_imports: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut wc_origin: crate::package::WildcardOrigins = BTreeMap::new();
+        let mut explicit_imports: crate::package::ExplicitImports = BTreeMap::new();
         // The module's own declared names shadow a wildcard import (§26.3) — the
         // same set the GAP-G array guard below reads, gathered once, here, because
         // the imports bind BEFORE the nets are declared.
         let names = self.gather_local_decl_names(module);
+        // §2 🆕 U: …and with the module's own enum LABELS, the names an EXPLICIT import
+        // collides with (§26.3). A SEPARATE set: `names` is the wildcard skip set and
+        // `local_decl_names`, and neither may gain the labels (see
+        // `apply_import_consts`' `conflict_names`).
+        let conflict_names: std::collections::BTreeSet<String> = names
+            .iter()
+            .cloned()
+            .chain(decl_collide::own_region_enum_labels(
+                module,
+                UnitKind::Module,
+            ))
+            .collect();
         let n_cu = self.cu_imports.len();
         let is_header_import =
             |i: usize, imp: &ast::ImportDecl| Self::import_precedes_header(module, n_cu, i, imp);
+        // §2 🆕 U, §26.3 position: where each import is written — the compilation unit,
+        // or this module at a position segment (how many of its own items precede it).
+        let item_starts = crate::package::scope_item_starts(module);
+        let site_of = |i: usize, imp: &ast::ImportDecl| {
+            if i < n_cu {
+                crate::package::ImportSite::Unit
+            } else {
+                crate::package::ImportSite::Module(crate::package::import_segment(
+                    &item_starts,
+                    imp,
+                ))
+            }
+        };
         // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
         // header parameter fold (`bind_params`) and the body fold, so a header default
         // `#(parameter int X = f(4))` and a `localparam W = f(N)` interpret `f` at
@@ -540,7 +564,8 @@ impl Elaborator<'_> {
                     &mut wc_origin,
                     &mut explicit_imports,
                     &names,
-                    i >= n_cu,
+                    &conflict_names,
+                    site_of(i, imp),
                 );
                 self.apply_import_const_funcs(
                     imp,
@@ -571,7 +596,8 @@ impl Elaborator<'_> {
                     &mut wc_origin,
                     &mut explicit_imports,
                     &names,
-                    i >= n_cu,
+                    &conflict_names,
+                    site_of(i, imp),
                 );
                 self.apply_import_const_funcs(
                     imp,
