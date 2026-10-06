@@ -39,7 +39,9 @@ impl Elaborator<'_> {
     /// P1-9 (E3018): assignment-kind legality. `is_proc=true` (a procedural `=`/
     /// `<=`) may not target a NET (`wire`); `is_proc=false` (a user `assign`) may
     /// not drive a VARIABLE (`reg`/`integer`/`real`). SV `logic` passes both ways
-    /// (IEEE 1800 admits either one continuous driver or procedural writes).
+    /// (IEEE 1800 admits either one continuous driver or procedural writes) — but not
+    /// both on one variable, nor two continuous drivers (§6.5): that is
+    /// `multidriver.rs` Rule D's E3001, decided per variable before lowering.
     /// Called ONLY for user-written assignments — port-binding/decl-init synthetic
     /// cont-assigns are exempt (IEEE 1800 §23.3.3 var ports are legal).
     pub(crate) fn check_lvalue_kind(&mut self, lhs: &ir::Lvalue, is_proc: bool) {

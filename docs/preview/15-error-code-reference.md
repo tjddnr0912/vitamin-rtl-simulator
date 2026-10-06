@@ -448,7 +448,7 @@ simulator that implements the check. Suppress with `-Wno-I-PARSE-UNIQUE-OVERLAP-
 ## 3xxx · ELABORATE
 
 ### VITA-E3001 · `E-ELAB-MULTIDRIVER` (Error)
-**Two drivers the engine cannot resolve.** Three distinct conditions share this code.
+**Two drivers the engine cannot resolve.** Four distinct conditions share this code.
 
 **Overlapping continuous-assign bit ranges.** Part-select continuous assignments to one net
 overlap and the overlap cannot be resolved. Whole-net multiple drivers
@@ -511,7 +511,8 @@ always_ff @(posedge clk) n <= n + 1;          // driver 2
 Verilator reports `MULTIDRIVEN` for every one of those pairs except the `always_latch` ones,
 where it is silent; Xcelium rejects those too, so an `always_latch` pair is demoted to the
 warning [`VITA-W3060`](#vita-w3060--w-elab-multidriver-strict-warning) and only the
-`always_comb` and `always_ff` pairs reach this error. A pair with *no* inferring procedure
+`always_comb` and `always_ff` pairs reach this error — unless the other writer is a continuous
+`assign`, which is the fourth condition below and an error. A pair with *no* inferring procedure
 among the writers — `initial` beside a plain `always`, or `logic clk = 0; always #5 clk =
 ~clk;` — is accepted by both tools and stays silent.
 
@@ -556,14 +557,44 @@ Two precision rules keep this from rejecting RTL every tool accepts:
   name-based and cannot tell a module-scope `n` from a block-local shadow `n`, and iverilog,
   Verilator and Xcelium all accept the shadow.
 
-Variables and procedures inside a `generate` are out of scope for both variable rows: a
-generate block is its own scope and a `generate for` body is instantiated once per iteration,
-so matching bare names across blocks would report two different variables as one.
+**A continuous `assign` on a variable plus any other driver.** IEEE 1800-2017 §6.5: "it shall
+be an error to have multiple continuous assignments or a mixture of procedural and continuous
+assignments writing to any term in the expansion of a written longest static prefix of a logic
+variable"; §10.3.2 adds that such a variable shall not be initialized in its declaration. The
+other driver may be a second continuous `assign` or a gate output, a write in a plain `always`,
+an `initial` or a `final`, a procedural `assign`, or a declaration initializer. A net resolves
+its continuous drivers (the first condition above); a variable does not, and before this check
+two whole `assign`s on a `logic` were resolved as if it were a `wire`.
+```
+logic y;  assign y = en0 ? d0 : 1'bz;  assign y = en1 ? d1 : 1'bz;
+->  m.sv:3:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` is driven by more than one
+    continuous `assign`, and a variable takes a single continuous driver (IEEE §6.5) —
+    declare it a net (`wire`) to resolve the drivers, or keep one `assign`
+```
+Icarus Verilog refuses every such pair ("Variable 'y' cannot have multiple drivers.", "Cannot
+perform procedural assignment to variable 'y' because it is also continuously assigned.").
+Verilator reports `MULTIDRIVEN`, `BLKANDNBLK` or `CONTASSINIT` on most of them and nothing on two
+tri-state `assign`s, on a `final` writer or on an `always_latch`; those stay errors on IEEE §6.5
+and Icarus (the latch pair is not the warning `VITA-W3060` here). A gate output is a continuous
+driver like an `assign`. An `always_comb` / `always_ff` beside the `assign` is the previous
+condition, with its message. The
+error is reported once per variable — at the second `assign`, the procedure, or the declaration —
+and a variable reported here is not reported again by the overlap check. Not counted: a `force`
+(IEEE §10.6.2 lets it override the `assign`), a block-local or an assertion action-block local of
+the same name, and the shapes the variable rows leave out (partial writes, writes through a call)
+plus a port binding, a hierarchical write and an interface body. An unpacked array whose
+whole-array `assign` has another writer is [`VITA-E3009`](#vita-e3009--e-elab-unsupported-error)
+instead.
+
+Variables and procedures inside a `generate` are out of scope for the variable rows: a generate
+block is its own scope and a `generate for` body is instantiated once per iteration, so matching
+bare names across blocks would report two different variables as one.
 
 **Fix:** separate the overlapping part-select ranges or restructure to a single driver; drop
-either the initializer or the `always_comb` write; or give the variable exactly one writing
-process — seed a register through its reset branch rather than from an `initial`. Not
-suppressible; there is no policy flag to demote it to a warning.
+either the initializer or the `always_comb` write; give the variable exactly one writing
+process — seed a register through its reset branch rather than from an `initial`; or, for a
+variable with a continuous `assign`, keep that `assign` as its only driver or declare it a net.
+Not suppressible; there is no policy flag to demote it to a warning.
 
 ### VITA-E3002 · `E-ELAB-PORT-MISMATCH` (Error)
 **An instance port binding is incompatible with the module's port declarations.** A named
@@ -953,7 +984,8 @@ most the `PROCASSINIT` style note), and every FPGA synthesis flow implements the
 the register's power-on value — it is the standard idiom, and this repository's own
 `obs_procs` fixture is written in it. iverilog says nothing.
 
-**An `always_latch` sharing a variable with another process or a continuous `assign`.**
+**An `always_latch` sharing a variable with another process.** With a continuous `assign` on the
+variable the pair is the error `VITA-E3001` instead (IEEE §6.5; see that entry).
 ```
 logic [31:0] mask;
 always_latch if (en) mask[idx*8 +: 8] = 8'h99;

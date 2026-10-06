@@ -290,6 +290,10 @@ struct Elaborator<'s> {
     /// Whole-array `assign`s lowered element by element, for the sole-writer check
     /// (`cont_array.rs`). Never restored.
     whole_array_cas: Vec<cont_array::WholeArrayCa>,
+    /// Variables Rule D (`multidriver.rs`) reported — a continuous `assign` beside
+    /// another driver — so `check_whole_net_multidriver` does not report the same
+    /// net a second time. Empty unless an E3001 was emitted. Never restored.
+    cont_var_multidriver_nets: BTreeSet<u32>,
     /// Unpacked-array nets whose element type is written in their own declaration
     /// (`cont_array::inline_elem_type`). Never restored.
     inline_elem_arrays: BTreeSet<u32>,

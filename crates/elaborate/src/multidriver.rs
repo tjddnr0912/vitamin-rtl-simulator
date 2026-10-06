@@ -1,10 +1,11 @@
-//! IEEE 1800 §9.2.2.2/§9.2.2.3/§9.2.2.4 process-multidriver diagnostics for
-//! module-scope variables, output ports that are variables (§23.2.2.3) included —
-//! split out of `var_init.rs` (module-size policy).
+//! IEEE 1800 §9.2.2.2/§9.2.2.3/§9.2.2.4 process-multidriver diagnostics and the §6.5
+//! continuous-assignment rule for module-scope variables, output ports that are
+//! variables (§23.2.2.3) included — split out of `var_init.rs` (module-size policy).
 //!
-//! Three rules live here, and they are three because the two oracles split three
-//! ways. Measured, one shape per file, verilator 5.052 `--lint-only` and an
-//! external xcelium report (`*E,MULAXX`); iverilog says nothing about any of them:
+//! Rules A, B and C are three because the two oracles split three ways on the
+//! `always_*` pairs. Measured, one shape per file, verilator 5.052 `--lint-only` and an
+//! external xcelium report (`*E,MULAXX`); iverilog says nothing about any of them
+//! (Rule D, a continuous `assign` beside another driver, is below the list):
 //!
 //! ```text
 //!   shape                                   verilator     xcelium      vita
@@ -42,7 +43,8 @@
 //! - Both tools reject ⇒ [`MsgCode::ElabMultidriver`] (error).
 //! - Only xcelium rejects ⇒ [`MsgCode::ElabMultidriverStrict`] (warning). That code
 //!   covers two shapes: a declaration initializer on an `always_ff`/`always_latch`
-//!   variable, and an `always_latch` sharing a variable with another process. The
+//!   variable, and an `always_latch` sharing a variable with another process (not with
+//!   a continuous `assign`: that is Rule D's error, below). The
 //!   initializer is that register's power-on value; verilator and every synthesis
 //!   flow implement it, and this repository's own `obs_procs` fixture is written in
 //!   that idiom. An error there was built once and reverted because it rejected
@@ -57,6 +59,41 @@
 //!   both run it to different values (`always_comb y = '{a, c};` beside
 //!   `always_comb y = '{c, a};`: `y0=3 y1=5` and `y0=5 y1=3`), an ordering race.
 //!   Pinned in `cli/tests/multidriver_output_ports.rs`.
+//!
+//! Rule D is IEEE 1800 §6.5 / §10.3.2: a variable written by a continuous assignment
+//! takes no second continuous assignment, no procedural write and no declaration
+//! initializer. Here iverilog 13.0 is the oracle that speaks; measured one shape per
+//! file, with verilator 5.052 `--lint-only -Wall`:
+//!
+//! ```text
+//!   shape (whole variable, module scope)    iverilog          verilator        vita
+//!   two continuous assigns                  multiple drivers  MULTIDRIVEN      E3001
+//!   two tri-state assigns (n_logic_bus)     multiple drivers  accepts          E3001 (ruling)
+//!   assign + always @* / always @(a or b)   procedural+cont   MULTIDRIVEN      E3001
+//!   assign + always @(posedge) y <= …       procedural+cont   BLKANDNBLK       E3001
+//!   assign + initial                        procedural+cont   CONTASSINIT      E3001
+//!   assign + procedural `assign`            procedural+cont   CONTASSINIT      E3001
+//!   decl initializer + assign               procedural+cont   CONTASSINIT      E3001
+//!   assign + final                          procedural+cont   accepts          E3001 (ruling)
+//!   gate output + assign, two gates         primitive driver  MULTIDRIVEN      E3001
+//!   gate output + initial / initializer     primitive driver  CONTASSINIT      E3001
+//!   assign + always_latch                   procedural+cont   accepts          E3001 (ruling)
+//!   two assigns + always_latch              multiple drivers  accepts          E3001
+//!   initializer + assign + always_latch     procedural+cont   CONTASSINIT      E3001
+//!   assign + force / release                accepts           accepts          silent (§10.6.2)
+//!   two assigns on a `wire`                 accepts           accepts          resolved
+//! ```
+//!
+//! The "(ruling)" rows are the owner's of 2026-10-06: loud where IEEE says error (E
+//! over W), and verilator is not an x/z oracle. An `always_latch` beside an `assign` is
+//! therefore Rule D's, not Rule B's latch warning: Rule B's W3060 stands down whenever
+//! Rule D fires, and stays for the latch pairs with no `assign`. Rule D does not reach
+//! a select, element or member write (`mdrv-partial`), a write through a task, a
+//! hierarchical name or a system task's output argument (`mdrv-ca-call`), a port
+//! binding, a UDP instance, a generate block or an interface body (`mdrv-ca-port`), a
+//! bare `generate … endgenerate` region (`mdrv-gen-region`), or an unpacked array,
+//! which `cont_array.rs` already refuses (E3009, `mdrv-ca-array`). Pinned in
+//! `cli/tests/cont_assign_variable_drivers.rs`.
 //!
 //! Nothing about a simulated VALUE changes here; this is the diagnostic that was
 //! missing, not a semantics change.
@@ -89,37 +126,56 @@ use super::*;
 /// question — and it is the reason this guard is written as "the source declares a
 /// shadow", which is a fact about the SOURCE, rather than as anything about which
 /// net vita happens to use.
-fn declares_local_named(stmts: &[ast::Stmt], name: &str) -> bool {
+///
+/// `into_assert_actions` is Rule D's OPT-IN, and Rules A and B pass a literal
+/// `false`, which leaves the two assertion arms below unreachable for them. With
+/// `true` the guard also descends into an immediate/deferred assertion's action
+/// blocks and a concurrent assertion's pass/fail blocks — exactly where
+/// [`stmt_writes_whole_ident`] already descends, so a local declared there hides
+/// the process from Rule D the way a `begin … end` local hides it. It is not the
+/// default because, for Rules A and B, the same descent trades a loud for a silent:
+/// an action-block local is flattened onto the module variable by bare name, and
+/// `always @* x = a;` beside `a1: assert property (@(posedge clk) 1'b0) else begin
+/// logic [7:0] x; x = '0; end` prints `A1 x=00` where verilator 5.052 prints
+/// `x=11` (`p0_*` cells, `cli/tests/cont_assign_variable_drivers.rs`). In Rule D's
+/// lane the same design with `assign x = a;` as the module driver prints the
+/// oracles' `x=11` and was a false E3001 without the opt-in, so only Rule D opts
+/// in. The flattening is still there: a finer probe in that lane sees the local's
+/// write on the module `x` for the rest of the step (ROADMAP §3.b
+/// `mdrv-assert-local`, pinned as it is, unchanged by this guard).
+fn declares_local_named(stmts: &[ast::Stmt], name: &str, into_assert_actions: bool) -> bool {
     fn decl_hit(decls: &[ast::NetVarDecl], name: &str) -> bool {
         decls
             .iter()
             .any(|d| d.names.iter().any(|n| n.name.name == name))
     }
+    let sub =
+        |s: &ast::Stmt| declares_local_named(std::slice::from_ref(s), name, into_assert_actions);
     stmts.iter().any(|st| match st {
         ast::Stmt::Block { decls, stmts, .. } | ast::Stmt::Fork { decls, stmts, .. } => {
-            decl_hit(decls, name) || declares_local_named(stmts, name)
+            decl_hit(decls, name) || declares_local_named(stmts, name, into_assert_actions)
         }
-        ast::Stmt::If { then_s, else_s, .. } => {
-            declares_local_named(std::slice::from_ref(then_s), name)
-                || else_s
-                    .as_deref()
-                    .is_some_and(|e| declares_local_named(std::slice::from_ref(e), name))
-        }
+        ast::Stmt::If { then_s, else_s, .. } => sub(then_s) || else_s.as_deref().is_some_and(sub),
         ast::Stmt::For { body, .. }
         | ast::Stmt::While { body, .. }
         | ast::Stmt::Repeat { body, .. }
-        | ast::Stmt::Forever { body, .. } => declares_local_named(std::slice::from_ref(body), name),
+        | ast::Stmt::Forever { body, .. } => sub(body),
         // The timing statements carry an OPTIONAL body (`@(posedge clk) begin … end`
         // is one of them, and it is the shape an `always_ff` almost always has).
         ast::Stmt::DelayCtrl { body, .. }
         | ast::Stmt::EventCtrl { body, .. }
-        | ast::Stmt::Wait { body, .. } => body
-            .as_deref()
-            .is_some_and(|b| declares_local_named(std::slice::from_ref(b), name)),
+        | ast::Stmt::Wait { body, .. } => body.as_deref().is_some_and(sub),
         ast::Stmt::Case { items, .. } => items.iter().any(|it| {
             let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) = it;
-            declares_local_named(std::slice::from_ref(body), name)
+            sub(body)
         }),
+        // Rule D only — see the opt-in above.
+        ast::Stmt::DeferredAssert { then_s, else_s, .. } if into_assert_actions => {
+            sub(then_s) || sub(else_s)
+        }
+        ast::Stmt::ConcurrentAssert { pass, fail, .. } if into_assert_actions => {
+            pass.as_deref().is_some_and(sub) || fail.as_deref().is_some_and(sub)
+        }
         _ => false,
     })
 }
@@ -185,7 +241,8 @@ fn lvalue_is_whole_ident(lv: &ast::Lvalue, name: &str) -> bool {
 /// ```
 ///
 /// So a writer counts only when its lvalue is the bare identifier. `force` and a
-/// procedural `assign` on a bare identifier are whole writes and do count.
+/// procedural `assign` on a bare identifier are whole writes and do count — except
+/// that Rule D asks with [`ProcWrites::ExceptForce`], below.
 ///
 /// QUEUED: the call-actual refinement — verilator counts an actual bound to an
 /// output/inout formal as a write, and does not count one bound to an `input` formal
@@ -196,9 +253,9 @@ fn lvalue_is_whole_ident(lv: &ast::Lvalue, name: &str) -> bool {
 ///
 /// The match is `_`-free over `ast::Stmt` so a future statement form with a write
 /// position is a compile error here rather than a silent blind spot.
-fn stmt_writes_whole_ident(s: &ast::Stmt, name: &str) -> bool {
+fn stmt_writes_whole_ident(s: &ast::Stmt, name: &str, writes: ProcWrites) -> bool {
     use ast::Stmt::*;
-    let sub = |s: &ast::Stmt| stmt_writes_whole_ident(s, name);
+    let sub = |s: &ast::Stmt| stmt_writes_whole_ident(s, name, writes);
     match s {
         // `x = e;` / `x <= e;` — including the assign-with-timing spellings
         // (`x = #3 e;`, `x <= @(posedge c) e;`), which are the same statement with a
@@ -207,7 +264,8 @@ fn stmt_writes_whole_ident(s: &ast::Stmt, name: &str) -> bool {
         Blocking { lhs, .. } | NonBlocking { lhs, .. } => lvalue_is_whole_ident(lhs, name),
         // Procedural continuous assign / force — a driver on `name` in the same sense,
         // and both are MULTIDRIVEN in the measurement above.
-        Assign { lhs, .. } | Force { lhs, .. } => lvalue_is_whole_ident(lhs, name),
+        Assign { lhs, .. } => lvalue_is_whole_ident(lhs, name),
+        Force { lhs, .. } => writes == ProcWrites::All && lvalue_is_whole_ident(lhs, name),
         Block { stmts, .. } | Fork { stmts, .. } => stmts.iter().any(sub),
         If { then_s, else_s, .. } => sub(then_s) || else_s.as_deref().is_some_and(sub),
         Case { items, .. } => items.iter().any(|it| {
@@ -245,6 +303,89 @@ fn stmt_writes_whole_ident(s: &ast::Stmt, name: &str) -> bool {
     }
 }
 
+/// Which procedural statement forms [`stmt_writes_whole_ident`] counts as a writer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProcWrites {
+    /// `=`, `<=`, a procedural `assign` and `force` — Rule B and the callee-body walk.
+    All,
+    /// The same without `force` — Rule D. IEEE 1800 §10.6.2 lets a `force` override a
+    /// continuous assignment to a variable until its `release`; iverilog 13.0 and
+    /// verilator 5.052 both run `assign y = a;` beside `initial force y = 0;`
+    /// (`y=1 y=0 y=1 y=0` across a force/release), and so does vita. A procedural
+    /// `assign` stays a writer: both tools reject it beside a continuous `assign`
+    /// (iverilog "Cannot perform procedural assignment to variable 'y' because it is
+    /// also continuously assigned.", verilator `%Error-CONTASSINIT`).
+    ExceptForce,
+}
+
+/// Rule D's verdict for one variable: the caret and the message tail (after the
+/// subject) when a whole continuous `assign` of `name` has another driver, `None`
+/// otherwise. The caret is the second `assign` (or gate), the procedure, or the
+/// declaration — iverilog 13.0's own, except that it marks a gate pair's first.
+fn cont_assign_var_conflict(
+    name: &str,
+    decl_span: ast::Span,
+    has_init: bool,
+    procs: &[&ast::ProceduralBlock],
+    cont_assigns: &[&ast::ContinuousAssign],
+) -> Option<(ast::Span, String)> {
+    // One entry per left-hand side: `assign y = a, y = b;` is two drivers. A gate
+    // primitive (`and g (y, a, b);`) is desugared to a continuous assign marked
+    // `from_gate`, and it is a continuous driver in the same sense.
+    let drivers: Vec<(ast::Span, bool)> = cont_assigns
+        .iter()
+        .flat_map(|ca| {
+            ca.assigns
+                .iter()
+                .filter(|(lhs, _)| lvalue_is_whole_ident(lhs, name))
+                .map(|_| (ca.span, ca.from_gate))
+        })
+        .collect();
+    let &(_, first_gate) = drivers.first()?;
+    if let Some(&(second, _)) = drivers.get(1) {
+        let msg = if drivers.iter().any(|&(_, g)| g) {
+            "is driven by more than one continuous driver (an `assign` or a gate output), and \
+             a variable takes a single continuous driver (IEEE §6.5) — declare it a net \
+             (`wire`) to resolve the drivers, or keep one driver"
+        } else {
+            "is driven by more than one continuous `assign`, and a variable takes a single \
+             continuous driver (IEEE §6.5) — declare it a net (`wire`) to resolve the \
+             drivers, or keep one `assign`"
+        };
+        return Some((second, msg.to_string()));
+    }
+    let (driven_by, keep) = if first_gate {
+        ("a gate output", "the gate")
+    } else {
+        ("a continuous `assign`", "the `assign`")
+    };
+    let proc_w = procs.iter().find(|p| {
+        !declares_local_named(std::slice::from_ref(&*p.body), name, true)
+            && stmt_writes_whole_ident(&p.body, name, ProcWrites::ExceptForce)
+    });
+    if let Some(p) = proc_w {
+        let what = proc_writer(p.kind, p.span).what;
+        return Some((
+            p.span,
+            format!(
+                "is driven by {driven_by} AND written by {what}, and a variable driven by a \
+                 continuous assignment takes no other writer (IEEE §6.5, §10.3.2) — keep \
+                 {keep} or the procedural write"
+            ),
+        ));
+    }
+    has_init.then(|| {
+        (
+            decl_span,
+            format!(
+                "has a declaration initializer AND is driven by {driven_by}, and a variable \
+                 driven by a continuous assignment takes no initializer (IEEE §10.3.2) — \
+                 drop the initializer"
+            ),
+        )
+    })
+}
+
 /// One module-scope writer of a variable, as it is named in a diagnostic.
 struct Writer {
     /// The writer as a diagnostic renders it, backticks included: ``` `always_ff` ```,
@@ -277,6 +418,20 @@ impl VarNoun {
             }
         }
     }
+}
+
+/// One variable the single-driver check covers — see [`Elaborator::multidriver_vars`].
+struct MdVar {
+    name: String,
+    /// The declaration's span.
+    span: ast::Span,
+    /// A declaration initializer (`logic y = 0;`, an ANSI `output logic y = 0`).
+    has_init: bool,
+    noun: VarNoun,
+    /// Unpacked dimensions written in the variable's own declaration. Rule D leaves
+    /// such a variable to `cont_array.rs`, whose whole-array sole-writer check is
+    /// already loud (E3009) for every whole-array `assign` that has another writer.
+    unpacked: bool,
 }
 
 fn proc_writer(kind: ast::ProcKind, span: ast::Span) -> Writer {
@@ -430,7 +585,7 @@ impl Elaborator<'_> {
         {
             return E::Inert;
         }
-        if stmt_writes_whole_ident(body, name) {
+        if stmt_writes_whole_ident(body, name, ProcWrites::All) {
             return E::Writes;
         }
         let ignore = |_: &ast::HierPath, _: &[ast::Expr], _: &str| crate::da::CallEffect::Inert;
@@ -473,11 +628,7 @@ impl Elaborator<'_> {
     /// name nothing earlier declared (the split `output y; reg y;` is the
     /// `NetVarDecl`'s, so it is collected once). An ANSI port the body redeclares is
     /// left to the body declaration, which is E3009 anyway.
-    fn multidriver_vars(
-        &self,
-        body: &[ast::ModuleItem],
-        ports: &ast::PortList,
-    ) -> Vec<(String, ast::Span, bool, VarNoun)> {
+    fn multidriver_vars(&self, body: &[ast::ModuleItem], ports: &ast::PortList) -> Vec<MdVar> {
         let body_decls: std::collections::BTreeSet<&str> = body
             .iter()
             .filter_map(|it| match it {
@@ -495,12 +646,13 @@ impl Elaborator<'_> {
                     && !body_decls.contains(p.name.name.as_str())
                     && netvar_kind_is_var(self.port_net_kind(p.net_or_var, &p.shape_param))
                 {
-                    vars.push((
-                        p.name.name.clone(),
-                        p.span,
-                        p.default.is_some(),
-                        VarNoun::OutputPort,
-                    ));
+                    vars.push(MdVar {
+                        name: p.name.name.clone(),
+                        span: p.span,
+                        has_init: p.default.is_some(),
+                        noun: VarNoun::OutputPort,
+                        unpacked: !p.unpacked.is_empty(),
+                    });
                 }
             }
         }
@@ -508,24 +660,31 @@ impl Elaborator<'_> {
             match item {
                 ast::ModuleItem::NetVar(d) if netvar_kind_is_var(d.kind) => {
                     for n in &d.names {
-                        vars.push((
-                            n.name.name.clone(),
-                            d.span,
-                            n.init.is_some(),
-                            VarNoun::Variable,
-                        ));
+                        vars.push(MdVar {
+                            name: n.name.name.clone(),
+                            span: d.span,
+                            has_init: n.init.is_some(),
+                            noun: VarNoun::Variable,
+                            unpacked: !n.unpacked.is_empty(),
+                        });
                     }
                 }
                 ast::ModuleItem::PortDecl(pd) => {
                     let is_var = pd.dir == ast::PortDir::Output
                         && netvar_kind_is_var(self.port_net_kind(pd.net_or_var, &pd.shape_param));
-                    for n in &pd.names {
+                    for (i, n) in pd.names.iter().enumerate() {
                         // `insert` is false for a name already declared: the net
                         // builder skips it the same way.
                         if declared.insert(n.name.as_str()) && is_var {
                             // A non-ANSI port declaration carries no initializer
                             // (`output reg q = 1'b1;` is E2002).
-                            vars.push((n.name.clone(), pd.span, false, VarNoun::OutputPort));
+                            vars.push(MdVar {
+                                name: n.name.clone(),
+                                span: pd.span,
+                                has_init: false,
+                                noun: VarNoun::OutputPort,
+                                unpacked: pd.unpacked.get(i).is_some_and(|u| !u.is_empty()),
+                            });
                         }
                     }
                 }
@@ -582,11 +741,15 @@ impl Elaborator<'_> {
                 v => v,
             };
             vars.iter()
-                .filter(|(name, _, has_init, _)| {
+                .filter(|MdVar { name, has_init, .. }| {
                     *has_init
                         && procs.iter().any(|p| {
                             p.kind == ast::ProcKind::AlwaysComb
-                                && !declares_local_named(std::slice::from_ref(&*p.body), name)
+                                && !declares_local_named(
+                                    std::slice::from_ref(&*p.body),
+                                    name,
+                                    false,
+                                )
                                 && !stmt_never_writes_ident(
                                     std::slice::from_ref(&*p.body),
                                     name,
@@ -594,7 +757,7 @@ impl Elaborator<'_> {
                                 )
                         })
                 })
-                .map(|(name, _, _, _)| name.clone())
+                .map(|v| v.name.clone())
                 .collect()
         };
         // Rule B's writers through a CALLEE BODY, computed in the same phase. The
@@ -610,9 +773,9 @@ impl Elaborator<'_> {
         let via_call_writers: std::collections::BTreeSet<(String, usize)> = {
             let me: &Self = &*self;
             let mut set = std::collections::BTreeSet::new();
-            for (name, _, _, _) in &vars {
+            for MdVar { name, .. } in &vars {
                 for (pi, p) in procs.iter().enumerate() {
-                    if !declares_local_named(std::slice::from_ref(&*p.body), name)
+                    if !declares_local_named(std::slice::from_ref(&*p.body), name, false)
                         && me.proc_writes_whole_via_call(std::slice::from_ref(&*p.body), name)
                     {
                         set.insert((name.clone(), pi));
@@ -629,14 +792,22 @@ impl Elaborator<'_> {
             })
             .collect();
 
-        for (name, decl_span, has_init, noun) in vars {
+        for MdVar {
+            name,
+            span: decl_span,
+            has_init,
+            noun,
+            unpacked,
+        } in vars
+        {
             // ⚠️ The SHADOW guard runs first in EVERY rule below, and it is what makes
             // an error defensible: a procedure that declares its own `name` is writing
             // THAT one, and no name-based walk can tell them apart. Skipping the whole
             // procedure — rather than just its declaring block — is the conservative
-            // direction for a diagnostic that stops the run.
+            // direction for a diagnostic that stops the run. (Rule D calls the same
+            // guard with its opt-in, which also looks inside assertion action blocks.)
             let visible = |p: &&ast::ProceduralBlock| {
-                !declares_local_named(std::slice::from_ref(&*p.body), &name)
+                !declares_local_named(std::slice::from_ref(&*p.body), &name, false)
             };
             let subject = noun.subject(&name);
 
@@ -682,7 +853,7 @@ impl Elaborator<'_> {
                 .filter(|(pi, p)| {
                     p.kind == ast::ProcKind::AlwaysComb
                         && visible(p)
-                        && (stmt_writes_whole_ident(&p.body, &name)
+                        && (stmt_writes_whole_ident(&p.body, &name, ProcWrites::All)
                             || via_call_writers.contains(&(name.clone(), *pi)))
                 })
                 .count();
@@ -694,7 +865,7 @@ impl Elaborator<'_> {
                 let via = p.kind == ast::ProcKind::AlwaysComb
                     && comb_writers >= 2
                     && via_call_writers.contains(&(name.clone(), pi));
-                if stmt_writes_whole_ident(&p.body, &name) || via {
+                if stmt_writes_whole_ident(&p.body, &name, ProcWrites::All) || via {
                     writers.push(proc_writer(p.kind, p.span));
                 }
             }
@@ -713,6 +884,20 @@ impl Elaborator<'_> {
             }
             let inferred = writers.iter().position(|w| w.clause.is_some());
 
+            // Rule D's verdict (below), decided first because Rule B's warning defers
+            // to it. A pure function of the AST plus the built net's array-ness: with
+            // no whole continuous `assign` of `name` it is `None`, and every rule runs
+            // exactly as it did before Rule D existed.
+            let rule_d = (!unpacked)
+                .then(|| {
+                    cont_assign_var_conflict(&name, decl_span, has_init, &procs, &cont_assigns)
+                })
+                .flatten()
+                .map(|verdict| (verdict, self.lookup_net_scoped(&name)))
+                // A typedef'd unpacked array carries no dimension in its declaration;
+                // the net built for it does.
+                .filter(|(_, net)| !net.is_some_and(|n| self.net_is_static_array(n)));
+
             // ── Rule B: an inferring procedure plus ANY other module-scope writer. ─
             //
             // One diagnostic per variable, at the always_* procedure, naming the first
@@ -720,6 +905,14 @@ impl Elaborator<'_> {
             // verilator reports MULTIDRIVEN for the `always_comb` and `always_ff` pairs
             // and is SILENT for every `always_latch` pair, so a latch pair is the
             // warning and the other two are the error.
+            //
+            // Except when Rule D fires: a continuous `assign` beside the latch (or
+            // beside anything else) is IEEE §6.5's error whatever verilator says, and
+            // iverilog 13.0 rejects it ("Cannot perform procedural assignment to
+            // variable 'y' because it is also continuously assigned."). So the latch
+            // warning stands down and Rule D reports the variable — the owner's
+            // ruling of 2026-10-06 (E over W where IEEE says error). Without this, a
+            // latch also hid two `assign`s on the variable (`y=x` at exit 0).
             if let Some(i) = inferred {
                 if writers.len() > 1 {
                     let other = writers
@@ -734,16 +927,19 @@ impl Elaborator<'_> {
                         writers[i].span,
                     );
                     if what == "`always_latch`" {
-                        self.warn_code_at(
-                            MsgCode::ElabMultidriverStrict,
-                            span,
-                            &format!(
-                                "{subject} is written by {what} AND by {other}; \
-                                 xcelium rejects this as two drivers (*E,MULAXX, IEEE \
-                                 §{clause}) while verilator accepts it — give the variable \
-                                 one writing process"
-                            ),
-                        );
+                        if rule_d.is_none() {
+                            self.warn_code_at(
+                                MsgCode::ElabMultidriverStrict,
+                                span,
+                                &format!(
+                                    "{subject} is written by {what} AND by {other}; \
+                                     xcelium rejects this as two drivers (*E,MULAXX, IEEE \
+                                     §{clause}) while verilator accepts it — give the \
+                                     variable one writing process"
+                                ),
+                            );
+                            continue;
+                        }
                     } else {
                         self.error_at(
                             MsgCode::ElabMultidriver,
@@ -754,9 +950,42 @@ impl Elaborator<'_> {
                                  — verilator MULTIDRIVEN / xcelium *E,MULAXX"
                             ),
                         );
+                        continue;
                     }
-                    continue;
                 }
+            }
+
+            // ── Rule D: a continuous `assign` of the whole variable plus any other ──
+            // ── driver: a second such `assign`, a process, or an initializer. ───────
+            //
+            // IEEE 1800 §6.5: "it shall be an error to have multiple continuous
+            // assignments or a mixture of procedural and continuous assignments writing
+            // to any term in the expansion of a written longest static prefix of a
+            // variable"; §10.3.2: a variable written by a continuous assignment shall
+            // not be initialized in its declaration nor written procedurally. Rule B
+            // already answered for every pair with an `always_comb`/`always_ff` writer
+            // (its error `continue`d), so what reaches here is a continuous `assign`
+            // (or gate) beside another one, a plain `always`, an `always_latch` (Rule
+            // B's warning stood down), an `initial`, a `final`, or the declaration
+            // initializer — all of which ran at exit 0, two whole `assign`s resolved as
+            // a `wire` (`y=x` where iverilog 13.0 says "Variable 'y' cannot have
+            // multiple drivers.").
+            //
+            // Its writer walk and its shadow guard each reach less than Rule B's, and
+            // each is an opt-in Rules A and B do not take: `force` is not a writer
+            // ([`ProcWrites::ExceptForce`]), and a local declared in an assertion's
+            // action block hides the process ([`declares_local_named`]'s
+            // `into_assert_actions`). Whole writes only, as Rule B: a select, an element
+            // or a member is `mdrv-partial`. An unpacked array is `cont_array.rs`'s
+            // (E3009).
+            if let Some(((span, msg), net)) = rule_d {
+                self.error_at(MsgCode::ElabMultidriver, span, &format!("{subject} {msg}"));
+                // One diagnostic per variable: the flat overlap check
+                // (`check_whole_net_multidriver`) would report a whole `assign`
+                // overlapping a concat / select / delayed `assign` of the same net a
+                // second time, without a location.
+                self.cont_var_multidriver_nets.extend(net);
+                continue;
             }
 
             // ── Rule C: a declaration initializer plus `always_ff` / `always_latch`. ─

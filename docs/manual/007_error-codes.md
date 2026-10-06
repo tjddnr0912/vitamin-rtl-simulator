@@ -405,12 +405,12 @@ connectivity, parameter resolution.
 | `VITA-W3057` | `W-ELAB-AUTOTOP-AMBIGUOUS` | Warning | The design has several uninstantiated roots and auto-top picked one. Pin the intended root with `--top`. |
 | `VITA-W3058` | `W-ELAB-STR-TERNARY` | Warning | A ternary whose arms are string literals is an integral value, so `$display` prints it as a number rather than as text. |
 | `VITA-W3059` | `W-ELAB-STR-ESCAPE` | Warning | A string literal uses an escape IEEE 1800 Table 5-1 does not define, and tools read it differently. One line per literal-and-escape pair for the whole run. |
-| `VITA-W3060` | `W-ELAB-MULTIDRIVER-STRICT` | Warning | Two drivers on one variable that Xcelium rejects (`*E,MULAXX`) and Verilator accepts: a declaration initializer on an `always_ff`/`always_latch` variable, or an `always_latch` sharing a variable with another process. |
+| `VITA-W3060` | `W-ELAB-MULTIDRIVER-STRICT` | Warning | Two drivers on one variable that Xcelium rejects (`*E,MULAXX`) and Verilator accepts: a declaration initializer on an `always_ff`/`always_latch` variable, or an `always_latch` sharing a variable with another process. With a continuous `assign` on the variable it is `VITA-E3001` instead. |
 | `VITA-E3061` | `E-ELAB-ALWAYS-FF-TIMING` | Error | An `always_ff` with no event control, with more than one (the header plus each `@(…)` statement and each `q <= @(e) d` in the body), or with a blocking timing control (`#`, `wait`, `wait fork`, `q = #1 d`, `q = @(e) d`), which IEEE 1800 §9.2.2.4 forbids; also one with an event control inside a `fork`, with no header and only a `q <= @(e) d`, or with no header and an `@(…)` some pass can miss (inside an `if`, a `case` or a loop, or after a loop or a `disable`; stricter than the IEEE text), which would never suspend. The message says which. Icarus Verilog refuses these too; Verilator runs most of them. |
 
 ### `E-ELAB-MULTIDRIVER` in detail
 
-Three shapes reach this code.
+Four shapes reach this code.
 
 A **net** driven by more than one continuous assignment is an error only when the
 overlap is one the engine does not model. Whole-net, non-delayed continuous
@@ -448,6 +448,29 @@ under IEEE 1800 §9.2.2.2, §9.2.2.3 and §9.2.2.4, which each say the variable
 md4.sv:3:25: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `n` is written by `always_ff` AND by `initial`, which is two drivers on one variable (IEEE §9.2.2.4) — verilator MULTIDRIVEN / xcelium *E,MULAXX [in top]
 ```
 
+A **variable** driven by a continuous `assign` takes no other driver under IEEE
+1800 §6.5 and §10.3.2: not a second continuous `assign` or gate output, not a
+procedural write in any process (`always`, `always @*`, `always_latch`,
+`initial`, `final`, a procedural `assign`), and not a declaration initializer. Multiple continuous
+drivers are resolved only on a net, so declare the signal `wire` when a bus is
+meant. The error is reported once per variable, at the second `assign`, the
+procedure, or the declaration, which is where Icarus Verilog reports most of them:
+
+```
+md5.sv:4:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` is driven by more than one continuous `assign`, and a variable takes a single continuous driver (IEEE §6.5) — declare it a net (`wire`) to resolve the drivers, or keep one `assign` [in top]
+md6.sv:4:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` is driven by a continuous `assign` AND written by `always`, and a variable driven by a continuous assignment takes no other writer (IEEE §6.5, §10.3.2) — keep the `assign` or the procedural write [in top]
+md7.sv:2:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` has a declaration initializer AND is driven by a continuous `assign`, and a variable driven by a continuous assignment takes no initializer (IEEE §10.3.2) — drop the initializer [in top]
+```
+
+A gate output counts as a continuous driver, and an `always_latch` beside the
+`assign` is this error too, not the latch warning below. A `force` over the
+`assign` is not a second driver (IEEE §10.6.2). An `always_comb` or `always_ff`
+beside the `assign` is the previous shape, with its own message. Only whole-variable writes at module
+scope are read: a select, element or member write, a write through a task or a
+hierarchical name, a port binding, a generate-block `assign`, an interface body
+and an unpacked array (which is `VITA-E3009` when its whole-array `assign` has
+another writer) are outside the check.
+
 Only a *direct*, *whole-variable* write counts. Direct means an assignment
 (including `force` and a procedural `assign`), not a write that reaches the
 variable through a task or function call — `initial wt();` where
@@ -463,13 +486,15 @@ Two shapes are deliberately not errors:
 - A declaration initializer with an `always_ff` or `always_latch` write is a
   register's power-on value. Verilator and synthesis accept it, Xcelium does not,
   so it is the warning `W-ELAB-MULTIDRIVER-STRICT` rather than an error.
-- An `always_latch` sharing a variable with another process is the same split:
+- An `always_latch` sharing a variable with another process (not with a
+  continuous `assign`, which is an error) is the same split:
   Verilator reports nothing for any latch pair measured while reporting
   `MULTIDRIVEN` for the `always_comb` and `always_ff` twins, so it is that warning
   too. Only the `always_comb` and `always_ff` pairs are errors.
 - Plain `always` and `initial` writers with no `always_*` procedure among them
   are not covered by any of the three clauses. `logic clk = 0; always #5 clk =
-  ~clk;` is legal, and so is an `initial` seed beside a plain `always`.
+  ~clk;` is legal, and so is an `initial` seed beside a plain `always` — unless a
+  continuous `assign` drives the same variable, which is the fourth shape above.
 
 An `output` port declared with a data type and no net type (`output logic y`,
 `output reg y`, `output int y`, a typedef, enum or struct type, a non-ANSI

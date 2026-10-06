@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — a variable driven by a continuous `assign` takes no other driver
+
+- IEEE 1800 §6.5 allows a variable one continuous driver and nothing else, and §10.3.2 forbids
+  initializing it in its declaration. A `logic` variable or an `output logic` port driven by two
+  whole `assign`s (`assign y = en0 ? d0 : 1'bz; assign y = en1 ? d1 : 1'bz;`) or gate outputs,
+  or by an `assign` or gate plus a write in a plain `always` / `always @*`, an `always_latch`, an
+  `initial` or a `final`, a procedural `assign`, or a declaration initializer (`logic y = 0;
+  assign y = a;`), is now the error `VITA-E3001` (`E-ELAB-MULTIDRIVER`), reported once per
+  variable at the second driver, the procedure or the declaration; the design exits 1. Before, it
+  ran at exit 0: two `assign`s were resolved as if the variable were a `wire` (`y=x` on a
+  conflict), the other shapes kept whichever writer ran last, and an `always_latch` beside the
+  `assign` drew only the warning `VITA-W3060` (which stays for an `always_latch` sharing a
+  variable with another process when no `assign` drives it). Icarus Verilog refuses all of these; Verilator reports most of them.
+  To have several drivers resolved, declare the signal a net (`wire`). A `force` over the `assign`
+  stays legal (§10.6.2). Not checked yet: a select or element write, a write through a task, a
+  hierarchical name or a system task's output argument, and a port binding, a UDP instance, a
+  generate block or `generate … endgenerate` region, or an interface body driving the same
+  variable. A whole `assign` beside a concatenation or a delayed `assign` of the same
+  variable was already refused, by the unlocated line ``net `t.y` driven by multiple overlapping
+  continuous assignments``; that line is now this located error instead.
+
 ### Changed — an `always_ff` that IEEE 1800 §9.2.2.4 forbids is an error
 
 - An `always_ff` must contain exactly one event control and no blocking timing control (IEEE 1800

@@ -343,6 +343,19 @@ count, and a parameter override.
 
 `-Werror=W-PARSE-IMPLICIT-NET` turns implicit nets into a project-wide error.
 
+Multiple drivers are legal on a net, not on a variable (IEEE 1800 §6.5). A
+variable driven by a continuous `assign` or a gate output — `logic y;`, or an
+`output logic y` port — takes no other driver: a second whole `assign` or gate
+output on it, a procedural write in an `always`, `always_latch`, `initial` or
+`final` block, a procedural `assign`, or a declaration initializer is
+`E-ELAB-MULTIDRIVER` / `VITA-E3001`, as Icarus Verilog refuses it. Declare the
+signal a net (`wire`) to have its drivers resolved. A `force` is not a driver
+(§10.6.2). The rule reads whole-variable writes at module scope only: a select,
+element or member write, a write through a task, a hierarchical name or a system
+task's output argument, and a port binding, a UDP instance, a generate block, a
+`generate … endgenerate` region or an interface body driving the same variable
+are not checked.
+
 Multiple continuous drivers on one net are legal when every driver writes the
 whole net without a delay; the value is resolved by 4-state wire resolution at
 settle time. When any driver is delayed, multi-chunk, an array element or a
@@ -829,7 +842,7 @@ Assignment-kind legality (`VITA-E3018`):
 |---|---|---|
 | `wire` family | Loud — `procedural assignment to net` | allowed |
 | `reg` / `integer` / `real` / `string` | allowed | Loud — `continuous assign drives variable` |
-| `logic` | allowed | allowed (IEEE 1800 admits either) |
+| `logic` | allowed | allowed as the only driver: a second continuous driver, a procedural write or a declaration initializer beside it is `VITA-E3001` (IEEE 1800 §6.5; see §5.2) |
 
 Port bindings and declaration initializers are synthetic continuous assignments
 and are exempt.

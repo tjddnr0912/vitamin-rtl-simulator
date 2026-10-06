@@ -16,6 +16,7 @@ impl<'s> Elaborator<'s> {
             consts: Vec::new(),
             cont_assigns: Vec::new(),
             whole_array_cas: Vec::new(),
+            cont_var_multidriver_nets: BTreeSet::new(),
             delayed_decl_nets: BTreeSet::new(),
             inline_elem_arrays: BTreeSet::new(),
             typedef_elem_arrays: BTreeSet::new(),

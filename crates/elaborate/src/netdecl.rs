@@ -13,7 +13,9 @@ impl Elaborator<'_> {
         let mut per_net: BTreeMap<u32, Vec<(u64, u64)>> = BTreeMap::new();
         // MULTI-DRIVER: a net all of whose cont-assign drivers are WHOLE-NET and
         // non-delayed is RESOLVED by 4-state wire resolution at settle time (the
-        // sim-engine `md_nets`), so its overlap is LEGAL — not an error. Mirror
+        // sim-engine `md_nets`), so its overlap is LEGAL — not an error. (On a
+        // VARIABLE it is not legal, IEEE 1800 §6.5: `multidriver.rs` Rule D has
+        // already reported a module-scope one, before lowering.) Mirror
         // the engine's eligibility exactly: a net is `not_md` (keeps E3001 on
         // overlap) if ANY driver is delayed, multi-chunk, array-element, or a
         // partial/bit select.
@@ -56,7 +58,8 @@ impl Elaborator<'_> {
             }
         }
         for (net, mut ivs) in per_net {
-            if ivs.len() < 2 {
+            // Rule D (`multidriver.rs`) already reported this variable, at its source.
+            if ivs.len() < 2 || self.cont_var_multidriver_nets.contains(&net) {
                 continue;
             }
             // Whole-net multi-driver (all drivers resolvable): legal, the engine
