@@ -319,6 +319,17 @@ A packed range or dimension is accepted only on a net kind or on
 | `wire` / `reg` / `logic` / `bit`, `[m:l]` | `abs(m−l)+1` | unsigned unless `signed` is written |
 
 Real values convert through `$rtoi`, `$itor`, `$realtobits` and `$bitstoreal`.
+An integral value converts to real — in an assignment, a port or formal of type `real`,
+an operator with a real operand, `$itor`, `real'()`, `%f`, and a constant — at its own
+width and sign, with each x or z bit read as 0 (IEEE 1800 §6.12.2: `4'bx011` is 3.0)
+and its set bits added least significant first, as Icarus Verilog converts, so a value
+past 53 bits rounds exactly as there (`64'hC000_0000_0000_0401` is
+13835058055282163712.0). A signed negative value with an x/z bit below its sign bit
+reads the bit as 0 (`4'sb1z11` is -5.0, as Verilator; Icarus Verilog prints -1.0), and
+`$itor` converts its whole argument (Icarus Verilog truncates a non-constant argument to
+32 bits). Verilator rounds a wide value correctly at run time and so differs from both
+(13835058055282165760.0 for that variable), while agreeing on a constant. A constant
+with an x/z bit is still refused where a real constant is required.
 `$bits` of a real variable or of a `real`/`realtime` parameter is 64 (IEEE 1800
 §6.12.1) in every context — a range bound, a `localparam` initializer, a
 `generate if` condition, a constant function. A real parameter reached through a

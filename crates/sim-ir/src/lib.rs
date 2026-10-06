@@ -426,9 +426,8 @@ pub enum SysFuncId {
     /// elaborate builds for `int'(r)` names the operand 2 to 5 times, so an
     /// operand that may not be evaluated twice (a user call, `$random`) could not
     /// be converted with it. Elaborate emits it only for a real operand; a
-    /// non-real one converts as `to_f64` would, and an operand whose value has any
-    /// unknown bit reads as 0.0 (`to_f64` is `None`), so the result is never
-    /// unknown.
+    /// non-real one converts as `to_f64` does, reading each unknown bit as 0
+    /// (§6.12.2, `mw::int_to_real`), so the result is never unknown.
     RealToInt,
     /// 2-state store: every x/z bit of the operand reads as 0 (IEEE §6.11.1).
     /// Width and sign are the operand's own. The single-mention twin of the

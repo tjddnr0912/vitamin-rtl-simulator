@@ -256,7 +256,17 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 Value::from_i128(x.trunc() as i128, 32, true)
             }
             SysFuncId::Itor => {
-                // int → real, exact convert.
+                // int → real: the one conversion (`Value::to_f64`, §6.12.2 — each x/z
+                // bit reads 0, any width). It was `to_i128_signed().unwrap_or(0)`, so
+                // `$itor(4'bx011)` was 0.0 where all three oracles give 3.0, and a value
+                // past 128 bits was 0.0 too. A wide argument splits the oracles, and
+                // each contradicts itself across a constant and a variable: for a 64-bit
+                // variable `v = 64'hC000_0000_0000_0401`, iverilog truncates a
+                // non-constant argument to 32 bits (`$itor(v)` 1025.0) and verilator
+                // rounds correctly (13835058055282165760.0), while for the literal both
+                // print 13835058055282163712.0. vita converts all of it, LSB first, in
+                // both forms (13835058055282163712.0; it printed 13835058055282165760.0,
+                // correctly rounded, until §4.5.599).
                 //
                 // ⭐ …unless the argument is already REAL, which `$itor` accepts even
                 // though §20.5 defines it as integral→real. `to_i128_signed` on a real
@@ -283,8 +293,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 if v.is_real {
                     return Value::from_f64(v.to_f64().unwrap_or(0.0).round());
                 }
-                let i = v.to_i128_signed().unwrap_or(0);
-                Value::from_f64(i as f64)
+                Value::from_f64(v.to_f64().unwrap_or(0.0))
             }
             SysFuncId::RealToBits => {
                 // real → 64-bit vector (raw IEEE bits). val[0] already holds
@@ -295,9 +304,9 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // oracles, where reading the integer's own bits gave `…0005`. The
                 // conversion is sign-aware (an unsigned 8'd200 is 200.0), reads each x/z
                 // bit as 0, and rounds a wide argument as iverilog does
-                // (`Value::integral_to_f64`).
+                // (`Value::to_f64`).
                 if !v.is_real {
-                    v = Value::from_f64(v.integral_to_f64().unwrap_or(0.0));
+                    v = Value::from_f64(v.to_f64().unwrap_or(0.0));
                 }
                 v.is_real = false;
                 v.signed = false;
@@ -337,10 +346,10 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // round half away from zero into a 128-bit signed integer, the same
             // `real_to_int_round` the net store uses, so a converted operand
             // matches what a store of it would hold. Elaborate emits it only over a
-            // real operand; an integral one converts through `to_f64`, and an
-            // operand with any unknown bit reads as 0.0 (`to_f64` is `None`), so
-            // the result is never unknown (elaborate's
-            // `expr_may_be_unknown` answers false for this id on that premise).
+            // real operand; an integral one converts through `to_f64`, which reads
+            // each unknown bit as 0 (§6.12.2), so the result is never unknown
+            // (elaborate's `expr_may_be_unknown` answers false for this id on that
+            // premise).
             SysFuncId::RealToInt => {
                 let x = args
                     .first()
@@ -760,12 +769,10 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                     match args.get(i) {
                         Some(&a) => {
                             let v = self.eval(a);
-                            if v.is_real {
-                                v.to_f64().unwrap_or(0.0)
-                            } else {
-                                // integral operand → real (signed); X/Z → 0.0.
-                                v.to_i128_signed().unwrap_or(0) as f64
-                            }
+                            // An integral operand converts (`Value::to_f64`, §6.12.2: each
+                            // x/z bit reads 0 — `$sqrt(4'bx011)` is 1.732051 in all three
+                            // oracles, and was `$sqrt(0.0)`; any width).
+                            v.to_f64().unwrap_or(0.0)
                         }
                         None => 0.0,
                     }

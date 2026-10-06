@@ -251,11 +251,14 @@ impl Elaborator<'_> {
             return Some((f, None));
         }
         // A wholly integral initializer of a DECLARED-real parameter converts to
-        // real at its own self-determined size (§11.8.1 — the real target gives it
-        // no integral context): `parameter real P = 4'd15 + 4'd1` binds 0.0 (the
-        // 4-bit sum wraps; iverilog agrees), not 16.0. The i64 twin registers the
-        // SAME self-determined value, so the parameter's integral capabilities
-        // cannot disagree with its real reading.
+        // real at its own self-determined size and sign (§11.8.1 — the real target
+        // gives it no integral context; `const_selfdet_real`): `parameter real P =
+        // 4'd15 + 4'd1` binds 0.0 (the 4-bit sum wraps; iverilog agrees), not 16.0,
+        // and `64'hC000_0000_0000_0401` is 13835058055282163712.0, not the i64's
+        // negative reading. The i64 twin registers the SAME value, so the parameter's
+        // integral capabilities cannot disagree with its real reading — and where the
+        // i64 cannot hold that value (an unsigned 64-bit constant with the top bit
+        // set, a value past 64 bits) there is no twin.
         //
         // A STRING-literal default is an integral value too (§5.9): `localparam real R =
         // "a";` is 97.0 in both oracles, and the i64 fold has no string arm. It binds NO
@@ -263,8 +266,13 @@ impl Elaborator<'_> {
         // (ROADMAP §2), and `import pk::*` of this one then divided `R/2` as an integer.
         declared_real
             .then(|| {
-                self.const_int_selfdet(value)
-                    .map(|v| (v as f64, Some(v)))
+                self.const_eval_real_in_scope(value)
+                    .map(|f| {
+                        let twin = self
+                            .const_int_selfdet(value)
+                            .filter(|&v| crate::const_real::i64_to_real(v) == f);
+                        (f, twin)
+                    })
                     .or_else(|| {
                         Self::param_str_literal(value)
                             .and_then(|raw| crate::const_wide::str_raw_real(&raw))

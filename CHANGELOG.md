@@ -9,6 +9,26 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an integral value converts to real bit by bit, at its own width and sign
+
+- IEEE 1800 §6.12.2 reads each x or z bit of an integral value converted to real as 0. vita
+  read the whole value as 0.0 when any bit was x or z, and when the value was wider than 128
+  bits: `real r = a;` with `a = 4'bx011` stored 0.0 where Icarus Verilog stores 3.0, and so did
+  a real operator's integral operand (`a + 1.5` was 1.5, `a < 2.5` was 1), a ternary's integral
+  arm, `$itor` and `real'()`, `$sqrt` and the other real functions, `$rtoi`, `%f` / `%e` / `%g`,
+  a `real` port (whose `always @(x)` then never woke) and a `real` subroutine formal. Every lane
+  now converts per bit and adds the set bits least significant first, as Icarus Verilog does,
+  so a value past 53 bits rounds as there too (`64'hC000_0000_0000_0401` is
+  13835058055282163712.0; vita printed the correctly rounded 13835058055282165760.0).
+- A constant converted to real keeps its width and sign: `localparam real R =
+  64'hC000_0000_0000_0401;` was -4611686018427386880.0 (the 64-bit pattern read as signed),
+  and so were an unsigned 64-bit parameter, package constant, override, `defparam`, `-G` value,
+  unsigned constant-function result or `time'()` cast converted to real; `generate if
+  (64'hC000_0000_0000_0401 > 1.0e19)` took the `else`, and `65'd5 - 65'd7` converted the
+  64-bit wrap (-2.0). A real parameter whose integral initializer is wider than 64 bits now
+  binds instead of being refused. A constant with an x or z bit is still refused where a real
+  constant is required.
+
 ### Changed — a variable driven by a continuous `assign` takes no other driver
 
 - IEEE 1800 §6.5 allows a variable one continuous driver and nothing else, and §10.3.2 forbids

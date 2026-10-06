@@ -1319,7 +1319,7 @@ impl Elaborator<'_> {
                     &ConstWidths::new(),
                     0,
                 ) {
-                    Some(v) => v as f64,
+                    Some(v) => crate::const_real::u64_to_real(v),
                     None => self.const_eval_real_in_scope(num)?,
                 };
                 let units = subprec_unit_ticks(x, e, mult, pmult);
@@ -1471,7 +1471,7 @@ impl Elaborator<'_> {
                     &ConstWidths::new(),
                     0,
                 ) {
-                    Some(v) => v as f64,
+                    Some(v) => crate::const_real::u64_to_real(v),
                     None => self.const_eval_real_in_scope(num)?,
                 };
                 // A sub-precision-UNIT leaf rounds HERE — `subprec_unit_ticks` says
@@ -1565,7 +1565,7 @@ impl Elaborator<'_> {
             &ConstWidths::new(),
             0,
         )
-        .map(|v| v as f64)
+        .map(crate::const_real::u64_to_real)
     }
 
     /// One delay value → ticks: the scope-free fold, then the scope-resolved one.

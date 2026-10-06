@@ -59,10 +59,12 @@ pub(crate) fn str_raw_bits(raw: &str) -> Option<WideBits> {
 /// [`str_raw_bits`] converted to real (§6.12.1: the unsigned integral value) — what a
 /// declared-real parameter binds for a string.
 pub(crate) fn str_raw_real(raw: &str) -> Option<f64> {
-    let (bits, _, _) = str_raw_bits(raw)?;
-    Some(bits.val.iter().rev().fold(0.0f64, |acc, &w| {
-        acc * 18_446_744_073_709_551_616.0 + w as f64
-    }))
+    let (bits, width, _) = str_raw_bits(raw)?;
+    // The engine's conversion (`sim_ir::mw::int_to_real`, set bits LSB first). Folding
+    // the words most significant first rounded once per word instead:
+    // `"\xC0\x00\x00\x00\x00\x00\x04\x01"` was 13835058055282165760.0 where all
+    // three oracles give 13835058055282163712.0.
+    Some(sim_ir::mw::int_to_real(&bits.val, &bits.unk, width, false))
 }
 
 /// [`str_raw_bits`] as an i64 — the reading a generate-case label compares against a

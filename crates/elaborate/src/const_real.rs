@@ -94,6 +94,58 @@ impl Elaborator<'_> {
         Some((0..w as usize).any(|i| bp_get(&b, i).0))
     }
 
+    /// The REAL value of a constant subtree with no real in it — the §11.8.1 crossing
+    /// of its self-determined integral value into the real domain, converted at its own
+    /// width and sign by the engine's conversion ([`sim_ir::mw::int_to_real`]: set bits
+    /// added LSB first, as iverilog does). Every elaborate-time int→real crossing of an
+    /// EXPRESSION reads this, through [`Self::const_eval_real_in_scope`]'s real-free arm: a
+    /// real-free operand of a real operator, a declared-real parameter's integral
+    /// initializer (`param_real_value`).
+    ///
+    /// The width and sign come from the wide bit domain, which keeps both; the i64 walk
+    /// keeps neither, and reading its value as a signed 64-bit number made every
+    /// unsigned 64-bit constant with the top bit set NEGATIVE: `localparam real R =
+    /// 64'hC000_0000_0000_0401;` was -4611686018427386880.0 where iverilog, verilator and
+    /// sv2v → iverilog bind 13835058055282163712.0 (so `generate if (… > 1.0e19)` took
+    /// the other branch), and `65'd5 - 65'd7` was the i64 wrap -2.0 for the oracles'
+    /// 36893488147419103232.0. An x/z bit declines here as everywhere else in this
+    /// domain (§6.12.2 reads it as 0 and the oracles agree, `4'bx011` is 3.0; the run-time
+    /// conversion does that), so such a constant stays loud.
+    ///
+    /// A shape the wide domain declines keeps the i64 walk's value, read signed — except
+    /// a top whose DECLARED type is unsigned, whose value the i64 holds as its
+    /// two's-complement image: a constant function call's return type (§13.4.1;
+    /// `function logic [63:0] f(…)` returning `64'hC000_0000_0000_0401` binds
+    /// 13835058055282163712.0 in all three oracles, not -4611686018427386880.0) and a
+    /// primitive cast's type (§6.24.1; `time'(-5) + 0.0` is 18446744073709551616.0 in
+    /// iverilog, not -5.0).
+    fn const_selfdet_real(&self, e: &ast::Expr) -> Option<f64> {
+        if let Some((b, w, sg)) = fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+            if bp_any_unknown(&b, w) {
+                return None;
+            }
+            return Some(sim_ir::mw::int_to_real(&b.val, &b.unk, w, sg));
+        }
+        let v = self.const_int_selfdet(e)?;
+        if v < 0 {
+            let declared = match &Self::peel_parens(e).kind {
+                ast::ExprKind::Call { name, .. } => self
+                    .const_fn_def(name)
+                    .and_then(|(f, p)| self.const_fn_ret_wsign_in(f, p.as_deref())),
+                ast::ExprKind::Cast {
+                    target: ast::CastTarget::Prim(p),
+                    ..
+                } => crate::expr_cast::cast_prim_wsign(*p).map(|(w, s, _)| (w, s)),
+                _ => None,
+            };
+            if let Some((w @ 1..=64, false)) = declared {
+                let mask = if w == 64 { u64::MAX } else { (1u64 << w) - 1 };
+                return Some(u64_to_real(v as u64 & mask));
+            }
+        }
+        Some(i64_to_real(v))
+    }
+
     /// Fold `e` in the REAL domain. `None` (⇒ the caller stays loud) for anything
     /// this domain cannot evaluate exactly: an unmodeled node, an unbound name, a
     /// division by zero, or a non-finite result.
@@ -122,14 +174,14 @@ impl Elaborator<'_> {
         // is the integer 3, so `N / 2` beside a real folds 1 (integer division), where
         // the blind walk saw the outer real and folded 1.5.
         if !self.expr_mentions_real_opt(e, true) {
-            return self.const_int_selfdet(e).map(|v| v as f64);
+            return self.const_selfdet_real(e);
         }
         match &e.kind {
             K::RealLit { raw, .. } => Some(parse_real_f64(raw)),
             // An integer literal inside a real expression promotes (§11.8.1).
             // (Reached only for a literal the gate above declined to claim — kept
             // for the day `expr_mentions_real` learns a form this arm models.)
-            K::IntLit { .. } => const_eval_i64_lit(e).map(|v| v as f64),
+            K::IntLit { .. } => self.const_selfdet_real(e),
             K::Paren { inner } => self.const_eval_real_in_scope(inner),
             K::Unary { op, operand } => {
                 let v = self.const_eval_real_in_scope(operand)?;
@@ -152,7 +204,7 @@ impl Elaborator<'_> {
                 if self.real_param_lowers_real(n) {
                     self.walk_scopes(n, &self.real_param_val)
                 } else {
-                    self.lookup_scoped(n).map(|v| v as f64)
+                    self.lookup_scoped(n).map(i64_to_real)
                 }
             }
             // The package twin, in the same precedence order (real map first, then the
@@ -169,7 +221,7 @@ impl Elaborator<'_> {
                     self.pkg_consts
                         .get(&pkg.name)
                         .and_then(|c| c.get(&name.name))
-                        .map(|&v| v as f64)
+                        .map(|&v| i64_to_real(v))
                 }),
             K::Binary { op, lhs, rhs } => {
                 let a = self.const_eval_real_in_scope(lhs)?;
@@ -247,6 +299,19 @@ pub(crate) fn real_round_to_i64(x: f64) -> Option<i64> {
     (r.is_finite() && (-LIM..LIM).contains(&r)).then_some(r as i64)
 }
 
+/// A u64 constant (an unsigned reading, `const_unsigned_selfdet`) converted by the
+/// engine's conversion ([`sim_ir::mw::int_to_real`]). Equal to `v as f64` below 2^53.
+pub(crate) fn u64_to_real(v: u64) -> f64 {
+    sim_ir::mw::int_to_real(&[v], &[0], 64, false)
+}
+
+/// An i64 constant read as a signed 64-bit integer, converted by the engine's conversion
+/// ([`sim_ir::mw::int_to_real`]) — the reading for a value whose width and sign the
+/// domain did not keep. Equal to `v as f64` below 2^53.
+pub(crate) fn i64_to_real(v: i64) -> f64 {
+    sim_ir::mw::int_to_real(&[v as u64], &[0], 64, true)
+}
+
 impl Elaborator<'_> {
     /// Fold `e` in the REAL domain and hand back its INTEGER reading (§6.24.1).
     ///
@@ -277,7 +342,8 @@ impl Elaborator<'_> {
         // ⚠️ Integer FIRST, and the order is load-bearing rather than stylistic. A
         // wholly integral argument is already its own truncation, and asking the real
         // domain for it routes an exact i64 through f64: `const_eval_real_in_scope`
-        // promotes a real-free subtree with `as f64`, which above 2^53 is lossy.
+        // converts a real-free subtree to f64 (`const_selfdet_real`), which above 2^53
+        // rounds.
         // Measured — `$rtoi(64'd9007199254740993)` came back 9007199254740992, and
         // since PRE had no `$rtoi` const arm at all that was a loud → silently
         // off-by-one. The real domain can only ADD answers here, never correct one.

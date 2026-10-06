@@ -81,9 +81,9 @@ pub(crate) fn select_lsb_width(kind: SelKind, off: i64, width: u32) -> (i64, u32
 impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     pub(crate) fn arith(&self, op: BinOp, l: &Value, r: &Value) -> Value {
         if l.is_real || r.is_real {
-            // IEEE 1364 §4.3: if either operand is real, the other promotes to real.
-            // An X/Z integer entering a mixed real op decays to 0.0 (documented MVP
-            // policy), never panics, never X-propagates.
+            // IEEE 1364 §4.3: if either operand is real, the other promotes to real
+            // (`Value::to_f64`, §6.12.2: each x/z bit reads 0, so `4'bx011 + 1.5` is
+            // 4.5 as in iverilog — it decayed whole to 0.0). Never X-propagates.
             let a = l.to_f64().unwrap_or(0.0);
             let b = r.to_f64().unwrap_or(0.0);
             let res = match op {

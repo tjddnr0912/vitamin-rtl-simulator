@@ -92,9 +92,11 @@ fn real_to_int_out_of_range_matches_the_net_store() {
 }
 
 #[test]
-fn real_to_int_of_an_unknown_integral_operand_is_zero() {
-    // Elaborate emits it only over a real; the documented fallback for an
-    // integral operand with any unknown bit is 0 for the whole value, never x.
+fn real_to_int_of_an_unknown_integral_operand_reads_the_bit_as_zero() {
+    // Elaborate emits it only over a real; an integral operand converts as every
+    // int→real crossing does (`Value::to_f64`, IEEE 1800 §6.12.2): each x/z bit reads
+    // 0, so `8'bx000_0111` is 7 — never x. It was 0 for the whole value until §4.5.599
+    // (iverilog 13.0: `real r = 8'bx000_0111;` is 7.0).
     let ir = ir_of(
         vec![
             sig(0),
@@ -108,7 +110,7 @@ fn real_to_int_of_an_unknown_integral_operand_is_zero() {
     );
     let v = eval_interp(&ir, 1, 128, true, &[vw_xz(8, 0x07, 0x80)]);
     assert!(!v.has_xz());
-    assert_eq!(v.to_i128_signed(), Some(0));
+    assert_eq!(v.to_i128_signed(), Some(7));
     let v = eval_interp(&ir, 1, 128, true, &[vw(8, 0x2d)]);
     assert_eq!(v.to_i128_signed(), Some(0x2d));
 }

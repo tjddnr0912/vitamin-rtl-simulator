@@ -1731,7 +1731,7 @@ impl Elaborator<'_> {
         saved: &mut Vec<(String, Option<i64>)>,
     ) -> i64 {
         self.real_param_val.insert(key.clone(), rv);
-        let view = if rv == ov as f64 {
+        let view = if rv == crate::const_real::i64_to_real(ov) {
             Some(ov)
         } else {
             (rv.fract() == 0.0)
@@ -1979,7 +1979,8 @@ impl Elaborator<'_> {
                     .get(p.name.name.as_str())
                     .and_then(|(k, raw)| fill_to_i64(*k, raw, 1))
                 {
-                    self.real_param_val.insert(key.clone(), fv as f64);
+                    self.real_param_val
+                        .insert(key.clone(), crate::const_real::i64_to_real(fv));
                     saved.push((key.clone(), self.bind_param_value(key, fv)));
                     return;
                 }
@@ -1995,8 +1996,29 @@ impl Elaborator<'_> {
                         // The override's REAL value when its result is real — the i64
                         // is the integer domain's fold of the same expression, which
                         // truncates a real sub-result: `#(.R(X / 2))` with `real X = 5`
-                        // bound 2.0 where both oracles bind 2.5.
-                        self.bind_real_override(key, ovr_real.unwrap_or(ov as f64), ov, saved);
+                        // bound 2.0 where both oracles bind 2.5. An integral override
+                        // converts at the width and sign its wide channel kept
+                        // (`ovr.bits`, folded in the parent's scope), as the engine
+                        // converts (`sim_ir::mw::int_to_real`): the i64 read an unsigned
+                        // `#(.R(64'hC000_0000_0000_0401))` as negative
+                        // (-4611686018427386880.0; all three oracles bind
+                        // 13835058055282163712.0).
+                        let integral = || {
+                            ovr.bits
+                                .get(p.name.name.as_str())
+                                .filter(|c| !bp_any_unknown(&c.bits, c.width))
+                                .map(|c| {
+                                    sim_ir::mw::int_to_real(
+                                        &c.bits.val,
+                                        &c.bits.unk,
+                                        c.width,
+                                        c.signed,
+                                    )
+                                })
+                                .unwrap_or_else(|| crate::const_real::i64_to_real(ov))
+                        };
+                        let rv = ovr_real.unwrap_or_else(integral);
+                        self.bind_real_override(key, rv, ov, saved);
                         return;
                     }
                     Some(None) => self.error(

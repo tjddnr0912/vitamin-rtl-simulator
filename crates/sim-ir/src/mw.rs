@@ -221,3 +221,75 @@ pub fn mw_pow(base: &[u64], exp: &[u64], w: u32) -> Vec<u64> {
     }
     acc
 }
+
+/// The REAL value of a `width`-bit integral value — the one int→real conversion, shared
+/// by the runtime (`sim_engine::value::Value::to_f64`) and the elaborate-time constant
+/// domain (`elaborate::const_real`). `val`/`unk` are the little-endian value and unknown
+/// planes (a word missing from either reads 0); `signed` reads the top bit as the sign.
+///
+/// IEEE 1800-2017 §6.12.2: "Individual bits that are x or z in the net or the variable
+/// shall be treated as zero upon conversion." So each unknown bit is 0 — not the whole
+/// value: `4'bx011` is 3.0 in iverilog 13.0 and sv2v → iverilog, where reading the value
+/// as unknown and answering 0.0 was the defect this function replaced.
+///
+/// The magnitude's set bits are added LSB first in double precision, each addition
+/// rounding — iverilog's conversion, measured bit for bit on wide cells, applied here to
+/// constants and at run time alike. It is NOT the correctly rounded value, and verilator
+/// splits from it at run time: a 64-bit VARIABLE holding `64'hC000_0000_0000_0401`
+/// converts to 13835058055282163712.0 here and in iverilog and sv2v → iverilog (the `+1`
+/// rounds the `+2^10` up to a tie the next addition breaks to even), where verilator,
+/// converting a value it read after a delay, rounds correctly to 13835058055282165760.0
+/// (`$realtobits` `43e8000000000001`); verilator agrees on the CONSTANT, which it folds at
+/// compile time (13835058055282163712.0), so it contradicts itself on this value. Also
+/// `2^180 + 2^127 + 1` is `2^180` (the `1` is absorbed before the tie at `2^127` is
+/// decided). verilator drops the words below its top three instead, and where the two
+/// methods differ the oracles split in both lanes (`2^100 + 2^47 + 1`: iverilog
+/// `4630000000000001`, verilator `4630000000000000`).
+///
+/// A signed value whose top bit is 1 is negative and its two's-complement magnitude is
+/// converted. With an unknown bit below the sign bit the oracles split: verilator reads
+/// the bit as 0 (`4'sb1z11` is -5.0, §6.12.2's text), iverilog propagates the unknown
+/// through the negation's carry (-1.0). This is the text's answer.
+pub fn int_to_real(val: &[u64], unk: &[u64], width: u32, signed: bool) -> f64 {
+    if width == 0 {
+        return 0.0;
+    }
+    let n = nwords(width);
+    let mut limbs: Vec<u64> = (0..n)
+        .map(|w| val.get(w).copied().unwrap_or(0) & !unk.get(w).copied().unwrap_or(0))
+        .collect();
+    let top_word = low_mask(match width % 64 {
+        0 => 64,
+        r => r,
+    });
+    limbs[n - 1] &= top_word;
+    let top = width - 1;
+    let neg = signed && (limbs[(top / 64) as usize] >> (top % 64)) & 1 == 1;
+    if neg {
+        // Two's-complement magnitude within the width.
+        let mut carry = true;
+        for l in limbs.iter_mut() {
+            let (v, c) = (!*l).overflowing_add(carry as u64);
+            *l = v;
+            carry = c;
+        }
+        limbs[n - 1] &= top_word;
+    }
+    let bitlen = match limbs.iter().rposition(|&l| l != 0) {
+        Some(i) => i as u32 * 64 + (64 - limbs[i].leading_zeros()),
+        None => return 0.0,
+    };
+    let mut mag = 0.0f64;
+    let mut base = 1.0f64;
+    for i in 0..bitlen {
+        if (limbs[(i / 64) as usize] >> (i % 64)) & 1 == 1 {
+            mag += base;
+        }
+        base *= 2.0;
+    }
+    if neg {
+        -mag
+    } else {
+        mag
+    }
+}

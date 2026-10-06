@@ -12,10 +12,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 37 | 7 | 30 | named prerequisite 15 · oracle split 5 · loud, zero demand 3 · held 3 · performance 2 · do-not-start 2 | frozen; 🆕 AH, AG, AF, W, T, S queued | 1, 3, 4, 6, 7 |
-| §2 | recorded defects by mechanism | 212 | 111 | 101 | oracle split / no oracle 59 · named prerequisite 19 · record only 8 · WALL 5 · held 5 · performance 4 · filed to §3 1 | frozen; the "Scoping" import line and two "Size cast" enum lines queued | 2, 8 |
+| §2 | recorded defects by mechanism | 209 | 108 | 101 | oracle split / no oracle 59 · named prerequisite 19 · record only 8 · WALL 5 · held 5 · performance 4 · filed to §3 1 | frozen; the "Scoping" import line and two "Size cast" enum lines queued | 2, 8 |
 | §2-N | verilog-axi census | 5 | 0 | 5 | oracle split 2 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | loud by design 2 · named prerequisite 2 · deferred to §5 1 | ② | |
-| §3.b | loud → correct-support, small | 139 | 116 | 23 | named prerequisite 11 · held 4 · record only 4 · oracle split 2 · do-not-start 2 | ② | 5 |
+| §3.b | loud → correct-support, small | 138 | 115 | 23 | named prerequisite 11 · held 4 · record only 4 · oracle split 2 · do-not-start 2 | ② | 5 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design or oracle split 12 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -24,7 +24,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 18 | 8 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 5 | 0 | 5 | trigger-gated 5 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 491 | 285 | 206 | | | |
+| total | | 487 | 281 | 206 | | | |
 
 ## 0. correct-support promotion queue
 
@@ -232,13 +232,10 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
 - `$signed(<real>)` in a function body is accepted; 2 oracles; OPEN
 - `real unsigned r;` is accepted; 2 oracles; OPEN
 - `$realtobits` / `$bitstoreal` accept a non-64-bit argument; iverilog; OPEN
-- A real over a >64-bit integral (`65'd5 - 65'd7`) converts the i64 fold; 2 oracles; OPEN
 - An untyped `R = 2.5` given an integral call override stays real; BLOCKED (declaring-scope fold, §4.5.558)
 - A real parameter's integer view answers `R/4 > 1` in the integer domain (`params` before `real_param_val`); 2 oracles; OPEN
 - A package real imported by name reads its i64 twin (`apply_import_consts`); 2 oracles; OPEN
-- `$itor` / `real'()` / assignment use `to_f64`, `$realtobits` uses `integral_to_f64`; route all through the latter; 2 oracles; OPEN
 - An exact-integer real parameter divides as an integer (`int'(R / 2)`); 2 oracles; OPEN
-- `time'(NM) + 0.0` converts signed; iverilog + hand-IEEE; OPEN
 
 ### Ranges / bounds / selects
 
@@ -594,8 +591,7 @@ The workload corpus has no refused row; the next work is the new-design census (
 **VCD / real conversion**
 
 - vcd — cosmetic VCD encoding differences (widths, t0 dump, var kinds); iverilog; OPEN
-- x→real — an x/z integral converts to real as 0.0 at every store and in `$itor` / `$sqrt` / `**` (`real_arg` is `to_i128_signed().unwrap_or(0)`); convert per bit (§6.12.2); iverilog; OPEN
-- wide→real — an integer wider than 128 bits converts to 0.0; OPEN
+- const-x-real — a constant with an x/z bit converted to real is E3009, where the run-time conversion (§4.5.599) and iverilog read each x/z bit as 0: `localparam real P = 4'bx011;` ("value is not a constant: 4'bx011 has no constant-fold arm"), `#(.P(4'bx011))` onto a real parameter ("a real override cannot be folded"), `localparam int W = $rtoi(4'bx011 * 1.0);`, `localparam real P = 4'bx011; if (P > 2.0)`; iverilog, verilator and sv2v → iverilog `P=3.000000`, `bits=4`, `gen=hit`; `const_real.rs` `const_selfdet_real` and the override's unknown-bit filter (`params.rs`) decline; 3 oracles; OPEN
 
 ### 3.c Intentionally loud (not gaps)
 

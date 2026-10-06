@@ -917,68 +917,34 @@ impl Value {
     }
 
     /// The REAL value of an INTEGRAL `Value` of any width, honoring signedness, with
-    /// each x/z bit read as 0 (§6.12.2; both oracles: `8'b0000_001x` is 2.0).
-    /// [`Self::to_f64`] answers only up to 128 bits and declines any x/z.
-    ///
-    /// The magnitude's set bits are added LSB first in double precision, each addition
-    /// rounding — iverilog's conversion, measured bit for bit on seven wide cells. It is
-    /// NOT the correctly rounded value: `2^180 + 2^127 + 1` is `2^180` here and in both
-    /// oracles (the `1` is absorbed before the tie at `2^127` is decided), where a
-    /// sticky-bit conversion gives `2^180 + 2^128`. verilator drops the words below its
-    /// top three instead, and where the two methods differ the oracles split
-    /// (`2^100 + 2^47 + 1`: iverilog rounds up, verilator down).
+    /// each x/z bit read as 0 (IEEE §6.12.2) and the set bits added LSB first, as
+    /// iverilog converts: [`sim_ir::mw::int_to_real`], the one int→real conversion this
+    /// engine and the elaborate-time constant domain share. `None` only at width 0.
     pub fn integral_to_f64(&self) -> Option<f64> {
         if self.width == 0 {
             return None;
         }
-        let n = nwords(self.width);
-        let mut limbs: Vec<u64> = (0..n)
-            .map(|w| self.val.get(w).copied().unwrap_or(0) & !self.unk.get(w).copied().unwrap_or(0))
-            .collect();
-        limbs[n - 1] &= top_mask(self.width);
-        let top = self.width - 1;
-        let neg = self.signed && (limbs[(top / 64) as usize] >> (top % 64)) & 1 == 1;
-        if neg {
-            // Two's-complement magnitude within the width.
-            let mut carry = true;
-            for l in limbs.iter_mut() {
-                let (v, c) = (!*l).overflowing_add(carry as u64);
-                *l = v;
-                carry = c;
-            }
-            limbs[n - 1] &= top_mask(self.width);
-        }
-        let bitlen = match limbs.iter().rposition(|&l| l != 0) {
-            Some(i) => i as u32 * 64 + (64 - limbs[i].leading_zeros()),
-            None => return Some(0.0),
-        };
-        let mut mag = 0.0f64;
-        let mut base = 1.0f64;
-        for i in 0..bitlen {
-            if (limbs[(i / 64) as usize] >> (i % 64)) & 1 == 1 {
-                mag += base;
-            }
-            base *= 2.0;
-        }
-        Some(if neg { -mag } else { mag })
+        Some(sim_ir::mw::int_to_real(
+            &self.val,
+            &self.unk,
+            self.width,
+            self.signed,
+        ))
     }
 
-    /// Decode to f64. If already real, reinterpret val[0]. Otherwise coerce the
-    /// 4-state integer value to f64 (IEEE 1364 §4.3 int→real promotion), honoring
-    /// signedness. Returns None only if an integer operand is X/Z (caller decides
-    /// poison vs 0.0).
+    /// Decode to f64: a real reinterprets `val[0]`; an integral value CONVERTS
+    /// ([`Self::integral_to_f64`]: §6.12.2, each x/z bit read as 0, any width). Every
+    /// int→real crossing in the engine reads this — the assignment conversion
+    /// (`coerce_assign`), a real operator's integral operand, a ternary's integral arm,
+    /// `$itor` / `real'()`, the real math functions, `$rtoi`, `%f`/`%e`/`%g` — so they
+    /// cannot disagree. It used to answer `None` for any x/z bit and for a value past
+    /// 128 bits, which every caller read as 0.0: `real r = 4'bx011` was 0.0 where
+    /// iverilog and sv2v → iverilog give 3.0. `None` only at width 0.
     pub fn to_f64(&self) -> Option<f64> {
         if self.is_real {
             return Some(f64::from_bits(self.val[0]));
         }
-        if self.has_xz() {
-            return None;
-        }
-        if self.signed {
-            self.to_i128_signed().map(|i| i as f64)
-        } else {
-            self.to_u128().map(|u| u as f64)
-        }
+        self.integral_to_f64()
     }
 
     /// Build an INTEGER (is_real=false) Value of `width` bits from an i128,
@@ -1114,7 +1080,7 @@ pub(crate) fn coerce_assign(
     match (dest_is_real, value.is_real) {
         // real net ← real value: store verbatim (already 64 IEEE bits).
         (true, true) => value,
-        // real net ← integer value (int→real CONVERT): exact for ≤53-bit.
+        // real net ← integer value (int→real CONVERT, §6.12.2: x/z bits read as 0).
         (true, false) => Value::from_f64(value.to_f64().unwrap_or(0.0)),
         // integer net ← real value (real→int ASSIGNMENT: ROUND half-away).
         (false, true) => real_to_int_round(value.to_f64().unwrap_or(0.0), int_w.max(1), int_signed),
