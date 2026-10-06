@@ -112,17 +112,149 @@
 //!
 //! (vita columns: after the change; each equals its twin, and the twins equal iverilog.)
 //!
-//! Header-less blocks with two event controls (an intra-assignment `@` on a non-blocking
-//! assignment counts), with only an intra-assignment one, with an event control inside a
-//! `fork`, with its one `@` where some pass can miss it (in an `if`, a `case` or a loop
-//! body, or after a loop or a `disable`), or with a blocking timing control, do NOT take
-//! the self-timed lane: they keep the edge lane and its W3056
-//! (`unrouted_shapes_keep_the_edge_lane`). A missed `@` as the self-timed lane ends a pass
-//! without suspending: the plain-`always` twin of `begin if (en) @(posedge clk) q <= d; q2
-//! <= d; end` reaches 1.5 GB in 0.69 s. A forked `@` as the
-//! self-timed lane does not suspend the process: the plain-`always` twin
-//! `always begin fork @(posedge clk) q <= d; join_none end` grows without bound (1.5 GB in
-//! 1.44 s; `join_any` 4.8 s; verilator %Error-DIDNOTCONVERGE).
+//! ## Every other shape that breaks §9.2.2.4 is `VITA-E3061`
+//!
+//! The event controls are the header plus every `@(…)` statement and every
+//! intra-assignment `@` on a non-blocking assignment (`q <= @(e) d`) in the body; a count
+//! of 0, or of 2 and more, is an error, and so is a blocking timing control (`#`, `wait`,
+//! `wait fork`, `q = #1 d`, `q = @(e) d`). A non-blocking `q <= #1 d` is legal. Two more
+//! refusals keep a block from looping without suspending: an event control inside a
+//! `fork` (a forked process cannot be the procedure's one event control; its
+//! plain-`always` twin `always begin fork @(posedge clk) q <= d; join_none end` grows
+//! without bound), and, with no header, an intra-assignment `@` as the only event
+//! control (`always_ff q <= @(posedge clk) d;`).
+//!
+//! With no header, the one `@(…)` must also be reached on EVERY pass: in the body's
+//! sequential list or a nested `begin … end` (named or not), the first statement of a
+//! `do … while`, or a `forever` body, and after no loop and no `disable` (`break`,
+//! `continue`). An `@` inside `if` / `else`, a `case` arm, a `for` / `foreach` /
+//! `while` / `repeat` body or a `fork`, or after a loop or a `disable`, is refused. This
+//! is STRICTER than the IEEE text, which counts such an `@` as the one event control; the
+//! block cannot run (a pass that misses the `@` ends without suspending, and its NBAs pile
+//! up: the plain-`always` twin of `begin if (en) @(posedge clk) q <= d; q2 <= d; end`
+//! reaches 1.5 GB in 0.69 s), and iverilog refuses it as "the first statement of an
+//! always_ff process must be an event control statement." (u1 below; verilator spins).
+//! Owner decision (2026-10-06): an error, not a warning. Running it as IEEE allows is
+//! ROADMAP §7 FF-MISSED-AT, gated on the engine bounding NBA growth (§5.b NBA-GROWTH) and
+//! on a real design using the shape.
+//!
+//! Owner ruling (2026-10-06): a count of 2 and more is an ERROR, exit 1, though only
+//! iverilog refuses it and verilator and sv2v run it (an exception to ER §10.4, which
+//! would make a shape the second tool accepts a warning at most): "loud where IEEE says
+//! error". A count of 0 is an error too.
+//!
+//! ```text
+//!   f_twoev (palways/chk)  always_ff @(posedge clk) begin q <= d; @(posedge clk) q <= ~d; end
+//!     iverilog 13.0         f_twoev.sv:4: error: an event control is not allowed in an
+//!                           always_comb, always_ff or always_latch process.
+//!                           f_twoev.sv:2: error: there must only be a single event control
+//!                           and no blocking delays in an always_ff process.
+//!                           Elaboration failed
+//!     verilator 5.052 --lint-only -Wall --timing   (nothing, rc=0)
+//!     under TB (i2_twoev): verilator --binary  c1 q=1 c2 q=1 c3 q=1 r1 q=1 c4 q=0
+//!                          sv2v -> iverilog    c1 q=1 c2 q=1 c3 q=1 r1 q=1 c4 q=0
+//!     vita before           exit 0, no diagnostic; under TB the same five lines
+//!   i2_noctl               always_ff q <= d;
+//!     iverilog 13.0         i2_noctl.sv:2: error: the first statement of an always_ff
+//!                           process must be an event control statement.
+//!     verilator 5.052       %Warning-COMBDLY: i2_noctl.sv:2:15: Non-blocking assignment '<='
+//!                           in combinational logic process
+//!                           c1 q=1 c2 q=0 c3 q=1 r1 q=1 c4 q=1
+//!     sv2v -> iverilog      i2_noctl.sv2v.v:11: error: always process does not have any
+//!                           delay. / : A runtime infinite loop will occur.
+//!     vita before           W3056, x on every line
+//!   i2_delay               always_ff @(posedge clk) begin #1 q <= d; end
+//!     iverilog 13.0         i2_delay.sv:3: error: a blocking delay is not allowed in an
+//!                           always_comb, always_ff or always_latch process.
+//!                           i2_delay.sv:2: error: there must only be a single event control
+//!                           and no blocking delays in an always_ff process.
+//!     verilator 5.052       c1 q=0 c2 q=0 c3 q=1 r1 q=1 c4 q=1
+//!     sv2v -> iverilog      c1 q=x c2 q=0 c3 q=1 r1 q=1 c4 q=1
+//!     vita before           c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1   (the input-port hop lands
+//!                           after its batch: ROADMAP §2 "A CA hop lands after the whole batch")
+//!   i2_wait                always_ff @(posedge clk) begin wait (d) q <= ~q; end
+//!     iverilog 13.0         i2_wait.sv:3: error: a wait statement is not allowed in an
+//!                           always_comb, always_ff or always_latch process. (and the
+//!                           "single event control" line)
+//!     verilator 5.052       c1 q=1 c2 q=1 c3 q=1 r1 q=1 c4 q=0
+//!     sv2v -> iverilog      x on every line
+//!     vita before           x on every line
+//!   i2_blk_intra           always_ff @(posedge clk) q = #1 d;
+//!     iverilog 13.0         i2_blk_intra.sv:2: error: a blocking delay is not allowed in an
+//!                           always_comb, always_ff or always_latch process. (and the
+//!                           "single event control" line)
+//!     verilator 5.052       c1 q=0 c2 q=1 c3 q=0 r1 q=1 c4 q=1
+//!     sv2v -> iverilog      c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1
+//!     vita before           c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1
+//!   intra `@` on an NBA     always_ff @(posedge clk) q <= @(negedge clk) d;   (count 2)
+//!     iverilog 13.0         impl_c_nbaev.sv:2: error: A non-blocking assignment cannot be
+//!                           synthesized with an event control in an always_ff process.
+//!     verilator 5.052       c1 q=0 q2=0 | q=1 q2=0 | q=0 q2=0 | q=1 q2=0 | q=0 q2=0
+//!     sv2v -> iverilog      c1 q=1 q2=z | q=0 q2=z | q=1 q2=z | q=0 q2=z | q=1 q2=z
+//!     vita before           c1 q=x q2=x | q=1 q2=x | q=0 q2=x | q=1 q2=x | q=0 q2=x
+//!     (and under the review's free-running clock, nbaev_mytb: iverilog the same error;
+//!     verilator t=10 q=0 | t=20 q=3 | t=30 q=5 | t=40 q=a | t=50 q=c | t53 q=7; sv2v
+//!     t=10 q=3 | t=20 q=5 | t=30 q=a | t=40 q=c | t=50 q=7 | t53 q=7; vita before t=10
+//!     q=x | t=20 q=3 | t=30 q=5 | t=40 q=a | t=50 q=c | t53 q=7)
+//!   u1  always_ff begin if (en) @(posedge clk) q <= d; q2 <= d; end   (not every pass)
+//!     iverilog 13.0         u1_nba_loop.sv:5: error: the first statement of an always_ff
+//!                           process must be an event control statement.
+//!     verilator 5.052       spins (killed by the watchdog at 20 s)
+//!     vita before           W3056, x; the self-timed lane of the second S2 build grew to
+//!                           1.5 GB in 0.69 s (6 GB with four NBAs), as the twin does
+//!   u2  always_ff begin repeat (cnt) @(posedge clk); q2 <= d; end (cnt 0)
+//!     iverilog 13.0         the "first statement" error / warning: A repeat statement
+//!                           cannot be synthesized in an always_ff process.
+//!     verilator 5.052       q=0 q2=0
+//!     vita before           W3056, x; the second S2 build grew past 1.5 GB
+//!   always_ff q <= @(posedge clk) d;                  (no statement-level event control)
+//!     iverilog 13.0         error: the first statement of an always_ff process must be an
+//!                           event control statement. / error: A non-blocking assignment
+//!                           cannot be synthesized with an event control in an always_ff
+//!                           process.
+//!     verilator 5.052       %Error: Internal Error: …:2:20: ../V3Active.cpp:552: Should not
+//!                           reach here when walking body without --timing
+//!     sv2v -> iverilog      error: always process does not have any delay. / : A runtime
+//!                           infinite loop will occur.
+//!   always_ff begin fork @(posedge clk) q <= d; join_none end         (`@` in a fork)
+//!     iverilog 13.0         error: the first statement of an always_ff process must be an
+//!                           event control statement. / A fork/join_none statement cannot be
+//!                           synthesized in an always_ff process.
+//!     verilator 5.052       %Error-DIDNOTCONVERGE: Active region did not converge after
+//!                           '--converge-limit' of 10000 tries
+//!     sv2v                  Parse error: missing expected `join`
+//!     vita before           W3056, x; the self-timed lane of the first S2 build grew to
+//!                           1.5 GB in 1.44 s (`join_any`: 4.8 s), as the twin does
+//!   always_ff fork @(posedge clk) q <= d; join                        (`@` in a `join`)
+//!     iverilog 13.0         the "first statement" error / error: A fork/join statement
+//!                           cannot be synthesized in an always_ff process.
+//!     verilator 5.052       q=1 q2=0 | q=0 q2=0 | q=1 q2=0 | q=0 q2=0 | q=1 q2=0
+//!     sv2v -> iverilog      q=1 q2=z | q=0 q2=z | q=1 q2=z | q=0 q2=z | q=1 q2=z
+//!     vita before           W3056, x (the first S2 build routed it and printed its
+//!                           twin's `1 0 1 0 1`; `join` waits, so it was bounded, but a
+//!                           `fork` is refused whatever its join)
+//! ```
+//!
+//! Legal, and unchanged:
+//!
+//! ```text
+//!   i2_nba_intra           always_ff @(posedge clk) q <= #1 d;
+//!     iverilog 13.0         c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1
+//!     verilator 5.052       c1 q=0 c2 q=1 c3 q=0 r1 q=1 c4 q=1   (2-state: not an x oracle)
+//!     sv2v -> iverilog      c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1
+//!     vita                  c1 q=x c2 q=1 c3 q=0 r1 q=1 c4 q=1   (before and after)
+//!   f_ok     always_ff @(posedge clk or negedge rst_n) if (!rst_n) q <= 1'b0; else if (en) q <= d;
+//!     iverilog, verilator --lint-only -Wall: nothing
+//!   f_noedge always_ff @(a or b) y <= a & b;
+//!     iverilog 13.0         f_noedge.sv:2 warning: Synthesis requires the sensitivity list of
+//!                           an always_ff process to only be edge sensitive. f_noedge.b is
+//!                           missing a pos/negedge. (and the same for f_noedge.a)
+//!     verilator --lint-only -Wall: nothing
+//!   f_block  always_ff @(posedge clk) begin q1 = d; q2 = q1; end
+//!     iverilog: nothing; verilator --lint-only -Wall: %Warning-BLKSEQ: f_block.sv:3:12:
+//!     Blocking assignment '=' in sequential logic process (and 4:12)
+//!   each: vita exit 0, no diagnostic (before and after)
+//! ```
 //!
 //! Every test counts the EXACT set of codes the run prints (`-Wno-W1017` silences the
 //! no-`timescale` warning so that nothing is left out).
@@ -495,44 +627,443 @@ fn time_zero_edges_match_the_twin() {
     }
 }
 
-/// A header-less block with two event controls (an intra-assignment `@` counts), with
-/// only an intra-assignment one, with one inside a `fork`, or with its one `@` where some
-/// pass can miss it, an `@*` block with one in its body, or any of them with a blocking
-/// timing control is NOT routed: it keeps the edge lane and its W3056, every line `x`.
+/// What `VITA-E3061` says, by rule.
+const NO_EVENT: &str =
+    "`always_ff` has no event control; IEEE 1800-2017 §9.2.2.4 requires exactly one";
+const BLOCKING: &str = "a blocking timing control; IEEE 1800-2017 §9.2.2.4 allows none";
+const NO_STMT_EVENT: &str = "`always_ff` has no statement-level event control: with no header, its one event control is an intra-assignment `@` on a non-blocking assignment";
+const NOT_EVERY_PASS: &str =
+    "`always_ff` has no header, and its one event control is not reached on every pass";
+const IN_FORK: &str = "`always_ff` has an event control inside a `fork`; a forked process cannot be the procedure's one event control";
+
+fn count_msg(n: usize, place: &str) -> String {
+    format!(
+        "`always_ff` has {n} event controls ({place}); IEEE 1800-2017 §9.2.2.4 allows exactly one"
+    )
+}
+
+/// The `VITA-E3061` lines the run printed.
+fn e3061_lines(out: &str) -> Vec<&str> {
+    out.lines().filter(|l| l.contains("[VITA-E3061]")).collect()
+}
+
+/// A refused design: exit 1, `VITA-E3061` and nothing else, one line per expected
+/// message, and no simulation.
+fn expect_refused(src: &str, msgs: &[&str], what: &str) -> String {
+    let (rc, out) = run(src);
+    assert_eq!(rc, Some(1), "{what}:\n{out}");
+    expect_codes(&out, &["VITA-E3061"], what);
+    let lines = e3061_lines(&out);
+    assert_eq!(lines.len(), msgs.len(), "{what}: E3061 lines:\n{out}");
+    for (l, m) in lines.iter().zip(msgs) {
+        assert!(l.contains(m), "{what}: want {m:?} in\n{l}");
+    }
+    assert!(values(&out).is_empty(), "{what}: simulated:\n{out}");
+    out
+}
+
+/// `f_twoev`, as the blog post writes it: two event controls, the header's and one in
+/// the body. Owner ruling 2026-10-06: an error, exit 1 (see the module doc). Anchored at
+/// the body's `@`, the one past the first.
 #[test]
-fn unrouted_shapes_keep_the_edge_lane() {
+fn f_twoev_is_refused() {
+    let src = "module f_twoev (input logic clk, d, output logic q);
+    always_ff @(posedge clk) begin
+        q <= d;
+        @(posedge clk) q <= ~d;
+    end
+endmodule
+";
+    let out = expect_refused(
+        src,
+        &[&count_msg(2, "the header and 1 in the body")],
+        "f_twoev",
+    );
+    assert!(
+        out.contains("t.sv:4:9: error[VITA-E3061]"),
+        "anchor:\n{out}"
+    );
+    // The same block under the i2 testbench (i2_twoev), where verilator and sv2v print
+    // `1 1 1 1 0`.
+    let tb = design(
+        TB,
+        "  always_ff @(posedge clk) begin\n    q <= d;\n    @(posedge clk) q <= ~d;\n  end",
+    );
+    expect_refused(
+        &tb,
+        &[&count_msg(2, "the header and 1 in the body")],
+        "i2_twoev",
+    );
+}
+
+/// `i2_noctl`: no event control at all.
+#[test]
+fn i2_noctl_is_refused() {
+    let out = expect_refused(&design(TB, "  always_ff q <= d;"), &[NO_EVENT], "i2_noctl");
+    assert!(
+        out.contains("t.sv:2:3: error[VITA-E3061]"),
+        "anchor:\n{out}"
+    );
+}
+
+/// `i2_delay`, `i2_wait`, `i2_blk_intra`: one event control and a blocking timing
+/// control, each named; and the other blocking forms.
+#[test]
+fn blocking_timing_is_refused() {
+    for (what, body, kind) in [
+        (
+            "i2_delay",
+            "  always_ff @(posedge clk) begin\n    #1 q <= d;\n  end",
+            "contains a `#` delay, ",
+        ),
+        (
+            "i2_wait",
+            "  always_ff @(posedge clk) begin\n    wait (d) q <= ~q;\n  end",
+            "contains a `wait`, ",
+        ),
+        (
+            "i2_blk_intra",
+            "  always_ff @(posedge clk) q = #1 d;",
+            "contains an intra-assignment delay on a blocking assignment (`= #…`), ",
+        ),
+        (
+            "blocking intra event",
+            "  always_ff @(posedge clk) q = @(negedge clk) d;",
+            "contains an intra-assignment event control on a blocking assignment (`= @(…)`), ",
+        ),
+        (
+            "wait fork",
+            "  logic t;\n  always_ff @(posedge clk) begin fork t <= d; join_none wait fork; q <= d; end",
+            "contains a `wait fork`, ",
+        ),
+        (
+            "# in a fork branch",
+            "  always_ff @(posedge clk) fork #1 q <= d; join",
+            "contains a `#` delay, ",
+        ),
+        (
+            "# in a join_none branch",
+            "  logic t;\n  always_ff @(posedge clk) begin fork #1 t <= d; join_none q <= d; end",
+            "contains a `#` delay, ",
+        ),
+    ] {
+        let out = expect_refused(&design(TB, body), &[BLOCKING], what);
+        let line = e3061_lines(&out)[0];
+        assert!(line.contains(kind), "{what}: want {kind:?} in\n{line}");
+    }
+}
+
+/// Both rules broken: one diagnostic each, the count first.
+#[test]
+fn both_rules_report_once_each() {
+    expect_refused(
+        &design(
+            TB,
+            "  always_ff @(posedge clk) begin #1; @(negedge clk) q <= d; end",
+        ),
+        &[&count_msg(2, "the header and 1 in the body"), BLOCKING],
+        "count 2 and a delay",
+    );
+    expect_refused(
+        &design(TB, "  always_ff begin wait (d); q <= d; end"),
+        &[NO_EVENT, BLOCKING],
+        "count 0 and a wait",
+    );
+}
+
+/// The shapes the change does not route (they kept the edge lane and its W3056 before
+/// this rule) are refused: two event controls (an intra-assignment `@` on a non-blocking
+/// assignment among them), an `@*` header beside one in the body, a blocking timing
+/// control beside the one event control, no event control, an intra-assignment `@` as the
+/// only one, and an `@` inside a `fork`.
+#[test]
+fn unrouted_shapes_are_refused() {
+    let two_hl = count_msg(2, "2 in the body");
+    let two_hd = count_msg(2, "the header and 1 in the body");
+    for (body, msg) in [
+        (
+            "  always_ff begin @(posedge clk) q <= d; @(posedge clk) q <= ~d; end",
+            two_hl.as_str(),
+        ),
+        (
+            "  always_ff begin @(posedge clk) begin q <= d; @(negedge clk) q2 <= d; end end",
+            two_hl.as_str(),
+        ),
+        (
+            "  always_ff begin @(posedge clk) if (en) @(negedge clk) q <= d; end",
+            two_hl.as_str(),
+        ),
+        (
+            "  always_ff begin @(posedge clk) q <= d; #1 q2 <= d; end",
+            BLOCKING,
+        ),
+        (
+            "  always_ff begin @(posedge clk) q <= d; wait (en) q2 <= d; end",
+            BLOCKING,
+        ),
+        ("  always_ff begin @(posedge clk) q = #1 d; end", BLOCKING),
+        ("  always_ff q <= @(posedge clk) d;", NO_STMT_EVENT),
+        ("  always_ff q <= d;", NO_EVENT),
+        (
+            "  always_ff @* begin @(posedge clk) q <= d; end",
+            two_hd.as_str(),
+        ),
+        ("  always_ff @* q <= @(posedge clk) d;", two_hd.as_str()),
+        (
+            "  always_ff begin @(posedge clk) q <= d; q2 <= @(negedge clk) d; end",
+            two_hl.as_str(),
+        ),
+        (
+            "  always_ff begin fork @(posedge clk) q <= d; join_none end",
+            IN_FORK,
+        ),
+        (
+            "  always_ff fork @(posedge clk) q <= d; begin end join_any",
+            IN_FORK,
+        ),
+        (
+            "  always_ff begin fork @(posedge clk) q <= d; join end",
+            IN_FORK,
+        ),
+    ] {
+        expect_refused(&design(TB2, body), &[msg], body);
+    }
+}
+
+/// Legal shapes keep their behaviour: `f_ok`, `f_noedge` and `f_block` as the blog post
+/// writes them run with no diagnostic, and `i2_ok_async` prints the oracles' values.
+#[test]
+fn legal_shapes_are_unchanged() {
+    for (what, src) in [
+        (
+            "f_ok",
+            "module f_ok (input logic clk, rst_n, en, d, output logic q);
+    always_ff @(posedge clk or negedge rst_n)
+        if (!rst_n)  q <= 1'b0;
+        else if (en) q <= d;
+endmodule
+",
+        ),
+        (
+            "f_noedge",
+            "module f_noedge (input logic a, b, output logic y);
+    always_ff @(a or b) y <= a & b;
+endmodule
+",
+        ),
+        (
+            "f_block",
+            "module f_block (input logic clk, d, output logic q1, q2);
+    always_ff @(posedge clk) begin
+        q1 = d;
+        q2 = q1;
+    end
+endmodule
+",
+        ),
+    ] {
+        let (rc, out) = run(src);
+        assert_eq!(rc, Some(0), "{what}:\n{out}");
+        expect_codes(&out, &[], what);
+    }
+    let (rc, out) = run(&design(
+        TB,
+        "  always_ff @(posedge clk or posedge rst)\n    if (rst) q <= 1'b0; else q <= d;",
+    ));
+    assert_eq!(rc, Some(0), "i2_ok_async:\n{out}");
+    expect_codes(&out, &[], "i2_ok_async");
+    assert_eq!(
+        values(&out),
+        ["c1 q=1", "c2 q=0", "c3 q=1", "r1 q=0", "c4 q=1"],
+        "i2_ok_async:\n{out}"
+    );
+}
+
+/// `i2_nba_intra`: a non-blocking intra-assignment delay does not block the process, so
+/// it is legal; the value is iverilog's and sv2v's (verilator reads 0 for the unwritten
+/// `q` at `c1`).
+#[test]
+fn nba_intra_delay_is_accepted() {
+    let (rc, out) = run(&design(TB, "  always_ff @(posedge clk) q <= #1 d;"));
+    assert_eq!(rc, Some(0), "i2_nba_intra:\n{out}");
+    expect_codes(&out, &[], "i2_nba_intra");
+    assert_eq!(
+        values(&out),
+        ["c1 q=x", "c2 q=1", "c3 q=0", "r1 q=1", "c4 q=1"],
+        "i2_nba_intra:\n{out}"
+    );
+}
+
+/// An intra-assignment EVENT control on a non-blocking assignment is an `event_control`
+/// by the grammar (`nonblocking_assignment ::= variable_lvalue <= [delay_or_event_control]
+/// expression`), so it counts: beside a header it makes two (impl_c_nbaev, nbaev_mytb:
+/// iverilog refuses both, verilator runs them; the module doc has the raw text). With no
+/// header it can never be the one: nothing would suspend the block.
+#[test]
+fn nba_intra_event_counts() {
+    let two_hd = count_msg(2, "the header and 1 in the body");
+    for (what, tb, body, msg) in [
+        (
+            "impl_c_nbaev",
+            TB2,
+            "  always_ff @(posedge clk) q <= @(negedge clk) d;",
+            two_hd.as_str(),
+        ),
+        (
+            "repeat intra event",
+            TB2,
+            "  always_ff @(posedge clk) q <= repeat (1) @(negedge clk) d;",
+            two_hd.as_str(),
+        ),
+        (
+            "i2 testbench",
+            TB,
+            "  always_ff @(posedge clk) q <= @(negedge clk) d;",
+            two_hd.as_str(),
+        ),
+        (
+            "no statement-level event control",
+            TB2,
+            "  always_ff q <= @(posedge clk) d;",
+            NO_STMT_EVENT,
+        ),
+    ] {
+        let out = expect_refused(&design(tb, body), &[msg], what);
+        assert!(
+            out.contains("t.sv:2:"),
+            "{what}: anchor on the block's line:\n{out}"
+        );
+    }
+}
+
+/// An event control inside a `fork` branch — `join`, `join_any`, `join_none`, nested — is
+/// refused, with a header or without; a `fork` with no timing in it is legal.
+#[test]
+fn event_control_inside_a_fork_is_refused() {
     for body in [
-        "  always_ff begin @(posedge clk) q <= d; @(posedge clk) q <= ~d; end",
-        "  always_ff begin @(posedge clk) begin q <= d; @(negedge clk) q2 <= d; end end",
-        "  always_ff begin @(posedge clk) if (en) @(negedge clk) q <= d; end",
-        "  always_ff begin @(posedge clk) q <= d; #1 q2 <= d; end",
-        "  always_ff begin @(posedge clk) q <= d; wait (en) q2 <= d; end",
-        "  always_ff begin @(posedge clk) q = #1 d; end",
-        "  always_ff q <= @(posedge clk) d;",
-        "  always_ff q <= d;",
-        "  always_ff @* begin @(posedge clk) q <= d; end",
-        "  always_ff @* q <= @(posedge clk) d;",
-        "  always_ff begin @(posedge clk) q <= d; q2 <= @(negedge clk) d; end",
-        "  always_ff begin fork @(posedge clk) q <= d; join_none end",
-        "  always_ff fork @(posedge clk) q <= d; begin end join_any",
         "  always_ff begin fork @(posedge clk) q <= d; join end",
-        "  always_ff begin @(posedge clk) q <= d; fork @(negedge clk) q2 <= d; join_none end",
+        "  always_ff fork @(posedge clk) q <= d; begin end join_any",
+        "  always_ff begin fork @(posedge clk) q <= d; join_none end",
+        "  always_ff begin fork begin begin @(posedge clk) q <= d; end end join end",
+        "  always_ff @(posedge clk) begin fork begin @(negedge clk) q2 <= d; end join_none q <= d; end",
+        "  always_ff @* begin fork @(posedge clk) q <= d; join end",
+    ] {
+        expect_refused(&design(TB2, body), &[IN_FORK], body);
+    }
+    // An intra-assignment `@` in a fork branch is refused too; vita also cannot lower it
+    // there (`VITA-E3009`, before this rule as after).
+    let (rc, out) = run(&design(
+        TB2,
+        "  always_ff @(posedge clk) begin fork q2 <= @(negedge clk) d; join_none q <= d; end",
+    ));
+    assert_eq!(rc, Some(1), "forked intra event:\n{out}");
+    expect_codes(&out, &["VITA-E3009", "VITA-E3061"], "forked intra event");
+    assert!(
+        e3061_lines(&out).iter().all(|l| l.contains(IN_FORK)),
+        "forked intra event:\n{out}"
+    );
+    // An `@` outside the fork beside one inside it: the fork's is its own violation.
+    expect_refused(
+        &design(
+            TB2,
+            "  always_ff begin @(posedge clk) q <= d; fork @(negedge clk) q2 <= d; join_none end",
+        ),
+        &[IN_FORK],
+        "outer @ and forked @",
+    );
+    let (rc, out) = run(&design(
+        TB2,
+        "  always_ff @(posedge clk) fork q <= d; q2 <= ~d; join",
+    ));
+    assert_eq!(rc, Some(0), "timing-free fork:\n{out}");
+    expect_codes(&out, &[], "timing-free fork");
+    assert_eq!(
+        values(&out),
+        [
+            "c1 q=1 q2=0",
+            "c2 q=0 q2=1",
+            "c3 q=1 q2=0",
+            "c4 q=0 q2=1",
+            "c5 q=1 q2=0"
+        ],
+        "timing-free fork:\n{out}"
+    );
+}
+
+/// With no header, an `@(…)` that some pass misses is refused (stricter than IEEE, see the
+/// module doc): inside `if` / `else`, a `case` arm, a loop body (`for`, `foreach`,
+/// `while`, `repeat`), a nested `begin` under an `if`, an `if` under a `begin`, a
+/// `forever` or `do … while` body under an `if`; and after a loop or a `disable`.
+#[test]
+fn event_control_missed_on_some_pass_is_refused() {
+    for body in [
         "  always_ff begin if (en) @(posedge clk) q <= d; q2 <= d; end",
+        "  always_ff begin if (en) @(posedge clk) q <= d; else q2 <= d; end",
         "  always_ff begin case (en) 1'b1: @(posedge clk) q <= d; default: q2 <= d; endcase end",
+        "  always_ff begin for (int i = 0; i < 2; i++) @(posedge clk) q <= d; end",
+        "  logic fa [2];\n  always_ff begin foreach (fa[i]) @(posedge clk) q <= d; end",
         "  always_ff begin while (en) @(posedge clk) q <= d; q2 <= d; end",
         "  always_ff begin repeat (0) @(posedge clk); q2 <= d; end",
         "  always_ff begin repeat (2) @(posedge clk); q <= d; end",
+        "  always_ff begin begin if (en) @(posedge clk) q <= d; end q2 <= d; end",
         "  always_ff begin if (en) begin @(posedge clk) q <= d; end end",
+        "  always_ff begin if (en) forever @(posedge clk) q <= d; end",
         "  always_ff forever begin if (en) @(posedge clk) q <= d; q2 <= d; end",
+        "  always_ff do begin if (en) @(posedge clk) q <= d; q2 <= d; end while (0);",
+        "  always_ff begin for (int i = 0; i < 2; i++) q2 <= d; @(posedge clk) q <= d; end",
         "  always_ff begin : nb q2 <= d; if (!en) disable nb; @(posedge clk) q <= d; end",
+        "  always_ff begin do q2 <= d; while (0); @(posedge clk) q <= d; end",
         "  always_ff begin forever q2 <= d; @(posedge clk) q <= d; end",
     ] {
-        let (rc, out) = run(&design(TB2, body));
-        assert_eq!(rc, Some(0), "{body}:\n{out}");
-        expect_codes(&out, &["VITA-W3056"], body);
+        let out = expect_refused(&design(TB2, body), &[NOT_EVERY_PASS], body);
         assert!(
-            values(&out).iter().all(|l| l.contains("q=x q2=x")),
-            "{body}:\n{out}"
+            out.contains("stricter than IEEE 1800-2017 §9.2.2.4"),
+            "{body}: the message says the rule is vita's:\n{out}"
         );
     }
+}
+
+/// `do S while (c)` is one statement in the source, though the parser copies `S`: one
+/// `@` is one event control. With no header it is routed (its values are pinned with the
+/// other routed shapes); under a header it makes two, not three.
+#[test]
+fn do_while_counts_its_event_once() {
+    let (rc, out) = run(&design(
+        TB2,
+        "  always_ff do @(posedge clk) q <= d; while (0);",
+    ));
+    assert_eq!(rc, Some(0), "do-while:\n{out}");
+    expect_codes(&out, &[], "do-while");
+    expect_refused(
+        &design(
+            TB2,
+            "  always_ff @(posedge clk) do @(negedge clk) q <= d; while (0);",
+        ),
+        &[&count_msg(2, "the header and 1 in the body")],
+        "do-while under a header",
+    );
+}
+
+/// Out of scope, pinned as it is (PROBE_CATALOG §4.5.597): timing inside a CALLED task is
+/// not counted. A header block whose task holds a `#` runs (iverilog counts through the
+/// task and refuses it: "a blocking delay is not allowed in an always_comb, always_ff or
+/// always_latch process."); a header-less block whose only event control is in a task
+/// has a count of 0 and is refused (iverilog refuses it too: "the first statement of an
+/// always_ff process must be an event control statement."; verilator and sv2v print
+/// `1 0 1 0 1`).
+#[test]
+fn timing_in_a_called_task_is_not_counted() {
+    let tasks =
+        "  task automatic t_ev; @(posedge clk); endtask\n  task automatic t_dl; #1; endtask\n";
+    let (rc, out) = run(&design(
+        TB2,
+        &format!("{tasks}  always_ff @(posedge clk) begin t_dl; q <= d; end"),
+    ));
+    assert_eq!(rc, Some(0), "task delay:\n{out}");
+    expect_codes(&out, &[], "task delay");
+    expect_refused(
+        &design(TB2, &format!("{tasks}  always_ff begin t_ev; q <= d; end")),
+        &[NO_EVENT],
+        "task event",
+    );
 }

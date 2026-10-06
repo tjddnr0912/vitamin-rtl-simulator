@@ -21,10 +21,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
 | §6 | G2 observability (OBS) | 6 stages + 10 | 15 | 1 | call tree: two lowering paths 1 | ④ | |
 | study/03 | workload corpus | 1 | 1 | 0 | — | real-design | 9 |
-| §5.b | performance / hardening | 17 | 7 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
-| §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated 4 | trigger-gated | |
+| §5.b | performance / hardening | 18 | 8 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
+| §7 | conditional / long-term | 5 | 0 | 5 | trigger-gated 5 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 481 | 278 | 203 | | | |
+| total | | 483 | 279 | 204 | | | |
 
 ## 0. correct-support promotion queue
 
@@ -638,6 +638,7 @@ Below the correctness ladder; a row resumes only when its re-entry condition fir
 - ARR-LHS — md element LHS ~10× cliff (= §2 row 19); BLOCKED (its own census first)
 - INLINE-FOLD — the inline fold is exponential (DAG walked as a tree); per-activation memoisation; OPEN
 - MEM-GUARD — no process memory guard; RSS watchdog + `--max-mem`; BLOCKED (macOS FFI is unsafe)
+- NBA-GROWTH — nothing bounds the pending NBAs or forked processes one time step can pile up; F4027 (`max_body_steps`) bounds steps, not memory, so a plain `always` with a zero-delay pass holding a non-blocking assignment grows to GB before it fires (PRE, under a 1.5 GB watchdog: `always begin if (en) @(posedge clk) q <= d; q2 <= d; end` with `en` 0, 1.53 GB in 0.69 s; four NBAs, 1.69 GB in 0.56 s; `begin repeat (cnt) @(posedge clk); q2 <= d; end` with `cnt` 0, 1.57 GB in 1.20 s; `always begin fork @(posedge clk) q <= d; join_none end`, 1.51 GB in 1.45 s; under a 6 GB cap the first fires F4027 at 4.7 GB and the four-NBA one does not before 6 GB; the §4.5.597 review's u1–u3 twins); `sched/propagate.rs::schedule_nba`, `native/kernel.rs` (`nba`), the fork spawn; F4027 or a sibling fatal also bounds pending NBAs and live processes per step; no oracle needed (a guard); OPEN
 - EXEC-ROWS — `native::run::executor_rows` rescans per `simulate`; HELD (cache if it matters)
 - DELAY-CLAMP — `#delay` above u32::MAX is clamped (frozen u32); bump or announce; OPEN
 - KPRED-3RD — tier-3 lacks a "kernel can run it" layer; HELD (with dispatch)
@@ -732,6 +733,7 @@ Non-goals: FSDB / UCDB, an embedded SQLite, a waveform GUI, UVM. VCD stays the h
 | VHDL | a VHDL front end (GHDL oracle, E7xxx) | an SV plateau, a value-domain decision, GHDL setup |
 | VCD-EXT | `$dumpports*` | waveform-tool demand |
 | MVP-CUT | string concat outside assignment · `[*]` index · package import residue · cross-frame `disable` | individual demand |
+| FF-MISSED-AT | run a header-less `always_ff` whose one `@(…)` some pass misses (`if (en) @…`, a zero-trip loop), as the IEEE text allows, instead of `VITA-E3061` (§4.5.597) | §5.b NBA-GROWTH closed AND a real design uses the shape (corpus: 0 uses) |
 
 ## 8. Non-goals (permanent, not gaps)
 

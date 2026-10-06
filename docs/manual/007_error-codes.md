@@ -3,7 +3,7 @@
 Every diagnostic vitamin prints carries a stable code: a number like `VITA-E3009`
 and a mnemonic like `E-ELAB-UNSUPPORTED`. This chapter defines the rendered
 diagnostic format, the severity levels and how to change them, the process exit
-codes, and the complete catalogue of all 71 registered codes.
+codes, and the complete catalogue of all 72 registered codes.
 
 For installing and running the tools see [Installation](001_installation.md) and
 the [CLI Reference](004_cli-reference.md), which covers `vita` and the staged
@@ -177,7 +177,7 @@ Error and Fatal are the always-logged spine. `-Wno-E-ELAB-UNRESOLVED-NAME` is
 accepted, because the mnemonic resolves, and has no effect: a suppression flag
 can never hide a real failure.
 
-Of the 71 registered codes, 31 default to Warning and 3 to Info, so those 34 are
+Of the 72 registered codes, 31 default to Warning and 3 to Info, so those 34 are
 the suppressible set by default. Promotion applies to the 31 Warning-default
 codes. Notes are suppressed through their parent error's code, which drops the
 note while the error itself still prints.
@@ -332,7 +332,7 @@ whose leading digit is the stage.
 
 In the catalogue below, "Reserved" marks a code that is registered, documented
 and resolvable by `vita explain`, `-Wno-` and `-Werror=`, but that no code path
-in the tool produces. Six of the 71 are in that state.
+in the tool produces. Six of the 72 are in that state.
 
 ---
 
@@ -406,6 +406,7 @@ connectivity, parameter resolution.
 | `VITA-W3058` | `W-ELAB-STR-TERNARY` | Warning | A ternary whose arms are string literals is an integral value, so `$display` prints it as a number rather than as text. |
 | `VITA-W3059` | `W-ELAB-STR-ESCAPE` | Warning | A string literal uses an escape IEEE 1800 Table 5-1 does not define, and tools read it differently. One line per literal-and-escape pair for the whole run. |
 | `VITA-W3060` | `W-ELAB-MULTIDRIVER-STRICT` | Warning | Two drivers on one variable that Xcelium rejects (`*E,MULAXX`) and Verilator accepts: a declaration initializer on an `always_ff`/`always_latch` variable, or an `always_latch` sharing a variable with another process. |
+| `VITA-E3061` | `E-ELAB-ALWAYS-FF-TIMING` | Error | An `always_ff` with no event control, with more than one (the header plus each `@(…)` statement and each `q <= @(e) d` in the body), or with a blocking timing control (`#`, `wait`, `wait fork`, `q = #1 d`, `q = @(e) d`), which IEEE 1800 §9.2.2.4 forbids; also one with an event control inside a `fork`, with no header and only a `q <= @(e) d`, or with no header and an `@(…)` some pass can miss (inside an `if`, a `case` or a loop, or after a loop or a `disable`; stricter than the IEEE text), which would never suspend. The message says which. Icarus Verilog refuses these too; Verilator runs most of them. |
 
 ### `E-ELAB-MULTIDRIVER` in detail
 
@@ -610,7 +611,7 @@ hash.
 
 ## Codes with no emitter
 
-Six of the 71 are registered and documented but produced by no code path. They
+Six of the 72 are registered and documented but produced by no code path. They
 resolve in `vita explain`, `-Wno-` and `-Werror=`, and their numbers are
 permanently reserved.
 

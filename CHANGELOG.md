@@ -9,6 +9,24 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — an `always_ff` that IEEE 1800 §9.2.2.4 forbids is an error
+
+- An `always_ff` must contain exactly one event control and no blocking timing control (IEEE 1800
+  §9.2.2.4). One with two (`always_ff @(posedge clk) begin q <= d; @(posedge clk) q <= ~d; end`,
+  or `always_ff @(posedge clk) q <= @(negedge clk) d;`), with none (`always_ff q <= d;`), or with
+  a `#` delay, a `wait`, a `wait fork`, or a blocking assignment with an intra-assignment `#` or
+  `@` (`q = #1 d`) is now the error `VITA-E3061` (`E-ELAB-ALWAYS-FF-TIMING`), and the design exits
+  1. So is one with an event control inside a `fork`, or with no header and only an
+  intra-assignment `@` (`always_ff q <= @(posedge clk) d;`): neither would ever suspend. And,
+  stricter than the IEEE text, one with no header whose one `@(…)` some pass can miss — inside an
+  `if`, a `case` or a loop, or after a loop or a `disable` (`always_ff begin if (en) @(posedge
+  clk) q <= d; q2 <= d; end`), which cannot run, and which Icarus Verilog also refuses. The
+  message says which rule the block breaks. Before, such a block ran — with no diagnostic when it
+  had a header, or as an edge process armed on nothing under `VITA-W3056` when it did not. Icarus
+  Verilog refuses every one of these shapes; Verilator runs most of them. A non-blocking
+  `q <= #1 d` stays legal, and an event control or a delay inside a task the block calls is not
+  counted.
+
 ### Fixed — `always_ff` with its event control in the body, and `always_ff @*`, run
 
 - Two legal `always_ff` forms have no edge list in the header: no header at all, with the one

@@ -439,6 +439,12 @@ impl Elaborator<'_> {
             self.final_procs.insert(self.cur_proc);
         }
 
+        // §9.2.2.4 `always_ff`: one and only one event control (the header plus the
+        // body's `@(…)` statements) and no blocking timing control (`ff_timing.rs`).
+        if matches!(p.kind, ast::ProcKind::AlwaysFf) {
+            self.check_always_ff_timing(p);
+        }
+
         // §9.2.2.4 (`ff_timing.rs`): a header-less `always_ff` whose one event control
         // is in its body, and `always_ff @*`, lower through the `always` lane spelled
         // the same way. `lane` is `p.kind` for every other block.

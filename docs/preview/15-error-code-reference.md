@@ -981,6 +981,47 @@ register explicitly (`always_ff @(posedge clk) if (rst) q <= 0; else q <= q + 1;
 latch from its own procedure. If the design never targets Xcelium, suppress with
 `-Wno-W-ELAB-MULTIDRIVER-STRICT`; promote with `-Werror=`.
 
+### VITA-E3061 · `E-ELAB-ALWAYS-FF-TIMING` (Error)
+**An `always_ff` without exactly one event control, or with a blocking timing control.** IEEE
+1800-2017 §9.2.2.4: "The always_ff procedure imposes the restriction that it contains one and only
+one event control and no blocking timing controls." The event controls are the header `@(…)` plus
+every `@(…)` statement and every intra-assignment `@` on a non-blocking assignment (`q <= @(e) d`)
+in the body; the blocking timing controls are a `#` delay statement, `wait`, `wait fork`, and a
+blocking assignment with an intra-assignment `#` or `@` (`q = #1 d`, `q = @(e) d`). Two more
+shapes are refused because the block would never suspend: an event control inside a `fork` (a
+forked process cannot be the procedure's one event control), and, with no header, an
+intra-assignment `@` as the only event control. With no header, the one `@(…)` must also be reached
+on every pass — in the body's statement list or a nested `begin … end`, the first statement of a
+`do … while`, or a `forever` body, and after no loop and no `disable` — or the block is refused
+too; this is vita's rule, stricter than the IEEE text, because a pass that misses the `@` ends
+without suspending. The message says which rule the block breaks, one diagnostic per rule.
+```
+always_ff @(posedge clk) begin
+  q <= d;
+  @(posedge clk) q <= ~d;
+end
+->  m.sv:4:5: error[VITA-E3061] E-ELAB-ALWAYS-FF-TIMING: `always_ff` has 2 event controls (the
+    header and 1 in the body); IEEE 1800-2017 §9.2.2.4 allows exactly one [in m]
+
+always_ff q <= d;
+->  m.sv:2:3: error[VITA-E3061] E-ELAB-ALWAYS-FF-TIMING: `always_ff` has no event control; IEEE
+    1800-2017 §9.2.2.4 requires exactly one — an `@(…)` header, or one `@(…)` statement in the
+    body [in m]
+
+always_ff @(posedge clk) begin #1 q <= d; end
+->  m.sv:2:34: error[VITA-E3061] E-ELAB-ALWAYS-FF-TIMING: `always_ff` contains a `#` delay, a
+    blocking timing control; IEEE 1800-2017 §9.2.2.4 allows none [in m]
+```
+Icarus Verilog refuses each of these shapes; Verilator runs them. The error follows the standard's
+text by owner ruling. Legal and not reported: a header-less `always_ff` whose one event control is an
+`@(…)` statement every pass reaches (`always_ff begin @(posedge clk) q <= d; end`),
+which runs as the self-timed `always`; `always_ff @*`, which runs as `always @*`; and a
+non-blocking assignment with an intra-assignment delay (`q <= #1 d`). An event control or a delay
+inside a task the block calls is not counted.
+
+**Fix:** keep one event control — the header's edge list, or one `@(…)` at the top of the body —
+and move a delay or `wait` into a plain `always` or an `initial`.
+
 ---
 
 ## 4xxx · RUNTIME
@@ -1621,7 +1662,7 @@ an artifact-class failure, not an RTL defect. Not suppressible.
 
 ## Appendix A · Reserved codes (survey inventory)
 
-The body sections above define the 71 codes registered in the `MsgCode` enum. This appendix is
+The body sections above define the 72 codes registered in the `MsgCode` enum. This appendix is
 a separate inventory: 96 additional error and warning conditions defined by IEEE 1800-2017 and
 IEEE 1364-2005, and by the published documentation of Verilator, Icarus iverilog, VCS, Xcelium
 and GHDL. They are collected in advance so that implementing one of those conditions starts

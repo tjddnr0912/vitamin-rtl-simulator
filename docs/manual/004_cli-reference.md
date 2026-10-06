@@ -363,7 +363,7 @@ Gate semantics:
 * Info and Note are suppressible and never promoted.
 
 Because the counts are taken after the gate, a promoted warning drives the exit code to 1, and
-`vcmp` and `velab` additionally refuse to write their artifact. There are 71 diagnostic codes; the
+`vcmp` and `velab` additionally refuse to write their artifact. There are 72 diagnostic codes; the
 catalogue is [007 · Error codes](007_error-codes.md) and
 [../preview/15-error-code-reference.md](../preview/15-error-code-reference.md).
 

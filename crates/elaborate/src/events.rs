@@ -465,9 +465,11 @@ impl Elaborator<'_> {
         let list = match sens {
             Some(ast::Sensitivity::List(l)) => l.as_slice(),
             Some(ast::Sensitivity::Star) | None => {
-                if force_edge {
-                    self.warn("always_ff requires an explicit @(edge ...) list");
-                }
+                // The `Edge` half is reached only by an `always_ff` that
+                // `check_always_ff_timing` has refused (`VITA-E3061`): `always_ff_lane`
+                // sends every header-less or `@*` block that satisfies §9.2.2.4 to the
+                // `always` lane, so the refusal is the one diagnostic here.
+                //
                 // The `Comb` half is dead, by caller census (§4.5.584): the
                 // `always_ff` caller forces an edge, the `always @(…)` caller
                 // passes a list, and the clocking substitution passes a clocking

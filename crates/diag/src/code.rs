@@ -106,6 +106,7 @@ msgcodes! {
     ElabFeatureLimit       => ("W-ELAB-FEATURE-LIMIT",      "VITA-W3056", Warning, "legal construct accepted but simplified"),
     ElabAutoTopAmbiguous   => ("W-ELAB-AUTOTOP-AMBIGUOUS",  "VITA-W3057", Warning, "auto-top selected among multiple uninstantiated roots; pin one with --top"),
     ElabMultidriverStrict  => ("W-ELAB-MULTIDRIVER-STRICT", "VITA-W3060", Warning, "two drivers that xcelium rejects (*E,MULAXX) and verilator accepts"),
+    ElabAlwaysFfTiming     => ("E-ELAB-ALWAYS-FF-TIMING",   "VITA-E3061", Error,   "always_ff without exactly one event control, or with a blocking timing control (IEEE 1800 §9.2.2.4)"),
     // 4xxx RUNTIME
     RunAssertFail          => ("E-RUN-ASSERT-FAIL",         "VITA-E4001", Error,   "assertion failed (no action block)"),
     RunRange               => ("E-RUN-RANGE",               "VITA-E4002", Error,   "runtime index/select out of range"),
