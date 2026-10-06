@@ -719,7 +719,8 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `always` with `@( … )` | Supported | |
 | `always` with no `@` but in-body `#` or `@` | Supported | The clock-generator shape; starts at time 0. |
 | `always` with neither | Partial | Unschedulable; lowered as an inert process with a warning. |
-| `always_ff` / `always_comb` / `always_latch` | Supported | `always_comb` and `always_latch` run once at time 0 (IEEE 1800 §9.2.2.2) after every `initial` and `always` has run its first slice and the continuous assigns have settled, before `#0` continuations and nonblocking updates; they are armed from the start, so a time-0 change of what they read runs them too ([006 §3.1, §3.2](006_limitations.md) list the time-0 order cases). |
+| `always_ff` | Supported | An edge list in the header (`always_ff @(posedge clk …)`) is the usual form. With no header and its one event control an `@(…)` statement that every pass reaches (`always_ff begin @(posedge clk) q <= d; end`: in the body's statement list or a nested `begin … end`, the first statement of a `do … while`, or a `forever` body; not in an `if`, a `case`, another loop or a `fork`, nor after a loop or a `disable`) it runs as the self-timed `always` written the same way, and `always_ff @*` as `always @*`. |
+| `always_comb` / `always_latch` | Supported | `always_comb` and `always_latch` run once at time 0 (IEEE 1800 §9.2.2.2) after every `initial` and `always` has run its first slice and the continuous assigns have settled, before `#0` continuations and nonblocking updates; they are armed from the start, so a time-0 change of what they read runs them too ([006 §3.1, §3.2](006_limitations.md) list the time-0 order cases). |
 | `final` | Supported | Runs once after the main loop ends, whatever the finish reason. A timing control inside it is Loud (IEEE 1800 §9.2.3 makes a `final` block zero-time). |
 
 ### 8.1 Sensitivity and event control

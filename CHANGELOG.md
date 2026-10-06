@@ -9,6 +9,16 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — `always_ff` with its event control in the body, and `always_ff @*`, run
+
+- Two legal `always_ff` forms have no edge list in the header: no header at all, with the one
+  event control in the body where every pass reaches it (`always_ff begin @(posedge clk) q <= d;
+  end`), and `always_ff @*`.
+  Both were armed on nothing, so the block never ran and everything it wrote read `x`, with only
+  the warning `VITA-W3056` ("always_ff requires an explicit @(edge ...) list"). They now run as
+  the `always` written the same way — the self-timed `always` and `always @*` — and print what
+  Icarus Verilog, Verilator and sv2v print (`1 0 1 1 1` where vitamin printed `x` five times).
+
 ### Fixed — an output port that is a variable is checked for two drivers
 
 - An `output` port written with a data type and no net type (`output logic y`, `output reg y`,

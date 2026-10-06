@@ -345,7 +345,9 @@ impl Elaborator<'_> {
     /// any explicit edge ⇒ `Edge`; all bare ⇒ `Level`; `always_ff` forces
     /// `Edge`; `@(*)` ⇒ `Level` and `always_comb` ⇒ `Comb` (read-set inference
     /// deferred — empty edges, no error); `always_latch` ⇒ `Latch`; `initial`
-    /// and an `always` with no header (self-timed or inert) ⇒ `Initial`.
+    /// and an `always` with no header (self-timed or inert) ⇒ `Initial`. `kind` is
+    /// the block's lane ([`always_ff_lane`]): an `always_ff` that satisfies
+    /// §9.2.2.4 with no header, or with `@*`, arrives as `Always`.
     ///
     /// So `Comb` / `Latch` mean exactly `always_comb` / `always_latch`: the
     /// processes IEEE 1800 §9.2.2.2 gives an implicit time-zero pass, which the

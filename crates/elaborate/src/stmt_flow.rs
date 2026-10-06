@@ -439,14 +439,19 @@ impl Elaborator<'_> {
             self.final_procs.insert(self.cur_proc);
         }
 
+        // §9.2.2.4 (`ff_timing.rs`): a header-less `always_ff` whose one event control
+        // is in its body, and `always_ff @*`, lower through the `always` lane spelled
+        // the same way. `lane` is `p.kind` for every other block.
+        let lane = always_ff_lane(p);
+
         // M-C: a bare `always` with NO header @(...) re-arms via its own in-body
         // timing (`always #5 clk=~clk;`). Detect that and wrap the body in an
         // implicit forever so control loops back to the in-body delay/event.
         let bare_always_self_timed =
-            matches!(p.kind, ast::ProcKind::Always) && p.sensitivity.is_none();
+            matches!(lane, ast::ProcKind::Always) && p.sensitivity.is_none();
 
         // `const_level_header.rs`: a header level list naming a constant also runs at t0.
-        let sensitivity = self.proc_sensitivity(p, user_written, desugared.is_some());
+        let sensitivity = self.proc_sensitivity(p, lane, user_written, desugared.is_some());
         let mut b = ProcessBuilder::new(); // entry block #0 open
         if bare_always_self_timed && stmt_has_timing(&p.body) {
             // Implicit `forever { body }` so the process re-arms on its own #/@.
@@ -462,13 +467,12 @@ impl Elaborator<'_> {
         // and record it as level-sensitive edges so the engine re-fires the block
         // when any input changes. EXCLUDES a bare self-timed `always` (re-arms via
         // its own in-body #/@, no data read-set).
-        let is_comb_inferred = matches!(
-            p.kind,
-            ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch
-        ) || matches!(
-            (p.kind, p.sensitivity.as_ref()),
-            (ast::ProcKind::Always, Some(ast::Sensitivity::Star))
-        );
+        let is_comb_inferred =
+            matches!(lane, ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch)
+                || matches!(
+                    (lane, p.sensitivity.as_ref()),
+                    (ast::ProcKind::Always, Some(ast::Sensitivity::Star))
+                );
         let sensitivity = if is_comb_inferred && sensitivity.edges.is_empty() {
             // Record this ProcId so the post-hier-resolution pass can recompute
             // its read-set (a bare self-timed `always` is NOT is_comb_inferred, so
@@ -476,10 +480,7 @@ impl Elaborator<'_> {
             self.comb_inferred_procs.push(self.cur_proc);
             let nets = self.comb_read_set(
                 &body,
-                matches!(
-                    p.kind,
-                    ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch
-                ),
+                matches!(lane, ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch),
             );
             ir::Sensitivity {
                 kind: sensitivity.kind,

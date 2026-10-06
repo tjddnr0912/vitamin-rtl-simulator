@@ -149,10 +149,14 @@ impl Elaborator<'_> {
 
     /// `lower_proc_block`'s sensitivity: the time-0 lane's when it admits `p`, else
     /// `lower_sensitivity`'s with the decline reason parked in `t0_decline` for the
-    /// header lane's constant refusal ([`Self::error_header_level_const`]).
+    /// header lane's constant refusal ([`Self::error_header_level_const`]). `lane` is
+    /// [`always_ff_lane`]'s answer for `p`: `lower_sensitivity` maps it, while the
+    /// time-0 lane reads `p.kind` (it declines every `always_ff`, and the two shapes
+    /// `lane` reroutes have no header list for it to admit).
     pub(crate) fn proc_sensitivity(
         &mut self,
         p: &ast::ProceduralBlock,
+        lane: ast::ProcKind,
         user_written: bool,
         iff_desugared: bool,
     ) -> ir::Sensitivity {
@@ -160,7 +164,7 @@ impl Elaborator<'_> {
             Ok(()) => self.header_const_level_sensitivity(p),
             Err(why) => {
                 self.t0_decline = Some(why);
-                let s = self.lower_sensitivity(p.kind, p.sensitivity.as_ref(), &p.body);
+                let s = self.lower_sensitivity(lane, p.sensitivity.as_ref(), &p.body);
                 self.t0_decline = None;
                 s
             }
