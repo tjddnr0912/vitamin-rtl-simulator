@@ -38,10 +38,13 @@ pub(crate) fn is_whole_single_net(lv: &ir::Lvalue) -> bool {
 impl Elaborator<'_> {
     /// P1-9 (E3018): assignment-kind legality. `is_proc=true` (a procedural `=`/
     /// `<=`) may not target a NET (`wire`); `is_proc=false` (a user `assign`) may
-    /// not drive a VARIABLE (`reg`/`integer`/`real`). SV `logic` passes both ways
-    /// (IEEE 1800 admits either one continuous driver or procedural writes) — but not
-    /// both on one variable, nor two continuous drivers (§6.5): that is
-    /// `multidriver.rs` Rule D's E3001, decided per variable before lowering.
+    /// not drive a `string`, a class handle or a named event. A variable is legal under
+    /// ONE continuous `assign` and no other writer (IEEE 1800 §6.5, §10.3.2): SV `logic`
+    /// passes here, and two drivers on it are `multidriver.rs` Rule D's E3001, decided
+    /// per variable before lowering; every other variable kind ([`Self::cont_var_kind`]:
+    /// `reg`, `integer`, `time`, `real`, the 2-state types) passes too, and
+    /// `cont_var.rs` keeps the `assign` only as the variable's sole writer, once every
+    /// writer exists — its E3018 says why it does not.
     /// Called ONLY for user-written assignments — port-binding/decl-init synthetic
     /// cont-assigns are exempt (IEEE 1800 §23.3.3 var ports are legal).
     pub(crate) fn check_lvalue_kind(&mut self, lhs: &ir::Lvalue, is_proc: bool) {
@@ -58,7 +61,7 @@ impl Elaborator<'_> {
                         | ir::NetKind::Integer
                         | ir::NetKind::Real
                         | ir::NetKind::String
-                )
+                ) && !self.cont_var_kind(c.net)
             };
             if bad {
                 let name = self

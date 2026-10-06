@@ -6,10 +6,13 @@
 //! degraded to `#0` (turning `forever #x` into a delta-limit blowup), and
 //! (2026-06-10 §F-(F): force/release, proc assign/deassign and enclosing-block
 //! `disable` are REAL now — the loud lanes below are the remaining v1 cuts) —
-//! net-vs-variable assignment legality was never checked (iverilog rejects
-//! both directions; doc-02 documents them as errors). All are LOUD now:
+//! net-vs-variable assignment legality was never checked. All are LOUD now:
 //! `E-ELAB-UNSUPPORTED` for the v1 cuts, `E-ELAB-LVALUE-KIND` (VITA-E3018,
-//! promoted from doc-15 Appendix A) for the kind violations.
+//! promoted from doc-15 Appendix A) for the kind violations. A procedural write
+//! to a net is one (iverilog 13.0 rejects it). A continuous `assign` to a `reg`
+//! is one only beside another writer: IEEE 1800 §6.5 lets a variable take one
+//! continuous assignment, and iverilog 13.0 `-g2012` and verilator 5.052 run a
+//! sole `assign r = …;` (§4.5.600; `cli/tests/cont_assign_variable_kinds.rs`).
 
 use diag::{LogEvent, LogSink};
 
@@ -183,9 +186,31 @@ endmodule
     );
 }
 
-/// E3018: a continuous assign may not drive a variable (reg).
+/// E3018: a continuous assign may not drive a variable (reg) that has another writer —
+/// here an instance output bound to it (iverilog 13.0 `-g2012`: "Variable 'r' cannot
+/// have multiple drivers."). The same `assign` as the reg's sole writer is legal (IEEE
+/// 1800 §6.5) and elaborates; until §4.5.600 it was E3018 too, IEEE 1364's rule.
 #[test]
 fn cont_assign_to_reg_is_rejected() {
+    let (ok, diags) = elab(
+        r#"
+module c(output logic o);
+  assign o = 1'b0;
+endmodule
+module t;
+  reg r;
+  c u(.o(r));
+  assign r = 1'b1;
+endmodule
+"#,
+    );
+    assert!(!ok, "must fail; diags: {diags:?}");
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.contains("VITA-E3018") && d.contains("also written by a port connection")),
+        "expected E-ELAB-LVALUE-KIND naming the port; got {diags:?}"
+    );
     let (ok, diags) = elab(
         r#"
 module t;
@@ -194,10 +219,9 @@ module t;
 endmodule
 "#,
     );
-    assert!(!ok, "must fail; diags: {diags:?}");
     assert!(
-        diags.iter().any(|d| d.contains("VITA-E3018")),
-        "expected E-ELAB-LVALUE-KIND; got {diags:?}"
+        ok && diags.iter().all(|d| !d.starts_with("error[")),
+        "a reg's sole continuous assign must elaborate: {diags:?}"
     );
 }
 

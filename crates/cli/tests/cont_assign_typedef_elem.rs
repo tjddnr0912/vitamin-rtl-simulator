@@ -393,8 +393,10 @@ fn a_copy_that_is_not_equivalent_stays_refused() {
     // §6.22.2: a signed struct is not equivalent to an unsigned vector, nor a 4-bit
     // struct to a 5-bit vector (verilator: `Array element types are not equivalent`;
     // iverilog: `Element types are not compatible`), nor a 4-state struct to a `bit`
-    // vector (both oracles refuse). A 2-state struct target is a variable this IR does
-    // not drive continuously (E3018, as for `bit [3:0] d [2]`; both oracles print `9`).
+    // vector (both oracles refuse). A copy between two arrays of one 2-state struct IS
+    // equivalent, and runs: it was E3018 until §4.5.600 (a continuous assign to a
+    // variable that is not `logic`), and is the sole writer of `d` here — iverilog 13.0,
+    // verilator 5.052 and sv2v 0.0.13 → iverilog all print `N2 9`.
     let signed = "typedef struct packed signed { logic [3:0] a; } s_t;\nmodule t; logic [3:0] v [2]; s_t d [2]; assign d = v;\n  initial begin v[0] = 4'hf; #1 $display(\"E4 %0d\", d[0]); end\nendmodule\n";
     is_loud(
         signed,
@@ -408,7 +410,7 @@ fn a_copy_that_is_not_equivalent_stays_refused() {
     let two_state_src = "typedef struct packed { logic [3:0] a; } s_t;\nmodule t; bit [3:0] v [2]; s_t d [2]; assign d = v;\n  initial begin v[0] = 4'h9; #1 $display(\"E6 %h\", d[0]); end\nendmodule\n";
     is_loud(two_state_src, WRITE);
     let two_state_dst = "module t;\n  typedef struct packed { bit [2:0] a; bit b; } s_t;\n  s_t s [2]; s_t d [2];\n  assign d = s;\n  initial begin s[0] = 4'h9; #1 $display(\"N2 %h\", d[0]); end\nendmodule\n";
-    is_loud(two_state_dst, "continuous assign drives variable `t.d`");
+    prints(two_state_dst, "N2", &["N2 9"]);
 }
 
 #[test]

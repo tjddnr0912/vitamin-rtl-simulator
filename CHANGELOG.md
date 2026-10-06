@@ -9,6 +9,30 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a `reg`, `integer`, `int` or `real` takes one continuous `assign`
+
+- IEEE 1800 §6.5 lets a variable be written by one continuous assignment, and §6.11.2 makes `reg`
+  and `logic` one type. vita refused every `assign` to a variable that is not `logic` — `reg`,
+  `integer`, `time`, `real`, `realtime`, `bit`, `byte`, `shortint`, `int`, `longint`, a 2-state
+  packed struct, an `output reg` port, a `reg` array — with `VITA-E3018` ("continuous assign
+  drives variable … (declare it wire/logic)"), IEEE 1364's rule; Icarus Verilog (`-g2012`) and
+  Verilator run them. Such an `assign` now runs when it is the variable's sole writer, calls no
+  function, and drives all of it — the whole variable, or every element of an unpacked array once
+  at a constant index — with Icarus Verilog's values (a 2-state target reads x as 0, a delay, time 0 and the wake of
+  a process waiting on it included). With another writer — a port connection, a task body, a
+  hierarchical write, a system task's output argument, a generate-block or interface `assign`, a
+  `force` — with a function call on the right-hand side, for a built-in gate's output, or with
+  part of the variable left undriven, `VITA-E3018` stays, at the `assign`, and names the reason. A variable `VITA-E3001` already reports (two `assign`s, or an `assign` beside
+  a process or an initializer) no longer prints `VITA-E3018` beside it. A `string` or class-handle
+  target keeps the old `VITA-E3018`.
+- New warning `VITA-W3062` (`W-ELAB-CONT-ASSIGN-VAR-1364`): such an `assign` to a `reg`,
+  `integer`, `time`, `real` or `realtime`, in a file whose name ends in `.v`, runs and warns that
+  IEEE 1364 forbids it (Icarus Verilog `-g2005`: "Variable 'y' cannot be driven by a continuous
+  assignment/module."). It is the only behaviour vita bases on a file's extension.
+- A non-ANSI 2-state output port with no unpacked dimension (`output bit y;`, `output int z;`)
+  now reads an x written to it as 0, procedurally as well as continuously, and `$typename` names
+  its type (`int`, not `logic signed[31:0]`); it kept the x before.
+
 ### Fixed — an integral value converts to real bit by bit, at its own width and sign
 
 - IEEE 1800 §6.12.2 reads each x or z bit of an integral value converted to real as 0. vita

@@ -29,6 +29,49 @@ pub(crate) struct WholeArrayCa {
     pub(crate) prefix: String,
 }
 
+/// The first writer [`Elaborator::other_writers`] finds on a net, as a diagnostic names it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum OtherWriter {
+    /// A port connection: an instance output bound to the net, or its own input port.
+    Port,
+    /// Another user `assign`.
+    Assign,
+    /// Any other continuous driver (a net declaration assignment, a synthesized copy).
+    ContDriver,
+    /// A procedural `=` or `<=` (a declaration initializer's flush is one).
+    Procedural,
+    /// A `force` or a `release`.
+    Force,
+    /// A system task's output argument.
+    SysTask,
+    /// A system function's output argument.
+    SysFunc,
+    /// An `output` or `inout` argument of a task or function call (its copy-out).
+    OutArg,
+    /// A clocking block's output drive.
+    Clocking,
+    /// An `inout` port connection.
+    Inout,
+}
+
+impl OtherWriter {
+    /// The writer as a diagnostic names it.
+    pub(crate) fn phrase(self) -> &'static str {
+        match self {
+            OtherWriter::Port => "a port connection",
+            OtherWriter::Assign => "another continuous `assign`",
+            OtherWriter::ContDriver => "another continuous driver",
+            OtherWriter::Procedural => "a procedural assignment (or a declaration initializer)",
+            OtherWriter::Force => "a `force` or `release`",
+            OtherWriter::SysTask => "a system task's output argument",
+            OtherWriter::SysFunc => "a system function's output argument",
+            OtherWriter::OutArg => "an `output` or `inout` argument of a task or function call",
+            OtherWriter::Clocking => "a clocking block output",
+            OtherWriter::Inout => "an `inout` port connection",
+        }
+    }
+}
+
 /// The value an element continuous assign reads.
 enum ElemSource<'a> {
     /// Pattern leaves, one per element in declared order.
@@ -196,7 +239,9 @@ impl Elaborator<'_> {
                 }],
             };
             if k == 0 {
-                self.check_lvalue_kind(&lhs, false); // E3018 once (same net throughout)
+                // E3018 once (same net throughout) for a kind no `assign` drives; another
+                // writer of a variable is the sole-writer check below.
+                self.check_lvalue_kind(&lhs, false);
             }
             // Each item is evaluated as an assignment to its element (§10.9.1), sized as
             // the procedural pattern path sizes it: a fill grows to the element, and a
@@ -236,16 +281,9 @@ impl Elaborator<'_> {
     }
 
     /// Refuse every whole-array `assign` whose array has another writer. Runs after the
-    /// last lowering and the deferred hierarchical writes, so every writer exists. The
-    /// census is every channel that stores to a net: the continuous assigns (another
-    /// `assign`, an output port, a declaration initializer), the statements (procedural
-    /// writes, `force`/`release`, task and function bodies, hierarchical writes), a system
-    /// task or function that may write an argument, a frame call's copy-out, a clocking
-    /// block's output commit, and an `inout` port connection, whose drive back from the
-    /// child no IR carries. A system call is classified by an explicit READ-ONLY list, so
-    /// an unlisted one counts as a writer; `$sformat` / `$swrite*` write only `args[0]`.
-    /// A written chunk naming no net of this design (a hierarchical placeholder no pass
-    /// resolved) is a writer of every array.
+    /// last lowering and the deferred hierarchical writes, so every writer exists; the
+    /// writers are [`Self::other_writers`]'s census, and a group sees every other group on
+    /// the same array as another writer.
     pub(crate) fn check_whole_array_sole_writer(&mut self) {
         if self.whole_array_cas.is_empty() {
             return;
@@ -256,73 +294,13 @@ impl Elaborator<'_> {
         for w in &self.whole_array_cas {
             own.entry(w.net).or_default().push((w.lo, w.hi));
         }
-        let mut written: BTreeSet<u32> = BTreeSet::new();
-        let mut unknown = false;
+        let (found, unknown) = self.other_writers(&targets, &own);
+        let mut written: BTreeSet<u32> = found.into_keys().collect();
         // A group sees every other group on the same array as another writer.
         for (&net, groups) in &own {
             if groups.len() > 1 {
                 written.insert(net);
             }
-        }
-        for (i, ca) in self.cont_assigns.iter().enumerate() {
-            for c in &ca.lhs.chunks {
-                if targets.contains(&c.net)
-                    && !own[&c.net].iter().any(|&(lo, hi)| (lo..hi).contains(&i))
-                {
-                    written.insert(c.net);
-                }
-                unknown |= c.net as usize >= self.nets.len();
-            }
-        }
-        for st in &self.stmts {
-            match st {
-                ir::Stmt::BlockingAssign { lhs, .. }
-                | ir::Stmt::NonblockingAssign { lhs, .. }
-                | ir::Stmt::Force { lhs, .. }
-                | ir::Stmt::Release { lhs } => {
-                    self.lvalue_writes(lhs, &targets, &mut written, &mut unknown);
-                }
-                ir::Stmt::SysTask { which, args, .. } => {
-                    let dest = match which {
-                        ir::SysTaskId::Sformat => &args[..args.len().min(1)],
-                        w if systask_is_read_only(*w) => &[][..],
-                        _ => &args[..],
-                    };
-                    for &a in dest {
-                        self.ir_expr_nets_in(a, &targets, &mut written);
-                    }
-                }
-                ir::Stmt::Disable { .. } => {}
-            }
-        }
-        for e in &self.exprs {
-            if let ir::Expr::SysFunc { which, args } = e {
-                if !sysfunc_is_read_only(*which) {
-                    for &a in args {
-                        self.ir_expr_nets_in(a, &targets, &mut written);
-                    }
-                }
-            }
-        }
-        let out_binds = self
-            .task_calls_proc
-            .values()
-            .chain(self.task_calls_func.values())
-            .chain(self.pending_task_calls.iter().map(|(_, info)| info))
-            .flat_map(|info| info.out_binds.iter());
-        for (_, lv) in out_binds {
-            self.lvalue_writes(lv, &targets, &mut written, &mut unknown);
-        }
-        for pairs in self.clocking_outputs.values() {
-            written.extend(
-                pairs
-                    .iter()
-                    .map(|&(src, _)| src)
-                    .filter(|n| targets.contains(n)),
-            );
-        }
-        for &eid in &self.inout_actual_exprs {
-            self.ir_expr_nets_in(eid, &targets, &mut written);
         }
         if unknown {
             written = targets;
@@ -330,6 +308,9 @@ impl Elaborator<'_> {
         if written.is_empty() {
             return;
         }
+        // One diagnostic per variable: a `reg` array's element rows are also recorded for
+        // `cont_var.rs`, whose census finds the same other writer.
+        self.cont_var.reported.extend(written.iter().copied());
         let refused: Vec<(ast::Span, String)> = self
             .whole_array_cas
             .iter()
@@ -350,18 +331,123 @@ impl Elaborator<'_> {
         self.cur_prefix = saved;
     }
 
-    /// Record in `written` each chunk of `lv` on a net of `targets`; set `unknown` for a
-    /// chunk naming no net of this design.
+    /// Every writer of a net of `targets` other than its own continuous assigns (`own`:
+    /// net → `cont_assigns` index ranges), as net → the first writer found, named for a
+    /// diagnostic; and whether some written chunk names no net of this design (a
+    /// hierarchical placeholder no pass resolved), which is a writer of every target.
+    /// Shared by the whole-array `assign` above and `cont_var.rs`, so the two cannot see
+    /// different writers. The census is every channel that stores to a net: the continuous
+    /// assigns (another `assign`, an output port, a declaration initializer), the
+    /// statements (procedural writes, `force`/`release`, task and function bodies,
+    /// hierarchical writes), a system task or function that may write an argument, a frame
+    /// call's copy-out, a clocking block's output commit, and an `inout` port connection,
+    /// whose drive back from the child no IR carries. A system call is classified by an
+    /// explicit READ-ONLY list, so an unlisted one counts as a writer; `$sformat` /
+    /// `$swrite*` write only `args[0]`. Runs after the last lowering and the deferred
+    /// hierarchical writes, so every writer exists.
+    pub(crate) fn other_writers(
+        &self,
+        targets: &BTreeSet<u32>,
+        own: &BTreeMap<u32, Vec<(usize, usize)>>,
+    ) -> (BTreeMap<u32, OtherWriter>, bool) {
+        let mut written: BTreeMap<u32, OtherWriter> = BTreeMap::new();
+        let mut unknown = false;
+        for (i, ca) in self.cont_assigns.iter().enumerate() {
+            let by = match self.ca_idents.get(i).map(|id| id.kind) {
+                Some("port") => OtherWriter::Port,
+                Some("assign") => OtherWriter::Assign,
+                _ => OtherWriter::ContDriver,
+            };
+            for c in &ca.lhs.chunks {
+                if targets.contains(&c.net)
+                    && !own
+                        .get(&c.net)
+                        .is_some_and(|r| r.iter().any(|&(lo, hi)| (lo..hi).contains(&i)))
+                {
+                    written.entry(c.net).or_insert(by);
+                }
+                unknown |= c.net as usize >= self.nets.len();
+            }
+        }
+        for st in &self.stmts {
+            match st {
+                ir::Stmt::BlockingAssign { lhs, .. } | ir::Stmt::NonblockingAssign { lhs, .. } => {
+                    self.lvalue_writes(
+                        lhs,
+                        targets,
+                        OtherWriter::Procedural,
+                        &mut written,
+                        &mut unknown,
+                    );
+                }
+                ir::Stmt::Force { lhs, .. } | ir::Stmt::Release { lhs } => {
+                    self.lvalue_writes(
+                        lhs,
+                        targets,
+                        OtherWriter::Force,
+                        &mut written,
+                        &mut unknown,
+                    );
+                }
+                ir::Stmt::SysTask { which, args, .. } => {
+                    let dest = match which {
+                        ir::SysTaskId::Sformat => &args[..args.len().min(1)],
+                        w if systask_is_read_only(*w) => &[][..],
+                        _ => &args[..],
+                    };
+                    for &a in dest {
+                        self.ir_expr_nets_in(a, targets, OtherWriter::SysTask, &mut written);
+                    }
+                }
+                ir::Stmt::Disable { .. } => {}
+            }
+        }
+        for e in &self.exprs {
+            if let ir::Expr::SysFunc { which, args } = e {
+                if !sysfunc_is_read_only(*which) {
+                    for &a in args {
+                        self.ir_expr_nets_in(a, targets, OtherWriter::SysFunc, &mut written);
+                    }
+                }
+            }
+        }
+        let out_binds = self
+            .task_calls_proc
+            .values()
+            .chain(self.task_calls_func.values())
+            .chain(self.pending_task_calls.iter().map(|(_, info)| info))
+            .flat_map(|info| info.out_binds.iter());
+        for (_, lv) in out_binds {
+            self.lvalue_writes(lv, targets, OtherWriter::OutArg, &mut written, &mut unknown);
+        }
+        for pairs in self.clocking_outputs.values() {
+            for n in pairs
+                .iter()
+                .map(|&(src, _)| src)
+                .filter(|n| targets.contains(n))
+            {
+                written.entry(n).or_insert(OtherWriter::Clocking);
+            }
+        }
+        for &eid in &self.inout_actual_exprs {
+            self.ir_expr_nets_in(eid, targets, OtherWriter::Inout, &mut written);
+        }
+        (written, unknown)
+    }
+
+    /// Record in `written` each chunk of `lv` on a net of `targets`, as written `by`; set
+    /// `unknown` for a chunk naming no net of this design.
     fn lvalue_writes(
         &self,
         lv: &ir::Lvalue,
         targets: &BTreeSet<u32>,
-        written: &mut BTreeSet<u32>,
+        by: OtherWriter,
+        written: &mut BTreeMap<u32, OtherWriter>,
         unknown: &mut bool,
     ) {
         for c in &lv.chunks {
             if targets.contains(&c.net) {
-                written.insert(c.net);
+                written.entry(c.net).or_insert(by);
             }
             *unknown |= c.net as usize >= self.nets.len();
         }
@@ -381,8 +467,15 @@ impl Elaborator<'_> {
             .is_some_and(|k| net_kind_is_two_state(*k))
     }
 
-    /// Add to `out` every net of `nets` that expression `eid` reads anywhere in its tree.
-    fn ir_expr_nets_in(&self, eid: u32, nets: &BTreeSet<u32>, out: &mut BTreeSet<u32>) {
+    /// Add to `out`, as written `by`, every net of `nets` that expression `eid` reads
+    /// anywhere in its tree.
+    fn ir_expr_nets_in(
+        &self,
+        eid: u32,
+        nets: &BTreeSet<u32>,
+        by: OtherWriter,
+        out: &mut BTreeMap<u32, OtherWriter>,
+    ) {
         let mut stack = vec![eid];
         while let Some(id) = stack.pop() {
             let Some(e) = self.exprs.get(id as usize) else {
@@ -392,7 +485,7 @@ impl Elaborator<'_> {
                 ir::Expr::Const { .. } | ir::Expr::ArrayItem { .. } => {}
                 ir::Expr::Signal { net, word } => {
                     if nets.contains(net) {
-                        out.insert(*net);
+                        out.entry(*net).or_insert(by);
                     }
                     stack.extend(word.iter().copied());
                 }

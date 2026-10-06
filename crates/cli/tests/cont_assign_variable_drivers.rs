@@ -380,10 +380,11 @@ endmodule
 }
 
 #[test]
-fn a_reg_keeps_its_e3018_beside_the_new_e3001() {
-    // `reg` already refuses every continuous assign (E3018, once per assign); the
-    // two-driver error is added beside it. iverilog `d_reg_cc.sv:5: error: Variable 'y'
-    // cannot have multiple drivers.`
+fn a_reg_with_two_assigns_is_one_e3001() {
+    // A `reg` takes one continuous assign as a `logic` does (§4.5.600), so two are Rule
+    // D's E3001 alone — one diagnostic per variable. Until §4.5.600 the run also printed
+    // E3018 once per assign (IEEE 1364's rule). iverilog `d_reg_cc.sv:5: error: Variable
+    // 'y' cannot have multiple drivers.`
     let (rc, out) = run("module t;
   logic a = 1, b = 0;
   reg y;
@@ -393,7 +394,7 @@ fn a_reg_keeps_its_e3018_beside_the_new_e3001() {
 endmodule
 ");
     assert_eq!(rc, Some(1), "{out}");
-    expect_codes(&out, &["VITA-E3001", "VITA-E3018"], "reg, two assigns");
+    expect_codes(&out, &["VITA-E3001"], "reg, two assigns");
 }
 
 // ── a continuous assign beside a procedural write ────────────────────────────────

@@ -59,8 +59,9 @@
 //! - `wire a = 1'b1; reg r = a;` reads `r=1` (verilator `1`, iverilog `z`), and `reg r0 =
 //!   1; wire a = (r0 !== 1'b1); reg r1 = a;` reads `r1=1` (iverilog `1`, verilator `0`):
 //!   an initializer reading a net is a §4.7 race, PRE = POST.
-//! - A `bit`-typed net is not a continuous-assign destination (E3018), an unpacked element
-//!   level wait and a `tri1` net are E3009 — the `bit`/array/`tri1` cells are unexercised.
+//! - A `bit` variable was not a continuous-assign destination (E3018 until §4.5.600), and an
+//!   unpacked element level wait and a `tri1` net are E3009 — the `bit`/array/`tri1` cells
+//!   are unexercised.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 

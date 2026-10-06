@@ -77,6 +77,7 @@ impl Elaborator<'_> {
                     .find(|(_, &id)| id == net)
                     .map(|(n, _)| n.clone())
                     .unwrap_or_else(|| format!("#{net}"));
+                self.cont_var.reported.insert(net);
                 self.error(
                     MsgCode::ElabMultidriver,
                     &format!(
@@ -878,17 +879,28 @@ impl Elaborator<'_> {
         // (`fold_ca_delay_rt`, which also stamps the `Some(0)` routing flag).
         let (delay, rft, rt, zero_scope) = self.fold_ca_delay_rt(ca.delay.as_ref());
         for (lv, rhs) in &ca.assigns {
+            // Read off the right-hand side as written, before any rewrite below.
+            let calls = cont_var::calls_a_subroutine(rhs);
             // A whole unpacked array has no whole value here: an undelayed user `assign`
-            // of one is lowered element by element (`cont_array.rs`).
+            // of one is lowered element by element (`cont_array.rs`). Its element rows
+            // are recorded for `cont_var.rs` exactly as the scalar rows below are, so a
+            // `reg` array's `assign` meets the same rules as its element-wise spelling
+            // (the call rule, the `.v` warning); a `logic` array records nothing.
+            let groups = self.whole_array_cas.len();
             if ca.delay.is_none() && !ca.from_gate && self.cont_assign_whole_array(lv, rhs, ca.span)
             {
+                if let Some(rows) = self.whole_array_cas.get(groups).map(|w| w.lo..w.hi) {
+                    for row in rows {
+                        self.record_var_cont_assign(row, ca.span, calls, false);
+                    }
+                }
                 continue;
             }
             let lhs = self.lower_lvalue(lv);
-            // P1-9 (E3018): a user `assign` may not drive a Reg/Integer/Real
-            // variable (SV `logic` admits one continuous driver — passes). Port
-            // bindings / decl-inits are NOT routed here (IEEE 1800 var-port and
-            // legacy `reg r = init` forms stay accepted).
+            // P1-9 (E3018): a user `assign` may not drive a `string` or a class handle;
+            // a variable of another kind takes one continuous driver (recorded below,
+            // decided by `cont_var.rs`). Port bindings / decl-inits are NOT routed here (IEEE 1800
+            // var-port and legacy `reg r = init` forms stay accepted).
             self.check_lvalue_kind(&lhs, false);
             // `'{default: v}` on a packed target (`packed_pattern.rs`).
             let packed = self
@@ -920,6 +932,7 @@ impl Elaborator<'_> {
                 "assign",
                 Some(ca.span),
             );
+            self.record_var_cont_assign(idx as usize, ca.span, calls, ca.from_gate);
         }
     }
 }

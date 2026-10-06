@@ -826,8 +826,8 @@ impl Elaborator<'_> {
             // walk, because it also counts an actual bound to an `input` formal, which
             // verilator does not.
             if has_init && rule_a_fires.contains(&name) {
-                self.error_at(
-                    MsgCode::ElabMultidriver,
+                self.var_multidriver_error(
+                    &name,
                     decl_span,
                     &format!(
                         "{subject} has a declaration initializer AND is written by \
@@ -941,8 +941,8 @@ impl Elaborator<'_> {
                             continue;
                         }
                     } else {
-                        self.error_at(
-                            MsgCode::ElabMultidriver,
+                        self.var_multidriver_error(
+                            &name,
                             span,
                             &format!(
                                 "{subject} is written by {what} AND by {other}, \
@@ -979,7 +979,7 @@ impl Elaborator<'_> {
             // or a member is `mdrv-partial`. An unpacked array is `cont_array.rs`'s
             // (E3009).
             if let Some(((span, msg), net)) = rule_d {
-                self.error_at(MsgCode::ElabMultidriver, span, &format!("{subject} {msg}"));
+                self.var_multidriver_error(&name, span, &format!("{subject} {msg}"));
                 // One diagnostic per variable: the flat overlap check
                 // (`check_whole_net_multidriver`) would report a whole `assign`
                 // overlapping a concat / select / delayed `assign` of the same net a

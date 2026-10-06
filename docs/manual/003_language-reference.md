@@ -290,7 +290,7 @@ subset below. A keyword marked Loud parses and is then refused with
 | `wand` | Verilog | Supported | True IEEE 4-state wired-AND resolution on multiple drivers. |
 | `wor` | Verilog | Supported | True wired-OR resolution. |
 | `triand`, `trior`, `tri0`, `tri1`, `supply0`, `supply1`, `trireg` | Verilog | Loud | `VITA-E3009` |
-| `reg` | Verilog | Supported | 4-state; time 0 is all-`x`. |
+| `reg` | Verilog | Supported | 4-state; time 0 is all-`x`. Accepts procedural writes, or one continuous `assign` as its sole writer (§9.4). |
 | `logic` | SystemVerilog | Supported | 4-state; accepts both continuous and procedural writes. |
 | `integer` | Verilog | Supported | 32 bits, signed by default, 4-state. |
 | `time` | Verilog | Supported | 64 bits, always unsigned — an explicit `signed` is dropped. As a parameter the width and unsignedness come from the declaration, never from the initializer: `localparam time A = 8'd5` is 64 bits, and `localparam time B = -8'sd2` reads `18446744073709551614`. |
@@ -365,7 +365,10 @@ signal a net (`wire`) to have its drivers resolved. A `force` is not a driver
 element or member write, a write through a task, a hierarchical name or a system
 task's output argument, and a port binding, a UDP instance, a generate block, a
 `generate … endgenerate` region or an interface body driving the same variable
-are not checked.
+are not checked. On a variable that is not `logic` — `reg`, `integer`, `time`,
+`real`, `realtime`, a 2-state type — they are: a continuous `assign` there is kept
+only as the variable's sole writer, driving all of it, and is otherwise
+`E-ELAB-LVALUE-KIND` / `VITA-E3018` (§9.4).
 
 Multiple continuous drivers on one net are legal when every driver writes the
 whole net without a delay; the value is resolved by 4-state wire resolution at
@@ -852,8 +855,9 @@ Assignment-kind legality (`VITA-E3018`):
 | lvalue kind | procedural `=` / `<=` | continuous `assign` |
 |---|---|---|
 | `wire` family | Loud — `procedural assignment to net` | allowed |
-| `reg` / `integer` / `real` / `string` | allowed | Loud — `continuous assign drives variable` |
 | `logic` | allowed | allowed as the only driver: a second continuous driver, a procedural write or a declaration initializer beside it is `VITA-E3001` (IEEE 1800 §6.5; see §5.2) |
+| `reg` / `integer` / `time` / `real` / `realtime` / `bit` / `byte` / `shortint` / `int` / `longint` / a 2-state packed struct | allowed | allowed as the sole writer (IEEE 1800 §6.5; iverilog `-g2012` and Verilator run it), with no function or method call on its right-hand side, driving all of the variable: the whole variable (a whole-array `assign` included), or every element of a one-dimensional unpacked array once at a constant index. The shapes `VITA-E3001` names at module scope are that code; every other writer — a port connection, a task body, a hierarchical write, a system task's output, a generate-block or interface `assign`, a `force` — a built-in gate's output, an `assign` that calls a function, and an `assign` to a part select, a member, some of an array's elements or a multi-dimensional array's elements, is Loud, `VITA-E3018` naming why. In a file named `*.v` (or `*.V`), the `assign` to a `reg`, `integer`, `time`, `real` or `realtime` also warns `VITA-W3062` (one-shot `vita` only): IEEE 1364 forbids it |
+| `string` / class handle | allowed | Loud — `continuous assign drives variable` |
 
 Port bindings and declaration initializers are synthetic continuous assignments
 and are exempt.

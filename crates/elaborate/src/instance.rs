@@ -1015,6 +1015,15 @@ impl Elaborator<'_> {
                                 self.array_dims.insert(id, dim_extents.clone());
                             }
                         }
+                    } else if net_kind_is_two_state(kind) {
+                        // A 2-state port records its kind as the branch above and the ANSI
+                        // port do: the engine's `two_state_nets` is read off `intro_kind`,
+                        // so without it an x written to a non-ANSI `output bit y;` or
+                        // `output int y;` stayed x (iverilog 13.0 reads 0; IEEE 1800
+                        // §6.11.2). The 4-state kinds keep the derived descriptor.
+                        if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                            self.intro_kind.insert(id, kind);
+                        }
                     }
                     // WAND/WOR: non-ANSI port net also needs its resolution sidecar.
                     if matches!(kind, ast::NetVarKind::Wand | ast::NetVarKind::Wor) {

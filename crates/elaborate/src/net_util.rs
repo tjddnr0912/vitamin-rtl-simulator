@@ -47,14 +47,15 @@ pub(crate) fn map_net_kind_or_wire(k: ast::NetVarKind) -> ir::NetKind {
         // `real`/`realtime` → IEEE-754 f64 net (64-bit, signed, 2-state).
         Real | Realtime => ir::NetKind::Real,
         // `time` → 64-bit unsigned 4-state VARIABLE. The frozen NetKind has no
-        // Time variant; Reg carries the same legality (procedural-assign ok,
-        // user `assign` rejected) and 4-state all-X init. Width/signedness come
-        // from range_to_dims (64, unsigned).
+        // Time variant; Reg carries the same legality (procedural-assign ok, a
+        // user `assign` only as the sole writer, `cont_var.rs`) and 4-state all-X
+        // init. Width/signedness come from range_to_dims (64, unsigned).
         Time => ir::NetKind::Reg,
         // named event → its 64-bit counter reg (v5 batch B desugar).
         Event => ir::NetKind::Reg,
-        // SVPART 2-state types → Reg storage (procedural-assignable, user `assign`
-        // rejected). Width/sign from range_to_dims, 2-state 0-init from default_init.
+        // SVPART 2-state types → Reg storage (procedural-assignable, a user `assign`
+        // only as the sole writer). Width/sign from range_to_dims, 2-state 0-init from
+        // default_init.
         Bit | Byte | Shortint | Int | Longint => ir::NetKind::Reg,
         // N7: a class handle is a 32-bit unsigned integer reg holding an object-id
         // (0 = null); the object itself lives in the engine `class_heap`. Reg

@@ -64,6 +64,7 @@ mod const_fn;
 mod const_fn_width;
 mod const_level_header;
 mod cont_array;
+mod cont_var;
 mod struct_arm;
 pub use const_level_header::T0_PULSE_KIND;
 mod const_real;
@@ -294,6 +295,9 @@ struct Elaborator<'s> {
     /// another driver — so `check_whole_net_multidriver` does not report the same
     /// net a second time. Empty unless an E3001 was emitted. Never restored.
     cont_var_multidriver_nets: BTreeSet<u32>,
+    /// User continuous `assign`s to a variable that is not `logic`, and the variables an
+    /// E3001 already reported (`cont_var.rs`).
+    cont_var: cont_var::ContVarState,
     /// Unpacked-array nets whose element type is written in their own declaration
     /// (`cont_array::inline_elem_type`). Never restored.
     inline_elem_arrays: BTreeSet<u32>,

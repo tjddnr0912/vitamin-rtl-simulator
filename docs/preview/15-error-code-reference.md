@@ -856,22 +856,73 @@ reused.
 **Fix:** nothing to do. Suppressible and promotable if it fires.
 
 ### VITA-E3018 · `E-ELAB-LVALUE-KIND` (Error)
-**The assignment kind does not match the target's kind.** A user `assign` drives a variable
-(`reg`, `integer`, `real`, `string`), or a procedural assignment in an `initial`/`always`
-targets a `wire`. iverilog rejects both directions; Verilator reports `CONTASSREG` and
-`PROCASSWIRE`. SystemVerilog `logic` passes either way, because IEEE 1800-2017 admits both a
-single continuous driver and procedural writes. The implicit connections synthesised by port
-binding are exempt — IEEE 1800-2017 §23.3.3 makes variable ports legal.
-```
-module m; reg r; assign r = 1'b1; endmodule
-->  m.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `m.r`
-    (declare it wire/logic) [in m]
-```
-The procedural direction reads
-``procedural assignment to net `m.w` (declare it reg/logic)``.
+**The assignment kind does not match the target.** Three shapes reach this code.
 
-**Fix:** change the declaration to `wire` or `reg` (or SystemVerilog `logic`) to match, or
-change the form of the assignment. Not suppressible.
+**A procedural assignment to a net.** IEEE 1800-2017 §6.5: a net "cannot be procedurally
+assigned". iverilog 13.0 rejects it ("'w' is not a valid l-value for a procedural
+assignment."), Verilator 5.052 reports `%Error-PROCASSWIRE`.
+```
+module m; wire w; initial w = 1'b1; endmodule
+->  m.sv:1:27: error[VITA-E3018] E-ELAB-LVALUE-KIND: procedural assignment to net `m.w`
+    (declare it reg/logic) [in m]
+```
+
+**A continuous `assign` to a variable that is not its sole writer.** IEEE 1800-2017 §6.5:
+"variables can be written by one continuous assignment or one port"; §10.3.2 forbids a
+declaration initializer or any procedural assignment beside it; §6.11.2 makes `logic` and `reg`
+one type. So a `reg`, `integer`, `time`, `real`, `realtime`, `bit`, `byte`, `shortint`, `int`,
+`longint` or 2-state packed struct takes one `assign`, as `logic` does — iverilog 13.0 `-g2012`
+and Verilator 5.052 run it (only iverilog `-g2005`, IEEE 1364, refuses it). vita keeps the
+`assign` once every writer exists, where it finds no other writer, the `assign` is not a gate's
+output, its right-hand side calls no function, and the `assign`s drive all of the variable: the
+whole variable, or every element of a one-dimensional unpacked array once, at a constant index
+(a whole-array `assign`, `assign m = b;`, meets the same rules). Otherwise this error, at the
+`assign`, says why:
+```
+module ch(input logic a, output logic o); assign o = a; endmodule
+module t; logic a, b; reg y; ch u(.a(a), .o(y)); assign y = b; endmodule
+->  t.sv:2:50: error[VITA-E3018] E-ELAB-LVALUE-KIND: variable `t.y` is driven by a continuous
+    `assign` and also written by a port connection; a variable driven by a continuous
+    assignment takes no other writer (IEEE 1800 §6.5, §10.3.2) — keep one writer [in t]
+```
+The writers it names: a port connection (an instance output bound to the variable, or its own
+input port), another continuous driver, a procedural assignment (a declaration initializer's
+flush is one, as is a task body's or a hierarchical write), a system task's or function's output
+argument (`$sscanf`, `$readmemh`), an `output` or `inout` argument of a task or function call, a
+clocking block output, an `inout` connection, and a `force` or `release` — that one reads "IEEE
+1800 §10.6.2 allows that, but v1 keeps … only as its sole writer — declare it `logic`", because
+the `logic` variable runs it. Two `assign`s read "is driven by more than one continuous
+`assign`" unless each drives a different whole element of an unpacked array. An `assign` to a
+part select, a struct member, or some but not all of an array's elements reads "drives only part
+of variable", an element of a multi-dimensional array assigned on its own reads "an element of
+the multi-dimensional array" (its flattened index carries a bounds guard the check does not
+fold), and one at a non-constant index "at an index that is not a constant": the undriven
+part reads differently across tools (iverilog 13.0 reads `z`, even in an `int` element; vita's
+`logic` twin reads `x`). A built-in gate's output reads "driven by a gate output": IEEE 1800
+§10.3.2 allows it, but iverilog 13.0 refuses a primitive driving a variable ("non-default
+strength"), leaving no 4-state tool. An `assign` calling a function or method reads "that calls
+a function": a `logic` target re-runs it when the function body reads a variable that is not an
+argument, as Verilator does and iverilog does not (IEEE 1800 §10.3.2 re-evaluates on an
+operand), so no call is lifted. IEEE 1800 allows the disjoint parts, the `force`, and one element
+assigned continuously beside another written procedurally; v1 refuses them on a variable that is
+not `logic`. Where `VITA-E3001` already reports the variable — two `assign`s, or an `assign`
+beside a process or an initializer, at module scope — or `VITA-E3009` refuses a whole-array
+`assign` beside another writer, this code is not added: one diagnostic per variable.
+
+**A continuous `assign` to a `string`, a class handle or a named event.** None is a variable
+kind vita drives continuously.
+```
+module t; logic a; string v; assign v = a ? "ab" : "c"; endmodule
+->  t.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `t.v`
+    (declare it wire/logic) [in t]
+```
+
+A port binding's own synthesised connection is never refused here — IEEE 1800-2017 §23.3.3
+makes variable ports legal — but beside a user `assign` it is the other writer.
+
+**Fix:** give the variable one writer: drop the other one, declare it `logic` to `force` it, or
+declare it a `wire` to resolve several continuous drivers; drive a net procedurally through a
+variable. Not suppressible.
 
 ### VITA-W3056 · `W-ELAB-FEATURE-LIMIT` (Warning)
 **A legal construct is accepted but simplified.** The general elaborate simplification
@@ -1053,6 +1104,35 @@ inside a task the block calls is not counted.
 
 **Fix:** keep one event control — the header's edge list, or one `@(…)` at the top of the body —
 and move a delay or `wait` into a plain `always` or an `initial`.
+
+### VITA-W3062 · `W-ELAB-CONT-ASSIGN-VAR-1364` (Warning)
+**A continuous `assign` to a variable of an IEEE 1364 kind, in a `.v` file.** IEEE 1800-2017 §6.5
+lets a variable take one continuous assignment (see `VITA-E3018`); IEEE 1364-2005 does not —
+there a continuous assignment drives only a net. vita runs the `assign`, and warns when the
+`assign` statement is in a file whose extension is `v` (`.v` or `.V`) and the variable is a
+`reg`, `integer`, `time`, `real` or `realtime`: a Verilog-2005 tool refuses the design. One
+warning per `assign` statement and variable — a whole-array `assign` warns once.
+```
+module n_reg_assign (input a, b, output reg y);
+    assign y = a & b;
+endmodule
+->  n_reg_assign.v:2:5: warning[VITA-W3062] W-ELAB-CONT-ASSIGN-VAR-1364: continuous assignment
+    to a variable is legal in IEEE 1800 but not in IEEE 1364 (Verilog): `n_reg_assign.y` is a
+    variable, and this `assign` is in a `.v` file — declare it a `wire` for a Verilog-2005 tool
+    [in n_reg_assign]
+```
+iverilog 13.0 `-g2005`: "Variable 'y' cannot be driven by a continuous assignment/module." /
+"This is allowed when SystemVerilog is enabled."; `-g2012` and Verilator 5.052 run it. The same
+file named `n_reg_assign.sv` prints nothing. An owner ruling (2026-10-06), and vita's only
+file-extension-aware behaviour: there is no IEEE 1364 language mode, and a `.v` file is read and
+run as SystemVerilog. `logic` and the 2-state types are not IEEE 1364 kinds and are not warned;
+an `assign` refused with `VITA-E3018`, `VITA-E3001` or `VITA-E3009` is not warned beside the
+error. The staged flow does not warn: `vcmp` / `velab` diagnostics carry no source file, so the
+extension is unknown there (`vita vcmp w1.v` + `vita velab` print nothing where one-shot `vita
+w1.v` warns).
+
+**Fix:** declare the target a `wire` (one continuous driver, in either standard), or name the
+file `.sv`. Suppress with `-Wno-W-ELAB-CONT-ASSIGN-VAR-1364`; promote with `-Werror=`.
 
 ---
 
@@ -1694,7 +1774,7 @@ an artifact-class failure, not an RTL defect. Not suppressible.
 
 ## Appendix A · Reserved codes (survey inventory)
 
-The body sections above define the 72 codes registered in the `MsgCode` enum. This appendix is
+The body sections above define the 73 codes registered in the `MsgCode` enum. This appendix is
 a separate inventory: 96 additional error and warning conditions defined by IEEE 1800-2017 and
 IEEE 1364-2005, and by the published documentation of Verilator, Icarus iverilog, VCS, Xcelium
 and GHDL. They are collected in advance so that implementing one of those conditions starts

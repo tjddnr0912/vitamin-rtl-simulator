@@ -646,8 +646,9 @@ fn t14_rhs_memory_word_select_is_signal_word() {
     );
 
     // LHS symmetry: `mem[1] = y` → LvalChunk{word:Some(1)}. The array is a SV
-    // `logic` (one continuous driver is legal — E3018 rejects `assign` to a reg,
-    // so the old reg fixture became an illegal-code fixture).
+    // `logic` (one continuous driver is legal). A `reg` array would be refused here:
+    // `cont_var.rs` keeps an element-wise `assign` to one only when every element is
+    // driven, and this fixture drives one.
     let unit2 = module(
         "m",
         vec![

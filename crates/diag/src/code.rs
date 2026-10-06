@@ -102,11 +102,12 @@ msgcodes! {
     ElabCasezApprox        => ("W-ELAB-CASEZ-APPROX",       "VITA-W3011", Warning, "casez treats an explicit-x label bit as don't-care (v1 approximation)"),
     ElabUnsupported        => ("E-ELAB-UNSUPPORTED",        "VITA-E3009", Error,   "construct not yet supported by elaborate"),
     ElabUnresolvedName     => ("E-ELAB-UNRESOLVED-NAME",    "VITA-E3010", Error,   "reference to undeclared net/variable"),
-    ElabLvalueKind         => ("E-ELAB-LVALUE-KIND",        "VITA-E3018", Error,   "continuous assign to a variable / procedural assign to a net"),
+    ElabLvalueKind         => ("E-ELAB-LVALUE-KIND",        "VITA-E3018", Error,   "continuous assign to a variable that is not its sole writer, or to a string; procedural assign to a net"),
     ElabFeatureLimit       => ("W-ELAB-FEATURE-LIMIT",      "VITA-W3056", Warning, "legal construct accepted but simplified"),
     ElabAutoTopAmbiguous   => ("W-ELAB-AUTOTOP-AMBIGUOUS",  "VITA-W3057", Warning, "auto-top selected among multiple uninstantiated roots; pin one with --top"),
     ElabMultidriverStrict  => ("W-ELAB-MULTIDRIVER-STRICT", "VITA-W3060", Warning, "two drivers that xcelium rejects (*E,MULAXX) and verilator accepts"),
     ElabAlwaysFfTiming     => ("E-ELAB-ALWAYS-FF-TIMING",   "VITA-E3061", Error,   "always_ff without exactly one event control, or with a blocking timing control (IEEE 1800 §9.2.2.4)"),
+    ElabContAssignVar1364  => ("W-ELAB-CONT-ASSIGN-VAR-1364", "VITA-W3062", Warning, "continuous assignment to a variable in a .v file: legal in IEEE 1800, not in IEEE 1364"),
     // 4xxx RUNTIME
     RunAssertFail          => ("E-RUN-ASSERT-FAIL",         "VITA-E4001", Error,   "assertion failed (no action block)"),
     RunRange               => ("E-RUN-RANGE",               "VITA-E4002", Error,   "runtime index/select out of range"),

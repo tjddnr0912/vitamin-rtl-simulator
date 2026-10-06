@@ -681,11 +681,35 @@ fn a_mismatched_source_or_pattern_names_the_mismatch() {
         ),
         "a call-free `'{default: v}` value",
     );
-    // A `reg` array takes the scalar `assign`'s E3018.
-    is_loud(
-        &with_item("  assign rg = b;"),
-        "continuous assign drives variable `t.rg`",
+    // A `reg` array is a variable like a `logic` one (IEEE 1800 §6.11.2): it took the
+    // scalar `assign`'s E3018 until §4.5.600, and is now copied when the `assign` is its
+    // only writer — iverilog 13.0 prints these two lines (verilator 5.052, 2-state, reads
+    // the x element as `00`) — and keeps the sole-writer refusal beside another writer
+    // (iverilog "Cannot perform procedural assignment to array word 'rg['sd0]' because it
+    // is also continuously assigned.", verilator `%Error-CONTASSINIT`), with no E3018.
+    let reg_copy = r#"
+module t;
+  logic [7:0] b [2];
+  reg [7:0] rg [2];
+  assign rg = b;
+  initial begin
+    b[0] = 8'h12; b[1] = 8'h34;
+    #1 $display("R rg=%h %h", rg[0], rg[1]);
+    b[1] = 8'bx;
+    #1 $display("R rg=%h %h", rg[0], rg[1]);
+    $finish;
+  end
+endmodule
+"#;
+    prints(reg_copy, "R", &["R rg=12 34", "R rg=12 xx"]);
+    let out = is_loud(
+        &reg_copy.replace(
+            "  initial begin\n",
+            "  initial rg[0] = 8'h1;\n  initial begin\n",
+        ),
+        SOLE,
     );
+    assert!(!out.contains("VITA-E3018"), "{out}");
 }
 
 #[test]
