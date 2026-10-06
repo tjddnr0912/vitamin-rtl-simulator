@@ -1,5 +1,6 @@
 //! IEEE 1800 §9.2.2.2/§9.2.2.3/§9.2.2.4 process-multidriver diagnostics for
-//! module-scope variables — split out of `var_init.rs` (module-size policy).
+//! module-scope variables, output ports that are variables (§23.2.2.3) included —
+//! split out of `var_init.rs` (module-size policy).
 //!
 //! Three rules live here, and they are three because the two oracles split three
 //! ways. Measured, one shape per file, verilator 5.052 `--lint-only` and an
@@ -18,12 +19,14 @@
 //!   always_comb + continuous assign         MULTIDRIVEN   *E,MULAXX    E3001
 //!   always_ff + final                       MULTIDRIVEN   *E,MULAXX    E3001
 //!   always + always (no always_*)           accepts       accepts      silent
+//!   unpacked array, two WHOLE writers       accepts       UNMEASURED    E3001 (ruling)
 //!   any pair, EITHER side a PARTIAL write    accepts      UNMEASURED    silent
 //! ```
 //!
-//! ⚠️ The last row is the widest one and the only one with a hole in it. Verilator
-//! is silent on every pair where one side writes a struct member, an array element,
-//! a bit or a part select — ten shapes measured, `always_ff` against `always_ff` and
+//! ⚠️ The last row is the widest one and, with the unpacked-array row above it, the
+//! only one with a hole in it. Verilator is silent on every pair where one side
+//! writes a struct member, an array element, a bit or a part select — ten shapes
+//! measured, `always_ff` against `always_ff` and
 //! `initial` against `always_ff`, whole-against-partial in both directions. Its rule
 //! is "both writers write the WHOLE variable", and [`stmt_writes_whole_ident`] carries
 //! the cell list. **Xcelium on a partial write is UNMEASURED — zero observations, not
@@ -46,6 +49,14 @@
 //!   working RTL — a test design breaking is evidence AGAINST a new rejection, not
 //!   for it. The warning exists because the design still dies at xcelium sign-off,
 //!   and the development loop is where the author still has the context to fix it.
+//! - The one exception, an owner ruling of 2026-10-06 under IEEE §9.2.2.2 ("shall
+//!   not be written to by any other process"): an UNPACKED-ARRAY variable — body
+//!   declaration or output port — written WHOLE by two processes is
+//!   [`MsgCode::ElabMultidriver`] although neither oracle rejects it. verilator
+//!   `--lint-only` reports no MULTIDRIVEN, and iverilog 13.0 and verilator `--binary`
+//!   both run it to different values (`always_comb y = '{a, c};` beside
+//!   `always_comb y = '{c, a};`: `y0=3 y1=5` and `y0=5 y1=3`), an ordering race.
+//!   Pinned in `cli/tests/multidriver_output_ports.rs`.
 //!
 //! Nothing about a simulated VALUE changes here; this is the diagnostic that was
 //! missing, not a semantics change.
@@ -246,6 +257,28 @@ struct Writer {
     span: ast::Span,
 }
 
+/// What a diagnostic calls the variable: the code, severity and clause are the same
+/// for both — an output port that is a variable is checked as its body twin is —
+/// and only the subject names the declaration the user wrote.
+#[derive(Clone, Copy)]
+enum VarNoun {
+    /// A body `NetVarDecl`.
+    Variable,
+    /// An `output` port with an explicit data type (IEEE 1800 §23.2.2.3).
+    OutputPort,
+}
+
+impl VarNoun {
+    fn subject(self, name: &str) -> String {
+        match self {
+            VarNoun::Variable => format!("variable `{name}`"),
+            VarNoun::OutputPort => {
+                format!("output port `{name}` (a variable, IEEE §23.2.2.3)")
+            }
+        }
+    }
+}
+
 fn proc_writer(kind: ast::ProcKind, span: ast::Span) -> Writer {
     // `_`-free so that adding a procedure kind is a forced decision here.
     let (what, clause) = match kind {
@@ -414,21 +447,100 @@ impl Elaborator<'_> {
         }
     }
 
-    pub(crate) fn check_multidriver_processes(&mut self, body: &[ast::ModuleItem]) {
-        // Every module-scope VARIABLE declaration, in declaration order: the name,
-        // the decl span, and whether it carries an initializer. A `wire` initializer
-        // is a continuous assign, not this.
-        let mut vars: Vec<(String, ast::Span, bool)> = Vec::new();
-        for item in body {
-            if let ast::ModuleItem::NetVar(d) = item {
-                if !netvar_kind_is_var(d.kind) {
-                    continue;
-                }
-                for n in &d.names {
-                    vars.push((n.name.name.clone(), d.span, n.init.is_some()));
+    /// Every module-scope VARIABLE the single-driver check covers, in declaration
+    /// order: the name, the declaration span, whether it carries an initializer, and
+    /// what a diagnostic calls it. A `wire` initializer is a continuous assign, not
+    /// this.
+    ///
+    /// Two sources. A body `NetVarDecl` of a variable kind, and an `output` PORT
+    /// that is a variable — IEEE 1800 §23.2.2.3: an output port written with an
+    /// explicit data type and no net type (`output logic y`, `output reg y`,
+    /// `output int y`, a typedef, enum or struct type) defaults to a variable, so
+    /// §9.2.2.2–§9.2.2.4 reach it exactly as they reach `logic y;` in the body. The
+    /// port half was missing: `output logic y` written by two `always_comb` ran at
+    /// exit 0 where its internal twin was E3001 and verilator reports MULTIDRIVEN.
+    ///
+    /// A port's kind is [`Self::port_net_kind`], the function its net builder calls,
+    /// read by the same `netvar_kind_is_var` a `NetVarDecl` is — so a port and its
+    /// body twin are one decision. (`shape_kind` moves only `logic`/`reg`/`bit`
+    /// between `logic` and `bit`, so the verdict does not depend on the instance's
+    /// type-parameter override.) `input`, `inout` and interface ports, and an
+    /// `output` with an implicit type or a net type (`output y`, `output [3:0] y`,
+    /// `output wire y`), are not collected.
+    ///
+    /// A name has ONE owner, the declaration whose net the elaborator builds: the
+    /// ANSI ports, then every body `NetVarDecl`, then each non-ANSI `PortDecl` whose
+    /// name nothing earlier declared (the split `output y; reg y;` is the
+    /// `NetVarDecl`'s, so it is collected once). An ANSI port the body redeclares is
+    /// left to the body declaration, which is E3009 anyway.
+    fn multidriver_vars(
+        &self,
+        body: &[ast::ModuleItem],
+        ports: &ast::PortList,
+    ) -> Vec<(String, ast::Span, bool, VarNoun)> {
+        let body_decls: std::collections::BTreeSet<&str> = body
+            .iter()
+            .filter_map(|it| match it {
+                ast::ModuleItem::NetVar(d) => Some(d),
+                _ => None,
+            })
+            .flat_map(|d| d.names.iter().map(|n| n.name.name.as_str()))
+            .collect();
+        let mut declared: std::collections::BTreeSet<&str> = body_decls.clone();
+        let mut vars = Vec::new();
+        if let ast::PortList::Ansi(list) = ports {
+            for p in list.iter().filter(|p| p.iface.is_none()) {
+                declared.insert(p.name.name.as_str());
+                if p.dir == ast::PortDir::Output
+                    && !body_decls.contains(p.name.name.as_str())
+                    && netvar_kind_is_var(self.port_net_kind(p.net_or_var, &p.shape_param))
+                {
+                    vars.push((
+                        p.name.name.clone(),
+                        p.span,
+                        p.default.is_some(),
+                        VarNoun::OutputPort,
+                    ));
                 }
             }
         }
+        for item in body {
+            match item {
+                ast::ModuleItem::NetVar(d) if netvar_kind_is_var(d.kind) => {
+                    for n in &d.names {
+                        vars.push((
+                            n.name.name.clone(),
+                            d.span,
+                            n.init.is_some(),
+                            VarNoun::Variable,
+                        ));
+                    }
+                }
+                ast::ModuleItem::PortDecl(pd) => {
+                    let is_var = pd.dir == ast::PortDir::Output
+                        && netvar_kind_is_var(self.port_net_kind(pd.net_or_var, &pd.shape_param));
+                    for n in &pd.names {
+                        // `insert` is false for a name already declared: the net
+                        // builder skips it the same way.
+                        if declared.insert(n.name.as_str()) && is_var {
+                            // A non-ANSI port declaration carries no initializer
+                            // (`output reg q = 1'b1;` is E2002).
+                            vars.push((n.name.clone(), pd.span, false, VarNoun::OutputPort));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        vars
+    }
+
+    pub(crate) fn check_multidriver_processes(
+        &mut self,
+        body: &[ast::ModuleItem],
+        ports: &ast::PortList,
+    ) {
+        let vars = self.multidriver_vars(body, ports);
         if vars.is_empty() {
             return;
         }
@@ -470,7 +582,7 @@ impl Elaborator<'_> {
                 v => v,
             };
             vars.iter()
-                .filter(|(name, _, has_init)| {
+                .filter(|(name, _, has_init, _)| {
                     *has_init
                         && procs.iter().any(|p| {
                             p.kind == ast::ProcKind::AlwaysComb
@@ -482,7 +594,7 @@ impl Elaborator<'_> {
                                 )
                         })
                 })
-                .map(|(name, _, _)| name.clone())
+                .map(|(name, _, _, _)| name.clone())
                 .collect()
         };
         // Rule B's writers through a CALLEE BODY, computed in the same phase. The
@@ -498,7 +610,7 @@ impl Elaborator<'_> {
         let via_call_writers: std::collections::BTreeSet<(String, usize)> = {
             let me: &Self = &*self;
             let mut set = std::collections::BTreeSet::new();
-            for (name, _, _) in &vars {
+            for (name, _, _, _) in &vars {
                 for (pi, p) in procs.iter().enumerate() {
                     if !declares_local_named(std::slice::from_ref(&*p.body), name)
                         && me.proc_writes_whole_via_call(std::slice::from_ref(&*p.body), name)
@@ -517,7 +629,7 @@ impl Elaborator<'_> {
             })
             .collect();
 
-        for (name, decl_span, has_init) in vars {
+        for (name, decl_span, has_init, noun) in vars {
             // ⚠️ The SHADOW guard runs first in EVERY rule below, and it is what makes
             // an error defensible: a procedure that declares its own `name` is writing
             // THAT one, and no name-based walk can tell them apart. Skipping the whole
@@ -526,6 +638,7 @@ impl Elaborator<'_> {
             let visible = |p: &&ast::ProceduralBlock| {
                 !declares_local_named(std::slice::from_ref(&*p.body), &name)
             };
+            let subject = noun.subject(&name);
 
             // ── Rule A: a declaration initializer plus `always_comb`. ──────────────
             //
@@ -546,7 +659,7 @@ impl Elaborator<'_> {
                     MsgCode::ElabMultidriver,
                     decl_span,
                     &format!(
-                        "variable `{name}` has a declaration initializer AND is written by \
+                        "{subject} has a declaration initializer AND is written by \
                          `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) \
                          — drop the initializer or the `always_comb` write"
                     ),
@@ -625,7 +738,7 @@ impl Elaborator<'_> {
                             MsgCode::ElabMultidriverStrict,
                             span,
                             &format!(
-                                "variable `{name}` is written by {what} AND by {other}; \
+                                "{subject} is written by {what} AND by {other}; \
                                  xcelium rejects this as two drivers (*E,MULAXX, IEEE \
                                  §{clause}) while verilator accepts it — give the variable \
                                  one writing process"
@@ -636,7 +749,7 @@ impl Elaborator<'_> {
                             MsgCode::ElabMultidriver,
                             span,
                             &format!(
-                                "variable `{name}` is written by {what} AND by {other}, \
+                                "{subject} is written by {what} AND by {other}, \
                                  which is two drivers on one variable (IEEE §{clause}) \
                                  — verilator MULTIDRIVEN / xcelium *E,MULAXX"
                             ),
@@ -660,7 +773,7 @@ impl Elaborator<'_> {
                 MsgCode::ElabMultidriverStrict,
                 decl_span,
                 &format!(
-                    "variable `{name}` has a declaration initializer AND is written by \
+                    "{subject} has a declaration initializer AND is written by \
                      {what}; xcelium rejects this as two drivers (*E,MULAXX, IEEE \
                      §{clause}) while verilator and synthesis accept the initializer as the \
                      power-on value — drop the initializer or reset explicitly"

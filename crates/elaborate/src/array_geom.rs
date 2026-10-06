@@ -496,6 +496,20 @@ impl Elaborator<'_> {
         }
     }
 
+    /// A module port's kind in this instance: its written kind (an omitted one is
+    /// the default net, `wire`) under [`Self::shape_kind`]. The ONE spelling of that
+    /// decision — the ANSI net builder (`elaborate_ports`), the non-ANSI `PortDecl`
+    /// loop (`instance.rs`) and the single-driver check
+    /// (`check_multidriver_processes`) all call it, so the check classifies a
+    /// typedef, enum, struct or type-parameter port exactly as its net is built.
+    pub(crate) fn port_net_kind(
+        &self,
+        net_or_var: Option<ast::NetVarKind>,
+        shape_param: &Option<ast::Ident>,
+    ) -> ast::NetVarKind {
+        self.shape_kind(net_or_var.unwrap_or(ast::NetVarKind::Wire), shape_param)
+    }
+
     pub(crate) fn range_to_dims(
         &mut self,
         kind: ast::NetVarKind,

@@ -963,10 +963,7 @@ impl Elaborator<'_> {
         // that path merges the port direction itself).
         for item in &module.body {
             if let ast::ModuleItem::PortDecl(pd) = item {
-                let kind = self.shape_kind(
-                    pd.net_or_var.unwrap_or(ast::NetVarKind::Wire),
-                    &pd.shape_param,
-                );
+                let kind = self.port_net_kind(pd.net_or_var, &pd.shape_param);
                 let (width, msb, lsb, signed) = self.range_to_dims(
                     self.shape_kind(kind, &pd.shape_param),
                     pd.range.as_ref(),
@@ -1217,7 +1214,7 @@ impl Elaborator<'_> {
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
         // IEEE §9.2.2.x single-driver check — a pure AST pass, run once here so it
         // sees the whole body before any lowering reorders it.
-        self.check_multidriver_processes(&module.body);
+        self.check_multidriver_processes(&module.body, &module.ports);
         self.gen_ctr = 0;
         for item in &module.body {
             match item {

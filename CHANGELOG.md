@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an output port that is a variable is checked for two drivers
+
+- An `output` port written with a data type and no net type (`output logic y`, `output reg y`,
+  `output int y`, a typedef, enum or struct type, a non-ANSI `output reg y;`) is a variable
+  (IEEE 1800 §23.2.2.3), and the single-driver check skipped it: two `always_comb` writing it, or
+  an `always_ff` and an `always @(*)`, ran at exit 0 — under a testbench printing whichever writer
+  ran last (`y=1`; Icarus Verilog `y=0`) — where the same design with `logic y;` in the body stops
+  with `VITA-E3001`. The port now gets its body twin's code, severity and clause (`VITA-E3001`, or
+  the warning `VITA-W3060` for an initializer under `always_ff` and for an `always_latch` pair), and
+  the message names the port. Such a design now exits 1. Verilator reports `MULTIDRIVEN` on each
+  error shape but one: an unpacked-array output port written whole by two processes, which Icarus
+  Verilog and Verilator both run, with different values (`y0=3 y1=5` and `y0=5 y1=3`), is an error
+  too, as its body twin already was (IEEE 1800 §9.2.2.2). `input`, `inout`, `output wire` and
+  implicitly typed outputs are nets and unchanged.
+
 ## [0.2.1] — 2026-10-05
 
 **A 30,000-line SystemVerilog core runs.** lowRISC's Ibex RV32 core joins the workload corpus as its

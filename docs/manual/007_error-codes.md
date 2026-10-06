@@ -470,6 +470,13 @@ Two shapes are deliberately not errors:
   are not covered by any of the three clauses. `logic clk = 0; always #5 clk =
   ~clk;` is legal, and so is an `initial` seed beside a plain `always`.
 
+An `output` port declared with a data type and no net type (`output logic y`,
+`output reg y`, `output int y`, a typedef, enum or struct type, a non-ANSI
+`output reg y;`) is a variable under IEEE 1800 §23.2.2.3 and is checked exactly
+like its body twin, with the same code and severity; the message names it
+``output port `y` (a variable, IEEE §23.2.2.3)``. `input` and `inout` ports and
+`output wire y` / `output [3:0] y` are nets and are not checked.
+
 Variables and procedures inside a `generate` are not checked: a generate block is
 its own scope, so matching them by bare name across blocks would report two
 different variables as one.
