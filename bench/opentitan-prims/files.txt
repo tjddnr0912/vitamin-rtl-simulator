@@ -1,0 +1,12 @@
+src/hw/ip/prim/rtl/prim_cipher_pkg.sv
+src/hw/ip/prim/rtl/prim_count_pkg.sv
+src/hw/ip/prim/rtl/prim_count.sv
+src/hw/ip/prim/rtl/prim_crc32.sv
+src/hw/ip/prim_generic/rtl/prim_flop.sv
+src/hw/ip/prim/rtl/prim_gf_mult.sv
+src/hw/ip/prim/rtl/prim_present.sv
+src/hw/ip/prim/rtl/prim_prince.sv
+src/hw/ip/prim/rtl/prim_secded_inv_39_32_dec.sv
+src/hw/ip/prim/rtl/prim_secded_inv_39_32_enc.sv
+src/hw/ip/prim/rtl/prim_subst_perm.sv
+tb.sv

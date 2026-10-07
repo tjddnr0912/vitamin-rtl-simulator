@@ -14,8 +14,8 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use corpus_runner::{
-    coverage, grade, measure, plan_fetch, resolve_bench_root, Expect, Grade, Origin, Outcome, Tool,
-    CORPUS,
+    clear_stale, clone_state, coverage, grade, measure, plan_fetch, resolve_bench_root, CloneState,
+    Expect, Grade, Origin, Outcome, Tool, CORPUS,
 };
 
 fn main() -> ExitCode {
@@ -309,8 +309,40 @@ fn fetch(root: &std::path::Path, execute: bool) -> ExitCode {
         println!("nothing to fetch — the corpus is entirely first-party");
         return ExitCode::SUCCESS;
     }
+    // A stale clone that may not be removed (local changes, an unreadable status) fails
+    // its own row; the other rows are still fetched, and the exit is 1 at the end.
+    let mut refused = 0usize;
     for s in &steps {
-        if s.present {
+        if let CloneState::Stale(why) = &s.state {
+            println!(
+                "# {} — {} is not the pinned checkout ({why}); `fetch --run` removes it, unless \
+                 it holds local changes, and clones again",
+                s.name, s.dest
+            );
+            if execute {
+                let w = CORPUS
+                    .iter()
+                    .find(|w| w.name == s.name)
+                    .expect("every planned row comes from the manifest");
+                match clear_stale(root, w, s.sha) {
+                    Ok(true) => println!("#   removed {}", s.dest),
+                    // Measured again inside `clear_stale`: no longer stale. A clone that
+                    // is now the pinned one is left; one that vanished is cloned below.
+                    Ok(false) => {
+                        if clone_state(root, w, s.sha) == CloneState::Present {
+                            println!("#   {} is no longer stale; left as it is", s.dest);
+                            continue;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("corpus-runner: {}: {e}", s.name);
+                        refused += 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        if s.state == CloneState::Present {
             println!("# {} — already present at {}", s.name, s.dest);
             // The prepare step still runs: it regenerates artifacts that are
             // deliberately not committed, and it is idempotent.
@@ -352,6 +384,12 @@ fn fetch(root: &std::path::Path, execute: bool) -> ExitCode {
     }
     if !execute {
         println!("# nothing was run — re-invoke with `fetch --run` to perform these clones");
+    }
+    if refused > 0 {
+        eprintln!(
+            "corpus-runner: {refused} stale clone(s) left in place; nothing was removed from them"
+        );
+        return ExitCode::from(1);
     }
     ExitCode::SUCCESS
 }

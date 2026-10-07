@@ -112,6 +112,142 @@ fn a_verilator_oracle_row_records_its_x_invariance_check() {
     }
 }
 
+/// `fetch --run` may remove `bench/<root>/src` (a stale clone), so every upstream root
+/// must name one directory of its own: exactly one plain path component — no separator,
+/// no `.` or `..`, not absolute, no whitespace — and no two upstream rows may share one.
+/// Two rows on one root with different pins would each delete the other's clone on every
+/// `fetch --run`.
+#[test]
+fn every_upstream_root_is_one_plain_component_and_unique() {
+    use std::path::{Component, Path};
+    let mut roots: Vec<&str> = Vec::new();
+    for w in CORPUS {
+        if !matches!(w.origin, Origin::Upstream { .. }) {
+            continue;
+        }
+        let mut c = Path::new(w.root).components();
+        assert!(
+            matches!((c.next(), c.next()), (Some(Component::Normal(_)), None))
+                && !w.root.contains(['/', '\\'])
+                && !w.root.contains(char::is_whitespace),
+            "{}: root {:?} is not one plain path component",
+            w.name,
+            w.root
+        );
+        assert!(
+            corpus_runner::root_is_plain(w.root),
+            "{}: fetch's own check disagrees on {:?}",
+            w.name,
+            w.root
+        );
+        roots.push(w.root);
+    }
+    let n = roots.len();
+    roots.sort_unstable();
+    roots.dedup();
+    assert_eq!(n, roots.len(), "two upstream rows share a root: {roots:?}");
+    assert!(n > 0, "no upstream row");
+}
+
+/// A sparse directory is one relative path with no `..`, no leading or trailing `/` and
+/// no whitespace: `fetch --run` splits each plan line on whitespace into a command's
+/// arguments, so a space would turn one directory into two.
+fn sparse_dir_is_plain(d: &str) -> bool {
+    !d.is_empty()
+        && !d.starts_with('/')
+        && !d.ends_with('/')
+        && !d.contains("..")
+        && !d.contains(char::is_whitespace)
+}
+
+#[test]
+fn a_sparse_directory_must_be_a_plain_relative_path() {
+    for ok in ["hw/ip/prim/rtl", "hw", "a-b/c_d.e"] {
+        assert!(sparse_dir_is_plain(ok), "{ok:?} should pass");
+    }
+    for bad in [
+        "",
+        "/hw/ip",
+        "hw/ip/",
+        "../hw",
+        "hw/../x",
+        "hw/ip prim",
+        "hw\tip",
+        "hw/ip\n",
+        " hw",
+    ] {
+        assert!(!sparse_dir_is_plain(bad), "{bad:?} should be refused");
+    }
+}
+
+/// A sparse row checks out only the directories it names (`fetch.rs`), so a listed
+/// source, a data file or an `-I` directory of the clone that lies outside them would be
+/// missing after `fetch --run`: the row would read `absent`, or fail an `include`, on
+/// every machine except one that happens to hold the whole tree.
+#[test]
+fn every_sparse_checkout_covers_what_its_row_reads() {
+    use std::path::{Component, Path, PathBuf};
+    for w in CORPUS {
+        let Origin::Upstream { sparse, .. } = w.origin else {
+            continue;
+        };
+        if sparse.is_empty() {
+            continue;
+        }
+        for d in sparse {
+            assert!(
+                sparse_dir_is_plain(d),
+                "{}: sparse directory {d:?} must be a plain relative path",
+                w.name
+            );
+        }
+        // `bench/<dir>/<path>` with `..` resolved, then made relative to the clone.
+        let in_clone = |p: &str| -> Option<String> {
+            let mut out = PathBuf::new();
+            for c in Path::new(w.dir).join(p).components() {
+                match c {
+                    Component::ParentDir => assert!(out.pop(), "{}: {p} escapes", w.name),
+                    Component::CurDir => {}
+                    c => out.push(c),
+                }
+            }
+            let s = out.to_string_lossy().replace('\\', "/");
+            s.strip_prefix(&format!("{}/src/", w.root))
+                .map(str::to_string)
+        };
+        let mut read: Vec<String> = w
+            .files
+            .iter()
+            .chain(w.data)
+            .filter_map(|f| in_clone(f))
+            .collect();
+        for args in [w.vita_args, w.iverilog_args] {
+            for (i, a) in args.iter().enumerate() {
+                let dir = match a.strip_prefix("-I") {
+                    Some("") => args.get(i + 1).copied(),
+                    Some(d) => Some(d),
+                    None => None,
+                };
+                if let Some(d) = dir.and_then(in_clone) {
+                    read.push(format!("{d}/"));
+                }
+            }
+        }
+        assert!(
+            !read.is_empty(),
+            "{}: a sparse row that reads nothing from its clone",
+            w.name
+        );
+        for r in &read {
+            assert!(
+                sparse.iter().any(|d| r.starts_with(&format!("{d}/"))),
+                "{}: {r} is outside the sparse checkout {sparse:?}",
+                w.name
+            );
+        }
+    }
+}
+
 /// A refusal pinned as an empty string would match every diagnostic, so a *changed*
 /// gap would grade as the known one.
 #[test]

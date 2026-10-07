@@ -29,9 +29,9 @@ are not comparable.
 | 2 | nothing present (run `fetch --run` first), or `--filter` matched no workload |
 | 3 | usage error, or no `vita` binary to run |
 
-## The eleven rows
+## The fifteen rows
 
-Eleven workloads over ten directories: `keccak` and `keccak-arr` share `bench/keccak`
+Fifteen workloads over fourteen directories: `keccak` and `keccak-arr` share `bench/keccak`
 and differ only in which design file they compile. Four shapes are represented, so
 the corpus measures more than one kind of RTL.
 
@@ -45,18 +45,23 @@ the corpus measures more than one kind of RTL.
 | `serv` | `serv/` | olofk/serv | cpu | ISC |
 | `verilog-axi` | `verilog-axi/` | alexforencich/verilog-axi | fabric | MIT |
 | `verilog-ethernet` | `verilog-ethernet/` | alexforencich/verilog-ethernet | stream | MIT |
+| `verilog-axis` | `verilog-axis/` | alexforencich/verilog-axis | fabric | MIT |
+| `verilog-i2c` | `verilog-i2c/` | alexforencich/verilog-i2c | stream | MIT |
+| `verilog-uart` | `verilog-uart/` | alexforencich/verilog-uart | stream | MIT |
 | `keccak` | `keccak/` | first-party | crypto | this repository |
 | `keccak-arr` | `keccak/` | first-party | crypto | this repository |
 | `ibex` | `ibex/` | lowRISC/ibex | cpu | Apache-2.0 |
+| `opentitan-prims` | `opentitan-prims/` | lowRISC/opentitan | crypto | Apache-2.0 |
 
 Each directory carries a `RUN.md` with the by-hand recipe for that one workload: the
 pinned SHA, the exact file list in order, the exact command lines, the expected
 output, and the reconstruction steps for anything not committed. `bench/keccak` also
 carries a `README.md`, because that RTL is written here rather than fetched.
 
-`ibex` is the only SystemVerilog row. iverilog 13 cannot
-parse it, so its oracle is verilator, admitted because its digest does not move when
-every uninitialised bit is randomised (`bench/ibex/RUN.md`).
+`ibex` and `opentitan-prims` are the SystemVerilog rows. iverilog 13 cannot parse
+either, so their oracle is verilator, admitted because each digest does not move when
+every uninitialised bit is randomised (`bench/ibex/RUN.md`,
+`bench/opentitan-prims/RUN.md`).
 
 ## Committed here, and not
 
@@ -65,7 +70,7 @@ Two kinds of thing live under `bench/`, treated oppositely.
 | | Committed | Why |
 |---|---|---|
 | Testbenches (`tb*.v`, `tb*.sv`), `files.txt`, `RUN.md`, `README.md`, `run.sh`, `prepare.sh`, `*.py` | yes | First-party work product. A pinned SHA reconstructs the upstream RTL but not the harness, and the harness is what produced the digest |
-| `bench/*/src/` — the upstream clone | no | Third-party RTL under eight different licences, never redistributed by this project. `corpus-runner fetch --run` clones it at the pinned SHA |
+| `bench/*/src/` — the upstream clone | no | Third-party RTL, never redistributed by this project. `corpus-runner fetch --run` clones it at the pinned SHA |
 | `bench/keccak/*.sv`, `bench/keccak/*.py` | yes | First-party RTL written in this repository |
 | Firmware images (`prog.hex`) | no | Upstream content, extracted from upstream's own `test.elf`. `bench/biriscv/prepare.sh` regenerates it |
 | Build products (`*.vvp`, `obj_dir/`, simulator binaries, logs) | no | — |
@@ -80,10 +85,16 @@ committed by accident. `bench/*/src/` and `bench/*/obj_dir*/` are ignored outrig
 
 ```sh
 git clone --filter=blob:none --no-checkout <repo> bench/<root>/src
+git -C bench/<root>/src sparse-checkout set --cone <dirs>   # only a sparse row
 git -C bench/<root>/src fetch --depth 1 origin <sha>
 git -C bench/<root>/src checkout --detach <sha>
 sh bench/<root>/prepare.sh          # only where the workload has one
 ```
+
+A sparse row names the directories of the upstream tree it reads (`sparse` in the
+manifest), and only their files are checked out and downloaded: `opentitan-prims`
+compiles eleven files of the OpenTitan repository and checks out two directories of it.
+A manifest test holds every listed file and `-I` directory of such a row inside them.
 
 A workload already on disk still re-runs its `prepare.sh` under `--run`: the script
 regenerates deliberately-uncommitted artifacts and is idempotent. `bench/biriscv` is
@@ -91,7 +102,12 @@ the only workload carrying one.
 
 Presence is tested on the source files, not on the directory, because `fetch` creates
 `bench/<root>/src` and that makes `bench/<root>` exist whether or not the clone
-succeeded.
+succeeded. `fetch` applies the same rule to the clone itself: `bench/<root>/src` counts as
+present only when its HEAD resolves to the pinned SHA (detached, or a branch whose ref holds
+it) and every file the row lists inside it exists. Anything else there — a clone whose fetch
+or checkout failed half-way, another commit, a cone that misses a listed file — is reported
+as not the pinned checkout, and `fetch --run` removes it and clones again, unless it holds
+local changes: then nothing is removed and `fetch --run` fails for that row.
 
 ## Reading the run table
 
@@ -130,7 +146,7 @@ After the table `run` prints a phase split (one extra `--obs-dir` probe run per
 workload, not the timed rounds), then a coverage line. With `--compare` it also prints
 one `vita … iverilog … = N.NNx faster|SLOWER` line per workload.
 
-At HEAD the corpus reports `coverage: 11/11`: ten rows grade `ok` and `verilog-axi`
+At HEAD the corpus reports `coverage: 15/15`: fourteen rows grade `ok` and `verilog-axi`
 grades `ruled-split`, which is neither a pass nor a failure and reads that way on every
 run with its reason on the line.
 
@@ -141,5 +157,6 @@ The pinned digests are recorded in the manifest, so `run` grades a machine that 
 iverilog is reported and is not itself a corpus failure. The manifest's hygiene tests
 — permissive licence, full 40-character SHA, unique names, a findable digest, an
 oracle per row, a reason on every pinned refusal, more than one shape, every uncommitted
-path gitignored — run in the normal test suite. CI also fetches and runs the corpus itself
+path gitignored, every sparse checkout covering what its row reads — run in the normal
+test suite. CI also fetches and runs the corpus itself
 on all three platforms ([docs/study/03-workload-corpus.md](../docs/study/03-workload-corpus.md) §8).

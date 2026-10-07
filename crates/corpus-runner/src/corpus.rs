@@ -17,6 +17,12 @@ pub enum Origin {
         /// which would silently invalidate every number measured against it.
         sha: &'static str,
         license: &'static str,
+        /// Directories of the upstream tree to check out (`git sparse-checkout set
+        /// --cone`), or empty for the whole tree. For a repository whose full checkout
+        /// dwarfs what the row compiles: `opentitan-prims` reads eleven files of a tree
+        /// of thousands. Every listed file and every `-I` directory of the row must lie
+        /// inside one of these (`tests/manifest.rs`), or the fetch would leave them out.
+        sparse: &'static [&'static str],
     },
 }
 
@@ -189,6 +195,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/secworks/sha256",
             sha: "837c5cc396f001d18f2c765721c585716eb439ae",
             license: "BSD-2-Clause",
+            sparse: &[],
         },
         shape: Shape::Crypto,
         root: "sha256",
@@ -214,6 +221,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/secworks/aes",
             sha: "80dc4718e1dcbbdb4b0dd1bdb393d8f7b98981dc",
             license: "BSD-2-Clause",
+            sparse: &[],
         },
         shape: Shape::Crypto,
         root: "aes",
@@ -246,6 +254,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/YosysHQ/picorv32",
             sha: "a473fc8fca393771d83b0ffcf0b14db3393339d8",
             license: "ISC",
+            sparse: &[],
         },
         shape: Shape::Cpu,
         root: "picorv32",
@@ -271,6 +280,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/darklife/darkriscv",
             sha: "4aa437997cd35253c9111f10a449de13ccaeee78",
             license: "BSD-3-Clause",
+            sparse: &[],
         },
         shape: Shape::Cpu,
         // Upstream's own sim directory: `darkram.v` opens `../src/darksocv.mem`
@@ -309,6 +319,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/ultraembedded/biriscv",
             sha: "6af9c4be5a0807d368eaad5e49af52322e31d073",
             license: "Apache-2.0",
+            sparse: &[],
         },
         shape: Shape::Cpu,
         root: "biriscv",
@@ -354,6 +365,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/olofk/serv",
             sha: "41e8aeedfd1e9ad5f95902c5b0dfc83d1c99e5d2",
             license: "ISC",
+            sparse: &[],
         },
         shape: Shape::Cpu,
         root: "serv",
@@ -416,6 +428,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/alexforencich/verilog-axi",
             sha: "516bd5dadc3365b7f9e225d2af8fe0b8d804fe53",
             license: "MIT",
+            sparse: &[],
         },
         shape: Shape::Fabric,
         root: "verilog-axi",
@@ -457,6 +470,7 @@ pub static CORPUS: &[Workload] = &[
             repo: "https://github.com/alexforencich/verilog-ethernet",
             sha: "77320a9471d19c7dd383914bc049e02d9f4f1ffb",
             license: "MIT",
+            sparse: &[],
         },
         shape: Shape::Stream,
         root: "verilog-ethernet",
@@ -483,11 +497,93 @@ pub static CORPUS: &[Workload] = &[
                iverilog's 7.62 s",
     },
     Workload {
+        name: "verilog-axis",
+        origin: Origin::Upstream {
+            repo: "https://github.com/alexforencich/verilog-axis",
+            sha: "48ff7a7e2ef782cf778d47910cf85835c64b1bce",
+            license: "MIT",
+            sparse: &[],
+        },
+        shape: Shape::Fabric,
+        root: "verilog-axis",
+        dir: "verilog-axis",
+        vita_args: &[],
+        iverilog_args: &[],
+        files: &[
+            "src/rtl/axis_switch.v",
+            "src/rtl/axis_register.v",
+            "src/rtl/arbiter.v",
+            "src/rtl/priority_encoder.v",
+            "src/rtl/axis_fifo.v",
+            "tb.v",
+        ],
+        data: &[],
+        plusargs: &["+N=3000"],
+        digest: "DIGEST=d24b621c2e3346ba",
+        // Admitted from the row-9 census (ROADMAP §5.2 row 13). 189 of the 86,322 cycles
+        // carry an x on a handshake bit in the oracle and in vita alike (`XC=189`).
+        expect: Expect::Runs { exit: 0 },
+        oracle: "iverilog 13.0",
+        note: "4x4 axis_switch into four frame-mode axis_fifo instances — routing, \
+               round-robin arbitration and frame drop",
+    },
+    Workload {
+        name: "verilog-i2c",
+        origin: Origin::Upstream {
+            repo: "https://github.com/alexforencich/verilog-i2c",
+            sha: "a65be4045e898a52e791c6ee71f8f79a7cd2e129",
+            license: "MIT",
+            sparse: &[],
+        },
+        shape: Shape::Stream,
+        root: "verilog-i2c",
+        dir: "verilog-i2c",
+        vita_args: &[],
+        iverilog_args: &[],
+        files: &["src/rtl/i2c_master.v", "src/rtl/i2c_slave.v", "tb.v"],
+        data: &[],
+        plusargs: &["+N=900000"],
+        digest: "DIGEST=e8bac662acedfaec",
+        // Admitted from the row-9 census (ROADMAP §5.2 row 14).
+        expect: Expect::Runs { exit: 0 },
+        oracle: "iverilog 13.0",
+        note: "i2c_master and i2c_slave on one open-drain bus — a bit-level protocol \
+               state machine pair",
+    },
+    Workload {
+        name: "verilog-uart",
+        origin: Origin::Upstream {
+            repo: "https://github.com/alexforencich/verilog-uart",
+            sha: "1b867e53af738e4a8bc7c839ca2f1c07f40382dc",
+            license: "MIT",
+            sparse: &[],
+        },
+        shape: Shape::Stream,
+        root: "verilog-uart",
+        dir: "verilog-uart",
+        vita_args: &[],
+        iverilog_args: &[],
+        files: &[
+            "src/rtl/uart.v",
+            "src/rtl/uart_rx.v",
+            "src/rtl/uart_tx.v",
+            "tb.v",
+        ],
+        data: &[],
+        plusargs: &["+N=20000"],
+        digest: "DIGEST=7ba8527cf36dd903",
+        // Admitted from the row-9 census (ROADMAP §5.2 row 15).
+        expect: Expect::Runs { exit: 0 },
+        oracle: "iverilog 13.0",
+        note: "uart with txd looped back into rxd — a serial line, three small modules",
+    },
+    Workload {
         name: "ibex",
         origin: Origin::Upstream {
             repo: "https://github.com/lowRISC/ibex",
             sha: "8b8ee086aef72e0833b7f0493d9d33f1e4d3c8e2",
             license: "Apache-2.0",
+            sparse: &[],
         },
         shape: Shape::Cpu,
         root: "ibex",
@@ -604,6 +700,54 @@ pub static CORPUS: &[Workload] = &[
             "verilator 5.052, x-invariant under randomized reset (iverilog 13 cannot parse it; \
                  sv2v 0.0.13 + iverilog 13, 4-state, agrees)",
         note: "the only SystemVerilog workload (30k lines)",
+    },
+    Workload {
+        name: "opentitan-prims",
+        origin: Origin::Upstream {
+            repo: "https://github.com/lowRISC/opentitan",
+            sha: "a3490b428e30cde95ad7a4d9072517bfbd03fc02",
+            license: "Apache-2.0",
+            // The eleven files below and the headers `prim_assert.sv` includes; the
+            // whole tree is far larger than anything this row compiles.
+            sparse: &["hw/ip/prim/rtl", "hw/ip/prim_generic/rtl"],
+        },
+        shape: Shape::Crypto,
+        root: "opentitan-prims",
+        dir: "opentitan-prims",
+        // `SYNTHESIS` as in the census and in `ibex`: every tool gets it.
+        vita_args: &["--top", "tb", "-DSYNTHESIS", "-Isrc/hw/ip/prim/rtl"],
+        iverilog_args: &["-s", "tb", "-DSYNTHESIS", "-Isrc/hw/ip/prim/rtl"],
+        files: &[
+            "src/hw/ip/prim/rtl/prim_cipher_pkg.sv",
+            "src/hw/ip/prim/rtl/prim_count_pkg.sv",
+            "src/hw/ip/prim/rtl/prim_count.sv",
+            "src/hw/ip/prim/rtl/prim_crc32.sv",
+            "src/hw/ip/prim_generic/rtl/prim_flop.sv",
+            "src/hw/ip/prim/rtl/prim_gf_mult.sv",
+            "src/hw/ip/prim/rtl/prim_present.sv",
+            "src/hw/ip/prim/rtl/prim_prince.sv",
+            "src/hw/ip/prim/rtl/prim_secded_inv_39_32_dec.sv",
+            "src/hw/ip/prim/rtl/prim_secded_inv_39_32_enc.sv",
+            "src/hw/ip/prim/rtl/prim_subst_perm.sv",
+            "tb.sv",
+        ],
+        data: &[],
+        plusargs: &["+N=32"],
+        digest: "DIGEST=8387a22d0531655d",
+        // Admitted from the row-9 census (ROADMAP §5.2 row 16): the upstream text runs
+        // unmodified.
+        expect: Expect::Runs { exit: 0 },
+        // Not iverilog: iverilog 13 stops at `prim_cipher_pkg.sv:23` ("sorry: packed array
+        // parameters are not supported yet", twelve times). verilator answers because the
+        // digest does not move under randomized x initialisation (contract rule 2): 66 runs
+        // (`+verilator+rand+reset+0`, `+1`, and `+2` with seeds 1–64) and 34 more of an
+        // `--x-initial-edge` build. sv2v 0.0.13 converted to Verilog (keeping `always_comb`)
+        // and run under iverilog 13 — 4-state — prints the same digest
+        // (bench/opentitan-prims/RUN.md).
+        oracle: "verilator 5.052, x-invariant under randomized reset (iverilog 13 cannot parse it; \
+                 sv2v 0.0.13 + iverilog 13, 4-state, agrees)",
+        note: "seven constant-heavy OpenTitan primitives (PRESENT, PRINCE, a substitution-\
+               permutation network, SECDED, CRC-32, GF(2^32) multiply, a hardened counter)",
     },
     Workload {
         name: "keccak",

@@ -51,7 +51,9 @@ mod grade;
 mod run;
 
 pub use corpus::{coverage, Expect, Origin, Shape, Workload, CORPUS};
-pub use fetch::{plan_fetch, FetchStep};
+pub use fetch::{
+    clear_stale, clone_state, plan_fetch, resolve_head, root_is_plain, CloneState, FetchStep,
+};
 pub use grade::{grade, grade_expect, Grade};
 pub use run::{
     job_for, measure, prepare_iverilog, resolve_bench_root, Job, Measurement, Outcome, Run, Tool,
