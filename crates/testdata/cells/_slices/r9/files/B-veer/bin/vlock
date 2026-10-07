@@ -1,0 +1,6 @@
+#!/bin/bash
+# usage: vlock <secs> <rss_kb> <out> cmd... ; holds the shared verilator lock
+L=/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/.verilator.lock
+until mkdir $L 2>/dev/null; do sleep 30; done
+trap 'rmdir $L' EXIT INT TERM
+perl /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/s2-review/sound/p3/wd.pl "$@"

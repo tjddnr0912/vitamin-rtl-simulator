@@ -1,0 +1,136 @@
+== uart
+deps:       44 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13360 wall_s=0.23  err=0 warn=4
+iv: WD rc=2 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=416260 wall_s=0.81 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1728 wall_s=0.05  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=2400 wall_s=0.06  errors=50 warnings=0 notes=0
+== gpio
+deps:       39 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13392 wall_s=0.24  err=0 warn=1
+iv: WD rc=3 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=409868 wall_s=0.70 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=2448 wall_s=0.06  errors=50 warnings=0 notes=0
+== i2c
+deps:       58 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13264 wall_s=0.46  err=0 warn=1
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=469848 wall_s=1.59 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1696 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=1872 wall_s=0.06  errors=50 warnings=0 notes=0
+== spi_host
+deps:       65 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13264 wall_s=0.35  err=0 warn=17
+iv: WD rc=2 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=465648 wall_s=1.69 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=2272 wall_s=0.06  errors=50 warnings=4 notes=0
+== spi_device
+deps:       94 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13504 wall_s=1.69  err=0 warn=20
+iv: WD rc=2 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=2
+sv2v: WD rc=1 sig=0 peak_rss_kb=580552 wall_s=1.41 
+vita: WD rc=1 sig=0 peak_rss_kb=2160 wall_s=0.06  errors=50 warnings=4 notes=0
+== rv_timer
+deps:       38 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13392 wall_s=0.17  err=0 warn=1
+iv: WD rc=2 sig=0 peak_rss_kb=1760 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=407580 wall_s=0.64 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1728 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=2256 wall_s=0.06  errors=50 warnings=0 notes=0
+== pattgen
+deps:       38 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13248 wall_s=0.17  err=0 warn=1
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=408876 wall_s=0.64 
+sv2v->iv: WD rc=0 sig=0 peak_rss_kb=1728 wall_s=0.06  lines=0
+vita: WD rc=1 sig=0 peak_rss_kb=2240 wall_s=0.06  errors=50 warnings=0 notes=0
+== hmac
+deps:       52 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13280 wall_s=0.41  err=0 warn=3
+iv: WD rc=4 sig=0 peak_rss_kb=1776 wall_s=0.06  lines=4
+sv2v: WD rc=0 sig=0 peak_rss_kb=471968 wall_s=1.81 
+sv2v->iv: WD rc=0 sig=0 peak_rss_kb=1744 wall_s=0.11  lines=0
+vita: WD rc=1 sig=0 peak_rss_kb=2016 wall_s=0.06  errors=50 warnings=4 notes=0
+== aes
+deps:       92 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13488 wall_s=2.78  err=0 warn=1
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=629852 wall_s=3.46 
+sv2v->iv: WD rc=10 sig=0 peak_rss_kb=1744 wall_s=0.12  lines=17
+vita: WD rc=1 sig=0 peak_rss_kb=29536 wall_s=0.11  errors=50 warnings=1 notes=0
+== kmac
+deps:       78 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13344 wall_s=1.46  err=0 warn=10
+iv: WD rc=3 sig=0 peak_rss_kb=1760 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=600028 wall_s=2.92 
+sv2v->iv: WD rc=9 sig=0 peak_rss_kb=1744 wall_s=0.06  lines=16
+vita: WD rc=1 sig=0 peak_rss_kb=18032 wall_s=0.13  errors=50 warnings=4 notes=0
+== otbn
+deps:      117 files; 
+vl: WD rc=1 sig=0 peak_rss_kb=13280 wall_s=0.34  err=42 warn=0
+iv: WD rc=3 sig=0 peak_rss_kb=48 wall_s=0.06  lines=3
+sv2v: WD rc=1 sig=0 peak_rss_kb=561588 wall_s=0.77 
+vita: WD rc=1 sig=0 peak_rss_kb=30944 wall_s=0.12  errors=50 warnings=4 notes=0
+== usbdev
+deps:       72 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13456 wall_s=0.75  err=0 warn=3
+iv: WD rc=2 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=590648 wall_s=2.83 
+sv2v->iv: WD rc=0 sig=0 peak_rss_kb=1744 wall_s=0.34  lines=0
+vita: WD rc=1 sig=0 peak_rss_kb=2128 wall_s=0.06  errors=50 warnings=4 notes=0
+== entropy_src
+deps:       73 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13552 wall_s=1.00  err=0 warn=5
+iv: WD rc=2 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=508888 wall_s=2.12 
+sv2v->iv: WD rc=6 sig=0 peak_rss_kb=1696 wall_s=0.06  lines=13
+vita: WD rc=1 sig=0 peak_rss_kb=2544 wall_s=0.06  errors=50 warnings=0 notes=0
+== csrng
+deps:       83 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13328 wall_s=0.93  err=0 warn=14
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=509808 wall_s=2.40 
+sv2v->iv: WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=1792 wall_s=0.06  errors=50 warnings=0 notes=0
+== edn
+deps:       52 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13168 wall_s=0.34  err=0 warn=2
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=0 sig=0 peak_rss_kb=437876 wall_s=0.99 
+sv2v->iv: WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=2304 wall_s=0.06  errors=50 warnings=0 notes=0
+== aon_timer
+deps:       47 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13248 wall_s=0.29  err=0 warn=1
+iv: WD rc=28 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=28
+sv2v: WD rc=0 sig=0 peak_rss_kb=423308 wall_s=0.75 
+sv2v->iv: WD rc=1 sig=0 peak_rss_kb=1680 wall_s=0.06  lines=2
+vita: WD rc=1 sig=0 peak_rss_kb=160 wall_s=0.06  errors=50 warnings=0 notes=0
+== adc_ctrl
+deps:       43 files; 
+vl: WD rc=1 sig=0 peak_rss_kb=13392 wall_s=0.17  err=9 warn=0
+iv: WD rc=3 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=3
+sv2v: WD rc=1 sig=0 peak_rss_kb=439080 wall_s=0.40 
+vita: WD rc=1 sig=0 peak_rss_kb=1760 wall_s=0.06  errors=50 warnings=0 notes=0
+== sysrst_ctrl
+deps:       48 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13472 wall_s=0.60  err=0 warn=2
+iv: WD rc=2 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=467620 wall_s=1.29 
+sv2v->iv: WD rc=0 sig=0 peak_rss_kb=1744 wall_s=0.28  lines=0
+vita: WD rc=1 sig=0 peak_rss_kb=2016 wall_s=0.06  errors=50 warnings=0 notes=0
+== rv_plic
+deps:       37 files; 
+vl: WD rc=0 sig=0 peak_rss_kb=13472 wall_s=1.40  err=0 warn=1
+iv: WD rc=2 sig=0 peak_rss_kb=1712 wall_s=0.06  lines=2
+sv2v: WD rc=0 sig=0 peak_rss_kb=499416 wall_s=2.08 
+sv2v->iv: WD rc=0 sig=0 peak_rss_kb=1744 wall_s=0.82  lines=0
+vita: WD rc=1 sig=0 peak_rss_kb=1888 wall_s=0.06  errors=29 warnings=0 notes=0
+== keymgr
+deps:        1 files; MISSING_MODULE keymgr
+vl: WD rc=1 sig=0 peak_rss_kb=13616 wall_s=0.12  err=1 warn=0
+iv: WD rc=1 sig=0 peak_rss_kb=1696 wall_s=0.06  lines=9
+sv2v: WD rc=0 sig=0 peak_rss_kb=312692 wall_s=0.12 
+vita: WD rc=3 sig=0 peak_rss_kb=0 wall_s=0.06  

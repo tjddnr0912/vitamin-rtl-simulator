@@ -1,0 +1,619 @@
+{
+"closure": {
+"arbiter": [
+"arbiter.v",
+"priority_encoder.v"
+],
+"axis_arb_mux": [
+"axis_arb_mux.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"dma_client_axis_sink": [
+"dma_client_axis_sink.v"
+],
+"dma_client_axis_source": [
+"dma_client_axis_source.v"
+],
+"dma_if_axi": [
+"dma_if_axi.v",
+"dma_if_axi_rd.v",
+"dma_if_axi_wr.v"
+],
+"dma_if_axi_rd": [
+"dma_if_axi_rd.v"
+],
+"dma_if_axi_wr": [
+"dma_if_axi_wr.v"
+],
+"dma_if_desc_mux": [
+"dma_if_desc_mux.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"dma_if_mux": [
+"dma_if_mux.v",
+"dma_if_mux_rd.v",
+"dma_if_mux_wr.v",
+"dma_if_desc_mux.v",
+"dma_ram_demux_rd.v",
+"arbiter.v",
+"priority_encoder.v",
+"dma_ram_demux_wr.v"
+],
+"dma_if_mux_rd": [
+"dma_if_mux_rd.v",
+"dma_if_desc_mux.v",
+"dma_ram_demux_wr.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"dma_if_mux_wr": [
+"dma_if_mux_wr.v",
+"dma_if_desc_mux.v",
+"dma_ram_demux_rd.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"dma_if_pcie": [
+"dma_if_pcie.v",
+"dma_if_pcie_rd.v",
+"dma_if_pcie_wr.v"
+],
+"dma_if_pcie_rd": [
+"dma_if_pcie_rd.v"
+],
+"dma_if_pcie_us": [
+"dma_if_pcie_us.v",
+"dma_if_pcie_us_rd.v",
+"dma_if_pcie_us_wr.v"
+],
+"dma_if_pcie_us_rd": [
+"dma_if_pcie_us_rd.v"
+],
+"dma_if_pcie_us_wr": [
+"dma_if_pcie_us_wr.v"
+],
+"dma_if_pcie_wr": [
+"dma_if_pcie_wr.v"
+],
+"dma_psdpram": [
+"dma_psdpram.v"
+],
+"dma_psdpram_async": [
+"dma_psdpram_async.v"
+],
+"dma_ram_demux": [
+"dma_ram_demux.v",
+"dma_ram_demux_rd.v",
+"dma_ram_demux_wr.v"
+],
+"dma_ram_demux_rd": [
+"dma_ram_demux_rd.v"
+],
+"dma_ram_demux_wr": [
+"dma_ram_demux_wr.v"
+],
+"irq_rate_limit": [
+"irq_rate_limit.v"
+],
+"pcie_axi_dma_desc_mux": [
+"pcie_axi_dma_desc_mux.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"pcie_axi_master": [
+"pcie_axi_master.v",
+"pcie_axi_master_rd.v",
+"pcie_axi_master_wr.v",
+"pcie_tlp_demux.v",
+"pulse_merge.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_axi_master_rd": [
+"pcie_axi_master_rd.v"
+],
+"pcie_axi_master_wr": [
+"pcie_axi_master_wr.v"
+],
+"pcie_axil_master": [
+"pcie_axil_master.v"
+],
+"pcie_axil_master_minimal": [
+"pcie_axil_master_minimal.v"
+],
+"pcie_msix": [
+"pcie_msix.v"
+],
+"pcie_ptile_cfg": [
+"pcie_ptile_cfg.v"
+],
+"pcie_ptile_fc_counter": [
+"pcie_ptile_fc_counter.v"
+],
+"pcie_ptile_if": [
+"pcie_ptile_if.v",
+"pcie_ptile_cfg.v",
+"pcie_ptile_if_rx.v",
+"pcie_ptile_if_tx.v",
+"pcie_ptile_fc_counter.v",
+"pcie_tlp_fifo_mux.v",
+"pcie_tlp_fc_count.v",
+"pcie_tlp_fifo_raw.v",
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v"
+],
+"pcie_ptile_if_rx": [
+"pcie_ptile_if_rx.v",
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_ptile_if_tx": [
+"pcie_ptile_if_tx.v",
+"pcie_ptile_fc_counter.v",
+"pcie_tlp_fifo_mux.v",
+"pcie_tlp_fc_count.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_s10_cfg": [
+"pcie_s10_cfg.v"
+],
+"pcie_s10_if": [
+"pcie_s10_if.v",
+"pcie_s10_cfg.v",
+"pcie_s10_if_rx.v",
+"pcie_s10_if_tx.v",
+"pcie_s10_msi.v",
+"arbiter.v",
+"priority_encoder.v",
+"pcie_tlp_fc_count.v",
+"pcie_tlp_fifo_mux.v",
+"pcie_tlp_fifo_raw.v",
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v"
+],
+"pcie_s10_if_rx": [
+"pcie_s10_if_rx.v",
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_s10_if_tx": [
+"pcie_s10_if_tx.v",
+"pcie_tlp_fc_count.v",
+"pcie_tlp_fifo_mux.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_s10_msi": [
+"pcie_s10_msi.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"pcie_tlp_demux": [
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_tlp_demux_bar": [
+"pcie_tlp_demux_bar.v",
+"pcie_tlp_demux.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_tlp_fc_count": [
+"pcie_tlp_fc_count.v"
+],
+"pcie_tlp_fifo": [
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_tlp_fifo_mux": [
+"pcie_tlp_fifo_mux.v",
+"pcie_tlp_fc_count.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_tlp_fifo_raw": [
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_tlp_mux": [
+"pcie_tlp_mux.v"
+],
+"pcie_us_axi_dma": [
+"pcie_us_axi_dma.v",
+"pcie_us_axi_dma_rd.v",
+"pcie_us_axi_dma_wr.v"
+],
+"pcie_us_axi_dma_rd": [
+"pcie_us_axi_dma_rd.v"
+],
+"pcie_us_axi_dma_wr": [
+"pcie_us_axi_dma_wr.v"
+],
+"pcie_us_axi_master": [
+"pcie_us_axi_master.v",
+"pcie_us_axi_master_rd.v",
+"pcie_us_axi_master_wr.v",
+"pcie_us_axis_cq_demux.v",
+"pulse_merge.v"
+],
+"pcie_us_axi_master_rd": [
+"pcie_us_axi_master_rd.v"
+],
+"pcie_us_axi_master_wr": [
+"pcie_us_axi_master_wr.v"
+],
+"pcie_us_axil_master": [
+"pcie_us_axil_master.v"
+],
+"pcie_us_axis_cq_demux": [
+"pcie_us_axis_cq_demux.v"
+],
+"pcie_us_axis_rc_demux": [
+"pcie_us_axis_rc_demux.v"
+],
+"pcie_us_cfg": [
+"pcie_us_cfg.v"
+],
+"pcie_us_if": [
+"pcie_us_if.v",
+"pcie_us_cfg.v",
+"pcie_us_if_cc.v",
+"pcie_us_if_cq.v",
+"pcie_us_if_rc.v",
+"pcie_us_if_rq.v",
+"pcie_us_msi.v",
+"arbiter.v",
+"priority_encoder.v",
+"pcie_tlp_fifo_raw.v",
+"pcie_tlp_fifo.v"
+],
+"pcie_us_if_cc": [
+"pcie_us_if_cc.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_us_if_cq": [
+"pcie_us_if_cq.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_us_if_rc": [
+"pcie_us_if_rc.v",
+"pcie_tlp_fifo.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_us_if_rq": [
+"pcie_us_if_rq.v",
+"pcie_tlp_fifo_raw.v"
+],
+"pcie_us_msi": [
+"pcie_us_msi.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"priority_encoder": [
+"priority_encoder.v"
+],
+"pulse_merge": [
+"pulse_merge.v"
+]
+},
+"extern": {
+"arbiter.v": [
+"i",
+"priority_encoder_ins",
+"priority_encoder_maske"
+],
+"axis_arb_mux.v": [
+"arb_ins",
+"fo",
+"i"
+],
+"dma_client_axis_sink.v": [
+"cas",
+"fo",
+"i"
+],
+"dma_client_axis_source.v": [
+"cas",
+"i"
+],
+"dma_if_axi.v": [
+"dma_if_axi_rd_ins",
+"dma_if_axi_wr_ins"
+],
+"dma_if_axi_rd.v": [
+"cas",
+"fo",
+"i"
+],
+"dma_if_axi_wr.v": [
+"cas",
+"endcase",
+"fo",
+"i"
+],
+"dma_if_desc_mux.v": [
+"arb_ins",
+"fo",
+"i"
+],
+"dma_if_mux.v": [
+"dma_if_mux_rd_ins",
+"dma_if_mux_wr_ins"
+],
+"dma_if_mux_rd.v": [
+"dma_if_desc_mux_ins",
+"dma_ram_demux_ins"
+],
+"dma_if_mux_wr.v": [
+"dma_if_desc_mux_ins",
+"dma_ram_demux_ins"
+],
+"dma_if_pcie.v": [
+"dma_if_pcie_rd_ins",
+"dma_if_pcie_wr_ins"
+],
+"dma_if_pcie_rd.v": [
+"cas",
+"fo",
+"i"
+],
+"dma_if_pcie_us.v": [
+"dma_if_pcie_us_rd_ins",
+"dma_if_pcie_us_wr_ins"
+],
+"dma_if_pcie_us_rd.v": [
+"cas",
+"fo",
+"i"
+],
+"dma_if_pcie_us_wr.v": [
+"cas",
+"endcase",
+"fo",
+"i"
+],
+"dma_if_pcie_wr.v": [
+"cas",
+"endcase",
+"fo",
+"i"
+],
+"dma_psdpram.v": [
+"fo",
+"i"
+],
+"dma_psdpram_async.v": [
+"fo",
+"i"
+],
+"dma_ram_demux.v": [
+"dma_ram_demux_rd_ins",
+"dma_ram_demux_wr_ins"
+],
+"dma_ram_demux_rd.v": [
+"fo",
+"i"
+],
+"dma_ram_demux_wr.v": [
+"fo",
+"i"
+],
+"irq_rate_limit.v": [
+"cas",
+"fo",
+"i"
+],
+"pcie_axi_dma_desc_mux.v": [
+"arb_ins",
+"fo",
+"i"
+],
+"pcie_axi_master.v": [
+"fo",
+"pcie_axi_master_rd_ins",
+"pcie_axi_master_wr_ins",
+"pcie_tlp_demux_ins",
+"status_error_uncor_pm_ins"
+],
+"pcie_axi_master_rd.v": [
+"cas",
+"endcase",
+"i"
+],
+"pcie_axi_master_wr.v": [
+"i"
+],
+"pcie_axil_master.v": [
+"cas",
+"endcase",
+"i"
+],
+"pcie_axil_master_minimal.v": [
+"cas",
+"endcase",
+"i"
+],
+"pcie_msix.v": [
+"fo",
+"i"
+],
+"pcie_ptile_cfg.v": [
+"cas",
+"i"
+],
+"pcie_ptile_fc_counter.v": [
+"i"
+],
+"pcie_ptile_if.v": [
+"pcie_ptile_cfg_ins",
+"pcie_ptile_if_rx_ins",
+"pcie_ptile_if_tx_ins"
+],
+"pcie_ptile_if_rx.v": [
+"fo",
+"i",
+"pcie_tlp_demux_ins"
+],
+"pcie_ptile_if_tx.v": [
+"fc_counter_cpl",
+"fc_counter_np",
+"fc_counter_p",
+"i",
+"pcie_tlp_fifo_mux_ins"
+],
+"pcie_s10_cfg.v": [
+"cas",
+"i"
+],
+"pcie_s10_if.v": [
+"pcie_s10_cfg_ins",
+"pcie_s10_if_rx_ins",
+"pcie_s10_if_tx_ins",
+"pcie_s10_msi_ins"
+],
+"pcie_s10_if_rx.v": [
+"cas",
+"fo",
+"i",
+"pcie_tlp_demux_ins"
+],
+"pcie_s10_if_tx.v": [
+"fc_count_ins",
+"fo",
+"i",
+"pcie_tlp_fifo_ins",
+"pcie_tlp_fifo_mux_ins"
+],
+"pcie_s10_msi.v": [
+"arb_ins",
+"i"
+],
+"pcie_tlp_demux.v": [
+"fo",
+"i",
+"pcie_tlp_fifo_ins"
+],
+"pcie_tlp_demux_bar.v": [
+"fo",
+"i",
+"pcie_tlp_demux_ins"
+],
+"pcie_tlp_fc_count.v": [
+"cas",
+"fo",
+"i"
+],
+"pcie_tlp_fifo.v": [
+"fo",
+"i",
+"pcie_tlp_fifo_raw_ins"
+],
+"pcie_tlp_fifo_mux.v": [
+"fc_count_ins",
+"fo",
+"i",
+"pcie_tlp_fifo_ins"
+],
+"pcie_tlp_fifo_raw.v": [
+"fo",
+"i"
+],
+"pcie_tlp_mux.v": [
+"fo",
+"i"
+],
+"pcie_us_axi_dma.v": [
+"pcie_us_axi_dma_rd_ins",
+"pcie_us_axi_dma_wr_ins"
+],
+"pcie_us_axi_dma_rd.v": [
+"cas",
+"fo",
+"i"
+],
+"pcie_us_axi_dma_wr.v": [
+"cas",
+"fo",
+"i"
+],
+"pcie_us_axi_master.v": [
+"cq_demux_ins",
+"pcie_us_axi_master_rd_ins",
+"pcie_us_axi_master_wr_ins",
+"status_error_uncor_pm_ins"
+],
+"pcie_us_axi_master_rd.v": [
+"cas",
+"endcase",
+"i"
+],
+"pcie_us_axi_master_wr.v": [
+"cas",
+"i"
+],
+"pcie_us_axil_master.v": [
+"cas",
+"i"
+],
+"pcie_us_axis_cq_demux.v": [
+"fo",
+"i"
+],
+"pcie_us_axis_rc_demux.v": [
+"fo",
+"i"
+],
+"pcie_us_cfg.v": [
+"i"
+],
+"pcie_us_if.v": [
+"i",
+"pcie_us_cfg_ins",
+"pcie_us_if_cc_ins",
+"pcie_us_if_cq_ins",
+"pcie_us_if_rc_ins",
+"pcie_us_if_rq_ins",
+"pcie_us_msi_ins"
+],
+"pcie_us_if_cc.v": [
+"cas",
+"cpl_fifo_ins",
+"endcase",
+"fo",
+"i"
+],
+"pcie_us_if_cq.v": [
+"cas",
+"fo",
+"i",
+"pcie_tlp_fifo_ins"
+],
+"pcie_us_if_rc.v": [
+"cas",
+"fo",
+"i",
+"pcie_tlp_fifo_ins"
+],
+"pcie_us_if_rq.v": [
+"cas",
+"fo",
+"i",
+"rd_req_fifo_ins",
+"wr_req_fifo_ins"
+],
+"pcie_us_msi.v": [
+"arb_ins",
+"i"
+],
+"priority_encoder.v": [
+"fo",
+"i"
+],
+"pulse_merge.v": [
+"i"
+]
+}
+}

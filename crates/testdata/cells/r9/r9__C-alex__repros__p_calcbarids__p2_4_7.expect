@@ -1,0 +1,49 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r9__C-alex__repros__p_calcbarids__p2_4_7
+slice: §5.2 row 9 new-design census (r9; details _slices/r9/)
+origin: row9/C-alex/repros/p_calcbarids/p2_4_7.v
+roadmap_row: unrecorded
+set: C-alex/repros/p_calcbarids
+oracles_present: iverilog,sv2v,verilator
+vita_tags: FINAL
+verdict: unrecorded
+verdict_source: unrecorded
+notes: not named in JUDGED_ROOTS.md; the census ran this wrapper together with upstream verilog-pcie/rtl/pcie_tlp_demux_bar.v (those captures are not kept: run on an upstream module); the judge ran the wrapper alone (judge/runs/C-p_calcbarids-p2_4_7)
+alias: judge/runs/C-p_calcbarids-p2_4_7/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: FINAL: md5 f4d778f25ab5921a472cf14fefd569e5 commit 1d23be89
+blocks: 4
+=== block 1 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | judge/runs/C-p_calcbarids-p2_4_7/iv.c.out | 217 bytes | exit from the capture's own WD line "WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06"; appended rc=2
+t.v:2: error: Unknown module type: pcie_tlp_demux_bar
+2 error(s) during elaboration.
+*** These modules were missing:
+        pcie_tlp_demux_bar referenced 1 times.
+***
+WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06 
+rc=2
+=== block 2 | oracle sv2v 0.0.13 (version at preservation) [sv2v + iverilog compile] | judge/runs/C-p_calcbarids-p2_4_7/s2v.c.out | 262 bytes | exit from the capture's own WD lines "WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.12"; "WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06"; appended rc=2
+WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.12 
+sv.v:7: error: Unknown module type: pcie_tlp_demux_bar
+2 error(s) during elaboration.
+*** These modules were missing:
+        pcie_tlp_demux_bar referenced 1 times.
+***
+WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06 
+rc=2
+=== block 3 | oracle verilator 5.052 (version captured in census) [verilator build] | judge/runs/C-p_calcbarids-p2_4_7/vl.c.out | 1052 bytes | exit from the capture's own WD line "WD rc=1 sig=0 peak_rss_kb=32 wall_s=0.06"; appended build_rc=1
+%Error: t.v:2:133: Dotted reference to instance that refers to missing module/interface: 'pcie_tlp_demux_bar'
+    2 | module tbw; pcie_tlp_demux_bar #(.PORTS(2), .BAR_BASE(4), .BAR_STRIDE(7), .FIFO_DEPTH(64)) u(); initial begin #1 $display("IDS=%h", u.BAR_IDS_INT); $finish; end endmodule
+      |                                                                                                                                     ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=5.052 for more assistance.
+%Error: t.v:2:135: Can't find definition of 'BAR_IDS_INT' in dotted variable/method: 'u.BAR_IDS_INT'
+    2 | module tbw; pcie_tlp_demux_bar #(.PORTS(2), .BAR_BASE(4), .BAR_STRIDE(7), .FIFO_DEPTH(64)) u(); initial begin #1 $display("IDS=%h", u.BAR_IDS_INT); $finish; end endmodule
+      |                                                                                                                                       ^~~~~~~~~~~
+%Error: Exiting due to 2 error(s)
+WD rc=1 sig=0 peak_rss_kb=32 wall_s=0.06 
+build_rc=1
+=== block 4 | vita [FINAL] | judge/runs/C-p_calcbarids-p2_4_7/vita.out | 330 bytes | exit from the capture's own WD line "WD rc=1 sig=0 peak_rss_kb=2080 wall_s=0.06"; appended rc=1
+t.v:2:8: error[VITA-E3003] E-ELAB-UNRESOLVED-INSTANCE: unknown module `pcie_tlp_demux_bar` instantiated [in tbw]
+t.v:2:114: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `u.BAR_IDS_INT` (no such cross-instance net or parameter)
+errors=2 warnings=0 notes=0
+WD rc=1 sig=0 peak_rss_kb=2080 wall_s=0.06 
+rc=1
+=== end

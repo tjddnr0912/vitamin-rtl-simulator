@@ -1,0 +1,19 @@
+#!/bin/bash
+# usage: tri <dir> [top]  -- run vita, iverilog, sv2v->iverilog, verilator --binary on <dir>/t.sv; print raw lines
+S=/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad
+WD="perl $S/s2-review/sound/p3/wd.pl"
+cd "$1"; top=${2:-top}; shift; shift
+$WD 300 6000000 vita.out $S/accept/vita-final t.sv "$@" > vita.wd
+echo "vita: $(cat vita.wd)"; grep -v "^$" vita.out | head -6 | cut -c1-260
+$WD 300 6000000 iv.out sh -c "/opt/homebrew/bin/iverilog -g2012 -s $top -o iv.vvp t.sv && /opt/homebrew/bin/vvp -n iv.vvp" > iv.wd
+echo "iverilog: $(cat iv.wd)"; grep -v "^$" iv.out | head -6 | cut -c1-260
+$WD 300 6000000 s2v.out sh -c "$S/blog4/sv2v/sv2v-macOS/sv2v -E Always t.sv > t_sv2v.v && sed -i '' 's/(\* full_case, parallel_case \*)//' t_sv2v.v && /opt/homebrew/bin/iverilog -g2012 -s $top -o s2v.vvp t_sv2v.v && /opt/homebrew/bin/vvp -n s2v.vvp" > s2v.wd
+echo "sv2v+iverilog: $(cat s2v.wd)"; grep -v "^$" s2v.out | head -6 | cut -c1-260
+FREE=$(df -g /System/Volumes/Data | tail -1 | awk '{print $4}')
+if [ "$FREE" -lt 40 ]; then echo "verilator: SKIPPED free=${FREE}GiB<40"; exit 0; fi
+L=$S/row9/.verilator.lock
+until mkdir $L 2>/dev/null; do sleep 30; done
+$WD 1200 10000000 vl.out sh -c "rm -rf obj_dir; /opt/homebrew/bin/verilator --binary --timing -Wno-fatal -Wno-lint -Wno-style --top-module $top -o v t.sv >/dev/null 2>vl.err; rc=\$?; cat vl.err; [ \$rc = 0 ] && ./obj_dir/v" > vl.wd
+rmdir $L
+rm -rf obj_dir
+echo "verilator: $(cat vl.wd)"; grep -v "^$" vl.out | grep -v "^- " | head -6 | cut -c1-260

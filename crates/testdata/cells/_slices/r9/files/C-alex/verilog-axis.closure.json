@@ -1,0 +1,241 @@
+{
+"closure": {
+"arbiter": [
+"arbiter.v",
+"priority_encoder.v"
+],
+"axis_adapter": [
+"axis_adapter.v"
+],
+"axis_arb_mux": [
+"axis_arb_mux.v",
+"arbiter.v",
+"priority_encoder.v"
+],
+"axis_async_fifo": [
+"axis_async_fifo.v"
+],
+"axis_async_fifo_adapter": [
+"axis_async_fifo_adapter.v",
+"axis_adapter.v",
+"axis_async_fifo.v"
+],
+"axis_broadcast": [
+"axis_broadcast.v"
+],
+"axis_cobs_decode": [
+"axis_cobs_decode.v"
+],
+"axis_cobs_encode": [
+"axis_cobs_encode.v",
+"axis_fifo.v"
+],
+"axis_crosspoint": [
+"axis_crosspoint.v"
+],
+"axis_demux": [
+"axis_demux.v"
+],
+"axis_fifo": [
+"axis_fifo.v"
+],
+"axis_fifo_adapter": [
+"axis_fifo_adapter.v",
+"axis_adapter.v",
+"axis_fifo.v"
+],
+"axis_frame_join": [
+"axis_frame_join.v"
+],
+"axis_frame_len": [
+"axis_frame_len.v"
+],
+"axis_frame_length_adjust": [
+"axis_frame_length_adjust.v"
+],
+"axis_frame_length_adjust_fifo": [
+"axis_frame_length_adjust_fifo.v",
+"axis_fifo.v",
+"axis_frame_length_adjust.v"
+],
+"axis_ll_bridge": [
+"axis_ll_bridge.v"
+],
+"axis_mux": [
+"axis_mux.v"
+],
+"axis_pipeline_fifo": [
+"axis_pipeline_fifo.v"
+],
+"axis_pipeline_register": [
+"axis_pipeline_register.v",
+"axis_register.v"
+],
+"axis_ram_switch": [
+"axis_ram_switch.v",
+"arbiter.v",
+"axis_adapter.v",
+"priority_encoder.v"
+],
+"axis_rate_limit": [
+"axis_rate_limit.v"
+],
+"axis_register": [
+"axis_register.v"
+],
+"axis_srl_fifo": [
+"axis_srl_fifo.v"
+],
+"axis_srl_register": [
+"axis_srl_register.v"
+],
+"axis_stat_counter": [
+"axis_stat_counter.v"
+],
+"axis_switch": [
+"axis_switch.v",
+"arbiter.v",
+"axis_register.v",
+"priority_encoder.v"
+],
+"axis_tap": [
+"axis_tap.v"
+],
+"ll_axis_bridge": [
+"ll_axis_bridge.v"
+],
+"priority_encoder": [
+"priority_encoder.v"
+],
+"sync_reset": [
+"sync_reset.v"
+]
+},
+"extern": {
+"arbiter.v": [
+"i",
+"priority_encoder_ins",
+"priority_encoder_maske"
+],
+"axis_adapter.v": [
+"i"
+],
+"axis_arb_mux.v": [
+"arb_ins",
+"fo",
+"i"
+],
+"axis_async_fifo.v": [
+"fo",
+"i"
+],
+"axis_async_fifo_adapter.v": [
+"adapter_ins",
+"fifo_ins",
+"i"
+],
+"axis_broadcast.v": [
+"i"
+],
+"axis_cobs_decode.v": [
+"cas",
+"i"
+],
+"axis_cobs_encode.v": [
+"cas",
+"code_fifo_ins",
+"data_fifo_ins",
+"i"
+],
+"axis_crosspoint.v": [
+"fo"
+],
+"axis_demux.v": [
+"i"
+],
+"axis_fifo.v": [
+"i"
+],
+"axis_fifo_adapter.v": [
+"adapter_ins",
+"fifo_ins",
+"i"
+],
+"axis_frame_join.v": [
+"cas",
+"i"
+],
+"axis_frame_len.v": [
+"fo",
+"i"
+],
+"axis_frame_length_adjust.v": [
+"fo",
+"i"
+],
+"axis_frame_length_adjust_fifo.v": [
+"axis_frame_length_adjust_ins",
+"frame_fifo_ins",
+"header_fifo_ins"
+],
+"axis_ll_bridge.v": [
+"i"
+],
+"axis_mux.v": [
+"i"
+],
+"axis_pipeline_fifo.v": [
+"fo",
+"i"
+],
+"axis_pipeline_register.v": [
+"fo",
+"reg_ins"
+],
+"axis_ram_switch.v": [
+"adapter_ins",
+"cmd_arb_ins",
+"cmd_status_arb_ins",
+"en",
+"fo",
+"i",
+"ram_read_arb_ins",
+"ram_write_arb_ins"
+],
+"axis_rate_limit.v": [
+"i"
+],
+"axis_register.v": [
+"i"
+],
+"axis_srl_fifo.v": [
+"fo",
+"i"
+],
+"axis_srl_register.v": [
+"fo",
+"i"
+],
+"axis_stat_counter.v": [
+"cas",
+"fo",
+"i"
+],
+"axis_switch.v": [
+"arb_ins",
+"fo",
+"i",
+"reg_ins"
+],
+"axis_tap.v": [
+"i"
+],
+"priority_encoder.v": [
+"fo",
+"i"
+],
+"sync_reset.v": [
+"i"
+]
+}
+}

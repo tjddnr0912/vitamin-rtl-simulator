@@ -1,0 +1,27 @@
+{
+"closure": {
+"uart": [
+"uart.v",
+"uart_rx.v",
+"uart_tx.v"
+],
+"uart_rx": [
+"uart_rx.v"
+],
+"uart_tx": [
+"uart_tx.v"
+]
+},
+"extern": {
+"uart.v": [
+"uart_rx_ins",
+"uart_tx_ins"
+],
+"uart_rx.v": [
+"i"
+],
+"uart_tx.v": [
+"i"
+]
+}
+}

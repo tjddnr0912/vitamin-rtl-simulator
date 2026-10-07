@@ -1,0 +1,94 @@
+{
+"closure": {
+"axis_fifo": [
+"axis_fifo.v"
+],
+"i2c_init": [
+"i2c_init.v"
+],
+"i2c_master": [
+"i2c_master.v"
+],
+"i2c_master_axil": [
+"i2c_master_axil.v",
+"axis_fifo.v",
+"i2c_master.v"
+],
+"i2c_master_wbs_16": [
+"i2c_master_wbs_16.v",
+"axis_fifo.v",
+"i2c_master.v"
+],
+"i2c_master_wbs_8": [
+"i2c_master_wbs_8.v",
+"axis_fifo.v",
+"i2c_master.v"
+],
+"i2c_single_reg": [
+"i2c_single_reg.v"
+],
+"i2c_slave": [
+"i2c_slave.v"
+],
+"i2c_slave_axil_master": [
+"i2c_slave_axil_master.v",
+"i2c_slave.v"
+],
+"i2c_slave_wbm": [
+"i2c_slave_wbm.v",
+"i2c_slave.v"
+]
+},
+"extern": {
+"axis_fifo.v": [
+"i"
+],
+"i2c_init.v": [
+"cas",
+"i"
+],
+"i2c_master.v": [
+"cas",
+"i"
+],
+"i2c_master_axil.v": [
+"cas",
+"cmd_fifo_ins",
+"i",
+"read_fifo_ins",
+"write_fifo_ins"
+],
+"i2c_master_wbs_16.v": [
+"cas",
+"cmd_fifo_ins",
+"i",
+"read_fifo_ins",
+"write_fifo_ins"
+],
+"i2c_master_wbs_8.v": [
+"cas",
+"cmd_fifo_ins",
+"i",
+"read_fifo_ins",
+"write_fifo_ins"
+],
+"i2c_single_reg.v": [
+"cas",
+"i"
+],
+"i2c_slave.v": [
+"cas",
+"i"
+],
+"i2c_slave_axil_master.v": [
+"cas",
+"i",
+"i2c_slave_ins"
+],
+"i2c_slave_wbm.v": [
+"cas",
+"i",
+"i2c_slave_ins"
+]
+}
+}

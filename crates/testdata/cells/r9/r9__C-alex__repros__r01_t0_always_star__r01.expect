@@ -1,0 +1,66 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r9__C-alex__repros__r01_t0_always_star__r01
+slice: §5.2 row 9 new-design census (r9; details _slices/r9/)
+origin: row9/C-alex/repros/r01_t0_always_star/r01.v
+roadmap_row: unrecorded
+set: C-alex/repros/r01_t0_always_star
+oracles_present: iverilog,sv2v,verilator
+vita_tags: FINAL
+verdict: unrecorded
+verdict_source: unrecorded
+notes: same repro dir as C-R01 (JUDGED_ROOTS.md:36), whose quoted values are r01b.v's; not named
+alias: judge/runs/C-r01_t0_always_star-r01/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: FINAL: md5 f4d778f25ab5921a472cf14fefd569e5 commit 1d23be89
+blocks: 9
+=== block 1 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | ./ivc2.out | 0 bytes
+
+=== block 2 | oracle iverilog 13.0 (version at preservation) [vvp run] | ./iv2.out | 70 bytes
+t1 q_next=00 b_next=06
+t2 q=00
+r01.v:14: $finish called at 2000 (1ps)
+=== block 3 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | judge/runs/C-r01_t0_always_star-r01/iv.c.out | 44 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1136 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=1136 wall_s=0.06 
+=== block 4 | oracle iverilog 13.0 (version at preservation) [vvp run] | judge/runs/C-r01_t0_always_star-r01/iv.out | 117 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1680 wall_s=0.06"; appended rc=0
+t1 q_next=xx b_next=xx
+t2 q=xx
+t.v:14: $finish called at 2000 (1ps)
+WD rc=0 sig=0 peak_rss_kb=1680 wall_s=0.06 
+rc=0
+=== block 5 | oracle sv2v 0.0.13 (version at preservation) [sv2v + iverilog compile] | judge/runs/C-r01_t0_always_star-r01/s2v.c.out | 88 bytes | exit from the capture's own WD lines "WD rc=0 sig=0 peak_rss_kb=2336 wall_s=0.19"; "WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=2336 wall_s=0.19 
+WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06 
+=== block 6 | oracle sv2v 0.0.13 (version at preservation) [vvp run] | judge/runs/C-r01_t0_always_star-r01/s2v.out | 114 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=3024 wall_s=0.06"; appended rc=0
+t1 q_next=xx b_next=xx
+t2 q=xx
+sv.v:16: $finish called at 2 (1s)
+WD rc=0 sig=0 peak_rss_kb=3024 wall_s=0.06 
+rc=0
+=== block 7 | oracle verilator 5.052 (version captured in census) [verilator build] | judge/runs/C-r01_t0_always_star-r01/vl.c.out | 4454 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=13232 wall_s=4.35"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.033 MB sources in 2 modules, into 0.030 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.249 s (elab=0.000, cvt=0.002, bld=4.243); cpu 0.006 s on 1 threads; allocated 10.172 MB
+WD rc=0 sig=0 peak_rss_kb=13232 wall_s=4.35 
+=== block 8 | oracle verilator 5.052 (version captured in census) [verilator run] | judge/runs/C-r01_t0_always_star-r01/vl.out | 288 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.25"; appended rc=0
+t1 q_next=00 b_next=06
+t2 q=00
+- t.v:14: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ns; walltime 0.000 s; speed 125.000 us/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.25 
+rc=0
+=== block 9 | vita [FINAL] | judge/runs/C-r01_t0_always_star-r01/vita.out | 147 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1504 wall_s=0.06"; appended rc=0
+t1 q_next=xx b_next=xx
+t2 q=xx
+simulation ended (Finish) at time 2000
+errors=0 warnings=0 notes=0
+WD rc=0 sig=0 peak_rss_kb=1504 wall_s=0.06 
+rc=0
+=== end

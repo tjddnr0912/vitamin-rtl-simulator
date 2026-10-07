@@ -1,0 +1,147 @@
+R02 hw/ip/adc_ctrl/rtl/adc_ctrl_reg_pkg.sv
+R02 hw/ip/aes/rtl/aes_reg_pkg.sv
+R06 hw/ip/aon_timer/rtl/aon_timer.sv
+R04 hw/ip/aon_timer/rtl/aon_timer.sv
+R02 hw/ip/aon_timer/rtl/aon_timer_reg_pkg.sv
+R06 hw/ip/aon_timer/rtl/aon_timer_reg_top.sv
+R04 hw/ip/aon_timer/rtl/aon_timer_reg_top.sv
+R05 hw/ip/csrng/rtl/csrng_ctr_drbg.sv
+R25 hw/ip/csrng/rtl/csrng_pkg.sv
+R02 hw/ip/csrng/rtl/csrng_reg_pkg.sv
+R17 hw/ip/edn/rtl/edn_core.sv
+R17 hw/ip/edn/rtl/edn_core.sv
+R02 hw/ip/edn/rtl/edn_reg_pkg.sv
+R05 hw/ip/entropy_src/rtl/entropy_src_core.sv
+R02 hw/ip/entropy_src/rtl/entropy_src_reg_pkg.sv
+R02 hw/ip/hmac/rtl/hmac_reg_pkg.sv
+R05 hw/ip/hmac/rtl/hmac_reg_top.sv
+R06 hw/ip/i2c/rtl/i2c.sv
+R04 hw/ip/i2c/rtl/i2c.sv
+R02 hw/ip/i2c/rtl/i2c_reg_pkg.sv
+R06 hw/ip/i2c/rtl/i2c_reg_top.sv
+R04 hw/ip/i2c/rtl/i2c_reg_top.sv
+R02 hw/ip/keymgr_dpe/rtl/keymgr_dpe_reg_pkg.sv
+R05 hw/ip/kmac/rtl/kmac.sv
+R05 hw/ip/kmac/rtl/kmac_app.sv
+R02 hw/ip/kmac/rtl/kmac_reg_pkg.sv
+R05 hw/ip/kmac/rtl/kmac_reg_top.sv
+R26 hw/ip/lc_ctrl/rtl/lc_ctrl_pkg.sv
+R04 hw/ip/lc_ctrl/rtl/lc_ctrl_pkg.sv
+R11 hw/ip/lc_ctrl/rtl/lc_ctrl_pkg.sv
+R29 hw/ip/lc_ctrl/rtl/lc_ctrl_pkg.sv
+R02 hw/ip/lc_ctrl/rtl/lc_ctrl_reg_pkg.sv
+R26 hw/ip/lc_ctrl/rtl/lc_ctrl_state_pkg.sv
+R28 hw/ip/lc_ctrl/rtl/lc_ctrl_state_pkg.sv
+R04 hw/ip/lc_ctrl/rtl/lc_ctrl_state_pkg.sv
+R05 hw/ip/otbn/rtl/otbn.sv
+R05 hw/ip/otbn/rtl/otbn_alu_bignum.sv
+R05 hw/ip/otbn/rtl/otbn_controller.sv
+R05 hw/ip/otbn/rtl/otbn_kmac_if.sv
+R01 hw/ip/otbn/rtl/otbn_pkg.sv
+R01 hw/ip/otbn/rtl/otbn_pkg.sv
+R04 hw/ip/otbn/rtl/otbn_pkg.sv
+R02 hw/ip/otbn/rtl/otbn_reg_pkg.sv
+R05 hw/ip/otbn/rtl/otbn_reg_top.sv
+R02 hw/ip/pattgen/rtl/pattgen_reg_pkg.sv
+R08 hw/ip/prim/rtl/prim_assert.sv
+R14 hw/ip/prim/rtl/prim_flop_macros.sv
+R11 hw/ip/prim/rtl/prim_mubi_pkg.sv
+R06 hw/ip/rv_timer/rtl/rv_timer.sv
+R04 hw/ip/rv_timer/rtl/rv_timer.sv
+R17 hw/ip/rv_timer/rtl/rv_timer.sv
+R17 hw/ip/rv_timer/rtl/rv_timer.sv
+R27 hw/ip/rv_timer/rtl/rv_timer.sv
+R27 hw/ip/rv_timer/rtl/rv_timer.sv
+R27 hw/ip/rv_timer/rtl/rv_timer.sv
+R27 hw/ip/rv_timer/rtl/rv_timer.sv
+R02 hw/ip/rv_timer/rtl/rv_timer_reg_pkg.sv
+R06 hw/ip/rv_timer/rtl/rv_timer_reg_top.sv
+R04 hw/ip/rv_timer/rtl/rv_timer_reg_top.sv
+R27 hw/ip/rv_timer/rtl/timer_core.sv
+R27 hw/ip/rv_timer/rtl/timer_core.sv
+R06 hw/ip/spi_device/rtl/spi_device.sv
+R04 hw/ip/spi_device/rtl/spi_device.sv
+R05 hw/ip/spi_device/rtl/spi_device.sv
+R19 hw/ip/spi_device/rtl/spi_device_pkg.sv
+R02 hw/ip/spi_device/rtl/spi_device_reg_pkg.sv
+R06 hw/ip/spi_device/rtl/spi_device_reg_top.sv
+R04 hw/ip/spi_device/rtl/spi_device_reg_top.sv
+R05 hw/ip/spi_device/rtl/spi_device_reg_top.sv
+R06 hw/ip/spi_host/rtl/spi_host.sv
+R04 hw/ip/spi_host/rtl/spi_host.sv
+R05 hw/ip/spi_host/rtl/spi_host.sv
+R02 hw/ip/spi_host/rtl/spi_host_reg_pkg.sv
+R06 hw/ip/spi_host/rtl/spi_host_reg_top.sv
+R04 hw/ip/spi_host/rtl/spi_host_reg_top.sv
+R05 hw/ip/spi_host/rtl/spi_host_reg_top.sv
+R04 hw/ip/spi_host/rtl/spi_host_window.sv
+R02 hw/ip/sysrst_ctrl/rtl/sysrst_ctrl_reg_pkg.sv
+R04 hw/ip/tlul/rtl/tlul_adapter_racl.sv
+R05 hw/ip/tlul/rtl/tlul_adapter_reg.sv
+R10 hw/ip/tlul/rtl/tlul_adapter_reg.sv
+R10 hw/ip/tlul/rtl/tlul_adapter_reg.sv
+R04 hw/ip/tlul/rtl/tlul_adapter_reg_racl.sv
+R05 hw/ip/tlul/rtl/tlul_adapter_sram.sv
+R04 hw/ip/tlul/rtl/tlul_adapter_sram_racl.sv
+R05 hw/ip/tlul/rtl/tlul_err.sv
+R10 hw/ip/tlul/rtl/tlul_err.sv
+R10 hw/ip/tlul/rtl/tlul_err.sv
+R10 hw/ip/tlul/rtl/tlul_err.sv
+R10 hw/ip/tlul/rtl/tlul_err.sv
+R10 hw/ip/tlul/rtl/tlul_err_resp.sv
+R10 hw/ip/tlul/rtl/tlul_err_resp.sv
+R09 hw/ip/tlul/rtl/tlul_pkg.sv
+R05 hw/ip/tlul/rtl/tlul_sram_byte.sv
+R06 hw/ip/uart/rtl/uart.sv
+R04 hw/ip/uart/rtl/uart.sv
+R05 hw/ip/uart/rtl/uart_core.sv
+R10 hw/ip/uart/rtl/uart_core.sv
+R02 hw/ip/uart/rtl/uart_reg_pkg.sv
+R06 hw/ip/uart/rtl/uart_reg_top.sv
+R04 hw/ip/uart/rtl/uart_reg_top.sv
+R02 hw/ip/usbdev/rtl/usbdev_reg_pkg.sv
+R05 hw/ip/usbdev/rtl/usbdev_reg_top.sv
+R06 hw/top_earlgrey/ip_autogen/gpio/rtl/gpio.sv
+R04 hw/top_earlgrey/ip_autogen/gpio/rtl/gpio.sv
+R02 hw/top_earlgrey/ip_autogen/gpio/rtl/gpio_reg_pkg.sv
+R06 hw/top_earlgrey/ip_autogen/gpio/rtl/gpio_reg_top.sv
+R04 hw/top_earlgrey/ip_autogen/gpio/rtl/gpio_reg_top.sv
+R01 hw/top_earlgrey/rtl/autogen/top_racl_pkg.sv
+R01 hw/top_earlgrey/rtl/autogen/top_racl_pkg.sv
+R04 hw/top_earlgrey/rtl/autogen/top_racl_pkg.sv
+R04 hw/top_earlgrey/rtl/autogen/top_racl_pkg.sv
+R01 hw/top_earlgrey/rtl/top_pkg.sv
+R12 pkg rv_plic
+R12 pkg usbdev
+R12 pkg hmac
+R12 pkg keymgr_dpe
+R12 pkg csrng
+R12 pkg spi_device
+R12 pkg adc_ctrl
+R12 pkg rv_timer
+R12 pkg lc_ctrl
+R12 pkg sysrst_ctrl
+R12 pkg pattgen
+R12 pkg kmac
+R12 pkg aes
+R12 acc hw/top_earlgrey/ip_autogen/rv_plic/rtl/rv_plic.sv
+R12 acc hw/top_earlgrey/ip_autogen/rv_plic/rtl/rv_plic_reg_top.sv
+R12 acc hw/ip/usbdev/rtl/usbdev_reg_top.sv
+R12 acc hw/ip/usbdev/rtl/usbdev.sv
+R12 acc hw/ip/hmac/rtl/hmac_reg_top.sv
+R12 acc hw/ip/hmac/rtl/hmac.sv
+R12 acc hw/ip/csrng/rtl/csrng_core.sv
+R12 acc hw/ip/csrng/rtl/csrng_reg_top.sv
+R12 acc hw/ip/spi_device/rtl/spi_device_reg_top.sv
+R12 acc hw/ip/spi_device/rtl/spi_device.sv
+R12 acc hw/ip/adc_ctrl/rtl/adc_ctrl_core.sv
+R12 acc hw/ip/adc_ctrl/rtl/adc_ctrl_reg_top.sv
+R12 acc hw/ip/rv_timer/rtl/rv_timer_reg_top.sv
+R12 acc hw/ip/rv_timer/rtl/rv_timer.sv
+R12 acc hw/ip/sysrst_ctrl/rtl/sysrst_ctrl_reg_top.sv
+R12 acc hw/ip/pattgen/rtl/pattgen_core.sv
+R12 acc hw/ip/pattgen/rtl/pattgen_reg_top.sv
+R12 acc hw/ip/kmac/rtl/kmac_reg_top.sv
+R12 acc hw/ip/kmac/rtl/kmac.sv
+R12 acc hw/ip/aes/rtl/aes_reg_top.sv
+R12 acc hw/ip/aes/rtl/aes_core.sv

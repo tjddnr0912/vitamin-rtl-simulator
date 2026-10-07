@@ -1,0 +1,12 @@
+S=/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad
+R=$S/row9/A-opentitan
+OT=$R/ot
+WD="perl $S/s2-review/sound/p3/wd.pl"
+VITA=$S/accept/vita-final
+SV2V=$S/blog4/sv2v/sv2v-macOS/sv2v
+YDIRS=""
+for d in $OT/hw/ip/*/rtl; do case $d in */prim_xilinx*|*/prim_asap7*|*/otp_ctrl/*|*/rv_core_ibex/*) ;; *) YDIRS="$YDIRS -y $d";; esac; done
+for d in $OT/hw/top_earlgrey/ip_autogen/*/rtl; do YDIRS="$YDIRS -y $d"; done
+YDIRS="-y $OT/hw/ip/prim_generic/rtl $YDIRS -y $OT/hw/top_earlgrey/rtl -y $OT/hw/top_earlgrey/rtl/autogen"
+INCS="-I$OT/hw/ip/prim/rtl -I$OT/hw/dv/sv/dv_utils"
+DEFS="-DSYNTHESIS"

@@ -1,0 +1,149 @@
+category	path_or_glob	count	bytes	reason
+binary	A-opentitan/bin/__pycache__/**	1	5653	compiled Python bytecode
+binary	C-alex/scripts/vita	1	144	symlink to S/accept/vita-final (the census binary)
+licence	A-opentitan/bin/patches.py	1	5664	overlay script embedding upstream lines as exact-text rules (e.g. A-opentitan/ot/hw/top_earlgrey/rtl/top_pkg.sv:14, the ASSERT_STATIC_IN_PACKAGE body of A-opentitan/ot/hw/ip/prim/rtl/prim_assert.sv:48, A-opentitan/ot/hw/ip/tlul/rtl/tlul_pkg.sv:180)
+licence	B-veer/bin/apply_eh1w.py	1	10528	overlay script embedding upstream lines (B-veer/eh1/testbench/tb_top.sv:367-370 and others)
+licence	B-veer/bin/apply_el2w.py	1	12334	overlay script embedding upstream lines (B-veer/el2/testbench/tb_top.sv:2489-2491, B-veer/el2/testbench/tb_top_pkg.sv:19 and others)
+licence	B-veer/bin/w20.py	1	561	overlay script embedding upstream lines (B-veer/el2/testbench/tb_top.sv:2576 incl. its URL comment, and the `$display("[%0t ns] done",$time);` block)
+licence	B-veer/bin/w26.py	1	860	overlay script embedding an upstream comment line and code fragments (B-veer/el2/design/lsu/el2_lsu_bus_buffer.sv:668)
+licence	B-veer/bin/wp.py	1	1215	overlay script embedding upstream lines (B-veer/el2/testbench/tb_top.sv:2620-2621 `ifdef RV_LOCKSTEP_ENABLE ... "Dual Core Lockstep enabled!")
+licence	B-veer/eh1w.patch	1	42172	patch file (git diff of the upstream EH1 tree; embeds upstream lines)
+licence	B-veer/el2w.patch	1	641309	patch file (git diff of the upstream EL2 tree; embeds upstream lines)
+licence	B-veer/repros/fn_retvar_partsel_ca/t.sv	22	11149	reproduces the upstream function countones (header, input, body statement) verbatim modulo whitespace - B-veer/el2/design/ifu/el2_ifu_bp_ctl.sv:896-903; byte-identical copies: judge/runs/B-fn_retvar_partsel_ca-t/t.sv
+licence	B-veer/repros/nested_lvalue_select/rv.sv	10	7245	copies the upstream rvdff/rvdffs modules (13 of 13 non-trivial lines verbatim, longest run 13 lines; cross-line token run 255/255) - B-veer/eh1/design/lib/beh_lib.sv:19-54 (also B-veer/el2/design/lib/beh_lib.sv:19); byte-identical copies: judge/runs/B-nested_lvalue_select-rv/t.sv
+log	A-opentitan/*.log	3	69	clone / checkout logs
+log	A-opentitan/*.rc	2	4	clone / checkout exit codes
+log	B-veer/*.log	2	3208	clone logs
+log	B-veer/.t0	1	11	census start timestamp
+log	C-alex/*.log	4	6391	clone logs
+log	judge/list*.log	3	0	empty run-list logs
+log	judge/list*.progress	3	2566	run-list progress lines
+log	judge/list*.rc	3	6	run-list exit codes
+log	judge_start.ts	1	11	judge start timestamp
+no-oracle-output	A-opentitan/repros/grid4/a1.sv	2	676	vita output only, no oracle capture (judge/grid4/a1.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g1.sv	3	1799	vita output only, no oracle capture (judge/grid4/g1.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g10.sv	3	2391	vita output only, no oracle capture (judge/grid4/g10.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g2.sv	3	1781	vita output only, no oracle capture (judge/grid4/g2.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g3.sv	3	2789	vita output only, no oracle capture (judge/grid4/g3.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g4.sv	3	2767	vita output only, no oracle capture (judge/grid4/g4.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g5.sv	3	3982	vita output only, no oracle capture (judge/grid4/g5.vita.out)
+no-oracle-output	A-opentitan/repros/grid4/g6.sv	3	3971	vita output only, no oracle capture (judge/grid4/g6.vita.out)
+no-oracle-output	judge/probes/r01e.sv	4	4909	vita output only, no oracle capture (judge/probes/r01e.vita.out)
+no-oracle-output	judge/probes/r01f.sv	4	2690	vita output only, no oracle capture (judge/probes/r01f.vita.out)
+no-oracle-output	judge/probes/r10n.sv	2	443	vita output only, no oracle capture (judge/probes/r10n.vita.out)
+no-oracle-output	judge/probes/r10v.sv	3	2521	vita output only, no oracle capture (judge/probes/r10v.vita.out)
+no-oracle-output	judge/probes/r11c.sv	2	596	vita output only, no oracle capture (judge/probes/r11c.vita.out)
+no-oracle-output	judge/probes/r11d.sv	3	3547	vita output only, no oracle capture (judge/probes/r11d.vita.out)
+no-oracle-output	judge/probes/r11lit.sv	2	723	vita output only, no oracle capture (judge/probes/r11lit.vita.out)
+no-oracle-output	judge/probes/r21b.sv	4	6176	vita output only, no oracle capture (judge/probes/r21b.vita.out)
+no-oracle-output	judge/probes/r26m.sv	2	402	vita output only, no oracle capture (judge/probes/r26m.vita.out)
+no-oracle-output	judge/probes/r26o.sv	2	443	vita output only, no oracle capture (judge/probes/r26o.vita.out)
+no-oracle-output	judge/probes/r26w.sv	2	484	vita output only, no oracle capture (judge/probes/r26w.vita.out)
+no-oracle-output	judge/probes/r27a.sv	2	390	vita output only, no oracle capture (judge/probes/r27a.vita.out)
+no-oracle-output	judge/probes/r27b.sv	2	717	vita output only, no oracle capture (judge/probes/r27b.vita.out)
+no-oracle-output	judge/probes/r27c.sv	2	545	vita output only, no oracle capture (judge/probes/r27c.vita.out)
+no-oracle-output	judge/probes/r33b.sv	4	4641	vita output only, no oracle capture (judge/probes/r33b.vita.out)
+no-oracle-output	judge/probes/t2a.sv	2	674	vita output only, no oracle capture (judge/probes/t2a.vita.out)
+no-oracle-output	judge/probes/t2b.sv	2	616	vita output only, no oracle capture (judge/probes/t2b.vita.out)
+no-oracle-output	judge/probes/t2c.sv	2	635	vita output only, no oracle capture (judge/probes/t2c.vita.out)
+no-oracle-output	judge/probes/t2d.sv	2	674	vita output only, no oracle capture (judge/probes/t2d.vita.out)
+no-oracle-output	judge/probes/v4a.sv	3	2117	vita output only, no oracle capture (judge/probes/v4a.vita.out)
+no-oracle-output	judge/v1/p1.sv	4	2721	vita output only, no oracle capture (judge/v1/p1.vita.out)
+no-oracle-output	judge/v1/p2.sv	4	2756	vita output only, no oracle capture (judge/v1/p2.vita.out)
+no-oracle-output	judge/v1/p3.sv	4	5311	vita output only, no oracle capture (judge/v1/p3.vita.out)
+no-oracle-output	judge/v1/row10.sv	4	2450	vita output only, no oracle capture (judge/v1/row10.vita.out)
+no-output	A-opentitan/repros/grid1/g1.sv	2	1545	no capture of any tool
+no-output	A-opentitan/repros/grid1/g10.sv	2	1550	no capture of any tool
+no-output	A-opentitan/repros/grid1/g11.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g12.sv	2	1547	no capture of any tool
+no-output	A-opentitan/repros/grid1/g13.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g14.sv	2	1555	no capture of any tool
+no-output	A-opentitan/repros/grid1/g15.sv	2	1553	no capture of any tool
+no-output	A-opentitan/repros/grid1/g16.sv	2	1559	no capture of any tool
+no-output	A-opentitan/repros/grid1/g17.sv	2	1550	no capture of any tool
+no-output	A-opentitan/repros/grid1/g2.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g3.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g4.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g5.sv	2	1549	no capture of any tool
+no-output	A-opentitan/repros/grid1/g6.sv	2	1552	no capture of any tool
+no-output	A-opentitan/repros/grid1/g7.sv	2	1548	no capture of any tool
+no-output	A-opentitan/repros/grid1/g8.sv	2	1559	no capture of any tool
+no-output	A-opentitan/repros/grid1/g9.sv	2	1548	no capture of any tool
+no-output	A-opentitan/repros/grid2/g1.sv	2	2295	no capture of any tool
+no-output	A-opentitan/repros/grid2/g10.sv	1	347	no capture of any tool
+no-output	A-opentitan/repros/grid2/g11.sv	2	2301	no capture of any tool
+no-output	A-opentitan/repros/grid2/g12.sv	2	2295	no capture of any tool
+no-output	A-opentitan/repros/grid2/g13.sv	2	2391	no capture of any tool
+no-output	A-opentitan/repros/grid2/g14.sv	1	368	no capture of any tool
+no-output	A-opentitan/repros/grid2/g15.sv	2	2395	no capture of any tool
+no-output	A-opentitan/repros/grid2/g16.sv	2	2389	no capture of any tool
+no-output	A-opentitan/repros/grid2/g2.sv	1	346	no capture of any tool
+no-output	A-opentitan/repros/grid2/g3.sv	2	2301	no capture of any tool
+no-output	A-opentitan/repros/grid2/g4.sv	2	2293	no capture of any tool
+no-output	A-opentitan/repros/grid2/g5.sv	2	2305	no capture of any tool
+no-output	A-opentitan/repros/grid2/g6.sv	1	356	no capture of any tool
+no-output	A-opentitan/repros/grid2/g7.sv	2	2311	no capture of any tool
+no-output	A-opentitan/repros/grid2/g8.sv	2	2303	no capture of any tool
+no-output	A-opentitan/repros/grid2/g9.sv	2	2296	no capture of any tool
+no-output	A-opentitan/repros/grid2/w1.sv	1	463	no capture of any tool
+no-output	A-opentitan/repros/grid3/g1.sv	1	444	no capture of any tool
+no-output	A-opentitan/repros/grid3/g2.sv	1	438	no capture of any tool
+no-output	A-opentitan/repros/grid3/g3.sv	1	432	no capture of any tool
+no-output	A-opentitan/repros/grid5/g1.sv	1	510	no capture of any tool
+no-output	A-opentitan/repros/grid5/g2.sv	1	522	no capture of any tool
+no-output	A-opentitan/repros/grid5/g3.sv	1	525	no capture of any tool
+no-output	A-opentitan/repros/grid5/g4.sv	1	614	no capture of any tool
+no-output	A-opentitan/repros/grid5/g5.sv	1	542	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g1.sv	1	372	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g10.sv	1	419	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g11.sv	1	514	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g12.sv	1	592	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g13.sv	1	624	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g2.sv	1	419	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g3.sv	1	489	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g4.sv	1	524	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g5.sv	1	722	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g6.sv	1	518	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g7.sv	1	582	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g8.sv	1	509	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/g9.sv	1	499	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t1.sv	1	809	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t3.sv	1	521	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t4.sv	1	415	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t5.sv	1	715	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t6.sv	1	414	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t7.sv	1	379	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t8.sv	1	460	no capture of any tool
+no-output	B-veer/repros/nested_lvalue_select/t9.sv	1	425	no capture of any tool
+scratch	A-opentitan/tmp/**	32	335103	census working files (bisection copies, report drafts); not cited by any verdict
+third-party-overlay	A-opentitan/patched/**	460	6978873	census overlay = upstream OpenTitan files with workarounds applied
+third-party-overlay	B-veer/eh1s/**	90	1919459	census copy of upstream EH1 with workarounds (sv2v oracle copy)
+third-party-overlay	B-veer/eh1v/**	90	1919823	census copy of upstream EH1 with workarounds (verilator oracle copy)
+third-party-overlay	B-veer/eh1w/**	218	2460602	census copy of upstream EH1 with workarounds (git repo)
+third-party-overlay	B-veer/el2s/**	402	4180894	census copy of upstream EL2 with workarounds (sv2v oracle copy)
+third-party-overlay	B-veer/el2v/**	402	4180508	census copy of upstream EL2 with workarounds (verilator oracle copy)
+third-party-overlay	B-veer/el2w/**	794	5193906	census copy of upstream EL2 with workarounds (git repo)
+third-party-tree	A-opentitan/ot/**	4551	154145576	upstream OpenTitan a3490b42 sparse checkout (Apache-2.0); never redistributed
+third-party-tree	B-veer/eh1/**	207	8493071	upstream VeeR EH1 d04b1c7a clone (Apache-2.0)
+third-party-tree	B-veer/el2/**	801	12907257	upstream VeeR EL2 0169d669 clone (Apache-2.0; testbench/axi4_mux is MIT)
+third-party-tree	C-alex/verilog-axis/**	249	2159517	upstream verilog-axis 48ff7a7e clone (MIT)
+third-party-tree	C-alex/verilog-i2c/**	69	493426	upstream verilog-i2c a65be404 clone (MIT)
+third-party-tree	C-alex/verilog-pcie/**	622	8034328	upstream verilog-pcie 25156a9a clone (MIT)
+third-party-tree	C-alex/verilog-uart/**	97	297679	upstream verilog-uart 1b867e53 clone (MIT)
+unattributable	C-alex/repros/r02_dead_reversed_psel/iv5.out	1	7	no file name in the capture ("tid=5a"); no source in the dir is named for suffix 5
+unattributable	C-alex/repros/r02_dead_reversed_psel/ivc5.out	1	0	empty capture; no source in the dir is named for suffix 5
+unattributable	C-alex/repros/r02_dead_reversed_psel/r02b.vvp	1	1570	compiled iverilog image whose source r02b.v is not in the dir
+unattributable	C-alex/repros/r02_dead_reversed_psel/vita2.out	1	77	no file name in the capture ("tid=da"); no source in the dir is named for suffix 2; r02b.vvp has no source
+upstream-run	A-opentitan/ips/**	507	104360193	per-IP runs of vita and the oracles on upstream designs (logs, sv2v output, compiled images, file lists of IP runs); only the tb file lists are kept
+upstream-run	A-opentitan/prims/**	1362	758360	per-prim elaboration runs on upstream prim modules
+upstream-run	A-opentitan/survey_vitap2.txt	1	14033	raw vita diagnostics on the overlay of the upstream IP designs
+upstream-run	A-opentitan/vita_page1.tsv	1	132288	raw vita diagnostics on the upstream IP designs (page 1 of 19 IPs)
+upstream-run	B-veer/work-eh1/**	101	94736259	whole-core EH1 runs (logs, traces, snapshots); only the file lists are kept
+upstream-run	B-veer/work-el2/**	200	353813993	whole-core EL2 runs (logs, traces, snapshots); only the file lists are kept
+upstream-run	C-alex/elab/**	327	254437	per-module elaboration runs on upstream modules
+upstream-run	C-alex/hand/out/**	65	37235541	hand-tb runs on upstream designs (traces)
+upstream-run	C-alex/repros/p_calcbarids/*.{iv,ivc,vita}.out	18	41038	census run of the wrapper together with upstream verilog-pcie/rtl/pcie_tlp_demux_bar.v (capture echoes the upstream module and its $error text)
+upstream-run	C-alex/run/**	5033	1109548144	per-module driven runs of vita and iverilog on upstream modules (generated tbs, traces)
+licence-rewritten	A-opentitan/repros/r01d_fncall.sv, A-opentitan/repros/out_r01d_fncall/*, judge/runs/A-R01d/*	14	6633	the source reproduces OpenTitan prim_util_pkg::vbits (ot/hw/ip/prim/rtl/prim_util_pkg.sv:43-45) whole with its argument renamed (bundle-1 review N2); the cell keeps a first-party rewrite (`bits_for`) with captures re-run on it (S/bundle1/n2/), so these census files no longer describe the kept source
+licence-rewritten	A-opentitan/repros/r26_pkgparam_impfn.sv, A-opentitan/repros/out_r26_pkgparam_impfn/*, judge/runs/A-R26/*	18	11322	the source reproduces OpenTitan prim_util_pkg::vbits (ot/hw/ip/prim/rtl/prim_util_pkg.sv:43-45) whole with its argument renamed (bundle-1 review N2); the cell keeps a first-party rewrite (`bits_for`) with captures re-run on it (S/bundle1/n2/), so these census files no longer describe the kept source
+licence-rewritten	A-opentitan/repros/r26b_pkgparam_scopedfn.sv, A-opentitan/repros/out_r26b_pkgparam_scopedfn/*, judge/runs/A-R26b/*	18	10933	the source reproduces OpenTitan prim_util_pkg::vbits (ot/hw/ip/prim/rtl/prim_util_pkg.sv:43-45) whole with its argument renamed (bundle-1 review N2); the cell keeps a first-party rewrite (`bits_for`) with captures re-run on it (S/bundle1/n2/), so these census files no longer describe the kept source

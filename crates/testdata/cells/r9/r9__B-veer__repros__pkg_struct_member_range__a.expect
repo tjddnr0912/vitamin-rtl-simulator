@@ -1,0 +1,56 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r9__B-veer__repros__pkg_struct_member_range__a
+slice: §5.2 row 9 new-design census (r9; details _slices/r9/)
+origin: row9/B-veer/repros/pkg_struct_member_range/a.sv
+roadmap_row: unrecorded
+set: B-veer/repros/pkg_struct_member_range
+oracles_present: iverilog,sv2v,verilator
+vita_tags: FINAL
+verdict: unrecorded
+verdict_source: unrecorded
+notes: in the V3 repro dir (row9/B-veer/REPORT.md:27); not named
+alias: judge/runs/B-pkg_struct_member_range-a/t (byte-identical source) verdict: unrecorded verdict_source: unrecorded
+vita_binary: FINAL: md5 f4d778f25ab5921a472cf14fefd569e5 commit 1d23be89
+blocks: 7
+=== block 1 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | judge/runs/B-pkg_struct_member_range-a/iv.c.out | 44 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06 
+=== block 2 | oracle iverilog 13.0 (version at preservation) [vvp run] | judge/runs/B-pkg_struct_member_range-a/iv.out | 89 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1120 wall_s=0.06"; appended rc=0
+bits=8
+t.sv:8: $finish called at 0 (1s)
+WD rc=0 sig=0 peak_rss_kb=1120 wall_s=0.06 
+rc=0
+=== block 3 | oracle sv2v 0.0.13 (version at preservation) [sv2v + iverilog compile] | judge/runs/B-pkg_struct_member_range-a/s2v.c.out | 88 bytes | exit from the capture's own WD lines "WD rc=0 sig=0 peak_rss_kb=2336 wall_s=0.18"; "WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.05"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=2336 wall_s=0.18 
+WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.05 
+=== block 4 | oracle sv2v 0.0.13 (version at preservation) [vvp run] | judge/runs/B-pkg_struct_member_range-a/s2v.out | 89 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1632 wall_s=0.06"; appended rc=0
+bits=8
+sv.v:7: $finish called at 0 (1s)
+WD rc=0 sig=0 peak_rss_kb=1632 wall_s=0.06 
+rc=0
+=== block 5 | oracle verilator 5.052 (version captured in census) [verilator build] | judge/runs/B-pkg_struct_member_range-a/vl.c.out | 3457 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=13248 wall_s=2.83"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.033 MB sources in 3 modules, into 0.023 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 2.751 s (elab=0.000, cvt=0.003, bld=2.745); cpu 0.006 s on 1 threads; allocated 10.000 MB
+WD rc=0 sig=0 peak_rss_kb=13248 wall_s=2.83 
+=== block 6 | oracle verilator 5.052 (version captured in census) [verilator run] | judge/runs/B-pkg_struct_member_range-a/vl.out | 261 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=160 wall_s=0.65"; appended rc=0
+bits=8
+- t.sv:8: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 0s; walltime 0.000 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+WD rc=0 sig=0 peak_rss_kb=160 wall_s=0.65 
+rc=0
+=== block 7 | vita [FINAL] | judge/runs/B-pkg_struct_member_range-a/vita.out | 219 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1808 wall_s=0.06"; appended rc=0
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+bits=8
+simulation ended (Finish) at time 0
+errors=0 warnings=1 notes=0
+WD rc=0 sig=0 peak_rss_kb=1808 wall_s=0.06 
+rc=0
+=== end

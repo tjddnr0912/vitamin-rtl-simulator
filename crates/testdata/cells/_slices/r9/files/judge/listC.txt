@@ -1,0 +1,12 @@
+C-r01_t0_always_star-r01 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r01_t0_always_star/r01.v
+C-r01_t0_always_star-r01b /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r01_t0_always_star/r01b.v
+C-r02_dead_reversed_psel-r02 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r02_dead_reversed_psel/r02.v
+C-r02_dead_reversed_psel-r02g /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r02_dead_reversed_psel/r02g.v
+C-r02_dead_reversed_psel-r02n2 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r02_dead_reversed_psel/r02n2.v
+C-r02_dead_reversed_psel-r02t /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/r02_dead_reversed_psel/r02t.v
+C-p_calcbarids-p2_4_7 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p2_4_7.v
+C-p_calcbarids-p3_1_2 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p3_1_2.v
+C-p_calcbarids-p3_1_3 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p3_1_3.v
+C-p_calcbarids-p4_0_0 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p4_0_0.v
+C-p_calcbarids-p4_6_1 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p4_6_1.v
+C-p_calcbarids-p6_0_1 /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/C-alex/repros/p_calcbarids/p6_0_1.v

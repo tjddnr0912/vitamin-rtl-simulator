@@ -2,7 +2,8 @@
 
 These are the small SystemVerilog designs (cells) that the slices §4.5.580 to §4.5.594 wrote to measure vita
 against the oracles. Each cell is stored with the raw output of every oracle run on it and the raw output of
-each vita binary it ran under, as the slice captured them during development.
+each vita binary it ran under, as the slice captured them during development. `r9/` holds, in the same form, the
+minimal repros of the row-9 new-design census (below).
 
 This directory is preserved data. The cells and captures are read-only: nothing writes them. **The
 harness reads them**: `MANIFEST.txt` (below) is generated from them, and a test fails if the two disagree. The
@@ -27,6 +28,12 @@ harness.
 row name (`case-inside`, `unique-const-fn`, ...). When a slice names two rows (`§2 🆕 T; §2 🆕 S (a)`), the
 first is used and `INDEX.tsv` keeps the full text. Cells with no recorded row are grouped by their scratch
 directory name (`r3`), and the `grouping` column of `INDEX.tsv` says so.
+
+`r9` is grouped by census, not by ROADMAP row: it holds the cells of the row-9 new-design census (§5.2 row 9;
+OpenTitan, VeeR and alexforencich minimal repros, with the judge's re-runs attached as aliases), and each cell's
+judged root id is its `roadmap_row`. It is not wired: `r9` is not a seed row, so admission and every test ignore
+it (a later `cells pin --rows r9` would read it). `_slices/r9/META.md` says how its exit codes, verdicts and
+licence screen were derived.
 
 `<cell>` is `<slice>__<path of the cell in the slice's scratch directory, with / replaced by __>`, for example
 `s588__g__b__b33_bits` for `s588/g/b/b33_bits.sv`.

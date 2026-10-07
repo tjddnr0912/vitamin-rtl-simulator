@@ -1,0 +1,87 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r9__A-opentitan__repros__r21_local_struct_hdrparam
+slice: §5.2 row 9 new-design census (r9; details _slices/r9/)
+origin: row9/A-opentitan/repros/r21_local_struct_hdrparam.sv
+roadmap_row: R21(+R33)
+set: A-opentitan/repros
+oracles_present: iverilog,sv2v,verilator
+vita_tags: FINAL
+verdict: T / S
+verdict_source: row9/JUDGED_ROOTS.md:21
+notes: repro column of R21, row9/A-opentitan/REPORT.md:61
+alias: judge/runs/A-R21/t (byte-identical source) verdict: T / S verdict_source: row9/JUDGED_ROOTS.md:21
+vita_binary: FINAL: md5 f4d778f25ab5921a472cf14fefd569e5 commit 1d23be89
+blocks: 12
+=== block 1 | oracle iverilog 13.0 (version captured in census) | ./out_r21_local_struct_hdrparam/iv.out | 228 bytes | exit from ./out_r21_local_struct_hdrparam/iv.wd "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.06"; appended rc=0
+A o2=82 o5=85
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r21_local_struct_hdrparam.sv:12: $finish called at 1 (1s)
+rc=0
+=== block 2 | oracle sv2v 0.0.13 (version captured in census) | ./out_r21_local_struct_hdrparam/sv.out | 53 bytes | exit from ./out_r21_local_struct_hdrparam/sv.wd "WD rc=0 sig=0 peak_rss_kb=2384 wall_s=0.19"; appended rc=0
+A o2=82 o5=85
+sv.v:31: $finish called at 1 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in census) [verilator build] | ./out_r21_local_struct_hdrparam/vlb.out | 4408 bytes | exit from ./out_r21_local_struct_hdrparam/vlb.wd "WD rc=0 sig=0 peak_rss_kb=13136 wall_s=4.45"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o v
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.034 MB sources in 3 modules, into 0.029 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.366 s (elab=0.000, cvt=0.002, bld=4.360); cpu 0.007 s on 1 threads; allocated 10.219 MB
+=== block 4 | oracle verilator 5.052 (version captured in census) [verilator run] | ./out_r21_local_struct_hdrparam/vl.out | 404 bytes | exit from ./out_r21_local_struct_hdrparam/vl.wd "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.25"; appended rc=0
+A o2=82 o5=85
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r21_local_struct_hdrparam.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 99.999 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | judge/runs/A-R21/iv.c.out | 44 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1600 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=1600 wall_s=0.06 
+=== block 6 | oracle iverilog 13.0 (version at preservation) [vvp run] | judge/runs/A-R21/iv.out | 96 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=768 wall_s=0.07"; appended rc=0
+A o2=82 o5=85
+t.sv:12: $finish called at 1 (1s)
+WD rc=0 sig=0 peak_rss_kb=768 wall_s=0.07 
+rc=0
+=== block 7 | oracle sv2v 0.0.13 (version at preservation) [sv2v + iverilog compile] | judge/runs/A-R21/s2v.c.out | 88 bytes | exit from the capture's own WD lines "WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.13"; "WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.13 
+WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06 
+=== block 8 | oracle sv2v 0.0.13 (version at preservation) [vvp run] | judge/runs/A-R21/s2v.out | 97 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=2064 wall_s=0.06"; appended rc=0
+A o2=82 o5=85
+sv.v:31: $finish called at 1 (1s)
+WD rc=0 sig=0 peak_rss_kb=2064 wall_s=0.06 
+rc=0
+=== block 9 | oracle verilator 5.052 (version captured in census) [verilator build] | judge/runs/A-R21/vl.c.out | 4454 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=13184 wall_s=4.41"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.034 MB sources in 3 modules, into 0.028 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.315 s (elab=0.000, cvt=0.002, bld=4.308); cpu 0.007 s on 1 threads; allocated 10.203 MB
+WD rc=0 sig=0 peak_rss_kb=13184 wall_s=4.41 
+=== block 10 | oracle verilator 5.052 (version captured in census) [verilator run] | judge/runs/A-R21/vl.out | 271 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.26"; appended rc=0
+A o2=82 o5=85
+- t.sv:12: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 1ps; walltime 0.000 s; speed 99.999 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.26 
+rc=0
+=== block 11 | vita [FINAL] | ./out_r21_local_struct_hdrparam/vita.out | 1009 bytes | exit from ./out_r21_local_struct_hdrparam/vita.wd "WD rc=1 sig=0 peak_rss_kb=1968 wall_s=0.06"; appended rc=1
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r21_local_struct_hdrparam.sv:6:15: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r21_local_struct_hdrparam.sv:6:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a whole-member read — a sub-select of a packed-struct member whose width names a header parameter is unsupported in v1, found '['
+errors=1 warnings=1 notes=0
+rc=1
+=== block 12 | vita [FINAL] | judge/runs/A-R21/vita.out | 700 bytes | exit from the capture's own WD line "WD rc=1 sig=0 peak_rss_kb=0 wall_s=0.06"; appended rc=1
+t.sv:6:15: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a variable reference (a name, possibly indexed or member-selected). vita accepts it; iverilog rejects every form of it and Verilator rejects a select on a parenthesised expression or on a literal. Assign the value to a variable first, then select from that
+t.sv:6:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a whole-member read — a sub-select of a packed-struct member whose width names a header parameter is unsupported in v1, found '['
+errors=1 warnings=1 notes=0
+WD rc=1 sig=0 peak_rss_kb=0 wall_s=0.06 
+rc=1
+=== end

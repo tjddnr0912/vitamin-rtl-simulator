@@ -1,0 +1,4 @@
+#!/bin/bash
+# usage: vita-eh1 <log> <filelist> <root> [extra args]   (cwd = work-eh1)
+log=$1; fl=$2; R=$3; shift 3
+exec perl /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/s2-review/sound/p3/wd.pl 300 6000000 $log /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/accept/vita-final -Isnapshots/default -I$R/testbench -I$R/design/include -I$R/design/lib "$@" $(cat $fl)

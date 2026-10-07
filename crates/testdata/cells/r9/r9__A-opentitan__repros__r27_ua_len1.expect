@@ -1,0 +1,97 @@
+# preserved raw captures (oracle + vita); not read by any test; format: crates/testdata/cells/README.md
+cell: r9__A-opentitan__repros__r27_ua_len1
+slice: §5.2 row 9 new-design census (r9; details _slices/r9/)
+origin: row9/A-opentitan/repros/r27_ua_len1.sv
+roadmap_row: R27
+set: A-opentitan/repros
+oracles_present: iverilog,sv2v,verilator
+vita_tags: FINAL
+verdict: T / L
+verdict_source: row9/JUDGED_ROOTS.md:31
+notes: repro column of R27, row9/A-opentitan/REPORT.md:66
+alias: judge/runs/A-R27/t (byte-identical source) verdict: T / L verdict_source: row9/JUDGED_ROOTS.md:31
+vita_binary: FINAL: md5 f4d778f25ab5921a472cf14fefd569e5 commit 1d23be89
+blocks: 11
+=== block 1 | oracle iverilog 13.0 (version captured in census) | ./out_r27_ua_len1/iv.out | 383 bytes | exit from ./out_r27_ua_len1/iv.wd "WD rc=2 sig=0 peak_rss_kb=32 wall_s=0.06"; appended rc=2
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:6: syntax error
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:6: error: Malformed statement
+rc=2
+=== block 2 | oracle sv2v 0.0.13 (version captured in census) | ./out_r27_ua_len1/sv.out | 61 bytes | exit from ./out_r27_ua_len1/sv.wd "WD rc=0 sig=0 peak_rss_kb=2384 wall_s=0.19"; appended rc=0
+A s=4 s2=4
+A s=4 s2=1
+sv.v:57: $finish called at 2 (1s)
+rc=0
+=== block 3 | oracle verilator 5.052 (version captured in census) [verilator build] | ./out_r27_ua_len1/vlb.out | 4408 bytes | exit from ./out_r27_ua_len1/vlb.wd "WD rc=0 sig=0 peak_rss_kb=13568 wall_s=4.81"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o v
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.034 MB sources in 4 modules, into 0.032 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.718 s (elab=0.000, cvt=0.003, bld=4.711); cpu 0.007 s on 1 threads; allocated 10.344 MB
+=== block 4 | oracle verilator 5.052 (version captured in census) [verilator run] | ./out_r27_ua_len1/vl.out | 399 bytes | exit from ./out_r27_ua_len1/vl.wd "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.38"; appended rc=0
+A s=4 s2=4
+A s=4 s2=1
+- /private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 133.333 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+rc=0
+=== block 5 | oracle iverilog 13.0 (version at preservation) [iverilog compile] | judge/runs/A-R27/iv.c.out | 105 bytes | exit from the capture's own WD line "WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06"; appended rc=2
+t.sv:6: syntax error
+t.sv:6: error: Malformed statement
+WD rc=2 sig=0 peak_rss_kb=1696 wall_s=0.06 
+rc=2
+=== block 6 | oracle sv2v 0.0.13 (version at preservation) [sv2v + iverilog compile] | judge/runs/A-R27/s2v.c.out | 88 bytes | exit from the capture's own WD lines "WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.13"; "WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06"; no marker appended: compile step exited 0
+WD rc=0 sig=0 peak_rss_kb=2320 wall_s=0.13 
+WD rc=0 sig=0 peak_rss_kb=1696 wall_s=0.06 
+=== block 7 | oracle sv2v 0.0.13 (version at preservation) [vvp run] | judge/runs/A-R27/s2v.out | 105 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=1712 wall_s=0.06"; appended rc=0
+A s=4 s2=4
+A s=4 s2=1
+sv.v:57: $finish called at 2 (1s)
+WD rc=0 sig=0 peak_rss_kb=1712 wall_s=0.06 
+rc=0
+=== block 8 | oracle verilator 5.052 (version captured in census) [verilator build] | judge/runs/A-R27/vl.c.out | 4454 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=13216 wall_s=4.44"; no marker appended: build step exited 0
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_timing.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_timing.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o verilated_threads.o /opt/homebrew/Cellar/verilator/5.052/share/verilator/include/verilated_threads.cpp
+python3 /opt/homebrew/Cellar/verilator/5.052/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vt.cpp Vt___024root__0.cpp Vt__main.cpp Vt___024root__Slow.cpp Vt___024root__0__Slow.cpp Vt__Syms__Slow.cpp > Vt__ALL.cpp
+c++ -Os  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -DVL_TIME_CONTEXT   -std=gnu++20 -c -o Vt__ALL.o Vt__ALL.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   verilated.o verilated_timing.o verilated_threads.o Vt__ALL.a    -pthread -lpthread   -o Vt
+rm Vt__ALL.verilator_deplist.tmp
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.034 MB sources in 4 modules, into 0.031 MB in 6 C++ files needing 0.000 MB
+- Verilator: Walltime 4.346 s (elab=0.000, cvt=0.003, bld=4.339); cpu 0.007 s on 1 threads; allocated 10.359 MB
+WD rc=0 sig=0 peak_rss_kb=13216 wall_s=4.44 
+=== block 9 | oracle verilator 5.052 (version captured in census) [verilator run] | judge/runs/A-R27/vl.out | 280 bytes | exit from the capture's own WD line "WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.25"; appended rc=0
+A s=4 s2=4
+A s=4 s2=1
+- t.sv:15: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 2ps; walltime 0.000 s; speed 117.647 ns/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB
+WD rc=0 sig=0 peak_rss_kb=32 wall_s=0.25 
+rc=0
+=== block 10 | vita [FINAL] | ./out_r27_ua_len1/vita.out | 1873 bytes | exit from ./out_r27_ua_len1/vita.wd "WD rc=1 sig=0 peak_rss_kb=1648 wall_s=0.06"; appended rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:12:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:13:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:13:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array cannot be the write target in this context (v1: procedural array assignment only) [in t]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:6:16: error[VITA-E3009] E-ELAB-UNSUPPORTED: a keyed assignment pattern `'{k: v, …}` is supported for a packed-struct target (member names, IEEE 1800 §10.9.2) and as `'{default: v}` on an unpacked array (§10.9.1) [in t.up]
+/private/tmp/claude-501/-Users-seongwookjang-project-git-vitamin-rtl-simulator/c40e1dc3-96e1-4997-a40d-90a56b79d219/scratchpad/row9/A-opentitan/repros/r27_ua_len1.sv:14:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+errors=5 warnings=1 notes=0
+rc=1
+=== block 11 | vita [FINAL] | judge/runs/A-R27/vita.out | 1112 bytes | exit from the capture's own WD line "WD rc=1 sig=0 peak_rss_kb=2848 wall_s=0.06"; appended rc=1
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:12:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+t.sv:13:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+t.sv:13:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array cannot be the write target in this context (v1: procedural array assignment only) [in t]
+t.sv:6:16: error[VITA-E3009] E-ELAB-UNSUPPORTED: a keyed assignment pattern `'{k: v, …}` is supported for a packed-struct target (member names, IEEE 1800 §10.9.2) and as `'{default: v}` on an unpacked array (§10.9.1) [in t.up]
+t.sv:14:14: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array has no value in this context (v1: arrays are copied by array assignment; index an element elsewhere) [in t]
+errors=5 warnings=1 notes=0
+WD rc=1 sig=0 peak_rss_kb=2848 wall_s=0.06 
+rc=1
+=== end
