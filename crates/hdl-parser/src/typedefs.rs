@@ -614,6 +614,33 @@ impl Parser<'_, '_> {
     }
 
     pub(crate) fn parse_typedef_struct(&mut self, start: Span) -> Option<ModuleItem> {
+        self.parse_struct_type(start, None)
+    }
+
+    /// The type name after a struct/union body: the typedef's `name ;`, or for an
+    /// anonymous member type the minted key (nothing to consume).
+    fn anon_or_typedef_name(&mut self, start: Span, anon: Option<String>) -> Option<Ident> {
+        match anon {
+            Some(name) => Some(Ident {
+                name,
+                span: start.to(self.prev_span()),
+            }),
+            None => {
+                let tname = self.ident()?;
+                self.expect(TokenKind::Semi, "';'");
+                Some(tname)
+            }
+        }
+    }
+
+    /// The body of `parse_typedef_struct`, shared with an ANONYMOUS packed struct
+    /// member type (`parse_anon_member_type`): `anon` is then the minted key the
+    /// layout is registered under, and no name or `;` follows the closing `}`.
+    pub(crate) fn parse_struct_type(
+        &mut self,
+        start: Span,
+        anon: Option<String>,
+    ) -> Option<ModuleItem> {
         self.bump(); // `struct`
         let packed = self.eat_kw(Kw::Packed);
         // `struct packed signed` (§7.2.1): the qualifier sets the WHOLE-struct value
@@ -630,8 +657,7 @@ impl Parser<'_, '_> {
         let (members, nested_keys, shape_keys, each_exact) =
             self.parse_struct_member_list(packed)?;
         let layout_exact = Self::members_layout_exact(&members, each_exact);
-        let tname = self.ident()?;
-        self.expect(TokenKind::Semi, "';'");
+        let tname = self.anon_or_typedef_name(start, anon)?;
         if !packed {
             // §3 ⑤ ⓓ: a packed-struct member inside an UNPACKED record would need
             // the record's per-member net to carry a layout — not in v1, loud.
@@ -1019,6 +1045,15 @@ impl Parser<'_, '_> {
     /// (different-width members read/write their own low bits). Pure parser
     /// addition (IR-0) — reuses `TypedefKind::Struct` for the AST node.
     pub(crate) fn parse_typedef_union(&mut self, start: Span) -> Option<ModuleItem> {
+        self.parse_union_type(start, None)
+    }
+
+    /// The body of `parse_typedef_union`; `anon` as for `parse_struct_type`.
+    pub(crate) fn parse_union_type(
+        &mut self,
+        start: Span,
+        anon: Option<String>,
+    ) -> Option<ModuleItem> {
         self.bump(); // `union`
         if !self.eat_kw(Kw::Packed) {
             self.error("`packed` after `union` (unpacked union unsupported in v1)");
@@ -1062,8 +1097,7 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close union body");
-        let tname = self.ident()?;
-        self.expect(TokenKind::Semi, "';'");
+        let tname = self.anon_or_typedef_name(start, anon)?;
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
             match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {

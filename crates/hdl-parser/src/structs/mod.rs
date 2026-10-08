@@ -81,8 +81,86 @@ impl Parser<'_, '_> {
                 info.layout_exact,
             ));
         }
+        if self.at_kw(Kw::Struct) || self.at_kw(Kw::Union) {
+            return self.parse_anon_member_type();
+        }
         self.error("a net/var type in a struct/union member");
         None
+    }
+
+    /// §3 ⑤ⓓ: the nesting cap of `parse_anon_member_type` (every anonymous member
+    /// in the OpenTitan sources is one level deep).
+    const MAX_ANON_MEMBER_DEPTH: u32 = 64;
+
+    /// §3 ⑤ⓓ: an ANONYMOUS packed struct or union as a member's type (`struct packed
+    /// { logic q; logic qe; } tx_done;`, every OpenTitan `*_reg_pkg`). The body is
+    /// parsed and laid out by the typedef path itself (`parse_struct_type` /
+    /// `parse_union_type`) under a minted type key, and the member then resolves as a
+    /// member of a NAMED nested typedef does (the `peek_typedef_name` arm above): its
+    /// flat vector, and the key as `nested`, so the layout chains `r.a.q`, recurses a
+    /// `'{…}` value and travels with the outer type's `pkg::t` twin. The key holds a
+    /// space, which no identifier can (an escaped one ends at whitespace), so no
+    /// source name reaches the type; and it holds `::`, the lifetime of a package
+    /// twin, so a scope restore at the end of a package keeps it for the outer type's
+    /// twin (`restore_scope_unit`), the `endpackage` pass leaves it as it is, no
+    /// `import` copies it (its prefix is no package name), and it ends in `::`, so
+    /// `stable_type_key` never takes it for a `pkg::name` twin. A block-local outer type
+    /// drops it with its own entry (`restore_scope`). Refused (loud), as their named
+    /// twins are: an unpacked anonymous member, and packed dimensions after the body.
+    fn parse_anon_member_type(&mut self) -> Option<MemberType> {
+        let start = self.cur_span();
+        let union = self.at_kw(Kw::Union);
+        if !matches!(
+            self.peek_at(1),
+            Some(TokenKind::Word(WordKind::Keyword(Kw::Packed)))
+        ) {
+            self.error(
+                "`packed` after an anonymous struct/union member type (an unpacked one \
+                 is unsupported in v1)",
+            );
+            return None;
+        }
+        if self.anon_member_depth >= Self::MAX_ANON_MEMBER_DEPTH {
+            self.error("anonymous struct/union member nesting too deep (cap 64)");
+            return None;
+        }
+        let key = format!(
+            "anonymous {} {}::",
+            if union { "union" } else { "struct" },
+            self.anon_member_types
+        );
+        self.anon_member_types += 1;
+        self.anon_member_depth += 1;
+        let item = if union {
+            self.parse_union_type(start, Some(key.clone()))
+        } else {
+            self.parse_struct_type(start, Some(key.clone()))
+        };
+        self.anon_member_depth -= 1;
+        item?;
+        let Some(info) = self.typedefs.get(&key).cloned() else {
+            self.error_at(start, "a laid-out anonymous struct/union member type");
+            return None;
+        };
+        if self.peek() == Some(TokenKind::LBracket) {
+            self.error(
+                "a member name after an anonymous struct/union type (packed dimensions \
+                 on an anonymous member type are unsupported in v1)",
+            );
+            return None;
+        }
+        // A struct's `TypeInfo` has no `shape_param`, so the shape-guard bookkeeping of
+        // the typedef-name arm has nothing to record here.
+        let nested = self.struct_layouts.contains_key(&key).then_some(key);
+        Some((
+            info.kind,
+            info.signed,
+            info.range,
+            Vec::new(),
+            nested,
+            None,
+            info.layout_exact,
+        ))
     }
 
     /// §3 ⑤ ⓓ: the key a NESTED member's layout stays reachable under. A bare

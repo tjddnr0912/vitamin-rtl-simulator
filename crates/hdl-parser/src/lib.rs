@@ -732,6 +732,14 @@ pub struct Parser<'t, 's> {
     /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
     /// Accumulates across the source unit (type names are not module-scoped).
     union_type_names: std::collections::HashSet<String>,
+    /// §3 ⑤ⓓ: how many ANONYMOUS packed struct/union member types this parse has
+    /// laid out (`parse_anon_member_type`); the next one's ordinal, so each minted
+    /// type key is unique within the parsed unit.
+    anon_member_types: u32,
+    /// §3 ⑤ⓓ: live nesting depth of anonymous member types (`struct packed { struct
+    /// packed { … } m; } n;`), capped like `stmt_depth` so a pathological nest is a
+    /// parse error, not a stack overflow.
+    anon_member_depth: u32,
     /// Module-scope `localparam` name → its constant value, but ONLY when the value
     /// is a pure literal constant (no `parameter` dependency). Used to fold a
     /// constant generate-array hier index (`g[P].x`, P a localparam). Safe because a
@@ -964,6 +972,8 @@ impl<'t, 's> Parser<'t, 's> {
             packed_md_scoped: std::collections::HashMap::new(),
             md_ret_var: None,
             union_type_names: std::collections::HashSet::new(),
+            anon_member_types: 0,
+            anon_member_depth: 0,
             const_locals: std::collections::HashMap::new(),
             pkg_const_scoped: std::collections::HashMap::new(),
             has_param_header: false,
