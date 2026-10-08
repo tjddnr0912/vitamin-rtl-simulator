@@ -88,6 +88,12 @@ impl<'s> Elaborator<'s> {
             gen_ctr: 0,
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
+            edge_recs: Vec::new(),
+            edge_index: std::collections::BTreeMap::new(),
+            use_recs: Vec::new(),
+            undecided_placeholders: std::collections::BTreeSet::new(),
+            error_placeholders: std::collections::BTreeSet::new(),
+            fill_eids: std::collections::BTreeSet::new(),
             reported_dup_params: std::collections::BTreeSet::new(),
             reported_decl_collisions: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
@@ -988,6 +994,9 @@ impl<'s> Elaborator<'s> {
         // §4.5.355: both lanes have now decided the real chunk, so the assignment
         // width a fill literal could not be told at lowering time finally exists.
         self.resolve_pending_fill_widths();
+        // §4.5.601: every placeholder is patched, so decide the late constant edges now —
+        // before the multidriver scan below reads a continuous-assign chunk's width.
+        self.decide_late_edges();
         // §4.5.166: now that hier read/write chunks + exprs carry real nets and
         // index eids, recompute the comb/latch read-sets so the referenced net
         // (and any index) enters the sensitivity list. Only runs when a hier ref

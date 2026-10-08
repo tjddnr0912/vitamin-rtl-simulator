@@ -57,6 +57,14 @@ impl Elaborator<'_> {
             }
             return Some((cv.bits.val.first().copied().unwrap_or(0) & 1) as u32);
         }
+        // A >64-bit parameter declared with a non-zero low bound (or an ascending one) is
+        // read by POSITION from bit 0 (ROADMAP §2 "A bare >64-bit non-zero-LSB parameter
+        // select reads positionally"): `f[P[15:8]:0]` over `[79:8] P` folded `P[7:0]`'s
+        // place and selected one bit. Decline, so the constant-edge gate refuses the width
+        // or count and names the parameter (`edge_gate.rs`).
+        if self.wide_lsb_param_in(e).is_some() {
+            return None;
+        }
         if let Some(v) = const_eval_u32(e) {
             return Some(v);
         }
@@ -97,7 +105,7 @@ impl Elaborator<'_> {
     pub(crate) fn const_bound_signed(&self, e: &ast::Expr) -> Option<i64> {
         // A fill literal is one bit in a self-determined position and never negative;
         // it also has no `const_self_width`, so the guard below would decline anyway.
-        if fill_literal_ast(e).is_some() {
+        if fill_literal_ast(e).is_some() || self.wide_lsb_param_in(e).is_some() {
             return None;
         }
         if self.ast_mentions_substituted_name(e) || !self.ast_selfwidths_all_known(e) {
@@ -163,34 +171,28 @@ impl Elaborator<'_> {
     }
 
     /// Lower a constant WIDTH / COUNT expression (an indexed part-select's `w` in
-    /// `[c +: w]` / `[c -: w]`, a replication count) so the downstream consumer
-    /// actually receives a constant.
+    /// `[c +: w]` / `[c -: w]`, a replication count) and decide its value.
     ///
     /// Both consumers reduce the lowered tree with a SHALLOW fold (`Const`, the
     /// `Add`/`Sub` of a width tree, `$clog2` of a `Const`) and treat "did not
     /// reduce" as `unwrap_or(1)` / `unwrap_or(0)` — a silent 1-bit select or an
-    /// empty replication. Everything else the language calls a constant expression
-    /// (a cast, a constant-function call, `*`, a ternary, `$bits(x)/k`) landed
-    /// there. So: lower as before, and only if the result is NOT already reducible
-    /// hand over a `Const` from the full const domain.
-    ///
-    /// ADDITIVE by construction — an expression whose lowered form already reduces
-    /// keeps that exact node (byte-identical IR for every design that worked), and
-    /// one the const domain cannot fold either keeps it too. The real/loud rejects
-    /// inside [`Self::lower_index_expr`] run first and yield `Const 0`, which IS
-    /// reducible, so this can never paper over one. (Width-blind shallow
-    /// reductions — `Const 4'd15 + Const 4'd1` as 16 where SV wraps to 0 — are
-    /// corrected inside `lower_index_expr` itself, the one funnel every index,
-    /// bound, offset and width site shares.)
-    pub(crate) fn lower_const_width_expr(&mut self, e: &ast::Expr) -> u32 {
+    /// empty replication; where it does reduce, it clamps every leaf at 2^24 and
+    /// saturates a subtraction. So the value is decided here (`edge_gate.rs`,
+    /// §4.5.601): the constant domain's where it answers and its signed fold is not
+    /// negative, else the lowered tree's own region value; the tree stays when the
+    /// engine reads that value from it (byte-identical IR for every design whose
+    /// tree the engine already read right), else a `Const` holds it. A tree with a
+    /// placeholder the deferred passes patch is decided after them.
+    pub(crate) fn lower_const_width_expr(&mut self, e: &ast::Expr, kind: EdgeKind) -> u32 {
         let id = self.lower_index_expr(e);
-        if self.const_of_expr_u32(id).is_some() {
-            return id;
-        }
-        match self.const_bound_u32(e) {
-            Some(n) => self.const_u32_expr(n, 32),
-            None => id,
-        }
+        self.decide_width_edge(e, id, kind, false)
+    }
+
+    /// [`Self::lower_const_width_expr`] for a replication count, with its own zero-count
+    /// legality (a direct operand of a concatenation may repeat zero times).
+    pub(crate) fn lower_rep_count_expr(&mut self, e: &ast::Expr, zero_ok: bool) -> u32 {
+        let id = self.lower_index_expr(e);
+        self.decide_width_edge(e, id, EdgeKind::RepCount, zero_ok)
     }
 
     /// True when evaluating `e` in the width-unlimited i64 const domain gives the

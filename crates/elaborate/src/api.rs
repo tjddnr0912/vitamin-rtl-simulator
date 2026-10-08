@@ -153,6 +153,7 @@ pub fn elaborate_located_params(
     el.top_param_overrides = top_params.to_vec();
     el.run(unit);
     el.assert_block_local_inits_drained();
+    el.edge_backstop();
     let class_rand = el.class_rand_table();
     let class_constraints = el.class_constraints_table();
     let class_dist = el.class_dist_table();

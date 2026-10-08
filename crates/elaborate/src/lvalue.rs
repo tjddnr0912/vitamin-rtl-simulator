@@ -80,32 +80,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Total bit width of a LOWERED lvalue (mirrors the engine's
-    /// `lvalue_width`/backend `lvalue_width_of`): whole-net chunks read the net
-    /// (element) width, bit selects are 1, part selects read their const width
-    /// edge. Used to size intra-assignment capture temps EXACTLY.
-    pub(crate) fn ir_lvalue_width(&self, lv: &ir::Lvalue) -> u32 {
-        lv.chunks
-            .iter()
-            .map(|c| match c.kind {
-                ir::SelKind::Bit => {
-                    if c.offset.is_none() && c.width.is_none() {
-                        // `.get()` (not index) so an error-recovery lvalue with an
-                        // out-of-range net id degrades to 1 instead of panicking.
-                        self.nets.get(c.net as usize).map(|n| n.width).unwrap_or(1)
-                    } else {
-                        1
-                    }
-                }
-                _ => c
-                    .width
-                    .and_then(|eid| self.const_of_expr_u32(eid))
-                    .unwrap_or(1),
-            })
-            .sum::<u32>()
-            .max(1)
-    }
-
     pub(crate) fn lower_lvalue(&mut self, lv: &ast::Lvalue) -> ir::Lvalue {
         let mut chunks = Vec::new();
         self.collect_lval_chunks(lv, &mut chunks);
@@ -486,7 +460,7 @@ impl Elaborator<'_> {
                     let idx_eids: Vec<u32> =
                         idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
-                    let w = self.lower_const_width_expr(width);
+                    let w = self.lower_const_width_expr(width, EdgeKind::IndexedWidth);
                     let part = HierPart {
                         raw_off,
                         width: w,
@@ -505,7 +479,7 @@ impl Elaborator<'_> {
                 let (net, word) = self.lval_part_base(base);
                 let raw_off = self.lower_index_expr(offset);
                 let off = self.norm_offset_for_net(net, raw_off);
-                let w = self.lower_const_width_expr(width);
+                let w = self.lower_const_width_expr(width, EdgeKind::IndexedWidth);
                 // Ascending net: flip the indexed direction (the offset is already
                 // normalized by `norm_offset_for_net`). Descending keeps `kind`.
                 let kind = indexed_sel_kind(dir, self.net_ascending(net));

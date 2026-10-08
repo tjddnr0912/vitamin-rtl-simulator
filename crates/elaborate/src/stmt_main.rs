@@ -292,7 +292,7 @@ impl Elaborator<'_> {
                     // with a synthetic tmp sized EXACTLY to the lvalue width so
                     // the rhs eval context (max(lhs_w, self_w)) is unchanged —
                     // a wider tmp would alter div/shift operand truncation.
-                    let w = self.ir_lvalue_width(&lv);
+                    let w = self.ia_capture_width(&lv, rhs_id);
                     let tmp = self.fresh_ia_tmp(w);
                     let cap = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: whole_net_lvalue(tmp),

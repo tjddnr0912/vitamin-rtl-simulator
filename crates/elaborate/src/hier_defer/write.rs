@@ -432,7 +432,9 @@ impl Elaborator<'_> {
             if self.lvalue_targets_real(&lv) {
                 continue; // §6.12, same withholding as the lowering-time guard
             }
-            let w = self.ir_lvalue_width(&lv);
+            // The decided width: every deferred pass has run, so a late edge in the
+            // rebuilt chunk is evaluated now (`edge_gate.rs`).
+            let w = self.decided_lvalue_width(&lv);
             // ⚠️ VERIFY BEFORE RE-LOWERING, READ-ONLY. `lower_expr_ctx` reports an
             // unresolved name by EMITTING the diagnostic, so a re-lowering that fails to
             // resolve cannot be rolled back — the error is already out. A right-hand
@@ -450,7 +452,8 @@ impl Elaborator<'_> {
                 redirect.insert(p.expr_id, new_id);
             }
         }
-        self.hier_resolved_chunk.clear();
+        // `hier_resolved_chunk` stays until the edge decision, which measures a capture
+        // into a sentinel target against it (`edge_gate.rs`).
         if redirect.is_empty() {
             return;
         }

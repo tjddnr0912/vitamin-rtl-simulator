@@ -83,6 +83,7 @@ mod driver;
 mod dyn_md_elem;
 mod dynarr;
 mod dynarr_method;
+mod edge_gate;
 mod events;
 mod expr_cast;
 mod expr_ctx;
@@ -188,6 +189,7 @@ pub(crate) use crv::*;
 pub(crate) use da::*;
 pub(crate) use decl_collide::UnitKind;
 pub(crate) use dynarr::*;
+pub(crate) use edge_gate::{EdgeKind, EdgeRec, F2Ctx, UseRec};
 pub(crate) use expr_cast::*;
 pub(crate) use expr_ctx::*;
 pub(crate) use expr_size_ctx::*;
@@ -1457,6 +1459,19 @@ struct Elaborator<'s> {
     /// declaration's range is folded by more than one pass, so without this the same
     /// bound is reported once per pass.
     reported_bad_bounds: std::collections::BTreeSet<(u32, u32)>,
+    /// Every constant edge a funnel built (part-select widths, indexed widths, replication
+    /// counts) and how it was decided (`edge_gate.rs`, §4.5.601).
+    edge_recs: Vec<EdgeRec>,
+    /// Edge root → its record in `edge_recs`.
+    edge_index: std::collections::BTreeMap<u32, usize>,
+    /// Widths a lowering-time consumer sized something from before they were decided.
+    use_recs: Vec<UseRec>,
+    /// `$bits(u.X)` placeholders not yet patched: a tree holding one is undecided.
+    undecided_placeholders: std::collections::BTreeSet<u32>,
+    /// Constants an error left in place of a value: an edge over one is never decided.
+    error_placeholders: std::collections::BTreeSet<u32>,
+    /// Fill literals as lowered (`'0`, `'1`, `'x`, `'z`), for the capture rule.
+    fill_eids: std::collections::BTreeSet<u32>,
     /// §2 🆕 L ⓢ: NAME-token spans already reported by
     /// [`Elaborator::check_duplicate_param_decls`]. The gate runs from
     /// `bind_params`, i.e. once per INSTANCE, and the defect is a property of

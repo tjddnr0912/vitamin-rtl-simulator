@@ -696,12 +696,18 @@ impl Elaborator<'_> {
             // alone rather than bake that in.
             return rhs_id;
         }
-        let lv_width = self.ir_lvalue_width(lv);
         // Re-lower the rhs with the lvalue width as the assignment context so every
         // fill in a context-determined position grows to that width (IEEE §11.6).
         // The originally-lowered `rhs_id` (sized self-determined) becomes dead — a
         // fill-bearing rhs has no golden to preserve, so this is harmless.
-        self.lower_expr_ctx(rhs, lv_width)
+        //
+        // A target whose width is decided only after the deferred passes
+        // (`a[gb.L-1:0]`, §4.5.601) lends the width the lowering can see, under F2:
+        // an all-ones or all-zeros fill is then spelled `~1'b0` / a one-bit zero, which
+        // the run sizes at the final assignment context, and an `'x` / `'z` fill records
+        // the width it was sized at (`edge_gate.rs`).
+        let (lv_width, f2) = self.fill_context(lv);
+        self.lower_expr_ctx_f2(rhs, lv_width, &f2)
     }
 
     /// The deferred-hierarchical sentinel this lvalue writes through, if any.
@@ -738,16 +744,78 @@ impl Elaborator<'_> {
     /// `lower_expr` and `lower_ctx_or_plain`); a non-fill sub-expression falls
     /// through to the byte-identical `lower_expr`.
     pub(crate) fn lower_expr_ctx(&mut self, e: &ast::Expr, ctx: u32) -> u32 {
+        self.lower_expr_ctx_f2(e, ctx, &None)
+    }
+
+    /// [`Self::lower_expr_ctx`] under an F2 state: the context comes (in part) from a
+    /// width not decided yet (`edge_gate.rs`, §4.5.601). The state follows exactly the
+    /// arms that pass the context on — a parenthesis, the operands of an arithmetic or
+    /// bitwise operator, a shift's or power's base, unary `+ - ~`, the ternary arms, a
+    /// min:typ:max's `typ` — and every other lowering under this one runs without it: a
+    /// comparison's operands, a logical or reduction operand, a shift amount or an
+    /// exponent, a ternary condition, and every self-determined node (a concatenation,
+    /// a replication, a call, a cast) start a new region.
+    pub(crate) fn lower_expr_ctx_f2(&mut self, e: &ast::Expr, ctx: u32, f2: &Option<F2Ctx>) -> u32 {
+        self.lower_expr_ctx_inner(e, ctx, f2)
+    }
+
+    /// A context-passing child that may lower plain (no fill in it): `lower_ctx_or_plain`
+    /// under the caller's F2 state.
+    fn ctx_or_plain_f2(&mut self, e: &ast::Expr, ctx: u32, f2: &Option<F2Ctx>) -> u32 {
+        if expr_contains_fill(e) || (self.inline_ctx_ext.is_some() && ctx > 0) {
+            self.lower_expr_ctx_f2(e, ctx, f2)
+        } else {
+            self.lower_expr(e)
+        }
+    }
+
+    /// The context and F2 state a fill-bearing operand takes from its lowered `sibling`:
+    /// `sibling_ctx`'s, unless the sibling's width is not decided yet — then the fill is
+    /// lowered for the run to size (RC2), recording against the sibling's width.
+    fn fill_side_ctx(&self, base: u32, sibling: u32, f2: &Option<F2Ctx>) -> (u32, Option<F2Ctx>) {
+        if self.sibling_undecided(sibling) {
+            let w = base.max(1);
+            return (w, F2Ctx::with(f2, edge_gate::Measure::Expr(sibling), w));
+        }
+        (self.sibling_ctx(base, sibling), f2.clone())
+    }
+
+    fn lower_expr_ctx_inner(&mut self, e: &ast::Expr, ctx: u32, f2: &Option<F2Ctx>) -> u32 {
         use ast::ExprKind::*;
         match &e.kind {
-            Paren { inner } => self.lower_expr_ctx(inner, ctx),
-            // A fill literal → a const of the context width (≥ 1 bit).
+            Paren { inner } => self.lower_expr_ctx_f2(inner, ctx, f2),
+            // A fill literal → a const of the context width (≥ 1 bit). Under F2 an
+            // all-ones / all-zeros fill is spelled for the run to size (`~1'b0` is
+            // all ones at any context width, a one-bit zero zero-extends), and an
+            // `'x` / `'z` fill records the width it was sized at.
             IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
-                let w = ctx.max(1);
-                let cv = literal::fill_literal_const(raw, *kind, w)
-                    .unwrap_or_else(|| make_const_u32(0, w));
-                let cid = self.intern_const(cv);
-                self.push_expr(ir::Expr::Const { val: cid })
+                let id = match f2 {
+                    Some(_) if !literal::fill_is_unknown(raw, *kind) => {
+                        let zcid = self.intern_const(make_const_u32(0, 1));
+                        let zero = self.push_expr(ir::Expr::Const { val: zcid });
+                        if literal::fill_is_zero(raw, *kind) {
+                            zero
+                        } else {
+                            self.push_expr(ir::Expr::Unary {
+                                op: ir::UnOp::BitNot,
+                                operand: zero,
+                            })
+                        }
+                    }
+                    _ => {
+                        let w = ctx.max(1);
+                        let cv = literal::fill_literal_const(raw, *kind, w)
+                            .unwrap_or_else(|| make_const_u32(0, w));
+                        let cid = self.intern_const(cv);
+                        let id = self.push_expr(ir::Expr::Const { val: cid });
+                        if let Some(f2) = f2 {
+                            self.record_unknown_fill(f2, w);
+                        }
+                        id
+                    }
+                };
+                self.fill_eids.insert(id);
+                id
             }
             Binary { op, lhs, rhs } => {
                 use ast::BinOp::*;
@@ -823,9 +891,9 @@ impl Elaborator<'_> {
                     let (l, r) = if matches!(op, Pow) && expr_contains_fill(lhs) {
                         let r = self.lower_self_det(rhs);
                         let base_ctx = if self.expr_is_real(r) { 0 } else { ctx };
-                        (self.lower_expr_ctx(lhs, base_ctx), r)
+                        (self.lower_expr_ctx_f2(lhs, base_ctx, f2), r)
                     } else {
-                        let l = self.lower_ctx_or_plain(lhs, ctx);
+                        let l = self.ctx_or_plain_f2(lhs, ctx, f2);
                         (l, self.lower_self_det(rhs))
                     };
                     // ⚠️ This is the branch that owns BOTH real rules a fill used to
@@ -845,23 +913,28 @@ impl Elaborator<'_> {
                 // 1-bit result does not let the outer ctx into the operands).
                 let is_cmp = matches!(op, Eq | Ne | Lt | Le | Gt | Ge | CaseEq | CaseNe | InsideEq);
                 let base = if is_cmp { 0 } else { ctx };
+                // a comparison's operands are a new region: F2 does not pass into them
+                let f2_ops = if is_cmp { None } else { f2.clone() };
                 let lf = expr_contains_fill(lhs);
                 let rf = expr_contains_fill(rhs);
                 let (l, r) = if lf && !rf {
                     // lower the NON-fill side first; its width sets the fill side's ctx.
                     let r = self.lower_self_det(rhs);
-                    let w = self.sibling_ctx(base, r);
-                    let l = self.lower_expr_ctx(lhs, w);
+                    let (w, f2l) = self.fill_side_ctx(base, r, &f2_ops);
+                    let l = self.lower_expr_ctx_f2(lhs, w, &f2l);
                     (l, r)
                 } else if rf && !lf {
                     let l = self.lower_self_det(lhs);
-                    let w = self.sibling_ctx(base, l);
-                    let r = self.lower_expr_ctx(rhs, w);
+                    let (w, f2r) = self.fill_side_ctx(base, l, &f2_ops);
+                    let r = self.lower_expr_ctx_f2(rhs, w, &f2r);
                     (l, r)
                 } else {
                     // both fills (or a fill nested under each) — size to ctx (≥1).
                     let w = base.max(1);
-                    (self.lower_expr_ctx(lhs, w), self.lower_expr_ctx(rhs, w))
+                    (
+                        self.lower_expr_ctx_f2(lhs, w, &f2_ops),
+                        self.lower_expr_ctx_f2(rhs, w, &f2_ops),
+                    )
                 };
                 // §11.4.13: an `inside` element is `==?` when it is a constant with
                 // x/z bits (a fill element is already sized to the left operand
@@ -887,7 +960,11 @@ impl Elaborator<'_> {
                     op,
                     LogNot | RedAnd | RedNand | RedOr | RedNor | RedXor | RedXnor
                 );
-                let o = self.lower_ctx_or_plain(operand, if self_det { 0 } else { ctx });
+                let o = if self_det {
+                    self.lower_ctx_or_plain(operand, 0)
+                } else {
+                    self.ctx_or_plain_f2(operand, ctx, f2)
+                };
                 let irop = map_unop(*op);
                 // ⭐ THE SAME §6.2 CHECK `lower_expr_ungated`'s `Unary` arm makes, in
                 // the one spelling both call. This arm had none: it was only
@@ -917,17 +994,17 @@ impl Elaborator<'_> {
                     let f = self.lower_self_det(else_e);
                     // Same real rule as the binary arm: `c ? r : '1` read 0 where both
                     // oracles (and `c ? r : 1'b1`) read 1.
-                    let w = self.sibling_ctx(ctx, f);
-                    (self.lower_expr_ctx(then_e, w), f)
+                    let (w, f2t) = self.fill_side_ctx(ctx, f, f2);
+                    (self.lower_expr_ctx_f2(then_e, w, &f2t), f)
                 } else if ff && !tf {
                     let t = self.lower_self_det(then_e);
-                    let w = self.sibling_ctx(ctx, t);
-                    (t, self.lower_expr_ctx(else_e, w))
+                    let (w, f2e) = self.fill_side_ctx(ctx, t, f2);
+                    (t, self.lower_expr_ctx_f2(else_e, w, &f2e))
                 } else {
                     let w = ctx.max(1);
                     (
-                        self.lower_expr_ctx(then_e, w),
-                        self.lower_expr_ctx(else_e, w),
+                        self.lower_expr_ctx_f2(then_e, w, f2),
+                        self.lower_expr_ctx_f2(else_e, w, f2),
                     )
                 };
                 self.push_expr(ir::Expr::Ternary {
@@ -952,7 +1029,7 @@ impl Elaborator<'_> {
             // other two, so the context belongs to `typ`. Without this arm the node
             // would fall to `_` below, be lowered without a context, and lose the
             // width that `expr_contains_fill`'s `MinTypMax` arm just earned it.
-            MinTypMax { typ, .. } => self.lower_expr_ctx(typ, ctx),
+            MinTypMax { typ, .. } => self.lower_expr_ctx_f2(typ, ctx, f2),
             // ⚠️⚠️ `lower_expr_ungated` HERE IS LOAD-BEARING, NOT STYLE. Since the
             // `Concat`/`Replicate` arms above were deleted, those two kinds fall to
             // THIS arm — and both are `is_ctx_node` kinds carrying a fill, so plain
@@ -1071,7 +1148,10 @@ impl Elaborator<'_> {
     /// Placeholder used after an error so downstream edges stay valid.
     pub(crate) fn placeholder_expr(&mut self) -> u32 {
         let cid = self.intern_const(make_const_u32(0, 1));
-        self.push_expr(ir::Expr::Const { val: cid })
+        let id = self.push_expr(ir::Expr::Const { val: cid });
+        // an edge over it is never decided (`edge_gate.rs`)
+        self.error_placeholders.insert(id);
+        id
     }
 
     /// Self-determined width of an already-lowered expr (mirrors the engine's

@@ -129,8 +129,8 @@ pub fn const_u32_of_expr_ctx(ir: ExprCtx, eid: u32) -> Option<u32> {
         // deliberately NOT folded: SV width-limited constant arithmetic, compounded
         // by the pre-existing derived-localparam value-inferred width (elaborate's
         // `param_decl_width` → ≥ 32 for an expression initializer), makes it unsafe
-        // to reproduce bit-exactly — it stays a silent 0-width count (a documented
-        // follow-on), NEVER a wrong non-zero one.
+        // to reproduce bit-exactly here — elaborate folds such a count to a `Const`
+        // or refuses it (`edge_gate.rs`, §4.5.601), NEVER a wrong non-zero one.
         Expr::SysFunc {
             which: SysFuncId::Clog2,
             args,
@@ -582,3 +582,249 @@ pub fn self_width_of(
 pub fn const_u32_of_expr(ir: &SimIr, eid: u32) -> Option<u32> {
     const_u32_of_expr_ctx(ExprCtx::of(ir), eid)
 }
+
+/// Which constant edge [`edge_value`] decides. The eids are the LOWERED bounds: the
+/// two bounds of a `[m:l]` select (in the declared direction of what it selects), the
+/// width of a `[b +: w]` / `[b -: w]` select, the count of a replication.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeSpec {
+    /// `[msb:lsb]`: the width is `|msb - lsb| + 1` in the declared direction.
+    Part { msb: u32, lsb: u32, desc: bool },
+    /// `[b +: w]` / `[b -: w]`.
+    Indexed { w: u32 },
+    /// `{n{…}}`.
+    Count { n: u32 },
+}
+
+/// Why an edge has no decided value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeFault {
+    /// The tree holds a node outside [`const_u32_of_expr_ctx`]'s arms (a read, a call,
+    /// `*`, a cast…): the engine cannot read it, so it is not decided here either.
+    Unreduced,
+    /// The value is negative: a negative count or width, or `[m:l]` bounds out of order
+    /// for the declared direction.
+    Negative,
+    /// A leaf has x or z bits.
+    Unknown,
+}
+
+/// The region a bound forms (IEEE 1800 §11.6.1, §11.8.1-2): the width and signedness
+/// [`self_width_of`] gives its root, over exactly the arms of
+/// [`const_u32_of_expr_ctx`] — a `Numeric` constant without x/z, `+`, `-`, and `$clog2`
+/// of one constant with the engine's own decline set.
+fn edge_region(ir: ExprCtx, eid: u32) -> Result<(u32, bool), EdgeFault> {
+    match &ir.exprs[eid as usize] {
+        Expr::Const { val } => {
+            let c = &ir.consts[*val as usize];
+            if !matches!(c.repr, ConstRepr::Numeric) {
+                return Err(EdgeFault::Unreduced);
+            }
+            if c.bits.unk.iter().any(|&u| u != 0) {
+                return Err(EdgeFault::Unknown);
+            }
+            Ok((clamp_w(c.width.max(1)), c.signed))
+        }
+        Expr::Binary {
+            op: BinOp::Add | BinOp::Sub,
+            lhs,
+            rhs,
+        } => {
+            let (a, sa) = edge_region(ir, *lhs)?;
+            let (b, sb) = edge_region(ir, *rhs)?;
+            // arithmetic: max(L, R), signed iff BOTH signed (the `self_width_of` arm)
+            Ok((a.max(b), sa && sb))
+        }
+        Expr::SysFunc {
+            which: SysFuncId::Clog2,
+            args,
+        } if args.len() == 1 => {
+            const_u32_of_expr_ctx(ir, eid).ok_or(EdgeFault::Unreduced)?;
+            // integer return: the `self_width_of` `$clog2` arm
+            Ok((32, true))
+        }
+        _ => Err(EdgeFault::Unreduced),
+    }
+}
+
+/// Bit `b` of a word vector.
+fn word_bit(v: &[u64], b: u32) -> bool {
+    v.get((b / 64) as usize)
+        .is_some_and(|w| (w >> (b % 64)) & 1 == 1)
+}
+
+/// A leaf's `lw` bits extended to the region's `w` bits: by the leaf's sign only when the
+/// region is signed (§11.8.2: an operand is sign-extended only if the propagated type is
+/// signed).
+fn edge_extend(bits: &[u64], lw: u32, w: u32, signed: bool) -> Vec<u64> {
+    let keep = lw.min(w);
+    let mut v = sim_ir::mw::mw_mask(bits.to_vec(), keep.max(1));
+    if keep == 0 {
+        v.iter_mut().for_each(|x| *x = 0);
+    }
+    v.resize(w.div_ceil(64).max(1) as usize, 0);
+    if signed && keep >= 1 && word_bit(bits, keep - 1) {
+        for b in keep..w {
+            v[(b / 64) as usize] |= 1u64 << (b % 64);
+        }
+    }
+    sim_ir::mw::mw_mask(v, w)
+}
+
+/// The region's value bits (`w` wide), every operation wrapping at `w`.
+fn edge_eval(ir: ExprCtx, eid: u32, w: u32, signed: bool) -> Vec<u64> {
+    match &ir.exprs[eid as usize] {
+        Expr::Const { val } => {
+            let c = &ir.consts[*val as usize];
+            edge_extend(&c.bits.val, clamp_w(c.width.max(1)), w, signed)
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            let a = edge_eval(ir, *lhs, w, signed);
+            let b = edge_eval(ir, *rhs, w, signed);
+            let b = if matches!(op, BinOp::Sub) {
+                sim_ir::mw::mw_neg(&b)
+            } else {
+                b
+            };
+            sim_ir::mw::mw_mask(sim_ir::mw::mw_add(&a, &b), w)
+        }
+        // `$clog2`: the engine arm's own answer, a non-negative 32-bit integer.
+        _ => {
+            let v = const_u32_of_expr_ctx(ir, eid).unwrap_or(0);
+            edge_extend(&[u64::from(v)], 32, w, signed)
+        }
+    }
+}
+
+/// The value of one bound: its region evaluated at the region's width and read at the
+/// region's signedness. Saturates at `i128::MAX` / `i128::MIN` past 127 bits of magnitude
+/// (every consumer of such a value refuses or clamps it).
+pub fn edge_bound_value(ir: ExprCtx, eid: u32) -> Result<i128, EdgeFault> {
+    let (w, signed) = edge_region(ir, eid)?;
+    let v = edge_eval(ir, eid, w, signed);
+    let negative = signed && word_bit(&v, w - 1);
+    let mag = if negative {
+        sim_ir::mw::mw_mask(sim_ir::mw::mw_neg(&v), w)
+    } else {
+        v
+    };
+    let wide = mag.iter().skip(2).any(|&x| x != 0) || mag.get(1).is_some_and(|&x| x >> 63 != 0);
+    let small = if wide {
+        i128::MAX
+    } else {
+        let lo = u128::from(mag.first().copied().unwrap_or(0));
+        let hi = u128::from(mag.get(1).copied().unwrap_or(0));
+        i128::try_from((hi << 64) | lo).unwrap_or(i128::MAX)
+    };
+    Ok(if negative { -small } else { small })
+}
+
+/// The decided value of a constant edge (§4.5.601): each bound one self-determined region
+/// (its own width and signedness, every operation wrapping there), a `[m:l]` width
+/// `hi - lo + 1` in the declared direction. Saturates at `u64::MAX`.
+pub fn edge_value(ir: ExprCtx, spec: EdgeSpec) -> Result<u64, EdgeFault> {
+    match spec {
+        EdgeSpec::Part { msb, lsb, desc } => {
+            let m = edge_bound_value(ir, msb)?;
+            let l = edge_bound_value(ir, lsb)?;
+            part_width(m, l, desc)
+        }
+        EdgeSpec::Indexed { w: e } | EdgeSpec::Count { n: e } => {
+            let v = edge_bound_value(ir, e)?;
+            if v < 0 {
+                return Err(EdgeFault::Negative);
+            }
+            Ok(u64::try_from(v).unwrap_or(u64::MAX))
+        }
+    }
+}
+
+/// `|m - l| + 1` in the declared direction; bounds out of order are [`EdgeFault::Negative`].
+pub fn part_width(m: i128, l: i128, desc: bool) -> Result<u64, EdgeFault> {
+    let (hi, lo) = if desc { (m, l) } else { (l, m) };
+    if hi < lo {
+        return Err(EdgeFault::Negative);
+    }
+    let w = hi.saturating_sub(lo).saturating_add(1);
+    Ok(u64::try_from(w).unwrap_or(u64::MAX))
+}
+
+/// Every constant EDGE the engine folds with [`const_u32_of_expr_ctx`]: each part or
+/// indexed select's width and each replication's count in `exprs`, and each part
+/// chunk's width in the targets of `stmts` and `cont_assigns` and in `call_outs`, the
+/// caller lvalues a task call copies its outputs to (the `out_binds` of the task-call
+/// side tables, which live outside the statement arena). A part chunk with no width
+/// edge is reported as `None` (its readers write the whole net).
+pub fn for_each_constant_edge<'a>(
+    exprs: &[Expr],
+    stmts: &'a [sim_ir::Stmt],
+    cont_assigns: &'a [sim_ir::ContAssign],
+    call_outs: impl IntoIterator<Item = &'a sim_ir::Lvalue>,
+    mut f: impl FnMut(Option<u32>),
+) {
+    for e in exprs {
+        match e {
+            Expr::Select { width, kind, .. } if *kind != SelKind::Bit => f(Some(*width)),
+            Expr::Replicate { count, .. } => f(Some(*count)),
+            _ => {}
+        }
+    }
+    let stmt_targets = stmts.iter().filter_map(|s| match s {
+        sim_ir::Stmt::BlockingAssign { lhs, .. }
+        | sim_ir::Stmt::NonblockingAssign { lhs, .. }
+        | sim_ir::Stmt::Force { lhs, .. }
+        | sim_ir::Stmt::Release { lhs } => Some(lhs),
+        sim_ir::Stmt::SysTask { .. } | sim_ir::Stmt::Disable { .. } => None,
+    });
+    let targets = stmt_targets
+        .chain(cont_assigns.iter().map(|c| &c.lhs))
+        .chain(call_outs);
+    for lv in targets {
+        for c in &lv.chunks {
+            if c.kind != SelKind::Bit {
+                f(c.width);
+            }
+        }
+    }
+}
+
+/// [`for_each_constant_edge`] with each edge handed out to be repointed: every holder the
+/// engine reads (a select's width, a replication's count, a part chunk's width in a
+/// statement target, a continuous-assign target and a task call's output targets).
+pub fn for_each_constant_edge_mut<'a>(
+    exprs: &mut [Expr],
+    stmts: &'a mut [sim_ir::Stmt],
+    cont_assigns: &'a mut [sim_ir::ContAssign],
+    call_outs: impl IntoIterator<Item = &'a mut sim_ir::Lvalue>,
+    mut f: impl FnMut(&mut u32),
+) {
+    for e in exprs.iter_mut() {
+        match e {
+            Expr::Select { width, kind, .. } if *kind != SelKind::Bit => f(width),
+            Expr::Replicate { count, .. } => f(count),
+            _ => {}
+        }
+    }
+    let stmt_targets = stmts.iter_mut().filter_map(|s| match s {
+        sim_ir::Stmt::BlockingAssign { lhs, .. }
+        | sim_ir::Stmt::NonblockingAssign { lhs, .. }
+        | sim_ir::Stmt::Force { lhs, .. }
+        | sim_ir::Stmt::Release { lhs } => Some(lhs),
+        sim_ir::Stmt::SysTask { .. } | sim_ir::Stmt::Disable { .. } => None,
+    });
+    let targets = stmt_targets
+        .chain(cont_assigns.iter_mut().map(|c| &mut c.lhs))
+        .chain(call_outs);
+    for lv in targets {
+        for c in &mut lv.chunks {
+            if c.kind != SelKind::Bit {
+                if let Some(w) = &mut c.width {
+                    f(w);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod edge_value_tests;

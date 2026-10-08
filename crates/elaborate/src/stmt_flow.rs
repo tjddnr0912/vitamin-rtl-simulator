@@ -696,7 +696,9 @@ impl Elaborator<'_> {
         // to enter a maximum with, and all three oracles keep `case (r) '1: …` matching
         // even with an eight-bit sibling label. `sibling_ctx` already withholds the
         // width per label; this skips the collective pass for the same reason.
-        if any_fill && !self.expr_is_real(scrut_id0) {
+        // A selector whose width is decided only after the deferred passes lends none:
+        // its fill labels are already spelled for the run to size (`lower_case_label`).
+        if any_fill && !self.expr_is_real(scrut_id0) && !self.sibling_undecided(scrut_id0) {
             let scrut_w = self.sibling_ctx(0, scrut_id0);
             let common = tests
                 .iter()
@@ -880,7 +882,7 @@ impl Elaborator<'_> {
         if let Some(d) = delay {
             // capture-now/write-later: the DRAW (and seed/ref update) happens at
             // the capture statement; only the lhs write is delayed.
-            let w = self.ir_lvalue_width(&lv);
+            let w = self.ia_capture_width(&lv, rhs_id);
             let tmp = self.fresh_ia_tmp(w);
             let cap = self.push_stmt(ir::Stmt::BlockingAssign {
                 lhs: whole_net_lvalue(tmp),
@@ -1120,6 +1122,21 @@ impl Elaborator<'_> {
         body: &ast::Stmt,
         span: ast::Span,
     ) {
+        // A count over a >64-bit parameter with a non-zero low bound would be read by
+        // position at run time too (the bound funnel declines it); refuse it, as the
+        // constant-edge gate refuses such a width or count (`edge_gate.rs`).
+        if let Some((name, range)) = self.wide_lsb_param_in(count) {
+            self.error_at(
+                MsgCode::ElabUnsupported,
+                count.span,
+                &format!(
+                    "this repeat count reads `{name}`, a parameter wider than 64 bits declared \
+                     {range}; vita reads a select of such a parameter by position from bit 0, so \
+                     it does not evaluate one in a count"
+                ),
+            );
+            return;
+        }
         // The unroll decision lives in `repeat_unroll_count` because the CLASSIFIER
         // (`ast_has_repeat_with_timing`) has to reach the same answer — see that
         // helper's doc for why a second spelling here was a false-loud.

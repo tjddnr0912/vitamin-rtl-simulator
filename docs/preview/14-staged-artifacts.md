@@ -56,7 +56,7 @@ deserialized. A bad magic, a short file or an undecodable header is `E-ART-FORMA
 
 | # | Field | Type | What the producers write |
 |---|---|---|---|
-| 1 | `format_version` | `u32` | `CURRENT_FORMAT_VERSION` = **35** |
+| 1 | `format_version` | `u32` | `CURRENT_FORMAT_VERSION` = **36** |
 | 2 | `schema_hash` | `[u8; 32]` | `.vu`: `schema_hash::<hdl_ast::SourceUnit>()`. `.velab`: `schema_hash::<sim_ir::SimIr>()` |
 | 3 | `composite_input_hash` | `[u8; 32]` | The upstream digest (§2 RULE V). `vcmp`: blake3 over the concatenated raw source text plus the `-D`/`-I` surface. `velab`: blake3 of the whole consumed `.vu` file. `velab -L`: blake3 over every consumed compilation-unit blob, concatenated |
 | 4 | `global_time_precision` | `i64` | The resolved design-wide precision exponent (`-9` = 1 ns) |
@@ -958,8 +958,9 @@ rather than a mid-file postcard failure or, worse, a successful mis-decode.
 **What is not versioned by it.** The work-library manifest carries its own `format_version = 1`,
 unrelated to the container number. The `sim-ir` golden hash moves independently of it: of the
 bumps since v29, only v33 and v34 (new `SysFuncId` variants in the frozen IR) re-pinned the golden
-hash; v30–v32 were trailer changes, and v35 changed what an existing value means with no wire-shape
-change. The two numbers are not the same thing and must not be read as one.
+hash; v30–v32 were trailer changes, and v35 and v36 changed what an existing value means with no
+wire-shape change (v36: every part-select width, indexed width and replication count is decided by
+elaborate, §4.5.601). The two numbers are not the same thing and must not be read as one.
 
 The version-by-version record lives in the doc comment on `CURRENT_FORMAT_VERSION` in
 `crates/vita-artifact/src/header.rs`, and in [../history/README.md](../history/README.md). This

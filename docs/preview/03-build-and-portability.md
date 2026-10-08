@@ -344,7 +344,7 @@ frozen type, `BTree`-only collections, span-free types, the fully-qualified `sim
 spelling, and the module-path sensitivity of `SchemaHash` — are stated in
 [16-schema-hash-spec.md](16-schema-hash-spec.md) and
 [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md). The container version
-is `CURRENT_FORMAT_VERSION`, currently 35.
+is `CURRENT_FORMAT_VERSION`, currently 36.
 
 ---
 

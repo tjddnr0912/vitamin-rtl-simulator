@@ -45,7 +45,9 @@ impl Elaborator<'_> {
                     let cv = literal::fill_literal_const(raw, *kind, 1)
                         .unwrap_or_else(|| make_const_u32(0, 1));
                     let cid = self.intern_const(cv);
-                    return self.push_expr(ir::Expr::Const { val: cid });
+                    let id = self.push_expr(ir::Expr::Const { val: cid });
+                    self.fill_eids.insert(id);
+                    return id;
                 }
                 let cid = self.lower_int_literal(*kind, raw);
                 let id = self.push_expr(ir::Expr::Const { val: cid });
@@ -843,7 +845,7 @@ impl Elaborator<'_> {
                     let idx_eids: Vec<u32> =
                         idx_asts.iter().map(|e| self.lower_index_expr(e)).collect();
                     let raw_off = self.lower_index_expr(offset);
-                    let w = self.lower_const_width_expr(width);
+                    let w = self.lower_const_width_expr(width, EdgeKind::IndexedWidth);
                     let eid = self.push_expr(ir::Expr::Signal {
                         net: POISON_NET,
                         word: None,
@@ -879,7 +881,7 @@ impl Elaborator<'_> {
                 } else {
                     self.norm_offset_if_net(base, raw_off)
                 };
-                let width = self.lower_const_width_expr(width);
+                let width = self.lower_const_width_expr(width, EdgeKind::IndexedWidth);
                 let kind = indexed_sel_kind(dir, asc);
                 self.push_expr(ir::Expr::Select {
                     base: base_id,
@@ -1046,8 +1048,10 @@ impl Elaborator<'_> {
                     // `{$bits(v)/4{…}}` all printed nothing while iverilog replicated.
                     // §11.4.12.2 requires a constant count, so the shared width/count
                     // funnel hands the engine a `Const` when the const domain can
-                    // prove one (and changes nothing otherwise).
-                    self.lower_const_width_expr(count)
+                    // prove one, and refuses one it cannot (`edge_gate.rs`, §4.5.601).
+                    // A count decided only after the deferred passes takes the
+                    // zero-count rule below there, with this count's own legality.
+                    self.lower_rep_count_expr(count, zero_ok)
                 };
                 // §11.4.12.2: the count is a NON-NEGATIVE constant expression, and
                 // BOTH oracles reject a negative one ("Concatenation repeat may not
@@ -1093,7 +1097,10 @@ impl Elaborator<'_> {
                 // 0-width value: `r = {(0){1'b1}}` printed 0 with exit 0 while
                 // iverilog rejects, and the width-honest count fold now routes
                 // `{(4'd15+4'd1){1'b1}}` (a 4-bit wrap) into this same position.
-                if !zero_ok && self.const_of_expr_u32(count) == Some(0) {
+                // The DECIDED count (`edge_gate.rs`): a tree the engine's fold saturates to
+                // zero is a negative count, which the decision names; a count decided
+                // only after the deferred passes takes this rule there.
+                if !zero_ok && self.count_is_zero_now(count) {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a replication count of zero is only legal as a direct \

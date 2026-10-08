@@ -241,10 +241,10 @@ impl Elaborator<'_> {
             );
             return Some(rhs_id);
         }
-        let lv_width = self.ir_lvalue_width(lv);
         // `None` = the expansion already failed loudly (a placeholder); padding it
         // would only invent a width for a value that has none.
         let stream_width = self.trusted_self_width(rhs_id)?;
+        let lv_width = self.stream_target_width(lv, stream_width);
         if lv_width <= stream_width {
             return Some(rhs_id);
         }

@@ -9,6 +9,76 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a part-select width, an indexed width and a replication count read their value
+
+- vita now decides the value of every part-select width (`f[m:l]`), indexed part-select width
+  (`f[b +: w]`, `f[b -: w]`) and replication count (`{n{…}}`) once, as IEEE 1800 defines it:
+  each bound a self-determined constant expression, a `[m:l]` width `|m - l| + 1` in the
+  declared direction. Before, the simulator read the lowered expression with a fold that
+  clamped every value at 2^24, could not go below zero and did not wrap, so it read the wrong
+  number at exit 0:
+  - a width or count computed from values at or past 2^24 — address constants
+    (`f[MEM_END - MEM_BASE : 0]` with `MEM_BASE = 32'h1000_0000`), `32'h1000_0004 -
+    32'h1000_0000` — read as one bit, zero copies or a high-impedance write (`r=00000001` where
+    Icarus Verilog, sv2v and Verilator print `0000000f`; `{8'hA5, {(A + 2 - A){1'b1}}}` printed
+    `a5` for `297`);
+  - a width or count over a generate-block or instance parameter that wraps at its own width
+    or is negative (`f[gb.U + 6 : 0]` with `U = 32'hFFFF_FFFE` selected 32 bits, not 5;
+    `f[gb.N + 6 : 0]` with `N = -2` too; `{8'hA5, {(gb.BIG + 4){1'b1}}}` with `BIG =
+    32'hFFFF_FFFC` replicated where all three tools print `a5`);
+  - a narrow or signed generate-block parameter in a bound (`localparam logic signed [7:0]
+    S`), and a task output copied to such a target (`t(a[gb.HI - gb.LO : 0])`).
+- An ascending net's part-select whose bounds fold only after elaboration (`g[2:$size(arr)]`,
+  `g[gb.A:gb.B]` on `logic [0:31] g`) read and wrote one bit, and its continuous-assign twin
+  reported a false `VITA-E3001`; it selects the bounds' width.
+- Two continuous assigns to disjoint parts of one net whose widths fold only after
+  elaboration (`assign w[gb.U + 6 : 0] = …; assign w[31:5] = '0;`) reported a false
+  `VITA-E3001` multiple-driver error; the widths are decided before that check.
+- A fill literal (`'1`, `'0`) whose context is a target or an operand whose width folds only
+  after elaboration (`a[gb.L-1:0] = '1;`, `a[u.W-1:0] <= '1;`, `assign w[u.W-1:0] = '1;`,
+  `(f[gb.L-1:0] == '1)`, `case (f[gb.L-1:0]) '1:`) was sized as one bit or as 32 bits; it now
+  takes the final width (Icarus Verilog, sv2v and Verilator agree), through every operator that
+  passes the context on, in an always_ff, always_comb or function body too. A fill inside a
+  comparison, a logical or a reduction operand, or a call argument keeps its own region.
+- An intra-assignment delay or event (`a[gb.L-1:0] = #1 f;`, `= @(posedge clk) f[0]`, also into
+  a hierarchical target `u.g = #1 …`) captured the right-hand side at one bit when the target
+  width folds only after elaboration; the capture now holds the right-hand side at its own
+  width, which is exact when the target is no wider or the value only zero-extends.
+- `VITA-E3009` (error, at the bound) where vita has no right value to give:
+  - a capture whose right-hand side is narrower than such a target and depends on the width
+    it is evaluated at — signed, holding a `'1`, `'x` or `'z` fill, or with
+    `+ - * ** << <<< ~^ ^~`, unary `~` or `-` at the top (`a[gb.L-1:0] = #1 4'hf + 4'h1;`,
+    Icarus Verilog `10`; a `'0` capture zero-extends exactly and runs) — and an `'x` or `'z`
+    fill sized before such a target;
+  - a streaming concatenation padded before such a target is known to be wider;
+  - a negative indexed width, including a negative literal (`f[0 +: -1]`, `f[0 +: -4'sd2]`,
+    `f[7 -: -1]`, which read the whole net or `xxxxxxxx`), and a zero one (`f[0 +: 0]`, IEEE
+    §11.5.1, which read `0`), including one a function computes from a variable it never
+    assigns (an x value vita's constant interpreter reads as 0, so the refusal names both);
+  - a negative replication count, `[m:l]` bounds out of order for the declared direction, and
+    a zero count outside a concatenation, also when they fold only after elaboration;
+  - a `[m:l]` width above 1048576 bits from bounds that are not two literals
+    (`f[WP[71:40]:0]`); a literal bound of the same width runs as before;
+  - a width or count with no value vita can decide: arithmetic over the bits of a parameter
+    wider than 64 bits (a member of a wide packed-struct parameter, `f[pt.HI-1:0]`, VeeR EL2's
+    fetch address; `{(WP[7:0]+1){1'b1}}`), a parameter wider than 64 bits declared with a
+    non-zero low bound (`[79:8]`), `*` or another operator over a generate-block or instance
+    name, a constant function the elaborator does not fold (a `case` body), a variable, or an
+    x/z value (Icarus Verilog and Verilator refuse an x-valued count and `+:` width;
+    Icarus Verilog reads an x-valued `[m:l]` bound as an all-x select). These read one bit,
+    zero copies or the whole net before. Assigning the bits to a narrower `localparam` first
+    folds.
+- The check is made on the code as written, not on what runs: such a width or count in a
+  function or task that is never called, in a branch never taken, in a package function that
+  is imported but never called, or in a module elaborated only because nothing instantiates
+  it is refused, although Icarus Verilog and Verilator run those designs. A width of 1 or a
+  count of 0 that the old reading happened to match is refused as well.
+- A negative literal bound (`x[-1:0]`) keeps its old one-bit read and whole-net write: Icarus
+  Verilog and sv2v refuse it as out of order, Verilator reads two bits.
+- The artifact format is 36: an artifact written by an earlier vita meets the header check
+  (`E-ART-FORMAT-MISMATCH`, exit 2) instead of running a width it did not decide; elaborate it
+  again.
+
 ### Fixed — a `reg`, `integer`, `int` or `real` takes one continuous `assign`
 
 - IEEE 1800 §6.5 lets a variable be written by one continuous assignment, and §6.11.2 makes `reg`

@@ -209,25 +209,28 @@ fn zero_replication_inside_concat_part_index_is_still_loud() {
     );
 }
 
-/// RESIDUAL MARKER (ROADMAP §2): a wrap-sensitive bound over a WIDTH-UNKNOWN
-/// leaf (a const-array element — `const_self_width` has no arm for it) must
-/// keep its pre-slice decline: the self-determined walk would DEGRADE to the
-/// width-unlimited domain there and fold 300 where SV's 8-bit sum wraps to 44
-/// (verilator answers the 44-bit select; iverilog cannot compile unpacked-array
-/// parameters). Until the width model answers const-array elements, the silent
-/// pre-slice 1-bit read stays — folding the unlimited 300 would trade one
-/// silent-wrong for another.
+/// REFUSED (ROADMAP §2): a wrap-sensitive bound over a WIDTH-UNKNOWN leaf (a
+/// const-array element — `const_self_width` has no arm for it) keeps its decline:
+/// the self-determined walk would DEGRADE to the width-unlimited domain there and
+/// fold 300 where SV's 8-bit sum wraps to 44. The decline used to reach the
+/// engine's 1-bit read (`CW=1`); since §4.5.601 the width the engine cannot reduce
+/// is E3009 (`edge_gate.rs`). verilator 5.052 and sv2v 0.0.13 -> iverilog 13.0
+/// `CW=fffffffffff` (the 44-bit select); iverilog 13.0 `sorry: unpacked array
+/// parameters are not supported yet.` Folding the unlimited 300 would trade one
+/// silent-wrong for another, so the value waits for the width model.
 #[test]
-fn width_unknown_wrap_bound_keeps_preslice_decline() {
-    let out = run("module top;\n\
+fn width_unknown_wrap_bound_is_refused() {
+    loud(
+        "module top;\n\
          localparam bit [7:0] CA [2] = '{8'd200, 8'd100};\n\
          logic [63:0] v;\n\
          initial begin\n\
            v = 64'hffff_ffff_ffff_ffff;\n\
            $display(\"CW=%h\", v[0 +: (CA[0] + CA[1])]);\n\
          end\n\
-         endmodule\n");
-    assert!(out.contains("CW=1"), "got:\n{out}");
+         endmodule\n",
+        "the width of this indexed part-select does not fold to a constant",
+    );
 }
 
 /// Unchanged neighbours stay byte-for-byte: literal counts/bounds, a plain

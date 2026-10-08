@@ -303,7 +303,9 @@ impl Elaborator<'_> {
                  — this reads a real-returning function",
             );
             let _ = id;
-            return self.const_u32_expr(0, 32);
+            let zero = self.const_u32_expr(0, 32);
+            self.error_placeholders.insert(zero);
+            return zero;
         }
         let id = self.lower_expr(e);
         if self.expr_is_real(id) {
@@ -324,7 +326,9 @@ impl Elaborator<'_> {
                 MsgCode::ElabUnsupported,
                 "a select index / bound / size must be integral, not real (IEEE §11.5.1)",
             );
-            return self.const_u32_expr(0, 32);
+            let zero = self.const_u32_expr(0, 32);
+            self.error_placeholders.insert(zero);
+            return zero;
         }
         // A constant index / bound / offset is a SELF-DETERMINED position, and the
         // downstream shallow reduction of the lowered tree is width-blind:
@@ -1887,6 +1891,7 @@ impl Elaborator<'_> {
         lsb_id: u32,
         ascending: bool,
     ) -> u32 {
+        let errors_before = self.error_count;
         let folded = (self.const_bound_u32(msb_ast), self.const_bound_u32(lsb_ast));
         if let (Some(m), Some(l)) = folded {
             if ascending {
@@ -1923,17 +1928,34 @@ impl Elaborator<'_> {
                 }
             }
         }
+        // `(msb - lsb) + 1` on a descending net, `(lsb - msb) + 1` on an ascending one: the
+        // tree is the width in the net's own direction, so bounds out of order for it
+        // make the subtraction negative, which the engine's fold would saturate to a
+        // 1-bit select and the constant-edge gate refuses (`edge_gate.rs`).
+        let (hi_id, lo_id) = if ascending {
+            (lsb_id, msb_id)
+        } else {
+            (msb_id, lsb_id)
+        };
         let diff = self.push_expr(ir::Expr::Binary {
             op: ir::BinOp::Sub,
-            lhs: msb_id,
-            rhs: lsb_id,
+            lhs: hi_id,
+            rhs: lo_id,
         });
         let one = self.const_u32_expr(1, 32);
-        self.push_expr(ir::Expr::Binary {
+        let width = self.push_expr(ir::Expr::Binary {
             op: ir::BinOp::Add,
             lhs: diff,
             rhs: one,
-        })
+        });
+        // A direction error above already refused the select, so the tree it falls
+        // through to is not a second defect.
+        if self.error_count != errors_before {
+            return width;
+        }
+        // The value is decided now, or after the deferred passes, or refused
+        // (`edge_gate.rs`, §4.5.601); a negative literal bound keeps this tree.
+        self.decide_part_edge(width, msb_ast, lsb_ast, msb_id, lsb_id, ascending, folded)
     }
 
     /// Like [`Self::expr_array_chain`] but for a multi-dim PACKED net (a flat vector

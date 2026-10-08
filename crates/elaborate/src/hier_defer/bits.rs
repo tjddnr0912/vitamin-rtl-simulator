@@ -137,6 +137,7 @@ impl Elaborator<'_> {
                     if let Some(slot) = self.exprs.get_mut(d.eid as usize) {
                         *slot = ir::Expr::Const { val: cid };
                     }
+                    self.undecided_placeholders.remove(&d.eid);
                 }
                 None => self.error(
                     MsgCode::ElabUnsupported,

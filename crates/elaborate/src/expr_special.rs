@@ -530,6 +530,8 @@ impl Elaborator<'_> {
                     .join(".");
                 if self.lookup_net_scoped(&joined).is_none() {
                     let eid = self.int_result_expr(32);
+                    // a width or count over it is undecided until the patch
+                    self.undecided_placeholders.insert(eid);
                     self.deferred_hier_bits.push(DeferredHierBits {
                         eid,
                         prefix: self.cur_prefix.clone(),
@@ -857,6 +859,12 @@ impl Elaborator<'_> {
         // width to lend (§6.12) and `ir_bits_of` answers its storage 64, so
         // `case (r) '1:` sized the label to 64 bits and fell through to `default`
         // where BOTH oracles match — and where `case (r) 1'b1:` already matched.
+        // RC2 (§4.5.601): a selector whose width is decided only after the deferred
+        // passes lends no width; the fill is spelled for the run to size.
+        if self.sibling_undecided(scrut_id) && expr_contains_fill(label) {
+            let f2 = F2Ctx::with(&None, edge_gate::Measure::Expr(scrut_id), 1);
+            return self.lower_expr_ctx_f2(label, 1, &f2);
+        }
         let w = self.sibling_ctx(0, scrut_id);
         self.lower_case_label_at(w, label)
     }

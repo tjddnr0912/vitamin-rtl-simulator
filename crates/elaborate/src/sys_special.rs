@@ -110,7 +110,7 @@ impl Elaborator<'_> {
                 // at the CAPTURE.
                 let lv = self.lower_lvalue(lhs);
                 self.check_lvalue_kind(&lv, true);
-                let w = self.ir_lvalue_width(&lv);
+                let w = self.ia_capture_width(&lv, rhs_id);
                 let tmp = self.fresh_ia_tmp(w);
                 let cap = self.push_stmt(ir::Stmt::BlockingAssign {
                     lhs: whole_net_lvalue(tmp),

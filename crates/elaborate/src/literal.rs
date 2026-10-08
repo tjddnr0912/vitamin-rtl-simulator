@@ -268,6 +268,12 @@ pub fn fill_is_unknown(raw: &str, kind: IntLitKind) -> bool {
     matches!(fill_bit(raw, kind), Some(b) if b.u)
 }
 
+/// Is `raw`/`kind` the fill literal `'0` (or `'s0`)? Its value is zero at every
+/// context width, so zero-extending a narrower one gives the wider one.
+pub fn fill_is_zero(raw: &str, kind: IntLitKind) -> bool {
+    matches!(fill_bit(raw, kind), Some(b) if !b.v && !b.u)
+}
+
 /// Build the `ConstVal` of a fill literal at the CONTEXT width `width` (the fill
 /// bit replicated across all `width` bits). `None` if `raw`/`kind` is not a fill
 /// literal. Fills are UNSIGNED (iverilog parity: `'1 > 0` is true); the engine

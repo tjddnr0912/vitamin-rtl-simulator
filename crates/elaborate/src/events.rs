@@ -71,7 +71,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
-        let w = self.ir_lvalue_width(&lv);
+        let w = self.ia_capture_width(&lv, rhs_id);
         let tmp = self.fresh_ia_tmp(w);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),
@@ -190,7 +190,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
-        let w = self.ir_lvalue_width(&lv);
+        let w = self.ia_capture_width(&lv, rhs_id);
         let tmp = self.fresh_ia_tmp(w);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),
