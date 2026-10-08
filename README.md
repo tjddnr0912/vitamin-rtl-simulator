@@ -122,10 +122,11 @@ Per-construct detail is in the
 [system-task chapter](docs/manual/005_system-tasks.md) lists every `$` name.
 
 Constructs outside the subset are refused with a diagnostic that names the
-construct and the reason. The deliberate non-goals are DPI-C, `shortreal`,
-`trireg`, implicit nets, UPF and SDF, the UVM ecosystem, synthesis, and a
-waveform GUI. Everything that is simplified rather than refused, and every
-place where the reference simulators disagree with each other, is listed in
+construct and the reason. The deliberate non-goals are `shortreal`, `trireg`,
+implicit nets, UPF and SDF, synthesis, and a waveform GUI; DPI-C is planned and
+UVM is a conditional long-term item. Everything that is simplified rather than
+refused, and every place where the reference simulators disagree with each other,
+is listed in
 [Limitations](docs/manual/006_limitations.md).
 
 ## The correct-or-loud contract

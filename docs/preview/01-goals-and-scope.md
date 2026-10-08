@@ -239,8 +239,8 @@ degraded, a diagnostic says so.
 | A synthesis tool | out of scope as a product. The reference notes still record each construct's synthesizability |
 | A waveform GUI viewer | VCD and FST are read in GTKWave, Surfer or another external viewer |
 | Waveform formats other than VCD and FST | FSDB and the rest are not planned |
-| DPI-C (`import "DPI-C"`, `export "DPI-C"`) | permanent non-goal |
-| UVM and its ecosystem | permanent non-goal |
+| DPI-C (`import "DPI-C"`, `export "DPI-C"`) | not implemented yet (refused as `VITA-E2002`); planned, no longer a non-goal ([ROADMAP §3.a ⑮](../ROADMAP.md)) |
+| UVM and its ecosystem | conditional, not scheduled: the prerequisites and the re-entry trigger are in [ROADMAP §7](../ROADMAP.md) |
 | UPF power intent, SDF timing back-annotation | permanent non-goal |
 | `shortreal`, `trireg` | permanent non-goal |
 | Implicit net creation | a policy decision: an undeclared name is `E-ELAB-UNRESOLVED-NAME`, not a new wire |

@@ -751,7 +751,7 @@ the construct dies at `E-PARSE-UNEXPECTED-TOKEN` / `VITA-E2002`.
 
 | Area | Constructs |
 |---|---|
-| Foreign interface | `import "DPI-C"`, `export "DPI-C" function` — a permanent non-goal |
+| Foreign interface | `import "DPI-C"`, `export "DPI-C" function` — planned (ROADMAP §3.a ⑮) |
 | Timing and paths | `specify` / `endspecify`, `edge` event control, `ifnone`, `showcancelled` / `noshowcancelled`, `pulsestyle_*` |
 | Strengths and switches | drive strengths (`assign (strong1, strong0) y = a;`), `pullup` / `pulldown`, the MOS and bidirectional primitives (`cmos rcmos nmos pmos rnmos rpmos tran tranif0 tranif1 rtran rtranif0 rtranif1`), `vectored` / `scalared` |
 | Configuration | `config` / `endconfig`, `library`, `liblist`, `cell`, `design`, `use`, `incdir`, `instance` |
@@ -770,10 +770,10 @@ shape, is a second unpacked dimension, a bounded queue (`[$:N]`), a declaration
 initializer on such an array, and a packed-struct member inside an unpacked struct.
 Parameterized classes are monomorphized in the parser and work.
 
-`shortreal`, `trireg`, UPF, SDF, synthesis, a waveform GUI, the UVM ecosystem, and a VHDL
-front end are permanent non-goals rather than gaps. `defparam` is IEEE-deprecated and
-implemented only for a direct-child `instance.param` target with a constant value; a
-multi-level path and a non-constant value are refused by name.
+`shortreal`, `trireg`, UPF, SDF, synthesis and a waveform GUI are permanent non-goals rather
+than gaps; the UVM ecosystem and a VHDL front end are conditional long-term items (ROADMAP §7).
+`defparam` is IEEE-deprecated and implemented only for a direct-child `instance.param` target
+with a constant value; a multi-level path and a non-constant value are refused by name.
 
 ### 2.11 Refusals by language area
 

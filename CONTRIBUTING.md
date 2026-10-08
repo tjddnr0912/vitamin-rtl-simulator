@@ -139,6 +139,9 @@ on; both crates deny clippy's `undocumented_unsafe_blocks`. CI's clippy compiles
 `frontend.rs`; `jit.rs` is checked only with the feature on
 (`cargo clippy -p sim-engine --features jit --locked -- -D warnings`). A new site
 changes this table and the lint configuration in the same commit, with its reason.
+One future site is ruled: DPI-C (ROADMAP §3.a ⑮) will load a user's shared library
+in-process through an isolated crate with audited `unsafe`, and it joins this table only
+after a review of its own.
 
 ## Frozen types and `format_version`
 

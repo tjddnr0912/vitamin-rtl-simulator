@@ -196,8 +196,9 @@ downgraded. See [CLI Reference](004_cli-reference.md).
 
 ### Out of scope
 
-Synthesis, a waveform GUI, FSDB and other vendor wave formats, UVM, UPF, SDF back-annotation,
-and DPI-C.
+Synthesis, a waveform GUI, FSDB and other vendor wave formats, UPF, and SDF back-annotation.
+DPI-C is not implemented yet and is planned; running UVM testbenches is a conditional
+long-term item (ROADMAP §7).
 
 ---
 

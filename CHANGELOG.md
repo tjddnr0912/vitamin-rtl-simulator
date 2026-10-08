@@ -9,6 +9,14 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — DPI-C and UVM are no longer permanent non-goals
+
+- DPI-C (`import` / `export "DPI-C"`) moves from the permanent non-goals to planned work, the import half
+  first; until it lands both are refused as before (`VITA-E2002`). UVM moves to the conditional long-term items
+  with its prerequisites listed. README, the manual's introduction and limitations chapter, and the scope
+  document say so. The limitations chapter also called a VHDL front end a permanent non-goal; it now says
+  what the roadmap already did: a conditional long-term item.
+
 ### Fixed — a part-select width, an indexed width and a replication count read their value
 
 - vita now decides the value of every part-select width (`f[m:l]`), indexed part-select width
@@ -78,6 +86,19 @@ changed for a user of the simulator.
 - The artifact format is 36: an artifact written by an earlier vita meets the header check
   (`E-ART-FORMAT-MISMATCH`, exit 2) instead of running a width it did not decide; elaborate it
   again.
+
+### Added — an anonymous packed struct or union as a struct member
+
+- `typedef struct packed { struct packed { logic q; logic qe; } tx_done; … } t;` — a member whose
+  type is an anonymous `struct packed { … }` or `union packed { … }`, the shape of every
+  OpenTitan `*_reg_pkg` — was refused at parse with `VITA-E2002` ("expected a net/var type in a
+  struct/union member, found keyword 'struct'"). It now behaves exactly as the same member
+  written with a named typedef does: `r.tx_done.q` reads and writes its bits, a `'{…}` pattern
+  recurses into it, `$bits` counts it, and a package's type keeps its layout through `import`,
+  `import p::t` and `p::t`, at any nesting depth and in a struct or union typedef in a module,
+  a package, `$unit`, a function or a generate block. Packed dimensions after an anonymous
+  member's body (`struct packed { … } [1:0] m;`) and an unpacked anonymous member stay
+  `VITA-E2002`, as do the named spellings vita refuses; nesting deeper than 64 levels is refused.
 
 ### Fixed — a `reg`, `integer`, `int` or `real` takes one continuous `assign`
 

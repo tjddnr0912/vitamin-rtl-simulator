@@ -99,7 +99,8 @@ a new guarantee.
    control and time-travel surfaces are large. §13 states which of them exist.
 
 Non-goals, outside the rail by decision: FSDB and UCDB, an embedded SQLite (one external loader
-script is enough), a waveform GUI, UVM integration, and automatic inference of protocol channels —
+script is enough), a waveform GUI, UVM-specific rail hooks (running a UVM testbench is ROADMAP §7), and
+automatic inference of protocol channels —
 R-I2 would be config-described, never guessed. VCD stays the human-facing format.
 
 ## 4. Surfaces

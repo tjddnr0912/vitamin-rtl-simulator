@@ -50,7 +50,14 @@ hold.
    randomising x does not show that a 4-state simulator's x-pessimism never reaches the
    digest, so a 4-state cross-check is recorded beside it where one can be built (for ibex,
    sv2v converts the design and iverilog runs it). A manifest test holds the row's `oracle`
-   field to naming the check. `ibex` and `opentitan-prims` are the rows admitted this way.
+   field to naming the check. `ibex` and `opentitan-prims` are the rows admitted this way. A second exception
+   (owner ruling): where Verilator is not x-invariant on a design, that 4-state
+   cross-check may stand alone as its oracle, on three conditions — vita's digest is
+   byte-identical to the 4-state oracle's; the failed x-invariance check is recorded with
+   the row (the seeds and the distinct digests or cycle counts they printed); and rule 5's
+   asymmetric mutations move the 4-state oracle's digest as well as vita's. VeeR EL2
+   (ROADMAP §5.2) is the row it was ruled for; the runner's contract text and its manifest
+   test take the exception with that row.
 3. **One digest line, accumulated over the whole run** — not final state, which is blind to
    a divergence the design later overwrites. The pinned digest is the *oracle's* answer, so
    `corpus-runner run` is a differential gate even on a machine with no other simulator
@@ -107,7 +114,7 @@ Shapes, from `enum Shape`, and what each exercises:
 
 Distribution is five crypto, five cpu, three stream, two fabric. `ibex` and
 `opentitan-prims` are the SystemVerilog designs. Rows 12–15 came out of the row-9
-new-design census (ROADMAP §5.2 rows 13–16), which ran each of them under its oracle first.
+new-design census (§4.5.603), which ran each of them under its oracle first.
 
 ### 3.1 Per-row mechanics
 
@@ -714,10 +721,15 @@ a 30.4 s median. The four rows admitted from the row-9 census add about 72 s to 
   reverted builds had printed the same pins, and §4.5.572's Verilator's table for eight of
   RUN.md's mutations.
 - New designs, licence and oracle first. The row-9 census admitted four rows that run today
-  (`verilog-axis`, `verilog-i2c`, `verilog-uart`, `opentitan-prims`; ROADMAP §5.2 rows
-  13–16). OpenTitan's IPs, VeeR EL2 / EH1 (Apache-2.0) and alexforencich verilog-pcie (MIT)
-  are blocked pages queued in §5.2. Solderpad designs (cv32e40p, cva6, the pulp-platform
-  libraries) stay outside rule 1 (owner ruling).
+  (`verilog-axis`, `verilog-i2c`, `verilog-uart`, `opentitan-prims`; §4.5.603). The rest are
+  ROADMAP §5.2 rows (Solderpad designs — cv32e40p, cva6, the pulp-platform libraries — stay
+  outside rule 1, owner ruling):
+  - VeeR EH1 (Apache-2.0, row 31): Verilator, x-invariant over 66 runs; after the rows that
+    open its page.
+  - OpenTitan pattgen, uart, gpio, i2c and rv_timer (row 47): after the T and B stage rows.
+  - OpenTitan aon_timer and edn (row 53): after the V stage rows.
+  - `verilog-pcie` (MIT, row 63): once a first-party testbench folds a digest.
+  - VeeR EL2 (Apache-2.0, row 64): under rule 2's 4-state exception; after its rows.
 - The full `darkriscv` SoC runs and agrees with Icarus Verilog (`bench/darkriscv/RUN.md`), also
   with upstream's `__RMW_CYCLE__` on since §4.5.575 accepted its null `$display` argument; it is
   not a corpus row because its UART's `$fgetc` path depends on host file state.
