@@ -821,7 +821,19 @@ impl Elaborator<'_> {
                     _ => continue 'names,
                 }
             }
-            self.bits_prescan.insert(n.name.name.clone(), (elem, dims));
+            let non_integral = matches!(
+                d.kind,
+                ast::NetVarKind::Real
+                    | ast::NetVarKind::Realtime
+                    | ast::NetVarKind::Event
+                    | ast::NetVarKind::ClassHandle
+                    | ast::NetVarKind::VirtualIface
+            );
+            let bit_selectable = d.packed.is_empty() && !non_integral;
+            self.bits_prescan.insert(
+                n.name.name.clone(),
+                (elem, dims, bit_selectable, non_integral),
+            );
         }
     }
 }

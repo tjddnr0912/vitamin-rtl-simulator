@@ -42,6 +42,7 @@ impl<'s> Elaborator<'s> {
             net_decl_range: BTreeMap::new(),
             file_directed_stmts: std::collections::BTreeSet::new(),
             bits_prescan: BTreeMap::new(),
+            select_scope: None,
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),
             scoped_gather: Default::default(),

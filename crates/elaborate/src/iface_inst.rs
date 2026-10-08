@@ -399,6 +399,10 @@ impl Elaborator<'_> {
                 let saved_dpos_scope = std::mem::replace(&mut self.decl_pos_scope, path.clone());
                 let saved_dpos_range =
                     std::mem::replace(&mut self.decl_pos_range, (decl.span.lo, decl.span.hi));
+                // No select census in an interface body: `$bits` of a select and of a
+                // signing conversion decline there (`select_scope.rs`), and every other
+                // `$bits` reads the tables exactly as before.
+                let saved_select_scope = self.select_scope.take();
                 let dbl = self.gather_block_local_names(&decl);
                 let saved_dbl = std::mem::replace(&mut self.decl_block_locals, dbl);
                 // §2 Scoping row 3: same augmented SCOPING feed as `instance.rs` (see
@@ -760,6 +764,7 @@ impl Elaborator<'_> {
                 self.decl_pos = saved_decl_pos;
                 self.decl_pos_scope = saved_dpos_scope;
                 self.decl_pos_range = saved_dpos_range;
+                self.select_scope = saved_select_scope;
                 self.decl_block_locals = saved_dbl;
                 self.scoped_block_locals = saved_scoped_blocks;
                 self.scoped_gather = saved_scoped_gather;

@@ -576,6 +576,9 @@ impl Elaborator<'_> {
                 );
             }
         }
+        // The parent's select census is not this module's: header parameters bind
+        // with none (`$bits` of a select declines there), the body with its own.
+        let saved_select_scope = self.select_scope.take();
         let param_ovr = {
             let (sp, ovr) = if dp_overrides.is_empty() {
                 self.bind_params(module, param_overrides)
@@ -665,6 +668,7 @@ impl Elaborator<'_> {
         let saved_coalesced = std::mem::replace(&mut self.coalesced_block_locals, coalesced);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
+        self.select_scope = Some(crate::select_scope::SelectScope::of_module(module));
         for item in &module.body {
             match item {
                 ast::ModuleItem::Param(p) => {
@@ -1415,6 +1419,7 @@ impl Elaborator<'_> {
         self.restore_params(saved_params);
         self.scope_imports = saved_scope_imports;
         self.bits_prescan = saved_prescan;
+        self.select_scope = saved_select_scope;
         self.local_decl_names = saved_local_names;
         self.scoped_block_locals = saved_scoped_blocks;
         self.scoped_gather = saved_scoped_gather;

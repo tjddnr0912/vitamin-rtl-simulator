@@ -725,6 +725,59 @@ impl Elaborator<'_> {
                     .try_fold(0u32, |acc, p| acc.checked_add(self.bits_of_selfdet(p)?))?;
                 n.checked_mul(one)
             }
+            // A select: what `bits_of_view` answers (an unpacked array element or
+            // view) first, as before; then, over a packed vector
+            // (`select_base_is_packed`), the select's own width (§11.5) whatever the
+            // vector holds — a bit-select one bit (its index may vary), a part-select
+            // `|msb − lsb| + 1` over its constant bounds, an indexed part-select its
+            // constant width. A packed-struct member arrives as the part-select the
+            // parser lays it out as, so `$bits({s.f, s.bus})` sums two of them. Only
+            // the width is asked, so a bound pair written against the vector's
+            // direction (`addr[4:5]` of `[31:0]`) answers 2, as all three oracles do;
+            // reading such a select stays the runtime lowering's question.
+            // Only at the module's own top level, over a name no nested scope
+            // declares (`select_base_is_packed`, `select_scope.rs`).
+            ast::ExprKind::BitSelect { base, .. } => self
+                .bits_of_view(e, true)
+                .or_else(|| self.select_base_is_packed(base, e.span).then_some(1)),
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                self.bits_of_view(e, true).or_else(|| {
+                    if !self.select_base_is_packed(base, e.span) {
+                        return None;
+                    }
+                    // Select bounds are self-determined constants, like a declared
+                    // range's (§11.5.1), so they fold through the range-bound funnel.
+                    let m = self.const_range_bound_fold(msb)?;
+                    let l = self.const_range_bound_fold(lsb)?;
+                    u32::try_from(m.abs_diff(l)).ok()?.checked_add(1)
+                })
+            }
+            ast::ExprKind::IndexedPart { base, width, .. } => {
+                self.bits_of_view(e, true).or_else(|| {
+                    if !self.select_base_is_packed(base, e.span) {
+                        return None;
+                    }
+                    u32::try_from(self.const_range_bound_fold(width)?).ok()
+                })
+            }
+            // A signing conversion keeps its operand's width (§6.24.1) — the parser
+            // wraps a signed packed-struct member's whole-field read in one. Under the
+            // select arms' rule (`signing_operand_admitted`): a real operand is not
+            // integral, and `$signed` refuses it.
+            ast::ExprKind::SysCall { name, args }
+                if matches!(name.name.as_str(), "$signed" | "$unsigned") && args.len() == 1 =>
+            {
+                self.signing_operand_admitted(&args[0], e.span)
+                    .then(|| self.bits_of_selfdet(&args[0]))
+                    .flatten()
+            }
+            ast::ExprKind::Cast {
+                target: ast::CastTarget::Signing { .. } | ast::CastTarget::SigningParam { .. },
+                expr,
+            } => self
+                .signing_operand_admitted(expr, e.span)
+                .then(|| self.bits_of_selfdet(expr))
+                .flatten(),
             _ => self.bits_of_view(e, true),
         }
         .filter(|&w| w > 0)
@@ -744,7 +797,7 @@ impl Elaborator<'_> {
             {
                 return None;
             }
-            let (elem, dims) = me.bits_prescan.get(root)?;
+            let (elem, dims, _, _) = me.bits_prescan.get(root)?;
             if depth > dims.len() {
                 return None; // indexing into packed space → lowering path
             }

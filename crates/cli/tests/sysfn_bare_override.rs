@@ -50,8 +50,9 @@
 //!
 //! `sys_fn_is_integer` is the NAMED list `$clog2 | $bits | $rtoi`, deliberately not
 //! widened here: the `$size`/`$high`/`$low`/`$left`/`$right`/`$increment` family and
-//! a call whose VALUE the const domain cannot fold (`{$bits(x)}`, `$bits(x[3])`)
-//! stay LOUD — their own loud→value row — which `i_*` pins.
+//! a call whose VALUE the const domain cannot fold (`{$bits(x)}`) stay LOUD —
+//! their own loud→value row — which `i_*` pins. (`$bits(x[3])` was one of them
+//! until §4.5.N folded a select's width; `j_*` pins it.)
 //!
 //! ## Oracles
 //!
@@ -347,15 +348,16 @@ fn i_size_dimension_query_stays_loud() {
     );
 }
 
-/// CONTROL — `$bits` of a SELECT: in the named list, but the value does not fold,
-/// so it stays loud rather than silently binding a width with no value.
+/// `$bits` of a SELECT: the value half folds a select's width since §4.5.N (it was
+/// this file's loud control while it did not), and the bare call binds 32 like the
+/// rest. iverilog and verilator `RES bits=32 val=1`.
 #[test]
-fn i_bits_of_a_bit_select_stays_loud() {
-    loud_code(
+fn j_bits_of_a_bit_select_binds_32() {
+    res(
         &design(
             "P = 1'b0",
             "  logic [7:0] x;\n  leaf #(.P($bits(x[3]))) u1();",
         ),
-        "VITA-E3009",
+        "RES bits=32 val=1",
     );
 }

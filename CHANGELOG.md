@@ -17,6 +17,27 @@ changed for a user of the simulator.
   document say so. The limitations chapter also called a VHDL front end a permanent non-goal; it now says
   what the roadmap already did: a conditional long-term item.
 
+### Fixed — `$bits` of a select in a constant position
+
+- `$bits` of a bit-select, a part-select or an indexed part-select of a packed vector, of a
+  packed-struct member (`$bits(s.bus)`, `$bits(s.bus[11:4])`), or of a concatenation of them
+  (`$bits({e.f, e.bus})`, OpenTitan's `prim_edn_req` under otbn) was refused with `VITA-E3009`
+  wherever a constant is needed: a `localparam` value, a range, a generate condition or loop, an
+  unpacked dimension, and a parameter override — VeeR EH1's `dff #(2*$bits(sig[5:4]))` kept the
+  child's default with `VITA-W3056` and stopped with `VITA-E3009`. These now take the select's
+  width (§11.5, §20.6.2), as vita's own runtime `$bits` already did and as Icarus Verilog,
+  sv2v → Icarus Verilog and Verilator do — in the module's own top level (a declaration, a range,
+  an override, a top-level generate construct's condition or loop header), over a module-level
+  name or an ANSI vector port (OpenTitan's `$bits(h.src)` of a struct port, row-9 R10) that no
+  nested scope of the module (generate block, routine, begin-block, assertion action) declares
+  again, nor any enum label, folded in the module's own scope — a module typedef used inside a
+  generate block declines. Inside a nested scope, an interface or a package function, and for a
+  select of a multi-dimensional packed array, a string index, an unpacked-array slice or a
+  hierarchical name, the refusal stays; a runtime position there keeps its lowering's answer. Inside
+  a part-select bound or an indexed width the constant-edge decision still refuses such a `$bits`.
+  `$signed` takes no `real`, `realtime` or `event` operand, and neither takes nor selects a class
+  handle or a virtual interface.
+
 ### Fixed — a part-select width, an indexed width and a replication count read their value
 
 - vita now decides the value of every part-select width (`f[m:l]`), indexed part-select width

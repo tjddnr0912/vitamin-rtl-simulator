@@ -63,12 +63,24 @@ fn bits_of_an_expression_folds_in_a_packed_declaration_bound() {
 
 /// The other half, and the more important one: a `$bits` shape the constant domain still
 /// cannot see must be LOUD, not a silent 1-bit net. Before this it silently declared one
-/// bit even for `$bits(<undeclared name>)`.
+/// bit even for `$bits(<undeclared name>)`. `mem[0][1]` (a bit of an element) was the
+/// first shape here until §4.5.N sized a select (iverilog, sv2v → iverilog and
+/// verilator `VAL=1`, pinned below); an element of a multi-dimensional packed array
+/// (all three `VAL=8`) is the select the constant domain still cannot see.
 #[test]
 fn an_unfoldable_bits_bound_is_loud_not_one_bit() {
-    for arg in ["mem[0][1]", "no_such_name"] {
+    let (o, e, code) = run("module tb;\n  logic [7:0] mem [0:3];\n\
+           wire [$bits(mem[0][1])-1:0] w;\n\
+           initial begin #1 $display(\"VAL=%0d\", $bits(w)); $finish; end\n\
+         endmodule\n");
+    assert_eq!(code, Some(0), "`$bits(mem[0][1])` is one bit:\n{o}{e}");
+    assert!(
+        o.contains("VAL=1"),
+        "`$bits(mem[0][1])` is one bit:\n{o}{e}"
+    );
+    for arg in ["p[1]", "no_such_name"] {
         let (o, e, code) = run(&format!(
-            "module tb;\n  logic [7:0] mem [0:3];\n\
+            "module tb;\n  logic [3:0][7:0] p;\n\
                wire [$bits({arg})-1:0] w;\n\
                initial begin #1 $display(\"VAL=%0d\", $bits(w)); $finish; end\n\
              endmodule\n"

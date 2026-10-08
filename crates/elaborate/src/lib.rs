@@ -125,6 +125,7 @@ mod limits;
 mod lvalue;
 mod multidriver;
 mod net_util;
+mod select_scope;
 pub(crate) use limits::*;
 // The deferred-print task list lives with the hoister that must skip those arguments;
 // `lower_stmt`'s own `$sformatf` child hoist needs the same answer.
@@ -388,12 +389,21 @@ struct Elaborator<'s> {
     /// `args[0]` as a descriptor for these and routes the postponed render through
     /// `file_write`. EMPTY for every design that uses neither.
     file_directed_stmts: std::collections::BTreeSet<u32>,
-    /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths) for the
-    /// CURRENT module's body decls, recorded in declaration order during the
+    /// v7 `$bits` prescan: name → (element bits, unpacked dim lengths, integral) for
+    /// the CURRENT module's body decls, recorded in declaration order during the
     /// body param-binding walk (3b) — a `localparam X = $bits(mem[0])` binds
     /// before nets lower, so the real net table can't serve it. Unfoldable
-    /// decls are silently skipped (the `$bits` SITE goes loud instead).
-    bits_prescan: BTreeMap<String, (u64, Vec<u64>)>,
+    /// decls are silently skipped (the `$bits` SITE goes loud instead). The first
+    /// `bool` says a select of an element is a select of bits: false for a
+    /// non-integral declaration and for more than one packed dimension, whose select
+    /// is an element (`select_base_is_packed`); the second marks a declaration that is
+    /// not integral (`real`, `realtime`, `event`, a class handle, a virtual
+    /// interface), which `$signed` does not take and no select reads as bits.
+    bits_prescan: BTreeMap<String, (u64, Vec<u64>, bool, bool)>,
+    /// The current module's census for `$bits` of a select (`select_scope.rs`): set
+    /// with `bits_prescan` for a module body, `None` in an interface body, where the
+    /// select and signing arms decline (and `bits_prescan` stays as it was).
+    select_scope: Option<crate::select_scope::SelectScope>,
     /// GAP-G (round-4 shadow guard): the bare names DECLARED locally by the
     /// current module — header (`#(...)`) params, ports, and top-level body
     /// nets/params — gathered from the AST ONCE before any body const-eval. A
