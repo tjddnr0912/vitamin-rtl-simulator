@@ -98,6 +98,222 @@ impl Parser<'_, '_> {
         Expr { kind, span }
     }
 
+    /// §5.2 row 36: a fresh `StructLayout::reg` for a packed struct or union typedef.
+    pub(crate) fn next_type_reg(&mut self) -> u64 {
+        self.type_reg_last += 1;
+        self.type_reg_last
+    }
+
+    /// §5.2 row 36: register `name`'s typedef entry as the name's newest type
+    /// registration (`TypeInfo::bind`).
+    pub(crate) fn stamp_type_bind(&mut self, name: &str) {
+        let n = self.next_type_reg();
+        if let Some(info) = self.typedefs.get_mut(name) {
+            info.bind = n;
+        }
+    }
+
+    /// §5.2 row 36: the number of the unpacked record `scoped` an import is about to
+    /// copy (`u64::MAX` — newest — for a record with no number); `None` when there is
+    /// none.
+    pub(crate) fn imported_record_bind(&self, scoped: &str) -> Option<u64> {
+        self.unpacked_struct_layouts
+            .contains_key(scoped)
+            .then(|| self.unpacked_bind.get(scoped).copied().unwrap_or(u64::MAX))
+    }
+
+    /// §5.2 row 36: an import wrote `bare`'s typedef entry (`td`, its number in the
+    /// package) and/or its unpacked record (`un`): each takes a fresh number, the
+    /// package's order between the two kept.
+    pub(crate) fn restamp_imported_type(&mut self, bare: &str, td: Option<u64>, un: Option<u64>) {
+        let record_last = match (td, un) {
+            (Some(t), Some(u)) => u > t,
+            _ => true,
+        };
+        if un.is_some() && !record_last {
+            let n = self.next_type_reg();
+            self.unpacked_bind.insert(bare.to_string(), n);
+        }
+        if td.is_some() {
+            self.stamp_type_bind(bare);
+        }
+        if un.is_some() && record_last {
+            let n = self.next_type_reg();
+            self.unpacked_bind.insert(bare.to_string(), n);
+        }
+    }
+
+    /// §5.2 row 36: `name`'s typedef entry is its newest type registration — no
+    /// unpacked record of the name (which writes no typedef entry) was registered after
+    /// it. Every other kind writes the typedef entry, so this entry is the kind the
+    /// name denotes where it is read.
+    pub(crate) fn typedef_is_freshest(&self, name: &str) -> bool {
+        let Some(info) = self.typedefs.get(name) else {
+            return false;
+        };
+        !self.unpacked_struct_layouts.contains_key(name)
+            || self.unpacked_bind.get(name).is_some_and(|b| *b < info.bind)
+    }
+
+    /// §5.2 row 36: the `reg` each nested member type key of `fields` names right now
+    /// (`StructLayout::decl_nested`), recorded as the type is declared.
+    pub(crate) fn nested_type_regs(&self, fields: &[StructFieldLayout]) -> Vec<(String, u64)> {
+        let mut out: Vec<(String, u64)> = Vec::new();
+        for f in fields {
+            if let Some(k) = &f.8 {
+                if !out.iter().any(|(n, _)| n == k) {
+                    if let Some(l) = self.struct_layouts.get(k) {
+                        out.push((k.clone(), l.reg));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// §10.9 (§5.2 row 36): the type key of a primary that names a TYPE — a bare
+    /// `T` or a scoped `p::T` registered as a typedef (packed or unpacked) — before a
+    /// `'{`; `None` for any other primary (a value before `'{` is no typed pattern).
+    pub(crate) fn typed_pattern_type_key(&self, e: &Expr) -> Option<String> {
+        let key = match &e.kind {
+            ExprKind::Ident(path) if path.segments.len() == 1 => path.segments[0].name.clone(),
+            ExprKind::PkgScoped { pkg, name } => format!("{}::{}", pkg.name, name.name),
+            _ => return None,
+        };
+        (self.typedefs.contains_key(&key) || self.unpacked_struct_layouts.contains_key(&key))
+            .then_some(key)
+    }
+
+    /// §10.9 (§5.2 row 36): a typed assignment pattern `T'{…}` (cursor at `'`, `ty`
+    /// the parsed type name). IEEE 1800-2017 §10.9: the pattern is typed by `T` — its
+    /// value is what assigning the untyped `'{…}` to a variable of type `T` stores.
+    /// So it lowers through the untyped pattern's own packed-struct rule,
+    /// `build_struct_pattern_concat` against `T`: the field-width concat, each element
+    /// sized to its member (a 2-state member coerced), a keyed or `default:` form put
+    /// into declaration order, a nested member recursed — exactly `T`'s width and,
+    /// for an unsigned `T`, its type. The result is self-determined like any concat,
+    /// so it stands wherever an expression does: a `return` (OpenTitan
+    /// `keymgr_dpe_pkg::extract_metadata_from_slot`), an operand, a replication, an
+    /// argument, a port actual, a parameter value.
+    ///
+    /// Only an UNSIGNED packed struct `T` is supported. A `struct packed signed`
+    /// typed pattern splits the oracles wherever its sign is read (beside a signed
+    /// `?:` arm verilator zero-extends the other arm where sv2v → iverilog
+    /// sign-extends; `%0d` prints 30 in verilator and -2 in sv2v → iverilog); a union,
+    /// an unpacked struct, an array or vector type, and a struct laid out per instance
+    /// have no packed-struct lowering here. Each is refused by name.
+    ///
+    /// The layout maps are keyed by type NAME and a scope that re-declares the name
+    /// leaves an outer or imported layout under it (a variable of the outer type reads
+    /// it there — ROADMAP §2, the T stage's §5.2 row 67). So the pattern decides what
+    /// `T` means where it stands from the typedef entry, not the layout map
+    /// (`typed_pattern_layout`), and lowers only when every nested member type key
+    /// still names the layout `T` was declared with.
+    /// Out of line: `expr_postfix` sits on the expression recursion, whose depth cap
+    /// is sized by its frame.
+    #[inline(never)]
+    pub(crate) fn parse_typed_assign_pattern(&mut self, ty: Expr) -> Expr {
+        let key = self.typed_pattern_type_key(&ty).unwrap_or_default();
+        let pat = self.parse_assign_pattern();
+        let span = ty.span.to(pat.span);
+        if matches!(pat.kind, ExprKind::Error) {
+            return Expr {
+                kind: ExprKind::Error,
+                span,
+            };
+        }
+        let Some(layout) = self.typed_pattern_layout(&key) else {
+            self.error_at(
+                span,
+                "a typed assignment pattern `T'{…}` whose type `T` is an unsigned packed \
+                 struct (a signed or per-instance struct, a union, an unpacked struct, an \
+                 array and a vector type are unsupported in v1)",
+            );
+            return Expr {
+                kind: ExprKind::Error,
+                span,
+            };
+        };
+        // §5.2 row 36: a nested member's layout is looked up by its type key HERE, so a
+        // key re-declared in between (a generate block, a routine, a `begin` block, an
+        // import) would lay the member out by the inner type.
+        if !self.nested_layouts_as_declared(layout, 0) {
+            self.error_at(
+                span,
+                "a typed assignment pattern whose nested member types mean here what they \
+                 meant where `T` was declared (a same-named type declared in between is \
+                 unsupported in v1)",
+            );
+            return Expr {
+                kind: ExprKind::Error,
+                span,
+            };
+        }
+        let before = self.errors.len();
+        let outer = std::mem::replace(&mut self.typed_pattern_lowering, true);
+        let lowered = self.build_struct_pattern_concat(&key, pat);
+        self.typed_pattern_lowering = outer;
+        if Self::is_assign_pattern(&lowered) {
+            // The untyped rule refused the pattern and said why (a count mismatch, a
+            // nested refusal, a 2-state member wider than 64 bits).
+            if self.errors.len() == before {
+                self.error_at(
+                    span,
+                    "a typed assignment pattern its type's members can take",
+                );
+            }
+            return Expr {
+                kind: ExprKind::Error,
+                span,
+            };
+        }
+        Expr {
+            kind: lowered.kind,
+            span,
+        }
+    }
+
+    /// §5.2 row 36: the packed-struct layout `key` names where a typed pattern stands —
+    /// `Some` only when the name's typedef entry was registered by the declaration that
+    /// laid out `struct_layouts[key]` (`TypeInfo::layout_reg` = `StructLayout::reg`), that
+    /// entry is the name's newest type registration (`typedef_is_freshest`: no unpacked
+    /// record of the name registered after it), and it is no union and no signed struct.
+    /// A vector, enum, per-instance struct, type parameter, unpacked record or import
+    /// re-declaring the name leaves the old layout behind; it is refused. A packed struct
+    /// declared after a same-named record or per-instance struct is the newest and runs.
+    fn typed_pattern_layout(&self, key: &str) -> Option<&StructLayout> {
+        let layout = self.struct_layouts.get(key)?;
+        let info = self.typedefs.get(key)?;
+        (info.layout_reg == Some(layout.reg)
+            && !info.signed
+            && !self.union_type_names.contains(key)
+            && self.typedef_is_freshest(key))
+        .then_some(layout)
+    }
+
+    /// §5.2 row 36: every nested member type key of `layout`, at any depth, still names
+    /// the layout it named where the enclosing type was declared (`StructLayout::
+    /// decl_nested`) — what the type's members are, whatever the name means where the
+    /// pattern stands. `depth` stops a pathological chain.
+    fn nested_layouts_as_declared(&self, layout: &StructLayout, depth: u32) -> bool {
+        if depth > 64 {
+            return false;
+        }
+        layout.fields.iter().all(|f| {
+            let Some(k) = &f.8 else {
+                return true;
+            };
+            let Some(cur) = self.struct_layouts.get(k) else {
+                return false;
+            };
+            layout
+                .decl_nested
+                .iter()
+                .any(|(n, reg)| n == k && *reg == cur.reg)
+                && self.nested_layouts_as_declared(cur, depth + 1)
+        })
+    }
+
     /// If the cursor sits on a resolvable assignment-pattern KEY followed by `:`,
     /// consume the key and the colon and return it; otherwise leave the cursor put
     /// (the element is positional, or a key form we reject downstream).
@@ -465,6 +681,27 @@ impl Parser<'_, '_> {
         let mut parts_in: Vec<(Expr, bool)> = Vec::with_capacity(elems.len());
         for ((e, defaulted), nested) in elems.into_iter().zip(from_default).zip(&nested) {
             match nested {
+                // §5.2 row 36: a union shares `struct_layouts`, so recursing
+                // concatenates EVERY member of the overlay (`'{4'h5, 4'h7}` for a 4-bit
+                // union laid 8 bits wide). Refused in a typed pattern; the untyped
+                // pattern keeps its pre-row-36 lowering (ROADMAP §2).
+                Some(nty)
+                    if self.typed_pattern_lowering
+                        && Self::is_assign_pattern(&e)
+                        && self.union_type_names.contains(nty) =>
+                {
+                    self.error_at(
+                        e.span,
+                        "a value for a packed-union member (a `'{…}` pattern for a union \
+                         member is unsupported in v1)",
+                    );
+                    return Expr {
+                        kind: ExprKind::AssignPattern(
+                            parts_in.into_iter().map(|(e, _)| e).collect(),
+                        ),
+                        span,
+                    };
+                }
                 Some(nty) if Self::is_assign_pattern(&e) => {
                     let inner = self.build_struct_pattern_concat(nty, e);
                     if Self::is_assign_pattern(&inner) {

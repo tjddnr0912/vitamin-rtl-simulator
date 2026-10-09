@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — typed assignment patterns `T'{…}`
+
+- A typed assignment pattern (IEEE 1800-2017 §10.9) — `return meta_t'{slot.pol, slot.stage,
+  slot.v, slot.ver};` in OpenTitan's `keymgr_dpe_pkg` — was refused at parse with `VITA-E2002`
+  ("expected ';' after return, found '''"). For an unsigned packed struct `T` (bare, imported or
+  `pkg::T`) it now runs wherever an expression can stand — a `return`, an operand, a `?:` arm, a
+  replication, an argument, a port actual, a parameter or declaration initializer, a constant
+  function — with the value assigning the untyped pattern to a `T` variable stores: positional,
+  keyed or `default:` elements, each sized to its member, a 2-state member reading x and z as 0,
+  a nested member recursed. Refused by name (`VITA-E2002`): a `struct packed signed`, union,
+  unpacked struct, array or vector `T`, a struct laid out per instance (Verilator and sv2v
+  disagree wherever a signed struct's sign is read); a `T` whose newest declaration or import,
+  where the pattern stands, is another kind of type than a packed struct (a vector, an enum, an
+  unpacked or per-instance struct, a type parameter — or an alias of such a name); a nested
+  member type declared again between `T` and the pattern; a nested `'{…}` for a packed-union
+  member; and a select after the pattern. Untyped patterns are unchanged.
+
 ### Fixed — a reversed part-select in an `if` arm the run never enters
 
 - A part-select whose bounds run against the net's direction (`tid[W-1:W-CL]` with

@@ -269,6 +269,20 @@ struct TypeInfo {
     /// declaration reads the members of the type that gave it its range. `None` for
     /// every other type.
     pattern_members: Option<Vec<hdl_ast::PatternMember>>,
+    /// §5.2 row 36: the `StructLayout::reg` of the packed struct or union layout this
+    /// entry was declared with. It travels with the entry (a chained alias, an
+    /// import, a package twin copy it); `None` for every other type — a vector, an
+    /// enum, a per-instance struct, a type parameter, a class. A typed assignment
+    /// pattern `T'{…}` lowers against `struct_layouts[T]` only when the two agree.
+    layout_reg: Option<u64>,
+    /// §5.2 row 36: when this name was last registered as a type of any kind — a
+    /// number from the one counter every type registration draws from
+    /// (`Parser::next_type_reg`): a typedef of any kind, an import of the name. A
+    /// package twin copies it with the entry, keeping the package's own order. An
+    /// unpacked record of the name, which writes no entry here, records its number in
+    /// `unpacked_bind`; a typed assignment pattern takes `T` as the packed struct only
+    /// when this entry is the fresher of the two. Read by nothing else.
+    bind: u64,
 }
 
 /// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the
@@ -409,9 +423,31 @@ type MemberType = (
     Option<Ident>,
     bool,
 );
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 struct StructLayout {
     fields: Vec<StructFieldLayout>,
+    /// §5.2 row 36: the declaration that laid this layout out — a number fresh per
+    /// packed struct or union typedef (`Parser::next_type_reg`; 0 for a layout no
+    /// declaration registers, `packable_record_layout`'s). Copies (a chained alias, an
+    /// import, a package twin) keep it, and the declaration's `TypeInfo::layout_reg`
+    /// holds the same number, so a typed assignment pattern can tell the layout of the
+    /// type its name means where it stands from one a same-named outer or imported
+    /// type left under the name (`typed_pattern_layout`). Read by nothing else.
+    reg: u64,
+    /// §5.2 row 36: the `reg` each nested member type key (`f.8`) named when this type
+    /// was declared. A nested key is looked up again where the type is used, so a
+    /// same-named type declared in between re-lays the member; a typed assignment
+    /// pattern compares against this record and refuses on a difference. Read by
+    /// nothing else.
+    decl_nested: Vec<(String, u64)>,
+}
+/// Two layouts are equal when their members are: `reg` and `decl_nested` record where a
+/// layout came from, for the typed assignment pattern only, and leave every comparison
+/// of layouts (a package body's chained-alias freshness test) exactly as it was.
+impl PartialEq for StructLayout {
+    fn eq(&self, other: &Self) -> bool {
+        self.fields == other.fields
+    }
 }
 impl StructLayout {
     fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, i64, u32)> {
@@ -468,6 +504,7 @@ struct ScopeSnapshot {
     struct_layouts: std::collections::HashMap<String, StructLayout>,
     sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
     unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
+    unpacked_bind: std::collections::HashMap<String, u64>,
     enum_defs: std::collections::HashMap<String, Vec<(String, i64)>>,
     union_type_names: std::collections::HashSet<String>,
     // VAR-name-keyed (a block-local struct/enum variable shadowing an outer one).
@@ -720,6 +757,11 @@ pub struct Parser<'t, 's> {
     /// (no aggregate storage in v1); accumulates across the source unit like
     /// `struct_layouts` (scoped `pkg::T` twins added at `endpackage`).
     unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
+    /// §5.2 row 36: the `TypeInfo::bind` number of each `unpacked_struct_layouts`
+    /// entry — when the name was registered as an unpacked record (a declaration, an
+    /// import, a package twin). Scoped exactly like `unpacked_struct_layouts`; read only
+    /// by the typed assignment pattern.
+    unpacked_bind: std::collections::HashMap<String, u64>,
     /// Round-9: variable name → its UNPACKED-struct type name (module-scoped;
     /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
     var_unpacked_struct: std::collections::HashMap<String, String>,
@@ -740,6 +782,13 @@ pub struct Parser<'t, 's> {
     /// packed { … } m; } n;`), capped like `stmt_depth` so a pathological nest is a
     /// parse error, not a stack overflow.
     anon_member_depth: u32,
+    /// §5.2 row 36: the last `StructLayout::reg` handed out (`next_type_reg`). Never
+    /// restored with a scope, so a number names one declaration for the whole parse.
+    type_reg_last: u64,
+    /// §5.2 row 36: a typed assignment pattern `T'{…}` is being lowered
+    /// (`parse_typed_assign_pattern`) — the refusals only a typed pattern makes (a
+    /// nested `'{…}` for a union member) read it; the untyped pattern never sets it.
+    typed_pattern_lowering: bool,
     /// Module-scope `localparam` name → its constant value, but ONLY when the value
     /// is a pure literal constant (no `parameter` dependency). Used to fold a
     /// constant generate-array hier index (`g[P].x`, P a localparam). Safe because a
@@ -964,6 +1013,7 @@ impl<'t, 's> Parser<'t, 's> {
             shape_alias: std::collections::HashMap::new(),
             overridable_params: std::collections::HashSet::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),
+            unpacked_bind: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),
             record_array_vars: std::collections::HashMap::new(),
             record_soa_vars: std::collections::HashMap::new(),
@@ -978,6 +1028,8 @@ impl<'t, 's> Parser<'t, 's> {
             union_type_names: std::collections::HashSet::new(),
             anon_member_types: 0,
             anon_member_depth: 0,
+            type_reg_last: 0,
+            typed_pattern_lowering: false,
             const_locals: std::collections::HashMap::new(),
             pkg_const_scoped: std::collections::HashMap::new(),
             has_param_header: false,

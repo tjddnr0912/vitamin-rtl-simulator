@@ -288,8 +288,11 @@ impl Parser<'_, '_> {
                     enum_type: false,
                     layout_exact: false,
                     pattern_members: None,
+                    layout_reg: None,
+                    bind: 0,
                 },
             );
+            self.stamp_type_bind(&name.name);
             // §3 ⑤ⓕ: `U$s = T$s` — record the alias so an UNCARRIED use of `U` marks
             // `T`'s guard, not a name no guard reads. Resolved transitively at insert,
             // so a chain `V = U = T` lands on `T$s` in one step.

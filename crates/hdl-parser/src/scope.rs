@@ -19,6 +19,7 @@ impl Parser<'_, '_> {
             struct_layouts: self.struct_layouts.clone(),
             sym_struct_layouts: self.sym_struct_layouts.clone(),
             unpacked_struct_layouts: self.unpacked_struct_layouts.clone(),
+            unpacked_bind: self.unpacked_bind.clone(),
             enum_defs: self.enum_defs.clone(),
             union_type_names: self.union_type_names.clone(),
             var_struct: self.var_struct.clone(),
@@ -96,6 +97,7 @@ impl Parser<'_, '_> {
         self.struct_layouts = s.struct_layouts;
         self.sym_struct_layouts = s.sym_struct_layouts;
         self.unpacked_struct_layouts = s.unpacked_struct_layouts;
+        self.unpacked_bind = s.unpacked_bind;
         self.enum_defs = s.enum_defs;
         self.union_type_names = s.union_type_names;
         self.var_struct = s.var_struct;
@@ -152,6 +154,14 @@ impl Parser<'_, '_> {
             .collect();
         self.unpacked_struct_layouts = s.unpacked_struct_layouts;
         self.unpacked_struct_layouts.extend(new_usl);
+        let new_ub: Vec<(String, u64)> = self
+            .unpacked_bind
+            .iter()
+            .filter(|(k, _)| k.contains("::") && !s.unpacked_bind.contains_key(*k))
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        self.unpacked_bind = s.unpacked_bind;
+        self.unpacked_bind.extend(new_ub);
         let new_ed: Vec<(String, Vec<(String, i64)>)> = self
             .enum_defs
             .iter()

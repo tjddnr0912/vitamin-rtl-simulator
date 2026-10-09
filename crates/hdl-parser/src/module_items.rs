@@ -101,6 +101,9 @@ impl Parser<'_, '_> {
                 // import here leaves it alone (`wildcard_type_bind`).
                 self.scope_type_names.insert(bare.clone());
                 self.note_type_rebound(&bare);
+                // §5.2 row 36: the import is the name's newest registration.
+                let td_from = self.typedefs.get(&scoped).map(|i| i.bind);
+                let un_from = self.imported_record_bind(&scoped);
                 if let Some(v) = self.typedefs.get(&scoped).cloned() {
                     self.typedefs.insert(bare.clone(), v);
                 }
@@ -116,6 +119,7 @@ impl Parser<'_, '_> {
                 if let Some(v) = self.unpacked_struct_layouts.get(&scoped).cloned() {
                     self.unpacked_struct_layouts.insert(bare.clone(), v);
                 }
+                self.restamp_imported_type(&bare, td_from, un_from);
                 if self.union_type_names.contains(&scoped) {
                     self.union_type_names.insert(bare);
                 }
@@ -149,11 +153,35 @@ impl Parser<'_, '_> {
                         self.note_type_rebound(b);
                     }
                 }
+                // §5.2 row 36: which of a bound name's entries this import writes, and
+                // their package order — the import is the name's newest registration.
+                let stamps: Vec<(String, Option<u64>, Option<u64>)> = binds
+                    .iter()
+                    .filter(|(_, bind)| {
+                        matches!(bind, WildcardBind::Replace | WildcardBind::IfAbsent)
+                    })
+                    .map(|(b, bind)| {
+                        let writes = |present: bool| *bind == WildcardBind::Replace || !present;
+                        let scoped = format!("{prefix}{b}");
+                        let td = self
+                            .typedefs
+                            .get(&scoped)
+                            .filter(|_| writes(self.typedefs.contains_key(b)))
+                            .map(|i| i.bind);
+                        let un = self
+                            .imported_record_bind(&scoped)
+                            .filter(|_| writes(self.unpacked_struct_layouts.contains_key(b)));
+                        (b.clone(), td, un)
+                    })
+                    .collect();
                 copy_wildcard_twins(&mut self.typedefs, &prefix, &binds);
                 copy_wildcard_twins(&mut self.struct_layouts, &prefix, &binds);
                 copy_wildcard_twins(&mut self.enum_defs, &prefix, &binds);
                 // G6: wildcard-copy UNPACKED struct typedefs too (see the explicit arm).
                 copy_wildcard_twins(&mut self.unpacked_struct_layouts, &prefix, &binds);
+                for (b, td, un) in stamps {
+                    self.restamp_imported_type(&b, td, un);
+                }
                 let un: Vec<String> = self
                     .union_type_names
                     .iter()
@@ -1050,6 +1078,16 @@ impl Parser<'_, '_> {
                                     }
                                 }
                             }
+                            // §5.2 row 36: the declaration record (`StructLayout::
+                            // decl_nested`) follows the re-spelled keys.
+                            for (k, _) in &mut sl.decl_nested {
+                                if !k.contains("::") {
+                                    let sk = format!("{pkg}::{k}");
+                                    if self.struct_layouts.contains_key(&sk) {
+                                        *k = sk;
+                                    }
+                                }
+                            }
                             self.struct_layouts.insert(scoped.clone(), sl);
                         }
                         // A union is a struct-layout overlay; its flag rides with the
@@ -1063,6 +1101,11 @@ impl Parser<'_, '_> {
                     // only an unpacked-struct typedef puts its name here).
                     if let Some(usl) = self.unpacked_struct_layouts.get(&n).cloned() {
                         self.unpacked_struct_layouts.insert(scoped.clone(), usl);
+                    }
+                    // §5.2 row 36: the twin keeps the record's number (the package's
+                    // own order of its registrations).
+                    if let Some(b) = self.unpacked_bind.get(&n).copied() {
+                        self.unpacked_bind.insert(scoped.clone(), b);
                     }
                     if enum_fresh {
                         if let Some(ed) = self.enum_defs.get(&n).cloned() {

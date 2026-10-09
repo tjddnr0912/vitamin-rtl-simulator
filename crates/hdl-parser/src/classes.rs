@@ -124,6 +124,8 @@ impl Parser<'_, '_> {
                 enum_type: false,
                 layout_exact: true,
                 pattern_members: None,
+                layout_reg: None,
+                bind: 0,
             });
         }
     }

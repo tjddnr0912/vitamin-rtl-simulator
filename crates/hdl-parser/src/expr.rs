@@ -391,6 +391,20 @@ impl Parser<'_, '_> {
                 Some(TokenKind::Apostrophe) if self.peek_at(1) == Some(TokenKind::LParen) => {
                     e = self.parse_size_or_named_cast(e);
                 }
+                // §10.9 typed assignment pattern `T'{…}`: a `'{` right after a primary
+                // that names a TYPE (`parse_typed_assign_pattern`). Any other primary
+                // before `'{` keeps falling through to the diagnostic below.
+                Some(TokenKind::Apostrophe)
+                    if self.peek_at(1) == Some(TokenKind::LBrace)
+                        && self.typed_pattern_type_key(&e).is_some() =>
+                {
+                    e = self.parse_typed_assign_pattern(e);
+                    // A typed pattern is no name to select from (verilator and sv2v →
+                    // iverilog reject `T'{…}[7:4]`).
+                    if self.peek() == Some(TokenKind::LBracket) {
+                        self.error("an operator after a typed assignment pattern, not a select");
+                    }
+                }
                 // G8 (§8.13): a method call chained on a CALL / method RESULT —
                 // `s.substr(a,b).atoi()`. Fires only when `e` is already a Call/MethodCall
                 // (a plain `a.b` hier path is folded in `expr_primary`, not here) and the

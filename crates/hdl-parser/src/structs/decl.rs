@@ -135,7 +135,11 @@ impl Parser<'_, '_> {
                 None, // a nested struct member never reaches a record layout
             ));
         }
-        Some(StructLayout { fields })
+        Some(StructLayout {
+            fields,
+            reg: 0,
+            decl_nested: Vec::new(),
+        })
     }
 
     /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,

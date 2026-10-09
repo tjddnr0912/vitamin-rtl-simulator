@@ -347,6 +347,8 @@ impl Parser<'_, '_> {
                 enum_type: true,
                 layout_exact: base_exact,
                 pattern_members: None,
+                layout_reg: None,
+                bind: 0,
             }
         } else {
             match &base {
@@ -362,6 +364,8 @@ impl Parser<'_, '_> {
                     enum_type: true,
                     layout_exact: base_exact,
                     pattern_members: None,
+                    layout_reg: None,
+                    bind: 0,
                 },
                 // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
                 // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
@@ -380,6 +384,8 @@ impl Parser<'_, '_> {
                     enum_type: true,
                     layout_exact: base_exact,
                     pattern_members: None,
+                    layout_reg: None,
+                    bind: 0,
                 },
             }
         };
@@ -388,6 +394,7 @@ impl Parser<'_, '_> {
         // sign, not the value-inferred one — a positive label of a signed enum stays signed.
         let enum_signed = info.signed;
         self.typedefs.insert(tname.name.clone(), info);
+        self.stamp_type_bind(&tname.name);
         // Const-foldable enum base WIDTH in bits, for the label-range check below.
         // `None` = skip the check (fail-open, never over-rejects) when the base range
         // is not a literal (`enum logic [N-1:0]`) or is >64 bits wide. Base-less
@@ -526,8 +533,11 @@ impl Parser<'_, '_> {
                 enum_type: false,
                 layout_exact,
                 pattern_members: None,
+                layout_reg: None,
+                bind: 0,
             },
         );
+        self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Alias {
@@ -579,7 +589,16 @@ impl Parser<'_, '_> {
         // Mirror the base's registration under the new name. Each side-map is SET
         // when the base has that property and CLEARED otherwise, so a cross-module
         // same-name stale entry (the union-desync hazard) cannot leak through.
-        self.typedefs.insert(alias.clone(), info.clone());
+        // §5.2 row 36: the alias is a registration of its own, and it names a packed
+        // struct only when that is what its base names where the alias stands — not
+        // when an unpacked record declared later shadows a same-named struct, whose
+        // entry here it would otherwise copy (`typedef_is_freshest`).
+        let mut alias_info = info.clone();
+        if !self.typedef_is_freshest(&base_name) {
+            alias_info.layout_reg = None;
+        }
+        self.typedefs.insert(alias.clone(), alias_info);
+        self.stamp_type_bind(&alias);
         match self.struct_layouts.get(&base_name).cloned() {
             Some(layout) => {
                 self.struct_layouts.insert(alias.clone(), layout);
@@ -680,6 +699,8 @@ impl Parser<'_, '_> {
             // the SCALAR record only.
             self.unpacked_struct_layouts
                 .insert(tname.name.clone(), members.clone());
+            let bind = self.next_type_reg();
+            self.unpacked_bind.insert(tname.name.clone(), bind);
             return Some(ModuleItem::Typedef(TypedefDecl {
                 name: tname,
                 kind: TypedefKind::Struct { members },
@@ -749,8 +770,16 @@ impl Parser<'_, '_> {
                     })
                     .collect::<Vec<_>>()
             });
-        self.struct_layouts
-            .insert(tname.name.clone(), StructLayout { fields });
+        let reg = self.next_type_reg();
+        let decl_nested = self.nested_type_regs(&fields);
+        self.struct_layouts.insert(
+            tname.name.clone(),
+            StructLayout {
+                fields,
+                reg,
+                decl_nested,
+            },
+        );
         // If a union with the same name was defined in an earlier module, retract it
         // from union_type_names so this struct definition wins (consistent with
         // struct_layouts last-writer-wins semantics; otherwise a later same-named
@@ -778,8 +807,11 @@ impl Parser<'_, '_> {
                 enum_type: false,
                 layout_exact,
                 pattern_members,
+                layout_reg: Some(reg),
+                bind: 0,
             },
         );
+        self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Struct { members },
@@ -870,8 +902,11 @@ impl Parser<'_, '_> {
                 // Laid out per instance from a bound this parse could not fold.
                 layout_exact: false,
                 pattern_members: None,
+                layout_reg: None,
+                bind: 0,
             },
         );
+        self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Struct { members },
@@ -1114,7 +1149,7 @@ impl Parser<'_, '_> {
         }
         // OVERLAY: union width = MAX member width; every member starts at bit 0.
         let total: u32 = widths.iter().map(|(f, _)| *f).max().unwrap_or(1);
-        let fields = members
+        let fields: Vec<StructFieldLayout> = members
             .iter()
             .zip(&widths)
             .zip(&nested_keys)
@@ -1132,8 +1167,16 @@ impl Parser<'_, '_> {
                 )
             })
             .collect();
-        self.struct_layouts
-            .insert(tname.name.clone(), StructLayout { fields });
+        let reg = self.next_type_reg();
+        let decl_nested = self.nested_type_regs(&fields);
+        self.struct_layouts.insert(
+            tname.name.clone(),
+            StructLayout {
+                fields,
+                reg,
+                decl_nested,
+            },
+        );
         // A union shares the `struct_layouts` map (for `u.field` member reads) but
         // its overlay layout (all fields at offset 0, width = MAX) is NOT a packed
         // concat — so it is recorded here to EXCLUDE it from the `'{…}` pattern
@@ -1161,8 +1204,11 @@ impl Parser<'_, '_> {
                 enum_type: false,
                 layout_exact: Self::members_layout_exact(&members, each_exact),
                 pattern_members: None,
+                layout_reg: Some(reg),
+                bind: 0,
             },
         );
+        self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Struct { members },
