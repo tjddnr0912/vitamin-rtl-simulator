@@ -151,6 +151,7 @@ impl Elaborator<'_> {
             let path = self.child_prefix(&item.name.name);
             if !self.iface_insts.contains_key(&path) {
                 let saved_prefix = std::mem::replace(&mut self.cur_prefix, path.clone());
+                let saved_module_span = self.cur_module_span.replace(decl.span);
                 // params (header `#(...)` then body localparams) BEFORE nets
                 // so `[W-1:0]` folds — mirroring module passes (3)/(3b).
                 // §3 ⑤ ⓕ: the interface's imports. Two passes around `bind_params`,
@@ -783,6 +784,7 @@ impl Elaborator<'_> {
                 self.release_static_scoped_frames(&parent_inst);
                 self.restore_routine_scope(saved_rtn);
                 self.cur_prefix = saved_prefix;
+                self.cur_module_span = saved_module_span;
             }
             // v6 ②: header-port connections wire LATE (all parent nets exist
             // by pass 8); the early 4c call leaves them for this pass.

@@ -382,8 +382,20 @@ fn every_decline_rule_has_a_pin() {
     );
 
     // ZERO-WIDTH INDEXED PART-SELECT. §11.5.1 requires a positive constant width;
-    // iverilog rejects `W[7 +: 0]`. Accepting it would fold a span of no bits.
-    assert_eq!(bits_of("[W[7 +: 0]+8:0]"), "1");
+    // iverilog rejects `W[7 +: 0]`. Accepting it would fold a span of no bits. The
+    // decline is loud (§5.2 row 65): it used to size the net one bit at exit 0, and the
+    // bound now names the zero width — a fold that accepted the span would answer and
+    // say nothing.
+    let e = run(
+        "  logic [W[7 +: 0]+8:0] v;\n",
+        "    $display(\"r=%0d\", $bits(v));\n",
+    )
+    .unwrap_err();
+    assert!(
+        e.contains("error[VITA-E3009]")
+            && e.contains("the width of this indexed part-select is zero"),
+        "{e}"
+    );
 }
 
 #[test]

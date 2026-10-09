@@ -753,6 +753,13 @@ struct Elaborator<'s> {
     /// [`Self::module_facts`]. Saved/restored around each `elaborate_instance`,
     /// like `cur_prefix`; empty outside a module body (an interface, a package).
     cur_module: String,
+    /// Source range of the module or interface whose body is being elaborated — the
+    /// text whose names bind at `inst_prefix`. Saved/restored with `cur_module` around
+    /// each `elaborate_instance` and interface instance, `None` outside both (a package,
+    /// `$unit`). A §11.5.1 zero-width claim reads a width only when its text lies here
+    /// (`edge_gate.rs`): an imported typedef's or a `$unit` routine's text is folded at
+    /// the user's prefix, where its names may bind to another declaration.
+    cur_module_span: Option<ast::Span>,
     /// Per-module static facts for resolving a HIERARCHICAL leaf's declared sign
     /// and width before the child instance exists (`expr_size_hier`). Built once
     /// from the AST in `run`, never mutated afterwards.
@@ -1079,6 +1086,13 @@ struct Elaborator<'s> {
     // Pushed per ITERATION by the generate-for arm, so it is what a registration
     // inside that iteration's body copies out.
     gen_genvars: Vec<(String, i64)>,
+    // The generate scopes the walk has open, innermost last: each one's full prefix,
+    // the source range of the construct that opened it (the `if` / `case` / `for` /
+    // block), and for a generate-for iteration the genvar key it binds — which sits at
+    // the ENCLOSING scope's key, shadowing a same-named constant there. Read only by the
+    // §11.5.1 zero-width claim (`edge_gate.rs`), to tell whether a name binds where the
+    // select's own text does.
+    gen_text_scopes: Vec<(String, ast::Span, Option<String>)>,
     // The declaring package of the routine whose BODY is being lowered right now
     // (a stack — a package routine may call another). `resolve_rtn_key` consults it
     // so a bare callee inside that body finds its own package's sibling (injected as

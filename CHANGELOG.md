@@ -9,6 +9,32 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an indexed part-select of width zero or less in a constant position is refused
+
+- A constant indexed part-select whose width is 0 or less (`P[0 +: N]` with `N = 0` or
+  `N = $clog2(1)`, `P[1 -: 0]`, a negative sized width) has no value (IEEE 1800-2017 §11.5.1). In a declaration bound
+  — a variable, net, port, typedef, function return or local, typed parameter, unpacked dimension —
+  both constant folds declined it and the declaration silently took one bit (or 32 bits, or eight
+  elements) at exit 0, where Icarus Verilog, sv2v and Verilator refuse it. It is `VITA-E3009` at the
+  width now, with the text the same select already has at run time. A
+  generate-case label read before the match (`case (1) P[0 +: N]: …`) was skipped silently and the
+  default arm taken; it is `VITA-E3010`. A parameter value or a generate condition holding one was
+  already refused, and the message now names the zero width instead of "has no constant-fold arm".
+- The claim is made only where the width is the value of the scope that declares the select:
+  where its text lies in the module or interface being elaborated and each name in it binds there
+  as that text sees it, with no net, variable, `real` or `string` of the same name closer in. A
+  package routine or typedef, a `$unit` routine, and a module typedef or routine read inside a
+  generate block or loop that redeclares one of its names are folded where they are used, so a
+  same-named constant there could stand in for the right one; they keep the previous behaviour,
+  as does a width a function call or `$bits` computes, and any design an earlier error already
+  refused.
+- A negative sized signed literal width in a declaration bound (`logic [P[0 +: -4'sd1]:0] x;`) is
+  refused like `f[0 +: -4'sd2]` at run time. Icarus Verilog and sv2v read the unsigned bit pattern
+  instead, and Verilator answers the same 4-bit value two ways (it accepts `-4'sd1` and refuses
+  `4'shF`), so no tool decides this axis; the standard's positive width does. A signed parameter
+  holding a negative width (`localparam logic signed [3:0] N = 4'sb1000;`, then `P[0 +: N]`) is
+  still read as its unsigned bit pattern in a constant position (ROADMAP §2).
+
 ### Changed — DPI-C and UVM are no longer permanent non-goals
 
 - DPI-C (`import` / `export "DPI-C"`) moves from the permanent non-goals to planned work, the import half

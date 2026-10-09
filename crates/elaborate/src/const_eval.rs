@@ -1020,6 +1020,16 @@ impl Elaborator<'_> {
             );
             return;
         }
+        // §11.5.1: an indexed part-select of width 0 or less has no value, so both
+        // constant folds decline it — and with every name in it a constant, nothing above
+        // spoke: `logic [P[0 +: N]:0] x;` with `N = 0` declared a SILENT one-bit net
+        // where all three oracles refuse the declaration. Named with the indexed-width
+        // funnel's own text, at the width (§4.5.601 refuses the same select in a runtime
+        // expression).
+        if let Some((span, text)) = self.nonpositive_indexed_width_in(e) {
+            self.error_at(MsgCode::ElabUnsupported, span, &text);
+            return;
+        }
         if Self::ast_contains_call(e) {
             self.error_at(
                 MsgCode::ElabUnsupported,

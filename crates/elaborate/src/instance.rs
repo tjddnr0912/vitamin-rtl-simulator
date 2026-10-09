@@ -351,6 +351,7 @@ impl Elaborator<'_> {
         // The key into `module_facts` for this body's hierarchical leaves
         // (`expr_size_hier`) — the module being lowered, not the instance path.
         let saved_module = std::mem::replace(&mut self.cur_module, module.name.name.clone());
+        let saved_module_span = self.cur_module_span.replace(module.span);
         // AMBIENT source anchor for this subtree: the instantiation site. Port
         // wiring, parameter binding and every structural check happen before any
         // statement sets `cur_span`, so without this they report no location at
@@ -1449,6 +1450,7 @@ impl Elaborator<'_> {
         self.cur_prefix = saved_prefix;
         self.inst_prefix = saved_inst_prefix;
         self.cur_module = saved_module;
+        self.cur_module_span = saved_module_span;
         self.cur_span = saved_span;
         self.in_generate_body = saved_in_gen;
         self.rank_band = saved_band;

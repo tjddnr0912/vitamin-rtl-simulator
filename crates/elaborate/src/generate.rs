@@ -349,7 +349,10 @@ impl Elaborator<'_> {
                     // binding of THIS iteration — see `rtn_decl_genvars`.
                     self.gen_genvars.push((gv_key.clone(), iter_val));
                     self.with_scope(&block_prefix, |me| {
+                        let open = (me.cur_prefix.clone(), *for_span, Some(gv_key.clone()));
+                        me.gen_text_scopes.push(open);
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
+                        me.gen_text_scopes.pop();
                     });
                     self.gen_genvars.pop();
                     self.gen_ctr = saved_gen_ctr;
@@ -460,6 +463,22 @@ impl Elaborator<'_> {
                                     self.const_str_in_scope(lab)
                                         .and_then(|t| crate::const_wide::str_raw_i64(&t))
                                 });
+                                // §11.5.1: a label read before the match whose indexed
+                                // part-select has a width of 0 or less has no value; both
+                                // folds decline it, and the scan went on to the default
+                                // arm at exit 0 where all three oracles refuse. A label
+                                // after the match is not read (iverilog and sv2v run it,
+                                // verilator refuses: a split). A label that fails for
+                                // any other reason is still skipped without a word (a
+                                // net named as a label: all three oracles refuse) — not
+                                // this rule's to change.
+                                if lv.is_none()
+                                    && phase == GenPhase::Nets
+                                    && self.nonpositive_indexed_width_in(lab).is_some()
+                                {
+                                    let msg = self.unfoldable_note("generate-case label", lab);
+                                    self.error_at(MsgCode::ElabUnresolvedName, lab.span, &msg);
+                                }
                                 if lv == Some(scrut) {
                                     chosen = Some(body);
                                     break 'scan;
@@ -476,19 +495,19 @@ impl Elaborator<'_> {
                     // `gen_case_body`) or `genblk<N>` (§27.6) — an un-blocked arm is an
                     // implicit block too (both oracles `top.genblk3`).
                     let (lbl, body) = Self::branch_label(body, *span, gen_no);
-                    self.elaborate_gen_scoped(&lbl, body, phase, depth, map, true);
+                    self.elaborate_gen_scoped(&lbl, body, *span, phase, depth, map, true);
                 }
             }
 
             // ── named/unnamed begin…end block inside generate ────────
-            ast::GenItem::Block { label, items, .. } => {
+            ast::GenItem::Block { label, items, span } => {
                 // §4.5.264: a bare `begin…end` in a gen-item list is the ANACHRONISTIC
                 // SURROUND (iverilog warns and treats it as syntax) — `parse_gen_branch`
                 // unwraps an `if`/`for`/`case` body's `begin…end` and hoists its label, so
                 // a `GenItem::Block` only ever arrives here as a free-standing item. Like
                 // the region one level up, an UNLABELED one is transparent; a labeled one
                 // still mints its scope.
-                self.elaborate_gen_scoped(label, items, phase, depth, map, false);
+                self.elaborate_gen_scoped(label, items, *span, phase, depth, map, false);
             }
 
             // ── a plain module-item directly inside generate ─────────
@@ -504,10 +523,15 @@ impl Elaborator<'_> {
     /// `if`/`for`/`case` body is a generate scope (its content initializes before the
     /// enclosing module's own), while a free-standing `begin…end` in a gen-item list is
     /// only syntax. A labeled body is a scope either way.
+    ///
+    /// `text` is the source range of the construct that opened the scope, recorded for
+    /// the scope's lifetime in `gen_text_scopes`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_gen_scoped(
         &mut self,
         label: &Option<ast::Ident>,
         items: &[ast::GenItem],
+        text: ast::Span,
         phase: GenPhase,
         depth: u32,
         map: &ModuleMap<'_>,
@@ -527,7 +551,9 @@ impl Elaborator<'_> {
                 // its constructs count from 1.
                 let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
                 self.with_scope(&seg, |me| {
+                    me.gen_text_scopes.push((me.cur_prefix.clone(), text, None));
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
+                    me.gen_text_scopes.pop();
                 });
                 self.gen_ctr = saved_gen_ctr;
             }
@@ -616,7 +642,7 @@ impl Elaborator<'_> {
             });
             // An `if` BODY is a scope even unlabeled — measured: its content
             // initializes before the enclosing module's own variables.
-            self.elaborate_gen_scoped(&lbl, then_b, phase, depth, map, true);
+            self.elaborate_gen_scoped(&lbl, then_b, span, phase, depth, map, true);
             return;
         }
         if else_b.is_empty() {
@@ -636,7 +662,7 @@ impl Elaborator<'_> {
             return;
         }
         let (lbl, body) = Self::branch_label(else_b, span, gen_no);
-        self.elaborate_gen_scoped(&lbl, body, phase, depth, map, true);
+        self.elaborate_gen_scoped(&lbl, body, span, phase, depth, map, true);
     }
 
     /// Lower ONE plain `ModuleItem` found inside a generate, honoring the current

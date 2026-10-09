@@ -674,6 +674,17 @@ direction disagrees with the net's; a real index, bound or size (IEEE 1800
 §11.5.1); a non-constant or non-positive indexed part-select width; and more
 indices than the packed array has dimensions.
 
+A non-positive indexed part-select width is refused in a constant position too:
+a declaration bound, a parameter value, a generate condition, and a generate-case
+label read before the match (`VITA-E3010` there). It is refused only where the
+width is the value of the scope that declares the select — its text lies in the
+module or interface being elaborated, and no net, variable, `real` or `string`
+of the same name is closer in. Text folded where it is used (a package routine
+or typedef, a `$unit` routine, a module typedef or routine read inside a
+generate block that redeclares one of its names), a width computed by a call or
+`$bits`, and the unselected arm of a constant `?:` keep the earlier behaviour
+(limitations §3.1).
+
 ### 7.4 Self-determined width and sign
 
 Every operand has a self-determined width computed by one rule table. The

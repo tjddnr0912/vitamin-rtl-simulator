@@ -629,7 +629,17 @@ impl Elaborator<'_> {
                 }
                 None
             }
-            K::IndexedPart { base, offset, .. } => {
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                // §11.5.1: a width of 0 or less is why both folds declined — named with
+                // the indexed-width funnel's text, not "no constant-fold arm".
+                if let Some(text) = self.nonpositive_indexed_width_text(width) {
+                    return Some(text);
+                }
                 let v = over_u32(offset)?;
                 Some(format!(
                     "the indexed part-select base {v} does not fit the 32-bit index \

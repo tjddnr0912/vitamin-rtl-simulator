@@ -173,6 +173,11 @@ impl F2Ctx {
     }
 }
 
+/// Does source range `outer` hold `inner`?
+fn span_holds(outer: ast::Span, inner: ast::Span) -> bool {
+    inner.lo >= outer.lo && inner.hi <= outer.hi
+}
+
 fn is_negative_literal(e: &ast::Expr) -> bool {
     match &Elaborator::peel_parens(e).kind {
         ast::ExprKind::Unary {
@@ -527,6 +532,149 @@ impl Elaborator<'_> {
         "the width of this indexed part-select is zero; an indexed part-select width must be \
          a positive constant (IEEE §11.5.1)"
             .to_string()
+    }
+
+    /// The §11.5.1 refusal of indexed part-select width `w` when it folds to zero or less
+    /// — asked of a select that only the CONSTANT domain reads (a declaration bound, a
+    /// parameter value, a generate condition), where no funnel above decides it. The
+    /// folds and the texts are the funnel's own ([`Self::decide_width_edge`]): a negative
+    /// signed fold, then a zero. `None` when the width does not fold, is positive, or is
+    /// not one the claim may read ([`Self::zero_width_claim_is_sound`]).
+    pub(crate) fn nonpositive_indexed_width_text(&self, w: &ast::Expr) -> Option<String> {
+        if !self.zero_width_claim_is_sound(w) {
+            return None;
+        }
+        if self.const_bound_signed(w).is_some_and(|s| s < 0) {
+            return Some(format!("{} is negative", EdgeKind::IndexedWidth.noun()));
+        }
+        (self.const_bound_u32(w) == Some(0)).then(Self::zero_width_text)
+    }
+
+    /// The first indexed part-select in constant expression `e` (the constant domain's
+    /// own traversal, every operand of a `?:` included) whose width
+    /// [`Self::nonpositive_indexed_width_text`] refuses, with the width's span.
+    pub(crate) fn nonpositive_indexed_width_in(
+        &self,
+        e: &ast::Expr,
+    ) -> Option<(ast::Span, String)> {
+        if let ast::ExprKind::IndexedPart { width, .. } = &e.kind {
+            if let Some(text) = self.nonpositive_indexed_width_text(width) {
+                return Some((width.span, text));
+            }
+        }
+        Self::const_fold_children(e)
+            .into_iter()
+            .find_map(|c| self.nonpositive_indexed_width_in(c))
+    }
+
+    /// May a zero or negative value of constant width `w` be claimed here — is it the
+    /// value the scope that DECLARED the select gives? A constant fold reads every name
+    /// at the current prefix, and text is folded away from its declaring scope two ways,
+    /// so a zero read there can be another declaration's (ROADMAP §5.2 rows 46, 68, 71):
+    /// text outside the module or interface being elaborated (a package routine — the
+    /// `decl_split` window corrects only where the caller-scope fold answered — an
+    /// imported package typedef, a `$unit` routine, all read at the user's prefix where
+    /// the user's own `N = 0` binds), and a module typedef or routine read inside a
+    /// generate block or loop that redeclares one of its names (`for (genvar N …)` even
+    /// rebinds the module's own key). So the claim
+    /// is opt-in: `w` lies in this module's text, and every leaf is a literal, a package
+    /// constant, or a bare constant whose binding here is one the select's own text sees
+    /// ([`Self::binding_encloses`]); a call, a cast and a system function other than
+    /// `$clog2` / `$signed` / `$unsigned` read text of their own, so they are not claimed.
+    /// A design an earlier error already refused gets no claim either: a value read after
+    /// one may be a recovery 0 (an x/z or unfoldable parameter binds 0) or a default a
+    /// refused override left in place. Wherever the claim is not made, the fold's decline
+    /// keeps PRE's behaviour.
+    fn zero_width_claim_is_sound(&self, w: &ast::Expr) -> bool {
+        if self.had_error {
+            return false;
+        }
+        let Some(m) = self.cur_module_span else {
+            return false;
+        };
+        span_holds(m, w.span) && self.width_leaves_bind_here(w, w.span)
+    }
+
+    /// [`Self::zero_width_claim_is_sound`]'s leaf rule over the constant domain's own
+    /// traversal; `at` is the select's width.
+    fn width_leaves_bind_here(&self, e: &ast::Expr, at: ast::Span) -> bool {
+        if let ast::ExprKind::Ident(p) = &e.kind {
+            return matches!(p.segments.as_slice(), [s] if self.binding_encloses(&s.name, at));
+        }
+        if Self::is_scope_free_leaf(e) {
+            return true;
+        }
+        if !Self::const_fold_descends(e) || Self::is_call_or_cast(e) || Self::is_other_sys_call(e) {
+            return false;
+        }
+        Self::const_fold_children(e)
+            .into_iter()
+            .all(|c| self.width_leaves_bind_here(c, at))
+    }
+
+    /// A literal or a package-scoped constant: its value is its declaration's, wherever
+    /// it is read.
+    fn is_scope_free_leaf(e: &ast::Expr) -> bool {
+        matches!(
+            e.kind,
+            ast::ExprKind::IntLit { .. } | ast::ExprKind::PkgScoped { .. }
+        )
+    }
+
+    fn is_call_or_cast(e: &ast::Expr) -> bool {
+        matches!(
+            e.kind,
+            ast::ExprKind::Call { .. } | ast::ExprKind::Cast { .. }
+        )
+    }
+
+    fn is_other_sys_call(e: &ast::Expr) -> bool {
+        if let ast::ExprKind::SysCall { name, .. } = &e.kind {
+            return !matches!(name.name.as_str(), "$clog2" | "$signed" | "$unsigned");
+        }
+        false
+    }
+
+    /// Is the declaration bare constant `name` binds to at the current prefix one that
+    /// text at `at` sees? The fold reads a bare name from `params` alone
+    /// (`lookup_scoped`), so that entry must be the name's INNERMOST binding of any
+    /// kind — a real, string or >64-bit constant, a net, variable or port closer in (or
+    /// on the same key) is what the text names, and the fold walks past it to an outer
+    /// integral one. Then: a live genvar only when `at` lies in its loop; a constant of
+    /// the instance's own scope always (the caller has put `at` in the module's text); a
+    /// generate block's own only when `at` lies in that block; anything else — a
+    /// routine's own local, or a name `params` does not bind here — never.
+    fn binding_encloses(&self, name: &str, at: ast::Span) -> bool {
+        let Some(key) = self.walk_scopes_key(name, |k| self.params.contains_key(k)) else {
+            return false;
+        };
+        let other_kind = |k: &str| {
+            self.wide_param_bits.contains_key(k)
+                || self.real_param_val.contains_key(k)
+                || self.str_param_raw.contains_key(k)
+                || self.symbols.contains_key(k)
+        };
+        let innermost =
+            self.walk_scopes_key(name, |k| self.params.contains_key(k) || other_kind(k));
+        if other_kind(&key) || innermost.as_deref() != Some(key.as_str()) {
+            return false;
+        }
+        let scopes = &self.gen_text_scopes;
+        if let Some((_, text, _)) = scopes.iter().rev().find(|s| s.2.as_deref() == Some(&key)) {
+            return span_holds(*text, at);
+        }
+        let scope = key
+            .strip_suffix(name)
+            .map(|s| s.strip_suffix('.').unwrap_or(s))
+            .unwrap_or_default();
+        if scope == self.inst_prefix {
+            return true;
+        }
+        scopes
+            .iter()
+            .rev()
+            .find(|s| s.0 == scope)
+            .is_some_and(|(_, text, _)| span_holds(*text, at))
     }
 
     fn zero_count_text() -> String {
