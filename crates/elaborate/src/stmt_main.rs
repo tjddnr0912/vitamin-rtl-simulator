@@ -396,6 +396,7 @@ impl Elaborator<'_> {
                 b.push_stmt_id(sid);
             }
             ast::Stmt::SysTaskCall { name, args, span } => {
+                self.note_assert_control_call(name, *span);
                 // v9 SYS-READ as a BARE statement (return discarded): $sscanf/
                 // $fscanf/$fgets/$fread WRITE their destination args, $value$plusargs
                 // writes its ref var, and $fgetc/$ungetc advance/mutate the fd — all

@@ -952,6 +952,7 @@ supported platform.
 | `assume (c);` | Supported | Parsed and checked exactly as `assert`. |
 | `assert #0 (c)` | Supported | Matures in the Observed region, flushing when the statement is re-reached. |
 | `assert final (c)` | Supported | Matures in the Reactive region. |
+| A deferred assertion as a module item, `[L :] assert #0 (c) …;` | Supported | Runs as the `always_comb` holding it (IEEE 1800 §16.4), in a module, an interface or a generate block; `assert final`, `assume #0` and `assume final` too. A label names the scope (`%m` is `top.L`). In a package or a program it is `VITA-E2002`, as is an item whose action block declares a variable. A design that also calls an assertion-control task (`$assertoff`, `$asserton`, `$assertkill`, `$assertcontrol`, …) is `VITA-E3009`. |
 | Deferred action | Supported | A print, a file print (`$fdisplay`, `$fwrite`, `$fstrobe`), `$finish` and `$stop` wait for the assertion to mature; their arguments are sampled when the assertion is reached, and every such task of the taken arm runs, in order. `$finish` ends the run in that time step. Any other action (a user task call, a queue method, `$sformat`, `$readmem*`, `$monitor`, …) runs when reached, with `VITA-W3056`; `$timeformat`, `$vita_stage`, a whole-handle copy and a queue slice are refused (`VITA-E3009`). |
 | `cover (c) stmt;`, `cover #0`, `cover final` | Loud | `VITA-E2002` |
 | `assert #N (c)`, N ≠ 0 | Loud | `VITA-E2002` — `#0` is the accepted deferred form. |

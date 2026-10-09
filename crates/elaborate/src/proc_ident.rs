@@ -97,6 +97,7 @@ impl Elaborator<'_> {
     /// and `ProcKind` is SchemaHash-frozen — every `.vu` would go stale for a
     /// reporting label.)
     pub(crate) fn lower_user_proc(&mut self, p: &ast::ProceduralBlock) -> ir::Process {
+        self.note_deferred_assert_item(p);
         let wrapped = matches!(
             *p.body,
             ast::Stmt::ConcurrentAssert { .. } | ast::Stmt::CoverProperty { .. }

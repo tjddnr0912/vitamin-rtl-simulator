@@ -111,6 +111,7 @@ pub(crate) use hier_leaf_shape::HierLeafShape;
 mod hoist;
 mod ident_route;
 pub(crate) use ident_route::BareIdentRoute;
+mod assert_item_gate;
 mod iface_inst;
 mod iface_rtn_scope;
 mod inline_bind;
@@ -1321,6 +1322,10 @@ struct Elaborator<'s> {
     assert_fire: std::collections::BTreeSet<u32>,
     assert_ctl: std::collections::BTreeMap<u32, u8>,
     in_assert_synth: bool,
+    // `assert_item_gate.rs`: the module-item deferred assertions and the
+    // assertion-control calls this elaboration lowered (spans, with the call's name).
+    deferred_assert_items: Vec<ast::Span>,
+    assert_control_calls: Vec<(String, ast::Span)>,
     // N4 clocking: source NetIds to snapshot in the preponed buffer + marked
     // commit-handler ProcId → [(holding_net, source_net)]. `clocking_events` maps a
     // clocking-block name to its clocking event so `@(cb)` lowers to `@(clk)`.

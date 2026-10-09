@@ -893,6 +893,10 @@ pub struct Parser<'t, 's> {
     /// is never instantiated, so nothing can override it) — the A2a array-parameter
     /// path reads this to accept `parameter T X[N] = '{…}` there.
     in_package: bool,
+    /// True while parsing a `program … endprogram` body. A program has no
+    /// deferred immediate assertion item (IEEE 1800-2017 A.1.7
+    /// `non_port_program_item`), so `parse_module_item` keeps that form loud there.
+    in_program: bool,
     /// True while a function or task body is parsed (`tf_body`): every function and
     /// task — module, interface, package, program, `$unit` and class, constructors
     /// included. A `unique` / `priority if … else if` chain there keeps the
@@ -995,6 +999,7 @@ impl<'t, 's> Parser<'t, 's> {
             pattern_used: std::collections::HashMap::new(),
             pattern_rebound: std::collections::HashSet::new(),
             in_package: false,
+            in_program: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
             first_if_arm_only: false,
             else_if_at: std::collections::BTreeSet::new(),

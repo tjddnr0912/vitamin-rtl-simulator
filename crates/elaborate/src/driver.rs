@@ -238,6 +238,8 @@ impl<'s> Elaborator<'s> {
             assert_fire: std::collections::BTreeSet::new(),
             assert_ctl: std::collections::BTreeMap::new(),
             in_assert_synth: false,
+            deferred_assert_items: Vec::new(),
+            assert_control_calls: Vec::new(),
             subst: Vec::new(),
             verbatim_actuals: BTreeSet::new(),
             inline_ctx_ext: None,

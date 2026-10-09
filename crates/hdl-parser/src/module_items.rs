@@ -692,6 +692,7 @@ impl Parser<'_, '_> {
         // Packages never nest, and every module-like resets this, so a body that
         // fails to parse cannot leak `true` into the next module.
         self.in_package = start_kw == Kw::Package;
+        self.in_program = start_kw == Kw::Program;
         // §3.b: a container owns its own type-parameter names (the `endpackage`
         // twin pass reads this set), so a previous package's cannot reach it.
         self.pkg_type_param_names.clear();
@@ -1162,6 +1163,7 @@ impl Parser<'_, '_> {
         // unit-scope `parameter type` after a package accidentally right and the
         // same declaration before one wrong — the predicate was position-dependent.
         self.in_package = false;
+        self.in_program = false;
         self.drop_rebound_pattern_members(&mut ports, &mut body);
         Some(ModuleDecl {
             is_macromodule,
@@ -1224,12 +1226,62 @@ impl Parser<'_, '_> {
         })
     }
 
+    /// `[IDENT :] (assert | assume) (# | final)` at the cursor: the head of a
+    /// deferred immediate assertion (IEEE 1800-2017 A.6.10). `parse_assert` keeps a
+    /// `#` other than `#0` loud.
+    fn at_deferred_assertion_item(&self) -> bool {
+        let k = if self.is_ident() && self.peek_at(1) == Some(TokenKind::Colon) {
+            2
+        } else {
+            0
+        };
+        matches!(
+            self.peek_at(k),
+            Some(TokenKind::Word(WordKind::Keyword(Kw::Assert | Kw::Assume)))
+        ) && matches!(
+            self.peek_at(k + 1),
+            Some(TokenKind::Hash) | Some(TokenKind::Word(WordKind::Keyword(Kw::Final)))
+        )
+    }
+
     pub(crate) fn parse_module_item(&mut self) -> Option<ModuleItem> {
         // skip a stray lexer error token without re-reporting (already diagnosed)
         if self.at_lex_error() {
             let s = self.cur_span();
             self.bump();
             return Some(ModuleItem::Error(s));
+        }
+        // IEEE 1800-2017 §16.4: a deferred immediate assertion (`assert #0`,
+        // `assert final`, and the `assume` forms) is also a module item
+        // (`deferred_immediate_assertion_item`, A.6.10), "treated as if it were
+        // contained in an always_comb procedure". Desugar it onto exactly that: an
+        // `always_comb` whose body is the statement the procedural parser builds, so
+        // a label becomes the named block `parse_labeled_stmt` makes (`%m` reads
+        // `top.L`, as in the LRM's own `always_comb begin L: assert #0 … end`). The
+        // procedural form is supported, so the item reaches only machinery a
+        // hand-written `always_comb` already reaches. A package or a program has no
+        // such item (A.1.11, A.1.7) and keeps the loud error below.
+        if !self.in_package && !self.in_program && self.at_deferred_assertion_item() {
+            let start = self.cur_span();
+            let body = Box::new(self.parse_statement());
+            // A declaration in the action block is not given a scope of its own — it
+            // is bound to a same-named module variable by name (ROADMAP
+            // `mdrv-assert-local`; the procedural form is PRE's, unchanged) — so the
+            // module item, which this desugar newly accepts, refuses it.
+            if action_declares(&body) {
+                self.error_at(
+                    start,
+                    "a deferred assertion item whose action block declares nothing (a \
+                     declaration in its action block is unsupported: it would bind to the \
+                     module's same-named variable)",
+                );
+            }
+            return Some(ModuleItem::Proc(ProceduralBlock {
+                kind: ProcKind::AlwaysComb,
+                sensitivity: None,
+                body,
+                span: start.to(self.prev_span()),
+            }));
         }
         // G9: an optional `label :` prefix on a labelable concurrent-assertion module
         // item (IEEE 1800 §16.2: `name : assert|assume property …` / `name : cover
@@ -1557,5 +1609,35 @@ impl Parser<'_, '_> {
         }
         self.error("module item");
         None
+    }
+}
+
+/// Does a deferred assertion in `s` declare anything in its action block?
+fn action_declares(s: &Stmt) -> bool {
+    fn declares(s: &Stmt) -> bool {
+        match s {
+            Stmt::Block { decls, stmts, .. } | Stmt::Fork { decls, stmts, .. } => {
+                !decls.is_empty() || stmts.iter().any(declares)
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                declares(then_s) || else_s.as_deref().is_some_and(declares)
+            }
+            Stmt::Case { items, .. } => items.iter().any(|it| match it {
+                CaseItem::Match { body, .. } | CaseItem::Default { body, .. } => declares(body),
+            }),
+            Stmt::For { body, .. }
+            | Stmt::While { body, .. }
+            | Stmt::Repeat { body, .. }
+            | Stmt::Forever { body, .. } => declares(body),
+            Stmt::DelayCtrl { body: Some(b), .. }
+            | Stmt::EventCtrl { body: Some(b), .. }
+            | Stmt::Wait { body: Some(b), .. } => declares(b),
+            _ => false,
+        }
+    }
+    match s {
+        Stmt::DeferredAssert { then_s, else_s, .. } => declares(then_s) || declares(else_s),
+        Stmt::Block { stmts, .. } => stmts.iter().any(action_declares),
+        _ => false,
     }
 }

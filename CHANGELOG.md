@@ -17,6 +17,24 @@ changed for a user of the simulator.
   document say so. The limitations chapter also called a VHDL front end a permanent non-goal; it now says
   what the roadmap already did: a conditional long-term item.
 
+### Added — a deferred immediate assertion as a module item
+
+- `[name :] assert #0 (c) …;`, `assert final`, `assume #0` and `assume final` written directly in a
+  module, an interface or a generate block (IEEE 1800-2017 §16.4) were refused at parse with
+  `VITA-E2002` ("expected `property` after `assert`/`assume` at module level"). Each now runs as
+  the `always_comb` the standard says it is treated as: checked at time 0 and whenever a signal it
+  reads changes, its report maturing in the Observed (`#0`) or Reactive (`final`) region, a label
+  naming its scope (`%m` reads `top.name`). Verilator prints the same reports; Icarus Verilog
+  rejects deferred assertions and sv2v drops them. In a package or a program the form stays
+  `VITA-E2002`, as does a simple `assert (c);` outside procedural code and an item whose action
+  block declares a variable (vita would bind it to the module's same-named one). VeeR EH1 under
+  its default `ASSERT_ON` now parses past these items. A design that also calls an
+  assertion-control task (`$assertoff`, `$asserton`, `$assertkill`, `$assertcontrol`,
+  `$assertfailoff`/`on`, `$assertpassoff`/`on`, `$assertnonvacuouson`, `$assertvacuousoff`) is
+  refused with `VITA-E3009` naming the item and the call: vita's assertion control does not reach
+  an immediate or deferred assertion yet, so the item would keep reporting while assertions are
+  off.
+
 ### Fixed — `$bits` of a select in a constant position
 
 - `$bits` of a bit-select, a part-select or an indexed part-select of a packed vector, of a
