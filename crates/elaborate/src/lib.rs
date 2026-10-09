@@ -77,6 +77,7 @@ mod cover_bins;
 mod cover_synth;
 mod crv;
 mod da;
+mod dead_arm;
 mod decl_collide;
 mod decl_scope;
 mod driver;
@@ -1495,6 +1496,10 @@ struct Elaborator<'s> {
     edge_index: std::collections::BTreeMap<u32, usize>,
     /// Widths a lowering-time consumer sized something from before they were decided.
     use_recs: Vec<UseRec>,
+    /// How many dead `if` arms the statement being lowered sits in (`dead_arm.rs`).
+    dead_arm_depth: u32,
+    /// Reversed selects lowered in a dead arm, not yet settled (`dead_arm.rs`).
+    dead_selects: Vec<dead_arm::DeadSelect>,
     /// `$bits(u.X)` placeholders not yet patched: a tree holding one is undecided.
     undecided_placeholders: std::collections::BTreeSet<u32>,
     /// Constants an error left in place of a value: an edge over one is never decided.

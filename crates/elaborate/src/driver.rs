@@ -92,6 +92,8 @@ impl<'s> Elaborator<'s> {
             edge_recs: Vec::new(),
             edge_index: std::collections::BTreeMap::new(),
             use_recs: Vec::new(),
+            dead_arm_depth: 0,
+            dead_selects: Vec::new(),
             undecided_placeholders: std::collections::BTreeSet::new(),
             error_placeholders: std::collections::BTreeSet::new(),
             fill_eids: std::collections::BTreeSet::new(),

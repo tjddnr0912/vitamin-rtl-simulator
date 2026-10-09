@@ -1896,19 +1896,21 @@ impl Elaborator<'_> {
         if let (Some(m), Some(l)) = folded {
             if ascending {
                 if m > l {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "part-select bounds [msb:lsb] descend but the net is ascending [lo:hi] (out of order)",
-                    );
+                    // A select in an `if` arm the run cannot enter (`dead_arm.rs`).
+                    if let Some(w) = self.dead_reversed_select(dead_arm::DESCEND_ON_ASCENDING, l, m)
+                    {
+                        return w;
+                    }
+                    self.error(MsgCode::ElabUnsupported, dead_arm::DESCEND_ON_ASCENDING);
                 } else if let Some(w) = Self::folded_part_width(l, m) {
                     // width = (l - m) + 1, folded; offset handled by norm_offset.
                     return self.const_u32_expr(w, 32);
                 }
             } else if m < l {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "part-select bounds [msb:lsb] ascend but the net is descending [hi:lo] (out of order)",
-                );
+                if let Some(w) = self.dead_reversed_select(dead_arm::ASCEND_ON_DESCENDING, m, l) {
+                    return w;
+                }
+                self.error(MsgCode::ElabUnsupported, dead_arm::ASCEND_ON_DESCENDING);
             } else if self.const_of_expr_u32(msb_id).is_none()
                 || self.const_of_expr_u32(lsb_id).is_none()
             {

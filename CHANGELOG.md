@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a reversed part-select in an `if` arm the run never enters
+
+- A part-select whose bounds run against the net's direction (`tid[W-1:W-CL]` with
+  `CL = $clog2(1) = 0`) inside an arm of a procedural `if` whose constant condition never selects
+  that arm (`if (S_COUNT > 1)`, or the `else` of a condition that is always true) was refused with
+  `VITA-E3009`. It now runs, as its generate twin does and as Icarus Verilog (which elaborates only
+  the arm it takes) and Verilator (a `SELRANGE` warning) run it. This opens alexforencich
+  `axis_arb_mux` at `S_COUNT=1`, `axis_switch` and `axis_ram_switch` at `S_COUNT=1` with
+  `M_COUNT` above 1 (at `M_COUNT=1` a zero-width indexed select stays `VITA-E3009`), and
+  `pcie_us_axi_dma`, `pcie_us_axi_dma_wr`, `pcie_us_axi_master` and `pcie_us_axi_master_rd` where
+  `AXIS_PCIE_DATA_WIDTH` leaves a wider-bus arm dead (64, and 128 for the DMA engines). A reversed
+  select the run can reach stays `VITA-E3009` (IEEE 1800 §11.5.1), as does one under a condition
+  that reads a variable, calls a function or `$clog2`, does arithmetic, has an x/z bit, compares a
+  string, a real or a wider-than-64-bit constant, or reads a hierarchical name (`$bits(u.X)`,
+  `u.P`, a generate block's `blk.L`), in a `case` item or a `?:` arm, in a static initializer, an event expression or a hierarchical select, and on a
+  multi-dimensional packed array.
+
 ### Fixed — an indexed part-select of width zero or less in a constant position is refused
 
 - A constant indexed part-select whose width is 0 or less (`P[0 +: N]` with `N = 0` or

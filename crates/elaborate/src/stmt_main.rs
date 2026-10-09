@@ -686,10 +686,14 @@ impl Elaborator<'_> {
                 // branch chain as a loop cond (`lower_shortcircuit_cond`) — the guarded
                 // call's copy-out fires ONLY on the path that reaches it, never made
                 // unconditional. Every other condition is byte-identical (one Branch).
+                // §5.2 row 17: a lowered condition that folds to a constant leaves one arm
+                // the run can never enter (`dead_arm.rs`); the Branch is unchanged.
+                let mut truth = None;
                 if self.cond_needs_shortcircuit_split(cond) {
                     self.lower_shortcircuit_cond(b, cond, then_bb.raw(), else_bb.raw());
                 } else {
                     let cond_id = self.lower_branch_cond(b, cond);
+                    truth = self.constant_if_truth(cond_id);
                     b.end_block_with(ir::Terminator::Branch {
                         cond: cond_id,
                         then_bb: then_bb.raw(),
@@ -697,11 +701,11 @@ impl Elaborator<'_> {
                     });
                 }
                 b.start_block(then_bb);
-                self.lower_stmt(b, then_s);
+                self.lower_if_arm(b, then_bb, then_s, truth == Some(false));
                 b.goto(merge);
                 b.start_block(else_bb);
                 if let Some(e) = else_s {
-                    self.lower_stmt(b, e);
+                    self.lower_if_arm(b, else_bb, e, truth == Some(true));
                 }
                 b.goto(merge);
                 b.start_block(merge); // continue in merge (post-condition)

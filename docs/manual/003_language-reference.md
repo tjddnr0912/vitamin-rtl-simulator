@@ -685,6 +685,17 @@ generate block that redeclares one of its names), a width computed by a call or
 `$bits`, and the unselected arm of a constant `?:` keep the earlier behaviour
 (limitations §3.1).
 
+A `[m:l]` select whose bounds disagree with the net's direction is accepted in
+one place: an arm of a procedural `if` that the run can never enter, because the
+condition is a constant that never selects it (`if (N > 1) tid[W-1:W-CL] = g;`
+with `CL = $clog2(N) = 0`, or the `else` of a condition that is always true).
+The condition must fold from known integral constants of at most 64 bits under
+`!`, `&&`, `||` and the relational and equality operators (a string, a real, a
+call, or a hierarchical name — `$bits(u.X)`, `u.P`, a generate block's `blk.L` —
+does not fold), and the select must be held by the arm's own statements; the
+arm's other checks still apply. Everywhere else the select
+stays `VITA-E3009`.
+
 ### 7.4 Self-determined width and sign
 
 Every operand has a self-determined width computed by one rule table. The
