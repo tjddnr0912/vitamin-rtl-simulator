@@ -904,6 +904,7 @@ and are exempt.
 | Unpacked-array formals | Supported | The actual must be a bare whole-array name of the same per-dimension shape and direction. |
 | Multi-dimensional packed formal | Supported | Element and part reads, element writes and the `$size` family inside the body. One that is also an unpacked array is Loud. |
 | A `function` with an `output` or `inout` formal | Loud | `VITA-E3009` — illegal per the standard. |
+| A select write of the return variable (`f[3] = …`, `f[7:4] = …`, `f[0 +: 4] = …`) in a static straight-line body | Partial | Merged into the return variable's running value; a bit never written is x, an out-of-range bit is not written (IEEE 1800 §11.5.1). Accepted only where every name the body or its declarations resolve is declared by the body and assigned before it is read, and every declaration range and the return range is written in literals (an owned package function's may name its package's constants). Loud (`VITA-E3009`, naming the reason) otherwise, and where an index or bound is not a literal constant expression, a value has an effect, or the select is reversed or nested. |
 | A function body that is not reducible to an expression when the frame lowering is unavailable | Loud | `VITA-E3009`, naming the reason. |
 | Recursive subroutine when the frame-call lowering is unavailable | Loud | `VITA-E3009`, naming the cycle. |
 | Argument-count mismatch | Loud | `VITA-E3009` `function/task f: N args for M formals` |

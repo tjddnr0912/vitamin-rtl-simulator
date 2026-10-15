@@ -9,6 +9,30 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a function that writes a select of its return variable, called from an expression
+
+- A static function whose straight-line body assigns a bit-, part- or indexed part-select of its
+  return variable (`decode2_4[3] = in[1] & in[0];`, `countones[1:0] = …;`, `f[4 +: 4] = …;`),
+  called from a continuous assignment, `always_comb`, `always @*`, `initial` or another
+  function's body, was refused (`VITA-E3009 function countones body is not reducible to an
+  expression (control flow)`). Each select write now merges into the return variable's running
+  value: the selected bits take the value sized to the select, every other bit keeps what the
+  body gave it so far, and a bit the body never writes is x. A select partly out of range
+  writes its in-range bits and one wholly out of range writes nothing (IEEE 1800-2017 §11.5.1).
+  Every value matches Icarus Verilog and sv2v → Icarus Verilog; Verilator, being 2-state, prints
+  0 or 1 where they print x, and writes a select partly out of range differently. VeeR EL2
+  `countones` and EH1 `decode2_4`, `decode3_8`, `encode8_3` run as written.
+- The merge applies only where every name the body or its declarations resolve is declared by
+  the body and assigned before it is read, and every declaration range is written in literals
+  (an owned package function's may name its package's constants): the body is inlined where the
+  call is, so anything else would bind the caller's same-named object. Still refused, naming the
+  reason: an index or bound that is not a literal constant expression, a parameter, module
+  signal, package item or call in the body, a local read before it is assigned or after its
+  block, a name declared twice, a local with an initializer, a range naming a constant, a value
+  with an effect (`$random`, a call), a reversed part-select and a nested select. A select under
+  control flow, an `automatic` or 2-state-return function and a `return`-bodied one keep taking
+  the frame lowering, as before.
+
 ### Fixed — a struct, record or enum variable read where its type name is declared again
 
 - A variable, port, parameter, formal or class property of a packed struct, union, unpacked

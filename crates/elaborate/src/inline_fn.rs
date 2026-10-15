@@ -39,6 +39,12 @@ pub(crate) struct InlineScope<'a> {
     /// all suppressed the caller's reason. The question here is only ever "did THIS
     /// fold refuse for a reason it stated".
     pub named_a_reason: std::cell::Cell<bool>,
+    /// The return variable's folded range, for a select write of it
+    /// (`inline_ret_select.rs`); `None` where such a write is refused.
+    pub ret_sel: Option<inline_ret_select::RetSelGeom>,
+    /// The body writes a select of its return variable, so every value it
+    /// assigns must be repeatable (`inline_ret_select.rs`).
+    pub sel_body: bool,
 }
 
 /// A function's declared RETURN bit-vector width. `None` = a `real`/`realtime`
@@ -721,6 +727,25 @@ impl Elaborator<'_> {
         // `resize_inline_assign`).
         let armed = self.decl_enter(hdr_win, true);
         let (ret_w, ret_signed) = self.func_return_dims(func);
+        // §5.2 row 25: only a body that writes a select of its return variable
+        // folds its range, so every other body's arena is untouched.
+        let sel_body = inline_ret_select::body_writes_ret_select(&func.body, &func.name.name);
+        // An owned package routine's declaration ranges fold in its package's window,
+        // so they may name that package's own constants; elsewhere they fold where
+        // the call is and must be literal (`inline_ret_select::body_binding_hazard`).
+        let decl_consts: std::collections::HashSet<String> = match hdr_win {
+            Some(w) if sel_body => self
+                .pkg_consts
+                .get(&w.pkg)
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default(),
+            _ => std::collections::HashSet::new(),
+        };
+        let ret_sel = if sel_body {
+            self.inline_ret_sel_geom(func, ret_w, &decl_consts)
+        } else {
+            None
+        };
         self.decl_exit(armed);
         // Sibling-block same-name string/handle collision (INLINE path): two
         // block-local decls sharing a NAME but differing in string/handle-ness
@@ -865,8 +890,19 @@ impl Elaborator<'_> {
             non_bv: &non_bv,
             two_state: &two_state,
             named_a_reason: std::cell::Cell::new(false),
+            ret_sel,
+            sel_body,
         };
-        let ok = self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &scope, &mut ret);
+        let hazard = if sel_body {
+            inline_ret_select::body_binding_hazard(func, &decl_consts)
+        } else {
+            None
+        };
+        let ok = if let Some(why) = hazard {
+            self.refuse_ret_select(&fname, why, &scope)
+        } else {
+            self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &scope, &mut ret)
+        };
         self.restore_params(saved_labels);
         self.restore_param_meta(saved_meta);
         // restore the substitution stack to its pre-call depth.

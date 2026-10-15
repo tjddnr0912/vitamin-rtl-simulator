@@ -119,6 +119,7 @@ mod inline_bind;
 mod inline_body_ctx;
 mod inline_fn;
 mod inline_fold;
+mod inline_ret_select;
 mod inline_task;
 mod inline_task_locals;
 mod instance;

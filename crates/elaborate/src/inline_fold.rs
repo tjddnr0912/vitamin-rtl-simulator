@@ -32,6 +32,13 @@ impl Elaborator<'_> {
                 if delay.is_some() {
                     self.warn("intra-assignment delay in inlined function dropped");
                 }
+                // §5.2 row 25: a select of the return variable merges into its
+                // running value (`inline_ret_select.rs`).
+                if let Some(ok) =
+                    self.fold_ret_select_write(lhs, rhs, fname, ret_signed, scope, ret)
+                {
+                    return ok;
+                }
                 // LHS must be a bare single-segment Ident (a local var or func name).
                 let ast::Lvalue::Ident(p) = lhs else {
                     return false;
@@ -134,6 +141,9 @@ impl Elaborator<'_> {
                     }
                     rhs_id = squashed;
                 }
+                if scope.sel_body && !self.expr_is_repeatable(rhs_id) {
+                    return self.refuse_value_not_repeatable(fname, scope);
+                }
                 if target == fname {
                     *ret = Some(rhs_id); // return assignment
                 } else {
@@ -166,6 +176,9 @@ impl Elaborator<'_> {
                         } else {
                             self.resize_inline_assign(rhs_id0, ret_w, ret_signed)
                         };
+                    if scope.sel_body && !self.expr_is_repeatable(rhs_id) {
+                        return self.refuse_value_not_repeatable(fname, scope);
+                    }
                     *ret = Some(rhs_id);
                 }
                 true
