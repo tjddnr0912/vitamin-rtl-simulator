@@ -64,8 +64,11 @@ impl Parser<'_, '_> {
         }
         // Clone the (small) label list up front so the `name` arm can mutate
         // `self.pending_enum_name_fns` without holding a borrow of `self.enum_defs`.
-        let ename = self.var_enum.get(&path.segments[0].name)?.clone();
-        let labels = self.enum_defs.get(&ename)?.clone();
+        // §5.2 row 67b: the labels of the enum the variable bound; its stored name
+        // only spells the `.name()` function's stem.
+        let ty = self.var_enum.get(&path.segments[0].name)?.clone();
+        let ename = ty.name;
+        let labels = self.decl_labels(ty.key)?.clone();
         if labels.is_empty() {
             return None;
         }
@@ -141,8 +144,8 @@ impl Parser<'_, '_> {
         if path.segments.len() != 2 {
             return None;
         }
-        let ename = self.var_enum.get(&path.segments[0].name)?;
-        let labels = self.enum_defs.get(ename)?;
+        let ty = self.var_enum.get(&path.segments[0].name)?;
+        let labels = self.decl_labels(ty.key)?;
         if labels.is_empty() {
             return None;
         }

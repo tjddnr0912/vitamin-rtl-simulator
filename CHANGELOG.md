@@ -9,6 +9,31 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a struct, record or enum variable read where its type name is declared again
+
+- A variable, port, parameter, formal or class property of a packed struct, union, unpacked
+  struct or enum type, and a struct member whose own type is a packed struct or union, was tied
+  to its type by name: every member read or write, `'{…}`, enum method and nested member chain
+  looked the name up again where it stood. Inside a function, task, `begin` block, generate block
+  or class method that declares its own type of that name, the outer variable was read through
+  the inner type at exit 0 — `o.f.x` in a function declaring its own `in_t` printed `q=0X` where
+  Icarus Verilog and Verilator print `q=10`, a module `st s` read in such a function `q=63` for
+  `q=52`, an enum variable's `.next()` the inner type's labels. Each binding and each nested
+  member now keeps the type declaration it was declared with, and every read uses it.
+- A variable declared before its scope declares or imports another type of the same name keeps
+  the type it was declared with (IEEE 1800-2017 §26.3, as Icarus Verilog reads it; Verilator and
+  sv2v take the later type).
+- A class inheriting a property whose type name means another type where the derived class
+  stands — a `$unit` base used in a module that declares or imports that name, a base declared
+  before an `import` — was refused (`VITA-E3010` / `VITA-E3009`); it now reads the type the base
+  declared the property with. An enum property of a `$unit` base stays refused in a module's
+  derived class.
+- A typed assignment pattern `T'{…}` whose nested member type is declared again between `T` and
+  the pattern was refused (`VITA-E2002`); the member is now laid out by its declared type.
+- Unchanged: which type a name denotes where a variable is declared, when a scope leaves an outer
+  type of another kind under the name (a vector typedef over an imported struct, an unpacked
+  struct over a module struct, a plain formal named like a module struct variable) — ROADMAP §2.
+
 ### Fixed — a block under a timing control declares its own variables
 
 - A `begin … end` that is the body of a timing control — `#1 begin`, `@(e) begin`, `wait (c) begin`
@@ -53,8 +78,8 @@ changed for a user of the simulator.
   disagree wherever a signed struct's sign is read); a `T` whose newest declaration or import,
   where the pattern stands, is another kind of type than a packed struct (a vector, an enum, an
   unpacked or per-instance struct, a type parameter — or an alias of such a name); a nested
-  member type declared again between `T` and the pattern; a nested `'{…}` for a packed-union
-  member; and a select after the pattern. Untyped patterns are unchanged.
+  `'{…}` for a packed-union member; and a select after the pattern. Untyped patterns are
+  unchanged.
 
 ### Fixed — a reversed part-select in an `if` arm the run never enters
 

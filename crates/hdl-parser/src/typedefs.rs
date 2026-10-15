@@ -481,7 +481,16 @@ impl Parser<'_, '_> {
                 counter = v.wrapping_add(1);
             }
             if foldable && !folded.is_empty() {
-                self.enum_defs.insert(tname.name.clone(), folded);
+                // §5.2 row 67b: the enum's declaration key (`decl_key.rs`).
+                let reg = self.next_type_reg();
+                self.register_decl(reg, DeclType::Enum(folded.clone()));
+                self.enum_defs.insert(
+                    tname.name.clone(),
+                    EnumDef {
+                        labels: folded,
+                        reg,
+                    },
+                );
             }
         }
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -697,9 +706,16 @@ impl Parser<'_, '_> {
             // unpacked-array VARIABLE of this type, a decl-init / `'{…}` pattern, a
             // whole-struct copy/compare, and a tf-port all stay LOUD — v1 supports
             // the SCALAR record only.
-            self.unpacked_struct_layouts
-                .insert(tname.name.clone(), members.clone());
+            // §5.2 row 67b: the record's number is also its declaration key.
             let bind = self.next_type_reg();
+            self.register_decl(bind, DeclType::Record(members.clone()));
+            self.unpacked_struct_layouts.insert(
+                tname.name.clone(),
+                RecordDef {
+                    members: members.clone(),
+                    reg: bind,
+                },
+            );
             self.unpacked_bind.insert(tname.name.clone(), bind);
             return Some(ModuleItem::Typedef(TypedefDecl {
                 name: tname,
@@ -771,15 +787,15 @@ impl Parser<'_, '_> {
                     .collect::<Vec<_>>()
             });
         let reg = self.next_type_reg();
-        let decl_nested = self.nested_type_regs(&fields);
-        self.struct_layouts.insert(
-            tname.name.clone(),
-            StructLayout {
-                fields,
-                reg,
-                decl_nested,
+        let layout = StructLayout { fields, reg };
+        self.register_decl(
+            reg,
+            DeclType::Packed {
+                layout: layout.clone(),
+                union: false,
             },
         );
+        self.struct_layouts.insert(tname.name.clone(), layout);
         // If a union with the same name was defined in an earlier module, retract it
         // from union_type_names so this struct definition wins (consistent with
         // struct_layouts last-writer-wins semantics; otherwise a later same-named
@@ -831,7 +847,7 @@ impl Parser<'_, '_> {
         &mut self,
         start: Span,
         members: Vec<StructMember>,
-        nested_keys: Vec<Option<String>>,
+        nested_keys: Vec<Option<TyRef>>,
         shape_keys: Vec<Option<Ident>>,
         tname: Ident,
         struct_signed: bool,
@@ -875,13 +891,14 @@ impl Parser<'_, '_> {
             } else {
                 NetVarKind::Logic
             };
-        self.sym_struct_layouts.insert(
-            tname.name.clone(),
-            SymStructLayout {
-                fields,
-                total: total.clone(),
-            },
-        );
+        let reg = self.next_type_reg();
+        let layout = SymStructLayout {
+            fields,
+            total: total.clone(),
+            reg,
+        };
+        self.register_decl(reg, DeclType::Sym(layout.clone()));
+        self.sym_struct_layouts.insert(tname.name.clone(), layout);
         self.union_type_names.remove(&tname.name);
         let msb = Self::sym_sub_one(total, start);
         self.typedefs.insert(
@@ -1168,15 +1185,15 @@ impl Parser<'_, '_> {
             })
             .collect();
         let reg = self.next_type_reg();
-        let decl_nested = self.nested_type_regs(&fields);
-        self.struct_layouts.insert(
-            tname.name.clone(),
-            StructLayout {
-                fields,
-                reg,
-                decl_nested,
+        let layout = StructLayout { fields, reg };
+        self.register_decl(
+            reg,
+            DeclType::Packed {
+                layout: layout.clone(),
+                union: true,
             },
         );
+        self.struct_layouts.insert(tname.name.clone(), layout);
         // A union shares the `struct_layouts` map (for `u.field` member reads) but
         // its overlay layout (all fields at offset 0, width = MAX) is NOT a packed
         // concat — so it is recorded here to EXCLUDE it from the `'{…}` pattern

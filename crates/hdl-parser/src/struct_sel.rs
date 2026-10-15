@@ -17,19 +17,16 @@ impl Parser<'_, '_> {
     pub(crate) fn struct_field_select(
         &self,
         path: &HierPath,
-    ) -> Option<(HierPath, FieldGeom, Option<String>)> {
+    ) -> Option<(HierPath, FieldGeom, Option<TyRef>)> {
         if path.segments.len() < 2 {
             return None;
         }
-        let tyname = self.var_struct.get(&path.segments[0].name)?;
-        // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
-        // (§4.5.192 packed-vector body-local, mirrors `struct_array_field_geom`) via
-        // `packable_record_layout` — both yield the same `StructLayout::field()` shape.
-        let layout = self
-            .struct_layouts
-            .get(tyname)
-            .cloned()
-            .or_else(|| self.packable_record_layout(tyname))?;
+        let ty = self.var_struct.get(&path.segments[0].name)?;
+        // §5.2 row 67b: the layout of the declaration the variable bound — a PACKED
+        // struct, or a packable UNPACKED record (§4.5.192 packed-vector body-local,
+        // mirrors `struct_array_field_geom`) — both yield the same
+        // `StructLayout::field()` shape.
+        let layout = self.decl_struct_layout(ty.key)?;
         let names: Vec<&str> = path.segments[1..].iter().map(|s| s.name.as_str()).collect();
         let (geom, nested) = self.struct_field_chain(&layout, &names)?;
         let base = HierPath {
@@ -46,11 +43,8 @@ impl Parser<'_, '_> {
         if path.segments.len() != 2 {
             return None;
         }
-        let tyname = self.var_struct.get(&path.segments[0].name)?;
-        let geom = self
-            .sym_struct_layouts
-            .get(tyname)?
-            .field(&path.segments[1].name)?;
+        let ty = self.var_struct.get(&path.segments[0].name)?;
+        let geom = self.decl_sym(ty.key)?.field(&path.segments[1].name)?;
         let base = HierPath {
             segments: vec![path.segments[0].clone()],
             span: path.segments[0].span,
@@ -61,8 +55,8 @@ impl Parser<'_, '_> {
     /// §3 ⑤ ⓒ: the symbolic geometry of `arr[i].field` for a packed / 1-D array
     /// of a symbolic-layout struct.
     pub(crate) fn sym_struct_array_field_geom(&self, arr: &str, field: &str) -> Option<SymGeom> {
-        let tyname = self.var_struct.get(arr)?;
-        self.sym_struct_layouts.get(tyname)?.field(field)
+        let ty = self.var_struct.get(arr)?;
+        self.decl_sym(ty.key)?.field(field)
     }
 
     /// §3 ⑤ ⓒ: the `[msb:lsb]` of a symbolic member — `off + w - 1` and `off`,
@@ -176,16 +170,17 @@ impl Parser<'_, '_> {
         &self,
         layout: &StructLayout,
         names: &[&str],
-    ) -> Option<(FieldGeom, Option<String>)> {
+    ) -> Option<(FieldGeom, Option<TyRef>)> {
         let (first, rest) = names.split_first()?;
         let (mut off, mut w, mut asc, mut sgn, mut dbase, mut stride) = layout.field(first)?;
-        let mut nested = layout.nested_of(first).map(str::to_string);
+        let mut nested = layout.nested_of(first).cloned();
         for name in rest {
-            let nl = self.struct_layouts.get(nested.as_deref()?)?;
+            // §5.2 row 67b: the nested member's own declaration, not its name here.
+            let nl = self.decl_packed(nested.as_ref()?.key)?;
             let (o2, w2, asc2, sgn2, db2, st2) = nl.field(name)?;
             off += o2;
             (w, asc, sgn, dbase, stride) = (w2, asc2, sgn2, db2, st2);
-            nested = nl.nested_of(name).map(str::to_string);
+            nested = nl.nested_of(name).cloned();
         }
         Some(((off, w, asc, sgn, dbase, stride), nested))
     }
@@ -199,8 +194,8 @@ impl Parser<'_, '_> {
     pub(crate) fn extend_member_chain(
         &mut self,
         mut geom: FieldGeom,
-        mut nested: Option<String>,
-    ) -> (FieldGeom, Option<String>) {
+        mut nested: Option<TyRef>,
+    ) -> (FieldGeom, Option<TyRef>) {
         while let Some(nty) = nested.clone() {
             if self.peek() != Some(TokenKind::Dot)
                 || !matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
@@ -209,9 +204,9 @@ impl Parser<'_, '_> {
             }
             self.bump(); // '.'
             let Some(name) = self.ident() else { break };
-            match self.struct_layouts.get(&nty).and_then(|l| {
+            match self.decl_packed(nty.key).and_then(|l| {
                 l.field(&name.name)
-                    .map(|g| (g, l.nested_of(&name.name).map(str::to_string)))
+                    .map(|g| (g, l.nested_of(&name.name).cloned()))
             }) {
                 Some(((o2, w2, asc2, sgn2, db2, st2), n2)) => {
                     geom = (geom.0 + o2, w2, asc2, sgn2, db2, st2);
@@ -290,7 +285,7 @@ impl Parser<'_, '_> {
         // a signed WHOLE-field read is `$signed`-wrapped; a sub-select stays unsigned.
         let field = tyname
             .as_ref()
-            .and_then(|t| self.packable_record_layout(t))
+            .and_then(|t| self.decl_struct_layout(t.key))
             .and_then(|l| {
                 l.fields
                     .iter()
@@ -376,17 +371,14 @@ impl Parser<'_, '_> {
         &self,
         arr: &str,
         field: &str,
-    ) -> Option<(FieldGeom, Option<String>)> {
-        let tyname = self.var_struct.get(arr)?;
-        // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
-        // (§4.5.191 fixed record array) via `packable_record_layout` — both yield the
+    ) -> Option<(FieldGeom, Option<TyRef>)> {
+        let ty = self.var_struct.get(arr)?;
+        // §5.2 row 67b: the declaration the array bound — a PACKED struct, or a
+        // packable UNPACKED record (§4.5.191 fixed record array) — both yield the
         // same `StructLayout::field()` `(off, w, asc, sgn, dbase, stride)` shape.
-        if let Some(l) = self.struct_layouts.get(tyname) {
-            let g = l.field(field)?;
-            return Some((g, l.nested_of(field).map(str::to_string)));
-        }
-        let l = self.packable_record_layout(tyname)?;
-        Some((l.field(field)?, None))
+        let l = self.decl_struct_layout(ty.key)?;
+        let g = l.field(field)?;
+        Some((g, l.nested_of(field).cloned()))
     }
 
     /// §4.5.190 (read): parse `arr[i].field` (cursor at `.`) → a part-select on the
@@ -553,7 +545,7 @@ impl Parser<'_, '_> {
         };
         let off_w = tyname
             .as_ref()
-            .and_then(|t| self.packable_record_layout(t))
+            .and_then(|t| self.decl_struct_layout(t.key))
             .and_then(|l| {
                 l.fields
                     .iter()

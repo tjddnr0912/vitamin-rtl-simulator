@@ -727,17 +727,18 @@ endmodule
     );
 }
 
-/// A nested member's layout is looked up by its bare type key where the pattern stands,
-/// so a same-named type declared in a generate block, a function, a task or a `begin`
-/// block between the type and its use re-laid the member (review F1: `w=0010011001`,
-/// verilator and sv2v → iverilog `w=0001011001`). The typed pattern refuses then; a
-/// package type's nested keys are package-qualified and keep working (all three
-/// `v=1011001 k=0110011`). The check runs at every depth: a type two levels down (`r7k`)
-/// and row 32's anonymous member (`d10`). The untyped pattern keeps the use-site lookup
-/// (ROADMAP §2, row 67).
+/// A nested member is laid out by the declaration its type named where `T` was
+/// declared (§5.2 row 67b: the member stores that declaration's key), so a same-named
+/// type declared in a generate block, a function, a task or a `begin` block between the
+/// type and the pattern no longer re-lays it (row 36's review F1 read the inner type,
+/// `w=0010011001`; row 36 then refused the pattern). Oracles: verilator 5.052 on every
+/// cell, sv2v 0.0.13 → iverilog 13.0 where sv2v runs it (`a01`, `a01s`, `r7k`, `d10`; it
+/// rejects a typedef in a routine or a `begin` block). At every depth: a type two levels
+/// down (`r7k`) and row 32's anonymous member (`d10`, which was E2002). A package type's
+/// nested keys keep working (all three `v=1011001 k=0110011`).
 #[test]
-fn a_nested_type_re_declared_before_the_pattern_is_refused() {
-    loud(
+fn a_nested_type_re_declared_before_the_pattern_keeps_its_declaration() {
+    value(
         "a01",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -750,9 +751,9 @@ fn a_nested_type_re_declared_before_the_pattern_is_refused() {
   initial begin #1 $display("A w=%b", w); $finish; end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A w=0001011001",
     );
-    loud(
+    value(
         "a01s",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -765,9 +766,9 @@ endmodule
   initial begin #1 $display("A w=%b", w); $finish; end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A w=0001011001",
     );
-    loud(
+    value(
         "a02",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -779,9 +780,9 @@ endmodule
   initial begin #1 $display("A f=%b", f()); $finish; end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A f=0001011001",
     );
-    loud(
+    value(
         "a03",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -794,9 +795,9 @@ endmodule
   end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A w=0001011001",
     );
-    loud(
+    value(
         "a29",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -809,9 +810,9 @@ endmodule
   initial begin tk(); #1 $display("A w=%b", w); $finish; end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A w=0001011001",
     );
-    loud(
+    value(
         "n04",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -823,9 +824,9 @@ endmodule
   initial begin #1 $display("A f=%b m=%b", f(), s_t'{'{2'b10, 1'b1}, 4'h9}); end
 endmodule
 "#,
-        "whose nested member types mean here what they meant where `T` was declared",
+        "A f=1011001 m=1011001",
     );
-    loud(
+    value(
         "r7k",
         r#"module t;
   typedef struct packed { logic [1:0] q; } x_t;
@@ -839,9 +840,9 @@ endmodule
   initial begin #1 $display("A w=%b", w); $finish; end
 endmodule
 "#,
-        "whose nested member types mean here what they meant",
+        "A w=0001011001",
     );
-    loud(
+    value(
         "d10",
         r#"module t;
   typedef struct packed { logic [1:0] h; logic l; } in_t;
@@ -854,7 +855,7 @@ endmodule
   initial begin #1 $display("A w=%b", w); $finish; end
 endmodule
 "#,
-        "error[VITA-E2002]",
+        "A w=0000010101",
     );
     value(
         "n03",
@@ -902,14 +903,14 @@ endmodule
     );
 }
 
-/// A variable is bound to its struct type by NAME, so inside a function, task, generate
-/// block or `begin` block that re-declares the name, an outer variable's member access,
-/// untyped pattern, queue push or element access still reads the layout the outer type
-/// left under it — the outer variable's own type (review round 2: every cell below printed
-/// the inner type's member, or was refused, once a re-declaration dropped that layout;
-/// verilator, and Icarus Verilog / sv2v → iverilog where they run, print these values).
-/// The typed pattern decides what `T` means where it stands from the typedef entry
-/// instead, so it never needs that layout dropped.
+/// Inside a function, task, generate block or `begin` block that re-declares the name, an
+/// outer variable's member access, untyped pattern, queue push or element access reads
+/// the outer variable's own type (review round 2: every cell below printed the inner
+/// type's member, or was refused, once a re-declaration dropped that layout; verilator,
+/// and Icarus Verilog / sv2v → iverilog where they run, print these values). Since §5.2
+/// row 67b the variable stores its type's declaration key, so the read no longer depends
+/// on which layout the name leaves behind. The typed pattern decides what `T` means where
+/// it stands from the typedef entry.
 #[test]
 fn an_outer_variable_keeps_its_type_where_the_name_is_re_declared() {
     value(

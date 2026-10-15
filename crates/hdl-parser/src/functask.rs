@@ -569,7 +569,10 @@ impl Parser<'_, '_> {
         // enum name through `inherited_type`, exactly like the struct binding above.
         if let Some(en) = &enum_name {
             if !name.name.is_empty() {
-                self.var_enum.insert(name.name.clone(), en.clone());
+                // §5.2 row 67b: the enum's declaration key, where the formal stands.
+                if let Some(ty) = self.enum_ref(en) {
+                    self.var_enum.insert(name.name.clone(), ty);
+                }
             }
         }
         // IEEE §13.5.3: an ANSI tf-port may carry a default argument value

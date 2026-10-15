@@ -95,6 +95,7 @@ mod casts;
 mod class_scope;
 mod classes;
 mod cover;
+mod decl_key;
 mod decls;
 mod enums;
 mod expr;
@@ -125,6 +126,7 @@ mod udp;
 mod udp_table;
 pub use api::*;
 pub(crate) use blocks_timing::*;
+pub(crate) use decl_key::*;
 pub(crate) use decls::*;
 pub(crate) use expr::*;
 pub(crate) use monomorph::*;
@@ -347,12 +349,14 @@ type TfPortType = (
 /// 4), or 1 for an ordinary single-dim member (so a `s.m[i]` bit-select stays
 /// byte-identical). `> 1` marks a multi-dim member whose `m[i]` selects an
 /// `elem_stride`-bit element, not a bit. The ninth element (§3 ⑤ ⓓ) is the
-/// struct/union TYPE KEY of a NESTED packed-struct member (`perms_t perms;` →
-/// `Some("perms_t")`, a `pkg::t` key when the member type was scoped), `None` for
-/// every vector/atom/enum member. The member itself is laid out FLAT at the
-/// nested type's total width; a chain `s.perms.EX` adds the nested layout's
-/// offsets (`struct_field_chain`), and a nested `'{…}` value recurses.
-type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32, Option<String>);
+/// struct/union TYPE of a NESTED packed-struct member (`perms_t perms;` → the key
+/// of the `perms_t` declaration in scope where the member was declared, stored
+/// under the name `perms_t`, or `pkg::t` when the member type was scoped — §5.2 row
+/// 67b), `None` for every vector/atom/enum member. The member itself is laid out
+/// FLAT at the nested type's total width; a chain `s.perms.EX` adds the nested
+/// declaration's offsets (`struct_field_chain`), and a nested `'{…}` value recurses
+/// into it, wherever the chain or the pattern stands.
+type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32, Option<TyRef>);
 /// A resolved member's geometry `(lsb_offset, width, ascending, signed, dbase,
 /// elem_stride)` — `StructLayout::field`'s answer.
 type FieldGeom = (u32, u32, bool, bool, i64, u32);
@@ -371,7 +375,7 @@ type SymGeom = (Expr, Expr, bool, Option<Ident>);
 /// NOT in `struct_layouts`: every consumer keyed there (the `'{…}` pattern, a
 /// union, `$bits(T)`, a nested-member chain, a member sub-select) stays loud
 /// exactly as before, and only the consumers that take a `SymGeom` see it.
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 struct SymStructLayout {
     /// `(name, lsb_offset, width, signed, shape_param)`, declaration order. §3 ⑤ⓕ:
     /// `shape_param` is `Some("T$s")` for a member declared with an overridable
@@ -380,6 +384,16 @@ struct SymStructLayout {
     fields: Vec<(String, Expr, Expr, bool, Option<Ident>)>,
     /// The struct's packed width.
     total: Expr,
+    /// §5.2 row 67b: the declaration's key (`Parser::next_type_reg`), carried by
+    /// every copy of the entry.
+    reg: u64,
+}
+/// Two symbolic layouts are equal when their members and width are (`reg` records
+/// where the layout came from).
+impl PartialEq for SymStructLayout {
+    fn eq(&self, other: &Self) -> bool {
+        self.fields == other.fields && self.total == other.total
+    }
 }
 impl SymStructLayout {
     fn field(&self, name: &str) -> Option<SymGeom> {
@@ -390,13 +404,13 @@ impl SymStructLayout {
     }
 }
 /// The member list of one packed struct/union body: the members, each member's
-/// NESTED struct/union type key, and — §3 ⑤ⓕ — each member's `T$s` carrier name.
-/// The three vectors are index-parallel by construction (`parse_struct_member_list`
+/// NESTED struct/union type (its declaration key, §5.2 row 67b), and — §3 ⑤ⓕ — each
+/// member's `T$s` carrier name. The three vectors are index-parallel by construction (`parse_struct_member_list`
 /// pushes to all three per declarator). The `bool` is `true` when every member's
 /// type is `TypeInfo::layout_exact` (§3.b cont-array-typedef-elem).
 type StructMemberList = (
     Vec<StructMember>,
-    Vec<Option<String>>,
+    Vec<Option<TyRef>>,
     Vec<Option<Ident>>,
     bool,
 );
@@ -420,34 +434,33 @@ type MemberType = (
     bool,
     Option<Range>,
     Vec<Range>,
-    Option<String>,
+    Option<TyRef>,
     Option<Ident>,
     bool,
 );
 #[derive(Clone)]
 struct StructLayout {
     fields: Vec<StructFieldLayout>,
-    /// §5.2 row 36: the declaration that laid this layout out — a number fresh per
-    /// packed struct or union typedef (`Parser::next_type_reg`; 0 for a layout no
-    /// declaration registers, `packable_record_layout`'s). Copies (a chained alias, an
-    /// import, a package twin) keep it, and the declaration's `TypeInfo::layout_reg`
-    /// holds the same number, so a typed assignment pattern can tell the layout of the
-    /// type its name means where it stands from one a same-named outer or imported
-    /// type left under the name (`typed_pattern_layout`). Read by nothing else.
+    /// The declaration that laid this layout out — its key (§5.2 row 67b,
+    /// `Parser::next_type_reg`; 0 for a layout no declaration registers,
+    /// `packable_record_layout`'s). Copies (a chained alias, an import, a package
+    /// twin, a scope restore) keep it, and the declaration's `TypeInfo::layout_reg`
+    /// holds the same number: a variable binding or a nested member stores it, and
+    /// reads the layout from `Parser::decl_types` (`decl_key.rs`).
     reg: u64,
-    /// §5.2 row 36: the `reg` each nested member type key (`f.8`) named when this type
-    /// was declared. A nested key is looked up again where the type is used, so a
-    /// same-named type declared in between re-lays the member; a typed assignment
-    /// pattern compares against this record and refuses on a difference. Read by
-    /// nothing else.
-    decl_nested: Vec<(String, u64)>,
 }
-/// Two layouts are equal when their members are: `reg` and `decl_nested` record where a
-/// layout came from, for the typed assignment pattern only, and leave every comparison
-/// of layouts (a package body's chained-alias freshness test) exactly as it was.
+/// Two layouts are equal when their members are, a nested member type compared by
+/// the name it is stored under: `reg` and the nested keys record where a layout came
+/// from, and leave every comparison of layouts (a package body's chained-alias
+/// freshness test, `stable_type_key`) exactly as it was.
 impl PartialEq for StructLayout {
     fn eq(&self, other: &Self) -> bool {
-        self.fields == other.fields
+        self.fields.len() == other.fields.len()
+            && self.fields.iter().zip(&other.fields).all(|(a, b)| {
+                (&a.0, a.1, a.2, a.3, a.4, a.5, a.6, a.7)
+                    == (&b.0, b.1, b.2, b.3, b.4, b.5, b.6, b.7)
+                    && a.8.as_ref().map(|t| &t.name) == b.8.as_ref().map(|t| &t.name)
+            })
     }
 }
 impl StructLayout {
@@ -459,13 +472,14 @@ impl StructLayout {
         )
     }
 
-    /// The nested struct/union type key of member `name` (`None` for a
-    /// non-struct member or an unknown name).
-    fn nested_of(&self, name: &str) -> Option<&str> {
+    /// The nested struct/union type of member `name` — the declaration its type
+    /// named where this layout was declared (`None` for a non-struct member or an
+    /// unknown name).
+    fn nested_of(&self, name: &str) -> Option<&TyRef> {
         self.fields
             .iter()
             .find(|(n, ..)| n == name)
-            .and_then(|f| f.8.as_deref())
+            .and_then(|f| f.8.as_ref())
     }
 }
 
@@ -473,7 +487,7 @@ impl StructLayout {
 #[derive(Clone, Default)]
 struct PkgBindings {
     /// `(name, "pkg::t")` for every struct-typed variable/parameter.
-    var_struct: Vec<(String, String)>,
+    var_struct: Vec<(String, TyRef)>,
     /// Names eligible for the scalar `'{…}` pattern desugar (non-union, no dims).
     struct_scalar: Vec<String>,
     /// Names that are a 1-D array of a struct (`arr[i].member` / `arr[i] = '{…}`
@@ -481,7 +495,7 @@ struct PkgBindings {
     /// landed-binding gate.
     struct_1d_array: Vec<String>,
     /// `(name, "pkg::e")` for every enum-typed variable/parameter.
-    var_enum: Vec<(String, String)>,
+    var_enum: Vec<(String, TyRef)>,
     /// §3 ⑤ ⓐ: `(name, dims)` for every multi-dimensional packed parameter
     /// (`packed_md_params`), replayed on import like `var_enum`.
     packed_md: Vec<(String, Vec<Range>)>,
@@ -504,24 +518,24 @@ struct ScopeSnapshot {
     typedefs: std::collections::HashMap<String, TypeInfo>,
     struct_layouts: std::collections::HashMap<String, StructLayout>,
     sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
-    unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
+    unpacked_struct_layouts: std::collections::HashMap<String, RecordDef>,
     unpacked_bind: std::collections::HashMap<String, u64>,
-    enum_defs: std::collections::HashMap<String, Vec<(String, i64)>>,
+    enum_defs: std::collections::HashMap<String, EnumDef>,
     union_type_names: std::collections::HashSet<String>,
     // VAR-name-keyed (a block-local struct/enum variable shadowing an outer one).
-    var_struct: std::collections::HashMap<String, String>,
-    var_unpacked_struct: std::collections::HashMap<String, String>,
+    var_struct: std::collections::HashMap<String, TyRef>,
+    var_unpacked_struct: std::collections::HashMap<String, TyRef>,
     // N3: a dynamic array of a PACKABLE record (`rec_t arr[]`, all-integral members) →
     // the record type name. `arr` lowers to a single `DynArray` net of the packed-
     // struct total width; `arr[i].field` is a part-select on the element (offsets
     // computed on demand from `unpacked_struct_layouts` via `packable_record_layout`).
-    record_array_vars: std::collections::HashMap<String, String>,
+    record_array_vars: std::collections::HashMap<String, TyRef>,
     // N3 heterogeneous heap (SoA): a dyn array of a NON-uniform record (mixed 2-/4-state,
     // or a string/real member) → the record type name. Each member becomes its own typed
     // dyn array `$unp$arr$field`, so `arr[i].field` = a native dyn element access (per-
     // field 2-state/string/real semantics come for free, unlike the packed single-net).
-    record_soa_vars: std::collections::HashMap<String, String>,
-    var_enum: std::collections::HashMap<String, String>,
+    record_soa_vars: std::collections::HashMap<String, TyRef>,
+    var_enum: std::collections::HashMap<String, TyRef>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
     /// §4.5.425: names declared `struct_t [N:0] v` (a PACKED array of a packed struct,
@@ -724,7 +738,7 @@ pub struct Parser<'t, 's> {
     /// value (25 census pins). Module-scoped; cleared per module.
     overridable_params: std::collections::HashSet<String>,
     /// Variable name → its struct type name (module-scoped; cleared per module).
-    var_struct: std::collections::HashMap<String, String>,
+    var_struct: std::collections::HashMap<String, TyRef>,
     /// Scalar (no unpacked dims) packed-struct variable names — the subset of
     /// `var_struct` keys eligible for the `'{e0,…}` assignment-pattern desugar
     /// (§10.9.1). An array-of-struct (`st_t a[4]`) is in `var_struct` but NOT
@@ -763,7 +777,7 @@ pub struct Parser<'t, 's> {
     /// variable of this type desugars to N independent member nets `k$field`
     /// (no aggregate storage in v1); accumulates across the source unit like
     /// `struct_layouts` (scoped `pkg::T` twins added at `endpackage`).
-    unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
+    unpacked_struct_layouts: std::collections::HashMap<String, RecordDef>,
     /// §5.2 row 36: the `TypeInfo::bind` number of each `unpacked_struct_layouts`
     /// entry — when the name was registered as an unpacked record (a declaration, an
     /// import, a package twin). Scoped exactly like `unpacked_struct_layouts`; read only
@@ -771,11 +785,11 @@ pub struct Parser<'t, 's> {
     unpacked_bind: std::collections::HashMap<String, u64>,
     /// Round-9: variable name → its UNPACKED-struct type name (module-scoped;
     /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
-    var_unpacked_struct: std::collections::HashMap<String, String>,
-    record_array_vars: std::collections::HashMap<String, String>,
+    var_unpacked_struct: std::collections::HashMap<String, TyRef>,
+    record_array_vars: std::collections::HashMap<String, TyRef>,
     /// N3 SoA record arrays (var → typename): a NON-uniform record dyn array whose
     /// members each became a `$unp$arr$field` typed dyn array (module-scoped).
-    record_soa_vars: std::collections::HashMap<String, String>,
+    record_soa_vars: std::collections::HashMap<String, TyRef>,
     /// Packed-union type names. Unions share `struct_layouts` (for `u.field`
     /// reads) but their overlay layout is NOT a packed concat, so a union var is
     /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
@@ -792,6 +806,10 @@ pub struct Parser<'t, 's> {
     /// §5.2 row 36: the last `StructLayout::reg` handed out (`next_type_reg`). Never
     /// restored with a scope, so a number names one declaration for the whole parse.
     type_reg_last: u64,
+    /// §5.2 row 67b: every type declaration's layout by its key (`decl_key.rs`).
+    /// Never restored with a scope: a binding or a nested member made in one scope
+    /// reads its declaration wherever it is used.
+    decl_types: std::collections::HashMap<DeclKey, DeclType>,
     /// §5.2 row 36: a typed assignment pattern `T'{…}` is being lowered
     /// (`parse_typed_assign_pattern`) — the refusals only a typed pattern makes (a
     /// nested `'{…}` for a union member) read it; the untyped pattern never sets it.
@@ -836,7 +854,7 @@ pub struct Parser<'t, 's> {
     /// struct member), so `maybe_struct_pattern_rhs` can desugar a `'{…}` on the
     /// right-hand side against that member's layout. Reset at every lvalue
     /// parse; consumed (taken) by the assignment hook.
-    member_pattern_ty: Option<String>,
+    member_pattern_ty: Option<TyRef>,
     /// ⓑ-breadth (§8.25): override specializations of parameterized classes,
     /// produced by `monomorphize_param_classes` and appended at top level.
     pending_mono_specs: Vec<ClassDecl>,
@@ -912,11 +930,11 @@ pub struct Parser<'t, 's> {
     /// an enum with a non-foldable label value (e.g. `B = SOME_PARAM`) is omitted,
     /// so `x.method()` on it stays a loud error (correct-or-loud). Accumulates
     /// across the source unit (typedef enums are file-scoped like `typedefs`).
-    enum_defs: std::collections::HashMap<String, Vec<(String, i64)>>,
+    enum_defs: std::collections::HashMap<String, EnumDef>,
     /// Variable name → its enum type name (module-scoped; cleared per module like
     /// `var_struct`). Lets `x.first/last/next/prev/name/num` desugar to literals /
     /// ternary chains over the enum's labels.
-    var_enum: std::collections::HashMap<String, String>,
+    var_enum: std::collections::HashMap<String, TyRef>,
     /// §3 ⑤: per-PACKAGE struct/enum NAME bindings — `(var_struct, struct_scalar_vars,
     /// var_enum)` entries a package body made for its own variables and parameters,
     /// captured at `endpackage` (the module-scoped maps are cleared at the next
@@ -1063,6 +1081,7 @@ impl<'t, 's> Parser<'t, 's> {
             anon_member_types: 0,
             anon_member_depth: 0,
             type_reg_last: 0,
+            decl_types: std::collections::HashMap::new(),
             typed_pattern_lowering: false,
             const_locals: std::collections::HashMap::new(),
             pkg_const_scoped: std::collections::HashMap::new(),

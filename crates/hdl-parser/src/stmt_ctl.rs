@@ -575,7 +575,7 @@ impl Parser<'_, '_> {
         let iter_arr = self
             .record_soa_vars
             .get(&arr.name)
-            .and_then(|ty| self.unpacked_struct_layouts.get(ty))
+            .and_then(|ty| self.decl_record(ty.key))
             .and_then(|ms| ms.first())
             .map(|m0| Ident {
                 name: Self::unpacked_member_net(&arr.name, &m0.name.name),

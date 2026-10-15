@@ -634,15 +634,21 @@ impl Parser<'_, '_> {
             self.packed_md_params.insert(name.name.clone(), md_dims);
         }
         if let Some(tn) = &pfx.tyname {
-            if self.struct_layouts.contains_key(tn) {
-                self.var_struct.insert(name.name.clone(), tn.clone());
+            // §5.2 row 67b: the declaration key, in the member reads' order (`var_struct_ref`).
+            if let Some(ty) = self
+                .struct_layouts
+                .contains_key(tn)
+                .then(|| self.var_struct_ref(tn))
+                .flatten()
+            {
+                self.var_struct.insert(name.name.clone(), ty);
                 if !self.union_type_names.contains(tn) {
                     self.struct_scalar_vars.insert(name.name.clone());
                     value = self.desugar_struct_assign_pattern(&name.name, value);
                 }
             }
-            if self.enum_defs.contains_key(tn) {
-                self.var_enum.insert(name.name.clone(), tn.clone());
+            if let Some(ty) = self.enum_ref(tn) {
+                self.var_enum.insert(name.name.clone(), ty);
             }
         }
         Some(ParamItem::Scalar(ParamDecl {
@@ -790,14 +796,14 @@ impl Parser<'_, '_> {
         // struct/enum binding of this name, then the declared type binds it anew.
         self.unbind_struct_enum_name(&name.name);
         if let Some(tn) = tyname.as_deref() {
-            if is_struct {
-                self.var_struct.insert(name.name.clone(), tn.to_owned());
+            if let Some(ty) = is_struct.then(|| self.var_struct_ref(tn)).flatten() {
+                self.var_struct.insert(name.name.clone(), ty.clone());
                 if !is_union {
                     self.struct_1d_array_vars.insert(name.name.clone());
-                    value = self.desugar_struct_array_init(tn, value);
+                    value = self.desugar_struct_array_init(&ty, value);
                 }
-            } else if is_enum {
-                self.var_enum.insert(name.name.clone(), tn.to_owned());
+            } else if let Some(ty) = is_enum.then(|| self.enum_ref(tn)).flatten() {
+                self.var_enum.insert(name.name.clone(), ty);
             }
         }
         // Mirror `signed_eff`: an explicit `signed`/`unsigned` wins; otherwise

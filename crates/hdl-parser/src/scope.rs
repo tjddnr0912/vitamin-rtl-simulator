@@ -159,7 +159,7 @@ impl Parser<'_, '_> {
         self.sym_struct_layouts = s.sym_struct_layouts;
         // Round-9: unpacked-struct layouts scope exactly like `struct_layouts` —
         // keep the `pkg::T` twins this unit added, drop its bare names.
-        let new_usl: Vec<(String, Vec<StructMember>)> = self
+        let new_usl: Vec<(String, RecordDef)> = self
             .unpacked_struct_layouts
             .iter()
             .filter(|(k, _)| k.contains("::") && !s.unpacked_struct_layouts.contains_key(*k))
@@ -175,7 +175,7 @@ impl Parser<'_, '_> {
             .collect();
         self.unpacked_bind = s.unpacked_bind;
         self.unpacked_bind.extend(new_ub);
-        let new_ed: Vec<(String, Vec<(String, i64)>)> = self
+        let new_ed: Vec<(String, EnumDef)> = self
             .enum_defs
             .iter()
             .filter(|(k, _)| k.contains("::") && !s.enum_defs.contains_key(*k))

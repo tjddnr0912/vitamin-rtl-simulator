@@ -155,22 +155,6 @@ impl Parser<'_, '_> {
             || self.unpacked_bind.get(name).is_some_and(|b| *b < info.bind)
     }
 
-    /// §5.2 row 36: the `reg` each nested member type key of `fields` names right now
-    /// (`StructLayout::decl_nested`), recorded as the type is declared.
-    pub(crate) fn nested_type_regs(&self, fields: &[StructFieldLayout]) -> Vec<(String, u64)> {
-        let mut out: Vec<(String, u64)> = Vec::new();
-        for f in fields {
-            if let Some(k) = &f.8 {
-                if !out.iter().any(|(n, _)| n == k) {
-                    if let Some(l) = self.struct_layouts.get(k) {
-                        out.push((k.clone(), l.reg));
-                    }
-                }
-            }
-        }
-        out
-    }
-
     /// §10.9 (§5.2 row 36): the type key of a primary that names a TYPE — a bare
     /// `T` or a scoped `p::T` registered as a typedef (packed or unpacked) — before a
     /// `'{`; `None` for any other primary (a value before `'{` is no typed pattern).
@@ -207,8 +191,8 @@ impl Parser<'_, '_> {
     /// leaves an outer or imported layout under it (a variable of the outer type reads
     /// it there — ROADMAP §2, the T stage's §5.2 row 67). So the pattern decides what
     /// `T` means where it stands from the typedef entry, not the layout map
-    /// (`typed_pattern_layout`), and lowers only when every nested member type key
-    /// still names the layout `T` was declared with.
+    /// (`typed_pattern_layout`); a nested member is laid out by the declaration its
+    /// type named where `T` was declared (§5.2 row 67b).
     /// Out of line: `expr_postfix` sits on the expression recursion, whose depth cap
     /// is sized by its frame.
     #[inline(never)]
@@ -234,24 +218,12 @@ impl Parser<'_, '_> {
                 span,
             };
         };
-        // §5.2 row 36: a nested member's layout is looked up by its type key HERE, so a
-        // key re-declared in between (a generate block, a routine, a `begin` block, an
-        // import) would lay the member out by the inner type.
-        if !self.nested_layouts_as_declared(layout, 0) {
-            self.error_at(
-                span,
-                "a typed assignment pattern whose nested member types mean here what they \
-                 meant where `T` was declared (a same-named type declared in between is \
-                 unsupported in v1)",
-            );
-            return Expr {
-                kind: ExprKind::Error,
-                span,
-            };
-        }
+        // §5.2 row 67b: `T`'s declaration key; its nested members are read from their
+        // own declarations (`build_struct_pattern_concat`), wherever the pattern stands.
+        let tkey = DeclKey(layout.reg);
         let before = self.errors.len();
         let outer = std::mem::replace(&mut self.typed_pattern_lowering, true);
-        let lowered = self.build_struct_pattern_concat(&key, pat);
+        let lowered = self.build_struct_pattern_concat(tkey, pat);
         self.typed_pattern_lowering = outer;
         if Self::is_assign_pattern(&lowered) {
             // The untyped rule refused the pattern and said why (a count mismatch, a
@@ -291,29 +263,6 @@ impl Parser<'_, '_> {
         .then_some(layout)
     }
 
-    /// §5.2 row 36: every nested member type key of `layout`, at any depth, still names
-    /// the layout it named where the enclosing type was declared (`StructLayout::
-    /// decl_nested`) — what the type's members are, whatever the name means where the
-    /// pattern stands. `depth` stops a pathological chain.
-    fn nested_layouts_as_declared(&self, layout: &StructLayout, depth: u32) -> bool {
-        if depth > 64 {
-            return false;
-        }
-        layout.fields.iter().all(|f| {
-            let Some(k) = &f.8 else {
-                return true;
-            };
-            let Some(cur) = self.struct_layouts.get(k) else {
-                return false;
-            };
-            layout
-                .decl_nested
-                .iter()
-                .any(|(n, reg)| n == k && *reg == cur.reg)
-                && self.nested_layouts_as_declared(cur, depth + 1)
-        })
-    }
-
     /// If the cursor sits on a resolvable assignment-pattern KEY followed by `:`,
     /// consume the key and the colon and return it; otherwise leave the cursor put
     /// (the element is positional, or a key form we reject downstream).
@@ -344,14 +293,14 @@ impl Parser<'_, '_> {
     /// record `'{…}`) becomes a field-width concat via `build_struct_pattern_concat`,
     /// leaving an outer `AssignPattern` of packed element VALUES. The existing dyn-array
     /// `'{…}` decl-init flush then lowers it to `new[N]` + one whole-element write each.
-    pub(crate) fn desugar_record_array_init(&mut self, tyname: &str, e: Expr) -> Expr {
+    pub(crate) fn desugar_record_array_init(&mut self, ty: &TyRef, e: Expr) -> Expr {
         let span = e.span;
         let ExprKind::AssignPattern(elems) = e.kind else {
             return e;
         };
         let parts = elems
             .into_iter()
-            .map(|el| self.build_struct_pattern_concat(tyname, el))
+            .map(|el| self.build_struct_pattern_concat(ty.key, el))
             .collect();
         Expr {
             kind: ExprKind::AssignPattern(parts),
@@ -370,7 +319,7 @@ impl Parser<'_, '_> {
     /// `'{default: '{…}}` (§10.9.1) reaches elaborate's `'{default: v}` arm with a
     /// packed `v`; an outer member key on an ARRAY is not touched (loud downstream).
     /// Anything that is not a pattern returns unchanged (byte-identical).
-    pub(crate) fn desugar_struct_array_init(&mut self, tyname: &str, e: Expr) -> Expr {
+    pub(crate) fn desugar_struct_array_init(&mut self, ty: &TyRef, e: Expr) -> Expr {
         let span = e.span;
         match e.kind {
             ExprKind::AssignPattern(elems) => {
@@ -378,7 +327,7 @@ impl Parser<'_, '_> {
                     .into_iter()
                     .map(|el| {
                         if Self::is_assign_pattern(&el) {
-                            self.build_struct_pattern_concat(tyname, el)
+                            self.build_struct_pattern_concat(ty.key, el)
                         } else {
                             el
                         }
@@ -394,7 +343,7 @@ impl Parser<'_, '_> {
                     .into_iter()
                     .map(|(k, v)| {
                         if Self::is_assign_pattern(&v) {
-                            (k, self.build_struct_pattern_concat(tyname, v))
+                            (k, self.build_struct_pattern_concat(ty.key, v))
                         } else {
                             (k, v)
                         }
@@ -429,8 +378,8 @@ impl Parser<'_, '_> {
         if !Self::is_assign_pattern(&rhs) || !self.struct_scalar_vars.contains(var_name) {
             return rhs;
         }
-        match self.var_struct.get(var_name).cloned() {
-            Some(tyname) => self.build_struct_pattern_concat(&tyname, rhs),
+        match self.var_struct.get(var_name).map(|t| t.key) {
+            Some(k) => self.build_struct_pattern_concat(k, rhs),
             None => rhs,
         }
     }
@@ -465,18 +414,18 @@ impl Parser<'_, '_> {
             return args;
         }
         let recv = &path.segments[0].name;
-        let Some(tyname) = self
+        let Some(k) = self
             .var_struct
             .get(recv)
-            .cloned()
-            .or_else(|| self.record_array_vars.get(recv).cloned())
+            .or_else(|| self.record_array_vars.get(recv))
+            .map(|t| t.key)
         else {
             return args;
         };
         args.into_iter()
             .map(|a| {
                 if Self::is_assign_pattern(&a) {
-                    self.build_struct_pattern_concat(&tyname, a)
+                    self.build_struct_pattern_concat(k, a)
                 } else {
                     a
                 }
@@ -619,19 +568,17 @@ impl Parser<'_, '_> {
         self.const_bound(e) == Some(0)
     }
 
-    pub(crate) fn build_struct_pattern_concat(&mut self, tyname: &str, rhs: Expr) -> Expr {
+    pub(crate) fn build_struct_pattern_concat(&mut self, ty: DeclKey, rhs: Expr) -> Expr {
         // Each field's (name, width, is_two_state) in declaration order (field 0 =
         // MSB = leftmost concat part); cloned out so `self` is free for `error`
         // below. The NAME is what a §10.9.2 keyed pattern resolves against.
         // N3: a PACKABLE record (in `unpacked_struct_layouts`, not `struct_layouts`)
         // has an on-demand packed layout — an `arr[i] = '{…}` / decl-init element of a
-        // record array desugars through the same field-width concat.
-        let layout = self
-            .struct_layouts
-            .get(tyname)
-            .cloned()
-            .or_else(|| self.packable_record_layout(tyname));
-        let nested: Vec<Option<String>> = match &layout {
+        // record array desugars through the same field-width concat. §5.2 row 67b: the
+        // layout is the declaration `ty` names, and a nested member recurses into the
+        // declaration its type named where the enclosing type was declared.
+        let layout = self.decl_struct_layout(ty);
+        let nested: Vec<Option<TyRef>> = match &layout {
             Some(l) => l.fields.iter().map(|f| f.8.clone()).collect(),
             None => return rhs,
         };
@@ -688,7 +635,7 @@ impl Parser<'_, '_> {
                 Some(nty)
                     if self.typed_pattern_lowering
                         && Self::is_assign_pattern(&e)
-                        && self.union_type_names.contains(nty) =>
+                        && self.decl_is_union(nty.key) =>
                 {
                     self.error_at(
                         e.span,
@@ -703,7 +650,7 @@ impl Parser<'_, '_> {
                     };
                 }
                 Some(nty) if Self::is_assign_pattern(&e) => {
-                    let inner = self.build_struct_pattern_concat(nty, e);
+                    let inner = self.build_struct_pattern_concat(nty.key, e);
                     if Self::is_assign_pattern(&inner) {
                         // the nested pattern was loud (error emitted) — keep the
                         // outer pattern unresolved, exactly like the count-mismatch arm
@@ -811,7 +758,7 @@ impl Parser<'_, '_> {
             return rhs;
         }
         if let (Some(ty), Lvalue::PartSelect { .. }) = (member_ty, lhs) {
-            return self.build_struct_pattern_concat(&ty, rhs);
+            return self.build_struct_pattern_concat(ty.key, rhs);
         }
         match lhs {
             // Whole scalar struct variable `s = '{…}`, or a whole 1-D struct
@@ -820,8 +767,8 @@ impl Parser<'_, '_> {
             Lvalue::Ident(p) if p.segments.len() == 1 => {
                 let nm = p.segments[0].name.clone();
                 if self.struct_1d_array_vars.contains(&nm) {
-                    if let Some(tyname) = self.var_struct.get(&nm).cloned() {
-                        return self.desugar_struct_array_init(&tyname, rhs);
+                    if let Some(ty) = self.var_struct.get(&nm).cloned() {
+                        return self.desugar_struct_array_init(&ty, rhs);
                     }
                 }
                 self.desugar_struct_assign_pattern(&nm, rhs)
@@ -836,15 +783,15 @@ impl Parser<'_, '_> {
                     if p.segments.len() == 1 {
                         let nm = &p.segments[0].name;
                         if self.struct_1d_array_vars.contains(nm) {
-                            if let Some(tyname) = self.var_struct.get(nm).cloned() {
-                                return self.build_struct_pattern_concat(&tyname, rhs);
+                            if let Some(k) = self.var_struct.get(nm).map(|t| t.key) {
+                                return self.build_struct_pattern_concat(k, rhs);
                             }
                         }
                         // N3: a record-array element `arr[i] = '{…}` — desugar the
                         // pattern to a packed field concat (via `packable_record_layout`),
                         // leaving a whole-element dyn write the engine already supports.
-                        if let Some(tyname) = self.record_array_vars.get(nm).cloned() {
-                            return self.build_struct_pattern_concat(&tyname, rhs);
+                        if let Some(k) = self.record_array_vars.get(nm).map(|t| t.key) {
+                            return self.build_struct_pattern_concat(k, rhs);
                         }
                     }
                 }

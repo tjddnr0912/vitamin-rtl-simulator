@@ -47,7 +47,7 @@ impl Parser<'_, '_> {
     /// element access — no packed offset / `$signed` / dbase machinery needed).
     pub(crate) fn soa_member_field(&self, var: &str, field: &str) -> Option<String> {
         let ty = self.record_soa_vars.get(var)?;
-        let members = self.unpacked_struct_layouts.get(ty)?;
+        let members = self.decl_record(ty.key)?;
         members
             .iter()
             .any(|m| m.name.name == field)
@@ -68,11 +68,7 @@ impl Parser<'_, '_> {
         // so leave the receiver `arr` alone here (it reaches those paths intact).
         if path.segments.len() == 2 && matches!(path.segments[1].name.as_str(), "size" | "num") {
             if let Some(ty) = self.record_soa_vars.get(&path.segments[0].name) {
-                if let Some(m0) = self
-                    .unpacked_struct_layouts
-                    .get(ty)
-                    .and_then(|ms| ms.first())
-                {
+                if let Some(m0) = self.decl_record(ty.key).and_then(|ms| ms.first()) {
                     let mnet = Self::unpacked_member_net(&path.segments[0].name, &m0.name.name);
                     let mut segs = path.segments;
                     segs[0].name = mnet;
@@ -133,7 +129,7 @@ impl Parser<'_, '_> {
         }
         let var = path.segments[0].name.clone();
         let ty = self.record_soa_vars.get(&var)?.clone();
-        let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+        let members = self.decl_record(ty.key)?.clone();
         let method = path.segments[1].name.clone();
         let nf = members.len();
         let call = |field: &str, margs: Vec<Expr>| Stmt::UserTaskCall {
@@ -236,7 +232,7 @@ impl Parser<'_, '_> {
                 if let Some(qty) = self.record_soa_vars.get(&qvar).cloned() {
                     // The destination must be a same-type record var.
                     if self.var_unpacked_struct.get(&lvar) == Some(&qty) {
-                        let members = self.unpacked_struct_layouts.get(&qty)?.clone();
+                        let members = self.decl_record(qty.key)?.clone();
                         let pop = name.segments[1].name.clone();
                         let stmts = members
                             .iter()
@@ -302,7 +298,7 @@ impl Parser<'_, '_> {
                     let qvar = bp.segments[0].name.clone();
                     if let Some(qty) = self.record_soa_vars.get(&qvar).cloned() {
                         if self.var_unpacked_struct.get(&lvar) == Some(&qty) {
-                            let members = self.unpacked_struct_layouts.get(&qty)?.clone();
+                            let members = self.decl_record(qty.key)?.clone();
                             let stmts = members
                                 .iter()
                                 .map(|m| {
@@ -362,7 +358,7 @@ impl Parser<'_, '_> {
                 let rvar = rp.segments[0].name.clone();
                 if let Some(lty) = self.var_unpacked_struct.get(&lvar).cloned() {
                     if self.var_unpacked_struct.get(&rvar) == Some(&lty) {
-                        let members = self.unpacked_struct_layouts.get(&lty)?.clone();
+                        let members = self.decl_record(lty.key)?.clone();
                         let stmts = members
                             .iter()
                             .map(|m| {
@@ -391,7 +387,7 @@ impl Parser<'_, '_> {
             if p.segments.len() == 1 {
                 let var = p.segments[0].name.clone();
                 let ty = self.record_soa_vars.get(&var)?.clone();
-                let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                let members = self.decl_record(ty.key)?.clone();
                 let stmts: Vec<Stmt> = match &rhs.kind {
                     ExprKind::New { size, src } => {
                         // Per-field `new[N]`; a SoA src `other` maps to `$unp$other$f`.
@@ -465,7 +461,7 @@ impl Parser<'_, '_> {
                 if p.segments.len() == 1 {
                     let var = p.segments[0].name.clone();
                     let ty = self.record_soa_vars.get(&var)?.clone();
-                    let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+                    let members = self.decl_record(ty.key)?.clone();
                     // T1-11: the WRITE twin of the whole-element read above. Two rhs
                     // forms, one fan-out:
                     //   `q[i] = rec`    — from a same-type record VAR   (`$unp$rec$f`)

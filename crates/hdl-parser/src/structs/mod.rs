@@ -65,10 +65,12 @@ impl Parser<'_, '_> {
                 );
                 return None;
             }
-            let nested = self
-                .struct_layouts
-                .contains_key(&nm)
-                .then(|| self.stable_type_key(&nm));
+            // §5.2 row 67b: the nested member stores the KEY of the declaration `nm`
+            // names here; the stored name only names it.
+            let nested = self.struct_layouts.get(&nm).map(|l| TyRef {
+                name: self.stable_type_key(&nm),
+                key: DeclKey(l.reg),
+            });
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
             return Some((
@@ -151,7 +153,7 @@ impl Parser<'_, '_> {
         }
         // A struct's `TypeInfo` has no `shape_param`, so the shape-guard bookkeeping of
         // the typedef-name arm has nothing to record here.
-        let nested = self.struct_layouts.contains_key(&key).then_some(key);
+        let nested = self.packed_ref(&key);
         Some((
             info.kind,
             info.signed,
@@ -445,11 +447,13 @@ impl Parser<'_, '_> {
             );
             return Vec::new();
         }
-        let Some(members) = self.unpacked_struct_layouts.get(tyname).cloned() else {
+        let Some(rec) = self.record_ref(tyname) else {
             return Vec::new();
         };
-        self.var_unpacked_struct
-            .insert(port.name.name.clone(), tyname.to_string());
+        let Some(members) = self.decl_record(rec.key).cloned() else {
+            return Vec::new();
+        };
+        self.var_unpacked_struct.insert(port.name.name.clone(), rec);
         members
             .iter()
             .map(|m| TfPort {
@@ -496,7 +500,7 @@ impl Parser<'_, '_> {
                 ExprKind::Ident(path) if path.segments.len() == 1 => self
                     .var_unpacked_struct
                     .get(&path.segments[0].name)
-                    .and_then(|ty| self.unpacked_struct_layouts.get(ty))
+                    .and_then(|ty| self.decl_record(ty.key))
                     .map(|members| (path.segments[0].name.clone(), a.span, members.clone())),
                 _ => None,
             };
@@ -557,8 +561,8 @@ impl Parser<'_, '_> {
             return None;
         }
         let arr = p.segments[0].name.as_str();
-        let ty = self.record_soa_vars.get(arr)?.clone();
-        let members = self.unpacked_struct_layouts.get(&ty)?.clone();
+        let ty = self.record_soa_vars.get(arr)?.key;
+        let members = self.decl_record(ty)?.clone();
         // IEEE §13.5.1: the actual (and its array index) is evaluated ONCE. This fan-out
         // CLONES the index into each of the N per-member reads, so a SIDE-EFFECTING /
         // non-deterministic index (a call — `kats[nxt()]`) would be evaluated N times →
@@ -694,8 +698,8 @@ impl Parser<'_, '_> {
             return None;
         }
         let var = &path.segments[0].name;
-        let tyname = self.var_unpacked_struct.get(var)?;
-        let members = self.unpacked_struct_layouts.get(tyname)?;
+        let ty = self.var_unpacked_struct.get(var)?;
+        let members = self.decl_record(ty.key)?;
         let field = &path.segments[1].name;
         if !members.iter().any(|m| &m.name.name == field) {
             return None;

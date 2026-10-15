@@ -83,7 +83,12 @@ impl Parser<'_, '_> {
     /// (not packable → a record ARRAY of it stays loud, deferred to a heterogeneous
     /// heap). Mirrors the `parse_typedef_struct` packed layout loop.
     pub(crate) fn packable_record_layout(&self, tyname: &str) -> Option<StructLayout> {
-        let members = self.unpacked_struct_layouts.get(tyname)?;
+        self.packable_members_layout(self.unpacked_struct_layouts.get(tyname)?)
+    }
+
+    /// [`Self::packable_record_layout`] over a record's member list (§5.2 row 67b:
+    /// the members of the declaration a binding stored, `decl_struct_layout`).
+    pub(crate) fn packable_members_layout(&self, members: &[StructMember]) -> Option<StructLayout> {
         let mut widths = Vec::with_capacity(members.len());
         for m in members {
             // A `string`/`real`/handle/event member is NOT a bit-vector — `member_width_
@@ -135,11 +140,7 @@ impl Parser<'_, '_> {
                 None, // a nested struct member never reaches a record layout
             ));
         }
-        Some(StructLayout {
-            fields,
-            reg: 0,
-            decl_nested: Vec::new(),
-        })
+        Some(StructLayout { fields, reg: 0 })
     }
 
     /// Round-9: parse a scalar UNPACKED-struct declaration `[pkg::]T k [, k2];`,
@@ -189,7 +190,9 @@ impl Parser<'_, '_> {
                 );
                 continue;
             }
-            self.var_struct.insert(n.name.name.clone(), tyname.clone());
+            if let Some(ty) = self.var_struct_ref(&tyname) {
+                self.var_struct.insert(n.name.name.clone(), ty);
+            }
             self.struct_scalar_vars.insert(n.name.name.clone());
             decl_names.push(DeclName {
                 name: n.name.clone(),
@@ -228,7 +231,9 @@ impl Parser<'_, '_> {
         self.bump(); // the type-name identifier
         let names = self.parse_decl_name_list()?;
         self.expect(TokenKind::Semi, "';'");
-        let members = self.unpacked_struct_layouts.get(&tyname)?.clone();
+        // §5.2 row 67b: every binding below stores the record's declaration key.
+        let rec = self.record_ref(&tyname)?;
+        let members = self.unpacked_struct_layouts.get(&tyname)?.members.clone();
         let mut out = Vec::new();
         for n in &names {
             if !n.unpacked.is_empty() {
@@ -250,11 +255,11 @@ impl Parser<'_, '_> {
                         // review RANK 2.)
                         let all_two_state = layout.fields.iter().all(|f| f.5);
                         self.record_array_vars
-                            .insert(n.name.name.clone(), tyname.clone());
+                            .insert(n.name.name.clone(), rec.clone());
                         let init = n
                             .init
                             .clone()
-                            .map(|e| self.desugar_record_array_init(&tyname, e));
+                            .map(|e| self.desugar_record_array_init(&rec, e));
                         out.push(NetVarDecl {
                             integral_typedef: false,
                             pattern_members: Vec::new(),
@@ -308,7 +313,7 @@ impl Parser<'_, '_> {
                             None => vec![None; members.len()],
                         };
                         self.record_soa_vars
-                            .insert(n.name.name.clone(), tyname.clone());
+                            .insert(n.name.name.clone(), rec.clone());
                         for (m, finit) in members.iter().zip(field_inits) {
                             out.push(NetVarDecl {
                                 integral_typedef: false,
@@ -362,7 +367,9 @@ impl Parser<'_, '_> {
                     if let Some(layout) = self.packable_record_layout(&tyname) {
                         let w: u32 = layout.fields.iter().map(|f| f.2).sum();
                         let all_two_state = layout.fields.iter().all(|f| f.5);
-                        self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                        if let Some(ty) = self.var_struct_ref(&tyname) {
+                            self.var_struct.insert(n.name.name.clone(), ty);
+                        }
                         self.struct_1d_array_vars.insert(n.name.name.clone());
                         out.push(NetVarDecl {
                             integral_typedef: false,
@@ -404,7 +411,7 @@ impl Parser<'_, '_> {
                     // member with no array form (nested struct / event / class) stays loud.
                     if members.iter().all(|m| Self::member_kind_soa_ok(m.kind)) {
                         self.record_soa_vars
-                            .insert(n.name.name.clone(), tyname.clone());
+                            .insert(n.name.name.clone(), rec.clone());
                         for m in &members {
                             out.push(NetVarDecl {
                                 integral_typedef: false,
@@ -471,7 +478,9 @@ impl Parser<'_, '_> {
             if let Some(layout) = self.packable_record_layout(&tyname) {
                 let w: u32 = layout.fields.iter().map(|f| f.2).sum();
                 let all_two_state = layout.fields.iter().all(|f| f.5);
-                self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                if let Some(ty) = self.var_struct_ref(&tyname) {
+                    self.var_struct.insert(n.name.name.clone(), ty);
+                }
                 self.struct_scalar_vars.insert(n.name.name.clone());
                 out.push(NetVarDecl {
                     integral_typedef: false,
@@ -501,7 +510,7 @@ impl Parser<'_, '_> {
                 continue;
             }
             self.var_unpacked_struct
-                .insert(n.name.name.clone(), tyname.clone());
+                .insert(n.name.name.clone(), rec.clone());
             for m in &members {
                 out.push(NetVarDecl {
                     integral_typedef: false,
@@ -576,8 +585,12 @@ impl Parser<'_, '_> {
     /// as a regular union var is. Scoped to the enclosing function/task by the
     /// snapshot/restore in `parse_function_def`/`parse_task_def`.
     pub(crate) fn bind_tf_port_struct(&mut self, name: &str, struct_name: &str) {
-        self.var_struct
-            .insert(name.to_string(), struct_name.to_string());
+        // §5.2 row 67b: the port stores the declaration key of its type (the caller
+        // took `struct_name` as a packed or per-instance struct); none, no binding.
+        let Some(ty) = self.var_struct_ref(struct_name) else {
+            return;
+        };
+        self.var_struct.insert(name.to_string(), ty);
         // A union, and a symbolic-layout struct (§3 ⑤ ⓒ), take no `'{…}` desugar.
         if !self.union_type_names.contains(struct_name)
             && !self.sym_struct_layouts.contains_key(struct_name)

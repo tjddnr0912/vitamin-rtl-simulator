@@ -785,10 +785,17 @@ impl Parser<'_, '_> {
         // member accesses can be desugared to part-selects. A scalar (no unpacked
         // dims) struct var is additionally eligible for the `'{…}` pattern
         // desugar, applied here to its decl-init `= '{…}` (§10.9.1).
-        if self.struct_layouts.contains_key(&tyname) {
+        // §5.2 row 67b: each binding stores a declaration key, taken in the member
+        // reads' order where several entries stand under the name (`var_struct_ref`).
+        if let Some(ty) = self
+            .struct_layouts
+            .contains_key(&tyname)
+            .then(|| self.var_struct_ref(&tyname))
+            .flatten()
+        {
             let is_union = self.union_type_names.contains(&tyname);
             for n in &mut names {
-                self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                self.var_struct.insert(n.name.name.clone(), ty.clone());
                 // A scalar STRUCT (not union, no unpacked dims) is eligible for the
                 // `'{…}` pattern desugar; a union overlay is not (kept loud).
                 if any_packed {
@@ -809,7 +816,7 @@ impl Parser<'_, '_> {
                     // BitSelect).
                     self.struct_1d_array_vars.insert(n.name.name.clone());
                     if let Some(init) = n.init.take() {
-                        n.init = Some(self.desugar_struct_array_init(&tyname, init));
+                        n.init = Some(self.desugar_struct_array_init(&ty, init));
                     }
                 }
             }
@@ -817,9 +824,14 @@ impl Parser<'_, '_> {
         // §3 ⑤ ⓒ: a symbolic-layout struct binds the name for the member desugar
         // (scalar, packed array, 1-D unpacked array) and nothing else — no `'{…}`
         // pattern, no decl-init desugar (both stay loud downstream).
-        if self.sym_struct_layouts.contains_key(&tyname) {
+        if let Some(ty) = self
+            .sym_struct_layouts
+            .contains_key(&tyname)
+            .then(|| self.var_struct_ref(&tyname))
+            .flatten()
+        {
             for n in &names {
-                self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                self.var_struct.insert(n.name.name.clone(), ty.clone());
                 if any_packed {
                     if packed_array && n.unpacked.is_empty() {
                         self.struct_packed_array_vars.insert(n.name.name.clone());
@@ -831,9 +843,9 @@ impl Parser<'_, '_> {
         }
         // If this is a (literal-foldable) enum type, bind each name → enum type so
         // `var.first/last/next/prev/name/num` can desugar to its labels (§6.19.5).
-        if self.enum_defs.contains_key(&tyname) {
+        if let Some(ty) = self.enum_ref(&tyname) {
             for n in &names {
-                self.var_enum.insert(n.name.name.clone(), tyname.clone());
+                self.var_enum.insert(n.name.name.clone(), ty.clone());
             }
         }
         // §5.2 row 67a (V10): a class-handle variable's class, for the with-block of

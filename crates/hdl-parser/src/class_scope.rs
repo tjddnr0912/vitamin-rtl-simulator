@@ -10,66 +10,33 @@
 //!   block; when `h`'s class is not known, a block naming a name some visible class
 //!   record binds is refused, and any other block parses where the call stands.
 //!
-//! A recorded binding names its TYPE by name (`var_struct[s] = "st2"`), and the
-//! desugars re-read that name's tables where they run. A record replayed in another
+//! A recorded binding stores the declaration KEY of its type (§5.2 row 67b,
+//! `decl_key.rs`), as every variable binding does, so a record replayed in another
 //! scope — a `$unit` base into a module, or a base before a module typedef or import
-//! of its property's type name — would read the type that scope binds to the name. So
-//! each entry also records what those tables held for its types (`TypeView`, nested
-//! member types included) and is re-bound only where they still hold the same; any
-//! other entry is replayed as an unbind (loud, as before this row).
+//! of its property's type name — reads the types the class declared its properties
+//! with, whatever the name means where it is replayed (IEEE 1800-2017 §8.13: an
+//! inherited property keeps its declaration).
 
 use super::*;
 
-/// What a name-keyed desugar reads for one type name: the packed struct or union
-/// layout (span-free members, nested member keys included), a per-instance layout, the
-/// union flag, the enum labels and an unpacked record's members. Two views are equal
-/// when a desugar through the name would build the same IR.
-#[derive(Clone, PartialEq)]
-pub(crate) struct TypeView {
-    name: String,
-    layout: Option<Vec<StructFieldLayout>>,
-    sym: Option<SymStructLayout>,
-    union: bool,
-    labels: Option<Vec<(String, i64)>>,
-    record: Option<Vec<StructMember>>,
-}
-
 /// One class property's entries in the variable-keyed binding tables (V1–V10) at
-/// `endclass`, and the views of the types they name. All bindings empty = a property
-/// no table binds (a vector, an int, …): replayed as an unbind, so an inherited plain
-/// name hides the enclosing scope's struct variable of that name.
+/// `endclass`. All bindings empty = a property no table binds (a vector, an int, …):
+/// replayed as an unbind, so an inherited plain name hides the enclosing scope's
+/// struct variable of that name.
 #[derive(Clone, Default)]
 pub(crate) struct ClassBindState {
-    var_struct: Option<String>,
+    var_struct: Option<TyRef>,
     struct_scalar: bool,
     struct_1d_array: bool,
     struct_packed_array: bool,
-    var_enum: Option<String>,
+    var_enum: Option<TyRef>,
     packed_md: Option<Vec<Range>>,
-    var_unpacked_struct: Option<String>,
-    record_array: Option<String>,
-    record_soa: Option<String>,
+    var_unpacked_struct: Option<TyRef>,
+    record_array: Option<TyRef>,
+    record_soa: Option<TyRef>,
     var_class: Option<String>,
-    views: Vec<TypeView>,
     /// The container the record was taken in (`Parser::cur_container`).
     container: Option<u64>,
-}
-
-impl ClassBindState {
-    /// The type names the entry's bindings read (V1, V5, V7–V9).
-    fn type_names(&self) -> Vec<String> {
-        [
-            &self.var_struct,
-            &self.var_enum,
-            &self.var_unpacked_struct,
-            &self.record_array,
-            &self.record_soa,
-        ]
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect()
-    }
 }
 
 /// What a class body bound, in binding order (first occurrence kept): its own
@@ -93,39 +60,8 @@ impl Parser<'_, '_> {
         }
     }
 
-    /// The views of `roots` and of every nested member type their packed layouts
-    /// name, transitively, in discovery order.
-    fn type_views(&self, roots: Vec<String>) -> Vec<TypeView> {
-        let mut seen: Vec<String> = Vec::new();
-        let mut queue = roots;
-        let mut out = Vec::new();
-        while let Some(n) = queue.pop() {
-            if seen.contains(&n) {
-                continue;
-            }
-            seen.push(n.clone());
-            let layout = self.struct_layouts.get(&n).map(|l| l.fields.clone());
-            if let Some(fields) = &layout {
-                for f in fields {
-                    if let Some(k) = &f.8 {
-                        queue.push(k.clone());
-                    }
-                }
-            }
-            out.push(TypeView {
-                layout,
-                sym: self.sym_struct_layouts.get(&n).cloned(),
-                union: self.union_type_names.contains(&n),
-                labels: self.enum_defs.get(&n).cloned(),
-                record: self.unpacked_struct_layouts.get(&n).cloned(),
-                name: n,
-            });
-        }
-        out
-    }
-
     /// The class record: each bound name once (first occurrence), in binding order,
-    /// with its V1–V10 entries and their type views as they stand at `endclass`.
+    /// with its V1–V10 entries as they stand at `endclass`.
     pub(crate) fn class_record(&self, names: Vec<String>) -> ClassRec {
         let mut seen = std::collections::HashSet::new();
         let mut rec = Vec::new();
@@ -133,7 +69,7 @@ impl Parser<'_, '_> {
             if !seen.insert(n.clone()) {
                 continue;
             }
-            let mut st = ClassBindState {
+            let st = ClassBindState {
                 var_struct: self.var_struct.get(&n).cloned(),
                 struct_scalar: self.struct_scalar_vars.contains(&n),
                 struct_1d_array: self.struct_1d_array_vars.contains(&n),
@@ -144,10 +80,8 @@ impl Parser<'_, '_> {
                 record_array: self.record_array_vars.get(&n).cloned(),
                 record_soa: self.record_soa_vars.get(&n).cloned(),
                 var_class: self.var_class.get(&n).cloned(),
-                views: Vec::new(),
                 container: self.cur_container,
             };
-            st.views = self.type_views(st.type_names());
             rec.push((n, st));
         }
         rec
@@ -155,27 +89,24 @@ impl Parser<'_, '_> {
 
     /// Put a class record back: every name is unbound first (`unbind_struct_enum_name`
     /// — what the property's own declaration did — and `unbind_bindings`), then
-    /// re-bound only where its types still read as recorded; a name whose type the
-    /// current scope binds to something else stays unbound (loud). `note` pushes each
-    /// name onto the class being parsed (an `extends` replay).
+    /// re-bound with its recorded declaration keys. `note` pushes each name onto the
+    /// class being parsed (an `extends` replay).
     pub(crate) fn replay_class_record(&mut self, rec: &ClassRec, note: bool) {
         for (n, st) in rec {
             self.unbind_struct_enum_name(n);
             self.unbind_bindings(n);
-            if self.type_views(st.type_names()) == st.views {
-                let mut st = st.clone();
-                if st.container != self.cur_container {
-                    // A record taken in another container — a `$unit` class replayed
-                    // into a module (`extends` or a with-block) — is traffic this row
-                    // opened (the container's start cleared the unit's leak, so it
-                    // was refused before). An enum method's result there is 32 bits
-                    // wide instead of the enum's (ROADMAP §2 enum-method-width; a
-                    // module's own enum variable reads the same width), so its enum
-                    // binding is withheld and `e.next()` stays refused as before.
-                    st.var_enum = None;
-                }
-                self.bind_class_state(n, st);
+            let mut st = st.clone();
+            if st.container != self.cur_container {
+                // A record taken in another container — a `$unit` class replayed into
+                // a module (`extends` or a with-block) — is traffic §5.2 row 67a opened
+                // (the container's start cleared the unit's leak, so it was refused
+                // before). An enum method's result there is 32 bits wide instead of the
+                // enum's (ROADMAP §2 enum-method-width; a module's own enum variable
+                // reads the same width), so its enum binding is withheld and `e.next()`
+                // stays refused as before.
+                st.var_enum = None;
             }
+            self.bind_class_state(n, st);
             if note {
                 self.note_class_decl_name(n);
             }

@@ -1071,23 +1071,16 @@ impl Parser<'_, '_> {
                             // own type (declared earlier in the body, so its twin is
                             // already registered) — re-spell it `pkg::t` so the twin
                             // an importer copies still chains (`stable_type_key`).
+                            // §5.2 row 67b: only the stored NAME is re-spelled; the
+                            // member keeps its declaration key, which is what a chain
+                            // or a nested `'{…}` reads.
                             for f in &mut sl.fields {
-                                if let Some(k) = &f.8 {
-                                    if !k.contains("::") {
-                                        let sk = format!("{pkg}::{k}");
+                                if let Some(k) = &mut f.8 {
+                                    if !k.name.contains("::") {
+                                        let sk = format!("{pkg}::{}", k.name);
                                         if self.struct_layouts.contains_key(&sk) {
-                                            f.8 = Some(sk);
+                                            k.name = sk;
                                         }
-                                    }
-                                }
-                            }
-                            // §5.2 row 36: the declaration record (`StructLayout::
-                            // decl_nested`) follows the re-spelled keys.
-                            for (k, _) in &mut sl.decl_nested {
-                                if !k.contains("::") {
-                                    let sk = format!("{pkg}::{k}");
-                                    if self.struct_layouts.contains_key(&sk) {
-                                        *k = sk;
                                     }
                                 }
                             }
@@ -1138,15 +1131,17 @@ impl Parser<'_, '_> {
             // the importer's scope against whatever same-named type it has
             // (measured: `V.a` cut as `V[15:4]` out of an 8-bit net, exit 0).
             let mut pb = PkgBindings::default();
-            let mut vs: Vec<(String, String)> = self
+            // §5.2 row 67b: the binding keeps its declaration key; only the stored
+            // spelling becomes `pkg::t`.
+            let mut vs: Vec<(String, TyRef)> = self
                 .var_struct
                 .iter()
                 .map(|(n, t)| (n.clone(), t.clone()))
                 .collect();
-            vs.sort();
+            vs.sort_by(|a, b| a.0.cmp(&b.0));
             for (n, ty) in vs {
-                let key = self.pkg_binding_type_key(&pkg, &ty);
-                pb.var_struct.push((n, key));
+                let name = self.pkg_binding_type_key(&pkg, &ty.name);
+                pb.var_struct.push((n, TyRef { name, key: ty.key }));
             }
             let mut ss: Vec<&String> = self.struct_scalar_vars.iter().collect();
             ss.sort();
@@ -1154,15 +1149,15 @@ impl Parser<'_, '_> {
             let mut sa: Vec<&String> = self.struct_1d_array_vars.iter().collect();
             sa.sort();
             pb.struct_1d_array = sa.into_iter().cloned().collect();
-            let mut ve: Vec<(String, String)> = self
+            let mut ve: Vec<(String, TyRef)> = self
                 .var_enum
                 .iter()
                 .map(|(n, t)| (n.clone(), t.clone()))
                 .collect();
-            ve.sort();
+            ve.sort_by(|a, b| a.0.cmp(&b.0));
             for (n, ty) in ve {
-                let key = self.pkg_binding_type_key(&pkg, &ty);
-                pb.var_enum.push((n, key));
+                let name = self.pkg_binding_type_key(&pkg, &ty.name);
+                pb.var_enum.push((n, TyRef { name, key: ty.key }));
             }
             // §3 ⑤ ⓐ: the multi-dimensional packed parameters, for `import` (bare
             // name) and for a scoped `pkg::P[i]` read (unit-scoped twin). Sorted:

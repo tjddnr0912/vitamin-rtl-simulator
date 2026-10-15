@@ -466,12 +466,14 @@ module top; m u(); initial #20 $finish; endmodule
 }
 
 #[test]
-fn an_inherited_property_is_replayed_only_where_its_type_reads_as_recorded() {
-    // A class record names a property's type by NAME. A `$unit` base replayed into a
-    // module that declares or imports another type of that name would read the
-    // module's type (row 67a review: `ga=0d` / `ds=12` silent where verilator prints
-    // `ga=16` / `ds=42`, iverilog `ds=42` on the pattern), so such a property is
-    // replayed unbound and stays refused, as it was before this row.
+fn an_inherited_property_keeps_the_type_its_class_declared_it_with() {
+    // §5.2 row 67b: a class record stores each property's declaration KEY, so a `$unit`
+    // base replayed into a module that declares or imports another type of that name
+    // reads the type the base declared the property with (IEEE 1800-2017 §8.13). Before
+    // row 67b the record named the type by NAME and such a property was replayed
+    // unbound (E3010 / E3009; the unchecked replay of row 67a's review read the
+    // module's type, `ga=0d` / `ds=12`). Oracles: verilator `ga=16` on all three;
+    // verilator and iverilog `ds=42` on the pattern; sv2v has no classes.
     let ga = "    function logic [5:0] ga(); return s.a; endfunction\n";
     let show = "d.s = 8'hD6; #1 $display(\"A ga=%h\", d.ga());";
     for (name, body) in [
@@ -482,22 +484,20 @@ fn an_inherited_property_is_replayed_only_where_its_type_reads_as_recorded() {
         ("wildcard_import", "  import q::*;\n"),
         ("explicit_import", "  import q::st2;\n"),
     ] {
-        loud(
-            name,
-            &unit_base(body, ga, show),
-            "error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `s.a`",
-        );
+        value(name, &unit_base(body, ga, show), "A ga=16");
     }
-    loud(
+    value(
         "module_typedef_pattern",
         &unit_base(
             "  typedef struct packed { logic [3:0] a; logic [3:0] b; } st2;\n",
             "    function void sp(); s = '{2'h1, 6'h2}; endfunction\n",
             "d.sp(); #1 $display(\"A ds=%h\", d.s);",
         ),
-        "error[VITA-E3009]",
+        "A ds=42",
     );
-    // An enum base type re-declared with other labels (verilator `nx=2`).
+    // An enum property of a `$unit` base: its binding is withheld in a module's derived
+    // class (the enum-method-width lane, `replay_class_record`), so `e.next()` stays
+    // refused there (verilator `nx=2`, the base's labels).
     loud(
         "module_enum",
         "typedef enum logic [1:0] {A0, A1, A2, A3} e_t;
@@ -514,9 +514,9 @@ module top; m u(); initial #20 $finish; endmodule
 ",
         "error[VITA-E3009]",
     );
-    // A nested member type re-declared in the module: `st2` is unchanged but its member
-    // `i`'s type `in_t` is the module's there (verilator `gx=3` = the renamed twin below;
-    // the unchecked replay read the module's `in_t`, `gx=6`).
+    // A nested member type re-declared in the module: `st2` is unchanged and its member
+    // `i` keeps the `in_t` it was declared with (verilator `gx=3` = the renamed twin
+    // below; a by-name replay read the module's `in_t`, `gx=6`; row 67a refused it).
     let nested = |in_name: &str| {
         format!(
             "typedef struct packed {{ logic [1:0] x; logic [1:0] y; }} in_t;
@@ -534,11 +534,7 @@ module top; m u(); initial #20 $finish; endmodule
 "
         )
     };
-    loud(
-        "nested_member_type",
-        &nested("in_t"),
-        "error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared hierarchical name `s.i.x`",
-    );
+    value("nested_member_type", &nested("in_t"), "A gx=3");
     value("nested_member_type_other_name", &nested("in_m"), "A gx=3");
     // Controls (verilator `ga=16`): the module re-declares `st2` with the same layout,
     // and a module type of another name.
