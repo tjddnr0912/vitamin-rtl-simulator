@@ -56,7 +56,7 @@ hold.
    byte-identical to the 4-state oracle's; the failed x-invariance check is recorded with
    the row (the seeds and the distinct digests or cycle counts they printed); and rule 5's
    asymmetric mutations move the 4-state oracle's digest as well as vita's. VeeR EL2
-   (ROADMAP §5.2) is the row it was ruled for; the runner's contract text and its manifest
+   (ROADMAP §7) is the row it was ruled for; the runner's contract text and its manifest
    test take the exception with that row.
 3. **One digest line, accumulated over the whole run** — not final state, which is blind to
    a divergence the design later overwrites. The pinned digest is the *oracle's* answer, so
@@ -722,14 +722,14 @@ a 30.4 s median. The four rows admitted from the row-9 census add about 72 s to 
   RUN.md's mutations.
 - New designs, licence and oracle first. The row-9 census admitted four rows that run today
   (`verilog-axis`, `verilog-i2c`, `verilog-uart`, `opentitan-prims`; §4.5.603). The rest are
-  ROADMAP §5.2 rows (Solderpad designs — cv32e40p, cva6, the pulp-platform libraries — stay
+  ROADMAP §5.2 or §7 rows (Solderpad designs — cv32e40p, cva6, the pulp-platform libraries — stay
   outside rule 1, owner ruling):
   - VeeR EH1 (Apache-2.0, row 31): Verilator, x-invariant over 66 runs; after the rows that
     open its page.
   - OpenTitan pattgen, uart, gpio, i2c and rv_timer (row 47): after the T and B stage rows.
   - OpenTitan aon_timer and edn (row 53): after the V stage rows.
-  - `verilog-pcie` (MIT, row 63): once a first-party testbench folds a digest.
-  - VeeR EL2 (Apache-2.0, row 64): under rule 2's 4-state exception; after its rows.
+  - `verilog-pcie` (MIT, row 63) and VeeR EL2 (Apache-2.0, row 64): deferred to ROADMAP §7
+    (owner, 2026-10-15).
 - The full `darkriscv` SoC runs and agrees with Icarus Verilog (`bench/darkriscv/RUN.md`), also
   with upstream's `__RMW_CYCLE__` on since §4.5.575 accepted its null `$display` argument; it is
   not a corpus row because its UART's `$fgetc` path depends on host file state.
