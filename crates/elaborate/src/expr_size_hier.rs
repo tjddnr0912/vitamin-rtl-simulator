@@ -309,9 +309,11 @@ fn note(seen: &mut BTreeMap<String, u32>, n: &str) {
 }
 
 /// Count every name the module declares that a bare hierarchical segment could
-/// bind to. Over-counting only costs a decline; MISSING one would let a query
-/// answer from a declaration the design shadows, so generate bodies and
-/// procedural block locals are walked too.
+/// bind to. MISSING one would let a query answer from a declaration the design
+/// shadows, so generate bodies and procedural block locals are walked too.
+/// Over-counting is NOT free: a declined name takes the region's 32-bit fallback,
+/// which is wrong for a narrower net (a block-local named like a module variable:
+/// ROADMAP §2, measured in row 72's round-1 review, `0000xx20` for `00000120`).
 fn census_item(it: &ast::ModuleItem, seen: &mut BTreeMap<String, u32>) {
     match it {
         ast::ModuleItem::NetVar(d) => {
@@ -350,9 +352,16 @@ fn census_item(it: &ast::ModuleItem, seen: &mut BTreeMap<String, u32>) {
         // v1 flattens a procedural block local onto a module net of the same
         // BARE name, so such a name is not answerable from the module-level
         // declaration alone.
+        //
+        // §5.2 row 72 (round 1, soundness F1): NOT the timing-control bodies. A
+        // shadowing local there now earns its own `$blk$` net, and counting it made the
+        // module's own same-named variable decline into this lane's 32-bit fallback
+        // (`16'(u.hs * q8)`: `00000120` → `0000xx20`, all three oracles `00000120`). The
+        // same decline for a local NOT under a timing control is pre-existing (ROADMAP
+        // §2), so this keeps the walk it had.
         ast::ModuleItem::Proc(p) => {
             let mut decls = Vec::new();
-            collect_block_local_decls(&p.body, &mut decls);
+            crate::block_local::collect_block_local_decls_outside_timing(&p.body, &mut decls);
             for d in &decls {
                 for n in &d.names {
                     note(seen, &n.name.name);

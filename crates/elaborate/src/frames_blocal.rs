@@ -12,9 +12,18 @@
 use super::*;
 
 impl Elaborator<'_> {
-    pub(crate) fn reserve_frame_block_locals(&mut self, body: &ast::Stmt, base_net: u32) -> u64 {
+    pub(crate) fn reserve_frame_block_locals(
+        &mut self,
+        view: &crate::block_local::RoutineView,
+        base_net: u32,
+    ) -> u64 {
+        let body = view.body;
         let mut decls = Vec::new();
         crate::block_local::collect_block_local_decls_spanned(body, &mut Vec::new(), &mut decls);
+        // §5.2 row 72: a declaration under a timing control is refused
+        // (`block_local/timed_task.rs`); it is still reserved, so its uses resolve and the
+        // refusal is the one diagnostic.
+        let timed = crate::block_local::timing_nested_decls(body);
         let mut auto_override = 0u64;
         for (chain, d) in &decls {
             // §2 Scoping (subroutine block-locals): a decl whose declaring block earned a
@@ -23,10 +32,16 @@ impl Elaborator<'_> {
             // takes the `None` arm, which is the pre-existing code verbatim.
             match self.block_local_scope_prefix(chain, d) {
                 Some(seg) => {
-                    let bits = self.with_scope(&seg, |s| s.reserve_block_local_decl(d, base_net));
+                    let bits = self.with_scope(&seg, |s| {
+                        s.refuse_timing_block_local_hazard(view, &timed, d);
+                        s.reserve_block_local_decl(d, base_net)
+                    });
                     auto_override |= bits;
                 }
-                None => auto_override |= self.reserve_block_local_decl(d, base_net),
+                None => {
+                    self.refuse_timing_block_local_hazard(view, &timed, d);
+                    auto_override |= self.reserve_block_local_decl(d, base_net)
+                }
             }
         }
         auto_override

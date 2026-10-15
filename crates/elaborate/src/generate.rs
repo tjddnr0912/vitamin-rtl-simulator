@@ -99,11 +99,29 @@ impl Elaborator<'_> {
     /// generate block: `top.gi.t` for both oracles' `top.t`). A chain lowered with
     /// no scope at all (class-method bodies lower before any instance) stays
     /// relative, exactly as before.
+    ///
+    /// §5.2 row 72 (round 1, differential F3): the process's own scope WITHOUT the
+    /// `$blk$<lo>` segments a scoped block-local's block is lowered under. Those are
+    /// storage segments, not scopes the design names — the block's label is already in
+    /// `block_scope` — so `%m` in `begin : blk` whose local shadows a module variable
+    /// printed `t.$blk$40.blk` where all three oracles print `t.blk` (a run-time
+    /// diagnostic's scope is this string too). Storage keys, waveform names and an
+    /// elaboration diagnostic's `[in …]` frame keep the segment (ROADMAP §2).
     pub(crate) fn scope_chain_abs(&self) -> String {
         let chain = self.block_scope.join(".");
         let root = match &self.block_scope_root {
             Some(r) => r.clone(),
-            None => self.display_prefix(),
+            None => {
+                let p = self.display_prefix();
+                if p.contains("$blk$") {
+                    p.split('.')
+                        .filter(|seg| !seg.starts_with("$blk$"))
+                        .collect::<Vec<_>>()
+                        .join(".")
+                } else {
+                    p
+                }
+            }
         };
         if root.is_empty() {
             chain

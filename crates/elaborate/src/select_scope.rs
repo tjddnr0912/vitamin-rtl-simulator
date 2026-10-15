@@ -105,9 +105,10 @@ impl SelectScope {
     }
 
     /// Every declaring `begin … end` / `fork` block of a statement, and its names,
-    /// taken by the walker the block-local lowering classifies with
-    /// (`gather_nested_block_locals`, timing-control bodies included) so the census
-    /// and the lowering enumerate the same scopes; the outermost block counts too (a
+    /// taken by `gather_nested_block_locals`, whose descent
+    /// (`block_local::for_each_nested_stmt`, timing-control bodies included) is the
+    /// one the block-local hoist and classifiers take, so the census and the lowering
+    /// enumerate the same scopes (§5.2 row 72); the outermost block counts too (a
     /// process body's own declarations are its scope, not the module's). And every
     /// deferred or concurrent assertion's action block (`actions`).
     fn blocks(&mut self, s: &ast::Stmt) {
@@ -141,30 +142,8 @@ impl SelectScope {
                     action(self, a);
                 }
             }
-            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
-                stmts.iter().for_each(|st| self.actions(st));
-            }
-            S::If { then_s, else_s, .. } => {
-                self.actions(then_s);
-                if let Some(e) = else_s {
-                    self.actions(e);
-                }
-            }
-            S::Case { items, .. } => {
-                for it in items {
-                    let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) =
-                        it;
-                    self.actions(body);
-                }
-            }
-            S::For { body, .. }
-            | S::While { body, .. }
-            | S::Repeat { body, .. }
-            | S::Forever { body, .. } => self.actions(body),
-            S::DelayCtrl { body: Some(b), .. }
-            | S::EventCtrl { body: Some(b), .. }
-            | S::Wait { body: Some(b), .. } => self.actions(b),
-            _ => {}
+            // Every other statement: the descent the block-local walkers take.
+            _ => crate::block_local::for_each_nested_stmt(s, |st, _| self.actions(st)),
         }
     }
 

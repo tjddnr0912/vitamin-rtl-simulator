@@ -14,6 +14,82 @@ use super::*;
 mod gate;
 mod hoist;
 mod proofs;
+mod timed_task;
+
+pub(crate) use timed_task::{source_name, timing_nested_decls, RoutineView};
+
+/// The statements nested DIRECTLY in `s` that can hold a declaring `begin … end` /
+/// `fork … join` — a block's or fork's own statements, both arms of an `if`, every
+/// `case` item, a loop's body (`f(child, true)`), and the body of a timing control:
+/// `#d`, `@(e)`, `wait (c)`.
+///
+/// §5.2 row 72: this is the ONE descent every walker that finds block-local
+/// declarations takes — the census (`gather_nested_block_locals`, which feeds the
+/// row-21 `select_scope` census, the scope-leak gate and the coalesce set), the
+/// collectors (`collect_block_local_decls_spanned`, which feeds every subroutine
+/// reserver), the Nets-phase hoist (`hoist_block_local_nets`), the scoping and
+/// per-entry classifiers (`gather_auto_block_locals`,
+/// `compute_per_entry_block_locals`), and the multidriver shadow guard. Each used to
+/// spell its own `match`, and three had no timing-control arm while the census had
+/// one: a declaration in `initial #1 begin logic [7:0] x; … end` was never hoisted,
+/// so the block's `x` resolved to a same-named module variable (its writes landed
+/// there; with no module twin it was E3010) while the census counted the block as a
+/// scope. A walker that takes its descent from here cannot disagree with another on
+/// which blocks exist.
+///
+/// Exhaustive on purpose: a future statement that holds a statement is a compile
+/// error here, not a silently skipped scope. Not entered, each for a stated reason:
+/// * a `for` header's `init` / `step` — an assignment, never a declaring block (the
+///   loop variable is the header's own declaration, not a block-local);
+/// * an assertion's action blocks (`DeferredAssert` arms, `ConcurrentAssert`
+///   pass/fail): a deferred assertion's action is one subroutine call (IEEE 1800-2017
+///   §16.4), and a concurrent one's is lowered by the SVA synthesis, whose action
+///   locals are ROADMAP §3.b `mdrv-assert-local`. The census takes their spans
+///   separately (`SelectScope::actions`), and the multidriver guard enters them only
+///   for its opted-in rule.
+pub(crate) fn for_each_nested_stmt<'a>(s: &'a ast::Stmt, mut f: impl FnMut(&'a ast::Stmt, bool)) {
+    use ast::Stmt::*;
+    match s {
+        Block { stmts, .. } | Fork { stmts, .. } => stmts.iter().for_each(|st| f(st, false)),
+        If { then_s, else_s, .. } => {
+            f(then_s, false);
+            if let Some(e) = else_s {
+                f(e, false);
+            }
+        }
+        Case { items, .. } => {
+            for it in items {
+                let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) = it;
+                f(body, false);
+            }
+        }
+        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
+            f(body, true)
+        }
+        Wait { body, .. } | DelayCtrl { body, .. } | EventCtrl { body, .. } => {
+            if let Some(b) = body {
+                f(b, false)
+            }
+        }
+        DeferredAssert { .. } | ConcurrentAssert { .. } => {}
+        Blocking { .. }
+        | NonBlocking { .. }
+        | Return { .. }
+        | SysTaskCall { .. }
+        | UserTaskCall { .. }
+        | RandomizeWith { .. }
+        | EventTrigger { .. }
+        | Disable { .. }
+        | WaitFork { .. }
+        | Assign { .. }
+        | Deassign { .. }
+        | Force { .. }
+        | Release { .. }
+        | CoverProperty { .. }
+        | Null(_)
+        | Error(_) => {}
+    }
+}
 
 /// Collect every NESTED `begin…end`/`fork` block (i.e. not the top-level body
 /// block) together with the names it declares as locals. `is_top` is true only for
@@ -24,55 +100,74 @@ pub(crate) fn gather_nested_block_locals(
     is_top: bool,
     out: &mut Vec<(ast::Span, Vec<(String, ast::Span)>)>,
 ) {
-    use ast::Stmt::*;
-    match s {
-        Block {
-            stmts, decls, span, ..
-        }
-        | Fork {
-            stmts, decls, span, ..
-        } => {
-            if !is_top && !decls.is_empty() {
-                // R17 §4.1: each name carries its own DECLARATION span, so the
-                // scope-leak diagnostic can be anchored at the declaration the user
-                // has to rename rather than at nothing at all.
-                let names: Vec<(String, ast::Span)> = decls
-                    .iter()
-                    .flat_map(|d| d.names.iter().map(|n| (n.name.name.clone(), d.span)))
-                    .collect();
-                if !names.is_empty() {
-                    out.push((*span, names));
-                }
-            }
-            for st in stmts {
-                gather_nested_block_locals(st, false, out);
+    if let ast::Stmt::Block { decls, span, .. } | ast::Stmt::Fork { decls, span, .. } = s {
+        if !is_top && !decls.is_empty() {
+            // R17 §4.1: each name carries its own DECLARATION span, so the
+            // scope-leak diagnostic can be anchored at the declaration the user
+            // has to rename rather than at nothing at all.
+            let names: Vec<(String, ast::Span)> = decls
+                .iter()
+                .flat_map(|d| d.names.iter().map(|n| (n.name.name.clone(), d.span)))
+                .collect();
+            if !names.is_empty() {
+                out.push((*span, names));
             }
         }
-        If { then_s, else_s, .. } => {
-            gather_nested_block_locals(then_s, false, out);
-            if let Some(e) = else_s {
-                gather_nested_block_locals(e, false, out);
-            }
-        }
-        Case { items, .. } => {
-            for it in items {
-                match it {
-                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        gather_nested_block_locals(body, false, out)
-                    }
-                }
-            }
-        }
-        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            gather_nested_block_locals(body, false, out)
-        }
-        Wait { body, .. } | DelayCtrl { body, .. } | EventCtrl { body, .. } => {
-            if let Some(b) = body {
-                gather_nested_block_locals(b, false, out)
-            }
-        }
-        _ => {}
     }
+    for_each_nested_stmt(s, |st, _| gather_nested_block_locals(st, false, out));
+}
+
+/// Is `s` a timing control whose body [`for_each_nested_stmt`] enters?
+pub(crate) fn is_timing_control(s: &ast::Stmt) -> bool {
+    matches!(
+        s,
+        ast::Stmt::Wait { .. } | ast::Stmt::DelayCtrl { .. } | ast::Stmt::EventCtrl { .. }
+    )
+}
+
+/// Can the statements of a declaring block SUSPEND — wait in a timing control (`#d`,
+/// `@(e)`, `wait (c)`, `wait fork`), an intra-assignment delay or event, or a call of a
+/// user task (which may wait)? A block that cannot runs from entry to exit without
+/// another process running in between, so two activations of it never overlap in time
+/// (§5.2 row 72, review round 2: p20, `x=1 x=2` = verilator).
+pub(crate) fn stmts_may_suspend(stmts: &[ast::Stmt]) -> bool {
+    fn walk(s: &ast::Stmt) -> bool {
+        let here = match s {
+            ast::Stmt::DelayCtrl { .. }
+            | ast::Stmt::EventCtrl { .. }
+            | ast::Stmt::Wait { .. }
+            | ast::Stmt::WaitFork { .. }
+            | ast::Stmt::UserTaskCall { .. } => true,
+            ast::Stmt::Blocking { delay, event, .. }
+            | ast::Stmt::NonBlocking { delay, event, .. } => delay.is_some() || event.is_some(),
+            _ => false,
+        };
+        let mut hit = here;
+        for_each_nested_stmt(s, |st, _| hit = hit || walk(st));
+        hit
+    }
+    stmts.iter().any(walk)
+}
+
+/// [`collect_block_local_decls`] without the timing-control bodies — the walk every
+/// collector took before §5.2 row 72.
+///
+/// Kept for `expr_size_hier`'s census of the names a bare hierarchical segment can
+/// bind to: counting a timing-body local made a module variable of the same name look
+/// declared twice, and a declined name takes that lane's 32-bit fallback (row 72's
+/// round-1 review: `16'(u.hs * q8)` went `00000120` → `0000xx20`). The same fallback
+/// for a block-local with no timing control above it is pre-existing (ROADMAP §2).
+pub(crate) fn collect_block_local_decls_outside_timing(
+    s: &ast::Stmt,
+    out: &mut Vec<ast::NetVarDecl>,
+) {
+    if let ast::Stmt::Block { decls, .. } | ast::Stmt::Fork { decls, .. } = s {
+        out.extend(decls.iter().cloned());
+    }
+    if is_timing_control(s) {
+        return;
+    }
+    for_each_nested_stmt(s, |st, _| collect_block_local_decls_outside_timing(st, out));
 }
 
 /// Collect every `begin`/`fork` block-local declaration in `s`, in source order
@@ -98,49 +193,54 @@ pub(crate) fn collect_block_local_decls(s: &ast::Stmt, out: &mut Vec<ast::NetVar
 /// span — because that arm nests its segments, so a decl two levels down sits at
 /// `…$blk$<outer>.$blk$<inner>` and a flat single segment would miss it.
 ///
-/// The recursion is the one above, verbatim: the same statement forms, and the
-/// outermost body block's own decls included (the parser leaves them empty, and
+/// The descent is [`for_each_nested_stmt`]'s, so a block under a timing control
+/// (`#d begin … end` in a task body) is reserved like any other; the outermost body
+/// block's own decls are included (the parser leaves them empty, and
 /// `gather_auto_block_locals` treats a process's top block the same way).
 pub(crate) fn collect_block_local_decls_spanned(
     s: &ast::Stmt,
     chain: &mut Vec<ast::Span>,
     out: &mut Vec<(Vec<ast::Span>, ast::NetVarDecl)>,
 ) {
-    use ast::Stmt::*;
-    match s {
-        Block {
-            decls, stmts, span, ..
-        }
-        | Fork {
-            decls, stmts, span, ..
-        } => {
+    let declaring = match s {
+        ast::Stmt::Block { decls, span, .. } | ast::Stmt::Fork { decls, span, .. } => {
             chain.push(*span);
             out.extend(decls.iter().map(|d| (chain.clone(), d.clone())));
-            for st in stmts {
-                collect_block_local_decls_spanned(st, chain, out);
-            }
-            chain.pop();
+            true
         }
-        If { then_s, else_s, .. } => {
-            collect_block_local_decls_spanned(then_s, chain, out);
-            if let Some(e) = else_s {
-                collect_block_local_decls_spanned(e, chain, out);
-            }
-        }
-        Case { items, .. } => {
-            for it in items {
-                match it {
-                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        collect_block_local_decls_spanned(body, chain, out)
-                    }
-                }
-            }
-        }
-        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            collect_block_local_decls_spanned(body, chain, out)
-        }
-        _ => {}
+        _ => false,
+    };
+    for_each_nested_stmt(s, |st, _| collect_block_local_decls_spanned(st, chain, out));
+    if declaring {
+        chain.pop();
     }
+}
+
+/// Does a `$strobe` / `$monitor`-family task ([`is_deferred_print_task`]) anywhere in
+/// `stmts` (the declaring block's own statements, nested blocks included) take `name`
+/// in its arguments?
+///
+/// §5.2 row 72: such a task renders its arguments LATER — at the end of the time step,
+/// or on every later change — so on a net two blocks share (the bare-name flatten's
+/// coalesce, `coalesced_block_locals`) it shows whatever the other block wrote by then.
+/// The coalesce gate's definite-assignment walk proves the WRITE comes first, which
+/// says nothing about when such a read happens. Conservative on purpose: any argument
+/// that mentions the name counts (`expr_no_ref`), a nested redeclaration included.
+pub(crate) fn stmts_defer_read(stmts: &[ast::Stmt], name: &str) -> bool {
+    fn walk(s: &ast::Stmt, name: &str) -> bool {
+        if let ast::Stmt::SysTaskCall {
+            name: task, args, ..
+        } = s
+        {
+            if is_deferred_print_task(&task.name) && args.iter().any(|a| !expr_no_ref(a, name)) {
+                return true;
+            }
+        }
+        let mut hit = false;
+        for_each_nested_stmt(s, |st, _| hit = hit || walk(st, name));
+        hit
+    }
+    stmts.iter().any(|s| walk(s, name))
 }
 
 impl Elaborator<'_> {

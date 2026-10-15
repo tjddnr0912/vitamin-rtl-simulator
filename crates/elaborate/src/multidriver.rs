@@ -152,23 +152,6 @@ fn declares_local_named(stmts: &[ast::Stmt], name: &str, into_assert_actions: bo
     let sub =
         |s: &ast::Stmt| declares_local_named(std::slice::from_ref(s), name, into_assert_actions);
     stmts.iter().any(|st| match st {
-        ast::Stmt::Block { decls, stmts, .. } | ast::Stmt::Fork { decls, stmts, .. } => {
-            decl_hit(decls, name) || declares_local_named(stmts, name, into_assert_actions)
-        }
-        ast::Stmt::If { then_s, else_s, .. } => sub(then_s) || else_s.as_deref().is_some_and(sub),
-        ast::Stmt::For { body, .. }
-        | ast::Stmt::While { body, .. }
-        | ast::Stmt::Repeat { body, .. }
-        | ast::Stmt::Forever { body, .. } => sub(body),
-        // The timing statements carry an OPTIONAL body (`@(posedge clk) begin … end`
-        // is one of them, and it is the shape an `always_ff` almost always has).
-        ast::Stmt::DelayCtrl { body, .. }
-        | ast::Stmt::EventCtrl { body, .. }
-        | ast::Stmt::Wait { body, .. } => body.as_deref().is_some_and(sub),
-        ast::Stmt::Case { items, .. } => items.iter().any(|it| {
-            let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) = it;
-            sub(body)
-        }),
         // Rule D only — see the opt-in above.
         ast::Stmt::DeferredAssert { then_s, else_s, .. } if into_assert_actions => {
             sub(then_s) || sub(else_s)
@@ -176,7 +159,22 @@ fn declares_local_named(stmts: &[ast::Stmt], name: &str, into_assert_actions: bo
         ast::Stmt::ConcurrentAssert { pass, fail, .. } if into_assert_actions => {
             pass.as_deref().is_some_and(sub) || fail.as_deref().is_some_and(sub)
         }
-        _ => false,
+        // Every other statement: a declaring block's own names, then the descent the
+        // block-local hoist takes (`block_local::for_each_nested_stmt` — a timing
+        // control's OPTIONAL body included: `@(posedge clk) begin … end` is the shape an
+        // `always_ff` almost always has), so the guard and the hoist agree on which
+        // blocks declare (§5.2 row 72).
+        _ => {
+            let own = match st {
+                ast::Stmt::Block { decls, .. } | ast::Stmt::Fork { decls, .. } => {
+                    decl_hit(decls, name)
+                }
+                _ => false,
+            };
+            let mut nested = false;
+            crate::block_local::for_each_nested_stmt(st, |c, _| nested = nested || sub(c));
+            own || nested
+        }
     })
 }
 

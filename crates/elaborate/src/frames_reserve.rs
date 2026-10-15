@@ -118,131 +118,102 @@ impl Elaborator<'_> {
         admit_static_plain: bool,
         out: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
     ) {
-        match s {
-            ast::Stmt::Block {
-                decls, stmts, span, ..
-            } => {
-                for d in decls {
-                    // §4.5.250 (review F1): the no-initializer exclusion below must be a
-                    // property of the whole DECLARATION, not of one name. `$blk$` scoping
-                    // is applied per-DECL (see `block_local_scope_seg`'s deliberate ANY
-                    // rule), so in `byte m[], n = g;` a qualifying `m` drags its
-                    // init-bearing sibling `n` onto the scoped arm — which returns before
-                    // the decl-init collector, and `n` comes up 0 at exit 0.
-                    let decl_has_init = d.names.iter().any(|n| n.init.is_some());
-                    for n in &d.names {
-                        // `automatic` earns a `$blk$` scope because the per-entry
-                        // storage demands it. §4.5.249 adds one more kind: a
-                        // DYNAMIC-STORAGE local (a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc`
-                        // unpacked dim). Two same-named dynamic locals in disjoint
-                        // blocks are two distinct variables in IEEE and CANNOT share a
-                        // flattened handle — the first block's elements leak into the
-                        // second — which is why the pair is loud today whenever either
-                        // side is static. Scoping them is therefore a pure loud → support
-                        // move: every shape it newly reaches was rejected before.
-                        //
-                        // §4.5.251: a scalar `string` joins them, and an INITIALIZER no
-                        // longer disqualifies either. Both exclusions existed for ONE
-                        // reason — the scoped path returned before the decl-init collector,
-                        // so a scoped `byte m[] = '{…}` / `string s = "a"` came up EMPTY,
-                        // trading the loud for a silent zero. The scoped path now records
-                        // its initializers under its own prefix and replays them there
-                        // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
-                        // so the reason is gone and with it both exclusions.
-                        // §4.5.255: a `string` local of ANY unpacked shape. Review S1 had cut
-                        // this back to SCALAR because a scoped `string s[2]` came up length 0
-                        // — its element storage is registered under the DECLARING prefix while
-                        // the pre-size and the element writes were resolved in the module one.
-                        // That asymmetry is gone (the collector runs inside the scope and the
-                        // pre-size is recorded there), so the whole kind qualifies: every
-                        // string local owns per-name storage that cannot be shared by a
-                        // flatten.
-                        let string_local = matches!(d.kind, ast::NetVarKind::String)
-                            && d.range.is_none()
-                            && d.packed.is_empty();
-                        let dyn_storage = string_local
-                            || n.unpacked.iter().any(|dim| {
-                                matches!(
-                                    dim,
-                                    ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)
-                                )
-                            });
-                        // The third field records WHY the span was admitted.
-                        // `compute_scoped_block_locals` needs the distinction twice over:
-                        // a WIDENED span (§4.5.249, i.e. not `automatic`) that ENCLOSES
-                        // another declaring span of the same name must not withdraw the
-                        // scoping the automatic-only set already granted (review S3 — it
-                        // turned a working inner/sibling pair loud); but a SHADOW span
-                        // must not be dropped for enclosing one either, because its
-                        // flatten target is the shadowed module net, not a fresh one.
-                        // It used to be a single bool carrying only the first of those,
-                        // which is why a static shadow was dropped like a widening.
-                        let shadows_module = module_names.contains(&n.name.name);
-                        // The fourth rule (ROADMAP §3.b `blocal-flatten`): a STATIC
-                        // declarator carrying an initializer. Decl-ANY, not per-name,
-                        // because `block_local_scope_seg` applies scoping per-DECL with a
-                        // deliberate ANY rule — a per-NAME term would put `byte m, n = g;`'s
-                        // two names on different arms (the §4.5.250 F1 trap above).
-                        let static_init = d.lifetime != Some(true) && decl_has_init;
-                        // The fifth rule (§2 Scoping), OPT-IN via `admit_static_plain`
-                        // and therefore SUBROUTINE-BODY ONLY: a STATIC declarator with
-                        // NO initializer. Decl-ANY for the same §4.5.250 F1 reason as
-                        // `static_init` — it is the exact complement of it under the
-                        // same `d.lifetime != Some(true)` guard, so `int m, n = g;` puts
-                        // both names on the `static_init` arm and never splits.
-                        let static_plain =
-                            admit_static_plain && d.lifetime != Some(true) && !decl_has_init;
-                        if d.lifetime == Some(true)
-                            || dyn_storage
-                            || shadows_module
-                            || static_init
-                            || static_plain
-                        {
-                            out.entry(n.name.name.clone()).or_default().push((
-                                span.lo,
-                                span.hi,
-                                AdmitReason {
-                                    widened: d.lifetime != Some(true),
-                                    shadows_module,
-                                    static_init,
-                                    static_plain,
-                                },
-                            ));
-                        }
+        // A `fork`'s own declarations are not admitted (the Logic phase warns them
+        // away, W3056); only its statements are entered, below.
+        if let ast::Stmt::Block { decls, span, .. } = s {
+            for d in decls {
+                // §4.5.250 (review F1): the no-initializer exclusion below must be a
+                // property of the whole DECLARATION, not of one name. `$blk$` scoping
+                // is applied per-DECL (see `block_local_scope_seg`'s deliberate ANY
+                // rule), so in `byte m[], n = g;` a qualifying `m` drags its
+                // init-bearing sibling `n` onto the scoped arm — which returns before
+                // the decl-init collector, and `n` comes up 0 at exit 0.
+                let decl_has_init = d.names.iter().any(|n| n.init.is_some());
+                for n in &d.names {
+                    // `automatic` earns a `$blk$` scope because the per-entry
+                    // storage demands it. §4.5.249 adds one more kind: a
+                    // DYNAMIC-STORAGE local (a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc`
+                    // unpacked dim). Two same-named dynamic locals in disjoint
+                    // blocks are two distinct variables in IEEE and CANNOT share a
+                    // flattened handle — the first block's elements leak into the
+                    // second — which is why the pair is loud today whenever either
+                    // side is static. Scoping them is therefore a pure loud → support
+                    // move: every shape it newly reaches was rejected before.
+                    //
+                    // §4.5.251: a scalar `string` joins them, and an INITIALIZER no
+                    // longer disqualifies either. Both exclusions existed for ONE
+                    // reason — the scoped path returned before the decl-init collector,
+                    // so a scoped `byte m[] = '{…}` / `string s = "a"` came up EMPTY,
+                    // trading the loud for a silent zero. The scoped path now records
+                    // its initializers under its own prefix and replays them there
+                    // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
+                    // so the reason is gone and with it both exclusions.
+                    // §4.5.255: a `string` local of ANY unpacked shape. Review S1 had cut
+                    // this back to SCALAR because a scoped `string s[2]` came up length 0
+                    // — its element storage is registered under the DECLARING prefix while
+                    // the pre-size and the element writes were resolved in the module one.
+                    // That asymmetry is gone (the collector runs inside the scope and the
+                    // pre-size is recorded there), so the whole kind qualifies: every
+                    // string local owns per-name storage that cannot be shared by a
+                    // flatten.
+                    let string_local = matches!(d.kind, ast::NetVarKind::String)
+                        && d.range.is_none()
+                        && d.packed.is_empty();
+                    let dyn_storage = string_local
+                        || n.unpacked.iter().any(|dim| {
+                            matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
+                        });
+                    // The third field records WHY the span was admitted.
+                    // `compute_scoped_block_locals` needs the distinction twice over:
+                    // a WIDENED span (§4.5.249, i.e. not `automatic`) that ENCLOSES
+                    // another declaring span of the same name must not withdraw the
+                    // scoping the automatic-only set already granted (review S3 — it
+                    // turned a working inner/sibling pair loud); but a SHADOW span
+                    // must not be dropped for enclosing one either, because its
+                    // flatten target is the shadowed module net, not a fresh one.
+                    // It used to be a single bool carrying only the first of those,
+                    // which is why a static shadow was dropped like a widening.
+                    let shadows_module = module_names.contains(&n.name.name);
+                    // The fourth rule (ROADMAP §3.b `blocal-flatten`): a STATIC
+                    // declarator carrying an initializer. Decl-ANY, not per-name,
+                    // because `block_local_scope_seg` applies scoping per-DECL with a
+                    // deliberate ANY rule — a per-NAME term would put `byte m, n = g;`'s
+                    // two names on different arms (the §4.5.250 F1 trap above).
+                    let static_init = d.lifetime != Some(true) && decl_has_init;
+                    // The fifth rule (§2 Scoping), OPT-IN via `admit_static_plain`
+                    // and therefore SUBROUTINE-BODY ONLY: a STATIC declarator with
+                    // NO initializer. Decl-ANY for the same §4.5.250 F1 reason as
+                    // `static_init` — it is the exact complement of it under the
+                    // same `d.lifetime != Some(true)` guard, so `int m, n = g;` puts
+                    // both names on the `static_init` arm and never splits.
+                    let static_plain =
+                        admit_static_plain && d.lifetime != Some(true) && !decl_has_init;
+                    if d.lifetime == Some(true)
+                        || dyn_storage
+                        || shadows_module
+                        || static_init
+                        || static_plain
+                    {
+                        out.entry(n.name.name.clone()).or_default().push((
+                            span.lo,
+                            span.hi,
+                            AdmitReason {
+                                widened: d.lifetime != Some(true),
+                                shadows_module,
+                                static_init,
+                                static_plain,
+                            },
+                        ));
                     }
                 }
-                for st in stmts {
-                    Self::gather_auto_block_locals(st, module_names, admit_static_plain, out);
-                }
             }
-            ast::Stmt::Fork { stmts, .. } => {
-                for st in stmts {
-                    Self::gather_auto_block_locals(st, module_names, admit_static_plain, out);
-                }
-            }
-            ast::Stmt::If { then_s, else_s, .. } => {
-                Self::gather_auto_block_locals(then_s, module_names, admit_static_plain, out);
-                if let Some(e) = else_s {
-                    Self::gather_auto_block_locals(e, module_names, admit_static_plain, out);
-                }
-            }
-            ast::Stmt::Case { items, .. } => {
-                for it in items {
-                    let inner = match it {
-                        ast::CaseItem::Match { body: b, .. } => b,
-                        ast::CaseItem::Default { body: b, .. } => b,
-                    };
-                    Self::gather_auto_block_locals(inner, module_names, admit_static_plain, out);
-                }
-            }
-            ast::Stmt::For { body: b, .. }
-            | ast::Stmt::While { body: b, .. }
-            | ast::Stmt::Repeat { body: b, .. }
-            | ast::Stmt::Forever { body: b, .. } => {
-                Self::gather_auto_block_locals(b, module_names, admit_static_plain, out);
-            }
-            _ => {}
         }
+        // §5.2 row 72: the descent the hoist and the census take — a timing control's
+        // body included, which this walk used to skip, so a shadowing block-local under
+        // `#d` / `@(e)` / `wait (c)` was never given its `$blk$` scope.
+        crate::block_local::for_each_nested_stmt(s, |st, _| {
+            Self::gather_auto_block_locals(st, module_names, admit_static_plain, out)
+        });
     }
 
     /// `int tmp;`. Returns the `automatic`-override bits for the freshly reserved
@@ -1029,7 +1000,11 @@ impl Elaborator<'_> {
             }
             // Block-locals declared inside a `begin … end` in the body (after the
             // top-level body_decls in the flat slot order).
-            auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
+            let view = crate::block_local::RoutineView {
+                name: &func.name.name,
+                body: &func.body,
+            };
+            auto_override |= s.reserve_frame_block_locals(&view, base_net);
             s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&func.body, base_net);
             s.reserve_frame_case_tmps(&func.body, base_net);
@@ -1378,7 +1353,11 @@ impl Elaborator<'_> {
                 }
             }
             // Block-locals declared inside a `begin … end` in the body.
-            auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
+            let view = crate::block_local::RoutineView {
+                name: &task.name.name,
+                body: &task.body,
+            };
+            auto_override |= s.reserve_frame_block_locals(&view, base_net);
             s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&task.body, base_net);
             s.reserve_frame_case_tmps(&task.body, base_net);

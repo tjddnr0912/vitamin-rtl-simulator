@@ -267,6 +267,13 @@ impl Elaborator<'_> {
                         fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                     }) && stmt_never_assigns_ident(stmts, nm);
                     let elem_bounds = self.fixed_elem_bounds(n);
+                    if d.lifetime == Some(true)
+                        && !const_immune
+                        && self.timed_blocks.overlapping.contains(&span.lo)
+                    {
+                        self.refuse_overlapping_automatic(nm);
+                        continue;
+                    }
                     // The gate is about the `automatic` PER-ENTRY lifetime, so
                     // it applies only to an `automatic` decl — the same
                     // condition the unscoped path below wraps it in. A STATIC
@@ -597,6 +604,8 @@ impl Elaborator<'_> {
                             ),
                         );
                         self.note_da_gave_up(nm, g);
+                    } else if self.timed_blocks.names.contains(nm) && stmts_defer_read(stmts, nm) {
+                        self.refuse_coalesced_defer_read(nm);
                     }
                 }
             }
@@ -650,6 +659,10 @@ impl Elaborator<'_> {
                     fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                 }) && stmt_never_assigns_ident(stmts, nm);
                 let elem_bounds = self.fixed_elem_bounds(n);
+                if !const_immune && self.timed_blocks.overlapping.contains(&span.lo) {
+                    self.refuse_overlapping_automatic(nm);
+                    continue;
+                }
                 if !per_entry && !const_immune {
                     let sole = !self.coalesced_block_locals.contains(nm);
                     let bw = self.decl_bit_width(d, n);
@@ -691,6 +704,8 @@ impl Elaborator<'_> {
                         ),
                     );
                     self.note_da_gave_up(nm, g);
+                } else if self.timed_blocks.names.contains(nm) && stmts_defer_read(stmts, nm) {
+                    self.refuse_coalesced_defer_read(nm);
                 }
             }
         }
@@ -734,6 +749,13 @@ impl Elaborator<'_> {
     /// Recursively create nets for every `begin…end`/`fork…join` block-local
     /// declaration reachable from a procedural-block body. v1 flattens these to
     /// module-scope nets (no per-process frame). Called in the Nets phase.
+    ///
+    /// §5.2 row 72: the descent is [`crate::block_local::for_each_nested_stmt`]'s, the
+    /// one the scoping classifier and the census take. It used to be a `match` of its
+    /// own with no timing-control arm, so `initial #1 begin logic [7:0] x; … end` got
+    /// no net: the block's `x` resolved to a same-named module variable and wrote it
+    /// (E3010 with none), while the census and the coalesce set already counted the
+    /// block.
     pub(crate) fn hoist_block_local_nets(
         &mut self,
         s: &ast::Stmt,
@@ -754,6 +776,7 @@ impl Elaborator<'_> {
                 // deliberate coalesce) — see the guard in `hoist_one_block_local`.
                 let mut seen: BTreeSet<String> = BTreeSet::new();
                 for d in decls {
+                    self.refuse_captured_by_callee(d, *span);
                     // §4.5.249: the Nets-phase hoist never passes through `lower_stmt`,
                     // so anchor each declaration's diagnostics here. This is exactly the
                     // family the report could not narrow — 81 identical messages with no
@@ -795,44 +818,99 @@ impl Elaborator<'_> {
                     .contains_key(&span.lo)
                     .then(|| format!("$blk${}", span.lo));
                 match seg {
-                    Some(seg) => self.with_scope(&seg, |s| {
-                        for st in stmts {
-                            s.hoist_block_local_nets(st, ports, body);
-                        }
+                    Some(seg) => self.with_scope(&seg, |me| {
+                        crate::block_local::for_each_nested_stmt(s, |st, _| {
+                            me.hoist_block_local_nets(st, ports, body)
+                        })
                     }),
-                    None => {
-                        for st in stmts {
-                            self.hoist_block_local_nets(st, ports, body);
-                        }
-                    }
+                    None => crate::block_local::for_each_nested_stmt(s, |st, _| {
+                        self.hoist_block_local_nets(st, ports, body)
+                    }),
                 }
                 for n in pushed {
                     self.per_entry_in_scope.remove(&n);
                 }
             }
-            ast::Stmt::If { then_s, else_s, .. } => {
-                self.hoist_block_local_nets(then_s, ports, body);
-                if let Some(e) = else_s {
-                    self.hoist_block_local_nets(e, ports, body);
-                }
-            }
-            ast::Stmt::Case { items, .. } => {
-                for it in items {
-                    let inner = match it {
-                        ast::CaseItem::Match { body: b, .. } => b,
-                        ast::CaseItem::Default { body: b, .. } => b,
-                    };
-                    self.hoist_block_local_nets(inner, ports, body);
-                }
-            }
-            ast::Stmt::For { body: b, .. }
-            | ast::Stmt::While { body: b, .. }
-            | ast::Stmt::Repeat { body: b, .. }
-            | ast::Stmt::Forever { body: b, .. } => {
-                self.hoist_block_local_nets(b, ports, body);
-            }
-            _ => {}
+            _ => crate::block_local::for_each_nested_stmt(s, |st, _| {
+                self.hoist_block_local_nets(st, ports, body)
+            }),
         }
+    }
+
+    /// §5.2 row 72 (round 5 review P1, round 6 review F1/F2): a block-local of a block
+    /// under a timing control whose block reaches a capturing callable — a module static
+    /// task, a package routine, a `let`, a class or any kind not allow-listed — that names
+    /// it ([`Self::compute_timed_blocks`]'s `captured`, with the by-name path: each name is
+    /// mentioned in the text before it, not a proven call). vita lowers a static task's
+    /// body inside the calling block's scope, so the body's own `z` would read and write
+    /// the local (b7: `a=9`, iverilog, sv2v → iverilog and verilator `a=5`). Before the
+    /// row the declaration was dropped and the block was loud; the same block with no
+    /// timing control above it is §2. One diagnostic per declarator, at its name.
+    fn refuse_captured_by_callee(&mut self, d: &ast::NetVarDecl, block: ast::Span) {
+        for n in &d.names {
+            let Some(path) = self
+                .timed_blocks
+                .captured
+                .get(&(block.lo, n.name.name.clone()))
+                .cloned()
+            else {
+                continue;
+            };
+            if !self
+                .reported_timing_block_locals
+                .insert((n.name.span.lo, n.name.span.hi))
+            {
+                continue;
+            }
+            let nm = crate::block_local::source_name(&n.name.name);
+            self.error_at(
+                MsgCode::ElabUnsupported,
+                n.name.span,
+                &format!(
+                    "declaration of `{nm}` under a timing control (`#d`, `@(e)`, `wait (c)`) \
+                     in a block whose text names {path} (a chain of names, each mentioned in \
+                     the text before it — not a proven call), and the last is a callable whose \
+                     definition names `{nm}` too: vita lowers a static task's, a package \
+                     routine's or a `let`'s body inside the calling block, where `{nm}` would be \
+                     this declaration — not supported yet; rename it"
+                ),
+            );
+        }
+    }
+
+    /// §5.2 row 72 (round 1, differential F1): an `automatic` block-local in a block that
+    /// can be live twice at once ([`Self::compute_timed_blocks`]) — the flatten's one
+    /// net would be shared by both activations.
+    fn refuse_overlapping_automatic(&mut self, nm: &str) {
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!(
+                "an `automatic` block-local `{nm}` in a `fork … join_none` / `join_any` arm \
+                 that can run again while an earlier activation is still live (a loop or a \
+                 repeating process spawns it) is unsupported: v1 gives a block-local one \
+                 static net, which both activations would share"
+            ),
+        );
+    }
+
+    /// §5.2 row 72 (round 1, differential F5): the R18-X1 coalesce gate's second
+    /// question. A block-local that shares one flattened net with a same-named local of
+    /// another block and is read by a `$strobe` / `$monitor`-family task
+    /// ([`stmts_defer_read`]) shows, at that task's later render, whatever the other
+    /// block wrote by then (`a=bb` where iverilog, sv2v and verilator print `a=aa`) —
+    /// the definite-assignment walk above proves only that the write comes first.
+    /// Asked only of a name some block under a timing control declares (such a pair was
+    /// E3010 before the row); the plain-block pair is ROADMAP §2.
+    fn refuse_coalesced_defer_read(&mut self, nm: &str) {
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!(
+                "block-local `{nm}` shares one flattened net with a same-named block-local \
+                 in another block and is read by a `$strobe` / `$monitor`-family task, \
+                 which shows its value later — after the other block may have written \
+                 it; rename one"
+            ),
+        );
     }
 
     /// R17: record the nets just created for an `automatic` block-local declaration so

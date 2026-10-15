@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a block under a timing control declares its own variables
+
+- A `begin … end` that is the body of a timing control — `#1 begin`, `@(e) begin`, `wait (c) begin`
+  — in an `initial` or `always` process of a module, a generate block or an interface had
+  its declarations dropped: `logic [7:0] x;` in it was the module's same-named variable, so the
+  block's writes changed that variable at exit 0 (`inner=000000aa outer=000000aa` where Icarus
+  Verilog, sv2v and Verilator print `inner=aa outer=11111111`), and with no such variable the block
+  was refused with `VITA-E3010`. It now declares its variables as the same block does with no
+  timing control above it: each its own type, width and lifetime, a static initializer run once
+  before time 0, the waveform scope of that block. Refused with `VITA-E3009` instead of taking a
+  wrong value: an `automatic` local in a `fork … join_none` / `join_any` arm that a loop or an
+  `always` spawns again while an earlier one is still live and that can wait, a `$strobe` /
+  `$monitor` read of a local whose flattened net only blocks under a timing control share, and a
+  local whose block reaches — directly or through other routines — a static task (or `function
+  void`), a package routine or a `let` that names it too: vita lowers that body inside the block,
+  so the callee's own name would read and write the local.
+- In a task or function body such a declaration is refused with `VITA-E3009` (it was `VITA-E3010`,
+  or it took the value of a same-named variable of the task or the module).
+- `%m` in a named block whose local shadows a module variable printed an internal scope
+  (`t.$blk$40.blk`); it prints `t.blk`.
+
 ### Added — typed assignment patterns `T'{…}`
 
 - A typed assignment pattern (IEEE 1800-2017 §10.9) — `return meta_t'{slot.pol, slot.stage,

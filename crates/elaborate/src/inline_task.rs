@@ -759,7 +759,11 @@ impl Elaborator<'_> {
         } else {
             let scope = format!("$itask${tname}$L");
             self.with_scope(&scope, |s| {
-                s.hoist_inline_task_locals(b, &tlocals);
+                let view = crate::block_local::RoutineView {
+                    name: &task.name.name,
+                    body: &task.body,
+                };
+                s.hoist_inline_task_locals(b, &tlocals, &view);
                 s.inline_task_body(b, &task.body);
             });
         }

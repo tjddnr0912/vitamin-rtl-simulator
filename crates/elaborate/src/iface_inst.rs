@@ -439,6 +439,15 @@ impl Elaborator<'_> {
                 let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);
                 let saved_per_entry_blocks =
                     std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
+                let saved_overlapping = std::mem::replace(
+                    &mut self.timed_blocks,
+                    Self::compute_timed_blocks(
+                        &decl,
+                        &self.scoped_block_locals.clone(),
+                        &self.pkg_funcs,
+                        &self.pkg_tasks,
+                    ),
+                );
                 let coalesced = Self::compute_coalesced_block_locals(
                     &decl,
                     &local_names,
@@ -771,6 +780,7 @@ impl Elaborator<'_> {
                 self.scoped_gather = saved_scoped_gather;
                 self.scoped_gather_fed = saved_scoped_fed;
                 self.per_entry_block_locals = saved_per_entry_blocks;
+                self.timed_blocks = saved_overlapping;
                 self.coalesced_block_locals = saved_coalesced;
                 self.local_decl_names = saved_local_names;
                 self.restore_params(saved_params);

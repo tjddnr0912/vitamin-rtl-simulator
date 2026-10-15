@@ -471,6 +471,11 @@ struct Elaborator<'s> {
     /// (kept loud), as are name/module-net collisions and dyn/string decls. Empty for every
     /// design without such a decl → byte-identical. Saved/restored per module.
     per_entry_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
+    /// §5.2 row 72: what `compute_timed_blocks` found in this module's processes — the
+    /// declaring blocks under a timing control that can be live twice at once, and the
+    /// names such blocks declare. Saved/restored per module with
+    /// `per_entry_block_locals`.
+    timed_blocks: crate::block_local_class::TimedBlocks,
     /// v7 P2-D: package name → its const symbols (params/localparams + enum
     /// labels), folded EAGERLY in declaration order at `run()` entry.
     pkg_consts: BTreeMap<String, BTreeMap<String, i64>>,
@@ -1518,6 +1523,10 @@ struct Elaborator<'s> {
     /// rules must never collapse into one set, because one keys on a `ParamDecl`
     /// name and the other on whichever binder took the name second.
     reported_decl_collisions: std::collections::BTreeSet<(u32, u32)>,
+    /// §5.2 row 72: declaration spans already asked by
+    /// [`Elaborator::refuse_timing_block_local_hazard`] — a static task is inlined at
+    /// every call site, so its body's declarations are met once per call.
+    reported_timing_block_locals: std::collections::BTreeSet<(u32, u32)>,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.

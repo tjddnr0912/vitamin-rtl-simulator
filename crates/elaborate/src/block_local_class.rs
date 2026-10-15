@@ -88,6 +88,199 @@ pub(crate) struct AdmitReason {
     pub(crate) static_plain: bool,
 }
 
+/// [`Elaborator::compute_timed_blocks`]'s answer for one module. In-memory only.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TimedBlocks {
+    /// `span.lo` of each declaring block under a timing control that can be live twice.
+    pub(crate) overlapping: std::collections::BTreeSet<u32>,
+    /// Every name whose blocks on the flattened net are all under a timing control.
+    pub(crate) names: std::collections::BTreeSet<String>,
+    /// (declaring block `span.lo`, local name) → the by-name path (`` `a` → `b` ``, each
+    /// name mentioned in the text before it) to a capturing callable whose text names
+    /// the local too (`reached_capturing`).
+    pub(crate) captured: BTreeMap<(u32, String), String>,
+}
+
+/// How a callable lowers when a block under a timing control calls it, for the capture
+/// check of [`Elaborator::compute_timed_blocks`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Lane {
+    /// A module `automatic` task: lowered in its own frame. Allow-listed (rounds 5–6:
+    /// non-capturing for every free-name kind); a module static task reached only through
+    /// one is non-capturing too (L5b), so it is a barrier for that kind.
+    ModuleAutomaticTask,
+    /// A module non-void function, static or automatic. Allow-listed (rounds 5–6: F1–F7,
+    /// Fs, Fa, Fn, f_in_init, f_in_delay, f_voidcast, f_via_task).
+    ModuleFunction,
+    /// A module static task (or `function void`, which reaches elaborate as a task):
+    /// lowered inside the calling block (P1, b7). Capturing unless reached only through
+    /// a [`Lane::ModuleAutomaticTask`].
+    ModuleStaticTask,
+    /// Everything else: a package task or function (F1, r8), a `let` (F2, l2), a class,
+    /// a sequence, a property, a covergroup. Capturing by default (row 72 round 7).
+    Other,
+}
+
+/// One callable the timed block can reach: a module or interface item at any generate
+/// depth (a `$unit` item the parser copied in included) or a package routine.
+pub(crate) struct Routine {
+    name: String,
+    lane: Lane,
+    /// The callable's whole definition, `Debug`-formatted: every identifier it holds, in
+    /// any position (statement, delay, event, range, default, hierarchical segment), as
+    /// a quoted string. A mention test on it is fail-closed by construction.
+    text: String,
+}
+
+/// The package routines of the design, for [`Elaborator::compute_timed_blocks`].
+pub(crate) fn package_routines(
+    funcs: &BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,
+    tasks: &BTreeMap<String, BTreeMap<String, ast::TaskDef>>,
+) -> Vec<Routine> {
+    let mut out = Vec::new();
+    for f in funcs.values().flat_map(|m| m.values()) {
+        out.push(Routine {
+            name: f.name.name.clone(),
+            lane: Lane::Other,
+            text: format!("{f:?}"),
+        });
+    }
+    for t in tasks.values().flat_map(|m| m.values()) {
+        out.push(Routine {
+            name: t.name.name.clone(),
+            lane: Lane::Other,
+            text: format!("{t:?}"),
+        });
+    }
+    out
+}
+
+fn module_routines(items: &[ast::ModuleItem], out: &mut Vec<Routine>) {
+    fn gen(items: &[ast::GenItem], out: &mut Vec<Routine>) {
+        for it in items {
+            match it {
+                ast::GenItem::For { body, .. } | ast::GenItem::Block { items: body, .. } => {
+                    gen(body, out)
+                }
+                ast::GenItem::If { then_b, else_b, .. } => {
+                    gen(then_b, out);
+                    gen(else_b, out);
+                }
+                ast::GenItem::Case { items, .. } => {
+                    for ci in items {
+                        match ci {
+                            ast::GenCaseItem::Match { body, .. }
+                            | ast::GenCaseItem::Default { body, .. } => gen(body, out),
+                        }
+                    }
+                }
+                ast::GenItem::Item(mi) => module_routines(std::slice::from_ref(mi), out),
+            }
+        }
+    }
+    fn push(out: &mut Vec<Routine>, name: &ast::Ident, lane: Lane, text: String) {
+        out.push(Routine {
+            name: name.name.clone(),
+            lane,
+            text,
+        })
+    }
+    for item in items {
+        match item {
+            ast::ModuleItem::Task(t) => push(
+                out,
+                &t.name,
+                if t.automatic {
+                    Lane::ModuleAutomaticTask
+                } else {
+                    Lane::ModuleStaticTask
+                },
+                format!("{t:?}"),
+            ),
+            ast::ModuleItem::Func(f) => push(out, &f.name, Lane::ModuleFunction, format!("{f:?}")),
+            ast::ModuleItem::LetDecl(l) => push(out, &l.name, Lane::Other, format!("{l:?}")),
+            ast::ModuleItem::SequenceDecl(q) => push(out, &q.name, Lane::Other, format!("{q:?}")),
+            ast::ModuleItem::PropertyDecl(q) => push(out, &q.name, Lane::Other, format!("{q:?}")),
+            ast::ModuleItem::Covergroup(c) => push(out, &c.name, Lane::Other, format!("{c:?}")),
+            ast::ModuleItem::Class(c) => {
+                // Every method name and the class name reach the whole class text.
+                let text = format!("{c:?}");
+                push(out, &c.name, Lane::Other, text.clone());
+                for it in &c.items {
+                    if let ast::ClassItem::Func { def, .. } = it {
+                        push(out, &def.name, Lane::Other, text.clone());
+                    } else if let ast::ClassItem::Task { def, .. } = it {
+                        push(out, &def.name, Lane::Other, text.clone());
+                    }
+                }
+            }
+            ast::ModuleItem::Generate(g) => gen(&g.items, out),
+            _ => {}
+        }
+    }
+}
+
+/// The capturing callables a statement reaches, each with the path that reaches it
+/// (the routine the statement names first). Reach is a name mention: a routine is
+/// reached when the statement's `Debug` text, or the text of a routine already
+/// reached, holds its quoted name — so this over-approximates the calls (fail-closed).
+/// The closure runs through every lane; only a module static task reached solely
+/// through a module `automatic` task does not capture.
+fn reached_capturing(routines: &[Routine], text: &str) -> Vec<(usize, Vec<usize>)> {
+    let quoted = |n: &str| format!("{n:?}");
+    // State: (routine, reached through a module automatic task). `via[i][b]` = parent.
+    let n = routines.len();
+    let mut seen = vec![[false; 2]; n];
+    let mut parent: Vec<[Option<(usize, usize)>; 2]> = vec![[None; 2]; n];
+    let mut queue: Vec<(usize, usize)> = Vec::new();
+    for (i, r) in routines.iter().enumerate() {
+        if text.contains(&quoted(&r.name)) {
+            seen[i][0] = true;
+            queue.push((i, 0));
+        }
+    }
+    let mut k = 0;
+    while k < queue.len() {
+        let (i, b) = queue[k];
+        k += 1;
+        let nb = usize::from(b == 1 || routines[i].lane == Lane::ModuleAutomaticTask);
+        for j in 0..n {
+            if !seen[j][nb] && routines[i].text.contains(&quoted(&routines[j].name)) {
+                seen[j][nb] = true;
+                parent[j][nb] = Some((i, b));
+                queue.push((j, nb));
+            }
+        }
+    }
+    let path = |mut at: (usize, usize)| {
+        let mut p = vec![at.0];
+        while let Some(prev) = parent[at.0][at.1] {
+            p.push(prev.0);
+            at = prev;
+        }
+        p.reverse();
+        p
+    };
+    let mut out = Vec::new();
+    for (i, r) in routines.iter().enumerate() {
+        let state = match r.lane {
+            Lane::ModuleAutomaticTask | Lane::ModuleFunction => None,
+            Lane::ModuleStaticTask => seen[i][0].then_some((i, 0)),
+            Lane::Other => {
+                if seen[i][0] {
+                    Some((i, 0))
+                } else {
+                    seen[i][1].then_some((i, 1))
+                }
+            }
+        };
+        if let Some(st) = state {
+            out.push((i, path(st)));
+        }
+    }
+    out
+}
+
 /// Can two blocks with these branch paths BOTH be elaborated?
 pub(crate) fn branches_coexist(a: &BranchPath, b: &BranchPath) -> bool {
     !a.iter()
@@ -575,167 +768,130 @@ impl Elaborator<'_> {
             out: &mut BTreeMap<u32, std::collections::BTreeSet<String>>,
         ) {
             let under_fork = fork_multi;
-            match s {
-                ast::Stmt::Block {
-                    decls, stmts, span, ..
-                } => {
-                    if !under_fork {
-                        for d in decls {
-                            if d.lifetime != Some(true) {
+            if let ast::Stmt::Block { decls, span, .. } = s {
+                if !under_fork {
+                    for d in decls {
+                        if d.lifetime != Some(true) {
+                            continue;
+                        }
+                        for n in &d.names {
+                            if module_names.contains(&n.name.name) {
                                 continue;
                             }
-                            for n in &d.names {
-                                if module_names.contains(&n.name.name) {
-                                    continue;
-                                }
-                                // A plain scalar VAR (not a net, not a string, no unpacked
-                                // dims) with an initializer — its init re-runs at block entry
-                                // (emitted as a plain `x = init` blocking).
-                                let scalar_var = netvar_kind_is_var(d.kind)
-                                    && !matches!(d.kind, ast::NetVarKind::String)
-                                    && n.init.is_some()
-                                    && n.unpacked.is_empty();
-                                // A scalar `string` local with an initializer. Its re-init is
-                                // the SAME plain `s = init` blocking the scalar case emits (a
-                                // string net holds one whole value; there is no handle to
-                                // reallocate), which is why `begin automatic string s; s = "a";
-                                // … end` already worked — only the decl-init spelling was left
-                                // out of family D, for no reason the emission path shares.
-                                let string_var = matches!(d.kind, ast::NetVarKind::String)
-                                    && n.init.is_some()
-                                    && n.unpacked.is_empty();
-                                // BL2/BL3 (round-19): a DYNAMIC-STORAGE block-local — a single
-                                // `Dim::Dyn`/`Dim::Queue` unpacked dim (a dyn array, a string
-                                // dyn array, or a queue) — declared `automatic` with a
-                                // `'{…}` / `{…}` (§10.10 unpacked-concat) initializer. Its
-                                // decl-init EXPANSION (`d = new[N]; d[i] = e;` for a dyn array /
-                                // a `q.push_back(e)` sequence for a queue) is re-emitted at
-                                // BLOCK ENTRY by `emit_per_entry_block_inits`, giving §6.21
-                                // per-entry semantics on the one flattened handle net
-                                // (self-resetting: `new[N]` re-allocates; a queue is cleared
-                                // first). EXCLUDED and left loud: associative arrays
-                                // (`Dim::Assoc` — no `'{…}` expansion), MULTI-dim dyn
-                                // (`unpacked.len() != 1`), and a non-pattern init. (A `new[]`
-                                // decl-init is separately rejected at the decl for any dyn
-                                // handle — vita supports only a `'{…}` pattern there.)
-                                //
-                                // §4.5.248: a `new[N]` init joins them — it re-allocates, so it
-                                // is self-resetting in exactly the way this gate requires, and
-                                // it emits as the plain `d = new[N]` statement.
-                                let dyn_pattern = n.unpacked.len() == 1
-                                    && matches!(n.unpacked[0], ast::Dim::Dyn | ast::Dim::Queue(_))
-                                    && n.init.as_ref().is_some_and(|init| {
-                                        matches!(
-                                            init.kind,
-                                            ast::ExprKind::AssignPattern(_)
-                                                | ast::ExprKind::Concat { .. }
-                                        ) || (matches!(init.kind, ast::ExprKind::New { .. })
-                                            && matches!(n.unpacked[0], ast::Dim::Dyn))
-                                    });
-                                // R16 §3.3: a FIXED-size unpacked array with a `'{…}` /
-                                // `{…}` initializer. The report measured that the
-                                // identical declaration with a DYNAMIC `[]` dim passes
-                                // while `[4]` is loud, with the same contents and the
-                                // same element type — the only thing missing was this
-                                // arm, not any emission capability. Re-initializing one
-                                // is the whole-array assign `a = '{…}`, a statement form
-                                // that already works today INCLUDING under `automatic`
-                                // (measured: `automatic logic [4:0] m[4]; m = '{…};` is
-                                // accepted and prints correctly), so the emission path is
-                                // reused verbatim.
-                                //
-                                // `Dim::Size(N)` (`a[4]`) and `Dim::Range(hi:lo)`
-                                // (`a[3:0]`) are the same fixed array spelled two ways.
-                                let fixed_pattern = n.unpacked.len() == 1
-                                    && matches!(
-                                        n.unpacked[0],
-                                        ast::Dim::Range(_) | ast::Dim::Size(_)
+                            // A plain scalar VAR (not a net, not a string, no unpacked
+                            // dims) with an initializer — its init re-runs at block entry
+                            // (emitted as a plain `x = init` blocking).
+                            let scalar_var = netvar_kind_is_var(d.kind)
+                                && !matches!(d.kind, ast::NetVarKind::String)
+                                && n.init.is_some()
+                                && n.unpacked.is_empty();
+                            // A scalar `string` local with an initializer. Its re-init is
+                            // the SAME plain `s = init` blocking the scalar case emits (a
+                            // string net holds one whole value; there is no handle to
+                            // reallocate), which is why `begin automatic string s; s = "a";
+                            // … end` already worked — only the decl-init spelling was left
+                            // out of family D, for no reason the emission path shares.
+                            let string_var = matches!(d.kind, ast::NetVarKind::String)
+                                && n.init.is_some()
+                                && n.unpacked.is_empty();
+                            // BL2/BL3 (round-19): a DYNAMIC-STORAGE block-local — a single
+                            // `Dim::Dyn`/`Dim::Queue` unpacked dim (a dyn array, a string
+                            // dyn array, or a queue) — declared `automatic` with a
+                            // `'{…}` / `{…}` (§10.10 unpacked-concat) initializer. Its
+                            // decl-init EXPANSION (`d = new[N]; d[i] = e;` for a dyn array /
+                            // a `q.push_back(e)` sequence for a queue) is re-emitted at
+                            // BLOCK ENTRY by `emit_per_entry_block_inits`, giving §6.21
+                            // per-entry semantics on the one flattened handle net
+                            // (self-resetting: `new[N]` re-allocates; a queue is cleared
+                            // first). EXCLUDED and left loud: associative arrays
+                            // (`Dim::Assoc` — no `'{…}` expansion), MULTI-dim dyn
+                            // (`unpacked.len() != 1`), and a non-pattern init. (A `new[]`
+                            // decl-init is separately rejected at the decl for any dyn
+                            // handle — vita supports only a `'{…}` pattern there.)
+                            //
+                            // §4.5.248: a `new[N]` init joins them — it re-allocates, so it
+                            // is self-resetting in exactly the way this gate requires, and
+                            // it emits as the plain `d = new[N]` statement.
+                            let dyn_pattern = n.unpacked.len() == 1
+                                && matches!(n.unpacked[0], ast::Dim::Dyn | ast::Dim::Queue(_))
+                                && n.init.as_ref().is_some_and(|init| {
+                                    matches!(
+                                        init.kind,
+                                        ast::ExprKind::AssignPattern(_)
+                                            | ast::ExprKind::Concat { .. }
+                                    ) || (matches!(init.kind, ast::ExprKind::New { .. })
+                                        && matches!(n.unpacked[0], ast::Dim::Dyn))
+                                });
+                            // R16 §3.3: a FIXED-size unpacked array with a `'{…}` /
+                            // `{…}` initializer. The report measured that the
+                            // identical declaration with a DYNAMIC `[]` dim passes
+                            // while `[4]` is loud, with the same contents and the
+                            // same element type — the only thing missing was this
+                            // arm, not any emission capability. Re-initializing one
+                            // is the whole-array assign `a = '{…}`, a statement form
+                            // that already works today INCLUDING under `automatic`
+                            // (measured: `automatic logic [4:0] m[4]; m = '{…};` is
+                            // accepted and prints correctly), so the emission path is
+                            // reused verbatim.
+                            //
+                            // `Dim::Size(N)` (`a[4]`) and `Dim::Range(hi:lo)`
+                            // (`a[3:0]`) are the same fixed array spelled two ways.
+                            let fixed_pattern = n.unpacked.len() == 1
+                                && matches!(n.unpacked[0], ast::Dim::Range(_) | ast::Dim::Size(_))
+                                && n.init.as_ref().is_some_and(|init| {
+                                    matches!(
+                                        init.kind,
+                                        ast::ExprKind::AssignPattern(_)
+                                            | ast::ExprKind::Concat { .. }
                                     )
-                                    && n.init.as_ref().is_some_and(|init| {
-                                        matches!(
-                                            init.kind,
-                                            ast::ExprKind::AssignPattern(_)
-                                                | ast::ExprKind::Concat { .. }
-                                        )
-                                    });
-                                // R16 §3.3 (the report's side case) is deliberately NOT
-                                // here. Marking an initializer-FREE local per-entry
-                                // would reset it at every block entry, and that is not
-                                // what a conforming simulator does: automatic storage is
-                                // created per ACTIVATION, not per block entry. Measured
-                                // in iverilog with a block inside an `automatic` task —
-                                // three loop iterations print `xx, 10, 11` (the leftover
-                                // survives), while three separate CALLS print `xx, xx,
-                                // xx`. An initializer, by contrast, does re-run on each
-                                // entry (`w=11` every iteration), which is exactly what
-                                // the arms above emit. The element-write case is closed
-                                // in the definite-assignment walk instead, where it can
-                                // be proven rather than assumed.
-                                if scalar_var || string_var || dyn_pattern || fixed_pattern {
-                                    out.entry(span.lo).or_default().insert(n.name.name.clone());
-                                }
+                                });
+                            // R16 §3.3 (the report's side case) is deliberately NOT
+                            // here. Marking an initializer-FREE local per-entry
+                            // would reset it at every block entry, and that is not
+                            // what a conforming simulator does: automatic storage is
+                            // created per ACTIVATION, not per block entry. Measured
+                            // in iverilog with a block inside an `automatic` task —
+                            // three loop iterations print `xx, 10, 11` (the leftover
+                            // survives), while three separate CALLS print `xx, xx,
+                            // xx`. An initializer, by contrast, does re-run on each
+                            // entry (`w=11` every iteration), which is exactly what
+                            // the arms above emit. The element-write case is closed
+                            // in the definite-assignment walk instead, where it can
+                            // be proven rather than assumed.
+                            if scalar_var || string_var || dyn_pattern || fixed_pattern {
+                                out.entry(span.lo).or_default().insert(n.name.name.clone());
                             }
                         }
                     }
-                    for st in stmts {
-                        walk(st, fork_multi, repeatable, module_names, out);
-                    }
                 }
-                // A fork's children run CONCURRENTLY and a `join_any`/`join_none` arm
-                // OUTLIVES the fork point. What breaks the one-flattened-net model is not
-                // concurrency as such — it is TWO LIVE ACTIVATIONS OF THE SAME BLOCK, which
-                // needs the fork itself to be spawned more than once. So the arms inherit
-                // `fork_multi = fork_multi || repeatable`: a fork reached once (an `initial`
-                // with no loop above it) gives each arm exactly one activation, and the
-                // flattened net is then as correct for the arm as for any straight-line
-                // block. A fork under a loop, or in a repeating process, keeps the loud.
-                //
-                // A loop INSIDE an arm does not reintroduce the hazard — one arm is one
-                // thread, so its iterations are sequential — which is why `repeatable`
-                // (about this statement) and `fork_multi` (about the spawning) are two
-                // flags and not one.
-                //
-                // This is what left the standard watchdog — `fork begin automatic int
-                // timeout = D; void'($value$plusargs(…, timeout)); #(timeout*1ns); end
-                // join_none` — loud in essentially every testbench.
-                ast::Stmt::Fork { stmts, .. } => {
-                    let arm_multi = fork_multi || repeatable;
-                    for st in stmts {
-                        walk(st, arm_multi, repeatable, module_names, out);
-                    }
-                }
-                ast::Stmt::If { then_s, else_s, .. } => {
-                    walk(then_s, fork_multi, repeatable, module_names, out);
-                    if let Some(e) = else_s {
-                        walk(e, fork_multi, repeatable, module_names, out);
-                    }
-                }
-                ast::Stmt::Case { items, .. } => {
-                    for it in items {
-                        walk(
-                            case_item_body(it),
-                            fork_multi,
-                            repeatable,
-                            module_names,
-                            out,
-                        );
-                    }
-                }
-                ast::Stmt::For { body, .. }
-                | ast::Stmt::While { body, .. }
-                | ast::Stmt::Repeat { body, .. }
-                | ast::Stmt::Forever { body, .. } => {
-                    walk(body, fork_multi, true, module_names, out)
-                }
-                ast::Stmt::DelayCtrl { body, .. }
-                | ast::Stmt::EventCtrl { body, .. }
-                | ast::Stmt::Wait { body, .. } => {
-                    if let Some(b) = body {
-                        walk(b, fork_multi, repeatable, module_names, out);
-                    }
-                }
-                _ => {}
             }
+            // A fork's children run CONCURRENTLY and a `join_any`/`join_none` arm
+            // OUTLIVES the fork point. What breaks the one-flattened-net model is not
+            // concurrency as such — it is TWO LIVE ACTIVATIONS OF THE SAME BLOCK, which
+            // needs the fork itself to be spawned more than once. So the arms inherit
+            // `fork_multi = fork_multi || repeatable`: a fork reached once (an `initial`
+            // with no loop above it) gives each arm exactly one activation, and the
+            // flattened net is then as correct for the arm as for any straight-line
+            // block. A fork under a loop, or in a repeating process, keeps the loud.
+            //
+            // A loop INSIDE an arm does not reintroduce the hazard — one arm is one
+            // thread, so its iterations are sequential — which is why `repeatable`
+            // (about this statement) and `fork_multi` (about the spawning) are two
+            // flags and not one.
+            //
+            // This is what left the standard watchdog — `fork begin automatic int
+            // timeout = D; void'($value$plusargs(…, timeout)); #(timeout*1ns); end
+            // join_none` — loud in essentially every testbench.
+            //
+            // §5.2 row 72: the descent every block-local walker takes. A loop body
+            // (`loop_body`) can run more than once.
+            let arm_multi = match s {
+                ast::Stmt::Fork { .. } => fork_multi || repeatable,
+                _ => fork_multi,
+            };
+            crate::block_local::for_each_nested_stmt(s, |st, loop_body| {
+                walk(st, arm_multi, repeatable || loop_body, module_names, out)
+            });
         }
         let mut out = BTreeMap::new();
         for_each_proc(&module.body, &mut |p, _branch| {
@@ -748,6 +904,151 @@ impl Elaborator<'_> {
             walk(&p.body, false, repeats, module_names, &mut out);
         });
         out
+    }
+
+    /// §5.2 row 72: the module's processes' declaring blocks that sit under a timing
+    /// control (`#d`, `@(e)`, `wait (c)` — the blocks the row opened; before it they
+    /// were E3010 or wrote the module's variable), for the two refusals the row's review
+    /// added on them. Each is cut from a measured hazard and kept to those blocks: the
+    /// same shapes with no timing control above them ran before the row, some right.
+    ///
+    /// * `overlapping` — such a block that can be LIVE TWICE AT ONCE: under a `fork` arm
+    ///   whose fork is `join_none` / `join_any` (the arm outlives the fork point) and is
+    ///   reached more than once (a loop above it, or an `always*` process), with no
+    ///   `wait fork` after it in the same statement list (that waits for the arm before
+    ///   the next pass can spawn again; review round 2, o8), and whose statements can
+    ///   suspend (`stmts_may_suspend`; otherwise each activation runs from entry to exit
+    ///   before another runs; p20). A `join` fork in a loop is not one either: each pass
+    ///   waits for its arms. An `automatic` local there needs
+    ///   storage per activation, and the flatten gives it one net (`repeat (2) fork #1
+    ///   begin automatic int x; x = n; #3 $display(x); end join_none`: `x=2 x=2`,
+    ///   verilator `x=1 x=2`; differential F1). The per-entry classifier's `fork_multi`
+    ///   is the broader question (any fork kind) and stays its own.
+    /// * `captured` — a local of such a block whose block reaches a static task naming it
+    ///   (see [`Routine`]): vita lowers that body inside the block, so the task's free
+    ///   name would bind the local (row 72 round 5, P1).
+    /// * `names` — the names whose EVERY block on the flattened net (`scoped` excluded,
+    ///   a process's own top block included) is under a timing control: a `$strobe` /
+    ///   `$monitor` read of one shows another such block's later write (differential
+    ///   F5), and before the row every one of those designs was E3010. A pair with one
+    ///   plain block keeps the row's predecessor behaviour (ROADMAP §2).
+    pub(crate) fn compute_timed_blocks(
+        module: &ast::ModuleDecl,
+        scoped: &BTreeMap<u32, std::collections::BTreeSet<String>>,
+        pkg_funcs: &BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,
+        pkg_tasks: &BTreeMap<String, BTreeMap<String, ast::TaskDef>>,
+    ) -> TimedBlocks {
+        struct Acc<'s> {
+            scoped: &'s BTreeMap<u32, std::collections::BTreeSet<String>>,
+            out: TimedBlocks,
+            /// name → (declared in a timed block, declared in a plain block), flat only.
+            sharers: BTreeMap<String, (bool, bool)>,
+            /// Every declaring block under a timing control, for the capture check: its
+            /// `span.lo`, its local names, its `Debug` text.
+            timed: Vec<(u32, Vec<String>, String)>,
+        }
+        fn walk(
+            s: &ast::Stmt,
+            timed: bool,
+            overlap: bool,
+            repeatable: bool,
+            waited: bool,
+            acc: &mut Acc,
+        ) {
+            if let ast::Stmt::Block { decls, span, .. } | ast::Stmt::Fork { decls, span, .. } = s {
+                if timed && !decls.is_empty() {
+                    let names = decls
+                        .iter()
+                        .flat_map(|d| d.names.iter().map(|n| n.name.name.clone()))
+                        .collect();
+                    acc.timed.push((span.lo, names, format!("{s:?}")));
+                }
+                for n in decls.iter().flat_map(|d| d.names.iter()) {
+                    let nm = &n.name.name;
+                    if acc.scoped.get(&span.lo).is_some_and(|set| set.contains(nm)) {
+                        continue;
+                    }
+                    let e = acc.sharers.entry(nm.clone()).or_default();
+                    if timed {
+                        e.0 = true;
+                    } else {
+                        e.1 = true;
+                    }
+                }
+                if let ast::Stmt::Block { stmts, .. } = s {
+                    if timed
+                        && overlap
+                        && !decls.is_empty()
+                        && crate::block_local::stmts_may_suspend(stmts)
+                    {
+                        acc.out.overlapping.insert(span.lo);
+                    }
+                }
+            }
+            let child_timed = timed || crate::block_local::is_timing_control(s);
+            let overlap = match s {
+                ast::Stmt::Fork { join, .. } => {
+                    overlap || (repeatable && !waited && !matches!(join, ast::JoinKind::Join))
+                }
+                _ => overlap,
+            };
+            // A fork followed by `wait fork` in the same statement list.
+            let waits: Vec<bool> = match s {
+                ast::Stmt::Block { stmts, .. } => (0..stmts.len())
+                    .map(|i| {
+                        matches!(stmts[i], ast::Stmt::Fork { .. })
+                            && stmts[i + 1..]
+                                .iter()
+                                .any(|x| matches!(x, ast::Stmt::WaitFork { .. }))
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let mut idx = 0usize;
+            crate::block_local::for_each_nested_stmt(s, |st, loop_body| {
+                let w = waits.get(idx).copied().unwrap_or(false);
+                idx += 1;
+                walk(st, child_timed, overlap, repeatable || loop_body, w, acc)
+            });
+        }
+        let mut acc = Acc {
+            scoped,
+            out: TimedBlocks::default(),
+            sharers: BTreeMap::new(),
+            timed: Vec::new(),
+        };
+        for_each_proc(&module.body, &mut |p, _branch| {
+            let repeats = !matches!(p.kind, ast::ProcKind::Initial | ast::ProcKind::Final);
+            walk(&p.body, false, false, repeats, false, &mut acc);
+        });
+        if !acc.timed.is_empty() {
+            let mut routines = package_routines(pkg_funcs, pkg_tasks);
+            module_routines(&module.body, &mut routines);
+            for (lo, names, text) in &acc.timed {
+                let reached = reached_capturing(&routines, text);
+                for nm in names {
+                    let quoted = format!("{nm:?}");
+                    // A routine's text holds its own name once (its declaration); a local
+                    // named like the routine is captured only by a further mention.
+                    let mentions =
+                        |r: &Routine| r.text.matches(&quoted).count() > usize::from(r.name == *nm);
+                    if let Some((_, path)) = reached.iter().find(|(i, _)| mentions(&routines[*i])) {
+                        let path: Vec<String> = path
+                            .iter()
+                            .map(|&k| format!("`{}`", routines[k].name))
+                            .collect();
+                        acc.out.captured.insert((*lo, nm.clone()), path.join(" → "));
+                    }
+                }
+            }
+        }
+        acc.out.names = acc
+            .sharers
+            .into_iter()
+            .filter(|(_, (t, plain))| *t && !*plain)
+            .map(|(n, _)| n)
+            .collect();
+        acc.out
     }
 
     /// R18-X1: bare names that end up sharing ONE flattened net because they are

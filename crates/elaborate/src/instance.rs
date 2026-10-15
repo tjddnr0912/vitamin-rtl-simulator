@@ -659,6 +659,15 @@ impl Elaborator<'_> {
         let per_entry_blocks = Self::compute_per_entry_block_locals(module, &names);
         let saved_per_entry_blocks =
             std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
+        let saved_overlapping = std::mem::replace(
+            &mut self.timed_blocks,
+            Self::compute_timed_blocks(
+                module,
+                &self.scoped_block_locals.clone(),
+                &self.pkg_funcs,
+                &self.pkg_tasks,
+            ),
+        );
         // R18-X1: which bare block-local names land on ONE shared flattened net. Same
         // shared-set pattern, and for the same reason: the hoist's own coalesce guard
         // is order-dependent (it fires only once the net exists), so the FIRST
@@ -1426,6 +1435,7 @@ impl Elaborator<'_> {
         self.scoped_gather = saved_scoped_gather;
         self.scoped_gather_fed = saved_scoped_fed;
         self.per_entry_block_locals = saved_per_entry_blocks;
+        self.timed_blocks = saved_overlapping;
         self.coalesced_block_locals = saved_coalesced;
         self.func_table = saved_funcs;
         self.tf_decl_scope = saved_decl_scope;

@@ -17,7 +17,12 @@ impl Elaborator<'_> {
         &mut self,
         b: &mut ProcessBuilder,
         decls: &[(Vec<ast::Span>, ast::NetVarDecl)],
+        view: &crate::block_local::RoutineView,
     ) {
+        // §5.2 row 72: a declaration under a timing control is refused
+        // (`block_local/timed_task.rs`); it is still hoisted, so its uses resolve and the
+        // refusal is the one diagnostic.
+        let timed = crate::block_local::timing_nested_decls(view.body);
         // The scope is shared per-task (static retention), so a SECOND call finds every
         // local already bound: it allocates nothing and re-runs no initializer;
         // `first_call` is true only for the FIRST inline, gating the one-time init.
@@ -71,8 +76,14 @@ impl Elaborator<'_> {
                 continue;
             }
             let allocated = match seg {
-                Some(sg) => self.with_scope(&sg, |s| s.hoist_one_inline_local(d)),
-                None => self.hoist_one_inline_local(d),
+                Some(sg) => self.with_scope(&sg, |s| {
+                    s.refuse_timing_block_local_hazard(view, &timed, d);
+                    s.hoist_one_inline_local(d)
+                }),
+                None => {
+                    self.refuse_timing_block_local_hazard(view, &timed, d);
+                    self.hoist_one_inline_local(d)
+                }
             };
             first_call |= allocated;
         }

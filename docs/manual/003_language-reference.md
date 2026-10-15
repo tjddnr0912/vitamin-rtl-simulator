@@ -801,7 +801,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | Statement | Status | Notes |
 |---|---|---|
 | `;` (null) | Supported | |
-| `begin` / `end`, `begin : name` | Supported | Block-local declarations, including `automatic` ones, and sibling blocks reusing a name at any depth. A block that encloses another and redeclares the same name is Loud. |
+| `begin` / `end`, `begin : name` | Supported | Block-local declarations, including `automatic` ones, and sibling blocks reusing a name at any depth, also in a block that is the body of a timing control (`#d begin`, `@(e) begin`, `wait (c) begin`) in a process (`initial`, `always`, a fork arm, a loop); in a task or function body such a declaration is Loud. A block that encloses another and redeclares the same name is Loud. |
 | Blocking assign `=`, non-blocking assign `<=` | Supported | |
 | `if` / `else` | Supported | |
 | `case` / `casez` / `casex` … `endcase`, with `default` | Supported | |

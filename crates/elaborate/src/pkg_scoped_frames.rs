@@ -342,36 +342,13 @@ impl Elaborator<'_> {
 /// Every `(decls, stmts)` pair inside one routine body: a declaring block's own
 /// declarations beside the statement list they are in scope over.
 ///
-/// The same statement forms [`collect_block_local_decls_spanned`] recurses through,
-/// so the two agree on which declarations exist; this one keeps the association with
-/// the scope, which the name-keyed definite-assignment question needs.
+/// The descent [`collect_block_local_decls_spanned`] takes
+/// ([`crate::block_local::for_each_nested_stmt`]), so the two agree on which
+/// declarations exist; this one keeps the association with the scope, which the
+/// name-keyed definite-assignment question needs.
 fn decl_scopes<'a>(s: &'a ast::Stmt, out: &mut Vec<(&'a [ast::NetVarDecl], &'a [ast::Stmt])>) {
-    use ast::Stmt::*;
-    match s {
-        Block { decls, stmts, .. } | Fork { decls, stmts, .. } => {
-            out.push((decls.as_slice(), stmts.as_slice()));
-            for st in stmts {
-                decl_scopes(st, out);
-            }
-        }
-        If { then_s, else_s, .. } => {
-            decl_scopes(then_s, out);
-            if let Some(e) = else_s {
-                decl_scopes(e, out);
-            }
-        }
-        Case { items, .. } => {
-            for it in items {
-                match it {
-                    ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        decl_scopes(body, out)
-                    }
-                }
-            }
-        }
-        For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            decl_scopes(body, out)
-        }
-        _ => {}
+    if let ast::Stmt::Block { decls, stmts, .. } | ast::Stmt::Fork { decls, stmts, .. } = s {
+        out.push((decls.as_slice(), stmts.as_slice()));
     }
+    crate::block_local::for_each_nested_stmt(s, |st, _| decl_scopes(st, out));
 }
