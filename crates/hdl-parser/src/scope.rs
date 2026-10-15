@@ -35,6 +35,9 @@ impl Parser<'_, '_> {
             local_decl_names: self.local_decl_names.clone(),
             scope_type_names: self.scope_type_names.clone(),
             const_locals: self.const_locals.clone(),
+            class_records: self.class_records.clone(),
+            var_class: self.var_class.clone(),
+            cur_container: self.cur_container,
         }
     }
 
@@ -66,7 +69,14 @@ impl Parser<'_, '_> {
         } else {
             None
         };
+        // §5.2 row 67a: a class-handle binding the declaration shadows comes back at
+        // the block's end (`exit_block_handle_scope`).
+        let handles = (!self.var_class.is_empty() && !self.block_handle_shadows.is_empty())
+            .then(|| self.var_class.clone());
         let d = self.parse_net_var(false);
+        if let (Some(h), Some(d)) = (handles, &d) {
+            self.note_block_handle_shadows(h, d);
+        }
         if let (Some(t), Some(d)) = (tentative, &d) {
             let shadows = d
                 .names
@@ -113,6 +123,9 @@ impl Parser<'_, '_> {
         self.local_decl_names = s.local_decl_names;
         self.scope_type_names = s.scope_type_names;
         self.const_locals = s.const_locals;
+        self.class_records = s.class_records;
+        self.var_class = s.var_class;
+        self.cur_container = s.cur_container;
     }
 
     /// Restore the type registries around a top-level UNIT (module / interface /
@@ -192,6 +205,11 @@ impl Parser<'_, '_> {
         self.local_decl_names = s.local_decl_names;
         self.scope_type_names = s.scope_type_names;
         self.const_locals = s.const_locals;
+        // §5.2 row 67a: a unit's class records are unit-local (full restore): a
+        // module's own classes are no base for the next unit's.
+        self.class_records = s.class_records;
+        self.var_class = s.var_class;
+        self.cur_container = s.cur_container;
     }
 
     /// A generate block is a scope (IEEE §27.2): the type names it binds itself start

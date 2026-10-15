@@ -189,6 +189,23 @@ impl Parser<'_, '_> {
             None
         };
         self.expect(TokenKind::Semi, "';' after class header");
+        // §5.2 row 67a: a class body is a scope. Its properties bind through the
+        // enclosing scope's tables (the declaration paths every scope shares), so the
+        // whole scope is snapshotted here and restored at `endclass` — before, a
+        // property's binding outlived the class and the enclosing scope's own variable
+        // of that name read through the property's type. Boxed: the caller sits on
+        // the generate-block recursion.
+        let snap = self.snapshot_scope_boxed();
+        let outer_names = self.class_decl_names.replace(Vec::new());
+        // `extends B`: the inherited properties are in scope in the body — B's record
+        // (taken at B's `endclass`) binds them again, each from no binding at all, where
+        // its types still read as recorded (`replay_class_record`).
+        if let Some(rec) = extends
+            .as_ref()
+            .and_then(|b| self.class_records.get(&b.name).cloned())
+        {
+            self.replay_class_record(&rec, true);
+        }
         let mut items = Vec::new();
         while !self.at_eof() && !self.at_kw(Kw::Endclass) {
             let before = self.pos;
@@ -204,6 +221,13 @@ impl Parser<'_, '_> {
             "'endclass'",
         );
         self.opt_block_label(); // optional `: name`
+
+        // The record is read before the restore (it is the body's state) and stored
+        // after it (`class_records` is part of the snapshot).
+        let names = std::mem::replace(&mut self.class_decl_names, outer_names);
+        let rec = self.class_record(names.unwrap_or_default());
+        self.restore_scope_boxed(snap);
+        self.class_records.insert(name.name.clone(), rec);
         Some(ClassDecl {
             name,
             params,
@@ -335,7 +359,10 @@ impl Parser<'_, '_> {
                 return Some(ClassItem::Error(s));
             };
             return Some(match decl {
-                Some(d) => ClassItem::RandProperty { randc, decl: d },
+                Some(d) => {
+                    self.note_class_decl_names(&d);
+                    ClassItem::RandProperty { randc, decl: d }
+                }
                 None => ClassItem::Error(self.prev_span()),
             });
         }
@@ -362,16 +389,19 @@ impl Parser<'_, '_> {
         // handle (registered as a `NetVarKind::Class` alias in the prescan). The
         // leading `local`/`protected` access qualifier rides as `vis`.
         if self.net_var_kind().is_some() {
-            return self
-                .parse_net_var(false) // class property: no net delay
-                .map(|d| ClassItem::Property(vis, d));
+            return self.parse_net_var(false).map(|d| {
+                // class property: no net delay
+                self.note_class_decl_names(&d);
+                ClassItem::Property(vis, d)
+            });
         }
         if let Some(info) = self.peek_typedef_name() {
             // §3 ⑤ⓕ: see the `rand` twin above — a class property keeps the strict guard.
             self.note_uncarried_shape_use(&info);
-            return self
-                .parse_typed_decl(info)
-                .map(|d| ClassItem::Property(vis, d));
+            return self.parse_typed_decl(info).map(|d| {
+                self.note_class_decl_names(&d);
+                ClassItem::Property(vis, d)
+            });
         }
         self.error("class member (data member or `function`/`task` method)");
         let s = self.cur_span();
@@ -424,7 +454,10 @@ impl Parser<'_, '_> {
     #[inline(never)]
     pub(crate) fn parse_randomize_with_postfix(&mut self, lhs: Expr) -> Expr {
         self.bump(); // `with`
-        let constraints = self.parse_with_constraints();
+        let constraints = match &lhs.kind {
+            ExprKind::Call { name, .. } => self.parse_with_constraints_in_class(name),
+            _ => unreachable!("caller gates on ExprKind::Call"),
+        };
         let span = lhs.span.to(self.prev_span());
         let (name, args) = match lhs.kind {
             ExprKind::Call { name, args } => (name, args),

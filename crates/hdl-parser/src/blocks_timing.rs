@@ -341,6 +341,7 @@ impl Parser<'_, '_> {
     /// Shared block body: decls-prefix THEN statements, until the closer.
     pub(crate) fn block_body(&mut self, end: BlockEnd) -> (Vec<NetVarDecl>, Vec<Stmt>) {
         let mut decls = Vec::new();
+        self.enter_block_handle_scope();
         // A block is lexically scoped: snapshot the scope registries at the block's
         // first body-local typedef DEFINITION or struct/enum-typed VAR decl, and
         // restore them when the block ends, so a local name does not leak out of /
@@ -444,6 +445,7 @@ impl Parser<'_, '_> {
         if let Some(scope) = scope {
             self.restore_scope_boxed(scope);
         }
+        self.exit_block_handle_scope();
         (decls, stmts)
     }
 

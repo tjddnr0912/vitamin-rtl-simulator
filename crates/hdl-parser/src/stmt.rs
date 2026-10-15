@@ -426,7 +426,7 @@ impl Parser<'_, '_> {
                     // `obj.randomize() with { … };` as a void statement (§18.7).
                     if self.at_ident_kw("with") && self.peek_at(1) == Some(TokenKind::LBrace) {
                         self.bump(); // `with`
-                        let constraints = self.parse_with_constraints();
+                        let constraints = self.parse_with_constraints_in_class(&path);
                         self.expect(TokenKind::Semi, "';'");
                         return Stmt::RandomizeWith {
                             name: path,

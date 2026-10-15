@@ -561,6 +561,26 @@ impl Parser<'_, '_> {
         // (an imported one, or a localparam of an outer scope) — the parse-time
         // fold must not answer the outer value for this scope's name.
         self.const_locals.remove(n);
+        self.var_class.remove(n);
+    }
+
+    /// Drop every variable-keyed binding of `n` (V1–V10: struct / enum / packed-md /
+    /// record / class-handle tables). `unbind_struct_enum_name` leaves
+    /// `struct_packed_array_vars` and the three record tables bound (a declaration
+    /// that writes none of them leaves them alone); a binding re-installed from a
+    /// recorded state must start from none (§5.2 row 67a class-record replay), or a
+    /// stale entry rides beside the recorded one.
+    pub(crate) fn unbind_bindings(&mut self, n: &str) {
+        self.var_struct.remove(n);
+        self.struct_scalar_vars.remove(n);
+        self.struct_1d_array_vars.remove(n);
+        self.struct_packed_array_vars.remove(n);
+        self.var_enum.remove(n);
+        self.packed_md_params.remove(n);
+        self.var_unpacked_struct.remove(n);
+        self.record_array_vars.remove(n);
+        self.record_soa_vars.remove(n);
+        self.var_class.remove(n);
     }
 
     pub(crate) fn parse_net_var(&mut self, allow_net_delay: bool) -> Option<NetVarDecl> {
@@ -814,6 +834,13 @@ impl Parser<'_, '_> {
         if self.enum_defs.contains_key(&tyname) {
             for n in &names {
                 self.var_enum.insert(n.name.name.clone(), tyname.clone());
+            }
+        }
+        // §5.2 row 67a (V10): a class-handle variable's class, for the with-block of
+        // `h.randomize() with { … }` (`parse_with_constraints_in_class`).
+        if let Some(c) = &info.class_name {
+            for n in &names {
+                self.var_class.insert(n.name.name.clone(), c.clone());
             }
         }
         // N7: a class-typed alias carries the class name through to elaborate.

@@ -740,6 +740,9 @@ impl Parser<'_, '_> {
         self.pattern_used.clear();
         self.pattern_rebound.clear();
         self.const_locals.clear();
+        self.var_class.clear();
+        self.container_seq += 1;
+        self.cur_container = Some(self.container_seq);
         self.overridable_params.clear();
         self.shape_carriers.clear();
         self.shape_uncarried.clear();

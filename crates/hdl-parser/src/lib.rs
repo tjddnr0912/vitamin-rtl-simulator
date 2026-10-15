@@ -92,6 +92,7 @@ mod assertions;
 mod assign_pattern;
 mod blocks_timing;
 mod casts;
+mod class_scope;
 mod classes;
 mod cover;
 mod decls;
@@ -533,6 +534,12 @@ struct ScopeSnapshot {
     local_decl_names: std::collections::HashSet<String>,
     scope_type_names: std::collections::HashSet<String>,
     const_locals: std::collections::HashMap<String, ConstVal>,
+    // §5.2 row 67a: the class records of the classes this scope declared (and its
+    // enclosing scopes', down to the unit's), for an `extends` or a with-block to
+    // replay; the class-handle bindings (V10).
+    class_records: std::collections::HashMap<String, class_scope::ClassRec>,
+    var_class: std::collections::HashMap<String, String>,
+    cur_container: Option<u64>,
 }
 
 /// What a wildcard import does with one bare type name its package exports, decided
@@ -833,6 +840,33 @@ pub struct Parser<'t, 's> {
     /// ⓑ-breadth (§8.25): override specializations of parameterized classes,
     /// produced by `monomorphize_param_classes` and appended at top level.
     pending_mono_specs: Vec<ClassDecl>,
+    /// §5.2 row 67a: while a class body is parsed, the names it has bound so far —
+    /// each property's declarators once its declaration bound them, and every name an
+    /// `extends` replayed — in order. `None` outside a class body. Never snapshotted:
+    /// `parse_class_decl` swaps it in and out around the body.
+    class_decl_names: Option<Vec<String>>,
+    /// §5.2 row 67a: class name → what its body bound (`ClassRec`), recorded at
+    /// `endclass` after the body's bindings are dropped from the enclosing scope, so a
+    /// derived class's `extends` can bind the inherited properties again. Part of
+    /// `ScopeSnapshot` and NOT cleared at a container's start: a unit-scope class is a
+    /// base for a module's class, and a module's own records go with its scope.
+    class_records: std::collections::HashMap<String, class_scope::ClassRec>,
+    /// §5.2 row 67a (V10): a class-handle variable → its class (`C h;`), for the
+    /// with-block of `h.randomize() with { … }` to resolve in C's record. Scoped with
+    /// the other variable-keyed maps (snapshot / restore / per-container clear;
+    /// dropped by any declaration of the name, `unbind_struct_enum_name`).
+    var_class: std::collections::HashMap<String, String>,
+    /// §5.2 row 67a: per open `begin`/`fork` block, the class-handle bindings its plain
+    /// block-local declarations shadowed, put back at the block's end. Not
+    /// snapshotted: `block_body` pushes and pops it.
+    block_handle_shadows: Vec<Vec<(String, String)>>,
+    /// §5.2 row 67a: the module / interface / program / package being parsed (a number
+    /// from `container_seq`), `None` at the compilation-unit scope. Part of
+    /// `ScopeSnapshot`, so a container's end gives the unit's `None` back. A class
+    /// record keeps the container it was taken in; one replayed in another container
+    /// (a `$unit` class) is a lane this row opened (`replay_class_record`).
+    cur_container: Option<u64>,
+    container_seq: u64,
     /// §23.11 binds written INSIDE a module/interface body. A bind whose target is a
     /// module NAME means the same thing wherever it is written — elaborate keys the
     /// bind table by target module name alone and wires the checker in each target
@@ -1035,6 +1069,12 @@ impl<'t, 's> Parser<'t, 's> {
             has_param_header: false,
             member_pattern_ty: None,
             pending_mono_specs: Vec::new(),
+            class_decl_names: None,
+            class_records: std::collections::HashMap::new(),
+            var_class: std::collections::HashMap::new(),
+            block_handle_shadows: Vec::new(),
+            cur_container: None,
+            container_seq: 0,
             pending_binds: Vec::new(),
             pending_module_items: Vec::new(),
             cu_items: Vec::new(),
