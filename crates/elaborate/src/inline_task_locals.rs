@@ -130,12 +130,24 @@ impl Elaborator<'_> {
             // §7.4.2 / §4.5.359: the STATIC task's body-local, the twin of the
             // framed one in `frames_reserve`. Opt-in and record are one unit.
             let odd_bound = self.declared_odd_bound(d.range.as_ref()).is_some();
-            let (w, msb, lsb, signed) = self.range_to_dims_opt(
+            let (mut w, mut msb, lsb, signed) = self.range_to_dims_opt(
                 self.shape_kind(d.kind, &d.shape_param),
                 d.range.as_ref(),
                 self.shape_signed(d.signed, &d.shape_param),
                 odd_bound,
             );
+            // A MULTI-DIM PACKED local (`logic [3:0][7:0] x`, a typedef of one, or the
+            // element of `logic [1:0][3:0] a [0:1]`) is the product of its packed dims
+            // wide, with its extents registered below — the frame lane's
+            // `reserve_frame_local_decl` twin, which this collector never had: the net was
+            // the OUTER range wide (4 bits for `[3:0][7:0]`) with no extents, so `x[1]`
+            // read bit 1 and `$bits(x[1])` was 1 (iverilog, sv2v → iverilog `56`, `8`),
+            // with no timing control anywhere (found by §5.2 row 72's grounding).
+            let pinfo = self.frame_packed_width(d);
+            if let Some((pw, pmsb, _)) = &pinfo {
+                w = *pw;
+                msb = *pmsb;
+            }
             let odd_net = self.nets.len() as u32;
             if odd_bound {
                 self.record_declared_bounds_for(odd_net, d.range.as_ref());
@@ -168,6 +180,9 @@ impl Elaborator<'_> {
             let Some(&id) = self.symbols.get(&key) else {
                 continue;
             };
+            if let Some((_, _, ext)) = pinfo {
+                self.register_frame_packed(id, d, &decl.unpacked, ext);
+            }
             if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
                 self.intro_kind
                     .insert(id, self.shape_kind(d.kind, &d.shape_param));

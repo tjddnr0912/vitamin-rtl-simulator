@@ -42,6 +42,11 @@
 //! * the hierarchical size census keeps its walk, so `u.hs` beside such a local keeps the
 //!   module variable's width.
 //!
+//! Opening those blocks reached a walker of its own, pinned below:
+//! * the static (inline) task lane's local reservation carried a multi-dim packed local
+//!   (`logic [3:0][7:0] x`) as its OUTER range wide with no extents, so `x[1]` read bit 1
+//!   (`e=0 b=1`) even with no timing control at all — it now mirrors the frame lane;
+//!
 //! ## Oracles
 //!
 //! Every value is iverilog 13 (`-g2012`, `vvp -n`), sv2v → iverilog 13 and verilator
@@ -609,6 +614,96 @@ endmodule
     assert!(vcd.contains("$scope module $blk$"), "{vcd}");
     assert!(vcd.contains("$var wire 8 \" x [7:0] $end"), "{vcd}");
     assert!(vcd.contains("b10101010 \""), "{vcd}");
+}
+
+// ── (6) the static (inline) task lane's multi-dim packed locals ─────────────
+
+/// A static task's `logic [3:0][7:0] x` is 32 bits with four 8-bit elements, in a
+/// block, at the body's top and as a typedef. PRE: the net was the outer range wide
+/// (`e=0 b=1 w=8`).
+#[test]
+fn static_task_multi_dim_packed_local() {
+    let probe =
+        "      x = 32'h12345678;\n      $display(\"R e=%h b=%0d w=%h\", x[1], $bits(x[1]), x);";
+    for (name, src) in [
+        (
+            "block",
+            format!("module t;\n  task tk;\n    begin\n      logic [3:0][7:0] x;\n{probe}\n    end\n  endtask\n  initial #1 tk();\n  initial #5 $finish;\nendmodule\n"),
+        ),
+        (
+            "body top",
+            format!("module t;\n  task tk;\n    logic [3:0][7:0] x;\n{probe}\n  endtask\n  initial #1 tk();\n  initial #5 $finish;\nendmodule\n"),
+        ),
+        (
+            "typedef",
+            format!("module t;\n  typedef logic [3:0][7:0] w_t;\n  task tk;\n    begin\n      w_t x;\n{probe}\n    end\n  endtask\n  initial #1 tk();\n  initial #5 $finish;\nendmodule\n"),
+        ),
+    ] {
+        let (o, code, _) = run_files(&src);
+        assert_eq!(code, Some(0), "{name}:\n{o}");
+        assert!(o.lines().any(|l| l == "R e=56 b=8 w=12345678"), "{name}:\n{o}");
+    }
+}
+
+/// Element and nested writes, the dimension queries, an unpacked array of packed
+/// elements, ascending and signed packed dims, and two call sites sharing the static
+/// local. PRE: wrong values, and `x[0][3:0] = …` E3009 "nested lvalue select".
+#[test]
+fn static_task_multi_dim_packed_local_shapes() {
+    let task = |body: &str, calls: &str| {
+        format!("module t;\n  task tk;\n    begin\n{body}\n    end\n  endtask\n  initial begin #1 {calls} end\n  initial #5 $finish;\nendmodule\n")
+    };
+    exactly(
+        &task(
+            "      logic [3:0][7:0] x;\n      x = '0;\n      x[2] = 8'hC3;\n      x[0][3:0] = 4'h9;\n      $display(\"R w=%h p=%h\", x, x[2][7:4]);",
+            "tk();",
+        ),
+        &["R w=00c30009 p=c"],
+    );
+    exactly(
+        &task(
+            "      logic [3:0][7:0] x;\n      $display(\"R d=%0d s1=%0d s2=%0d l2=%0d r2=%0d\", $dimensions(x), $size(x,1), $size(x,2), $left(x,2), $right(x,2));",
+            "tk();",
+        ),
+        &["R d=2 s1=4 s2=8 l2=7 r2=0"],
+    );
+    exactly(
+        &task(
+            "      logic [1:0][3:0] a [0:1];\n      a[0] = 8'h00;\n      a[1] = 8'hA5;\n      a[0][1] = 4'h3;\n      $display(\"R a0=%h a1=%h s=%h b=%0d\", a[0], a[1], a[1][0], $bits(a[1]));",
+            "tk();",
+        ),
+        &["R a0=30 a1=a5 s=5 b=8"],
+    );
+    exactly(
+        &task(
+            "      logic [0:3][7:0] x;\n      x = 32'h12345678;\n      $display(\"R e=%h w=%h\", x[1], x);",
+            "tk();",
+        ),
+        &["R e=34 w=12345678"],
+    );
+    exactly(
+        &task(
+            "      logic signed [1:0][7:0] x;\n      x = 16'hFF80;\n      $display(\"R w=%0d e=%h\", x, x[0]);",
+            "tk();",
+        ),
+        &["R w=-128 e=80"],
+    );
+    exactly(
+        &task(
+            "      logic [1:0][3:0] x = 8'h5A;\n      $display(\"R w=%h e=%h\", x, x[1]);",
+            "tk();",
+        ),
+        &["R w=5a e=5"],
+    );
+    // Static retention across three calls (iverilog and sv2v -> iverilog; verilator is
+    // 2-state and prints `0000 1122 2222`).
+    exactly(
+        &task(
+            "      logic [1:0][7:0] x;\n      $display(\"R x=%h\", x);\n      x[1] = 8'h11 + x[1];\n      x[0] = 8'h22;",
+            "tk(); tk(); tk();",
+        ),
+        &["R x=xxxx", "R x=xx22", "R x=xx22"],
+    );
 }
 
 // ── (8) round 5: a task or function body refuses a timing-body declaration ──

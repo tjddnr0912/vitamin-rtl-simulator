@@ -29,6 +29,10 @@ changed for a user of the simulator.
   or it took the value of a same-named variable of the task or the module).
 - `%m` in a named block whose local shadows a module variable printed an internal scope
   (`t.$blk$40.blk`); it prints `t.blk`.
+- A multi-dimensional packed local of a static task (`logic [3:0][7:0] x;`, a typedef of one, or
+  the element of an unpacked array) was only as wide as its first dimension, so `x[1]` read one
+  bit and `$bits(x[1])` was 1; it now has its full width and its elements, as in an `automatic`
+  task.
 
 ### Added — typed assignment patterns `T'{…}`
 
