@@ -230,10 +230,12 @@ fn hierarchical_associative_array_read_and_write() {
 
 #[test]
 fn a_missing_associative_key_is_not_invented_by_the_hierarchical_path() {
-    // The keyed lookup must MISS the same way locally and hierarchically — a warn plus X,
-    // not a silently defaulted 0 that a positional read of an empty slot could produce.
+    // The keyed lookup must MISS the same way locally and hierarchically — a warn plus the
+    // element type's default, never a value a positional read of an empty slot could
+    // produce. The element is 4-state, so the default is X (IEEE 1800-2017 §7.8.6); since
+    // §5.2 row 20 a 2-state element's miss reads 0, which an invented value could mimic.
     let (out, ok) = compile(
-        "module sub; int a[int]; initial a[5]=7; endmodule\n\
+        "module sub; integer a[int]; initial a[5]=7; endmodule\n\
          module m; sub u();\n\
          initial begin #1; $display(\"%0d\", u.a[99]); $finish; end\n\
          endmodule\n",

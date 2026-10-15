@@ -9,6 +9,35 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — associative arrays indexed by a type
+
+- An associative-array index written as a packed or integral TYPE parses and runs: a vector
+  (`bit [7:0] mem [bit [31:0]];`, `[logic signed [15:0]]`, `[bit [1:0][3:0]]`, a parameter-sized
+  `[bit [W-1:0]]`), an atom with an explicit signing (`[int unsigned]`, `[byte signed]`), and a typedef or enum
+  name (`[addr_t]`, `[p::addr_t]`). It was refused with `VITA-E2002` (`expected expression, found
+  keyword 'bit'`) — the VeeR EH1 / EL2 testbench memory. Every index is converted to the key
+  type before it is stored or looked up, so `m[259]` on a `[bit [7:0]]` array is key 3, as in
+  Verilator.
+- Refused by name (`VITA-E3009`) rather than run wrong: a key of 64 unsigned bits (`longint
+  unsigned`, `bit [63:0]` — vita orders keys as signed 64-bit values) or wider; a `foreach` over a
+  typed key that is not 32-bit signed (its loop index is declared `integer`); a `first` / `next` /
+  `last` / `prev` variable whose type is not the key's; an index-returning locator or `item.index`
+  over a typed key (vita answers the element's position); `%p` of a typed SIGNED key (vita would
+  print a negative key 64 bits wide); a whole-array copy between two key types, or between a typed
+  key and a keyword one (`[int]`); a bare `'0` / `'1` / `'x` / `'z` as a typed key's index, whose width has no
+  settled reading. A name in brackets is a key type only when the source uses it as nothing else: a
+  `parameter`/`localparam` shadowing an imported or outer typedef still sizes a fixed array.
+- The keyword spellings `[int]`, `[integer]`, `[byte]`, `[shortint]` and `[longint]` are unchanged:
+  their index is not cast to the key type (a known divergence from IEEE 1800-2017 §7.8.4, listed
+  in the limitations). A struct, `enum bit [N]` or type-parameter key name is refused at parse (`VITA-E2002`).
+
+### Fixed — reading a key an associative array does not hold
+
+- Reading a key an associative array does not hold (or an x/z key) returned `x` whatever the element
+  type, so the counter idiom `int cnt [string]; cnt["a"]++;` gave `x` where Verilator gives `1`. A
+  2-state element (`bit`, `int`, `byte`, …) now reads `0`, a 4-state one still `x` (IEEE 1800-2017
+  §7.8.6); the `VITA-W4020` warning says which (`read 0` / `read X`).
+
 ### Added — a function that writes a select of its return variable, called from an expression
 
 - A static function whose straight-line body assigns a bit-, part- or indexed part-select of its

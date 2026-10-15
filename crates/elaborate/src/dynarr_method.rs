@@ -43,6 +43,7 @@ impl Elaborator<'_> {
                 // `delete(key)` were gated; this one was not, so a real key
                 // returned 0 with a bogus-X warning at exit 0.
                 let key = self.lower_index_expr(k);
+                let key = self.assoc_key_convert(net, key);
                 self.push_expr(ir::Expr::SysFunc {
                     which: ir::SysFuncId::AssocExists,
                     args: vec![handle, key],
@@ -139,6 +140,7 @@ impl Elaborator<'_> {
             },
             ("delete", K::Assoc | K::AssocStr, 1) => {
                 let k = self.lower_index_expr(&args[0]);
+                let k = self.assoc_key_convert(net, k);
                 ir::Stmt::SysTask {
                     which: ir::SysTaskId::AssocDeleteKey,
                     fmt: None,

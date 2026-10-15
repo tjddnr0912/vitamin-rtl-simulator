@@ -795,23 +795,52 @@ pub enum Dim {
     /// `[$]` queue; `[$:N]` bounded queue (bound PARSED, elaborate loud-rejects
     /// it — bounded queues are outside the MVP).
     Queue(Option<Expr>),
-    /// `[integer]` / `[time]` / `[string]` — associative array key type
-    /// (integral keys live in the engine's signed-i64 domain; string keys in
+    /// `[int]` / `[bit [31:0]]` / `[time]` / `[string]` — associative array key
+    /// type (integral keys live in the engine's signed-i64 domain; string keys in
     /// the byte-string domain, v6).
     Assoc(AssocKey),
 }
 
 /// Assoc-array key type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum AssocKey {
-    /// Every integral key spelling (`integer`/`int`/`longint`/`shortint`/
-    /// `byte`) — the engine key domain is uniformly signed i64 (the v5-⑥
-    /// design pin: keys are never truncated to the declared width).
-    Integer,
-    Time, // `time` — same i64 engine domain; the variant is cosmetic today
+    /// §5.2 row 20: an integral key written as a data type — a keyword atom
+    /// (`[int]`, `[int unsigned]`, `[integer]`, `[byte]`), a vector
+    /// (`[bit [31:0]]`, `[logic signed [7:0]]`, `[bit [1:0][3:0]]`) or a typedef
+    /// name resolved by the parser (`[addr_t]`, an enum). Elaborate folds its
+    /// width and sign and converts every index expression to that type (IEEE
+    /// 1800-2017 §7.8.4) before the engine's signed-i64 key domain sees it; a
+    /// type the domain cannot hold exactly (wider than 64 bits, or 64-bit
+    /// unsigned) is refused by name.
+    Typed(Box<AssocKeyType>),
+    /// `[time]` — the i64 engine domain with no conversion (the pre-row-20
+    /// behaviour, kept: `time` is 64-bit unsigned, so a key at or above 2^63
+    /// orders as negative; ROADMAP §2).
+    Time,
     /// `[string]` (v6) — byte-string keys (contextual keyword: `string` stays
     /// a plain identifier everywhere else).
     Str,
+}
+
+/// §5.2 row 20: the integral type of an associative-array key, as written (or as
+/// the typedef it names resolved to). `kind` is the data-type keyword (`Bit`,
+/// `Logic`, `Reg`, `Int`, `Integer`, `Byte`, `Shortint`, `Longint`, `Time`),
+/// `signed` the effective signing, `range` / `packed` the packed dimensions, and
+/// `named` whether the key was spelled by a typedef name (`[addr_t]`) rather than
+/// by keywords, and `explicit_sign` whether a `signed` / `unsigned` keyword was
+/// written. A bare keyword atom with neither (`[int]`, `[byte]`, …) is the spelling
+/// that predates row 20, and elaborate keeps that spelling's pre-row-20 index,
+/// `foreach`, iteration-variable, copy and `%p` behaviour; `[int signed]` was never
+/// accepted before and is a typed key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub struct AssocKeyType {
+    pub kind: NetVarKind,
+    pub signed: bool,
+    pub range: Option<Range>,
+    pub packed: Vec<Range>,
+    pub named: bool,
+    pub explicit_sign: bool,
+    pub span: Span,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum NetVarKind {

@@ -456,6 +456,11 @@ endmodule
 fn assoc_first_next_hand_loop() {
     // hand-IEEE §7.9.4 (iverilog rejects assoc): 64-bit key var walks the
     // full signed-i64 key domain, ascending; last/prev walk back down.
+    // KNOWN-WRONG on the key (ROADMAP §2, §5.2 row 20 round 1 F1): the index of an
+    // `[integer]` key is not cast to the key type, so `64'd1099511627776` is kept as
+    // a key no `integer` holds. §7.8.4 casts it: key 0. verilator 5.052 on the
+    // `integer k` twin stores keys 0, 7, -3 (`0 -> 3`, `7 -> 2`, `-3 -> 1`, walked in
+    // unsigned bit order; §7.8.4 orders a signed key by value).
     let src = r#"
 module t;
   integer a [integer];
@@ -501,6 +506,9 @@ endmodule
 fn foreach_assoc_wide_key_stops_loud() {
     // A key beyond the 32-bit foreach index → status −1 stops the walk and
     // the engine warns (W4020) — LOUD degrade, never a silent wrong walk.
+    // KNOWN-WRONG on the key (ROADMAP §2, §5.2 row 20 round 1 F1): §7.8.4 casts
+    // the index to the `integer` key type, key 0, which the index holds; verilator
+    // 5.052 prints `0` / `done`.
     let src = r#"
 module t;
   integer a [integer];

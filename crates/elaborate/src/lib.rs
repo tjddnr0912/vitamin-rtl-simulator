@@ -47,6 +47,7 @@ mod api;
 mod array_formal;
 mod array_geom;
 mod arrays;
+mod assoc_key;
 mod ast_query;
 mod block_local;
 mod block_local_class;
@@ -1729,6 +1730,12 @@ struct Elaborator<'s> {
     assign_ranks: AssignRankTable,
     // Bounded-queue bounds (v6 ③): handle NetId → N.
     queue_bounds: QueueBoundTable,
+    // §5.2 row 20: assoc handle NetId → its folded key type (`assoc_key.rs`).
+    // Elaborate-only: every index is converted to the key type before the IR.
+    assoc_key_shapes: std::collections::BTreeMap<u32, assoc_key::AssocKeyShape>,
+    // §5.2 row 20 round 2 (differential B2): ExprIds of indexes written as a bare
+    // unbased unsized fill literal (`lower_index_expr`).
+    bare_fill_index_eids: std::collections::BTreeSet<u32>,
     // NetIds of named events (v5 batch B): each `event e` is a 64-bit counter
     // Reg (init 0). `->e` increments it; `@(e)` is plain AnyEdge sensitivity.
     // The set guards the VALUE surface — an event cannot be read or written.

@@ -460,6 +460,9 @@ impl Elaborator<'_> {
         // and the renderer's string arm is the one that quotes it.
         if let Some(net) = self.whole_name_net(e) {
             if self.is_dyn_handle_net(net) {
+                if self.assoc_pattern_refused(net) {
+                    return Some(self.placeholder_expr());
+                }
                 return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
             }
             return None;

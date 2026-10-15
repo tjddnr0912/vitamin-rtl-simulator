@@ -3,8 +3,10 @@
 //! `[string]`. Every integral spelling shares vitamin's documented signed-i64
 //! key domain (the v5-⑥ design pin: keys are NOT truncated to the declared
 //! width — `[integer]`/`[time]` already behave this way; Icarus rejects assoc
-//! declarations entirely, so this whole family is hand-IEEE). The wildcard
-//! `[*]` stays a loud reject with the updated spelling list.
+//! declarations entirely, so this whole family is hand-IEEE). §5.2 row 20 casts
+//! the index of a TYPED key (`assoc_typed_key.rs`) and keeps these spellings as
+//! they were (ROADMAP §2). The wildcard `[*]` stays a loud reject with the updated
+//! spelling list.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 

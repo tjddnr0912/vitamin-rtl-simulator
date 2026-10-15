@@ -214,7 +214,11 @@ impl Elaborator<'_> {
         };
         let elem = self.handle_elem_type(net);
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
+        let start = self.exprs.len();
         let with_eid = self.lower_with_expr_based(amw, elem, idx_base);
+        if self.assoc_index_read_refused(net, start, false) {
+            return self.placeholder_expr();
+        }
         self.push_expr(ir::Expr::SysFunc {
             which,
             args: vec![handle, with_eid],
@@ -297,9 +301,17 @@ impl Elaborator<'_> {
         let elem = self.handle_elem_type(src_net);
         let kc = self.const_u32_expr(code, 32);
         let mut args = vec![dst_h, src_h, kc];
+        // §5.2 row 20: the index locators answer a position (code 4, 7, 8, 9).
+        if self.assoc_index_read_refused(src_net, self.exprs.len(), matches!(code, 4 | 7 | 8 | 9)) {
+            return true;
+        }
         if let Some(amw) = amw {
             if needs_pred {
+                let start = self.exprs.len();
                 let pred = self.lower_with_expr(amw, elem);
+                if self.assoc_index_read_refused(src_net, start, false) {
+                    return true;
+                }
                 args.push(pred);
             } else {
                 self.error(
@@ -377,6 +389,16 @@ impl Elaborator<'_> {
         // never passes lower_lvalue (adversarial find: `aa.first(R)` silently
         // mutated a desugared array parameter).
         self.deny_readonly_write(knet, "write the iteration key into");
+        if kind == ir::NetKind::Assoc {
+            // §5.2 row 20: a typed key needs an iteration variable of its type.
+            let foreach = matches!(
+                &args[0].kind,
+                ast::ExprKind::Ident(p) if p.segments[0].name.starts_with("__foreach_")
+            );
+            if self.assoc_iter_var_refused(net, knet, foreach, method) {
+                return true;
+            }
+        }
         if !matches!(kind, ir::NetKind::Assoc | ir::NetKind::AssocStr) {
             // The dense dyn/queue walk exists only for the foreach desugar.
             let synthetic = matches!(

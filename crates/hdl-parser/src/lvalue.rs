@@ -178,23 +178,49 @@ impl Parser<'_, '_> {
                 self.expect(TokenKind::RBracket, "']'");
                 return Some(Dim::Queue(bound));
             }
-            // `[integer]` / `[time]` / `[int]` / `[longint]` / `[shortint]` /
-            // `[byte]` — assoc key type (keyword-led, so it can never shadow a
-            // same-named size parameter). Every integral spelling shares the
-            // documented signed-i64 key domain (the ⑥ design pin: keys are NOT
-            // truncated to the declared width — `[integer]`/`[time]` already
-            // behave this way), so the 2-state atoms map onto the same
-            // `AssocKey::Integer` lowering with zero AST/schema change.
+            // §5.2 row 20: an integral KEY TYPE — a keyword atom (`[int]`,
+            // `[int unsigned]`, `[integer]`, `[byte]`, …), a vector
+            // (`[bit [31:0]]`, `[logic signed [7:0]]`, `[bit [1:0][3:0]]`) or
+            // `[time]`. Keyword-led, so it can never shadow a same-named size
+            // parameter. The key carries its type; elaborate folds the width and
+            // sign and converts every index to it (IEEE 1800-2017 §7.8.4).
+            // `[time]` alone keeps its own variant (the pre-row-20 domain, no
+            // conversion).
             Some(TokenKind::Word(WordKind::Keyword(
-                k @ (Kw::Integer | Kw::Time | Kw::Int | Kw::Longint | Kw::Shortint | Kw::Byte),
+                k @ (Kw::Integer
+                | Kw::Time
+                | Kw::Int
+                | Kw::Longint
+                | Kw::Shortint
+                | Kw::Byte
+                | Kw::Bit
+                | Kw::Logic
+                | Kw::Reg),
             ))) => {
+                let start = self.cur_span();
+                if k == Kw::Time && self.peek_at(1) == Some(TokenKind::RBracket) {
+                    self.bump(); // `time`
+                    self.bump(); // `]`
+                    return Some(Dim::Assoc(AssocKey::Time));
+                }
+                let kind = self.net_var_kind().expect("an integral data-type keyword");
                 self.bump();
+                let signing = self.opt_signed();
+                let signed = signing.unwrap_or_else(|| atom_default_signed(Some(kind)));
+                let range = self.opt_range();
+                let packed = self.opt_packed_dims();
+                self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
+                let span = start.to(self.prev_span());
                 self.expect(TokenKind::RBracket, "']'");
-                return Some(Dim::Assoc(if k == Kw::Time {
-                    AssocKey::Time
-                } else {
-                    AssocKey::Integer
-                }));
+                return Some(Dim::Assoc(AssocKey::Typed(Box::new(AssocKeyType {
+                    kind,
+                    signed,
+                    range,
+                    packed,
+                    named: false,
+                    explicit_sign: signing.is_some(),
+                    span,
+                }))));
             }
             // `[string]` (v6) — since the v7 AST flip `string` is a real
             // KEYWORD (the P2-C type), so the assoc key form is keyword-led
@@ -203,6 +229,15 @@ impl Parser<'_, '_> {
                 self.bump();
                 self.expect(TokenKind::RBracket, "']'");
                 return Some(Dim::Assoc(AssocKey::Str));
+            }
+            // §5.2 row 20: `[addr_t]` / `[p::addr_t]` — a typedef name alone in the
+            // brackets is a KEY TYPE, never a size (a type is not a constant
+            // expression). The typedef resolves here, as any `addr_t x;`
+            // declaration resolves it, to its kind, sign and packed dimensions.
+            Some(TokenKind::Word(WordKind::Ident) | TokenKind::EscapedIdent)
+                if self.assoc_typedef_key_ahead() =>
+            {
+                return Some(self.parse_assoc_typedef_key());
             }
             // `[*]` — wildcard assoc index: outside the MVP, reject loudly at
             // parse (recover as a plain dyn dim so the decl still resolves).

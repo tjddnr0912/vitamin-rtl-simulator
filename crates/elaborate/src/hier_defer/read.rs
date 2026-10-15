@@ -44,7 +44,9 @@ impl Elaborator<'_> {
                 crate::array_geom::IndexDomain::ArrayWord,
             )),
             Some(_) => None,
-            None => (idx_eids.len() == 1).then(|| idx_eids[0]),
+            // §5.2 row 20: the child's typed key converts the index like a local
+            // `a[k]` (`assoc_key_convert` is a no-op for any other handle).
+            None => (idx_eids.len() == 1).then(|| self.assoc_key_convert(net, idx_eids[0])),
         }
     }
 
@@ -268,6 +270,11 @@ impl Elaborator<'_> {
             let bad = self.event_nets.contains(&net)
                 || (self.is_dyn_handle_net(net) && !pattern_arg)
                 || (self.net_is_static_array(net) && mem_arg.is_none() && !pattern_arg);
+            // §5.2 row 20 (round-1 soundness F2): the `%p` render of a typed SIGNED
+            // key is refused here as on the local arm (`lower_pattern_arg`).
+            if pattern_arg && self.assoc_pattern_refused(net) {
+                continue;
+            }
             if bad {
                 self.error(
                     MsgCode::ElabUnsupported,

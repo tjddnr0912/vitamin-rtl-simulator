@@ -448,14 +448,19 @@ impl Elaborator<'_> {
     /// Lower a dyn ELEMENT index. For a QUEUE the bare `$` substitutes
     /// `size(handle)-1` (IEEE §7.10.1: `q[$]` = the last element), scoped to
     /// THIS index by save/restore so nested selects bind `$` to their own
-    /// queue. Assoc keys lower plain — the engine's signed-i64 key domain
-    /// takes the expression's own width/signedness.
+    /// queue. An assoc key is converted to the handle's declared key type
+    /// (§5.2 row 20, `assoc_key.rs`); a handle with no typed key (`[time]`,
+    /// `[string]`) lowers it plain.
     pub(crate) fn lower_dyn_index(
         &mut self,
         net: u32,
         kind: ir::NetKind,
         index: &ast::Expr,
     ) -> u32 {
+        if kind == ir::NetKind::Assoc {
+            let key = self.lower_index_expr(index);
+            return self.assoc_key_convert(net, key);
+        }
         if kind != ir::NetKind::Queue {
             return self.lower_index_expr(index);
         }
@@ -674,6 +679,9 @@ impl Elaborator<'_> {
                         "whole-handle copy needs the SAME dynamic-storage kind \
                          on both sides (queue=queue, dynamic=dynamic, assoc=assoc)",
                     );
+                    return true;
+                }
+                if dst_kind == ir::NetKind::Assoc && self.assoc_copy_refused(dst_net, src_net) {
                     return true;
                 }
                 // §7.6 assignment compatibility: equivalent ELEMENT types only

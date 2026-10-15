@@ -90,6 +90,7 @@ enum GateKind {
 mod api;
 mod assertions;
 mod assign_pattern;
+mod assoc_key;
 mod blocks_timing;
 mod casts;
 mod class_scope;

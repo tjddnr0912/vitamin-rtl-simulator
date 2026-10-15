@@ -484,7 +484,8 @@ concatenation element, an unknown method or arity, `string'(real)`,
 | Multi-dimensional unpacked | Supported | |
 | Dynamic array `[]` | Supported | `new[n]`, `new[n](src)`, `.size()`, `.delete()`, element read and write, whole-handle copy. |
 | Queue `[$]`, bounded `[$:N]` | Supported | Push and pop at both ends, `.insert()`, `.delete()`, `q[$]`, bounded truncation, whole-handle copy, and the slice read `q[a:b]` (a partial out-of-range slice clamps; a reversed, fully out-of-range or x/z-bounded slice yields the empty queue). A non-constant or negative bound is Loud. |
-| Associative `[integer]` `[time]` `[int]` `[longint]` `[shortint]` `[byte]` | Supported | Every integral spelling shares one signed 64-bit key domain; keys are not truncated to the declared width. |
+| Associative `[integer]` `[time]` `[int]` `[longint]` `[shortint]` `[byte]` | Supported | Every integral spelling shares one signed 64-bit key domain; the index is not cast to these keyword types (Limitations §3.1). |
+| Associative typed key: `[bit [31:0]]`, `[logic signed [7:0]]`, `[int unsigned]`, `[int signed]`, `[addr_t]`, an enum | Supported | Up to 63 bits unsigned or 64 bits signed; the index is cast to the key type and keys iterate in the type's numeric order. A 64-bit unsigned or wider key, a struct / `enum bit [N]` / type-parameter key, a `foreach` over a key that is not 32-bit signed, an iteration variable of another type, `item.index` and the index locators, and `%p` of a signed key are Loud (Limitations §2.11). |
 | Associative `[string]` | Supported | Byte-string keys. |
 | Associative `[*]` wildcard | Loud | `VITA-E2002`, naming the accepted key types. |
 | Partial unpacked slice (fewer indices than dimensions) | Loud | `VITA-E3009` `partial unpacked-array slice (v1: index every dimension)` |

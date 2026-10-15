@@ -272,6 +272,8 @@ impl<'s> Elaborator<'s> {
             radixes: RadixTable::new(),
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
+            assoc_key_shapes: std::collections::BTreeMap::new(),
+            bare_fill_index_eids: std::collections::BTreeSet::new(),
             event_nets: std::collections::BTreeSet::new(),
             proc_scopes: Vec::new(),
             proc_inst_scopes: Vec::new(),

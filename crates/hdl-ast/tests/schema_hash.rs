@@ -305,9 +305,16 @@ use vita_schema::schema_hash;
 /// positional lowering in elaborate, so no sim-ir change — `format_version` STAYS
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
+/// Re-pinned 2026-10-15 (§5.2 row 20) TYPED ASSOCIATIVE-ARRAY KEYS: `AssocKey::Integer`
+/// becomes `AssocKey::Typed(Box<AssocKeyType>)` (kind, signing, packed dimensions and
+/// whether a typedef name spelled it, and whether a `signed`/`unsigned` keyword was
+/// written), so `[bit [31:0]]`, `[int unsigned]`, `[int signed]`, `[addr_t]` parse.
+/// Elaborate converts each typed key's index to the key type and keeps the bare
+/// keyword atoms as they were; no sim-ir change, format_version stays. All `.vu`
+/// artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    79, 112, 196, 117, 141, 137, 147, 239, 2, 162, 107, 188, 90, 150, 63, 162, 148, 58, 133, 232,
-    140, 169, 181, 94, 119, 220, 124, 250, 150, 196, 194, 54,
+    164, 72, 10, 182, 206, 128, 192, 91, 255, 27, 189, 168, 113, 129, 151, 126, 140, 254, 213, 51,
+    124, 52, 250, 13, 148, 14, 210, 91, 254, 156, 234, 221,
 ];
 
 #[test]

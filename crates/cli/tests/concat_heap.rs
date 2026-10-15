@@ -102,7 +102,10 @@ fn concat_with_a_dyn_chunk_splits_msb_first_on_tier_3() {
 /// engine's own behaviour rather than something this slice introduced.
 ///
 /// Pinned because "admitted by the gate" and "written" are different claims, and
-/// a slice that opened a row is exactly when they get conflated.
+/// a slice that opened a row is exactly when they get conflated. The source writes
+/// 7 into the assoc chunk so the dropped write stays visible: since §5.2 row 20 a
+/// key the array does not hold reads the `int` element's default, 0 (§7.8.6), not
+/// `x`, and `8'hAB` would have put 0 there anyway.
 #[test]
 fn concat_with_an_assoc_chunk_stays_loud() {
     let (out, rj) = run_native(
@@ -110,7 +113,7 @@ fn concat_with_an_assoc_chunk_stays_loud() {
            int aa [int];\n\
            reg [3:0] x;\n\
            initial begin\n\
-             {aa[5], x} = 8'hAB;\n\
+             {aa[5], x} = {32'd7, 4'hB};\n\
              $display(\"a aa5=%0d x=%h\", aa[5], x);\n\
              $finish;\n\
            end\n\
@@ -121,7 +124,7 @@ fn concat_with_an_assoc_chunk_stays_loud() {
         "the design did not run natively:\n{rj}\n{out}"
     );
     assert!(
-        out.contains("a aa5=x x=b"),
+        out.contains("a aa5=0 x=b"),
         "the flat chunk lands and the assoc one does not:\n{out}"
     );
 }

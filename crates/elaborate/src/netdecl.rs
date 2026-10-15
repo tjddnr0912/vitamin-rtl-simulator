@@ -450,6 +450,11 @@ impl Elaborator<'_> {
                 let Ok(queue_bound) = self.queue_dim_bound(&decl.unpacked[0]) else {
                     continue;
                 };
+                // §5.2 row 20: fold the key type before the handle exists, so every
+                // index sees it. A refused key type is reported here and the handle is
+                // still declared (with no conversion), so its uses do not cascade into
+                // "undeclared" errors; the design does not run.
+                let assoc_key = self.assoc_key_shape_of(&decl.unpacked).unwrap_or(None);
                 if let Some(init) = &decl.init {
                     // A queue / dynamic-array `'{…}` (or `{…}`) initializer is EXPANDED to
                     // runtime ops at t0 by the var-init flush (a push_back sequence /
@@ -541,6 +546,9 @@ impl Elaborator<'_> {
                 if self.nets.len() as u32 > next_id {
                     if let Some(b) = queue_bound {
                         self.queue_bounds.insert(next_id, b);
+                    }
+                    if let Some(k) = assoc_key {
+                        self.assoc_key_shapes.insert(next_id, k);
                     }
                     // IEEE §7.5.2: a 2-state element type defaults to 0, not X.
                     // The handle skips `record_dim_desc`, so flag it here so the

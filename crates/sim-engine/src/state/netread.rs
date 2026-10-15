@@ -128,33 +128,22 @@ impl NetReader for SimState<'_> {
             )
     }
     fn assoc_read(&self, net: u32, key: Option<i64>) -> Value {
-        let (w, signed) = self
-            .ir
-            .nets
-            .get(net as usize)
-            .map(|nv| (nv.width.max(1), nv.signed))
-            .unwrap_or((1, false));
         let Some(k) = key else {
-            // X/Z key = invalid index (IEEE §7.8.6): element-width X + warn.
-            self.dyn_warn_once_at(net, "assoc key is X/Z (read X)");
-            return Value::xs(w, signed);
+            // X/Z key = invalid index (IEEE §7.8.6): the element type's default + warn.
+            return self.assoc_missing_read(net, true);
         };
-        match self
+        // A missing heap entry IS the empty assoc — every key is "not found".
+        if let Some(DynObj::Assoc { map }) = self
             .dyn_heap
             .borrow()
             .get(net as usize)
             .and_then(|o| o.as_ref())
         {
-            Some(DynObj::Assoc { map }) => map.get(&k).cloned().unwrap_or_else(|| {
-                self.dyn_warn_once_at(net, "assoc key not found (read X)");
-                Value::xs(w, signed)
-            }),
-            // A missing entry IS the empty assoc — every key is "not found".
-            _ => {
-                self.dyn_warn_once_at(net, "assoc key not found (read X)");
-                Value::xs(w, signed)
+            if let Some(v) = map.get(&k) {
+                return v.clone();
             }
         }
+        self.assoc_missing_read(net, false)
     }
     fn assoc_exists(&self, net: u32, key: Option<i64>) -> Option<bool> {
         if !self.is_assoc(net) {
@@ -254,31 +243,20 @@ impl NetReader for SimState<'_> {
             )
     }
     fn assoc_str_read(&self, net: u32, key: &Option<Vec<u8>>) -> Value {
-        let (w, signed) = self
-            .ir
-            .nets
-            .get(net as usize)
-            .map(|nv| (nv.width.max(1), nv.signed))
-            .unwrap_or((1, false));
         let Some(k) = key else {
-            self.dyn_warn_once_at(net, "assoc key is X/Z (read X)");
-            return Value::xs(w, signed);
+            return self.assoc_missing_read(net, true);
         };
-        match self
+        if let Some(DynObj::AssocStr { map }) = self
             .dyn_heap
             .borrow()
             .get(net as usize)
             .and_then(|o| o.as_ref())
         {
-            Some(DynObj::AssocStr { map }) => map.get(k).cloned().unwrap_or_else(|| {
-                self.dyn_warn_once_at(net, "assoc key not found (read X)");
-                Value::xs(w, signed)
-            }),
-            _ => {
-                self.dyn_warn_once_at(net, "assoc key not found (read X)");
-                Value::xs(w, signed)
+            if let Some(v) = map.get(k) {
+                return v.clone();
             }
         }
+        self.assoc_missing_read(net, false)
     }
     fn assoc_str_exists(&self, net: u32, key: &Option<Vec<u8>>) -> Option<bool> {
         if !self.is_assoc_str(net) {
@@ -473,5 +451,38 @@ impl NetReader for SimState<'_> {
         };
         v.is_real = slot.is_real; // flag the read-back as real (val[0] = IEEE bits)
         v
+    }
+}
+
+impl SimState<'_> {
+    /// The value an associative-array read of a key the array does not hold — or
+    /// of an invalid (x/z) key — returns: the nonexistent-entry value of the
+    /// ELEMENT type (IEEE 1800-2017 §7.8.6, Table 7-1), `'0` for a 2-state element
+    /// (`bit`, `int`, `byte`, …; the `two_state_nets` sidecar) and all-`x` for a
+    /// 4-state one, with the §7.8.6 warning (W4020, once per net). §5.2 row 20:
+    /// before, a 2-state element read `x` too (`bit [7:0] m [int]; m[7]` printed
+    /// `xx` where Verilator 5.052 prints `00`).
+    pub(crate) fn assoc_missing_read(&self, net: u32, invalid_key: bool) -> Value {
+        let (w, signed) = self
+            .ir
+            .nets
+            .get(net as usize)
+            .map(|nv| (nv.width.max(1), nv.signed))
+            .unwrap_or((1, false));
+        let two_state = self.two_state.get(net as usize).copied().unwrap_or(false);
+        self.dyn_warn_once_at(
+            net,
+            match (invalid_key, two_state) {
+                (true, true) => "assoc key is X/Z (read 0)",
+                (true, false) => "assoc key is X/Z (read X)",
+                (false, true) => "assoc key not found (read 0)",
+                (false, false) => "assoc key not found (read X)",
+            },
+        );
+        if two_state {
+            Value::zeros(w, signed)
+        } else {
+            Value::xs(w, signed)
+        }
     }
 }

@@ -277,7 +277,19 @@ impl Elaborator<'_> {
     /// silently DROPPED the write. One wrapper for every index site so the rule cannot
     /// drift between rvalue and lvalue paths. (Real PARAMETERS made this reachable;
     /// a real literal index `v[1.5]` was always reachable and is covered too.)
+    /// [`Self::lower_index_expr_inner`], noting an index written as a bare unbased
+    /// unsized fill literal (`'0`, `'1`, `'x`, `'z`, parenthesized or not) in
+    /// `bare_fill_index_eids`: §5.2 row 20 refuses one as a typed associative key
+    /// (`assoc_key_convert`), whose width it has no single reading for.
     pub(crate) fn lower_index_expr(&mut self, e: &ast::Expr) -> u32 {
+        let id = self.lower_index_expr_inner(e);
+        if crate::const_eval::fill_literal_ast(e).is_some() {
+            self.bare_fill_index_eids.insert(id);
+        }
+        id
+    }
+
+    fn lower_index_expr_inner(&mut self, e: &ast::Expr) -> u32 {
         // r19/S1: a real-returning FUNCTION. `expr_is_real` works on the lowered IR
         // and cannot see this: the inline path folds the body to an expression whose
         // nodes carry no real marker, and `func_return_dims` computes the Real kind
