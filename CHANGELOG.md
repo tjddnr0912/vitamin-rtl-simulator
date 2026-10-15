@@ -33,6 +33,11 @@ changed for a user of the simulator.
   the element of an unpacked array) was only as wide as its first dimension, so `x[1]` read one
   bit and `$bits(x[1])` was 1; it now has its full width and its elements, as in an `automatic`
   task.
+- A package task that calls a function of its package only inside a timing control
+  (`#1 o = k(1);`, `wait (k(0) > 5)`, a delay `#(k(1))`) called the importing module's
+  same-named function, or was refused with `VITA-E3010` when there was none; it now calls its
+  package's. A static task that recurses only inside a timing control is no longer refused as
+  recursive.
 
 ### Added — typed assignment patterns `T'{…}`
 

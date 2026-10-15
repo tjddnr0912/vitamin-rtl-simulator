@@ -175,6 +175,39 @@ pub(crate) fn collect_callee_stmt(s: &ast::Stmt, out: &mut std::collections::BTr
             collect_callee_stmt(body, out);
         }
         Forever { body, .. } => collect_callee_stmt(body, out),
+        // A timing control's body is reachable code, and so are its delay values, wait
+        // condition and event expressions (found by §5.2 row 72's grounding). These arms
+        // were missing, so a package routine's `#1 o = k(1);` never asked for `p::k`:
+        // `inject_pkg_callees` left the bare `k` to resolve in the CALLING module, which
+        // bound the module's own `k` (measured `r=2`, iverilog and sv2v → iverilog
+        // `r=1001`) or, with none, refused it (E3010 "call to undeclared function").
+        DelayCtrl { delay, body, .. } => {
+            for v in &delay.values {
+                collect_callee_expr(v, out);
+            }
+            if let Some(b) = body {
+                collect_callee_stmt(b, out);
+            }
+        }
+        EventCtrl { ctrl, body, .. } => {
+            if let ast::Sensitivity::List(evs) = ctrl {
+                for ev in evs {
+                    collect_callee_expr(&ev.expr, out);
+                    if let Some(g) = &ev.iff {
+                        collect_callee_expr(g, out);
+                    }
+                }
+            }
+            if let Some(b) = body {
+                collect_callee_stmt(b, out);
+            }
+        }
+        Wait { cond, body, .. } => {
+            collect_callee_expr(cond, out);
+            if let Some(b) = body {
+                collect_callee_stmt(b, out);
+            }
+        }
         // ⚠️ The DECLS half is not decoration. A block-local declared WITH an
         // initializer (`int y = k(a) + 2;`) is the only place its call appears, and
         // both consumers of this walk decide from it: `inject_pkg_callees` would not

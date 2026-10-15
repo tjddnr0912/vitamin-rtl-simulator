@@ -42,10 +42,14 @@
 //! * the hierarchical size census keeps its walk, so `u.hs` beside such a local keeps the
 //!   module variable's width.
 //!
-//! Opening those blocks reached a walker of its own, pinned below:
+//! Opening those blocks reached two walkers of their own, each pinned below:
 //! * the static (inline) task lane's local reservation carried a multi-dim packed local
 //!   (`logic [3:0][7:0] x`) as its OUTER range wide with no extents, so `x[1]` read bit 1
 //!   (`e=0 b=1`) even with no timing control at all — it now mirrors the frame lane;
+//! * the call-graph walker (`collect_callee_stmt`) had no timing-control arm, so a
+//!   package routine's call inside `#d` / `wait (c)` was never injected and bound the
+//!   calling module's same-named function (`r=2` for `r=1001`), and a static task
+//!   recursing only through `#1` was refused as recursive.
 //!
 //! ## Oracles
 //!
@@ -703,6 +707,70 @@ fn static_task_multi_dim_packed_local_shapes() {
             "tk(); tk(); tk();",
         ),
         &["R x=xxxx", "R x=xx22", "R x=xx22"],
+    );
+}
+
+// ── (7) the call-graph walker ───────────────────────────────────────────────
+
+/// A package routine's callee reached only inside a timing control binds the
+/// routine's own package (PRE: the calling module's `k`, `r=2`; with none, E3010 "call to
+/// undeclared function `k`").
+#[test]
+fn a_package_callee_under_a_timing_control_binds_its_package() {
+    let src = |task_body: &str, module_k: bool| {
+        format!(
+            "package p;\n  function automatic int k(int v); return v + 1000; endfunction\n  task automatic a(output int o);\n{task_body}\n  endtask\nendpackage\nmodule t;\n  import p::a;\n{}  int r;\n  initial a(r);\n  initial #5 begin $display(\"R r=%0d\", r); $finish; end\nendmodule\n",
+            if module_k {
+                "  function automatic int k(int v); return v + 1; endfunction\n"
+            } else {
+                ""
+            }
+        )
+    };
+    exactly(&src("    #1 o = k(1);", true), &["R r=1001"]);
+    exactly(&src("    #1 o = k(1);", false), &["R r=1001"]);
+    // A delay value: the package `k(1)` is 2, so `o` is written at time 2, before the
+    // display at 3 (PRE: the module's `k(1)` = 4, `r=0`).
+    exactly(
+        r#"package p;
+  function automatic int k(int v); return v + 1; endfunction
+  task automatic a(output int o);
+    #(k(1)) o = 7;
+  endtask
+endpackage
+module t;
+  import p::a;
+  function automatic int k(int v); return v + 3; endfunction
+  int r;
+  initial a(r);
+  initial begin #3 $display("R r=%0d t=%0t", r, $time); #3 $finish; end
+endmodule
+"#,
+        &["R r=7 t=3"],
+    );
+    // A wait condition: verilator alone runs it (iverilog, directly and after sv2v:
+    // "internal error: Empty NexusSet from wait expression").
+    exactly(&src("    wait (k(0) > 500) o = 7;", true), &["R r=7"]);
+}
+
+/// A static task recursing only through a timing control is recursive. PRE: E3009
+/// "recursive task `r` (frame-call deferred)". A static task's formal is one variable,
+/// so every activation prints the last value written (`n=0`): iverilog and sv2v →
+/// iverilog, and the same task recursing after a bare `#1;`; verilator prints
+/// `n=0 1 2` for both (it gives a static task's formal per-call storage).
+#[test]
+fn a_static_task_recursing_through_a_delay_is_framed() {
+    exactly(
+        r#"module t;
+  task r(input int n);
+    if (n > 0) #1 r(n - 1);
+    $display("R n=%0d t=%0t", n, $time);
+  endtask
+  initial r(2);
+  initial #9 $finish;
+endmodule
+"#,
+        &["R n=0 t=2", "R n=0 t=2", "R n=0 t=2"],
     );
 }
 
