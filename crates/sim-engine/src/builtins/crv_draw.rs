@@ -465,7 +465,7 @@ pub(crate) fn cast_task<N: crate::eval::NetReader + ?Sized>(
 /// filter silently loses all diagnostics from the run. (PRE never hit this: it returned
 /// without saying anything at all.) The bytes still reach `fs::read_to_string` unescaped —
 /// only what a person reads is escaped.
-fn printable(name: &str) -> String {
+pub(crate) fn printable(name: &str) -> String {
     name.chars()
         .flat_map(|c| {
             if c.is_control() {
@@ -492,6 +492,39 @@ fn memfile_name<N: crate::eval::NetReader + ?Sized>(
     (!name.is_empty()).then_some(name)
 }
 
+/// A `$readmem*` data file with its `//` line and `/* */` block comments removed
+/// (a comment is whitespace between tokens). Shared by the fixed-memory and the
+/// associative-array loaders, so the two read one file the same way.
+pub(crate) fn strip_mem_comments(text: &str) -> String {
+    let mut cleaned = String::with_capacity(text.len());
+    let mut rest = text;
+    'outer: while !rest.is_empty() {
+        let line_c = rest.find("//");
+        let block_c = rest.find("/*");
+        match (line_c, block_c) {
+            (Some(l), b) if b.is_none_or(|b| l < b) => {
+                cleaned.push_str(&rest[..l]);
+                match rest[l..].find('\n') {
+                    Some(nl) => rest = &rest[l + nl..],
+                    None => break 'outer,
+                }
+            }
+            (_, Some(bs)) => {
+                cleaned.push_str(&rest[..bs]);
+                match rest[bs..].find("*/") {
+                    Some(be) => rest = &rest[bs + be + 2..],
+                    None => break 'outer,
+                }
+            }
+            _ => {
+                cleaned.push_str(rest);
+                break 'outer;
+            }
+        }
+    }
+    cleaned
+}
+
 pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
     sched: &mut Scheduler,
     nets: Option<&N>,
@@ -515,6 +548,22 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
     };
     let net = match args.get(1).and_then(|&a| sched.st.ir.exprs.get(a as usize)) {
         Some(sim_ir::Expr::Signal { net, word: None }) => *net,
+        // §5.2 row 27: a whole associative array arrives only as elaborate's
+        // `ReadmemAssocTarget` marker, which carries the key type (see
+        // `readmem_assoc`). An element select (`mem[5]`, `word: Some(_)`) is
+        // not a memory, as before.
+        Some(sim_ir::Expr::SysFunc {
+            which: sim_ir::SysFuncId::ReadmemAssocTarget,
+            args: target,
+        }) => {
+            match super::assoc_readmem_key(sched.st.ir, target) {
+                Some((net, range)) => {
+                    super::readmem_assoc(sched, nets, out, args, hex, &name, net, range);
+                }
+                None => warn(sched, "$readmem target is not a memory".to_string()),
+            }
+            return;
+        }
         _ => {
             warn(sched, "$readmem target is not a memory".to_string());
             return;
@@ -545,33 +594,7 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
         );
         return;
     };
-    // strip // line and /* */ block comments.
-    let mut cleaned = String::with_capacity(text.len());
-    let mut rest = text.as_str();
-    'outer: while !rest.is_empty() {
-        let line_c = rest.find("//");
-        let block_c = rest.find("/*");
-        match (line_c, block_c) {
-            (Some(l), b) if b.is_none_or(|b| l < b) => {
-                cleaned.push_str(&rest[..l]);
-                match rest[l..].find('\n') {
-                    Some(nl) => rest = &rest[l + nl..],
-                    None => break 'outer,
-                }
-            }
-            (_, Some(bs)) => {
-                cleaned.push_str(&rest[..bs]);
-                match rest[bs..].find("*/") {
-                    Some(be) => rest = &rest[bs + be + 2..],
-                    None => break 'outer,
-                }
-            }
-            _ => {
-                cleaned.push_str(rest);
-                break 'outer;
-            }
-        }
-    }
+    let cleaned = strip_mem_comments(&text);
     // range window (declared-index domain). Default: full array ascending.
     // Threaded: the optional window bounds are ordinary expressions and may name
     // nets (`$readmemh(f, m, lo, hi)`), so they are a second store read exactly

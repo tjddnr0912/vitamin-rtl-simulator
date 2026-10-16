@@ -3,6 +3,10 @@
 use vita_schema::{schema_hash, SchemaShape, ShapeRegistry};
 
 /// blake3 of the full SimIr-closure canonical string. Locked at
+/// format_version 37 (2026-10-16: `SysFuncId::ReadmemAssocTarget`, the marker for a
+/// `$readmem*` memory argument naming a whole associative array (§5.2 row 27) —
+/// reached via the Expr arena, so the root hash flips; the Process cluster's sub-pin
+/// is UNCHANGED). Earlier:
 /// format_version 34 (2026-09-24: `SysFuncId::RealToInt` and `SysFuncId::TwoState`,
 /// single-mention real→int and 2-state store conversions for the inline function
 /// lane — reached via the Expr arena, so the root hash flips; the Process cluster's
@@ -32,7 +36,7 @@ use vita_schema::{schema_hash, SchemaShape, ShapeRegistry};
 /// 2026-06-18 v9: 13 SysFuncId and 5 SysTaskId for the file-read/$dist_*/$cast/
 /// $writemem*/$monitoron-off family.)
 const EXPECTED_SIMIR_HASH: &str =
-    "01c1c9fba595a03c1aaefaa383caaf9edac99dc0b03e7fc96430c5fcaf25b053";
+    "a3501484322f3f982fc50feaab00fcc05dd9492064a5e627f7aa18ea92d9d821";
 /// Sub-pin: the runtime Process cluster (cheap regression signal; NOT the gate).
 const EXPECTED_PROCESS_HASH: &str =
     "61db2e207ed69c2ff1dbf3fc0473b7ed9906fbeb6c42128ef9edf382b081f277";

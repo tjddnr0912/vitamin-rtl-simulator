@@ -373,6 +373,10 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 }
                 a
             }
+            // v37: a `$readmem*` associative-array target marker. Only the
+            // loader reads it, by shape (`builtins::readmem`); as a value it is
+            // all-x, defensively.
+            SysFuncId::ReadmemAssocTarget => Value::xs(1, false),
             SysFuncId::Signed => {
                 let mut a = self.eval(args[0]);
                 a.signed = true;

@@ -66,6 +66,7 @@ mod const_fn_width;
 mod const_level_header;
 mod cont_array;
 mod cont_var;
+mod readmem_assoc;
 mod struct_arm;
 pub use const_level_header::T0_PULSE_KIND;
 mod const_real;
@@ -1733,6 +1734,11 @@ struct Elaborator<'s> {
     // §5.2 row 20: assoc handle NetId → its folded key type (`assoc_key.rs`).
     // Elaborate-only: every index is converted to the key type before the IR.
     assoc_key_shapes: std::collections::BTreeMap<u32, assoc_key::AssocKeyShape>,
+    // §5.2 row 27: assoc handle NetIds whose element type is integral (the only
+    // ones `$readmem*` loads; `readmem_assoc.rs`), and the `$readmem*` sites into an
+    // associative array, for the `wait` check once every body exists.
+    assoc_integral_elem: std::collections::BTreeSet<u32>,
+    readmem_assoc_sites: Vec<readmem_assoc::ReadmemAssocSite>,
     // §5.2 row 20 round 2 (differential B2): ExprIds of indexes written as a bare
     // unbased unsized fill literal (`lower_index_expr`).
     bare_fill_index_eids: std::collections::BTreeSet<u32>,

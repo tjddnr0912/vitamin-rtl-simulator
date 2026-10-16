@@ -174,6 +174,7 @@ pub fn sysfunc_name(which: SysFuncId) -> &'static str {
         F::Atanh => "$atanh",
         F::DistT => "$dist_t",
         F::DistErlang => "$dist_erlang",
+        F::ReadmemAssocTarget => "$readmem target",
     }
 }
 

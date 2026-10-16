@@ -890,6 +890,9 @@ follows one and says which.
 | A non-zero-LSB enum base (`enum logic [39:8] {…}`) in a constant select | refused | Icarus Verilog reads the label at the base's width; Verilator honours the declared LSB. Declare the base with a zero LSB and every tool agrees |
 | `$readmem*` ordering against a child `initial` | matches Verilator (§4.7 leaves `initial` order nondeterministic) | Icarus Verilog differs |
 | `$readmemh` into a `wire` array | accepted | Icarus Verilog refuses; Verilator accepts |
+| `$readmemh` into an associative array: a finish below the start, a word past the finish, an `@` address outside the start/finish window | loads downward / stops with `VITA-W4023`, as for a fixed-size memory and Icarus Verilog (IEEE 1800-2017 §21.4) | Verilator ignores the finish and the window, for a fixed-size memory too |
+| `$readmemh` into an associative array that a `wait` condition reads | refused (`VITA-E3009`) | Verilator wakes the `wait`; vita's `wait` over a queue, dynamic or associative array does not wake on an element write |
+| `$readmemh` into an associative array: an address that is not a value of the key type (`@1fe` into `[bit [7:0]]`, `@80000000` into `[int]`, the address after `@ffffffff` into `[bit [31:0]]`), or a word before any `@` into a signed key with no start argument | refused with `VITA-W4023`; the load stops there | Verilator truncates the address to the key type (key `fe`, −2^31, 0) and starts at 0 |
 | A header default naming a constant from a body import | accepted | Icarus Verilog rejects; Verilator folds |
 | A non-standard string escape such as `"\r"` | `0x0D`, with `W-ELAB-STR-ESCAPE` / `VITA-W3059` naming both readings and suggesting `\015` or `\x0D` | `0x0D` in Verilator; the letter `r` in Icarus Verilog and Xcelium |
 | `%m` inside a subroutine declared in a generate block | `t.u.g.show` — the block scope once, matching Icarus Verilog | Verilator repeats the label: `t.u.g.g.show` |

@@ -828,6 +828,11 @@ impl Elaborator<'_> {
                             && matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH)
                         {
                             self.deny_clocking_input_arg(a, "$readmem into");
+                            // §5.2 row 27: an associative array is loaded one entry
+                            // per address (`readmem_assoc_target`).
+                            if let Some(eid) = self.readmem_assoc_target(a) {
+                                return Some(eid);
+                            }
                         }
                         if let Some((net, lead)) = self.expr_array_view(a) {
                             if lead.is_empty() {

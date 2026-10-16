@@ -769,6 +769,26 @@ d.sv:4:5: warning[VITA-W4023] $readmem: unable to open 'fw.hex' for reading [in 
 
 `$fread` shares the code and the anchoring.
 
+`$readmem*` into an associative array (`bit [7:0] mem [bit [31:0]];`, `[int]`,
+`[longint]`, `[time]`, a typed key — local, in a generate scope, or named through an
+instance path as in `$readmemh("program.hex", lmem.mem)`) creates or overwrites one
+entry per address the file supplies; entries the file does not name keep their value.
+The comment, window and warning rules above apply, with these differences:
+
+| Aspect | Rule |
+|---|---|
+| key | every address — an `@` line, the start or finish argument, or the address after the previous word — must be a value of the key type (`0 … 2^32−1` for `[bit [31:0]]`, `−2^31 … 2^31−1` for `[int]`). One that is not warns `… is not a value of the associative array's N-bit signed/unsigned key` and the load stops there: vita does not truncate it to the key (Verilator does) |
+| default start | with no start argument, words before the first `@` line start at 0 for an unsigned key; for a signed key (`[int]`, `[byte]`, …) they are refused (warning, nothing loaded): give a start argument or an `@` line |
+| x / z start or finish | warns, nothing loaded |
+| malformed token | an `@` token or a data word with a character that is not a digit of the radix warns `bad address token` / `bad data word` and stops the load |
+| 2-state element | an `x` or `z` digit reads 0 (`bit`, `int`, …); a 4-state element keeps it |
+| `[string]` key | refused at elaboration (`VITA-E3009`): a `$readmem` address is integral |
+| element type | integral only (`bit`, `logic`, `int`, an enum, a packed struct, …); a class-handle element is refused at elaboration (`VITA-E3009`) |
+| `wait` | an array that a `wait` condition in the design may read — `wait (mem.num() == 2)`, `wait (mem.exists(k))`, `wait (mem[k] == v)`, through a hierarchical name, or in any function the condition calls, directly or in turn — is refused at elaboration (`VITA-E3009`): a `wait` over an associative array does not wake when its elements are written. A virtual method call counts every class's method at the same virtual-table position, so a method of an unrelated class that reads the array also refuses it. An `always_comb` / `assign` over the array does wake; `wait` on a variable it drives |
+| element select | `$readmemh(f, mem[5])` is not a memory (`VITA-W4023`, nothing loaded) |
+
+`$writemem*` of an associative array is refused (`VITA-E3009`).
+
 `$writemem*` details:
 
 | Aspect | Rule |

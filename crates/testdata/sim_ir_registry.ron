@@ -892,6 +892,9 @@
         84: {
             "TwoState": UNIT,
         },
+        85: {
+            "ReadmemAssocTarget": UNIT,
+        },
     }),
     "SysTaskId": ENUM({
         0: {

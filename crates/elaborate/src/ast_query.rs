@@ -698,7 +698,7 @@ impl Elaborator<'_> {
 
     /// The reads of ONE basic block (statements and a branch condition), with the
     /// frame functions it calls appended to `calls`.
-    fn collect_block_reads(
+    pub(crate) fn collect_block_reads(
         &self,
         bb: &ir::BasicBlock,
         reads: &mut std::collections::BTreeSet<u32>,

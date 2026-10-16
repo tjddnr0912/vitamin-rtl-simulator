@@ -433,6 +433,17 @@ pub enum SysFuncId {
     /// Width and sign are the operand's own. The single-mention twin of the
     /// per-bit `CaseEq` fan-out elaborate builds for a 2-state formal.
     TwoState,
+    // ── v37 (2026-10-16): §5.2 row 27, `$readmem*` into an associative array. ──
+    /// The memory argument of a `$readmemb` / `$readmemh` `SysTask` that names a
+    /// WHOLE associative array: `args = [Signal { net, word: None }, Const k]`,
+    /// where `net` is the `Assoc` handle and `k`'s width and sign are the array's
+    /// key type (the IR has no other place for it). Elaborate emits it only there
+    /// (`Elaborator::readmem_assoc_target`), and the engine's loader accepts an
+    /// associative-array target only in this shape, so an element select
+    /// (`mem[5]`, `Signal { net, word: Some(_) }`) keeps the fixed-memory
+    /// loader's "not a memory" warning. It is never evaluated as a value; an
+    /// evaluator that meets it reads all-x.
+    ReadmemAssocTarget,
 }
 
 /// Expression arena node (§1).

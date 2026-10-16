@@ -1311,7 +1311,9 @@ impl Elaborator<'_> {
                     | F::ArrProduct
                     | F::ArrAnd
                     | F::ArrOr
-                    | F::ArrXor => return None,
+                    | F::ArrXor
+                    // v37: a `$readmem*` target marker is not a value.
+                    | F::ReadmemAssocTarget => return None,
                 }
             }
             // A user function call's width is its declared return width (so a fill

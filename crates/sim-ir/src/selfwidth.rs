@@ -448,6 +448,22 @@ pub fn self_width_of(
                     width: 1,
                     signed: false,
                 }),
+            // v37: a `$readmem*` target marker (never evaluated): the handle's
+            // element width, like a pop.
+            SysFuncId::ReadmemAssocTarget => args
+                .first()
+                .and_then(|&a| match ir.exprs.get(a as usize) {
+                    Some(Expr::Signal { net, .. }) => ir.nets.get(*net as usize),
+                    _ => None,
+                })
+                .map(|nv| SelfWidth {
+                    width: nv.width.max(1),
+                    signed: false,
+                })
+                .unwrap_or(SelfWidth {
+                    width: 1,
+                    signed: false,
+                }),
             // $clog2: integer return → 32-bit signed `integer` convention.
             SysFuncId::Clog2 => SelfWidth {
                 width: 32,

@@ -550,6 +550,14 @@ impl Elaborator<'_> {
                     if let Some(k) = assoc_key {
                         self.assoc_key_shapes.insert(next_id, k);
                     }
+                    // §5.2 row 27: the element kinds `$readmem*` can load.
+                    if handle_kind == ir::NetKind::Assoc
+                        && crate::readmem_assoc::assoc_elem_kind_is_integral(
+                            self.shape_kind(d.kind, &d.shape_param),
+                        )
+                    {
+                        self.assoc_integral_elem.insert(next_id);
+                    }
                     // IEEE §7.5.2: a 2-state element type defaults to 0, not X.
                     // The handle skips `record_dim_desc`, so flag it here so the
                     // `two_state_nets` sidecar reaches the engine's `new[]` fill.

@@ -9,6 +9,25 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — `$readmemh` / `$readmemb` into an associative array
+
+- `$readmemh` and `$readmemb` load an associative array — `bit [7:0] mem [bit [31:0]];`, `[int]`,
+  `[longint]`, `[time]` or any typed integral key — local, in a generate scope, or named through an
+  instance path (`$readmemh("program.hex", lmem.mem)`, the VeeR EH1 / EL2 testbench). Each address the
+  file supplies creates or overwrites one entry; entries it does not name keep their value. It was
+  refused with `VITA-E3009` (`a dynamic-storage handle has no whole-value surface`, or `hierarchical
+  read of lmem.mem is unsupported`). The start / finish window follows the fixed-size memory rules.
+- Refused rather than run wrong, with `VITA-W4023` and the load stopped there: an address that is not
+  a value of the key type (an `@` line, a start or finish argument, or the address after the last word
+  — Verilator truncates it to the key), a word before any `@` into a signed key with no start
+  argument, an x / z start or finish, and an address or data word with a character that is not a digit.
+  Refused at elaboration (`VITA-E3009`): a `[string]` key, an element type that is not integral (a
+  class handle), and an array that a `wait` condition reads (directly, through `num()` / `exists()` /
+  `size()` or an element, hierarchically, or inside a called function) — a `wait` over an
+  associative array does not wake when its elements are written. An element select as the target
+  (`$readmemh(f, mem[5])`) keeps its `VITA-W4023` `$readmem target is not a memory`.
+  `$writememh` / `$writememb` of an associative array stays refused.
+
 ### Added — associative arrays indexed by a type
 
 - An associative-array index written as a packed or integral TYPE parses and runs: a vector

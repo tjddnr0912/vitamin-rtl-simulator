@@ -267,8 +267,15 @@ impl Elaborator<'_> {
             // array / assoc from `dyn_heap`, which is keyed by NET id and therefore
             // already per-instance — a hierarchical handle needs nothing extra.
             let pattern_arg = self.hier_pattern_args.contains(&d.eid);
+            // §5.2 row 27: `$readmem*` (a WRITE, `mem_arg == Some(true)`) into an
+            // associative array is the operand too; `$writemem*` of one stays loud.
+            let readmem_assoc = mem_arg == Some(true)
+                && matches!(
+                    self.nets.get(net as usize).map(|n| n.kind),
+                    Some(ir::NetKind::Assoc | ir::NetKind::AssocStr)
+                );
             let bad = self.event_nets.contains(&net)
-                || (self.is_dyn_handle_net(net) && !pattern_arg)
+                || (self.is_dyn_handle_net(net) && !pattern_arg && !readmem_assoc)
                 || (self.net_is_static_array(net) && mem_arg.is_none() && !pattern_arg);
             // §5.2 row 20 (round-1 soundness F2): the `%p` render of a typed SIGNED
             // key is refused here as on the local arm (`lower_pattern_arg`).
@@ -328,6 +335,14 @@ impl Elaborator<'_> {
             // The shape recorded when the placeholder was created
             // (`hier_leaf_shape.rs`) must be this net's; a mismatch is loud.
             self.verify_hier_net_shape(d.eid, net, &d.path);
+            // §5.2 row 27: the placeholder becomes the associative-array marker
+            // (`readmem_assoc.rs`), which carries the key type.
+            if readmem_assoc {
+                if let Some(m) = self.readmem_assoc_marker(net, &d.path.join(".")) {
+                    self.exprs[d.eid as usize] = m;
+                }
+                continue;
+            }
             if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *slot = net;
             }

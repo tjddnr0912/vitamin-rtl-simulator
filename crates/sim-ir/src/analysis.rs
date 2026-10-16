@@ -72,6 +72,9 @@ pub fn sysfunc_is_stmt_effect(which: sim_ir::SysFuncId, args: &[u32]) -> bool {
         S::StrCast => false,
         // v34: pure conversions of their one operand.
         S::RealToInt | S::TwoState => false,
+        // v37: a `$readmem*` target marker, never evaluated (the task writes; the
+        // marker itself computes nothing).
+        S::ReadmemAssocTarget => false,
         S::ArrSum | S::ArrProduct | S::ArrAnd | S::ArrOr | S::ArrXor => false,
         S::StrAtoi | S::StrAtohex | S::StrAtooct | S::StrAtobin | S::StrAtoreal => false,
         S::Ln | S::Log10 | S::Exp | S::Sqrt | S::Pow | S::Floor | S::Ceil => false,

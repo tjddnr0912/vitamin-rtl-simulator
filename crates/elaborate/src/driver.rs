@@ -273,6 +273,8 @@ impl<'s> Elaborator<'s> {
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
             assoc_key_shapes: std::collections::BTreeMap::new(),
+            assoc_integral_elem: std::collections::BTreeSet::new(),
+            readmem_assoc_sites: Vec::new(),
             bare_fill_index_eids: std::collections::BTreeSet::new(),
             event_nets: std::collections::BTreeSet::new(),
             proc_scopes: Vec::new(),
@@ -1029,5 +1031,8 @@ impl<'s> Elaborator<'s> {
         // `cont_var.rs`).
         self.check_whole_array_sole_writer();
         self.check_var_cont_assign_sole_writer();
+        // §5.2 row 27: every `wait` condition and function body exists, and every
+        // hierarchical name is resolved.
+        self.check_readmem_assoc_waits();
     }
 }
