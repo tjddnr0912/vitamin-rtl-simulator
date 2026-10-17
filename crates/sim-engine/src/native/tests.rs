@@ -3188,3 +3188,101 @@ fn s2_compile_why_names_the_reason_that_fired() {
     // SELECT_RANGE: a constant window that leaves the base (`a` is 8 bits).
     assert_eq!(at(rhs(2), 8, false), Err(why::SELECT_RANGE));
 }
+
+/// ENG-1: the two stores agree on which REAL store is an EVENT. A store that flips
+/// only the sign of a zero changes the bits (both report `changed`, both put the net on
+/// the dirty channel — a force re-evaluates off it and a `wait (expr)` is re-checked
+/// when it is swept) but takes NO change stamp and NO author tag on either side, so no
+/// level waiter takes it as its event; every other real change, and a 64-bit INTEGRAL
+/// net's sign bit over zero, is stamped on both. Write by write, so a lane that
+/// classified at one store point and not another (`write_chunk_word` vs `store_words`,
+/// the engine's `store_words` vs the bit-serial twin) is a named site, not a run-level
+/// value split.
+#[test]
+fn eng1_real_signed_zero_store_is_a_value_change_on_both_stores() {
+    let src = "module t;\n\
+               real r; real ra [2]; logic [63:0] v; int w;\n\
+               initial begin\n\
+                 r = $bitstoreal(64'h8000000000000000);\n\
+                 r = 0.0;\n\
+                 r = $bitstoreal(64'h8000000000000000);\n\
+                 r = 1.0;\n\
+                 r = -1.0;\n\
+                 ra[1] = $bitstoreal(64'h8000000000000000);\n\
+                 ra[1] = 0.0;\n\
+                 ra[1] = 0.5;\n\
+                 v = 64'h0;\n\
+                 v = 64'h8000000000000000;\n\
+                 w = 0;\n\
+               end\n\
+             endmodule\n";
+    let (ir, opts) = build_with_opts(src);
+    let mut arena = NetArena::build(&ir, &opts).expect("arena");
+    let sink = NullSink;
+    let mut st = fresh_state(&ir, &sink);
+    for &n in &opts.two_state_nets {
+        st.two_state[n as usize] = true;
+    }
+    st.build_plain_scalar();
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let sites: Vec<_> = write_sites(&ir)
+        .into_iter()
+        .filter(|(lhs, _)| ir.nets[lhs.chunks[0].net as usize].width == 64)
+        .collect();
+    // (changed, stamped) per write, in source order.
+    let want = [
+        (true, false), // r: +0.0 -> -0.0
+        (true, false), // r: -0.0 -> +0.0
+        (true, false), // r: +0.0 -> -0.0
+        (true, true),  // r: -0.0 -> 1.0
+        (true, true),  // r: 1.0 -> -1.0 (a non-zero sign flip)
+        (true, false), // ra[1]: +0.0 -> -0.0 (an element)
+        (true, false), // ra[1]: -0.0 -> +0.0
+        (true, true),  // ra[1]: +0.0 -> 0.5
+        (true, false), // v: x -> 0 is a change; stamped — see below
+        (true, true),  // v: 0 -> 64'h8000000000000000 (integral: an event)
+    ];
+    assert_eq!(sites.len(), want.len(), "write sites of the probe design");
+    st.blocking_writer = Some(7);
+    arena.ch.blocking_writer = Some(7);
+    for (k, ((lhs, rhs), &(w_changed, w_stamped))) in sites.iter().zip(want.iter()).enumerate() {
+        let n = lhs.chunks[0].net as usize;
+        let (se, sn) = (st.last_change_seq[n], arena.ch.last_change_seq[n]);
+        let (we, wn) = (st.last_blocking_writer[n], arena.ch.last_blocking_writer[n]);
+        let (ce, cn) = write_both_stores(&mut st, &mut arena, &ir, &wt, lhs, *rhs);
+        let stamped_e = st.last_change_seq[n] != se;
+        let stamped_n = arena.ch.last_change_seq[n] != sn;
+        assert_eq!(
+            (ce, stamped_e),
+            (cn, stamped_n),
+            "site {k}: engine vs tier-3"
+        );
+        assert_eq!(ce, w_changed, "site {k}: changed");
+        // `v` starts all-x, so its first write is an integral change and stamps.
+        let w_stamped = w_stamped || k == 8;
+        assert_eq!(stamped_e, w_stamped, "site {k}: stamped");
+        // The author tag moves exactly with the stamp: the writer's on an event,
+        // the previous one on a value-only change.
+        let tag = |stamped: bool, before: u32| if stamped { 7 } else { before };
+        assert_eq!(
+            st.last_blocking_writer[n],
+            tag(stamped_e, we),
+            "site {k}: author"
+        );
+        assert_eq!(
+            arena.ch.last_blocking_writer[n],
+            tag(stamped_n, wn),
+            "site {k}: tier-3 author"
+        );
+        // Dirty membership is the VALUE half: every change is on both channels.
+        let eng = engine_take(&mut st);
+        let mut nat = Vec::new();
+        arena.take_changed(&mut nat);
+        assert_eq!(eng, nat, "site {k}: dirty channel");
+        assert_eq!(
+            eng.iter().any(|e| e.0 as usize == n),
+            ce,
+            "site {k}: a value-only change stays on the dirty channel"
+        );
+    }
+}

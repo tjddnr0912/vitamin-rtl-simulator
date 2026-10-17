@@ -9,7 +9,19 @@ impl SimState<'_> {
     /// `propagate_changes` dirty sweep, then emit the VCD record. This is the
     /// single funnel both `write_chunk` exit paths use — any future mutation
     /// path MUST route through it or the sweep goes blind.
-    pub(crate) fn note_change(&mut self, net: u32, word: u32) {
+    ///
+    /// `event` is the store's answer to "is this change an EVENT", which only a
+    /// real-valued net can answer `false` (`value::real_bits_change_is_event`:
+    /// a store that flips only the sign of a zero). A non-event change is still a
+    /// VALUE change and keeps every value consumer: the dirty list (a live force
+    /// re-evaluates off it, a `wait (expr)` is re-checked because the sweep runs,
+    /// §10.6.2 / §9.4.3), `ca_dirty`, the VCD and the probe record. What it does
+    /// not get is the CHANGE STAMP and the author tag — and every level wake,
+    /// static or in-body, at time 0 or later, fires only on a stamp after its arm
+    /// (`propagate_changes` pass (b); tier-3 `native::wake` and its in-body twin),
+    /// while every edge wake reads bit 0, which a signed-zero flip never moves.
+    /// One rule, one place: the tier-3 twin is `NetArena::note_change`.
+    pub(crate) fn note_change(&mut self, net: u32, word: u32, event: bool) {
         let i = net as usize;
         if !self.dirty_flag[i] {
             self.dirty_flag[i] = true;
@@ -25,8 +37,11 @@ impl SimState<'_> {
         // author isn't re-fired on it; every other writer (NBA/cont-assign/
         // clocking/force, `blocking_writer = None`) tags `u32::MAX` = re-fire
         // normally. Overwritten each change, so it is fresh for the next sweep.
-        self.last_blocking_writer[i] = self.blocking_writer.unwrap_or(u32::MAX);
-        self.stamp_change(i);
+        // Both describe the net's last EVENT, so a value-only change leaves them.
+        if event {
+            self.last_blocking_writer[i] = self.blocking_writer.unwrap_or(u32::MAX);
+            self.stamp_change(i);
+        }
         // DIRTY-SETTLE: this net moved, so every continuous assign whose value reads it
         // must be re-evaluated by the next settle pass. Indexed re-borrow because the
         // flag write below aliases `self`. Nets no assign depends on (almost all of
@@ -157,6 +172,11 @@ impl SimState<'_> {
         if !self.dirty_flag[i] {
             self.dirty_flag[i] = true;
             self.dirty.push(net);
+        }
+        // ENG-1: a VALUE-only mark (`note_dyn_move`) is dirty membership alone —
+        // the twin of `note_change`'s `event == false`.
+        if !heap_mark_is_event(seq) {
+            return;
         }
         self.last_blocking_writer[i] = writer;
         // The sequence the mark was staged with (see `note_dyn_change`), not a
@@ -1057,13 +1077,16 @@ impl SimState<'_> {
         let moved = {
             let mut heap = self.dyn_heap.borrow_mut();
             let fresh = DynObj::DynArray { elems };
-            let moved = watched && !dyn_slot_eq(heap[net as usize].as_ref(), Some(&fresh));
+            let old = heap[net as usize].as_ref();
+            let moved = if watched && !dyn_slot_eq(old, Some(&fresh)) {
+                dyn_changed_move(old, Some(&fresh))
+            } else {
+                HeapMove::Unchanged
+            };
             heap[net as usize] = Some(fresh);
             moved
         };
-        if moved {
-            self.note_dyn_change(net);
-        }
+        self.note_dyn_move(net, moved);
     }
 
     /// R23: byte-set `s[i] = c` on a `string` net (`$sformatf`-free §6.16.2 element
@@ -1360,23 +1383,23 @@ impl SimState<'_> {
                     // HEAP-WAKE: a same-value element store is not a change — the
                     // rule `note_change` applies to a net word, applied to the
                     // element, so a self-writing `always_comb` converges here the
-                    // way it does there.
-                    let moved = elems[i] != coerced;
+                    // way it does there. ENG-1: and a real element whose store only
+                    // flips the sign of a zero is a value move, not an event — the
+                    // net word's rule again (`dyn_elem_move`).
+                    let moved = dyn_elem_move(&elems[i], &coerced);
                     elems[i] = coerced;
                     (true, moved)
                 } else {
-                    (false, false)
+                    (false, HeapMove::Unchanged)
                 }
             } else {
-                (false, false)
+                (false, HeapMove::Unchanged)
             }
         };
         if !hit {
             self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
         }
-        if moved {
-            self.note_dyn_change(net);
-        }
+        self.note_dyn_move(net, moved);
         false
     }
 

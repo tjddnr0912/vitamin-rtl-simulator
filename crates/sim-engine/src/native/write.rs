@@ -483,6 +483,10 @@ impl NetArena {
         // Bit-serial: only the in-range destination bits are written.
         let mut changed = false;
         let base = s.off as usize + (word as usize) * 2 * s.words as usize;
+        // ENG-1: a real element's bits before the store (unreachable for a real by
+        // census — a real is stored whole — and classified anyway, as the engine's
+        // bit-serial twin is).
+        let real_before = s.is_real.then(|| self.buf[base]);
         for i in 0..width {
             let dst = lsb + i as i64;
             if dst < 0 || dst as u32 >= net_w {
@@ -510,7 +514,9 @@ impl NetArena {
             }
         }
         if changed {
-            self.note_change(c.net, word);
+            let event = real_before
+                .is_none_or(|old| crate::value::real_bits_change_is_event(old, self.buf[base]));
+            self.note_change(c.net, word, event);
             if track_edge {
                 self.accumulate_edge(c.net, old_b0);
             }
@@ -600,7 +606,10 @@ impl NetArena {
         };
         self.buf[base] = wv;
         self.buf[base + 1] = wu;
-        self.note_change(c.net, word);
+        // ENG-1: THE real store on this side — every real is one 64-bit word, so a
+        // whole-real store lands here, not in `store_words`.
+        let event = !s.is_real || crate::value::real_bits_change_is_event(ov, wv);
+        self.note_change(c.net, word, event);
         if track_edge {
             self.accumulate_edge(c.net, old_b0);
         }
@@ -620,6 +629,7 @@ impl NetArena {
             sim_ir::FourState::Zero
         };
         let base = s.off as usize + (word as usize) * 2 * s.words as usize;
+        let real_before = s.is_real.then(|| self.buf[base]);
         // `s.words == nwords(width).max(1)` by construction (the allocation used
         // it) — using the slot's own count keeps the indices provably in bounds.
         let nw = s.words as usize;
@@ -641,7 +651,9 @@ impl NetArena {
             }
         }
         if changed {
-            self.note_change(net, word);
+            let event = real_before
+                .is_none_or(|old| crate::value::real_bits_change_is_event(old, self.buf[base]));
+            self.note_change(net, word, event);
             if track_edge {
                 self.accumulate_edge(net, old_b0);
             }

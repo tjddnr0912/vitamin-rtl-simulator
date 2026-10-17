@@ -29,6 +29,33 @@ pub(crate) fn top_mask(width: u32) -> u64 {
     }
 }
 
+/// Is a store that CHANGED the 64 stored bits of a real-valued element, `old` to `new`
+/// (the `val` words; a real holds no x/z), an EVENT?
+///
+/// IEEE 1800-2017 §9.4.2: an event is a change of VALUE, and footnote 12 makes a
+/// `real`'s value an IEEE-754 double, whose equality says `+0.0 == -0.0` — the one
+/// pair of different bit patterns that compare equal. So a store that only flips the
+/// sign of a zero is a value change and not an event: the bits are stored, continuous
+/// assigns and forces reading the net re-evaluate, the dump records it and a `wait`
+/// condition is asked again (all the VALUE consumers), but no `@`, `@*`,
+/// `always_comb` / `always_latch` or static assertion waiter is satisfied by it.
+/// iverilog's rule on all of R03 R06 R07 R11 (and verilator's on the `@` half).
+///
+/// Every other bit change is an event, NaNs included: a NaN payload or sign change
+/// moves the bits of a value that is never `==` anything (iverilog wakes on both), and
+/// a store of the same NaN bits is no change at all, which the caller never asks about.
+///
+/// ONE spelling for every store that can change a real's bits — the engine's and the
+/// arena's word stores, their bit-serial twins, the clocking sample, and the heap
+/// element compare — so the backends cannot disagree about which store wakes.
+/// Keyed on the net being REAL, never on its width or bit pattern: a 64-bit integral
+/// net whose sign bit flips over zero is an event (`logic [63:0]`, `longint`).
+#[inline]
+pub(crate) fn real_bits_change_is_event(old: u64, new: u64) -> bool {
+    const SIGN: u64 = 1 << 63;
+    !(old ^ new == SIGN && old & !SIGN == 0)
+}
+
 /// The masked word-by-word store a CLOCKING SAMPLE performs, on the raw planes:
 /// copy `v`'s words into `val`/`unk` (missing source words read as 0), mask the
 /// most-significant word to `m`, and report whether any stored bit moved.

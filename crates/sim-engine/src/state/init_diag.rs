@@ -1042,6 +1042,11 @@ impl<'a> SimState<'a> {
             sim_ir::FourState::Zero
         };
 
+        // ENG-1: a real element's bits before the store, so the change can be
+        // classified after it (`real_store_is_event`). Unreachable for a real by
+        // census (a real is only ever stored whole, through `store_words`), and
+        // classified anyway so this path cannot be the one that disagrees.
+        let real_before = self.real_word_before(net, base);
         let slot = &mut self.nets[net];
 
         let mut changed = false;
@@ -1059,12 +1064,39 @@ impl<'a> SimState<'a> {
             }
         }
         if changed {
-            self.note_change(net as u32, word);
+            let event = self.real_store_is_event(net, base, real_before);
+            self.note_change(net as u32, word, event);
             if track_edge {
                 self.accumulate_edge(net, old_b0);
             }
         }
         changed
+    }
+
+    /// ENG-1: the stored `val` word of real-valued `net` that holds bit `base` (an
+    /// element's first bit), read BEFORE a store; `None` for every net that is not
+    /// real, which is every event decision but one.
+    #[inline]
+    fn real_word_before(&self, net: usize, base: u32) -> Option<u64> {
+        let s = &self.nets[net];
+        s.is_real
+            .then(|| s.cur.val.get((base / 64) as usize).copied().unwrap_or(0))
+    }
+
+    /// ENG-1: is the change a store just made to `net` at bit `base` an EVENT?
+    /// `before` is [`Self::real_word_before`]'s answer from before the store; the
+    /// rule itself is `value::real_bits_change_is_event`, shared with tier-3.
+    #[inline]
+    fn real_store_is_event(&self, net: usize, base: u32, before: Option<u64>) -> bool {
+        before.is_none_or(|old| {
+            let new = self.nets[net]
+                .cur
+                .val
+                .get((base / 64) as usize)
+                .copied()
+                .unwrap_or(0);
+            crate::value::real_bits_change_is_event(old, new)
+        })
     }
 
     /// THE word-parallel whole-element store — the one copy of this loop.
@@ -1089,6 +1121,7 @@ impl<'a> SimState<'a> {
             sim_ir::FourState::Zero
         };
         let base = word * net_w;
+        let real_before = self.real_word_before(net, base);
         let slot = &mut self.nets[net];
         let wbase = (base / 64) as usize;
         let nw = nwords(net_w).max(1);
@@ -1113,7 +1146,8 @@ impl<'a> SimState<'a> {
             }
         }
         if changed {
-            self.note_change(net as u32, word);
+            let event = self.real_store_is_event(net, base, real_before);
+            self.note_change(net as u32, word, event);
             if track_edge {
                 self.accumulate_edge(net, old_b0);
             }
@@ -1141,6 +1175,9 @@ impl<'a> SimState<'a> {
         } else {
             sim_ir::FourState::Zero
         };
+        // ENG-1: a REAL holding net (a clocking block over a `real`, whose holder
+        // elaborate makes real) or a real source an output clockvar drives.
+        let real_before = self.real_word_before(i, 0);
         let slot = &mut self.nets[i];
         if slot.cur.val.len() < nw {
             slot.cur.val.resize(nw, 0);
@@ -1155,7 +1192,8 @@ impl<'a> SimState<'a> {
             v,
         );
         if changed {
-            self.note_change(net, 0);
+            let event = self.real_store_is_event(i, 0, real_before);
+            self.note_change(net, 0, event);
             if track_edge {
                 self.accumulate_edge(i, old_b0);
             }

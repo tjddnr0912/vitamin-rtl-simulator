@@ -866,20 +866,20 @@ impl SimState<'_> {
         // funnel's `frame_local` test is what separates them, so the site does not
         // have to; it only answers "did the object move", and pays for that answer
         // only for a net some sensitivity names.
-        let mut moved: Vec<u32> = Vec::new();
+        let mut moved: Vec<(u32, HeapMove)> = Vec::new();
         {
             let mut heap = self.dyn_heap.borrow_mut();
             for (dst, obj) in captured {
                 if let Some(cell) = heap.get_mut(dst as usize) {
                     if self.dyn_wake_observable(dst) && *cell != obj {
-                        moved.push(dst);
+                        moved.push((dst, dyn_changed_move(cell.as_ref(), obj.as_ref())));
                     }
                     *cell = obj;
                 }
             }
         }
-        for net in moved {
-            self.note_dyn_change(net);
+        for (net, m) in moved {
+            self.note_dyn_move(net, m);
         }
     }
 
@@ -896,16 +896,18 @@ impl SimState<'_> {
             let mut heap = self.dyn_heap.borrow_mut();
             match heap.get_mut(caller_net as usize) {
                 Some(cell) => {
-                    let moved = self.dyn_wake_observable(caller_net) && *cell != obj;
+                    let moved = if self.dyn_wake_observable(caller_net) && *cell != obj {
+                        dyn_changed_move(cell.as_ref(), obj.as_ref())
+                    } else {
+                        HeapMove::Unchanged
+                    };
                     *cell = obj;
                     moved
                 }
-                None => false,
+                None => HeapMove::Unchanged,
             }
         };
-        if moved {
-            self.note_dyn_change(caller_net);
-        }
+        self.note_dyn_move(caller_net, moved);
     }
 
     /// V2B (§4.5.194): if out-slot `slot` of `callee` is a DYNAMIC-array formal, deep-copy

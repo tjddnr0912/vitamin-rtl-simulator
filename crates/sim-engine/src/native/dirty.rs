@@ -435,13 +435,21 @@ impl NetArena {
     /// mask and records nothing in its place, which reads as "the net changed
     /// but no edge occurred" — the engine hit exactly this and documents it at
     /// its third store point (`commit_clocking_sample`).
-    pub(crate) fn note_change(&mut self, net: u32, word: u32) {
+    ///
+    /// `event` is the engine's: `false` only for a real-valued net whose store
+    /// flipped nothing but the sign of a zero (`value::real_bits_change_is_event`).
+    /// Such a change keeps the dirty mark (force re-evaluation, the `wait (expr)`
+    /// re-check), `ca_dirty`, VCD and probe, and takes no change stamp and no
+    /// author tag — the rule and its reasons are on `SimState::note_change`.
+    pub(crate) fn note_change(&mut self, net: u32, word: u32, event: bool) {
         let i = net as usize;
         if self.ch.dirty.insert(i) && self.ch.is_edge_target[i] {
             self.ch.slot_edge[i] = 0;
         }
-        self.ch.last_blocking_writer[i] = self.ch.blocking_writer.unwrap_or(u32::MAX);
-        self.ch.stamp_change(i);
+        if event {
+            self.ch.last_blocking_writer[i] = self.ch.blocking_writer.unwrap_or(u32::MAX);
+            self.ch.stamp_change(i);
+        }
         // DIRTY-SETTLE: this net moved, so every continuous assign that reads it
         // must be re-evaluated by the next settle pass. The engine's third store
         // effect, at the same point.
@@ -522,10 +530,15 @@ impl NetArena {
             FourState::Zero
         };
         let base = s.off as usize;
+        // ENG-1: a real holding net / real driven source — classified as the engine
+        // classifies its sample (`SimState::commit_clocking_sample`).
+        let real_before = s.is_real.then(|| self.buf[base]);
         let (lo, hi) = self.buf[base..base + 2 * nw].split_at_mut(nw);
         let changed = crate::value::store_sample_words(lo, hi, m, v);
         if changed {
-            self.note_change(net, 0);
+            let event = real_before
+                .is_none_or(|old| crate::value::real_bits_change_is_event(old, self.buf[base]));
+            self.note_change(net, 0, event);
             if track_edge {
                 self.accumulate_edge(net, old_b0);
             }

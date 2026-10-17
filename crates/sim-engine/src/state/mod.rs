@@ -16,6 +16,8 @@ use crate::value::{nwords, top_mask, Value, Words};
 mod changes;
 pub(crate) use changes::{dyn_slot_eq, edge_target_nets, heap_wake_nets};
 mod frame_eval;
+mod heap_move;
+pub(crate) use heap_move::{dyn_changed_move, dyn_elem_move, heap_mark_is_event, HeapMove};
 mod init_diag;
 mod netread;
 mod task_frames;

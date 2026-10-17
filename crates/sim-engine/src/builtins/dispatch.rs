@@ -281,17 +281,20 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 Some(slot) => {
                     // HEAP-WAKE: a missing entry IS the empty object on both sides,
                     // so `dst = src` with both never-touched moved nothing.
-                    let moved = sched.st.dyn_wake_observable(dst)
-                        && !crate::state::dyn_slot_eq(slot.as_ref(), obj.as_ref());
+                    let moved = if sched.st.dyn_wake_observable(dst)
+                        && !crate::state::dyn_slot_eq(slot.as_ref(), obj.as_ref())
+                    {
+                        crate::state::dyn_changed_move(slot.as_ref(), obj.as_ref())
+                    } else {
+                        crate::state::HeapMove::Unchanged
+                    };
                     *slot = obj;
                     moved
                 }
-                None => false,
+                None => crate::state::HeapMove::Unchanged,
             }
         };
-        if moved {
-            sched.st.note_dyn_change(dst);
-        }
+        sched.st.note_dyn_move(dst, moved);
         // §7.10.2: a whole-assign into a BOUNDED queue truncates to the bound
         // (+W4020), exactly like the push/insert post-op — without this the
         // clone silently overfills a `[$:N]` dst (R1 both-lens converged
@@ -398,7 +401,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
             // for a net some sensitivity names (`dyn_wake_observable`) — sorting an
             // already-sorted array must not stage a change.
             let watched = sched.st.dyn_wake_observable(net);
-            let mut moved = false;
+            let mut moved = crate::state::HeapMove::Unchanged;
             {
                 let mut heap = sched.st.dyn_heap.borrow_mut();
                 if let Some(obj) = heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
@@ -412,12 +415,12 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                         }
                         _ => bad_kind = true,
                     }
-                    moved = before.is_some_and(|b| b != *obj);
+                    if let Some(b) = before.filter(|b| *b != *obj) {
+                        moved = crate::state::dyn_changed_move(Some(&b), Some(&*obj));
+                    }
                 }
             }
-            if moved {
-                sched.st.note_dyn_change(net);
-            }
+            sched.st.note_dyn_move(net, moved);
             if bad_kind {
                 dyn_warn_once(
                     sched,

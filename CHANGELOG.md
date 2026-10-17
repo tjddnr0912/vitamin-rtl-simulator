@@ -9,6 +9,18 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — events on real values
+
+- A store that only flips the sign of a zero in a `real` / `realtime` variable (`+0.0` to `-0.0` or
+  back, the one pair IEEE 754 calls equal) no longer wakes an `@(r)`, `always @(r)`, `@*`,
+  `always_comb`, `always_latch` or static deferred assertion — at time 0, through a port, a
+  continuous assign, a `force`, a non-blocking assignment, an unpacked-struct member, an array
+  element or a `real d[]` element included. It is still a change of the stored value: continuous
+  assigns and `force` expressions reading it re-evaluate, the dump and `$monitor` record it, and a
+  `wait` condition over it is evaluated again. Every other change of the bits stays an event (a NaN
+  payload or sign, `1.0` to `-1.0`). Icarus Verilog wakes nothing on such a store; Verilator re-runs
+  `always_comb` and `@*` blocks.
+
 ### Added — `$readmemh` / `$readmemb` into an associative array
 
 - `$readmemh` and `$readmemb` load an associative array — `bit [7:0] mem [bit [31:0]];`, `[int]`,

@@ -1596,6 +1596,11 @@ fn drain_heap_marks(k: &mut NativeKernel) {
     k.sched.st.drain_dyn_dirty(&mut buf);
     for &(net, writer, seq) in &buf {
         k.arena.ch.dirty.insert(net as usize);
+        // ENG-1: a VALUE-only mark is dirty membership alone (the engine's
+        // `mark_heap_dirty`, one predicate).
+        if !crate::state::heap_mark_is_event(seq) {
+            continue;
+        }
         k.arena.ch.last_blocking_writer[net as usize] = writer;
         k.arena.ch.stamp_staged(net as usize, seq);
     }
