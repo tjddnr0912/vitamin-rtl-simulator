@@ -9,6 +9,16 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a negative zero prints its sign
+
+- A `real` holding IEEE 754 negative zero now prints with its sign, as C's `printf`, Icarus
+  Verilog and Verilator render it: `%f` `-0.000000`, `%e` `-0.000000e+00`, `%g` `-0`, with any
+  width, precision, `-` or `0` flag, `%t`, `$sformatf`, `$monitor`, an argument with no format,
+  `%p`, and the VCD value change `r-0`. `%+f` of it prints `-0.000000` (it printed `+0.000000`).
+  vita printed `0`, `0.000000` and `r0` before. The stored value is unchanged: a `-0.0` literal,
+  `-(0.0)`, `-5.0*0.0` or `$ceil(-0.3)` holds -0.0 (IEEE 754, as Verilator); Icarus Verilog holds
+  +0.0 for those constants and prints `0.000000`. `%d` still prints `0`.
+
 ### Fixed — events on real values
 
 - A store that only flips the sign of a zero in a `real` / `realtime` variable (`+0.0` to `-0.0` or

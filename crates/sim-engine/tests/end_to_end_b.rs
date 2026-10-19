@@ -571,15 +571,16 @@ fn real_unary_minus() {
     assert_eq!(out.trim(), "-2.5");
 }
 
-// 14b. signed-zero display: -0.0 canonicalizes to "0"/"0.000000" across %g AND
-// %f/%e, matching iverilog (which flushes a constant/literal -0.0 to +0.0). Prior
-// vita kept the sign in %f ("-0.000000") — a $display silent-wrong vs iverilog.
+// 14b. signed-zero display (§4.5.619): `-(0.0)` is an IEEE 754 negation, so `r`
+// holds -0.0 and %g / %f keep the sign. verilator 5.050 `-0|-0.000000`; iverilog
+// 13 and sv2v `0|0.000000`, but iverilog stores the constant as +0.0
+// (`$realtobits` 0) while `1.0/(-0.0)` folds to -inf — no oracle on that axis.
 #[test]
 fn real_negative_zero_display() {
     let out = run_sv(
         "module t; real r; initial begin r = -(0.0); $display(\"%g|%f\", r, r); end endmodule",
     );
-    assert_eq!(out.trim(), "0|0.000000");
+    assert_eq!(out.trim(), "-0|-0.000000");
 }
 
 // 16. %d of a NaN real → "0"; %d of a huge real saturates to i64::MAX.

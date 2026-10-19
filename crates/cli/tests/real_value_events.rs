@@ -15,7 +15,7 @@
 //! `always` once at time 0 (a "t0 artifact" its lines carry and these pins drop) and re-runs
 //! `always_comb` / `always @*` on a signed-zero store (a recorded split: iv + the LRM decide);
 //! iverilog re-checks a `wait` only on an operand event (a recorded split: vl + §9.4.3 decide).
-//! vita prints `-0.0` as `0` / `0.000000` (render.rs, documented) — where iv prints `-0`.
+//! A `-0.0` renders with its sign (`-0` / `-0.000000`, §4.5.619), as iv, s2v and vl print it.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -184,8 +184,8 @@ endmodule\n\
     );
 }
 
-/// VALUE half: $monitor fires at t=5 as iv = s2v do ("M t=5 r=-0.000000"; vita renders -0.0 as 0.000000, the documented
-/// render.rs divergence); vl prints nothing at t=5 (its change test is 754 `==`). §21.2.3 :29009 "changes value".
+/// VALUE half: $monitor fires at t=5 as iv = s2v do ("M t=5 r=-0.000000", vita too since §4.5.619); vl prints
+/// nothing at t=5 (its change test is 754 `==`). §21.2.3 :29009 "changes value".
 /// Cell `R08b_monitor_real_f`.
 #[test]
 fn r08b_monitor_still_prints_the_value_change() {
@@ -198,7 +198,7 @@ endmodule\n\
 ",
         &[
             "M t=0 r=0.000000",
-            "M t=5 r=0.000000",
+            "M t=5 r=-0.000000",
             "M t=8 r=1.000000",
             "A end",
         ],
@@ -1019,9 +1019,9 @@ endmodule\n\
     );
 }
 
-/// VALUE half (mutant M2): the dump records the t=5 store. PRE body "#5 / r0 !" kept (vita writes -0.0 as "r0", the
-/// documented vcd-writer render divergence); iv = s2v "#5 / r-0 !"; vl records nothing at t=5. §21.7 :29954 "records the
-/// values of the variables that change". Cell `R05_vcd_negzero`.
+/// VALUE half (mutant M2): the dump records the t=5 store, "#5 / r-0 !" as iv = s2v write it (vita since §4.5.619;
+/// before, "r0"); vl records nothing at t=5. §21.7 :29954 "records the values of the variables that change".
+/// Cell `R05_vcd_negzero`.
 #[test]
 fn r05_dump_records_the_value_change() {
     let src = "module top;\n\
@@ -1050,7 +1050,7 @@ endmodule\n\
                 "$end",
                 "#0",
                 "#5",
-                "r0 !",
+                "r-0 !",
                 "#8",
                 "r1 !"
             ],

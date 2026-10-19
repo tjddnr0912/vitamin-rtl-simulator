@@ -554,7 +554,9 @@ pub fn fmt_g(x: f64, p: i32) -> String {
         };
     }
     if x == 0.0 {
-        return "0".to_string();
+        // C keeps the sign of a zero ("-0"); iverilog's and verilator's VCD
+        // write `r-0` for -0.0 and `$display %g` prints "-0" (§4.5.619).
+        return if x.is_sign_negative() { "-0" } else { "0" }.to_string();
     }
     let p = p.max(1);
     let sci = format!("{:.*e}", (p - 1) as usize, x); // p-1 fractional → p sig digits
@@ -898,7 +900,9 @@ b000z #
             (1.0e16, 16, "1e+16"), // exp 16 >= p 16 → exp form
             (0.1, 16, "0.1"),
             (2.5, 16, "2.5"),
-            (-0.0, 6, "0"),
+            (-0.0, 6, "-0"),
+            (-0.0, 16, "-0"), // VCD `r-0`: iverilog 13 and verilator 5.050 alike
+            (0.0, 16, "0"),
             (f64::INFINITY, 6, "inf"),
             (f64::NEG_INFINITY, 6, "-inf"),
             (f64::NAN, 6, "nan"), // C/iverilog lowercase (was "NaN", a $display silent-wrong)

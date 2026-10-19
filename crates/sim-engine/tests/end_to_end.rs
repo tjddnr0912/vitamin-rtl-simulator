@@ -938,7 +938,7 @@ fn fork_join_concurrent_delays_interleave() {
 // re-implementation, no fast-math (see doc-18 §결정 기록 / §P3). A regression in
 // any frozen formatter (`fmt_real`/`fmt_real_e`/`format_g`/`fmt_dec`/`dec_field_width`,
 // builtins.rs) or in `value.rs` real ops flips this golden. Covers %f, %e (2-digit
-// padded exp), %g (exp form + signed-zero canon + inf), %d-on-real (round half-away,
+// padded exp), %g (exp form + signed zero + inf), %d-on-real (round half-away,
 // 64-bit field width 20), and the >128-bit %d field width (200-bit → 61, the only
 // f64-multiply path: `n * LOG10_2`), plus %g on $realtime.
 #[test]
@@ -958,12 +958,14 @@ fn float_format_determinism_golden() {
            end\n\
          endmodule",
     );
+    // `-(0.0)` holds -0.0 and prints its sign (§4.5.619; verilator 5.050
+    // `-0|-0.000000`, iverilog 13 `0|0.000000` from its +0.0 constant — ROADMAP §0 ⑩).
     // bare `%d` on a REAL is UNPADDED — iverilog prints the rounded value with no
     // default field width (2.5 → "3", not a 20-wide u64 field). `%d` on a 200-bit
     // INTEGER still uses the n*LOG10_2 path → field width 61 (unchanged; the 61
     // width is reconstructed via format! so it is self-documenting).
     let expected = format!(
-        "0.333333\n1.500000e+03\n1e-05\n0|0.000000\ninf\n3\n[{:>61}]\n3\n",
+        "0.333333\n1.500000e+03\n1e-05\n-0|-0.000000\ninf\n3\n[{:>61}]\n3\n",
         123456,
     );
     assert_eq!(out, expected);
