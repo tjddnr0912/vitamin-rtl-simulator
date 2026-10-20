@@ -659,6 +659,22 @@ impl Elaborator<'_> {
             };
             for &sid in &blk.stmts {
                 match &self.stmts[sid as usize] {
+                    // (5) a concatenation target over this task's locals that the
+                    // frame split declined (`frames_concat.rs`): lifted, it would be
+                    // written through the flat store — `{a, b} = #1 x` and
+                    // `{v[i], i} = e` printed `xx` / a wrong `v` at exit 0
+                    // (§4.5.621 review). Every split concatenation is single-chunk by now.
+                    ir::Stmt::BlockingAssign { lhs, .. }
+                        if lhs.chunks.len() > 1
+                            && lhs.chunks.iter().any(|c| is_frame_local(c.net)) =>
+                    {
+                        return Some(
+                            "a concatenation target over this task's locals that the frame \
+                             cannot split (an intra-assignment delay or event, a hierarchical \
+                             target, or an index that reads anything but this task's own \
+                             locals, reads another target or calls a function)",
+                        );
+                    }
                     // (2) a nonblocking assign to a frame-local LHS.
                     ir::Stmt::NonblockingAssign { lhs, .. } => {
                         if lhs.chunks.iter().any(|c| is_frame_local(c.net)) {

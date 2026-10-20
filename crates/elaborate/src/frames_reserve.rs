@@ -1008,6 +1008,7 @@ impl Elaborator<'_> {
             s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&func.body, base_net);
             s.reserve_frame_case_tmps(&func.body, base_net);
+            s.reserve_frame_concat_tmps(&func.body, base_net);
             s.reserve_frame_static_guard(&func.body_decls, &func.body, base_net, func.automatic);
             auto_override
         });
@@ -1361,6 +1362,7 @@ impl Elaborator<'_> {
             s.decl_exit(armed);
             s.reserve_frame_repeat_counters(&task.body, base_net);
             s.reserve_frame_case_tmps(&task.body, base_net);
+            s.reserve_frame_concat_tmps(&task.body, base_net);
             s.reserve_frame_static_guard(&task.body_decls, &task.body, base_net, task.automatic);
             auto_override
         });

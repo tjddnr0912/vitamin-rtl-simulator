@@ -316,6 +316,11 @@ impl Elaborator<'_> {
                         rhs: tmp_read,
                     });
                     b.push_stmt_id(wr);
+                } else if let Some(sids) = self.split_frame_concat_write(*span, &lv, rhs_id) {
+                    // §5.2 row 22: `{a, b} = e` in a frame body (`frames_concat.rs`).
+                    for sid in sids {
+                        b.push_stmt_id(sid);
+                    }
                 } else {
                     let sid = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: lv,
