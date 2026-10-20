@@ -612,6 +612,20 @@ impl Elaborator<'_> {
                 return (POISON_NET, None);
             }
         }
+        // A part-select of a static unpacked array (`v[2:1]`, `v[1+:2]`) selects
+        // ELEMENTS — a slice (IEEE 1800-2017 §7.4.6) — never bits of element 0.
+        // The procedural pattern lane takes it first (`array_slice_assign`, §5.2
+        // row 28); whatever reaches here (`assign v[2:1] = x;`, a concatenation
+        // part) wrote element 0's bits at exit 0, where iverilog and verilator refuse.
+        if matches!(base, ast::Lvalue::Ident(_)) && self.lval_array_view(base).is_some() {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a part-select of an unpacked array selects array elements (a slice); \
+                 a slice is assignable only from an assignment pattern `'{…}` in a \
+                 procedural assignment",
+            );
+            return (POISON_NET, None);
+        }
         (self.lval_base_net(base), None)
     }
 
