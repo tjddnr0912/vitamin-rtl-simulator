@@ -9,6 +9,39 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a concatenation target in a function or task body
+
+- `{a, b} = e;` inside a function or task that runs in its own activation (OpenTitan's
+  `tlul_pkg::get_cmd_intg`, the VeeR testbenches' `dasm16_ciw`) now runs: `e` is evaluated once
+  and each target takes its slice, most significant first, so `{a, b} = {b, a}` swaps. It was
+  refused before (E3009), and a time-consuming `automatic` task wrote it wrongly at exit 0
+  (`{hi, lo} = 8'hb6` printed `r=21` where Icarus Verilog, sv2v and Verilator print `r=b6`).
+- Still refused, by name, over a target local to the function or task: an intra-assignment delay
+  or event (`{a, b} = #1 e;`), a hierarchical target, an index that reads anything but the
+  routine's own locals (another target of the same concatenation, a module variable) or calls a
+  function, and a `real` or `string` target. A time-consuming task wrote these wrongly at exit 0
+  before.
+
+### Added — an assignment pattern into a slice of an unpacked array
+
+- `v[1:0] = '{a, b};`, `v[1:0] <= '{a, b};`, `v[k+:2] = '{…}`, `m[i][3:2] = '{…}` and
+  `v[1:0] = '{default: x}` assign element by element; the pattern's leftmost element goes to the
+  slice's left index (the VeeR EH1 testbench's `wb_valid[1:0] <= '{a, b};`). Each bound must be a
+  single constant (a literal, a parameter or a genvar; an arithmetic bound such as `A+1` is
+  refused for now) and the slice must run in the array's declared direction.
+- Refused, by name: a slice against the declared direction, a variable bound, a pattern whose
+  count differs from the slice's, a blocking pattern that reads the array it writes, and any
+  other value into a slice. A packed value into an unpacked-array slice (`v[1:0] = 2'b11;`,
+  `assign v[2:1] = x;`) wrote element 0 at exit 0 before; it is now refused, as Icarus Verilog,
+  sv2v and Verilator refuse it.
+
+### Fixed — a non-ANSI port array keeps its declared direction
+
+- A whole-array assignment pattern into an unpacked-array port declared in the non-ANSI style
+  (`module top(o); output logic [7:0] o [3:0];`) filled the elements in reverse:
+  `o = '{1, 2, 3, 4}` printed `o[3]=04`; it now prints `o[3]=01`, as Icarus Verilog, sv2v and
+  Verilator do.
+
 ### Fixed — a negative zero prints its sign
 
 - A `real` holding IEEE 754 negative zero now prints with its sign, as C's `printf`, Icarus
