@@ -345,11 +345,11 @@ fn standing(caps: &[Capture]) -> Standing {
         .filter(|c| !matches!(c, Capture::Clean(_)))
         .count();
     match (answers.len(), failures) {
-        (0, _) => Standing::Absent(if caps.iter().any(|c| *c == Capture::Unsupported) {
+        (0, _) => Standing::Absent(if caps.contains(&Capture::Unsupported) {
             "unsupported"
-        } else if caps.iter().any(|c| *c == Capture::Crashed) {
+        } else if caps.contains(&Capture::Crashed) {
             "crashed"
-        } else if caps.iter().any(|c| *c == Capture::Hung) {
+        } else if caps.contains(&Capture::Hung) {
             "hung"
         } else {
             "no run"
