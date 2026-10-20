@@ -159,11 +159,14 @@ fn domain_errors_match_iverilog() {
 }
 
 /// IEEE-754 negative zero (from a `-0.0` literal or a real-math result like
-/// `$ceil(-0.3)`/`$sin(-0.0)`) displays as a plain "0" across %f/%e/%g, matching
-/// iverilog. `$atan2(-0.0, -1.0)` correctly stays −π (the sign of the −0.0 y arg
-/// is meaningful and both tools agree on the direct-constant form).
+/// `$ceil(-0.3)`/`$sin(-0.0)`) keeps its sign across %f/%e/%g (§4.5.619):
+/// verilator 5.050 prints these three lines exactly. iverilog 13 and sv2v print
+/// `a=0.000000 b=0.000000e+00 c=0` / `ceil=0.000000 sin=0.000000`, but iverilog
+/// contradicts itself on a constant -0.0 (`$realtobits(-0.0)` 0, yet
+/// `1.0/(-0.0)` is -inf and `$atan2(-0.0, -1.0)` −π), so it is no oracle there.
+/// `$atan2(-0.0, -1.0)` stays −π on all three (the sign of the y arg is meaningful).
 #[test]
-fn negative_zero_displays_as_positive() {
+fn negative_zero_keeps_its_sign() {
     let out = run("module top;\n\
         initial begin\n\
           $display(\"a=%f b=%e c=%g\", -0.0, -0.0, -0.0);\n\
@@ -173,7 +176,7 @@ fn negative_zero_displays_as_positive() {
       endmodule\n");
     assert_eq!(
         out,
-        "a=0.000000 b=0.000000e+00 c=0\nceil=0.000000 sin=0.000000\natan2=-3.141593\n"
+        "a=-0.000000 b=-0.000000e+00 c=-0\nceil=-0.000000 sin=-0.000000\natan2=-3.141593\n"
     );
 }
 

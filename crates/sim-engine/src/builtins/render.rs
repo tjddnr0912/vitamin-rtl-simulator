@@ -476,9 +476,9 @@ pub(crate) fn fmt_time_spec(
     let shift = mz - k; // net decimal shift: ≥0 appends zeros, <0 cuts into digits
     let body = if v.is_real {
         // `$realtime`-style value: scale in f64, then %f-round to `prec` digits
-        // (mirrors fmt_real's −0.0 normalization and non-finite C spelling).
+        // (fmt_real's signed zero and non-finite C spelling: `%t` of -0.0 is "-0"
+        // in iverilog, sv2v and verilator).
         let x = v.to_f64().unwrap_or(0.0) * (m as f64) / 10f64.powi(k as i32);
-        let x = if x == 0.0 { 0.0 } else { x };
         if x.is_finite() {
             format!("{x:.prec$}")
         } else {
@@ -730,16 +730,14 @@ pub(crate) fn fmt_real(
     min_zero: bool,
     plus: bool,
 ) -> String {
-    // Normalize IEEE-754 negative zero to +0.0 so every real spec displays it as
-    // a plain "0" (the %g path / VCD `fmt_g` already do). iverilog prints a
-    // constant/literal -0.0 as "0"/"0.000000"; matching it here keeps %f/%e/%g
-    // internally consistent and was a $display silent-wrong (Rust's "{:.6}" of
-    // -0.0 emits "-0.000000"). NOTE: a -0.0 deliberately CONSTRUCTED at runtime
-    // (e.g. `-5.0*0.0`) also normalizes here — iverilog keeps that one's sign
-    // ("-0"); that single corner is an accepted, documented divergence (negative
-    // zero display is implementation-defined; IEEE 1800 does not pin it).
+    // An IEEE-754 negative zero keeps its sign under every real spec ("-0.000000",
+    // "-0.000000e+00", "-0", the `%g` sign coming from the shared `fmt_g`):
+    // iverilog, sv2v and verilator all render the stored bits, the way C's printf
+    // does (§4.5.619). The value is not normalised here — what holds -0.0 is the
+    // arithmetic (IEEE 754 negation, `$ceil(-0.3)`, a constant fold), and vita's
+    // bits there equal verilator's; iverilog's "0" for a literal `-0.0` or a
+    // constant fold is its value (`$realtobits` 0), not its rendering (ROADMAP §0).
     let x = v.to_f64().unwrap_or(0.0);
-    let x = if x == 0.0 { 0.0 } else { x };
     let body = if !x.is_finite() {
         // nan / inf / -inf — spelled the C way for every spec (incl. %g, which
         // fmt_g would also lowercase; routing here keeps all specs consistent).

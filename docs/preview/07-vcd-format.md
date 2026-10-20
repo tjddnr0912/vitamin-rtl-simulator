@@ -310,7 +310,8 @@ vector reads bits `width-1 .. 0` out of the packed words, so an 80-bit value ren
 
 The real value is `f64::from_bits(bits.val[0])` — vita stores reals as raw bits — formatted by
 `fmt_g(x, 16)`, vita's own deterministic C `%g`, shared with `$display %g`. Non-finite values are
-`nan`, `inf` and `-inf` in lowercase, matching C and iverilog; `-0.0` renders as `0`. Exponent form
+`nan`, `inf` and `-inf` in lowercase, matching C and iverilog; `-0.0` renders as `-0`, as C, iverilog
+and verilator write it. Exponent form
 is used when `exp < -4 || exp >= p`, with an exponent of at least two digits (`1e-05`, `6.022e+23`).
 
 There is no array-aggregate record: each element change emits an ordinary scalar or vector record
@@ -551,7 +552,7 @@ small testbench is better served by VCD.
 | `golden_vcd` (`crates/vcd-writer/src/lib.rs`) | The whole file byte for byte, header to last record, with the version substituted; also the trailing newline |
 | `value_change_byte_exact_scalar_and_vector` | `#0\n1!\nb0101 "\n` |
 | `real_var_emits_r_format` | a `real` must not emit a binary vector |
-| `fmt_g_determinism_golden` | 16 cases at precision 6 and 16, including `inf`, `-inf`, `nan`, `-0.0` |
+| `fmt_g_determinism_golden` | 18 cases at precision 6 and 16, including `inf`, `-inf`, `nan`, `-0.0` and `0.0` |
 | `$dumpoff` / `$dumpon` writer tests | the exact block text, and that suppressed changes do not appear |
 | `$dumpall` writer test | `#5\n$dumpall\n1!\nb0011 "\n$end\n` |
 | `$dumplimit` writer test | the comment is inserted once and later records — including `#0` — are suppressed |

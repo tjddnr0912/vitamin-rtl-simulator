@@ -41,6 +41,7 @@ Deliberately loud, not gaps: `new[]` on a fixed array; a multi-dim partial index
 - ⑦ `s<"ab"`, `s<"aa"`, `s<"zz"` with `s="ab"` — iverilog all 1, vita `0 0 1` (= verilator)
 - ⑧ an `automatic time signed` frame local — iverilog aborts, vita `-4` (verilator alone)
 - ⑨ a continuous assign's function at t0 — iverilog calls `f2(a | 1'b0)` and `f3(av[0])` on x first (`f2 t=0 x=x`, `WARNING: …: value is unhandled for priority or unique case statement` `Time: 0`), but `f1(a)` only on the written value (`f1 t=0 x=0`); vita calls all three once on the value (= verilator; `t0_call_cont_assign_hold.rs` `an_expression_argument_is_not_called_on_x`)
+- ⑩ a constant -0.0 (`-0.0`, `-(0.0)`, `-5.0*0.0`, `0.0 * -1`, `parameter real P = -0.0`, `$ceil(-0.3)`) and a runtime `-z` of +0.0 — iverilog stores +0.0 (`$realtobits` 0, `%f` `0.000000`) yet folds `1.0/(-0.0)` to -inf and `$atan2(-0.0, -1.0)` to −π; vita stores -0.0 and prints `-0.000000` (= verilator, IEEE 754 negation; `real_signed_zero_render.rs` `z03_constant_negative_zero_follows_its_bits`)
 
 ### T2 residues (each its own slice)
 
@@ -424,7 +425,7 @@ WALL(AST self-width): a tree-wide pass giving a node's self width without loweri
 - packed dims before an unpacked typedef name — split (vita = verilator)
 - init width of untyped `4'd15 + 4'd1` — split (vita = iverilog 16)
 - 64-bit unsigned `%` — iverilog self-contradicts
-- cross-scope t0 decl-init race; iverilog expression-force — do not chase (runtime `-0.0` events: §4.5.618; the rest is ENG-1b, ENG-1c, Q-FMTNEGZ)
+- cross-scope t0 decl-init race; iverilog expression-force — do not chase (runtime `-0.0` events: §4.5.618, its rendering: §4.5.619; the rest is ENG-1b, ENG-1c)
 - `$stime` sign under a cast — split (vita unsigned, 1364 §17.7.2)
 - cross-package const-function recursion — vita = hand-IEEE
 - `#(.S("str"))` prints one spurious W3056 (value right)
@@ -867,7 +868,7 @@ Rows 1–5, what the external report's fix path found (§4.5.585, §4.5.587, §4
 | Q-NETDLY | queued | a net delay on a declaration without an assignment (`wire [7:0] #(2,5) w; assign w = a;`) is ignored silently, int too: vita `W t=0 \| t=10 \| t=20`, verilator `t=2 \| t=15 \| t=22`, iverilog `sorry: Net delays not supported` (loud); IEEE 1800 §10.3.3; refuse by name until lifted, or implement; census first | ENG-1 r2 (F2e2 real right-hand side, F2e4 int) | ① |
 | Q-FORCEDYN | queued | a `force` whose expression reads a dynamic-array element (`force y = d[1] * 1.0`) never re-evaluates when the element changes: vita `S t=6 y=0000… \| S t=9 y=0000…` after `d[1] = 2.0`, verilator `W t=8 y=4000…`, iverilog `sorry … evaluated once` (loud); silent wrong value, PRE = POST; IEEE 1800 §10.6.2; refuse by name or re-seed the force from the heap change | ENG-1a lens-diff r3 (K01_force_dyn_elem) | ① |
 | Q-WAITDYN | queued | `wait (d[i] …)` on a dynamic-array element that no continuous reader observes is never re-checked, even for a real value change (`-1.0`): vita `A end`, iverilog and verilator `WT t=5`; PRE = POST; IEEE 1800 §9.4.3; fix: a heap change re-checks every pending `wait` over that handle | ENG-1a lens-diff r3 (G03b G03c G03d, W_none_*, W_monsame_*) | ① |
-| Q-FMTNEGZ | queued | `%f %e %g %0.1f` of `-0.0` print without the sign (vita `0.000000 0.000000e+00 0 0.0`; iverilog = sv2v = verilator `-0.000000 -0.000000e+00 -0 -0.0`); render only; size S | ENG-1a lens-sound r3 (W4_display_negzero_fmt) | ① |
+| Q-FMTNEGNAN | queued | a NaN whose sign bit is set prints `nan` under `%f` (vita `nan=nan`; iverilog = sv2v = verilator `nan=-nan`, as glibc's printf); `render.rs` `nonfinite_c` and `vcd_writer::fmt_g` spell every NaN `nan`; census first: the other specs, the `+` flag (pinned: a NaN takes no `+`), the VCD spelling and the NaN producers' sign on each oracle; render only; size S | §4.5.619 census (`real_signed_zero_render.rs` z08) | ① |
 
 Do not start:
 
