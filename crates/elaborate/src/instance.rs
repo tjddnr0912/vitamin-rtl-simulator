@@ -1023,6 +1023,25 @@ impl Elaborator<'_> {
                     );
                     if !dims.is_empty() {
                         if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                            // Declared per-dim DIRECTION, as a body declaration and an
+                            // ANSI port record it. Missing here, a non-ANSI
+                            // `output logic [7:0] o [3:0];` took the ascending order:
+                            // `o = '{1, 2, 3, 4}` stored `o[3] = 4` where sv2v and
+                            // verilator store `o[3] = 1` (§4.5.620 review).
+                            let desc: Vec<bool> = dims
+                                .iter()
+                                .map(|d| match d {
+                                    ast::Dim::Range(r) => {
+                                        let msb = self.const_range_bound_fold(&r.msb);
+                                        let lsb = self.const_range_bound_fold(&r.lsb);
+                                        matches!((msb, lsb), (Some(m), Some(l)) if m > l)
+                                    }
+                                    _ => false,
+                                })
+                                .collect();
+                            if desc.iter().any(|&d| d) {
+                                self.array_dim_desc.insert(id, desc);
+                            }
                             self.record_dim_desc(id, kind, pd.range.as_ref(), &[], dims);
                             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0)
                             {

@@ -3,6 +3,8 @@
 use super::*;
 use crate::array_geom::IndexDomain;
 
+mod pattern;
+
 impl Elaborator<'_> {
     pub(crate) fn expr_array_chain<'a>(
         &self,
@@ -577,7 +579,8 @@ impl Elaborator<'_> {
     ) -> bool {
         const ARRAY_COPY_UNROLL_CAP: u64 = 4096;
         let Some((t_net, t_lead)) = self.lval_array_view(lhs) else {
-            return false;
+            // §5.2 row 28: `v[1:0] <= '{a, b}` — a slice of an unpacked array.
+            return self.array_slice_assign(b, lhs, delay, rhs, nonblocking);
         };
         // The expansion builds chunks by hand, bypassing collect_lval_chunks
         // — re-run its modport write rule here (adversarial find #1: a
@@ -906,96 +909,5 @@ impl Elaborator<'_> {
             // named args, nested keyed patterns) is treated as impure — fail-closed.
             _ => true,
         }
-    }
-
-    pub(crate) fn lower_array_assign_pattern(
-        &mut self,
-        b: &mut ProcessBuilder,
-        t_net: u32,
-        t_lead: &[&ast::Expr],
-        elems: &[ast::Expr],
-        delay: Option<&ast::Delay>,
-        nonblocking: bool,
-    ) -> bool {
-        let t_dims = self.net_dim_extents(t_net);
-        let t_res = &t_dims[t_lead.len()..];
-        if !nonblocking && delay.is_some() {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "intra-assignment delay on an assignment-pattern array assignment",
-            );
-            return true;
-        }
-        // Flatten the (possibly nested) pattern into row-major leaves matching the
-        // residual unpacked dims. A 1-D residual is the base case; a multi-dim array
-        // (`int a[2][3] = '{'{1,2,3},'{4,5,6}}`) requires a nested `'{…}` per element,
-        // assigned in the same row-major flat order `residual_word_offsets` produces.
-        let Some(leaves) = self.flatten_assign_pattern(elems, t_res) else {
-            return true; // count mismatch / missing nested pattern — error emitted
-        };
-        // The pattern unrolls one assignment per leaf; bound it like the array-copy
-        // path (a deeply-nested large pattern would otherwise emit unbounded IR).
-        const ARRAY_PATTERN_UNROLL_CAP: usize = 4096;
-        if leaves.len() > ARRAY_PATTERN_UNROLL_CAP {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "an assignment pattern expands to {} elements (v1 cap {})",
-                    leaves.len(),
-                    ARRAY_PATTERN_UNROLL_CAP
-                ),
-            );
-            return true;
-        }
-        let t_desc: Vec<bool> = self
-            .array_dim_desc
-            .get(&t_net)
-            .map(|v| v[t_lead.len()..].to_vec())
-            .unwrap_or_default();
-        let t_offs = Self::residual_word_offsets(t_res, &t_desc);
-        let t_base = (!t_lead.is_empty())
-            .then(|| self.flatten_word(&t_dims, t_lead, &[], IndexDomain::ArrayWord));
-        let delay_id = if nonblocking {
-            delay.map(|d| self.lower_delay(d).0)
-        } else {
-            None
-        };
-        let elem_width = self.nets[t_net as usize].width;
-        let mut kind_checked = false;
-        for (k, &t_off) in t_offs.iter().enumerate() {
-            // §11.6: each element is in the array element's width context, so a fill
-            // literal (`'1`/`'x`/`'z`) grows to the element width (a bare `lower_expr`
-            // would size it to 1 bit, then the engine zero-extends it = silent-wrong).
-            // `lower_ctx_or_plain` is byte-identical for a non-fill element.
-            let rhs_id = self.lower_ctx_or_plain(leaves[k], elem_width);
-            let t_word = self.word_expr_at(t_base, t_off);
-            let lv = ir::Lvalue {
-                chunks: vec![ir::LvalChunk {
-                    net: t_net,
-                    word: Some(t_word),
-                    offset: None,
-                    width: None,
-                    kind: ir::SelKind::Bit,
-                }],
-            };
-            if !kind_checked {
-                self.check_lvalue_kind(&lv, true);
-                kind_checked = true;
-            }
-            let sid = if nonblocking {
-                self.push_stmt(ir::Stmt::NonblockingAssign {
-                    lhs: lv,
-                    rhs: rhs_id,
-                    delay: delay_id,
-                })
-            } else {
-                self.push_stmt(ir::Stmt::BlockingAssign {
-                    lhs: lv,
-                    rhs: rhs_id,
-                })
-            };
-            b.push_stmt_id(sid);
-        }
-        true
     }
 }

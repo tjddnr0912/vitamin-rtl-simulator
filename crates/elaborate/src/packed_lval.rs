@@ -96,10 +96,29 @@ impl Elaborator<'_> {
         }
     }
 
+    /// A single-segment name an inline function / task formal binds (input
+    /// snapshot or output / inout target).
+    pub(crate) fn bound_by_inline_formal(&self, path: &ast::HierPath) -> bool {
+        path.segments.len() == 1
+            && (self.subst_lookup(&path.segments[0].name).is_some()
+                || self.out_subst_lookup(&path.segments[0].name).is_some())
+    }
+
     /// Write-side twin of [`Self::packed_ps_base`] over `Lvalue` nodes.
     pub(crate) fn packed_ps_base_lval(&mut self, base: &ast::Lvalue) -> Option<(u32, Option<u32>)> {
         match base {
-            ast::Lvalue::Ident(path) => self.bare_packed_net(path).map(|n| (n, None)),
+            // An unpacked ARRAY of multi-dim packed elements is not a packed net:
+            // `v[1:0]` on `logic [1:0][3:0] v [3:0]` selects elements (a slice), so it
+            // falls through to `lval_part_base`, which refuses it (§4.5.620 review:
+            // this arm wrote the bits of `v[0]` at exit 0). Not for a name an inline
+            // task's formal binds: `bare_packed_net` resolves it to the module array
+            // of the same name, and the fall-through would write that array where
+            // this arm stays as it was (round 2: `task t(output logic [1:0][3:0] v)`
+            // beside a module `v [3:0]` wrote the module's `v[0]` at exit 0).
+            ast::Lvalue::Ident(path) => self
+                .bare_packed_net(path)
+                .filter(|&n| !self.net_is_static_array(n) || self.bound_by_inline_formal(path))
+                .map(|n| (n, None)),
             ast::Lvalue::BitSelect { base: b, index, .. } => {
                 let (net, idxs) = self.lval_array_chain(b, index)?;
                 if self.packed_dims.get(&net).is_none_or(|d| d.len() < 2) {
