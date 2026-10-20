@@ -322,8 +322,9 @@ endmodule
 
 #[test]
 fn m_concat_lvalue() {
-    // m_concat_lvalue: stays loud (declined shape)
-    loud(
+    // m_concat_lvalue: iverilog 13, sv2v and verilator 5.050 (§4.5.621 splits the
+    // concatenation target; it was loud)
+    digest(
         "m_concat_lvalue",
         r#"module tb;
   task automatic t(output logic [1:0][3:0] a, output logic [3:0] b);
@@ -333,7 +334,7 @@ fn m_concat_lvalue() {
   initial begin t(v, b); $display("DIGEST=%h %h", v, b); #1 $finish; end
 endmodule
 "#,
-        "E-ELAB-UNSUPPORTED: frame function/task `t` body uses a concatenation-target ass",
+        "9b a",
     );
     // m_cont: both oracles
     digest(

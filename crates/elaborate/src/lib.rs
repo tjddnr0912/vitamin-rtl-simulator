@@ -101,6 +101,7 @@ mod frames_call;
 mod frames_classify;
 mod frames_classify_fork;
 mod frames_classify_write;
+mod frames_concat;
 mod frames_reserve;
 mod frames_static_init;
 mod gen_enum;
@@ -885,6 +886,12 @@ struct Elaborator<'s> {
     /// span for the same reason the counter above is: the two walks are two walks
     /// of one tree, and "the Nth case in each" drifts silently.
     frame_case_tmp: BTreeMap<(u32, u32), BTreeMap<u32, u32>>,
+    /// §5.2 row 22: a concatenation-target assignment's SOURCE SPAN → the frame-local
+    /// capture net its value is written through (`{a, b} = e` in a frame body becomes
+    /// `tmp = e` plus one single-chunk write per target — `frame_write_lvalue` writes
+    /// one chunk). Reserved by `reserve_frame_concat_tmps`, consumed by
+    /// `split_frame_concat_write`, keyed and owner-checked like `frame_case_tmp`.
+    frame_concat_tmp: BTreeMap<(u32, u32), BTreeMap<u32, u32>>,
     /// WHICH frame's window the lowering is currently inside, as that frame's
     /// `base_net` — the second half of the key for the two span maps above.
     ///

@@ -175,21 +175,19 @@ fn frame_whole_write_unchanged() {
 }
 
 #[test]
-fn frame_concat_lvalue_still_loud() {
+fn frame_concat_lvalue_splits_per_target() {
     // BOUNDARY (review find): a concat-TARGET lvalue (`{a,b} = x`) is multi-chunk; the
-    // frame write path is single-chunk — it stays loud, NOT a panic / silent chunk-0
-    // write. (The per-chunk relax must not admit a concat.)
+    // frame write path is single-chunk — never a panic / silent chunk-0 write. Since
+    // §4.5.621 the lowering splits it into one single-chunk write per target
+    // (`frames_concat.rs`); iverilog 13, sv2v and verilator 5.050 all print `r=ab`.
     let src = "module m;\n\
          function integer f; reg [7:0] r; integer i; r = 0;\n\
            for (i=0;i<1;i=i+1) {r[7:4], r[3:0]} = 8'hAB;\n\
            f = r; endfunction\n\
          initial begin $display(\"r=%0h\", f()); #1 $finish; end endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(
-        code,
-        Some(1),
-        "concat lvalue must loud, got code={code:?}\n{out}"
-    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("r=ab"), "both nibbles written, got:\n{out}");
 }
 
 #[test]

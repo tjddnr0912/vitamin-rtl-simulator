@@ -1240,7 +1240,7 @@ impl Elaborator<'_> {
         }
     }
 
-    fn chunk_width(&self, c: &ir::LvalChunk) -> Option<u64> {
+    pub(crate) fn chunk_width(&self, c: &ir::LvalChunk) -> Option<u64> {
         if (HIER_SEL_WRITE_SENTINEL_BASE..POISON_NET).contains(&c.net) {
             let resolved = self.hier_resolved_chunk.get(&c.net)?;
             if resolved.net == POISON_NET {
