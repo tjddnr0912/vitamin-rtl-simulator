@@ -10,8 +10,10 @@
 //! byte for byte.
 //!
 //! Loud on purpose: a slice against the declared direction (s2v and vl assign in declaration order,
-//! or disagree), a variable bound (vl: unsupported), an element-count mismatch, a blocking pattern
-//! that reads the array it writes (s2v `5 3`, vl `5 5`), a slice copy, and — the write-side twin of
+//! or disagree), a variable bound (vl: unsupported), an element-count mismatch, a BLOCKING pattern
+//! whose elements or leading index are not all constants (the element-wise write could let a later
+//! element read an earlier one's new value: `v[1:0] = '{v[0], v[1]}` is s2v `5 3`, vl `5 5`; the
+//! nonblocking form takes any element), a slice copy, and — the write-side twin of
 //! the read guard — a PACKED value assigned to a slice, which PRE wrote into element 0's bits at
 //! exit 0 (`v[1:0] = 2'b11` stored `v[0] = 3`; `assign v[2:1] = x;` drove `v[0]`).
 use std::process::Command;
@@ -147,16 +149,15 @@ endmodule
     );
 }
 
-/// verilator (sv2v loses the sign); the whole-array twin prints the same on iverilog and verilator. Cell `c28_08_signed`.
+/// verilator (sv2v loses the sign: `v1=0 v0=213`). Cell `c28_08_signed`, its variable element made a constant (a blocking slice pattern takes constants only, review round 3).
 #[test]
 fn z06_signed_elements() {
     pin(
         r#"module top;
   logic signed [7:0] v [2:0];
-  logic signed [3:0] a = -4'sd3;
   initial begin
     v[2] = 8'sd9;
-    v[1:0] = '{a, 4'sd5};
+    v[1:0] = '{-4'sd3, 4'sd5};
     $display("v2=%0d v1=%0d v0=%0d", v[2], v[1], v[0]);
   end
 endmodule
@@ -199,18 +200,16 @@ endmodule
     );
 }
 
-/// sv2v = verilator. Cell `c28_12_struct`.
+/// sv2v = verilator. Cell `c28_12_struct`, its variable elements made constants (review round 3).
 #[test]
 fn z09_packed_struct_elements() {
     pin(
         r#"typedef struct packed {logic [1:0] a; logic [2:0] b;} s_t;
 module top;
   s_t v [2:0];
-  s_t x, y;
   initial begin
-    x = 5'b01110; y = 5'b10011;
     v[0] = 5'h1f;
-    v[2:1] = '{x, y};
+    v[2:1] = '{5'b01110, 5'b10011};
     $display("v2=%h v1=%h v0=%h", v[2], v[1], v[0]);
   end
 endmodule
@@ -287,10 +286,10 @@ endmodule
     );
 }
 
-/// sv2v = verilator. Cell `c28_22_task`.
+/// A blocking slice pattern whose elements read variables (here a task's formals) is refused (review round 3); sv2v = verilator `v3=1 v2=a v1=6 v0=8`. Cell `c28_22_task`.
 #[test]
 fn z14_static_task() {
-    pin(
+    loud(
         r#"module top;
   logic [3:0] v [3:0];
   task t(input logic [3:0] a, input logic [3:0] b);
@@ -303,19 +302,59 @@ fn z14_static_task() {
   end
 endmodule
 "#,
+        "is supported when every element and every leading index is a constant",
+    );
+}
+
+/// The nonblocking twin of `z14`: every element is read before any write. sv2v = verilator.
+#[test]
+fn z14b_static_task_nonblocking() {
+    pin(
+        r#"module top;
+  logic [3:0] v [3:0];
+  task t(input logic [3:0] a, input logic [3:0] b);
+    v[2:1] <= '{a, b};
+  endtask
+  initial begin
+    v[3]=4'h1; v[2]=4'h2; v[1]=4'h4; v[0]=4'h8;
+    t(4'ha, 4'h6);
+    #1 $display("v3=%h v2=%h v1=%h v0=%h", v[3], v[2], v[1], v[0]);
+  end
+endmodule
+"#,
         &["v3=1 v2=a v1=6 v0=8"],
     );
 }
 
-/// sv2v = verilator. Cell `c28_23_always_comb`.
+/// A blocking slice pattern over variables in `always_comb` is refused (review round 3); sv2v = verilator `v2=a v1=6` / `v2=3 v1=6`. Cell `c28_23_always_comb`.
 #[test]
 fn z15_always_comb() {
-    pin(
+    loud(
         r#"module top;
   logic [3:0] a = 4'ha, b = 4'h6;
   logic [3:0] v [3:0];
   always_comb v[2:1] = '{a, b};
   initial begin #1 $display("v2=%h v1=%h", v[2], v[1]); a = 4'h3; #1 $display("v2=%h v1=%h", v[2], v[1]); end
+endmodule
+"#,
+        "is supported when every element and every leading index is a constant",
+    );
+}
+
+/// A nonblocking slice pattern in an `always` block re-runs on its operands. sv2v = verilator.
+#[test]
+fn z15b_always_nonblocking() {
+    pin(
+        r#"module top;
+  logic [3:0] a, b;
+  logic [3:0] v [3:0];
+  always @(a or b) v[2:1] <= '{a, b};
+  initial begin
+    #1 a = 4'ha; b = 4'h6;
+    #1 $display("v2=%h v1=%h", v[2], v[1]);
+    a = 4'h3;
+    #1 $display("v2=%h v1=%h", v[2], v[1]);
+  end
 endmodule
 "#,
         &["v2=a v1=6", "v2=3 v1=6"],
@@ -470,7 +509,7 @@ fn l05_blocking_pattern_reads_the_target() {
   end
 endmodule
 "#,
-        "reads the array it writes",
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -625,7 +664,7 @@ fn r03_self_read_behind_a_cast_stays_loud() {
   end
 endmodule
 "#,
-        "reads the array it writes",
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -642,7 +681,7 @@ fn r04_self_read_through_a_hierarchical_name_stays_loud() {
   end
 endmodule
 "#,
-        "reads the array it writes",
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -686,7 +725,7 @@ fn r06_self_read_through_a_let_stays_loud() {
   end
 endmodule
 "#,
-        "reads the array it writes",
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -705,7 +744,7 @@ fn r07_leading_index_through_a_let_stays_loud() {
   end
 endmodule
 "#,
-        "reads the array it writes",
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -752,10 +791,10 @@ endmodule
     );
 }
 
-/// An inline task's input formal is a snapshot taken at the call, so it reads nothing the slice writes: sv2v = verilator `in 05 03 06` (iverilog refuses the slice). Cell `D28_inl_in`.
+/// An element that reads a variable — here an inline task's input snapshot — is refused in a blocking slice pattern, whatever it reads (review round 3); sv2v = verilator `in 05 03 06`. Cell `D28_inl_in`.
 #[test]
-fn r10_inline_task_input_snapshot_is_not_a_self_read() {
-    pin(
+fn r10_blocking_element_reading_a_formal_is_loud() {
+    loud(
         r#"module top;
   logic [7:0] x[2:0];
   task t(input logic [7:0] v);
@@ -768,7 +807,7 @@ fn r10_inline_task_input_snapshot_is_not_a_self_read() {
   end
 endmodule
 "#,
-        &["in 05 03 06"],
+        "is supported when every element and every leading index is a constant",
     );
 }
 
@@ -786,5 +825,45 @@ fn r11_arithmetic_bound_is_loud() {
 endmodule
 "#,
         "is not a single constant",
+    );
+}
+
+/// A package-scoped spelling of the target (`p::pa[2]`) read past the round-2 guard: POST took verilator's `05 05` where sv2v reads `05 03` (review round 3). Cell `R3_pkgmix`.
+#[test]
+fn r12_package_scoped_self_read_is_loud() {
+    loud(
+        r#"package p;
+  logic [7:0] pa [2:0];
+endpackage
+module top;
+  import p::*;
+  initial begin
+    pa[2] = 8'h03; pa[1] = 8'h04; pa[0] = 8'h06;
+    pa[2:1] = '{8'h05, p::pa[2]};
+    $display("pmx %h %h %h", pa[2], pa[1], pa[0]);
+  end
+endmodule
+"#,
+        "is supported when every element and every leading index is a constant",
+    );
+}
+
+/// A net a continuous assign drives from the target: vita updates it inside the process, so the second element read the first one's new value (`05 05`, sv2v `05 03`; review round 3). Cell `R3_wire_asg`.
+#[test]
+fn r13_continuously_driven_twin_is_loud() {
+    loud(
+        r#"module top;
+  logic [7:0] x[2:0];
+  logic [7:0] aw;
+  assign aw = x[2];
+  initial begin
+    x[2] = 8'h03; x[1] = 8'h04; x[0] = 8'h06;
+    #1;
+    x[2:1] = '{8'h05, aw};
+    $display("wasg %h %h %h", x[2], x[1], x[0]);
+  end
+endmodule
+"#,
+        "is supported when every element and every leading index is a constant",
     );
 }

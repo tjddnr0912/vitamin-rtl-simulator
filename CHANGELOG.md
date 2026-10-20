@@ -29,9 +29,11 @@ changed for a user of the simulator.
   slice's left index (the VeeR EH1 testbench's `wb_valid[1:0] <= '{a, b};`). Each bound must be a
   single constant (a literal, a parameter or a genvar; an arithmetic bound such as `A+1` is
   refused for now) and the slice must run in the array's declared direction.
+- A blocking `=` slice pattern takes constant elements only (literals, parameters, enum labels);
+  `<=` takes any elements. A blocking one over variables is refused for now: written element by
+  element, a later element could read an earlier element's new value.
 - Refused, by name: a slice against the declared direction, a variable bound, a pattern whose
-  count differs from the slice's, a blocking pattern that reads the array it writes, and any
-  other value into a slice. A packed value into an unpacked-array slice (`v[1:0] = 2'b11;`,
+  count differs from the slice's, and any other value into a slice. A packed value into an unpacked-array slice (`v[1:0] = 2'b11;`,
   `assign v[2:1] = x;`) wrote element 0 at exit 0 before; it is now refused, as Icarus Verilog,
   sv2v and Verilator refuse it.
 

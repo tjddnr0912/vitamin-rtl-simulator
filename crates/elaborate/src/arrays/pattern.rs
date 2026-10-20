@@ -81,28 +81,6 @@ impl Elaborator<'_> {
             );
             return true;
         }
-        // A blocking slice write is element-wise, so a leaf (or a leading index)
-        // that reads the array would see the elements already written. The
-        // whole-array lane has that order today (`v = '{v[0], v[1]}`: vita and
-        // verilator `5 5`, sv2v `5 3`, iverilog `3 3` — a recorded split); the
-        // slice lane does not extend it. Nonblocking reads every right-hand side
-        // before any write, so it needs no guard.
-        if slice.is_some()
-            && !nonblocking
-            && leaves
-                .iter()
-                .copied()
-                .chain(t_lead.iter().copied())
-                .any(|e| self.may_read_array(e, t_net))
-        {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "a blocking assignment pattern into an unpacked-array slice reads the \
-                 array it writes (the element-wise write would change what later \
-                 elements read); use `<=`, or a temporary",
-            );
-            return true;
-        }
         let t_desc: Vec<bool> = self
             .array_dim_desc
             .get(&t_net)
@@ -117,13 +95,49 @@ impl Elaborator<'_> {
             None
         };
         let elem_width = self.nets[t_net as usize].width;
+        // A BLOCKING slice write is element-wise, so an element or a leading index
+        // that reads anything could see an element already written — the target
+        // itself under any of its spellings (a cast, `top.x`, a `let`, `p::x`), or a
+        // net a continuous assign drives from it, which vita updates inside the
+        // process. Naming those spellings missed one per review round (§4.5.620
+        // rounds 1–3), so the rule is the fail-closed one the constant-index
+        // recognizer uses: every element and the leading index must lower to a
+        // compile-time constant. Nonblocking reads every right-hand side and index
+        // before any write, so it needs no rule.
+        let pre: Option<Vec<u32>> = if slice.is_some() && !nonblocking {
+            // §11.6: each element is in the array element's width context (below).
+            let ids: Vec<u32> = leaves
+                .iter()
+                .map(|e| self.lower_ctx_or_plain(e, elem_width))
+                .collect();
+            if ids
+                .iter()
+                .chain(t_base.iter())
+                .any(|&id| !self.index_is_compile_time_constant(id))
+            {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a blocking assignment pattern into an unpacked-array slice is \
+                     supported when every element and every leading index is a constant \
+                     (v1: the element-wise write could let a later element read an \
+                     earlier one's new value); use `<=`, or assign the elements one by one",
+                );
+                return true;
+            }
+            Some(ids)
+        } else {
+            None
+        };
         let mut kind_checked = false;
         for (k, &t_off) in t_offs.iter().enumerate() {
             // §11.6: each element is in the array element's width context, so a fill
             // literal (`'1`/`'x`/`'z`) grows to the element width (a bare `lower_expr`
             // would size it to 1 bit, then the engine zero-extends it = silent-wrong).
             // `lower_ctx_or_plain` is byte-identical for a non-fill element.
-            let rhs_id = self.lower_ctx_or_plain(leaves[k], elem_width);
+            let rhs_id = match &pre {
+                Some(ids) => ids[k],
+                None => self.lower_ctx_or_plain(leaves[k], elem_width),
+            };
             let off = (t_off as u64 + win_off).min(u32::MAX as u64) as u32;
             let t_word = self.word_expr_at(t_base, off);
             let lv = ir::Lvalue {
@@ -154,59 +168,6 @@ impl Elaborator<'_> {
             b.push_stmt_id(sid);
         }
         true
-    }
-
-    /// Whether evaluating `e` may read `net` — conservatively. `expr_reads_net`
-    /// answers for the spellings it enumerates and `false` for the rest, so a read
-    /// behind a cast (`8'(x[2])`) or a hierarchical self-name (`top.x[2]`) slipped
-    /// past the blocking guard (§4.5.620 review). Here every node is visited through
-    /// the one child enumeration, a dotted name counts as a read, and anything
-    /// `assign_pattern_expr_has_call` cannot vouch for (a call, a method) counts too.
-    fn may_read_array(&self, e: &ast::Expr, net: u32) -> bool {
-        if Self::assign_pattern_expr_has_call(e) {
-            return true;
-        }
-        self.mentions_net(e, net)
-    }
-
-    fn mentions_net(&self, e: &ast::Expr, net: u32) -> bool {
-        if let ast::ExprKind::Ident(p) = &e.kind {
-            if p.segments.len() > 1 {
-                return true;
-            }
-            return self.bare_name_may_read(&p.segments[0].name, e, net);
-        }
-        let mut hit = false;
-        e.for_each_child(|pos, c| {
-            hit = hit || (pos != ast::walk::ChildPos::Unevaluated && self.mentions_net(c, net));
-        });
-        hit
-    }
-
-    /// A bare name, bound the way the lowering binds it (`bare_ident_route`): a
-    /// constant reads nothing; a name that lowers to something other than a plain
-    /// net read counts as a read unless it is an inline task's input snapshot or an
-    /// output formal's own net. A zero-formal `let` lowers to its body
-    /// (`let L = x[2]; x[2:1] = '{8'h05, L}` took verilator's `05 05` where the
-    /// inlined spelling is loud — §4.5.620 review round 2), and so may a function
-    /// named without parentheses.
-    fn bare_name_may_read(&self, name: &str, e: &ast::Expr, net: u32) -> bool {
-        use crate::ident_route::BareIdentRoute as R;
-        match self.bare_ident_route(name, e.span) {
-            R::Str(_) | R::Wide(_) | R::Real(_) | R::Param { .. } => false,
-            R::Subst(eid) => !matches!(
-                self.exprs.get(eid as usize),
-                Some(ir::Expr::Signal { net: n, word: None }) if *n != net
-            ),
-            R::OutSubst(n) => n == net,
-            R::ArrayItem { .. } => true,
-            R::Other => {
-                self.let_table.contains_key(name)
-                    || self.has_func(name)
-                    || self.pkg_body_var(name).is_some_and(|n| n == net)
-                    || self.expr_reads_net(e, net)
-            }
-        }
     }
 
     /// `v[a:b] = …` / `v[a+:w] <= …` where `v[…]` (after any leading indices) is a
