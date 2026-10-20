@@ -605,7 +605,7 @@ impl Elaborator<'_> {
         Some((((raw << sh) as i64) >> sh) as u32)
     }
 
-    fn index_is_compile_time_constant(&mut self, eid: u32) -> bool {
+    pub(crate) fn index_is_compile_time_constant(&mut self, eid: u32) -> bool {
         self.with_seen(eid as usize, |me, seen, gen| {
             me.index_all_const(eid, seen, gen)
         })
