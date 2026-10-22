@@ -226,11 +226,11 @@ Each design or code change gets adversarial review at its tier (§3.7).
 
 ### 3.6 Stopping, reverting and prerequisites
 
-The round budget is three; a fourth is a scope signal, not a fourth patch. Two consecutive blocking rounds on one axis end that axis's attempt before the budget does. An owner's program in ROADMAP §5.2 may lift both for its rows: a blocking finding is fixed, not reverted for round count; an axis reaching round three is re-planned, not patched.
+There is no round budget (owner, 2026-10-23): a row runs as many review rounds as it needs, each with a fresh agent and a delta brief. A blocking finding is fixed, not reverted for round count. A second consecutive blocking round on one axis re-plans that axis — a fresh planner derives the rule again — instead of a third patch; a re-plan is not a stop.
 
 | Rule | Prevents |
 |---|---|
-| Also stop if each fix on one axis yields the next blocker, a root returns through another door, or blockers sit in what you routed to: revert (whole for a returning root, else ship separable halves; a producer axis's patch gets own row with measured cells, consumer declining what it cannot vouch for), queue uncovered prereq; round three is for another axis or the revert's delta | Wrong-axis patches |
+| Also stop if each fix on one axis yields the next blocker, a root returns through another door, or blockers sit in what you routed to: revert (whole for a returning root, else ship separable halves; a producer axis's patch gets own row with measured cells, consumer declining what it cannot vouch for), queue uncovered prereq; the next round is for another axis or the revert's delta | Wrong-axis patches |
 | After two mis-scoped guards or an unnameable condition, revert to pre-existing behaviour, measure the condition, register measured shapes; fix first the path holding a precondition (a workaround predicate wrong twice is an ordering problem) | Guessed third tries |
 | Decide fix-or-revert from root, not effort (pre-existing and independent? needs machinery frozen IR cannot hold? blast radius?); on revert record mechanism, not verdict; a defect a change merely exposes belongs to exposed code; propagate closures only after commit; on re-opening re-measure, never restore text | Blind reverts, absorbed roots, stale closures |
 | When three requests stop at one prerequisite, file one infrastructure line and point the feature rows at it | The next request hitting the same wall |
