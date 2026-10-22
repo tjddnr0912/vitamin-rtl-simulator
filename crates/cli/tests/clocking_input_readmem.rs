@@ -20,15 +20,16 @@
 //! rejects all nine spellings with *"Cannot write to input clockvar"*.
 //!
 //! ⚠️ The guard asks from the PATH, like the lvalue twin, and NOT from the resolved
-//! net id. A clocking input of an unpacked ARRAY gets a scalar holding net, so the
-//! array-view arm never produces the id to test — a net-keyed first version fired for
+//! net id. A clocking input of an unpacked ARRAY got a scalar holding net (and has none
+//! since ENG-1b), so the array-view arm never produces the id to test — a net-keyed first version fired for
 //! the scalar spelling and missed the array one that motivated the row. Both
 //! spellings are asserted below.
 //!
 //! ⚠️ No oracle: iverilog 13 cannot parse a clocking block and verilator rejects the
 //! shape, so the rule is hand-IEEE (§14.3) and the CONTROLS carry the weight — an
-//! ordinary array must still load, and `$writemem*`, which only READS, must still be
-//! allowed to take a clocking input.
+//! ordinary array must still load. (`$writemem*`, which only READS, took a clocking input
+//! over an unpacked array until ENG-1b; such an item has no holder now, and its use is
+//! refused by name.)
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -88,16 +89,31 @@ fn the_lvalue_spelling_is_still_loud() {
     );
 }
 
-/// CONTROLS. An ordinary array still loads, `$writemem*` — which only READS its
-/// memory argument — may still take a clocking input, and a clocking input used as
-/// the FILE NAME is a pure read and must be accepted.
-///
-/// ⚠️ That last one is not hypothetical: the first version of the guard ran for
-/// EVERY argument index, so `$readmemh(cb.fn, mem)` — a legal design vita ran
-/// correctly — was refused. §21.4's shape is `(file, mem, start, end)` and only
-/// argument 1 is written; two review lenses found the missing position test.
+/// CONTROL. An ordinary array still loads beside a clocking input, and a `$writemem*` of an
+/// ordinary array is untouched.
 #[test]
-fn an_ordinary_array_still_loads_and_writemem_may_read_a_clocking_input() {
+fn an_ordinary_array_still_loads() {
+    let (o, e, ok) = run("module t;\n  \
+           logic clk = 0;\n  logic [7:0] mem [0:3];\n  logic [7:0] cmem [0:3];\n  \
+           clocking cb @(posedge clk); input cmem; endclocking\n  \
+           initial begin\n    \
+             $readmemh(\"f.hex\", mem);\n    \
+             $writememh(\"out.hex\", mem);\n    \
+             #1 $display(\"m0=%h m3=%h\", mem[0], mem[3]);\n    \
+             $finish;\n  \
+           end\n\
+         endmodule\n");
+    assert!(ok, "vita failed:\n{o}{e}");
+    assert!(o.contains("m0=00 m3=33"), "got:\n{o}");
+}
+
+/// ENG-1b: `$writememh` — which only READS — of a clocking input over an unpacked ARRAY is
+/// refused by name. Such an item has no holder (a clocking sample holds one value), so the name
+/// `cb.cmem` has nothing to read: it wrote ONE word (`11`) at exit 0, where verilator writes the
+/// four sampled elements (`11 22 33 44`). The `$readmem` refusal above keeps precedence over this
+/// one: a clocking input is read-only whatever its type.
+#[test]
+fn writemem_of_an_unpacked_clocking_input_is_refused_by_name() {
     let (o, e, ok) = run("module t;\n  \
            logic clk = 0;\n  logic [7:0] mem [0:3];\n  logic [7:0] cmem [0:3];\n  \
            clocking cb @(posedge clk); input cmem; endclocking\n  \
@@ -108,8 +124,16 @@ fn an_ordinary_array_still_loads_and_writemem_may_read_a_clocking_input() {
              $finish;\n  \
            end\n\
          endmodule\n");
-    assert!(ok, "vita failed:\n{o}{e}");
-    assert!(o.contains("m0=00 m3=33"), "got:\n{o}");
+    assert!(!ok, "must not run:\n{o}{e}");
+    let all = format!("{o}{e}");
+    assert!(
+        all.contains("clocking input `cb.cmem` samples `cmem`, an unpacked array"),
+        "{all}"
+    );
+    assert!(
+        all.contains("errors=1 "),
+        "one error for the one use:\n{all}"
+    );
 }
 
 /// Every OTHER task that writes an argument, on one line. Each of these ran silently

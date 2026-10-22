@@ -882,8 +882,7 @@ impl Elaborator<'_> {
         if let Some(d) = delay {
             // capture-now/write-later: the DRAW (and seed/ref update) happens at
             // the capture statement; only the lhs write is delayed.
-            let w = self.ia_capture_width(&lv, rhs_id);
-            let tmp = self.fresh_ia_tmp(w);
+            let tmp = self.fresh_capture_for(&lv, rhs_id);
             let cap = self.push_stmt(ir::Stmt::BlockingAssign {
                 lhs: whole_net_lvalue(tmp),
                 rhs: rhs_id,

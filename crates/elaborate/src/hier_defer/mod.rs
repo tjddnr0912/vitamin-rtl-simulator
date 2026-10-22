@@ -147,6 +147,9 @@ pub(crate) struct DeferredHierSelWrite {
 /// a shadowing outer net).
 pub(crate) struct DeferredHierSelect {
     pub(crate) eid: u32,
+    /// The select expression itself (ENG-1b: a refused clocking item is named at its
+    /// use, also in a continuous assignment, where `cur_span` is the module header).
+    pub(crate) span: Option<ast::Span>,
     pub(crate) prefix: String,
     pub(crate) path: Vec<String>,
     /// Indices in SOURCE order (`grid[i][j]` → `[i, j]`). Length 1 = the N3.1 scalar/

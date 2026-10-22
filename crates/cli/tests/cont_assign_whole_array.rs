@@ -759,7 +759,13 @@ module t;
   end
 endmodule
 "#;
-    is_loud(clocking, SOLE);
+    // ENG-1b: a clocking item over an unpacked array gets no holder and drives nothing, so the
+    // use `cb.dst <= …` is refused by name — the one error; the `assign` keeps its only writer.
+    let out = is_loud(
+        clocking,
+        "clocking output `cb.dst` drives `dst`, an unpacked array",
+    );
+    assert!(out.contains("errors=1 "), "{out}");
     let inout = r#"
 module sub(inout wire [7:0] io); assign io = 8'h33; endmodule
 module t;

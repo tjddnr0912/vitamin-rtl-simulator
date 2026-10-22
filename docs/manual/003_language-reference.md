@@ -788,7 +788,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | In-body `@(*)` | Supported | Infers the read set of the statement it controls. An empty read set warns that it can never wake. |
 | In-body multi-term edge wait | Loud | `VITA-E3009` — move it to a block header or split the wait. |
 | Level (non-edge) event control on a constant bit, part, indexed-part or element select of a net (`@(n[0])`, `@(n[3:2])`, `@(n[I+:2])`, `@(a[1])`, `@(a[1][0])`, a packed struct member) | Supported | Wakes only when the selected bits change, as both reference tools do; Verilator additionally runs every header level `always` once at time 0. Works in a header list beside other terms, in-body, in a task body, in a generate block, through a port, and on a hierarchical or interface-port base. vitamin watches a net it derives from the select. A select's waiter and a whole-net waiter woken by the same change resume in declaration order, as in Verilator; Icarus resumes the select's waiter second. |
-| Event on a `real` / `realtime` (`@(r)`, `always @(r)`, `@*`, `always_comb`, `always_latch`, a deferred assertion; a real member) | Supported | A change of value under IEEE 754 equality (IEEE 1800 §9.4.2): a store that only flips the sign of a zero (`+0.0` to `-0.0` or back) wakes none of them, at time 0 too, as in Icarus Verilog (Verilator re-runs `always_comb` and `@*` blocks on it). It is still a change of the stored value: a continuous assign or a `force` reading the variable re-evaluates, the dump and `$monitor` record it, and a `wait` condition over it is evaluated again (as in Verilator; Icarus Verilog re-evaluates a `wait` only on an operand event). Every other change of the bits is an event, a NaN payload or sign included. |
+| Event on a `real` / `realtime` (`@(r)`, `always @(r)`, `@*`, `always_comb`, `always_latch`, a deferred assertion; a real member) | Supported | A change of value under IEEE 754 equality (IEEE 1800 §9.4.2): a store that only flips the sign of a zero (`+0.0` to `-0.0` or back) wakes none of them, at time 0 too, as in Icarus Verilog (Verilator re-runs `always_comb` and `@*` blocks on it). It is still a change of the stored value: a continuous assign or a `force` reading the variable re-evaluates, the dump and `$monitor` record it, and a `wait` condition over it is evaluated again (as in Verilator; Icarus Verilog re-evaluates a `wait` only on an operand event). Every other change of the bits is an event, a NaN payload or sign included. `@(ra[1])` on an element of a `real` array wakes on a change of that element's real value, and not at time 0 when the element starts at a non-zero value. |
 | Level event control on a select with a variable index (`@(n[i])`, `@(a[j])`), of an automatic subroutine's local, of a dynamic-storage element, or through a function call in an index | Loud | `VITA-E3009`. A variable index would wake the process at time 0 where the selected value did not change; wait on the whole variable, or copy the select into a variable in an `always @*` block and wait on that. |
 | Level event control on a select of a constant whose index vitamin cannot prove constant (`@(K[$clog2(P)])`, `@(K[f(1)])`) | Loud | `VITA-E3009` — whether it runs once at time 0 depends on the body, and the reference tools disagree. |
 | Edge term on a name that cannot change (a parameter, `localparam`, genvar, enum label, package constant `p::C`, or a constant select such as `K[0]`) | Supported | The term is dropped: it can never fire. A process whose every term is dropped simply never wakes, which is what both reference tools do. In a mixed list the live terms still arm. |
@@ -856,7 +856,7 @@ either side is `x` or `z`. Every remaining position compares 4-state exact. So
 
 | Construct | Status | Notes |
 |---|---|---|
-| `= #d rhs` / `<= #d rhs` | Supported | Intra-assignment delay with capture-now, write-later semantics. |
+| `= #d rhs` / `<= #d rhs` | Supported | Intra-assignment delay with capture-now, write-later semantics. The right-hand side is held in the type of the destination — a `real`, a `string`, an element, a struct member or a hierarchical variable — so the delayed write equals `lhs = rhs` (IEEE 1800 §9.4.5). The same holds for `= @(ev)`, `= repeat(n) @(ev)`, the `$random` / `$dist_*` / `$cast` form and `$value$plusargs`. |
 | `= @(ev) rhs` / `<= @(ev) rhs` | Supported | On `=` the process blocks; on `<=` it does not, and a detached helper performs the non-blocking write. |
 | `= repeat(n) @(ev) rhs` | Supported | Unrolled; a count above 1024 is Loud, and a runtime (non-constant) count is Loud. |
 | Intra-assignment delay on an unpacked-array or assignment-pattern assignment, on a string concatenation, on `new`, or on any dynamic-storage operation | Loud | `VITA-E3009` |
@@ -1049,12 +1049,13 @@ implication `|->` / `|=>` < primary.
 | Function | Status | Notes |
 |---|---|---|
 | `$sampled(e)` | Supported | Accepts any expression and recurses. |
-| `$past(sig)` | Partial | One signal argument; no `[n]` delay and no clocking or gating arguments. |
+| `$past(sig)` | Partial | One signal argument; no `[n]` delay and no clocking or gating arguments. The previous value has the variable's type and signedness (`real`, `string`, a signed integral); before the first clocking event it is `x` for an integral variable and `0.0` / empty for a `real` / `string`, not the declaration value (a known divergence, IEEE 1800 §16.5.1). Over a parameter, `localparam` or enum label it is the constant, also one in a generate block that shadows a module variable of the same name. |
 | `$stable(sig)` | Supported | `prev === e` |
 | `$changed(sig)` | Supported | `prev !== e` |
-| `$rose(sig)` / `$fell(sig)` | Supported | On bit 0. |
+| `$rose(sig)` / `$fell(sig)` | Supported | On bit 0. Of a `real` or `string` variable or constant: Loud (`VITA-E3009`), once per call. |
 
-Each takes exactly one simple, non-hierarchical signal; anything else is Loud.
+Each takes exactly one simple, non-hierarchical signal; anything else is Loud, and so is a whole
+unpacked array, queue, dynamic or associative array.
 There is no Preponed region in the region model — the sampled value is a
 previous-value register.
 
@@ -1116,7 +1117,7 @@ With `--obs-dir`, a design with at least one covergroup instance also writes
 | `pkg::name` scoped reference | Supported | For a parameter, an enum label and a plain variable. A part select of a package array element is Loud; read the whole element or import the name. |
 | `pkg::f(...)` scoped routine call | Supported | A function whose body names only its own formals/locals, same-package constants, variables and routines; its same-package callees are reached the same way as by `import pkg::f;`, including callees with initialized locals, control flow, loops and mutual recursion. Loud: a callee (or the routine itself) that is `static` and reads a local before writing it, or reads its own return variable before assigning it (`VITA-E3010`); a scoped TASK enable as a statement (`VITA-E2002`). |
 | `program` / `endprogram` | Partial | See §2. |
-| `clocking NAME @(event); … endclocking` | Partial | Default-skew input sampling: elaborate synthesizes preponed-sampled holding nets, `@(cb)` is a clocking event, and `cb.sig` reads the holding net. Anonymous `clocking @(clk);` and `default clocking` are supported. A clocking `inout` driver, a non-net input or output bind, an explicit skew other than `#1step`, a level or `@*` clocking event, and a cross-hierarchy `@(inst.cb)` are Loud. Writing a clocking input is Loud. |
+| `clocking NAME @(event); … endclocking` | Partial | Default-skew input sampling: elaborate synthesizes preponed-sampled holding nets, `@(cb)` is a clocking event, and `cb.sig` reads the holding net. Anonymous `clocking @(clk);` and `default clocking` are supported. A `real` item samples and drives the real value; an item over a `string`, a queue, a dynamic or associative array or an unpacked array is not sampled or driven, and a use of `cb.x` — in a function, task or generate block too — is Loud at the use, naming the signal (`VITA-E3009`); an unused one runs. A clocking `inout` driver, a non-net input or output bind, an explicit skew other than `#1step`, a level or `@*` clocking event, and a cross-hierarchy `@(inst.cb)` are Loud. Writing a clocking input is Loud. |
 | `timeunit` / `timeprecision` | Absent | `VITA-E2002`. `` `timescale `` is the supported channel; see §18. |
 | `nettype`, `alias`, `checker`, `interface class`, `implements` | Absent | `VITA-E2002` |
 

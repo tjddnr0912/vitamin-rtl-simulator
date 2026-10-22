@@ -579,9 +579,21 @@ impl Elaborator<'_> {
                     let target = id.name.clone();
                     if elems.iter().any(|e| !expr_no_ref(e, &target)) {
                         let ew = self.handle_elem_type(net_of).map_or(32, |(w, _)| w.max(1));
+                        // ENG-1b: each snapshot takes the queue ELEMENT's type (a string
+                        // queue's `'{q[0], "x"}` held "" in an integral temp).
+                        let held = self.held_of_storage(net_of, true);
                         let mut snap: Vec<ast::Expr> = Vec::with_capacity(elems.len());
                         for e in &elems {
-                            let t = self.fresh_ia_tmp(ew);
+                            let t = match held {
+                                h @ (Held::Real | Held::String) => {
+                                    let name = format!("$ia_tmp${}", self.nets.len());
+                                    self.add_typed_holder(&name, h).unwrap_or(POISON_NET)
+                                }
+                                // A local queue's element: never `NoHolder` / `Deferred`.
+                                Held::Integral | Held::NoHolder(_) | Held::Deferred => {
+                                    self.fresh_ia_tmp(ew)
+                                }
+                            };
                             let tid = self
                                 .symbols
                                 .iter()

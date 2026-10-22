@@ -152,6 +152,11 @@ impl Elaborator<'_> {
             return;
         };
         let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_funcs) else {
+            // ENG-1b: a method of a clocking item that has no holder.
+            if let Some(i) = self.clk_refused_at(&d.prefix, &d.path) {
+                self.report_clk_refused(i, d.span, &d.prefix);
+                return;
+            }
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(

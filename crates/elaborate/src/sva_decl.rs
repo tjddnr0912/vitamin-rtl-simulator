@@ -146,7 +146,9 @@ impl Elaborator<'_> {
                     .last()
                     .map(|s| s.name.clone())
                     .unwrap_or_default();
-                let prev = self.sva_prev_for(&sig, &args[0], regs);
+                let Some(prev) = self.sva_prev_for(&name.name, &sig, &args[0], regs) else {
+                    return sva_zero(sp); // refused by name, once
+                };
                 let prev_ref = sva_ident_expr(&prev, sp);
                 match name.name.as_str() {
                     "$past" => prev_ref,

@@ -15,6 +15,9 @@ use super::*;
 impl Elaborator<'_> {
     /// Reserve one frame-local capture net per concatenation-target blocking
     /// assignment in `body`, keyed by the statement's span and the frame's `owner`.
+    /// Integral by construction: its destination is a concatenation, which
+    /// `held_of_lvalue` types as integral bits at the lvalue width (ENG-1b), and a
+    /// `real` or string chunk is declined below.
     ///
     /// It has to be reserved here, before the frame's window of net ids closes, at a
     /// placeholder width the lowering patches — the same handoff, for the same

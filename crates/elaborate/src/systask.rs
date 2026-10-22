@@ -813,9 +813,9 @@ impl Elaborator<'_> {
                     if dump_family || readmem_family {
                         // …and the OTHER read-only target this position can reach.
                         // Asked from the PATH and BEFORE the array view, because a
-                        // clocking input of an unpacked array has only a scalar holding
-                        // net and never reaches the arm below — see
-                        // `deny_clocking_input_arg`.
+                        // clocking input of an unpacked array has no holding net (ENG-1b:
+                        // `deny_refused_clocking_input_arg`) and never reaches the arm
+                        // below — see `deny_clocking_input_arg`.
                         //
                         // ⚠️ `argi == 1` is load-bearing and was missing: §21.4's shape is
                         // `(file, mem, start, end)`, this closure runs for EVERY argument,
@@ -827,6 +827,9 @@ impl Elaborator<'_> {
                         if argi == 1
                             && matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH)
                         {
+                            if self.deny_refused_clocking_input_arg(a, "$readmem into") {
+                                return Some(self.placeholder_expr());
+                            }
                             self.deny_clocking_input_arg(a, "$readmem into");
                             // §5.2 row 27: an associative array is loaded one entry
                             // per address (`readmem_assoc_target`).

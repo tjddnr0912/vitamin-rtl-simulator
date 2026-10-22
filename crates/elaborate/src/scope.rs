@@ -151,8 +151,6 @@ impl Elaborator<'_> {
         hit: impl Fn(&str) -> bool,
         stop_at_net_binding: bool,
     ) -> Option<String> {
-        use std::fmt::Write;
-        let mut prefix = self.cur_prefix.as_str();
         // GEN-3X-STR (part b): reuse ONE scratch String across the outward walk
         // instead of a fresh `format!` allocation per scope level (byte-identical
         // keys; on a hit the scratch is moved out as the owned return).
@@ -163,6 +161,31 @@ impl Elaborator<'_> {
         if self.decl_probe_key(name, &mut key, &hit) {
             return Some(key);
         }
+        self.walk_out_from(&self.cur_prefix, name, &hit, stop_at_net_binding, key)
+    }
+
+    /// [`Self::walk_scopes_key`]'s outward walk from a SAVED `prefix` (a deferred
+    /// reference's lowering scope): the same scope-transparency rule, without the
+    /// package-routine probe. ENG-1b: a refused clocking item is found with it from a
+    /// function or generate block exactly as `lookup_net_scoped` finds its alias.
+    pub(crate) fn walk_scopes_key_from(
+        &self,
+        prefix: &str,
+        name: &str,
+        hit: impl Fn(&str) -> bool,
+    ) -> Option<String> {
+        self.walk_out_from(prefix, name, &hit, false, String::new())
+    }
+
+    fn walk_out_from(
+        &self,
+        mut prefix: &str,
+        name: &str,
+        hit: &impl Fn(&str) -> bool,
+        stop_at_net_binding: bool,
+        mut key: String,
+    ) -> Option<String> {
+        use std::fmt::Write;
         loop {
             key.clear();
             if prefix.is_empty() {

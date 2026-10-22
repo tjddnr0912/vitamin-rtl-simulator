@@ -71,8 +71,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
-        let w = self.ia_capture_width(&lv, rhs_id);
-        let tmp = self.fresh_ia_tmp(w);
+        let tmp = self.fresh_capture_for(&lv, rhs_id);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),
             rhs: rhs_id,
@@ -190,8 +189,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
-        let w = self.ia_capture_width(&lv, rhs_id);
-        let tmp = self.fresh_ia_tmp(w);
+        let tmp = self.fresh_capture_for(&lv, rhs_id);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),
             rhs: rhs_id,
@@ -684,6 +682,11 @@ impl Elaborator<'_> {
                 // the N4 clocking arm just above, and the same fix: when a caller knows
                 // the context, it owns the message. The resolution question is asked
                 // with `lookup_dotted_net` — `resolve_net`'s own predicate, not a copy.
+                // ENG-1b: a clocking item that has no holder, refused by name.
+                if let Some(i) = self.clk_refused_path(path) {
+                    self.report_clk_refused(i, Some(path.span), &self.cur_prefix.clone());
+                    return POISON_NET;
+                }
                 if path.segments.len() > 1 && self.lookup_dotted_net(path).is_none() {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -899,6 +902,23 @@ impl Elaborator<'_> {
         {
             return None;
         }
+        // ENG-1b: the holder takes the SELECTED storage's type. An element of a
+        // `real` array is a `real` holder — an integral one woke on `round()` of the
+        // element (`0.5` -> `0.75` was no change) — and `sim_engine::alias`'s
+        // `real_move` makes it a copy net at time 0 like the integral one. A bit or
+        // part select is integral bits. A hierarchical select's placeholder is typed
+        // by the shape recorded at its creation, which its resolution verifies
+        // (`verify_hier_sel_shape`); an unrecorded one has no width and never gets here.
+        let held = match self.exprs.get(rhs as usize) {
+            Some(ir::Expr::Signal { net, word }) => self.held_of_storage(*net, word.is_some()),
+            _ => Held::Integral,
+        };
+        let real = match held {
+            Held::Real => true,
+            Held::Integral => false,
+            Held::Deferred if self.hier_shape(rhs).is_some_and(|s| !s.real) => false,
+            Held::String | Held::NoHolder(_) | Held::Deferred => return None,
+        };
         // A `logic` holder, not a wire: the copy-net rule gives a copy its sources'
         // movement only where its OWN storage moved, and the time-0 answer then
         // depends on the default it starts from. From `x`, copying the all-x bits of
@@ -907,19 +927,23 @@ impl Elaborator<'_> {
         // `2'b1z`: iverilog wakes once) — MEASURED; a wire's `z` default inverted
         // both, the recorded `wire s = vv[0]` class.
         let net = self.nets.len() as u32;
-        self.add_net(
-            &format!("$ia_tmp${net}"),
-            ir::NetVar {
-                kind: ir::NetKind::Logic,
-                width: w,
-                msb: w - 1,
-                lsb: 0,
-                signed: false,
-                array_len: 1,
-                dir: ir::PortDir::Internal,
-                init: default_init(ast::NetVarKind::Logic, w),
-            },
-        );
+        if real {
+            self.add_typed_holder(&format!("$ia_tmp${net}"), Held::Real);
+        } else {
+            self.add_net(
+                &format!("$ia_tmp${net}"),
+                ir::NetVar {
+                    kind: ir::NetKind::Logic,
+                    width: w,
+                    msb: w - 1,
+                    lsb: 0,
+                    signed: false,
+                    array_len: 1,
+                    dir: ir::PortDir::Internal,
+                    init: default_init(ast::NetVarKind::Logic, w),
+                },
+            );
+        }
         if self.nets.len() as u32 == net {
             return Some(POISON_NET); // the net arena cap refused it (already loud)
         }

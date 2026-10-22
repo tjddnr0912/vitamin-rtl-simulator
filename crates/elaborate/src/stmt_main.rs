@@ -76,6 +76,12 @@ impl Elaborator<'_> {
                         return;
                     }
                 }
+                // ENG-1b: a write to a clocking item that has no holder is refused by
+                // name, before the right-hand side lowers (one error for the one use).
+                if let Some(i) = self.clk_refused_lvalue(lhs) {
+                    self.report_clk_refused(i, Some(lhs.span()), &self.cur_prefix.clone());
+                    return;
+                }
                 // §6.16.3: a string element write `s[i] = …` is detected FIRST —
                 // ahead of the event/delay early-return and the whole RHS-special
                 // chain below, every one of which would otherwise route through
@@ -289,11 +295,12 @@ impl Elaborator<'_> {
                     // IEEE §9.2.2 intra-assignment delay: the RHS evaluates NOW,
                     // the process suspends `d`, THEN the write happens. Lower as
                     //   tmp = rhs;  #d;  lhs = tmp;
-                    // with a synthetic tmp sized EXACTLY to the lvalue width so
-                    // the rhs eval context (max(lhs_w, self_w)) is unchanged —
-                    // a wider tmp would alter div/shift operand truncation.
-                    let w = self.ia_capture_width(&lv, rhs_id);
-                    let tmp = self.fresh_ia_tmp(w);
+                    // with a synthetic tmp of the DESTINATION's type (ENG-1b,
+                    // `fresh_capture_for`): a `real` / `string` one for such a
+                    // destination, else integral and sized EXACTLY to the lvalue width
+                    // so the rhs eval context (max(lhs_w, self_w)) is unchanged — a
+                    // wider tmp would alter div/shift operand truncation.
+                    let tmp = self.fresh_capture_for(&lv, rhs_id);
                     let cap = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: whole_net_lvalue(tmp),
                         rhs: rhs_id,
@@ -336,6 +343,12 @@ impl Elaborator<'_> {
                 rhs,
                 span,
             } => {
+                // ENG-1b: a write to a clocking item that has no holder is refused by
+                // name, before the right-hand side lowers (one error for the one use).
+                if let Some(i) = self.clk_refused_lvalue(lhs) {
+                    self.report_clk_refused(i, Some(lhs.span()), &self.cur_prefix.clone());
+                    return;
+                }
                 // §6.16.3: a string element write `s[i]` has no defined non-blocking
                 // form (iverilog 13.0 aborts on `s[i] <= c`). Detected FIRST — ahead
                 // of the event early-return — so the intra-event variant `s[i] <=

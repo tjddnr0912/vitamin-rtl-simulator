@@ -645,6 +645,55 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     copy_nets_landed(ir, &[])
 }
 
+/// ENG-1b (E1-b-t0): the source of a same-kind REAL move, if `ca` is one — a whole
+/// `NetKind::Real` scalar destination (no word, offset or width) driven by a whole
+/// `Real` scalar net other than itself, or by a constant, in-range word of a `Real`
+/// array (`assign c = ra[1];`, the `@(ra[1])` holder, a `real` port). Such a driver
+/// moves bits like an integral copy, so it is a copy net for the time-0 rule: its
+/// destination takes its source's time-0 status (IEEE 1800-2017 §6.8 — an
+/// initializer is no event; iverilog prints no `t=0` line for `real ra[2] =
+/// '{0.0, 0.5}; always @(ra[1])`, where the holder's `+0.0` start read as a move to
+/// `0.5`).
+///
+/// A SEPARATE arm, deliberately not a widening of [`flat`] or [`copied_source`]:
+/// `flat()` also feeds `sign_extending_copies` (no real-root check: `real -> wider
+/// int` would join the read alias unconverted) and `copied_source`'s whole-net arm
+/// checks width only (`real c = logic [63:0] lv` would become a copy of an integral
+/// root). Both kinds must be `Real` here, so a conversion copy (`real <- int`,
+/// `int <- real`) is never admitted; those keep their own time-0 split (queued). The
+/// read alias is untouched: `copy_alias` meets a `Real` root and skips it, so only
+/// the two time-0 consumers (repair and suppression) see the arm.
+fn real_move(ir: &SimIr, ca: &sim_ir::ContAssign, nc: &NetConsts) -> Option<u32> {
+    let [c] = ca.lhs.chunks.as_slice() else {
+        return None;
+    };
+    if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
+        return None;
+    }
+    let dv = ir.nets.get(c.net as usize)?;
+    if dv.kind != sim_ir::NetKind::Real || dv.array_len > 1 {
+        return None;
+    }
+    match ir.exprs.get(ca.rhs as usize)? {
+        sim_ir::Expr::Signal { net, word: None } => {
+            let sv = ir.nets.get(*net as usize)?;
+            (sv.kind == sim_ir::NetKind::Real && sv.array_len <= 1 && *net != c.net).then_some(*net)
+        }
+        sim_ir::Expr::Signal {
+            net,
+            word: Some(weid),
+        } => {
+            let sv = ir.nets.get(*net as usize)?;
+            if sv.kind != sim_ir::NetKind::Real || sv.array_len <= 1 {
+                return None;
+            }
+            let idx = word_const(ir, *weid, nc)?;
+            (idx < sv.array_len).then_some(*net)
+        }
+        _ => None,
+    }
+}
+
 /// `copy_nets` for the TIME-0 phase: a delayed driver whose time-0 write
 /// landed inside the settle (`landed`, indexed by cont-assign — see
 /// `Scheduler::delayed_landed_in_settle`) is a bit move there like an undelayed one,
@@ -697,7 +746,12 @@ pub(crate) fn copy_nets_landed(ir: &SimIr, landed: &[bool]) -> Vec<CopyNet> {
                     .map(|(s, _)| s)
                     .filter(|&s| s != c.net)
             })
-            .flatten();
+            .flatten()
+            .or_else(|| {
+                (undelayed && ca.lhs.chunks.len() == 1)
+                    .then(|| real_move(ir, ca, &nc))
+                    .flatten()
+            });
         match moved {
             Some(src) => {
                 let e =

@@ -144,6 +144,12 @@ impl Elaborator<'_> {
         path: &[String],
         fallback: String,
     ) {
+        // ENG-1b: a clocking item that got no holder has no `cb.x` alias, so every
+        // deferred lane reaching a use of it ends here — refuse it by name.
+        if let Some(i) = self.clk_refused_at(prefix, path) {
+            self.report_clk_refused(i, None, prefix);
+            return;
+        }
         let msg = self.gen_spelling_hint(prefix, path).unwrap_or(fallback);
         self.error(MsgCode::ElabUnresolvedName, &msg);
     }

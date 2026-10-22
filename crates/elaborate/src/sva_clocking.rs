@@ -663,21 +663,39 @@ impl Elaborator<'_> {
                         // array parameter source must stay loud (adversarial
                         // find: `cb.R <= v` silently overwrote the parameter).
                         self.deny_readonly_write(src_id, "drive (clocking output)");
-                        let sv = &self.nets[src_id as usize];
-                        let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
                         let clean = format!("__clkout_{}_{}", cb_name, it.name.name);
-                        let nv = ir::NetVar {
-                            kind: ir::NetKind::Reg,
-                            width: w,
-                            msb,
-                            lsb,
-                            signed,
-                            array_len: 1,
-                            dir: ir::PortDir::Internal,
-                            init: default_init(ast::NetVarKind::Reg, w), // X-init
-                        };
                         let hid_before = self.nets.len() as u32;
-                        self.add_net(&clean, nv);
+                        match self.held_of_storage(src_id, false) {
+                            // ENG-1b: the drive holder takes the signal's type.
+                            Held::Real => {
+                                self.add_typed_holder(&clean, Held::Real);
+                            }
+                            Held::Integral => {
+                                let sv = &self.nets[src_id as usize];
+                                let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
+                                let nv = ir::NetVar {
+                                    kind: ir::NetKind::Reg,
+                                    width: w,
+                                    msb,
+                                    lsb,
+                                    signed,
+                                    array_len: 1,
+                                    dir: ir::PortDir::Internal,
+                                    init: default_init(ast::NetVarKind::Reg, w), // X-init
+                                };
+                                self.add_net(&clean, nv);
+                            }
+                            held @ (Held::String | Held::NoHolder(_) | Held::Deferred) => {
+                                self.refuse_clocking_item(
+                                    &cb_name,
+                                    &it.name.name,
+                                    &src_name,
+                                    held,
+                                    false,
+                                );
+                                continue;
+                            }
+                        }
                         let hid = self.lookup_net_scoped(&clean).unwrap_or(hid_before);
                         // Alias `cb.sig` → holding net (writable — NOT added to clocking_hold_nets).
                         let alias = self.fq(&format!("{}.{}", cb_name, it.name.name));
@@ -720,23 +738,38 @@ impl Elaborator<'_> {
                     );
                     continue;
                 };
-                // Holding reg: same width/sign as the source, X-init (cb.sig is X
-                // before the first clocking edge — iverilog parity).
-                let sv = &self.nets[src_id as usize];
-                let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
+                // Holding reg: the source's type (ENG-1b) — same width/sign as an
+                // integral source, X-init (cb.sig is X before the first clocking edge —
+                // iverilog parity); a `real` holder (`+0.0`) for a `real` source. A
+                // string, a heap container or an unpacked array gets NO holder, no
+                // sample and no `cb.x` alias: a use of the name is refused by name
+                // (`refuse_clocking_item`), an unused item is harmless.
                 let clean = format!("__clk_{}_{}", cb_name, it.name.name);
-                let nv = ir::NetVar {
-                    kind: ir::NetKind::Reg,
-                    width: w,
-                    msb,
-                    lsb,
-                    signed,
-                    array_len: 1,
-                    dir: ir::PortDir::Internal,
-                    init: default_init(ast::NetVarKind::Reg, w),
-                };
                 let hid_before = self.nets.len() as u32;
-                self.add_net(&clean, nv);
+                match self.held_of_storage(src_id, false) {
+                    Held::Real => {
+                        self.add_typed_holder(&clean, Held::Real);
+                    }
+                    Held::Integral => {
+                        let sv = &self.nets[src_id as usize];
+                        let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
+                        let nv = ir::NetVar {
+                            kind: ir::NetKind::Reg,
+                            width: w,
+                            msb,
+                            lsb,
+                            signed,
+                            array_len: 1,
+                            dir: ir::PortDir::Internal,
+                            init: default_init(ast::NetVarKind::Reg, w),
+                        };
+                        self.add_net(&clean, nv);
+                    }
+                    held @ (Held::String | Held::NoHolder(_) | Held::Deferred) => {
+                        self.refuse_clocking_item(&cb_name, &it.name.name, &src_name, held, true);
+                        continue;
+                    }
+                }
                 let hid = self.lookup_net_scoped(&clean).unwrap_or(hid_before);
                 // Alias `cb.sig` → the holding net (resolution only; the net keeps its
                 // clean VCD name). Manual insert mirrors interface-member aliasing.

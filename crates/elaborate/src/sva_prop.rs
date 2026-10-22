@@ -875,23 +875,110 @@ impl Elaborator<'_> {
         (violation, completed)
     }
 
-    /// Get-or-create the shared prev-register for `sig` (matching its declared
-    /// width), registering the `prev <= signal` NBA on first creation.
+    /// Get-or-create the shared prev-register for `sig`, registering the
+    /// `prev <= signal` NBA on first creation. `None` = refused (reported here).
+    ///
+    /// ENG-1b: the register takes the type of what `prev <= sig` READS (IEEE 1800-2017
+    /// §16.9.3 "$past returns the sampled value of expression1", §16.5.1), asked of the
+    /// expression resolver itself ([`Self::bare_ident_route`], then the `let` and net
+    /// tail of `lower_expr`'s `Ident` arm), never of `lookup_net_scoped` alone: that walk
+    /// sees nets only, so a generate-local `localparam N` shadowing a module net `N`
+    /// typed the register from the outer net while the NBA stored the constant.
+    /// * a variable: a `real` / `string` register for such a variable, else integral at
+    ///   its width WITH its signedness (`$past(i) < 0` on `int i = -5` was false); a
+    ///   whole unpacked / dynamic array has no holder and is refused by name;
+    /// * a constant (parameter, localparam, enum label, genvar): no register — its
+    ///   sampled value is itself (§16.5.1), so its "previous value" is the constant;
+    /// * anything else (a `let`, a name the lowering declares implicitly): the integral
+    ///   register at the width `lookup_net_scoped` answers, else 1 bit, as before.
+    ///
+    /// `$rose` / `$fell` of a `real` or `string`, variable or constant, is refused by
+    /// name (their bit 0 is not a value of either type) — once, here, before the
+    /// rewrite reads `[0]` of it twice.
     pub(crate) fn sva_prev_for(
         &mut self,
+        func: &str,
         sig: &str,
         sig_expr: &ast::Expr,
         regs: &mut SvaRegs,
-    ) -> String {
-        if let Some((_, prev)) = regs.by_signal.iter().find(|(s, _)| s == sig) {
-            return prev.clone();
-        }
-        let width = self
-            .lookup_net_scoped(sig)
-            .map(|id| self.nets[id as usize].width)
-            .unwrap_or(1);
-        let prev = self.fresh_sva_reg(width, "prev");
+    ) -> Option<String> {
         let sp = sig_expr.span;
+        let rise_fall = matches!(func, "$rose" | "$fell");
+        let mut src = None;
+        let held = match self.bare_ident_route(sig, sp) {
+            BareIdentRoute::Real(_) => Some(Held::Real),
+            BareIdentRoute::Str(_) => Some(Held::String),
+            BareIdentRoute::Param { .. } | BareIdentRoute::Wide(_) => Some(Held::Integral),
+            BareIdentRoute::OutSubst(net) => {
+                src = Some(net);
+                Some(self.held_of_storage(net, false))
+            }
+            BareIdentRoute::Other => {
+                // `lower_expr`'s tail: a `let` binds only where no net does.
+                src = self.lookup_net_scoped(sig);
+                src.map(|net| self.held_of_storage(net, false))
+            }
+            BareIdentRoute::ArrayItem { .. } | BareIdentRoute::Subst(_) => None,
+        };
+        let why = match held {
+            Some(Held::Real) if rise_fall => Some((
+                "a `real`",
+                "`$rose` / `$fell` test the LSB (§16.9.3), and a `real` has none",
+            )),
+            Some(Held::String) if rise_fall => Some((
+                "a `string`",
+                "`$rose` / `$fell` test the LSB (§16.9.3), and a `string` has none",
+            )),
+            Some(Held::NoHolder(what)) => Some((
+                what,
+                "vita's sampled-value register holds one integral, `real` or `string` value",
+            )),
+            Some(Held::Integral | Held::Real | Held::String | Held::Deferred) | None => None,
+        };
+        if let Some((what, reason)) = why {
+            self.error_at(
+                MsgCode::ElabUnsupported,
+                sp,
+                &format!("`{func}` of `{sig}`, {what}, is unsupported: {reason}"),
+            );
+            return None;
+        }
+        // A constant: `prev_ref` is the name itself and lowers as that constant.
+        if held.is_some() && src.is_none() {
+            return Some(sig.to_string());
+        }
+        if let Some((_, prev)) = regs.by_signal.iter().find(|(s, _)| s == sig) {
+            return Some(prev.clone());
+        }
+        let prev = match (held, src) {
+            (Some(h @ (Held::Real | Held::String)), _) => {
+                let name = format!("__sva_prev_{}", self.nets.len());
+                self.add_typed_holder(&name, h)?;
+                name
+            }
+            // The resolver bound a net in the arena: its width and signedness.
+            (Some(Held::Integral | Held::NoHolder(_) | Held::Deferred), Some(net)) => {
+                let (width, signed) = {
+                    let nv = &self.nets[net as usize];
+                    (nv.width, nv.signed)
+                };
+                let id = self.nets.len();
+                let prev = self.fresh_sva_reg(width, "prev");
+                if let Some(nv) = self.nets.get_mut(id) {
+                    nv.signed = signed;
+                }
+                prev
+            }
+            // Neither a variable nor a constant (a `let`, an implicit net, an inline
+            // formal): the unsigned register at the net walk's width, else 1 bit.
+            (Some(Held::Integral | Held::NoHolder(_) | Held::Deferred), None) | (None, _) => {
+                let width = self
+                    .lookup_net_scoped(sig)
+                    .map(|id| self.nets[id as usize].width)
+                    .unwrap_or(1);
+                self.fresh_sva_reg(width, "prev")
+            }
+        };
         let prev_path = ast::HierPath {
             segments: vec![ast::Ident {
                 name: prev.clone(),
@@ -907,6 +994,6 @@ impl Elaborator<'_> {
             span: sp,
         });
         regs.by_signal.push((sig.to_string(), prev.clone()));
-        prev
+        Some(prev)
     }
 }

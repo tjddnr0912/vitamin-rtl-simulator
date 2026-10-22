@@ -87,6 +87,11 @@ impl Elaborator<'_> {
                     }
                     continue;
                 }
+                // ENG-1b: a select of a clocking item that has no holder, at its use.
+                if let Some(i) = self.clk_refused_at(&d.prefix, &d.path) {
+                    self.report_clk_refused(i, d.span, &d.prefix);
+                    continue;
+                }
                 self.error_hier_unresolved(
                     &d.prefix,
                     &d.path,
@@ -437,6 +442,10 @@ impl Elaborator<'_> {
                         d.path.join("."),
                         d.path[0]
                     )
+                } else if let Some(i) = self.clk_refused_at(&d.prefix, &d.path) {
+                    // ENG-1b: a method of a clocking item that has no holder.
+                    self.report_clk_refused(i, Some(d.span), &d.prefix);
+                    continue;
                 } else {
                     format!(
                         "unsupported hierarchical function call `{}` (the callee must be a \

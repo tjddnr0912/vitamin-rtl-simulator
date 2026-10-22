@@ -1675,7 +1675,8 @@ impl Elaborator<'_> {
         //
         // ⚠️ This covers every destination that HAS a net here. `$readmem*`'s memory
         // argument keeps its own PATH-based check as well, because a clocking input of
-        // an unpacked ARRAY has only a scalar holding net and never reaches this call.
+        // an unpacked ARRAY has no holding net (ENG-1b, `held.rs`) and never reaches this
+        // call.
         if self.clocking_hold_nets.contains(&net) {
             // ⚠️ The fallback says what it knows rather than inventing a name. Its
             // first comment claimed the HIERARCHICAL spelling (`u.cb.s`) reaches this
@@ -1751,8 +1752,9 @@ impl Elaborator<'_> {
     /// those, and `resolve_deferred_hier` asks once the net exists.
     ///
     /// Asks from the PATH, exactly as the lvalue twin does. A NetId is not enough
-    /// here: a clocking input of an UNPACKED ARRAY gets a scalar holding net, so the
-    /// array-view arm never produces the id to test — which is why the first version
+    /// here: a clocking input of an UNPACKED ARRAY got a scalar holding net (it has none
+    /// since ENG-1b; `deny_refused_clocking_input_arg` answers it), so the array-view arm
+    /// never produced the id to test — which is why the first version
     /// of this guard, keyed on the resolved net, fired for the scalar spelling and
     /// missed the array one that motivated the row.
     pub(crate) fn deny_clocking_input_arg(&mut self, e: &ast::Expr, how: &str) -> bool {

@@ -9,6 +9,34 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a value vitamin holds for the design keeps its type
+
+- An intra-assignment delay or event (`r = #1 e`, `r = @(go) e`, `r <= @(go) e`,
+  `r = repeat (n) @(go) e`, the `$random` / `$dist_*` / `$cast` form, `$value$plusargs`) holds
+  the right-hand side in the type of its destination, so the delayed write gives what `r = e`
+  gives. A `real` destination took an unsigned integral copy: `r = #1 i` with `int i = -5` stored
+  `18446744073709551616.0` (Icarus Verilog and Verilator `-5.0`), `r = #1 b + c` with 8-bit
+  operands `300.0` instead of `44.0`; a `string` destination — whole, a queue or array element,
+  a struct member, through a hierarchical name — came back empty.
+- A queue assigned a pattern that reads itself (`q = '{q[1], q[0]}`) holds each element in the
+  queue's element type; a `string` queue lost them.
+- `@(ra[1])` on an element of a `real` array wakes on a change of the real value; it woke on a
+  change of the value rounded to an integer, and at time 0 when the element started non-zero.
+- `$past`, `$stable`, `$changed` keep the sampled variable's type and signedness: `$past(i) < 0`
+  with `int i = -5` was false, a `real` or `string` past read back rounded or empty. Over a
+  parameter, `localparam` or enum label they read the constant (`$stable(P)` failed every clock),
+  also where a generate-block constant shadows a module variable of the same name.
+  `$rose` / `$fell` of a `real` or `string` variable or constant, and any of them over a whole
+  unpacked array, queue, dynamic or associative array, are refused by name (`VITA-E3009`), once
+  per call.
+- A clocking block item over a `real` samples and drives the real value. One over a `string`, a
+  queue, a dynamic or associative array or an unpacked array is no longer sampled or driven:
+  using `cb.x` is refused by name at the use, naming the signal (`VITA-E3009`); an item no
+  statement uses runs as before. Such an item read blank, `0` or `x` (the backends disagreed),
+  and a string output never reached its signal.
+- A waveform dump of a clocking holder or an SVA previous-value register over a `real` now
+  declares it `real`; the one over a `string` is no longer dumped.
+
 ### Added — a concatenation target in a function or task body
 
 - `{a, b} = e;` inside a function or task that runs in its own activation (OpenTitan's

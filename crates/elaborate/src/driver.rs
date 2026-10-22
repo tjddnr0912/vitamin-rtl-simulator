@@ -80,6 +80,8 @@ impl<'s> Elaborator<'s> {
             default_disable_iff: None,
             clocking_hold_nets: std::collections::BTreeSet::new(),
             clocking_hold_names: std::collections::BTreeMap::new(),
+            clk_refused: Vec::new(),
+            deferred_captures: Vec::new(),
             automatic_local_nets: std::collections::BTreeSet::new(),
             const_param_nets: std::collections::BTreeMap::new(),
             lowering_decl_init: false,
@@ -1005,6 +1007,9 @@ impl<'s> Elaborator<'s> {
         // (`dut.mem[i] = …`), also before the multidriver scan (the rebuilt chunks
         // carry real net ids).
         self.resolve_deferred_hier_sel_write();
+        // ENG-1b: both write lanes have decided their chunks, so a capture temp whose
+        // destination was a deferred hierarchical write takes that destination's type.
+        self.verify_deferred_captures();
         // §4.5.355: both lanes have now decided the real chunk, so the assignment
         // width a fill literal could not be told at lowering time finally exists.
         self.resolve_pending_fill_widths();

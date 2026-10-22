@@ -107,8 +107,10 @@ mod frames_static_init;
 mod gen_enum;
 mod gen_scope_name;
 mod generate;
+mod held;
 mod hier;
 mod hier_defer;
+pub(crate) use held::{ClkRefused, DeferredCapture, Held};
 mod hier_leaf_shape;
 mod md_return;
 pub(crate) use hier_leaf_shape::HierLeafShape;
@@ -1398,6 +1400,13 @@ struct Elaborator<'s> {
     /// message used to hardcode "`cb.sig`" whatever the design called it, which points
     /// at a name that is not in the source.
     clocking_hold_names: std::collections::BTreeMap<u32, String>,
+    /// ENG-1b: clocking items that got no holder (a string, a queue, a dynamic or
+    /// associative array, an unpacked array): no `cb.x` alias exists, and a use of the
+    /// name is refused with the recorded text (`held.rs`).
+    clk_refused: Vec<ClkRefused>,
+    /// ENG-1b: capture temps whose destination is a deferred hierarchical write,
+    /// verified when the write resolves (`held.rs`).
+    deferred_captures: Vec<DeferredCapture>,
     /// R17: NetIds created by FLATTENING an `automatic` procedural block-local into
     /// the module namespace. IEEE 1800 §23.9 forbids a hierarchical reference to an
     /// automatic variable — it has no static address to name — but v1's flatten gives

@@ -670,6 +670,7 @@ impl Elaborator<'_> {
                     });
                     self.record_hier_sel_shape(eid, &path, idx_eids.len(), None);
                     self.deferred_hier_sel.push(DeferredHierSelect {
+                        span: Some(e.span),
                         eid,
                         prefix: self.cur_prefix.clone(),
                         path,
@@ -753,6 +754,7 @@ impl Elaborator<'_> {
                     });
                     self.record_hier_sel_shape(eid, &path, idx_eids.len(), Some(width));
                     self.deferred_hier_sel.push(DeferredHierSelect {
+                        span: Some(e.span),
                         eid,
                         prefix: self.cur_prefix.clone(),
                         path,
@@ -852,6 +854,7 @@ impl Elaborator<'_> {
                     });
                     self.record_hier_sel_shape(eid, &path, idx_eids.len(), Some(w));
                     self.deferred_hier_sel.push(DeferredHierSelect {
+                        span: Some(e.span),
                         eid,
                         prefix: self.cur_prefix.clone(),
                         path,
