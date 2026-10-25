@@ -694,6 +694,12 @@ impl Elaborator<'_> {
         true
     }
 
+    /// A constant index's value in its OWN signedness: a signed constant is
+    /// sign-extended from its width; an unsigned one is its magnitude, so a 64-bit
+    /// unsigned constant with bit 63 set (`64'hFFFF_FFFF_FFFF_FFFF`) is a huge
+    /// positive, saturated to `i64::MAX` — out of every net's range, written and
+    /// read as nothing (IEEE 1800-2017 §11.5.1) — never `-1`. Wider than 64 bits,
+    /// X/Z, or not numeric: `None`.
     pub(crate) fn const_index_value(&self, eid: u32) -> Option<i64> {
         let ir::Expr::Const { val } = self.exprs.get(eid as usize)? else {
             return None;
@@ -714,8 +720,10 @@ impl Elaborator<'_> {
         };
         Some(if c.signed && w < 64 && (masked >> (w - 1)) & 1 == 1 {
             (masked | (!0u64 << w)) as i64
-        } else {
+        } else if c.signed {
             masked as i64
+        } else {
+            i64::try_from(masked).unwrap_or(i64::MAX)
         })
     }
 

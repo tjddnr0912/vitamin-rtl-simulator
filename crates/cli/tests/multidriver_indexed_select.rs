@@ -1835,3 +1835,219 @@ endmodule
         &["S t=1 y=zzz11zz0", "S t=2 y=zzz00zz1"],
     );
 }
+
+// ── Q-IDXU64: a 64-bit UNSIGNED constant index with bit 63 set is a huge positive, not -1 ──────────────
+// The lowering (`elaborate` `const_index_value`) read `64'hFFFF_FFFF_FFFF_FFFF` as -1, so the store wrote bit 0
+// (and, through B's check that mirrors the store, the pair below became E3001). IEEE 1800-2017 §11.5.1: an
+// index out of the net's range is ignored on a write and reads x. Verilator refuses every cell here (`Value too
+// wide for 32-bits expected in this context`).
+
+/// Beside `y[0]`, the out-of-range select drives nothing: iverilog = sv2v `S t=1 y=zzz0`. PRE = round 3
+/// `zzz0`; round 4's B before this fix: E3001 (probe wide64u). Kills MU1.
+#[test]
+fn wide64u_offset_out_of_range_pair_runs() {
+    pin(
+        r#"module top;
+  reg [1:0] a = 2'b11; reg b = 1'b0; wire [3:0] y;
+  assign y[64'hFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  assign y[0] = b;
+  initial begin
+    #1 $display("S t=1 y=%b", y);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzz0", "A end"],
+    );
+}
+
+/// The single driver writes nothing: iverilog = sv2v `S t=1 y=zzzz`. PRE = round 3 `zzz1` (bit 0 written
+/// through the -1 reading). Probe wide64u_solo. Kills MU1.
+#[test]
+fn wide64u_offset_single_driver_writes_nothing() {
+    pin(
+        r#"module top;
+  reg [1:0] a = 2'b11; wire [3:0] y;
+  assign y[64'hFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  initial begin
+    #1 $display("S t=1 y=%b", y);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzzz", "A end"],
+    );
+}
+
+/// The ascending twin `wire [0:3] y`: nothing written, §11.5.1 by hand `S t=1 y=zzzz r=0000 rd=x`. PRE =
+/// round 3 `S t=1 y=1zzz r=0000 rd=x` (`y[-1 +: 2]` reached y[0]). iverilog = sv2v fail in the runtime
+/// (`iv.vvp:30: syntax error`); verilator refuses. Probe wide64u_asc. Kills MU1.
+#[test]
+fn wide64u_offset_ascending_writes_nothing() {
+    pin(
+        r#"module top;
+  reg [1:0] a = 2'b11; wire [0:3] y; reg [0:3] r;
+  assign y[64'hFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  initial begin
+    r = 4'b0000; r[64'hFFFF_FFFF_FFFF_FFFF] = 1'b1;
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, r[64'hFFFF_FFFF_FFFF_FFFF]);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzzz r=0000 rd=x", "A end"],
+    );
+}
+
+/// The continuous write, a procedural write and a read of the same select: §11.5.1 by hand
+/// `S t=1 y=zzzz r=0000 rd=xx`. PRE = round 3 `S t=1 y=zzz1 r=0001 rd=1x`. iverilog = sv2v print
+/// `S t=1 y=zzzz r=0011 rd=xx`: iverilog drops the continuous write and reads `xx` through this select, yet
+/// its procedural write lands on r[1:0]; it contradicts itself on one select, so its `r` is not an oracle
+/// (sv2v runs on iverilog). Its `y` and `rd` agree with this pin. Probe wide64u_solo_s. Kills MU1.
+#[test]
+fn wide64u_offset_procedural_write_and_read_ignored() {
+    pin(
+        r#"module top;
+  reg [1:0] a = 2'b11; wire [3:0] y; reg [3:0] r;
+  assign y[64'hFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  initial begin
+    r = 4'b0000; r[64'hFFFF_FFFF_FFFF_FFFF +: 2] = 2'b11;
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, r[64'hFFFF_FFFF_FFFF_FFFF +: 2]);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzzz r=0000 rd=xx", "A end"],
+    );
+}
+
+/// Control: a SIGNED 64-bit `-1` keeps its reading: `y[-1 +: 2]` writes y[0], a real overlap with `y[0]`:
+/// E3001 (PRE = round 3 ran `zzz0`, the check's B move; iverilog = sv2v `sorry: part selects straddling the
+/// start of signal`). Probe wide64s_ctl. Must not move under the unsigned fix.
+#[test]
+fn wide64s_signed_minus_one_overlap_is_e3001() {
+    e3001(
+        r#"module top;
+  reg [1:0] a = 2'b11; reg b = 1'b0; wire [3:0] y;
+  assign y[64'shFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  assign y[0] = b;
+  initial begin
+    #1 $display("S t=1 y=%b", y);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+    );
+}
+
+// ── round 5: C's signed 64-bit constants on a nonzero-LSB / ascending net (lens CU1 / CU3) ──────────────
+// A 64-bit SIGNED constant is still read by its value (-1); a 65-bit one past the low word is out of range.
+
+/// `64'shFFFF_FFFF_FFFF_FFFF` (-1) on `[3:-2]`: `+: 2` is declared bits 0..-1, the CA, the procedural write and
+/// the read alike. PRE = R4 = iverilog = sv2v `S t=1 y=zzz11z r=000110 rd=10 | A end`. Cell ls4_out6_u1_s64m1_nz.
+#[test]
+fn u1_signed_minus_one_on_nonzero_lsb_net() {
+    pin(
+        r#"module top;
+  reg [1:0] a; logic [3:-2] r; logic [3:-2] q = 6'b101101; reg [1:0] rd;
+
+  wire [3:-2] y;
+  assign y[64'shFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  initial begin
+    a = 2'b11; r = 6'b000000;
+    r[64'shFFFF_FFFF_FFFF_FFFF +: 2] = 2'b11; rd = q[64'shFFFF_FFFF_FFFF_FFFF +: 2];
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, rd);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzz11z r=000110 rd=10", "A end"],
+    );
+}
+
+/// The same through `localparam longint P = -1`. PRE = R4 = iverilog = sv2v `S t=1 y=zzz11z r=000110 rd=10 | A
+/// end`. Cell ls4_out6_u1b_lint_nz.
+#[test]
+fn u1b_longint_minus_one_on_nonzero_lsb_net() {
+    pin(
+        r#"module top;
+  reg [1:0] a; logic [3:-2] r; logic [3:-2] q = 6'b101101; reg [1:0] rd;
+  localparam longint P = -1;
+  wire [3:-2] y;
+  assign y[P +: 2] = a;
+  initial begin
+    a = 2'b11; r = 6'b000000;
+    r[P +: 2] = 2'b11; rd = q[P +: 2];
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, rd);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzz11z r=000110 rd=10", "A end"],
+    );
+}
+
+/// The same on `[-2:3]`. PRE = R4 = iverilog = sv2v `S t=1 y=z11zzz r=011000 rd=01 | A end`. Cell
+/// ls4_out6_u1c_s64m1_asc.
+#[test]
+fn u1c_signed_minus_one_on_ascending_net() {
+    pin(
+        r#"module top;
+  reg [1:0] a; logic [-2:3] r; logic [-2:3] q = 6'b101101; reg [1:0] rd;
+
+  wire [-2:3] y;
+  assign y[64'shFFFF_FFFF_FFFF_FFFF +: 2] = a;
+  initial begin
+    a = 2'b11; r = 6'b000000;
+    r[64'shFFFF_FFFF_FFFF_FFFF +: 2] = 2'b11; rd = q[64'shFFFF_FFFF_FFFF_FFFF +: 2];
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, rd);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=z11zzz r=011000 rd=01", "A end"],
+    );
+}
+
+/// An unpacked-array slice `m[64'shFFFF_FFFF_FFFF_FFFF +: 2]` on `[-2:1]` writes `m[-1]`, `m[0]`. PRE = R4 = sv2v
+/// `S t=1 m=0 5 a 0 | A end`; iverilog `t.sv:5: error: Array cannot be indexed by a range. | t.sv:5: error:
+/// Packed array assignment pattern expects 4 element(s) in this context.`. Cell ls4_out6_u1e_slice_s64m1.
+#[test]
+fn u1e_signed_minus_one_unpacked_slice() {
+    pin(
+        r#"module top;
+  logic [3:0] m [-2:1];
+  initial begin
+    m = '{4'h0, 4'h0, 4'h0, 4'h0};
+    m[64'shFFFF_FFFF_FFFF_FFFF +: 2] = '{4'h5, 4'hA};
+    #1 $display("S t=1 m=%h %h %h %h", m[-2], m[-1], m[0], m[1]);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 m=0 5 a 0", "A end"],
+    );
+}
+
+/// `65'h1_0000_0000_0000_0003` on `[3:-2]` is out of range: nothing written, the read x (§11.5.1). PRE = R4 `S
+/// t=1 y=zzzzzz r=000000 rd=xx | A end`; iverilog = sv2v `Assertion failed: (adr+that.size_ <= size_), function
+/// set_vec, file vvp_net.cc, line 1212.`. Cell ls4_out6_u3_w65_nz.
+#[test]
+fn u3_65bit_offset_on_nonzero_lsb_net_writes_nothing() {
+    pin(
+        r#"module top;
+  reg [1:0] a; logic [3:-2] r; logic [3:-2] q = 6'b101101; reg [1:0] rd;
+
+  wire [3:-2] y;
+  assign y[65'h1_0000_0000_0000_0003 +: 2] = a;
+  initial begin
+    a = 2'b11; r = 6'b000000;
+    r[65'h1_0000_0000_0000_0003 +: 2] = 2'b11; rd = q[65'h1_0000_0000_0000_0003 +: 2];
+    #1 $display("S t=1 y=%b r=%b rd=%b", y, r, rd);
+    $display("A end"); $finish;
+  end
+endmodule
+"#,
+        &["S t=1 y=zzzzzz r=000000 rd=xx", "A end"],
+    );
+}

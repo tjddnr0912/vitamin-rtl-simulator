@@ -49,6 +49,15 @@ changed for a user of the simulator.
   numeric constant within 64 bits (a string, a negative signed value, an expression), a
   narrow signed sum on a `[N:0]` net, and the offsets skipped on the other nets above.
 
+### Fixed — a 64-bit unsigned constant index with its top bit set
+
+- A select whose constant index or offset is a 64-bit unsigned value with bit 63 set
+  (`y[64'hFFFF_FFFF_FFFF_FFFF +: 2]`) was read as -1 and wrote or read bit 0 (`y=zzz1` for one
+  driver, where Icarus Verilog reads `zzzz`). It is now the huge positive value it is: out of the
+  net's range, so a write is ignored and a read is x (IEEE 1800-2017 §11.5.1); an unpacked-array
+  slice with such an index is refused (E3009), like its 32-bit twin `m[32'hFFFF_FFFF +: 2]`. A
+  signed constant keeps its signed reading.
+
 ### Fixed — a value vitamin holds for the design keeps its type
 
 - An intra-assignment delay or event (`r = #1 e`, `r = @(go) e`, `r <= @(go) e`,
