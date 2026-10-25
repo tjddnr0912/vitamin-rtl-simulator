@@ -9,6 +9,19 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — `release` of a net driven by a delayed continuous assignment
+
+- A `release` of a net or variable driven by a delayed continuous assignment (`assign #3 y = a;`,
+  `wire #3 y = a;`, a delayed gate output, a delayed part-select of the net) gives it the driver's
+  output at once (IEEE 1800-2017 §10.6.2). It kept the forced value until the right-hand side
+  next changed: `y` forced to `4'h2` and released at t=7 read `0010` at t=8 and t=11, where Icarus
+  Verilog, sv2v and Verilator read `0001`. A release before the driver's first output lands gives
+  `x`. Only the released net is restored: when the driver's left-hand side is a concatenation, the
+  other nets in it are not written. A release of a target that was not forced still changes
+  nothing. A read in the same process right after releasing a net with an undelayed driver, or a
+  net driven through a port connection, still sees the forced value until the drivers settle
+  (queued, Q-RELIMM).
+
 ### Fixed — a value vitamin holds for the design keeps its type
 
 - An intra-assignment delay or event (`r = #1 e`, `r = @(go) e`, `r <= @(go) e`,

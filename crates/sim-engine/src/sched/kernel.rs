@@ -37,6 +37,9 @@ impl Kernel for Scheduler<'_, '_> {
         self.st.force_epilogue(lhs, rhs, sid);
     }
     fn k_release(&mut self, lhs: &Lvalue, sid: u32) {
+        let net = lhs.chunks[0].net;
+        // Decided BEFORE the prologue clears the pin (`released_driver_outputs`).
+        let restore = self.released_driver_outputs(net);
         let resumed = self.st.release_prologue(lhs, sid);
         if let Some((alv, arhs, amult)) = resumed {
             let saved = self.st.cur_time_mult;
@@ -46,7 +49,22 @@ impl Kernel for Scheduler<'_, '_> {
             self.st.cur_time_mult = saved;
             self.st.release_epilogue(&alv, arhs, amult);
         }
-        self.redirty_drivers_of(lhs.chunks[0].net);
+        // The delayed drivers' outputs, through the store funnel, onto `net`'s
+        // chunks only: `skip` names the chunks of a concatenation lvalue that lie
+        // on another net, which the release does not assign. An empty `skip`
+        // (every chunk on `net`) is the plain funnel write. A chunk of `net` the
+        // prologue left pinned (an active `assign` a `release` keeps, a strong
+        // force a `deassign` keeps) drops its part in the funnel.
+        for (ci, v, skip) in restore {
+            let clhs = self.st.ir.cont_assigns[ci].lhs.clone();
+            let offs = self.resolve_lvalue_offsets(&clhs);
+            if skip.is_empty() {
+                self.st.write_lvalue(&clhs, v, &offs);
+            } else {
+                self.st.write_lvalue_skipping(&clhs, v, &offs, &skip);
+            }
+        }
+        self.redirty_drivers_of(net);
     }
     fn k_write_lvalue(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) {
         self.st.write_lvalue(lhs, value, offsets);
@@ -542,6 +560,47 @@ impl Kernel for Scheduler<'_, '_> {
 }
 
 impl Scheduler<'_, '_> {
+    /// What a `release` of `net` writes back at once (IEEE 1800-2017 §10.6.2: the
+    /// net "shall immediately be assigned the value determined by the drivers of
+    /// the net"): every DELAYED continuous driver of `net` with the output it
+    /// drives now — the last value that landed (`last_ca_drv`), or the owed `x`
+    /// before its first landing (`owed_initial_x`; no rhs evaluation) — and the
+    /// per-chunk SKIP of its lvalue: the chunks on any net other than `net`. The
+    /// release assigns only the net it names; a co-member of a concatenation
+    /// keeps what its driver already gave it (no store, no event). The skip is
+    /// empty when every chunk lies on `net`, so a single-chunk lvalue takes the
+    /// plain funnel write. A delayed driver's output is otherwise written only at
+    /// its landing tick, so the settle the release re-dirties cannot restore it.
+    /// An undelayed driver is left to that settle (Q-RELIMM). Empty when `net` is
+    /// not pinned: releasing an unforced target is a no-op in both oracles, and
+    /// writing the owed `x` there would add an event neither has. Call it BEFORE
+    /// `release_prologue` clears the pin. Both kernels' `k_release` write the
+    /// triples, each through its own funnel.
+    pub(crate) fn released_driver_outputs(&self, net: u32) -> Vec<(usize, Value, Vec<bool>)> {
+        if !self.st.forced[net as usize] {
+            return Vec::new();
+        }
+        self.st
+            .drivers_of_net(net)
+            .into_iter()
+            .map(|ci| ci as usize)
+            .filter(|&ci| self.st.ir.cont_assigns[ci].delay.is_some())
+            .map(|ci| {
+                let v = match &self.last_ca_drv[ci] {
+                    Some(v) => v.clone(),
+                    None => self.owed_initial_x(ci),
+                };
+                let chunks = &self.st.ir.cont_assigns[ci].lhs.chunks;
+                let skip: Vec<bool> = if chunks.iter().all(|c| c.net == net) {
+                    Vec::new()
+                } else {
+                    chunks.iter().map(|c| c.net != net).collect()
+                };
+                (ci, v, skip)
+            })
+            .collect()
+    }
+
     /// Mark every continuous assign that DRIVES `net` dirty, so the next settle
     /// re-evaluates it. The `release` half of the fix documented at
     /// `SimState::drivers_of_net`; tier-3 has the same two lines against its own

@@ -1547,6 +1547,27 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// it remains the flat store's funnel, and this is the layer above it that
     /// chooses a store.
     pub(crate) fn write_routed(&mut self, lhs: &Lvalue, value: Value, offsets: &Offsets) -> bool {
+        self.write_routed_skipping(lhs, value, offsets, &[])
+    }
+
+    /// The funnel itself, with a PER-CHUNK SKIP: `skip[i]` set means chunk `i`
+    /// of a concatenation lvalue goes through the one split
+    /// (`write_lvalue_escaping`, the A8-concat escape below) and its piece is
+    /// then DROPPED — no store, no dirty, no VCD, no heap write. The engine twin
+    /// is `SimState::write_lvalue_skipping`. Every caller but `k_release` passes
+    /// `&[]` (through `write_routed`): a release assigns only the net it names
+    /// (Q-RELDELAY).
+    pub(crate) fn write_routed_skipping(
+        &mut self,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &Offsets,
+        skip: &[bool],
+    ) -> bool {
+        debug_assert!(
+            lhs.chunks.len() > 1 || !skip.iter().any(|&b| b),
+            "a chunk skip on a single-chunk lvalue"
+        );
         // V1 slice 2: a heap-kind net's elements are not in the flat store, so
         // this write belongs to `SimState::dyn_heap`. Mirrors the engine's own
         // `write_chunk`, whose FIRST check is the same one.
@@ -1636,8 +1657,16 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // destinations and nothing reads between them — the same argument
         // A1-iii's `TaskWrites::Collect` makes, for the same reason (the borrow
         // that makes the collect necessary).
+        // A skipped chunk (`k_release`) takes the same escape, and its piece is
+        // dropped instead of routed.
         if lhs.chunks.len() > 1 {
-            let mask: Vec<bool> = lhs.chunks.iter().map(|c| self.is_heap_net(c.net)).collect();
+            let skipped = |i: usize| skip.get(i).copied().unwrap_or(false);
+            let mask: Vec<bool> = lhs
+                .chunks
+                .iter()
+                .enumerate()
+                .map(|(i, c)| self.is_heap_net(c.net) || skipped(i))
+                .collect();
             if mask.iter().any(|&b| b) {
                 let mut esc = crate::native::write::Escape {
                     mask: &mask,
@@ -1649,6 +1678,9 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 };
                 let mut any = changed;
                 for (idx, piece) in esc.taken.into_iter() {
+                    if skipped(idx) {
+                        continue;
+                    }
                     let c = &lhs.chunks[idx];
                     let (off, word) = offsets.as_slice().get(idx).copied().unwrap_or((0, 0));
                     any |= self.sched.st.dyn_write(c, off, word, &piece);
@@ -2813,10 +2845,15 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
     /// WIRED (slice #2). `release_prologue` owns the four §9.3.1/§9.3.2 arms and
     /// hands back the latent procedural assign whose control resumes, if any;
-    /// this kernel evaluates and pins it, then re-dirties the target's
-    /// continuous drivers so a released WIRE snaps back in this settle rather
-    /// than at the next input change (see `SimState::drivers_of_net`).
+    /// this kernel evaluates and pins it, writes back the target's delayed
+    /// drivers' outputs onto the target's chunks only
+    /// (`Scheduler::released_driver_outputs`, decided before the prologue),
+    /// then re-dirties the target's continuous drivers so a released WIRE
+    /// snaps back in this settle rather than at the next input change (see
+    /// `SimState::drivers_of_net`).
     fn k_release(&mut self, lhs: &Lvalue, sid: u32) {
+        let net = lhs.chunks[0].net;
+        let restore = self.sched.released_driver_outputs(net);
         let resumed = self.sched.st.release_prologue(lhs, sid);
         if let Some((alv, arhs, amult)) = resumed {
             let saved = self.sched.st.cur_time_mult;
@@ -2826,7 +2863,16 @@ impl Kernel for NativeKernel<'_, '_, '_> {
             self.sched.st.cur_time_mult = saved;
             self.sched.st.release_epilogue(&alv, arhs, amult);
         }
-        self.redirty_drivers_of(lhs.chunks[0].net);
+        for (ci, v, skip) in restore {
+            let clhs = self.sched.st.ir.cont_assigns[ci].lhs.clone();
+            let offs = self.k_resolve_lvalue_offsets(&clhs);
+            if skip.is_empty() {
+                self.write_routed(&clhs, v, &offs);
+            } else {
+                self.write_routed_skipping(&clhs, v, &offs, &skip);
+            }
+        }
+        self.redirty_drivers_of(net);
     }
     fn k_queue_pop(&mut self, lhs: &Lvalue, rhs: u32) -> Value {
         // WIRED (A1-i). DELEGATED, not restated: `Scheduler::k_queue_pop` is

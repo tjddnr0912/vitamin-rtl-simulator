@@ -2468,7 +2468,8 @@ fn every_tier3_store_goes_through_the_one_write_funnel() {
         sites.len(),
         1,
         "exactly one store site is allowed, and it is the body of \
-         `NativeKernel::write_routed`. Found: {sites:?}"
+         `NativeKernel::write_routed_skipping` (`write_routed` is its \
+         no-skip delegate). Found: {sites:?}"
     );
     assert_eq!(sites[0].0, "kernel.rs");
 }

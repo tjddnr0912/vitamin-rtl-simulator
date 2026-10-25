@@ -498,6 +498,22 @@ fn reached_callees(ir: &sim_ir::SimIr, eid: u32, out: &mut Vec<u32>) -> bool {
 }
 
 impl Scheduler<'_, '_> {
+    /// The `x` a delayed assign `ci` drives before its first landing, sized from the
+    /// lvalue and the rhs's static width — the rhs is NOT evaluated (a release must not
+    /// call an effectful callee the oracles never call). The spelling of
+    /// `hold_t0_pass` below and of its tier-3 twin; the settles' owed-x drive sizes it
+    /// from an rhs evaluation instead (64 bits for a real rhs — N-R01, whose fix points
+    /// both settles and both hold twins at this helper). Read by
+    /// `released_driver_outputs` (Q-RELDELAY).
+    pub(crate) fn owed_initial_x(&self, ci: usize) -> Value {
+        let ca = &self.st.ir.cont_assigns[ci];
+        let w = self
+            .st
+            .lvalue_width(&ca.lhs)
+            .max(self.st.wt.get(ca.rhs).width);
+        Value::xs(w, false)
+    }
+
     /// The per-pass hold step of `settle_cont_assigns_inner`, run only while
     /// `t0_hold.active()`: drop every held assign from `pass` (its release marks it dirty
     /// again), and drive a held delayed assign's initial `x` (sized from the

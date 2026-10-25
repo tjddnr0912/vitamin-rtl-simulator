@@ -720,13 +720,36 @@ impl<'a> SimState<'a> {
     }
 
     /// The general write funnel. `write_lvalue` shortcuts the 99.7% case ahead of this;
-    /// everything else arrives here exactly as it always did.
+    /// everything else arrives here exactly as it always did. It is
+    /// `write_lvalue_skipping` with no chunk skipped.
     pub(crate) fn write_lvalue_general(
         &mut self,
         lhs: &Lvalue,
         value: Value,
         offsets: &crate::exec::Offsets,
     ) -> bool {
+        self.write_lvalue_skipping(lhs, value, offsets, &[])
+    }
+
+    /// The general funnel with a PER-CHUNK SKIP, the engine twin of tier-3's
+    /// `Escape` (`NetArena::write_lvalue_escaping`): `skip[i]` set means chunk `i`
+    /// of a concatenation lvalue is sliced like every other (its bits consumed
+    /// MSB-first, after the whole-lvalue conversion) and then NOT written — no
+    /// store, no dirty mark, no VCD. Only the multi-chunk loop reads `skip`; every
+    /// lane before it is single-chunk, where a set bit has no meaning. Every
+    /// caller but `k_release` passes `&[]` (through `write_lvalue_general`):
+    /// a release assigns only the net it names (Q-RELDELAY).
+    pub(crate) fn write_lvalue_skipping(
+        &mut self,
+        lhs: &Lvalue,
+        value: Value,
+        offsets: &crate::exec::Offsets,
+        skip: &[bool],
+    ) -> bool {
+        debug_assert!(
+            lhs.chunks.len() > 1 || !skip.iter().any(|&b| b),
+            "a chunk skip on a single-chunk lvalue"
+        );
         // ── real↔int assignment coercion (IEEE 1364 §6.2) ──
         // Only a WHOLE-NET lvalue (single Bit chunk, no offset/width) can be a
         // real destination: a real is dimensionless and never bit/part-selected
@@ -881,6 +904,11 @@ impl<'a> SimState<'a> {
         for (idx, chunk) in lhs.chunks.iter().enumerate() {
             let cw = self.chunk_width(chunk);
             let take_lo = src_hi.saturating_sub(cw);
+            if skip.get(idx).copied().unwrap_or(false) {
+                // A skipped chunk: its bits are consumed, nothing is written.
+                src_hi = take_lo;
+                continue;
+            }
             // slice src[take_lo .. src_hi) → low-aligned chunk value
             let mut piece = Value::zeros(cw.max(1), false);
             piece.width = cw;
