@@ -3,7 +3,8 @@
 //! signed, operands extended by the region's sign, every operation wrapping at the
 //! region's width), over every pair of leaves up to 6 bits and seeded random trees of
 //! depth 3; plus the region rule's parity with `self_width_of`, the `$clog2` arm's
-//! parity with the engine fold, wide leaves and x/z.
+//! parity with the engine fold, wide leaves and x/z; and `offset_value`'s string-literal
+//! leaf, which the width fold refuses.
 
 use super::*;
 use crate::{BitPacked, ConstRepr, ConstVal};
@@ -44,6 +45,29 @@ impl Arena {
             val: (self.consts.len() - 1) as u32,
         });
         (self.exprs.len() - 1) as u32
+    }
+    /// A string literal as the lowering interns it (`str_const_from_bytes`): 8 bits a
+    /// character, the first character most significant, unsigned, `""` 0 bits wide.
+    fn string(&mut self, bytes: &[u8]) -> u32 {
+        let width = (bytes.len() as u32) * 8;
+        let nw = (width as usize).div_ceil(64).max(1);
+        let mut val = vec![0u64; nw];
+        for (k, &b) in bytes.iter().enumerate() {
+            let bit = (bytes.len() - 1 - k) * 8;
+            val[bit / 64] |= u64::from(b) << (bit % 64);
+        }
+        self.consts.push(ConstVal {
+            width,
+            signed: false,
+            repr: ConstRepr::StrUtf8,
+            bits: BitPacked {
+                val,
+                unk: vec![0; nw],
+            },
+        });
+        self.push(Expr::Const {
+            val: (self.consts.len() - 1) as u32,
+        })
     }
     fn push(&mut self, e: Expr) -> u32 {
         self.exprs.push(e);
@@ -243,7 +267,7 @@ fn the_region_is_the_canonical_self_width() {
         }
         let canon = sw[root as usize];
         assert_eq!(
-            edge_region(ar.ctx(), root),
+            edge_region(ar.ctx(), root, Leaves::Width),
             Ok((canon.width, canon.signed)),
             "{t:?}"
         );
@@ -412,4 +436,50 @@ fn clog2_follows_the_engine_arm() {
             None => assert_eq!(edge_bound_value(ar.ctx(), e), Err(EdgeFault::Unreduced)),
         }
     }
+}
+
+/// `offset_value` reads a string literal as the unsigned integer constant it is (IEEE
+/// 1800-2017 §5.9), as the evaluator's `eval_const` does for a select offset; the width
+/// fold (`edge_bound_value`, `Leaves::Width`) still refuses one.
+#[test]
+fn offset_value_reads_a_string_literal_the_width_fold_does_not() {
+    // "a" + 4'sb1111: an unsigned 8-bit region (one operand unsigned), the signed leaf
+    // zero-extended: 97 + 15 = 112.
+    let mut ar = Arena::default();
+    let a = ar.string(b"a");
+    let m1 = ar.konst(4, true, 0xF, 0);
+    let s = ar.push(Expr::Binary {
+        op: BinOp::Add,
+        lhs: a,
+        rhs: m1,
+    });
+    assert_eq!(offset_value(ar.ctx(), s), Ok(112));
+    assert_eq!(offset_value(ar.ctx(), a), Ok(97));
+    // `""` is 0 (vita sizes it 1 bit, not IEEE §11.10.3's 8: Q-STRWIDTH; the value is 0
+    // either way).
+    let mut ar = Arena::default();
+    let e = ar.string(b"");
+    assert_eq!(offset_value(ar.ctx(), e), Ok(0));
+    // Past 64 bits the whole value is read: "\001" + 8 NULs = 2^64 (its low word is 0).
+    let mut ar = Arena::default();
+    let mut b = vec![1u8];
+    b.extend([0u8; 8]);
+    let big = ar.string(&b);
+    assert_eq!(offset_value(ar.ctx(), big), Ok(1i128 << 64));
+    // Width still refuses a string: a string literal as a part-select bound, an indexed
+    // width or a replication count stays E3009 (Q-STRSEL is the row that flips this).
+    let mut ar = Arena::default();
+    let a = ar.string(b"a");
+    let one = ar.konst(8, false, 1, 0);
+    let s = ar.push(Expr::Binary {
+        op: BinOp::Add,
+        lhs: a,
+        rhs: one,
+    });
+    assert_eq!(edge_bound_value(ar.ctx(), a), Err(EdgeFault::Unreduced));
+    assert_eq!(edge_bound_value(ar.ctx(), s), Err(EdgeFault::Unreduced));
+    assert_eq!(
+        edge_value(ar.ctx(), EdgeSpec::Count { n: a }),
+        Err(EdgeFault::Unreduced)
+    );
 }

@@ -4,13 +4,19 @@ use super::*;
 
 impl Elaborator<'_> {
     /// P1-8: emit `ElabMultidriver` for any net whose continuous-assign drivers
-    /// OVERLAP at the bit level. Whole-net targets count as `[0, width)`; a
-    /// static part/bit-select as `[off, off+w)`. DYNAMIC (non-const offset)
-    /// selects and array-element writes are not counted (the conservative cut —
-    /// a false positive on a disjoint dynamic split would reject legal code).
+    /// OVERLAP at the bit level. Each driver counts as the set of storage bits
+    /// its store WRITES — [`ir::const_chunk_written_bits`], the one home of that
+    /// rule in `sim-ir` (called, not copied: this check has no arithmetic of its
+    /// own; `sim-engine` pins both stores against it from SV source): the offset
+    /// as the engine evaluates it, the select's interval clipped to the net's
+    /// bits `[0, width)` (IEEE §11.5.1 — only in-range bits are written), so a
+    /// select wholly out of range drives nothing and overlaps nothing.
+    /// DYNAMIC selects (an offset that fold does not answer) and array-element
+    /// writes are not counted (the conservative cut — a false positive on a
+    /// disjoint dynamic split would reject legal code).
     /// Deterministic: nets in ascending id, intervals sorted, one report per net.
     pub(crate) fn check_whole_net_multidriver(&mut self) {
-        let mut per_net: BTreeMap<u32, Vec<(u64, u64)>> = BTreeMap::new();
+        let mut per_net: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
         // MULTI-DRIVER: a net all of whose cont-assign drivers are WHOLE-NET and
         // non-delayed is RESOLVED by 4-state wire resolution at settle time (the
         // sim-engine `md_nets`), so its overlap is LEGAL — not an error. (On a
@@ -37,22 +43,13 @@ impl Elaborator<'_> {
                 let Some(nv) = self.nets.get(c.net as usize) else {
                     continue;
                 };
-                let iv = match (c.offset, c.width) {
-                    (None, None) => Some((0u64, nv.width.max(1) as u64)),
-                    (Some(off_e), w_e) => {
-                        let off = self.const_expr_u64(off_e);
-                        let w = match w_e {
-                            Some(we) => self.const_expr_u64(we),
-                            None => Some(1), // bit-select
-                        };
-                        match (off, w) {
-                            (Some(o), Some(w)) => Some((o, o.saturating_add(w.max(1)))),
-                            _ => None, // dynamic select: skip
-                        }
-                    }
-                    (None, Some(_)) => None, // not produced by collect_lval_chunks
+                let net_w = nv.width.max(1);
+                let ctx = sim_ir::selfwidth::ExprCtx {
+                    exprs: &self.exprs,
+                    consts: &self.consts,
+                    nets: &self.nets,
                 };
-                if let Some(iv) = iv {
+                if let Some(iv) = ir::const_chunk_written_bits(ctx, c, net_w) {
                     per_net.entry(c.net).or_default().push(iv);
                 }
             }

@@ -179,6 +179,73 @@ pub enum SelKind {
     PartIdxDown,
 }
 
+/// The storage bits `[lo, hi)` that a write through one lvalue chunk of `kind` stores
+/// into a net of `net_w` bits — `None` when it stores none. The ONE spelling of that
+/// set outside the stores themselves: the elaborate multi-driver check asks it, and
+/// `sim-engine`'s parity test pins the native and engine stores against it.
+///
+/// - `off` is the chunk's NORMALIZED offset as a value (a whole net passes `0`). The
+///   stores read it through `eval::offset_of_index_value`: a value outside the `i32`
+///   range is dropped whole (never wrapped), so it writes nothing here either.
+/// - `width` is the chunk's width as the stores take it (`chunk_width`: a whole net is
+///   `net_w`, a bit-select `1`, a part-select its folded width edge).
+/// - The lowest bit is `off` for `Bit` / `PartConst` / `PartIdxUp` and `off - width + 1`
+///   for `PartIdxDown` (whose base is the select's TOP storage bit: `-:` on a
+///   descending net, `+:` on an ascending one), in signed arithmetic.
+/// - Only the bits inside `[0, net_w)` are written (IEEE 1800-2017 §11.5.1: a
+///   part-select partly out of range writes only its in-range bits), so the interval
+///   is clipped to the net and an interval wholly outside it is empty.
+pub fn sel_written_bits(kind: SelKind, off: i128, width: u32, net_w: u32) -> Option<(u32, u32)> {
+    let off = i64::from(i32::try_from(off).ok()?);
+    let w = i64::from(width);
+    let lsb = match kind {
+        SelKind::Bit | SelKind::PartConst | SelKind::PartIdxUp => off,
+        SelKind::PartIdxDown => off - w + 1,
+    };
+    let lo = lsb.max(0);
+    let hi = (lsb + w).min(i64::from(net_w));
+    (lo < hi).then_some((lo as u32, hi as u32))
+}
+
+/// The storage bits `[lo, hi)` that one lvalue chunk with CONSTANT offset and width
+/// writes into a net of `net_w` bits — the one home of "which bits a constant chunk
+/// writes" outside the stores; the elaborate multi-driver check (E3001) asks it, and
+/// `sim-engine` pins both stores against it from SV source. `None` = not counted: the
+/// chunk writes nothing, or its offset is not a constant this reads (the check then
+/// skips it, as a dynamic select). It has no arithmetic of its own; it composes:
+///
+/// - the offset VALUE from [`selfwidth::offset_value`], the engine's own region fold
+///   (one self-determined expression: the widest operand's width, signed only if every
+///   operand is, wrapping there, IEEE 1800-2017 §11.8.1-2) over a numeric literal
+///   without x/z, a string literal, `+`, `-` and `$clog2` of a constant; any other
+///   node (a unary minus, a multiply, a cast, a concatenation, a conditional, a call,
+///   the sealed `$signed(..)` of a normalized offset) is not read;
+/// - the width as the stores take it (`chunk_width`): a whole net `net_w`, a
+///   bit-select `1`, a part-select its width folded by
+///   [`selfwidth::const_u32_of_expr_ctx`], `net_w` when that declines;
+/// - [`sel_written_bits`]: the lowest bit by kind, an offset outside `i32` writing
+///   nothing, clipped to `[0, net_w)` (§11.5.1).
+pub fn const_chunk_written_bits(
+    ctx: selfwidth::ExprCtx,
+    chunk: &LvalChunk,
+    net_w: u32,
+) -> Option<(u32, u32)> {
+    match (chunk.offset, chunk.width) {
+        (None, None) => sel_written_bits(SelKind::Bit, 0, net_w, net_w),
+        (Some(off_e), w_e) => {
+            let off = selfwidth::offset_value(ctx, off_e).ok()?;
+            let w = match chunk.kind {
+                SelKind::Bit => 1,
+                _ => w_e
+                    .and_then(|we| selfwidth::const_u32_of_expr_ctx(ctx, we))
+                    .unwrap_or(net_w),
+            };
+            sel_written_bits(chunk.kind, off, w, net_w)
+        }
+        (None, Some(_)) => None, // not produced by `collect_lval_chunks`
+    }
+}
+
 /// System-function id (§1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum SysFuncId {

@@ -22,6 +22,33 @@ changed for a user of the simulator.
   net driven through a port connection, still sees the forced value until the drivers settle
   (queued, Q-RELIMM).
 
+### Fixed — overlapping continuous assignments through an indexed part-select
+
+- Two continuous assignments to one net, one of them through an indexed part-select whose base is
+  the select's top storage bit (`y[3 -: 2]` on `wire [5:0] y`, `y[2 +: 2]` on `wire [0:5] y`), were
+  checked for overlap at the wrong bits. A real overlap with `assign y[2] = b;` ran with the shared
+  bit unresolved (`y=zz11zz`, where Icarus Verilog reads `zz1xzz`); it is now refused like its
+  spelled twin `y[3:2]` (E3001). A disjoint pair (`assign y[1 -: 2] = a;` beside
+  `assign y[5:2] = b;`) was refused; it now runs.
+- The check now counts the bits a select actually writes: only the bits inside the net (IEEE
+  1800-2017 §11.5.1), with a constant offset read as the store evaluates it — one
+  self-determined expression: its widest operand's width, signed only if every operand is
+  (§11.8), a string literal the unsigned integer it is (§5.9). Two selects that meet only
+  outside the net (`y[5:4]` and `y[4]` on `wire [3:0] y`) were refused and now run, writing
+  nothing there; so does a select whose wide constant offset is out of range although its low
+  64 bits are not (`y[65'sh1_0000_0000_0000_0002 -: 2]` beside `y[2]`). An overlap at a real bit
+  through a select that reaches below the net's low bit (`y[2 +: 3]` beside `y[3]` on
+  `wire [10:3] y`) ran with that bit unresolved and is now refused, and so is one through an
+  offset holding `$clog2` (`y[$clog2(8) -: 2]` beside `y[2]`). On a net whose low bound is not
+  0 or that ascends, an offset is read only when it reaches the check as one constant of at
+  most 64 bits: a literal, a parameter or localparam, or a sum of sized literals the front end
+  folds (`16'hFFFF + 16'h0003`); a string literal, `$clog2`, a literal wider than 64 bits and
+  any other sum are skipped there. A select whose constant offset the check does not read is
+  still not counted (queued, Q-MDCONSTOFF): a multiply, a unary minus, a concatenation, a
+  conditional, a function call or cast, a `$clog2` whose argument is not one non-negative
+  numeric constant within 64 bits (a string, a negative signed value, an expression), a
+  narrow signed sum on a `[N:0]` net, and the offsets skipped on the other nets above.
+
 ### Fixed — a value vitamin holds for the design keeps its type
 
 - An intra-assignment delay or event (`r = #1 e`, `r = @(go) e`, `r <= @(go) e`,

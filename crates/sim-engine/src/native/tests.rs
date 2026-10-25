@@ -3286,3 +3286,556 @@ fn eng1_real_signed_zero_store_is_a_value_change_on_both_stores() {
         );
     }
 }
+
+/// Q-MDIDXDOWN (Q-RELDELAY r4): the storage bits a write through one lvalue chunk
+/// stores has ONE home outside the stores, `sim_ir::sel_written_bits`, which the
+/// elaborate multi-driver check (`check_whole_net_multidriver`) asks. Pinned here
+/// against BOTH stores — the native `write_chunk` (`chunk_lsb`) and the engine's
+/// (`state/init_diag.rs`) — and the read side's `select_lsb_width` over a grid:
+/// every `SelKind` x a descending and an ascending net x declared LSB {0, 3, -2} x
+/// normalized offsets negative, inside and past either end (and four outside the
+/// `i32` domain, which the stores drop whole) x chunk width {1, 2, 3, 65} x net width
+/// {1, 4, 8, 70}, plus each net's whole-net chunk. Each case writes an all-ones
+/// value into an all-x net, so the written bits are exactly the known ones.
+///
+/// The `+:` / `-:` / bit sites come from the lowering (an ascending net's `+:` is
+/// `PartIdxDown`); a `PartConst` chunk is each `PartIdxUp` site with its kind
+/// replaced, since the stores read `PartConst` and `PartIdxUp` alike and a
+/// constant `[m:l]` could not reach every grid point.
+#[test]
+fn sel_written_bits_is_the_set_both_stores_write() {
+    use sim_ir::{LvalChunk, Lvalue, SelKind};
+    let mut decls = String::new();
+    let mut body = String::new();
+    let mut n = 0u32;
+    for nw in [1i64, 4, 8, 70] {
+        for lsb in [0i64, 3, -2] {
+            for asc in [false, true] {
+                let (l, r) = if asc {
+                    (lsb, lsb + nw - 1)
+                } else {
+                    (lsb + nw - 1, lsb)
+                };
+                decls.push_str(&format!("reg [{l}:{r}] n{n};\n"));
+                body.push_str(&format!("n{n}[k] = v;\n"));
+                for w in [1, 2, 3, 65] {
+                    body.push_str(&format!("n{n}[k +: {w}] = v; n{n}[k -: {w}] = v;\n"));
+                }
+                n += 1;
+            }
+        }
+    }
+    let src = format!(
+        "module t;\n{decls}integer k; reg [99:0] v;\ninitial begin\n{body}end\nendmodule\n"
+    );
+    let (ir, opts) = build_with_opts(&src);
+    let sink = NullSink;
+    let mut chunks: Vec<LvalChunk> = Vec::new();
+    for (lhs, _) in write_sites(&ir) {
+        assert_eq!(lhs.chunks.len(), 1, "one chunk per site");
+        let c = lhs.chunks[0].clone();
+        if c.kind == SelKind::PartIdxUp {
+            chunks.push(LvalChunk {
+                kind: SelKind::PartConst,
+                ..c.clone()
+            });
+        }
+        chunks.push(c);
+    }
+    for net in 0..n {
+        chunks.push(LvalChunk {
+            net,
+            word: None,
+            offset: None,
+            width: None,
+            kind: SelKind::Bit,
+        });
+    }
+    let per_kind = |k: SelKind| chunks.iter().filter(|c| c.kind == k).count();
+    // 24 nets: 24 bit-selects + 24 whole nets, and 4 widths x 2 directions each
+    // for the indexed kinds, half of them flipped by the ascending nets.
+    assert_eq!(per_kind(SelKind::Bit), 48, "bit + whole chunks");
+    assert_eq!(per_kind(SelKind::PartIdxUp), 96, "PartIdxUp sites");
+    assert_eq!(per_kind(SelKind::PartIdxDown), 96, "PartIdxDown sites");
+    assert_eq!(per_kind(SelKind::PartConst), 96, "PartConst chunks");
+
+    // Normalized offsets in the `i32` domain, as `offset_of_index_value` hands them on.
+    let offs: [i64; 27] = [
+        -140, -71, -70, -66, -65, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 7, 8, 9, 63, 64, 65, 69, 70,
+        71, 72, 135, 136,
+    ];
+    // Offsets outside it, carried as the value the store reads: dropped whole.
+    let wide: [(i128, crate::value::Value); 4] = {
+        let v64 = |x: i64| {
+            let mut v = crate::value::Value::zeros(64, true);
+            v.val[0] = x as u64;
+            v
+        };
+        let mut v70 = crate::value::Value::zeros(70, false);
+        v70.val[1] = 1; // 2^64
+        [
+            (1i128 << 31, v64(1 << 31)),
+            (1i128 << 40, v64(1 << 40)),
+            (-(1i128 << 31) - 1, v64(-(1 << 31) - 1)),
+            (1i128 << 64, v70),
+        ]
+    };
+    let mut cases: Vec<(i128, u32)> = offs
+        .iter()
+        .map(|&o| (i128::from(o), o as i32 as u32))
+        .collect();
+    for (val, v) in &wide {
+        cases.push((*val, crate::eval::offset_of_index_value(v)));
+    }
+
+    let mut arena = NetArena::build(&ir, &opts).expect("arena");
+    let mut st = fresh_state(&ir, &sink);
+    st.build_plain_scalar();
+    let (mut compared, mut clipped_low, mut clipped_high, mut empty) =
+        (0usize, 0usize, 0usize, 0usize);
+    for c in &chunks {
+        let net_w = ir.nets[c.net as usize].width;
+        let whole = c.offset.is_none() && c.width.is_none();
+        let cw = arena.chunk_width(&ir, c);
+        for &(off, raw) in &cases {
+            if whole && off != 0 {
+                continue; // a whole-net chunk has no offset: one case
+            }
+            let reset = Lvalue {
+                chunks: vec![LvalChunk {
+                    net: c.net,
+                    word: None,
+                    offset: None,
+                    width: None,
+                    kind: SelKind::Bit,
+                }],
+            };
+            let o0 = crate::exec::Offsets::Heap(vec![(0, 0)]);
+            let xs = crate::value::Value::xs(net_w, false);
+            arena.write_lvalue(&ir, &reset, xs.clone(), &o0, &[]);
+            st.write_lvalue(&reset, xs, &o0);
+            let mut ones = crate::value::Value::zeros(cw.max(1), false);
+            for i in 0..cw {
+                ones.set_vu(i, 1, 0);
+            }
+            let lv = Lvalue {
+                chunks: vec![c.clone()],
+            };
+            let o = crate::exec::Offsets::Heap(vec![(raw, 0)]);
+            arena.write_lvalue(&ir, &lv, ones.clone(), &o, &[]);
+            st.write_lvalue(&lv, ones, &o);
+            let written = |v: &crate::value::Value| -> Vec<u32> {
+                (0..net_w).filter(|&i| v.get_vu(i) == (1, 0)).collect()
+            };
+            let got_n = written(&arena.read_net(c.net, None));
+            let got_e = written(&st.read_net(c.net, None));
+            let want: Vec<u32> = sim_ir::sel_written_bits(c.kind, off, cw, net_w)
+                .map_or(Vec::new(), |(lo, hi)| (lo..hi).collect());
+            let at = format!("{:?} net {} (w {net_w}) off {off} cw {cw}", c.kind, c.net);
+            assert_eq!(got_n, want, "native store vs sel_written_bits: {at}");
+            assert_eq!(got_e, want, "engine store vs sel_written_bits: {at}");
+            // The read side's spelling of the same window (`eval_select`).
+            if !whole {
+                if let Ok(o32) = i32::try_from(off) {
+                    let (lsb, rw) =
+                        crate::eval::binops::select_lsb_width(c.kind, i64::from(o32), cw);
+                    let rd: Vec<u32> = (lsb..lsb + i64::from(rw))
+                        .filter(|&b| b >= 0 && b < i64::from(net_w))
+                        .map(|b| b as u32)
+                        .collect();
+                    assert_eq!(rd, want, "select_lsb_width vs sel_written_bits: {at}");
+                }
+            }
+            let full_lo = match c.kind {
+                SelKind::PartIdxDown => i64::try_from(off).unwrap_or(i64::MAX) - i64::from(cw) + 1,
+                _ => i64::try_from(off).unwrap_or(i64::MAX),
+            };
+            if !want.is_empty() && full_lo < 0 {
+                clipped_low += 1;
+            }
+            if !want.is_empty() && full_lo.saturating_add(i64::from(cw)) > i64::from(net_w) {
+                clipped_high += 1;
+            }
+            if want.is_empty() {
+                empty += 1;
+            }
+            compared += 1;
+        }
+    }
+    // Non-vacuity: the grid reaches both clips and the empty set, and its size is
+    // pinned so a shrinking grid is a deliberate change.
+    assert!(
+        clipped_low > 0 && clipped_high > 0 && empty > 0,
+        "{clipped_low} {clipped_high} {empty}"
+    );
+    assert_eq!(
+        compared,
+        312 * 31 + 24,
+        "grid size moved — re-pin deliberately"
+    );
+}
+
+/// Q-RELDELAY r5 (Q-MDIDXDOWN): the bits the elaborate multi-driver check counts for a
+/// constant chunk, `sim_ir::const_chunk_written_bits`, ARE the bits both stores write —
+/// end to end from SV source, so the offset reaches the check and the stores through the
+/// real lowering, not as a computed value. Seeded `+` / `-` trees of depth <= 3 over
+/// sized literals (widths 1 to 128, both signs, small / all-ones / MSB-only patterns,
+/// `64'hFFFF_FFFF_FFFF_FFFF`, `65'sh1_0000_0000_0000_0002`), unsized decimals, string
+/// literals (`""`, `"a"`, `"ab"`, `"\001"`, 17 x `"a"`, and `"\001"` + 8 NULs = 2^64,
+/// whose low word is 0; alone, also `"\377"`, an unsigned 255 whose top bit is set), `$clog2` of a sized literal and `'0` / `'1`, each as
+/// `assign nK[T] = v;` / `[T +: 2]` / `[T -: 2]` / `[T +: 3]` on its own net of
+/// `[7:0]`, `[70:0]`, `[10:3]`, `[0:7]` and `[3:-4]`. Per chunk: when the offset is a
+/// constant `sim_ir::selfwidth::offset_value` reads, both stores (offsets through
+/// `eval::resolve_offsets` on each store's own reader) write all-ones into an all-x net
+/// and the written bits must equal the check's (empty when it counts none); otherwise
+/// the chunk is skipped by the check and only counted here. No leaf is wider than 128
+/// bits: a negative signed value of 129 bits or more is dropped by the store while the
+/// check reads it per IEEE (Q-IDXVALUE).
+#[test]
+fn const_chunk_written_bits_is_what_the_stores_write() {
+    use sim_ir::{LvalChunk, Lvalue, SelKind};
+
+    #[derive(Clone)]
+    enum T {
+        /// `w'[s]h..`: width, signed, value bits.
+        Lit(u32, bool, u128),
+        /// An unsized decimal (32-bit signed).
+        Dec(u32),
+        /// A string literal: its bytes.
+        Str(Vec<u8>),
+        /// `$clog2` of an unsigned sized literal.
+        Clog2(u32, u128),
+        /// `'0` / `'1`.
+        Fill(bool),
+        Add(Box<T>, Box<T>),
+        Sub(Box<T>, Box<T>),
+    }
+    fn mask(w: u32) -> u128 {
+        if w >= 128 {
+            u128::MAX
+        } else {
+            (1u128 << w) - 1
+        }
+    }
+    fn text(t: &T) -> String {
+        match t {
+            T::Lit(w, s, v) => format!("{w}'{}h{v:x}", if *s { "s" } else { "" }),
+            T::Dec(v) => v.to_string(),
+            T::Str(b) => {
+                let mut s = String::from("\"");
+                for &c in b {
+                    if c.is_ascii_alphanumeric() {
+                        s.push(c as char);
+                    } else {
+                        s.push_str(&format!("\\{c:03o}"));
+                    }
+                }
+                s.push('"');
+                s
+            }
+            T::Clog2(w, v) => format!("$clog2({w}'h{v:x})"),
+            T::Fill(true) => "'1".to_string(),
+            T::Fill(false) => "'0".to_string(),
+            T::Add(a, b) => format!("({} + {})", text(a), text(b)),
+            T::Sub(a, b) => format!("({} - {})", text(a), text(b)),
+        }
+    }
+    // The self-determined region (IEEE §11.6.1 / §11.8.1): widest operand, signed iff
+    // every operand is — for the coverage counts below only (`None` with a fill leaf,
+    // whose width the context decides).
+    fn region(t: &T) -> Option<(u32, bool)> {
+        match t {
+            T::Lit(w, s, _) => Some((*w, *s)),
+            T::Dec(_) | T::Clog2(..) => Some((32, true)),
+            T::Str(b) => Some(((b.len() as u32 * 8).max(1), false)),
+            T::Fill(_) => None,
+            T::Add(a, b) | T::Sub(a, b) => {
+                let (wa, sa) = region(a)?;
+                let (wb, sb) = region(b)?;
+                Some((wa.max(wb), sa && sb))
+            }
+        }
+    }
+    // The unwrapped sum of the region-extended leaves (`None` past 100-bit leaves).
+    fn exact(t: &T, signed: bool) -> Option<i128> {
+        match t {
+            T::Lit(w, s, v) => {
+                if *w > 100 {
+                    return None;
+                }
+                let neg = signed && *s && (v >> (w - 1)) & 1 == 1;
+                Some(*v as i128 - if neg { 1i128 << w } else { 0 })
+            }
+            T::Dec(v) => Some(i128::from(*v)),
+            T::Str(b) => {
+                if b.len() > 12 {
+                    return None;
+                }
+                Some(b.iter().fold(0i128, |a, &c| (a << 8) | i128::from(c)))
+            }
+            T::Clog2(_, v) => Some(if *v <= 1 {
+                0
+            } else {
+                i128::from(128 - (v - 1).leading_zeros())
+            }),
+            T::Fill(_) => None,
+            T::Add(a, b) => Some(exact(a, signed)? + exact(b, signed)?),
+            T::Sub(a, b) => Some(exact(a, signed)? - exact(b, signed)?),
+        }
+    }
+    fn any(t: &T, f: &dyn Fn(&T) -> bool) -> bool {
+        f(t) || matches!(t, T::Add(a, b) | T::Sub(a, b) if any(a, f) || any(b, f))
+    }
+
+    let mut rng = Rng::new(0x5245_4c44_5235);
+    const WIDTHS: [u32; 14] = [1, 2, 3, 4, 8, 31, 32, 33, 63, 64, 65, 70, 100, 128];
+    let strings: [Vec<u8>; 6] = [
+        b"".to_vec(),
+        b"a".to_vec(),
+        b"ab".to_vec(),
+        vec![1u8],
+        vec![b'a'; 17],
+        [vec![1u8], vec![0u8; 8]].concat(),
+    ];
+    let leaf = |rng: &mut Rng| -> T {
+        match rng.range(0, 19) {
+            0..=9 => {
+                let w = *rng.pick(&WIDTHS);
+                let s = rng.boolean();
+                let v = match rng.range(0, 9) {
+                    0..=3 => u128::from(rng.range(0, 3)),
+                    4..=6 => u128::from(rng.range(0, 15)),
+                    7 => u128::MAX,
+                    8 => 1u128 << (w - 1),
+                    _ => (u128::from(r64(rng)) << 64) | u128::from(r64(rng)),
+                };
+                T::Lit(w, s, v & mask(w))
+            }
+            10 => T::Lit(64, false, u128::from(u64::MAX)),
+            11 => T::Lit(65, true, (1u128 << 64) + 2),
+            12..=13 => T::Dec(rng.range(0, 9) as u32),
+            14..=16 => T::Str(rng.pick(&strings).clone()),
+            17..=18 => {
+                let w = *rng.pick(&[4u32, 8, 32, 64]);
+                T::Clog2(w, u128::from(rng.range(0, 300)) & mask(w))
+            }
+            _ => T::Fill(rng.boolean()),
+        }
+    };
+    fn tree(rng: &mut Rng, depth: u32, leaf: &dyn Fn(&mut Rng) -> T) -> T {
+        if depth == 0 || rng.range(0, 3) == 0 {
+            return leaf(rng);
+        }
+        let a = Box::new(tree(rng, depth - 1, leaf));
+        let b = Box::new(tree(rng, depth - 1, leaf));
+        if rng.boolean() {
+            T::Add(a, b)
+        } else {
+            T::Sub(a, b)
+        }
+    }
+
+    const NETS: [&str; 5] = ["[7:0]", "[70:0]", "[10:3]", "[0:7]", "[3:-4]"];
+    const SELS: [(&str, &str); 4] = [
+        ("[", "]"),
+        ("[", " +: 2]"),
+        ("[", " -: 2]"),
+        ("[", " +: 3]"),
+    ];
+    // Every special leaf alone first (a root constant reaches the check as itself), then
+    // the seeded trees.
+    let mut trees: Vec<T> = strings.iter().cloned().map(T::Str).collect();
+    trees.extend([
+        T::Str(vec![0xFF]),
+        T::Lit(64, false, u128::from(u64::MAX)),
+        T::Lit(65, true, (1u128 << 64) + 2),
+        T::Lit(128, true, u128::MAX),
+        T::Fill(false),
+        T::Fill(true),
+        T::Clog2(8, 9),
+    ]);
+    trees.extend((0..240).map(|_| tree(&mut rng, 3, &leaf)));
+    let mut decls = String::new();
+    let mut site: Vec<(usize, usize)> = Vec::new(); // net-shape index, tree index
+    for (ti, t) in trees.iter().enumerate() {
+        let tx = text(t);
+        for (ni, nd) in NETS.iter().enumerate() {
+            for (open, close) in SELS {
+                let n = site.len();
+                decls.push_str(&format!(
+                    "wire {nd} n{n};\nassign n{n}{open}{tx}{close} = v;\n"
+                ));
+                site.push((ni, ti));
+            }
+        }
+    }
+    let src = format!("module t;\nreg [127:0] v;\n{decls}endmodule\n");
+    let (ir, opts) = build_with_opts(&src);
+    assert_eq!(
+        ir.cont_assigns.len(),
+        site.len(),
+        "one continuous assignment per site"
+    );
+
+    let sink = NullSink;
+    let mut arena = NetArena::build(&ir, &opts).expect("arena");
+    let mut st = fresh_state(&ir, &sink);
+    st.build_plain_scalar();
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let ctx = sim_ir::selfwidth::ExprCtx::of(&ir);
+    // [decided, sites] on [7:0] / [70:0]; decided sites by tree class; in-range writes.
+    let (mut lsb0_sites, mut lsb0_decided) = (0usize, 0usize);
+    let (mut s_str, mut s_wide, mut s_clog, mut s_mixed, mut s_wrap, mut s_neg) =
+        (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+    let (mut decided, mut writes, mut skipped) = (0usize, 0usize, 0usize);
+    let mut last_net = None;
+    for (i, ca) in ir.cont_assigns.iter().enumerate() {
+        assert_eq!(ca.lhs.chunks.len(), 1, "one chunk per site");
+        let c: &LvalChunk = &ca.lhs.chunks[0];
+        // Site i drives net `n{i}`: the assignments come in declaration order, each on
+        // a later net than the one before, of its shape's width.
+        let (ni, ti) = site[i];
+        let t = &trees[ti];
+        assert!(
+            last_net < Some(c.net),
+            "site n{i}: nets out of declaration order"
+        );
+        last_net = Some(c.net);
+        let net_w = ir.nets[c.net as usize].width;
+        assert_eq!(net_w, if ni == 1 { 71 } else { 8 }, "site n{i}: net width");
+        let off = c.offset.map(|e| sim_ir::selfwidth::offset_value(ctx, e));
+        if ni < 2 {
+            lsb0_sites += 1;
+        }
+        if matches!(off, Some(Err(_))) {
+            skipped += 1;
+            continue;
+        }
+        decided += 1;
+        if ni < 2 {
+            lsb0_decided += 1;
+        }
+        let want: Vec<u32> = sim_ir::const_chunk_written_bits(ctx, c, net_w)
+            .map_or(Vec::new(), |(lo, hi)| (lo..hi).collect());
+
+        let reset = Lvalue {
+            chunks: vec![LvalChunk {
+                net: c.net,
+                word: None,
+                offset: None,
+                width: None,
+                kind: SelKind::Bit,
+            }],
+        };
+        let o0 = crate::exec::Offsets::Heap(vec![(0, 0)]);
+        let xs = crate::value::Value::xs(net_w, false);
+        arena.write_lvalue(&ir, &reset, xs.clone(), &o0, &[]);
+        st.write_lvalue(&reset, xs, &o0);
+        let lv = Lvalue {
+            chunks: vec![c.clone()],
+        };
+        let rng_a = crate::state::RngCells::default();
+        let ctx_e = EvalCtx {
+            ir: &ir,
+            nets: &st,
+            now: 0,
+            wt: &wt,
+            time_mult: 1,
+            rng: &rng_a,
+            plusargs: &[],
+        };
+        let off_e = crate::eval::resolve_offsets(&ctx_e, &lv);
+        let rng_b = crate::state::RngCells::default();
+        let ctx_n = EvalCtx {
+            ir: &ir,
+            nets: &arena,
+            now: 0,
+            wt: &wt,
+            time_mult: 1,
+            rng: &rng_b,
+            plusargs: &[],
+        };
+        let off_n = crate::eval::resolve_offsets(&ctx_n, &lv);
+        let cw = arena.chunk_width(&ir, c);
+        let mut ones = crate::value::Value::zeros(cw.max(1), false);
+        for b in 0..cw {
+            ones.set_vu(b, 1, 0);
+        }
+        arena.write_lvalue(&ir, &lv, ones.clone(), &off_n, &[]);
+        st.write_lvalue(&lv, ones, &off_e);
+        let written = |v: &crate::value::Value| -> Vec<u32> {
+            (0..net_w).filter(|&b| v.get_vu(b) == (1, 0)).collect()
+        };
+        let at = format!("site n{i} {} `{}` {:?}", NETS[ni], text(t), c.kind);
+        assert_eq!(
+            written(&arena.read_net(c.net, None)),
+            want,
+            "native store: {at}"
+        );
+        assert_eq!(
+            written(&st.read_net(c.net, None)),
+            want,
+            "engine store: {at}"
+        );
+
+        if !want.is_empty() {
+            writes += 1;
+        }
+        if any(t, &|x| matches!(x, T::Str(_))) {
+            s_str += 1;
+        }
+        if any(t, &|x| matches!(x, T::Lit(w, true, _) if *w > 64)) {
+            s_wide += 1;
+        }
+        if any(t, &|x| matches!(x, T::Clog2(..))) {
+            s_clog += 1;
+        }
+        if any(t, &|x| {
+            matches!(x, T::Lit(_, true, _) | T::Dec(_) | T::Clog2(..))
+        }) && any(t, &|x| matches!(x, T::Lit(_, false, _) | T::Str(_)))
+        {
+            s_mixed += 1;
+        }
+        if let Some((w, s)) = region(t) {
+            if let Some(x) = exact(t, s) {
+                let (lo, hi) = if s {
+                    (-(1i128 << (w - 1)), 1i128 << (w - 1))
+                } else {
+                    (0, 1i128 << w)
+                };
+                if x < lo || x >= hi {
+                    s_wrap += 1;
+                }
+            }
+        }
+        if matches!(off, Some(Ok(v)) if v < 0) {
+            s_neg += 1;
+        }
+    }
+    // Non-vacuity: almost every site on a net whose low bound is 0 is decided (the
+    // rest are the narrow signed sums the lowering seals, Q-MDCONSTOFF), every leaf
+    // class reaches a decided site, and many sites write in-range bits.
+    assert!(
+        lsb0_decided * 10 >= lsb0_sites * 9,
+        "decided {lsb0_decided} of {lsb0_sites} [N:0] sites"
+    );
+    for (what, n) in [
+        ("string leaf", s_str),
+        ("> 64-bit signed leaf", s_wide),
+        ("$clog2 leaf", s_clog),
+        ("mixed-sign tree", s_mixed),
+        ("wrapping region", s_wrap),
+        ("negative region value", s_neg),
+    ] {
+        assert!(n >= 10, "{what}: {n} decided sites");
+    }
+    assert!(
+        writes * 4 >= decided,
+        "{writes} of {decided} decided sites write"
+    );
+    assert_eq!(
+        decided + skipped,
+        253 * 20,
+        "site count moved — re-pin deliberately"
+    );
+}

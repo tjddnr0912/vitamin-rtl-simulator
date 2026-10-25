@@ -628,26 +628,34 @@ pub enum EdgeFault {
 /// The region a bound forms (IEEE 1800 §11.6.1, §11.8.1-2): the width and signedness
 /// [`self_width_of`] gives its root, over exactly the arms of
 /// [`const_u32_of_expr_ctx`] — a `Numeric` constant without x/z, `+`, `-`, and `$clog2`
-/// of one constant with the engine's own decline set.
-fn edge_region(ir: ExprCtx, eid: u32) -> Result<(u32, bool), EdgeFault> {
+/// of one constant with the engine's own decline set — plus, for [`offset_value`]
+/// (`Leaves::Value`), a string literal (unsigned).
+fn edge_region(ir: ExprCtx, eid: u32, leaves: Leaves) -> Result<(u32, bool), EdgeFault> {
     match &ir.exprs[eid as usize] {
         Expr::Const { val } => {
             let c = &ir.consts[*val as usize];
-            if !matches!(c.repr, ConstRepr::Numeric) {
+            let read = match c.repr {
+                ConstRepr::Numeric => true,
+                ConstRepr::StrUtf8 => leaves == Leaves::Value,
+                ConstRepr::Real => false,
+            };
+            if !read {
                 return Err(EdgeFault::Unreduced);
             }
             if c.bits.unk.iter().any(|&u| u != 0) {
                 return Err(EdgeFault::Unknown);
             }
-            Ok((clamp_w(c.width.max(1)), c.signed))
+            // signed only as a `Numeric` constant: the store's `self_width_of` rule.
+            let signed = c.signed && matches!(c.repr, ConstRepr::Numeric);
+            Ok((clamp_w(c.width.max(1)), signed))
         }
         Expr::Binary {
             op: BinOp::Add | BinOp::Sub,
             lhs,
             rhs,
         } => {
-            let (a, sa) = edge_region(ir, *lhs)?;
-            let (b, sb) = edge_region(ir, *rhs)?;
+            let (a, sa) = edge_region(ir, *lhs, leaves)?;
+            let (b, sb) = edge_region(ir, *rhs, leaves)?;
             // arithmetic: max(L, R), signed iff BOTH signed (the `self_width_of` arm)
             Ok((a.max(b), sa && sb))
         }
@@ -716,7 +724,28 @@ fn edge_eval(ir: ExprCtx, eid: u32, w: u32, signed: bool) -> Vec<u64> {
 /// region's signedness. Saturates at `i128::MAX` / `i128::MIN` past 127 bits of magnitude
 /// (every consumer of such a value refuses or clamps it).
 pub fn edge_bound_value(ir: ExprCtx, eid: u32) -> Result<i128, EdgeFault> {
-    let (w, signed) = edge_region(ir, eid)?;
+    edge_fold(ir, eid, Leaves::Width)
+}
+
+/// The value the engine's evaluator gives a constant select OFFSET (`eval::resolve_offsets`
+/// evaluates the offset at its own width and signedness): [`edge_bound_value`]'s region fold
+/// with a string literal read as the unsigned integer it is (IEEE 1800-2017 §5.9), as the store
+/// reads it (`self_width_of`, never signed, then `resize_keep_sign`). The width fold does not.
+pub fn offset_value(ir: ExprCtx, eid: u32) -> Result<i128, EdgeFault> {
+    edge_fold(ir, eid, Leaves::Value)
+}
+
+/// Which constant leaves a region fold reads.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Leaves {
+    /// The width fold's: a `Numeric` constant.
+    Width,
+    /// The evaluator's: a `Numeric` constant or a string literal.
+    Value,
+}
+
+fn edge_fold(ir: ExprCtx, eid: u32, leaves: Leaves) -> Result<i128, EdgeFault> {
+    let (w, signed) = edge_region(ir, eid, leaves)?;
     let v = edge_eval(ir, eid, w, signed);
     let negative = signed && word_bit(&v, w - 1);
     let mag = if negative {
