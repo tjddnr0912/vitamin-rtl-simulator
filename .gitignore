@@ -43,3 +43,7 @@ CLAUDE.md
 # bench/keccak is OUR OWN RTL (see its README) and ships whole.
 !/bench/keccak/*.sv
 !/bench/keccak/*.py
+
+# local secrets (API keys)
+.env
+.env.*
