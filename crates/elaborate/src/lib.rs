@@ -133,6 +133,7 @@ mod limits;
 mod lvalue;
 mod multidriver;
 mod net_util;
+mod read_set;
 mod select_scope;
 pub(crate) use limits::*;
 // The deferred-print task list lives with the hoister that must skip those arguments;
@@ -567,12 +568,17 @@ struct Elaborator<'s> {
     /// lane, read by the header lane's constant refusal (`None` outside it).
     t0_decline: Option<const_level_header::T0Decline>,
     /// §4.5.166 HIER twin: ProcIds whose implicit `@(*)`/`always_comb`/
-    /// `always_latch` read-set was inferred by `comb_read_set` (NOT a bare
+    /// `always_latch` read-set was inferred by `comb_read_set_in` (NOT a bare
     /// self-timed `always`). Recomputed after the deferred hierarchical
     /// indexed read/write resolvers patch real net+index into the arenas, so a
     /// hierarchical index (`y = dut.mem[idx]` / `dut.mem[idx] = v`) — invisible
     /// behind a sentinel at lowering time — enters the sensitivity list.
     comb_inferred_procs: Vec<u32>,
+    /// ENG-2: the provenance `comb_read_set_in` reads (`read_set.rs`) — which
+    /// expressions, statements and call sites came from an assertion action, an inlined
+    /// task / function / void-function body, a compound assignment's lvalue copy; the
+    /// void-function frames; every in-body `@(*)`. Lives as long as the arenas.
+    rs: read_set::ReadSetMarks,
     /// B1 frame-call metadata, index-aligned to `self.funcs`/`ir.funcs`. Pushed
     /// in `lower_frame_func`; drained into `Sidecars.func_table`. EMPTY until a
     /// frame (automatic/recursive) function lowers.

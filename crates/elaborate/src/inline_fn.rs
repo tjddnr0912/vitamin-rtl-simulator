@@ -496,6 +496,7 @@ impl Elaborator<'_> {
         // (2) Reduce the straight-line body → an ExprId, formals bound to actuals. The
         //     R2 dyn aliases are pushed for the body's read paths and popped after.
         let n_dyn = dyn_binds.len();
+        let dyn_nets: Vec<u32> = dyn_binds.iter().map(|&(_, n)| n).collect();
         self.dyn_subst.extend(dyn_binds);
         self.inline_stack.push(fname);
         let in_pkg = pkg.is_some();
@@ -509,7 +510,27 @@ impl Elaborator<'_> {
             );
             self.push_rtn_pkg_scope(p, &func.name.name, decl_scope::RtnKind::Func, declared);
         }
-        let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args, &hdr_win);
+        // ENG-2 (`read_set.rs`): the reduced body is marked — an `@*` reads the call's
+        // arguments, not the body (§9.4.2.2) — and the arguments are recorded against the
+        // result, read even where the body ignores its formal.
+        let result = self.with_read_mark(read_set::MARK_FN_INLINE, |s| {
+            s.reduce_function_body(func, &inputs, &actual_ids, &eff_args, &hdr_win)
+        });
+        self.rs
+            .inline_args
+            .entry(result)
+            .or_default()
+            .extend(actual_ids.iter().copied());
+        if !dyn_nets.is_empty() {
+            // An aliased dynamic-array actual has no expression of its own (its slot is a
+            // placeholder): the net is the argument read, under the call's own mark.
+            let mark = self.rs.cur;
+            self.rs
+                .inline_arg_nets
+                .entry(result)
+                .or_default()
+                .extend(dyn_nets.into_iter().map(|n| (mark, n)));
+        }
         if in_pkg {
             self.pop_rtn_pkg_scope();
         }

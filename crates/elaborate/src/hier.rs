@@ -924,15 +924,26 @@ impl Elaborator<'_> {
     /// unchanged; the newly-visible hier index is added) — never narrows a real
     /// read — so non-hier comb blocks are byte-identical. Two-phase to satisfy
     /// the borrow checker: gather under `&self`, then apply under `&mut self`.
+    /// ENG-2: the same rule as process lowering (`read_set.rs` keeps its provenance),
+    /// and every in-body `@(*)` is recomputed too — its controlled statement can hold
+    /// the same placeholders (a `POISON_NET` in its `Wait` otherwise).
     pub(crate) fn recompute_comb_sensitivity_after_hier(&mut self) {
+        // R1 / R5: W first — every read set below maps `ref` copy-outs through it.
+        self.build_ref_write_map();
         let mut updated: Vec<(u32, Vec<u32>)> = Vec::new();
         for &pid in &self.comb_inferred_procs {
             let pr = &self.processes[pid as usize];
-            let with_fn = matches!(
-                pr.sensitivity.kind,
-                ir::SensKind::Comb | ir::SensKind::Latch
+            let mode = match pr.sensitivity.kind {
+                ir::SensKind::Comb | ir::SensKind::Latch => read_set::ReadSetMode::Comb,
+                _ => read_set::ReadSetMode::Star,
+            };
+            let nets = self.comb_read_set_in(
+                read_set::CallKeys::Process(pid),
+                &pr.body,
+                0,
+                mode,
+                read_set::ReadMark::default(),
             );
-            let nets = self.comb_read_set_in(pid, &pr.body, 0, with_fn);
             updated.push((pid, nets));
         }
         for (pid, nets) in updated {
@@ -944,5 +955,6 @@ impl Elaborator<'_> {
                 })
                 .collect();
         }
+        self.recompute_in_body_star_sites();
     }
 }

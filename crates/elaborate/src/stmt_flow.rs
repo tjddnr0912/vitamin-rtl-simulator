@@ -186,6 +186,16 @@ impl Elaborator<'_> {
                             .is_some_and(|nv| nv.array_len > 1)
                 })
             });
+        // R-SITE (`read_set.rs`): after lowering an append is legal only inside a site.
+        debug_assert!(
+            self.rs_append_ok(),
+            "R-SITE: statement appended outside a site in phase {:?}: {:?}",
+            self.rs.phase,
+            s
+        );
+        if !self.rs.cur.is_empty() {
+            self.rs.stmts.insert(id, self.rs.cur); // ENG-2 provenance (`read_set.rs`)
+        }
         self.stmts.push(s);
         if wants {
             self.record_stmt_loc(id);
@@ -479,28 +489,14 @@ impl Elaborator<'_> {
                     (lane, p.sensitivity.as_ref()),
                     (ast::ProcKind::Always, Some(ast::Sensitivity::Star))
                 );
-        let sensitivity = if is_comb_inferred && sensitivity.edges.is_empty() {
-            // Record this ProcId so the post-hier-resolution pass can recompute
-            // its read-set (a bare self-timed `always` is NOT is_comb_inferred, so
-            // its intentionally-empty sensitivity is never touched — clocks safe).
+        if is_comb_inferred && sensitivity.edges.is_empty() {
+            // Record this ProcId: its read set is built once, after the last post-lowering
+            // builder (R-SETTLE, `recompute_comb_sensitivity_after_hier`), never here — a
+            // set built now would fold placeholders the resolve passes have not decided.
+            // A bare self-timed `always` is NOT is_comb_inferred, so its intentionally-empty
+            // sensitivity is never touched — clocks safe.
             self.comb_inferred_procs.push(self.cur_proc);
-            let nets = self.comb_read_set(
-                &body,
-                matches!(lane, ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch),
-            );
-            ir::Sensitivity {
-                kind: sensitivity.kind,
-                edges: nets
-                    .into_iter()
-                    .map(|net| ir::EdgeTerm {
-                        net,
-                        kind: ir::EdgeKind::AnyEdge,
-                    })
-                    .collect(),
-            }
-        } else {
-            sensitivity
-        };
+        }
 
         ir::Process {
             sensitivity,

@@ -342,7 +342,9 @@ impl Elaborator<'_> {
             // A2a: $fread WRITES the whole memory — a desugared array
             // parameter target is loud.
             self.deny_readonly_write(net, "$fread into");
-            self.push_expr(ir::Expr::Signal { net, word: None })
+            let eid = self.push_expr(ir::Expr::Signal { net, word: None });
+            self.note_sys_dest(eid); // ENG-2 R3
+            eid
         } else {
             let id = self.lower_expr(&args[0]);
             let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(id as usize) else {

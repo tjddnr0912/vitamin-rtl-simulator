@@ -356,6 +356,7 @@ impl Parser<'_, '_> {
                 body_enums: fd.body_enums,
                 body: fd.body,
                 span: fd.span,
+                is_void_fn: true,
             });
         }
         ModuleItem::Func(fd)

@@ -314,6 +314,7 @@ impl Parser<'_, '_> {
             body_enums,
             body: Box::new(body),
             span: start.to(self.prev_span()),
+            is_void_fn: false,
         }
     }
 

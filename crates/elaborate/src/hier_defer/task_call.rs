@@ -71,12 +71,15 @@ impl Elaborator<'_> {
                 .cloned()
                 .unwrap_or_default();
             let base_net = self.func_metas[fid as usize].base_net;
+            // R-SITE: what this call builds (an array actual's pack, the copy-out unpack) is
+            // built under the call site's mark — the one `call_site` reads for its binds.
+            let site = self.hier_call_site_mark(d.func_block, d.proc, d.call_block);
             let mut in_binds: Vec<(u32, u32)> = Vec::new();
             let mut out_binds: Vec<(u32, ir::Lvalue)> = Vec::new();
             // item 1: (caller-array net, packed-temp net, formal shape) for every OUTPUT/INOUT
             // array formal — the copy-OUT is UNPACKED into the caller-array elements at the
             // front of the ret block after the loop (the deferred twin of the local §4.5.204).
-            let mut out_array_unpacks: Vec<(u32, u32, ArrayFormal)> = Vec::new();
+            let mut out_array_unpacks: Vec<(u32, u32, ArrayFormal, u32)> = Vec::new();
             let mut bind_err = false;
             for (i, dir) in dirs.iter().enumerate() {
                 // §4.5.207: the callee formal `i` is the per-instance net `base_net + i`. If it
@@ -121,7 +124,9 @@ impl Elaborator<'_> {
                         // INPUT (§4.5.207): pack the whole-array actual into the callee's
                         // md-packed slot value (copy-in, IEEE §13.5.1 pass-by-value).
                         ast::PortDir::Input => {
-                            if let Some(eid) = self.pack_hier_array_actual(caller_net, &af) {
+                            if let Some(eid) =
+                                self.with_site(site, |s| s.pack_hier_array_actual(caller_net, &af))
+                            {
                                 in_binds.push((i as u32, eid));
                             }
                         }
@@ -155,7 +160,9 @@ impl Elaborator<'_> {
                                 "connect an output/inout array to",
                             );
                             if matches!(dir, ast::PortDir::Inout) {
-                                if let Some(eid) = self.pack_hier_array_actual(caller_net, &af) {
+                                if let Some(eid) = self
+                                    .with_site(site, |s| s.pack_hier_array_actual(caller_net, &af))
+                                {
                                     in_binds.push((i as u32, eid));
                                 }
                             }
@@ -176,7 +183,7 @@ impl Elaborator<'_> {
                                 },
                             );
                             out_binds.push((i as u32, whole_net_lvalue(packed_net)));
-                            out_array_unpacks.push((caller_net, packed_net, af));
+                            out_array_unpacks.push((caller_net, packed_net, af, i as u32));
                         }
                     }
                     continue;
@@ -223,34 +230,9 @@ impl Elaborator<'_> {
             // packs the caller's flat word `i` at slot position `i`), so the round-trip is
             // correct by construction. Element signedness is the caller array's, applied on
             // later reads (bit-faithful copy here). Prepended to the ret block below.
-            let mut unpack_sids: Vec<u32> = Vec::new();
-            for (caller_net, packed_net, af) in &out_array_unpacks {
-                for pos in 0..af.count {
-                    let base_sig = self.push_expr(ir::Expr::Signal {
-                        net: *packed_net,
-                        word: None,
-                    });
-                    let off = self.const_u32_expr(pos.saturating_mul(af.elem_w), 32);
-                    let wid = self.const_u32_expr(af.elem_w, 32);
-                    let rhs = self.push_expr(ir::Expr::Select {
-                        base: base_sig,
-                        offset: off,
-                        width: wid,
-                        kind: ir::SelKind::PartIdxUp,
-                    });
-                    let word = self.const_u32_expr(pos, 32);
-                    let lhs = ir::Lvalue {
-                        chunks: vec![ir::LvalChunk {
-                            net: *caller_net,
-                            word: Some(word),
-                            offset: None,
-                            width: None,
-                            kind: ir::SelKind::Bit,
-                        }],
-                    };
-                    unpack_sids.push(self.push_stmt(ir::Stmt::BlockingAssign { lhs, rhs }));
-                }
-            }
+            let unpack_sids = self.with_site(site, |s| {
+                s.build_hier_array_unpacks(fid, &out_array_unpacks)
+            });
             let info = TaskCallInfo {
                 callee: fid,
                 in_binds,
@@ -259,5 +241,48 @@ impl Elaborator<'_> {
             self.install_deferred_hier_call(&d, info, unpack_sids);
         }
         self.cur_span = ambient_span;
+    }
+
+    /// The copy-OUT unpack statements of a hierarchical task call's OUTPUT / INOUT array
+    /// formals (`caller[i] = packed[i*ew +: ew]`), in order.
+    fn build_hier_array_unpacks(
+        &mut self,
+        fid: u32,
+        out_array_unpacks: &[(u32, u32, ArrayFormal, u32)],
+    ) -> Vec<u32> {
+        let mut unpack_sids: Vec<u32> = Vec::new();
+        for (caller_net, packed_net, af, slot) in out_array_unpacks {
+            // ENG-2 B2: a `ref` array formal's unpack is a write of the caller only if
+            // the callee writes the formal (`read_set.rs`).
+            self.rs.unpack_temps.insert(*packed_net);
+            let s0 = self.stmts.len() as u32;
+            for pos in 0..af.count {
+                let base_sig = self.push_expr(ir::Expr::Signal {
+                    net: *packed_net,
+                    word: None,
+                });
+                let off = self.const_u32_expr(pos.saturating_mul(af.elem_w), 32);
+                let wid = self.const_u32_expr(af.elem_w, 32);
+                let rhs = self.push_expr(ir::Expr::Select {
+                    base: base_sig,
+                    offset: off,
+                    width: wid,
+                    kind: ir::SelKind::PartIdxUp,
+                });
+                let word = self.const_u32_expr(pos, 32);
+                let lhs = ir::Lvalue {
+                    chunks: vec![ir::LvalChunk {
+                        net: *caller_net,
+                        word: Some(word),
+                        offset: None,
+                        width: None,
+                        kind: ir::SelKind::Bit,
+                    }],
+                };
+                unpack_sids.push(self.push_stmt(ir::Stmt::BlockingAssign { lhs, rhs }));
+            }
+            self.gate_ref_unpack(fid, *slot, s0);
+        }
+        unpack_sids
     }
 }

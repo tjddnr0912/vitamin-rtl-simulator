@@ -207,7 +207,10 @@ impl Parser<'_, '_> {
     /// semantics (0/X/Z cond → else branch = assertion failure). A missing
     /// else clause synthesizes the IEEE default failure action
     /// `$error("Assertion failed")`, which lowers through the severity table
-    /// (stderr diagnostic + nonzero exit; run continues).
+    /// (stderr diagnostic + nonzero exit; run continues). The `If` carries
+    /// `assertion: Some(directive)` (and a deferred assertion its `directive`), so
+    /// elaborate gates the whole statement on the runtime assertion enable
+    /// (IEEE 1800-2017 §20.11) in whichever unit it was compiled.
     ///
     /// DEFERRED immediate assertions (§16.4): `assert #0 (expr)` (Observed
     /// deferred) and `assert final (expr)` (Reactive deferred) are evaluated WHEN
@@ -222,6 +225,14 @@ impl Parser<'_, '_> {
     /// to the inner if and the assert gets the synthesized default.
     pub(crate) fn parse_assert(&mut self) -> Stmt {
         let start = self.cur_span();
+        // The directive the assertion was written with: `stmt.rs` routes `assume`
+        // here too. It travels on the desugared statement so elaborate gates the
+        // assertion on the runtime enable (IEEE 1800-2017 §20.11).
+        let directive = if self.at_kw(Kw::Assume) {
+            AssertDirective::Assume
+        } else {
+            AssertDirective::Assert
+        };
         self.bump(); // `assert`
                      // v8 SVA subset: `assert property(@(clk) a |-> b);`
         if self.at_kw(Kw::Property) {
@@ -293,13 +304,15 @@ impl Parser<'_, '_> {
                 then_s,
                 else_s,
                 span,
+                directive,
             },
-            // Plain immediate assert: the byte-identical `Stmt::If` desugar.
+            // Plain immediate assert: the `Stmt::If` desugar, tagged as an assertion.
             None => Stmt::If {
                 cond,
                 then_s,
                 else_s: Some(else_s),
                 span,
+                assertion: Some(directive),
             },
         }
     }

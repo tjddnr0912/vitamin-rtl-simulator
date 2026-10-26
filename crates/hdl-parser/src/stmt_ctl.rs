@@ -93,6 +93,7 @@ impl Parser<'_, '_> {
             then_s,
             else_s,
             span: start.to(self.prev_span()),
+            assertion: None,
         }
     }
 

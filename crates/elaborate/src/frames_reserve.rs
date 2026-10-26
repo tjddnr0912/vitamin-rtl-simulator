@@ -690,6 +690,8 @@ impl Elaborator<'_> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = func.ports.len() as u32;
+        // ENG-2 B2: the `ref` / `const ref` formals (`read_set.rs`).
+        self.note_ref_formals(fid, &func.ports);
         // Family D (r17): register this per-instance FuncId for a hierarchical call
         // `u1.f(x)` IF the function is HIER-CALLABLE — a plain module function (no
         // `::`), input-only SCALAR formals, non-`string` formals, and a non-`string`
@@ -1151,6 +1153,8 @@ impl Elaborator<'_> {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = task.ports.len() as u32;
+        // ENG-2 B2: the `ref` / `const ref` formals (`read_set.rs`).
+        self.note_ref_formals(fid, &task.ports);
         // Family D (r18): register this per-instance FuncId for a hierarchical enable
         // `u1.tk(x)` IF the task is HIER-CALLABLE — a plain module task (no `::`) with
         // SCALAR non-`string`, non-array formals of ANY direction (§4.5.201: input/output/
@@ -1368,6 +1372,10 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.task_frame_idx.insert(name.to_string(), fid);
+        if task.is_void_fn {
+            // ENG-2: a framed void function's body is walked like a function's (R2.1).
+            self.rs.void_fids.insert(fid);
+        }
         let fp = self.frame_path_of(name, &task.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {

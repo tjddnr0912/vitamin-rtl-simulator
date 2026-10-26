@@ -22,7 +22,13 @@ impl Elaborator<'_> {
         if saved_defer.is_some() {
             self.warn_deferred_inline();
         }
+        // ENG-2 (`read_set.rs`): a compound assignment's implicit lvalue read is marked
+        // once the statement has lowered (§9.4.2.2 leaves it out of an `@*`).
+        let compound_from = s.is_compound_assign_desugar().then_some(self.stmts.len());
         self.lower_stmt_inner(b, s);
+        if let Some(first) = compound_from {
+            self.mark_compound_lvalue_copy(first);
+        }
         if saved_defer.is_some() {
             self.cur_defer = saved_defer;
         }
@@ -694,6 +700,7 @@ impl Elaborator<'_> {
                 cond,
                 then_s,
                 else_s,
+                assertion,
                 ..
             } => {
                 let then_bb = b.new_block();
@@ -718,13 +725,22 @@ impl Elaborator<'_> {
                         else_bb: else_bb.raw(),
                     });
                 }
-                b.start_block(then_bb);
-                self.lower_if_arm(b, then_bb, then_s, truth == Some(false));
-                b.goto(merge);
-                b.start_block(else_bb);
-                if let Some(e) = else_s {
-                    self.lower_if_arm(b, else_bb, e, truth == Some(true));
-                }
+                // ENG-2: an immediate assertion's arms are its action blocks; its
+                // condition stays an `if` condition (`read_set.rs`, §9.2.2.2.1).
+                let arms_mark = if assertion.is_some() {
+                    read_set::MARK_ACTION
+                } else {
+                    0
+                };
+                self.with_read_mark(arms_mark, |s| {
+                    b.start_block(then_bb);
+                    s.lower_if_arm(b, then_bb, then_s, truth == Some(false));
+                    b.goto(merge);
+                    b.start_block(else_bb);
+                    if let Some(e) = else_s {
+                        s.lower_if_arm(b, else_bb, e, truth == Some(true));
+                    }
+                });
                 b.goto(merge);
                 b.start_block(merge); // continue in merge (post-condition)
             }
@@ -774,11 +790,14 @@ impl Elaborator<'_> {
                 });
                 let n_before = self.defer_acts.len();
                 self.cur_defer = Some((marker, dr));
-                b.start_block(then_bb);
-                self.lower_stmt(b, then_s);
-                b.goto(merge);
-                b.start_block(else_bb);
-                self.lower_stmt(b, else_s);
+                // ENG-2: the pass / fail arms are action blocks (`read_set.rs`).
+                self.with_read_mark(read_set::MARK_ACTION, |s| {
+                    b.start_block(then_bb);
+                    s.lower_stmt(b, then_s);
+                    b.goto(merge);
+                    b.start_block(else_bb);
+                    s.lower_stmt(b, else_s);
+                });
                 b.goto(merge);
                 self.cur_defer = outer;
                 let ran_inline = self.prune_deferred_actions(marker);
@@ -891,15 +910,49 @@ impl Elaborator<'_> {
                     self.lower_stmt(b, body);
                 }
                 if star {
-                    let nets = self.comb_read_set_in(
-                        self.cur_proc,
-                        &b.body[resume.raw() as usize..],
-                        resume.raw(),
-                        false,
-                    );
-                    if nets.is_empty() {
-                        self.warn("in-body @(*) reads no nets; it can never wake");
-                    }
+                    // ENG-2: a frame body's site (a frame task, a frame function, a class
+                    // method: `in_frame_body`) is parked (R4): its cause is the one built here
+                    // by the walk it used before ENG-2 (`frame_star_read_set`), final — the set
+                    // the frame classify reads (`wait_cond_reads_frame_local`, before the
+                    // resolve passes) and the one the engine waits on — and its W3056 is
+                    // decided here from that set.
+                    //
+                    // A process body's site is recorded for the recompute after hierarchical
+                    // resolution (`read_set.rs`). The open block's statement ids fix the range
+                    // at the controlled statement (R-MEMBER); the mark here is the root its
+                    // exclusions are relative to (B1: an `@(*)` inside an inlined task body).
+                    let nets = if self.in_frame_body {
+                        let nets = self.frame_star_read_set(
+                            self.cur_proc,
+                            &b.body[resume.raw() as usize..],
+                            resume.raw(),
+                        );
+                        if nets.is_empty() {
+                            self.warn("in-body @(*) reads no nets; it can never wake");
+                        }
+                        nets
+                    } else {
+                        let root = self.rs.cur;
+                        self.rs.star_sites.push(read_set::StarSite {
+                            proc: self.cur_proc,
+                            wait_bb: wait_bb.raw(),
+                            lo: resume.raw(),
+                            hi: b.body.len() as u32,
+                            open: b
+                                .cur
+                                .map(|c| (c.raw(), b.body[c.raw() as usize].stmts.clone())),
+                            root,
+                            loc: self.cur_location(),
+                            ctx: self.cur_context(),
+                        });
+                        self.comb_read_set_in(
+                            read_set::CallKeys::Process(self.cur_proc),
+                            &b.body[resume.raw() as usize..],
+                            resume.raw(),
+                            read_set::ReadSetMode::Star,
+                            root,
+                        )
+                    };
                     b.body[wait_bb.raw() as usize].term = ir::Terminator::Wait {
                         cond: ir::WaitCause::Level { nets },
                         resume: resume.raw(),

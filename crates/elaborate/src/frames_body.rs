@@ -322,7 +322,11 @@ impl Elaborator<'_> {
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = std::mem::take(&mut self.block_scope);
         let saved_root = self.enter_frame_scope_root(name);
+        // ENG-2: a body lowered on demand mid-statement does not inherit its caller's
+        // provenance mark (`read_set.rs`); its own assertion actions mark themselves.
+        let saved_mark = self.enter_unmarked_body();
         self.lower_frame_body_inner_lower_frame_func_body(name, func, fid);
+        self.rs.cur = saved_mark;
         self.block_scope = saved_block_scope;
         self.block_scope_root = saved_root;
     }
@@ -508,7 +512,9 @@ impl Elaborator<'_> {
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = std::mem::take(&mut self.block_scope);
         let saved_root = self.enter_frame_scope_root(name);
+        let saved_mark = self.enter_unmarked_body(); // ENG-2, as the function twin
         self.lower_frame_body_inner_lower_frame_task_body(name, task, fid);
+        self.rs.cur = saved_mark;
         self.block_scope = saved_block_scope;
         self.block_scope_root = saved_root;
     }
@@ -539,6 +545,7 @@ impl Elaborator<'_> {
         self.cur_frame_owner = self.func_metas.get(fid as usize).map(|m| m.base_net);
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
+        let saved_rs_calls = std::mem::take(&mut self.rs.pending_calls);
         let saved_fork_modes = std::mem::take(&mut self.pending_fork_modes);
         let saved_hier_pending = std::mem::take(&mut self.pending_hier_task_calls);
         self.frame_task_lowering = true;
@@ -617,6 +624,7 @@ impl Elaborator<'_> {
         self.cur_frame_owner = saved_owner;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
+        let rs_calls = std::mem::replace(&mut self.rs.pending_calls, saved_rs_calls);
         let fork_modes_pending = std::mem::replace(&mut self.pending_fork_modes, saved_fork_modes);
         let hier_pending = std::mem::replace(&mut self.pending_hier_task_calls, saved_hier_pending);
         if pushed_pkg.is_some() {
@@ -637,6 +645,11 @@ impl Elaborator<'_> {
         // rebase the nested task-call sites' (process-local) block keys to global.
         for (local_block, info) in pending {
             self.task_calls_func.insert(base + local_block, info);
+        }
+        // ENG-2: …and their provenance marks. (This body's in-body `@(*)` sites are not
+        // recorded: their lowering-time cause is final, `stmt_main.rs`.)
+        for (local_block, m) in rs_calls {
+            self.rs.func_calls.insert(base + local_block, m);
         }
         // Stage-1 fork-in-frame: rebase this body's fork join-modes (process-local
         // join_bb → global func_blocks id) and key them under the frame sentinel — a

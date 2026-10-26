@@ -126,6 +126,7 @@ impl Elaborator<'_> {
                     then_s: Box::new(sva_error_stmt(sp)),
                     else_s: None,
                     span: sp,
+                    assertion: None,
                 });
                 // Liveness target = held(rhs) = !viol(rhs); arm every clock.
                 let held = sva_unary(ast::UnOp::LogNot, sva_unary(ast::UnOp::RedOr, vr, sp), sp);
@@ -192,6 +193,7 @@ impl Elaborator<'_> {
             }),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         let fpb = ast::ProceduralBlock {
             kind: ast::ProcKind::Final,

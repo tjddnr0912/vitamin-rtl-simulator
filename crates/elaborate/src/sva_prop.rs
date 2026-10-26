@@ -683,6 +683,7 @@ impl Elaborator<'_> {
             then_s: Box::new(fail_stmt),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         // Check FIRST (reads the prior clock's pend/prev regs), then the NBA updates
         // apply in the NBA region for the next clock.

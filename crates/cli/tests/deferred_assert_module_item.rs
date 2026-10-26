@@ -205,15 +205,19 @@ fn a_label_names_the_scope() {
 }
 
 #[test]
-fn an_action_block_read_is_part_of_the_sensitivity() {
-    // §9.2.2.2.1: the always_comb is sensitive to `b`, read only by the action
-    // block. verilator (de-duplicated): F t=5 b=0, F t=10 b=4, F t=15 b=5.
+fn an_action_block_read_is_not_part_of_the_sensitivity() {
+    // ENG-2 (O2, LRM over the tools): a static deferred assertion is an always_comb
+    // (§16.4.3), and §9.2.2.2.1 (IEEE 1800-2017 :9062-9063) says "Expressions used in
+    // assertion action blocks do not contribute to the implicit sensitivity list of an
+    // always_comb": `b`, read only by the action, wakes nothing; `a` (the condition) does.
+    // verilator (de-duplicated) adds the action: F t=5 b=0, F t=10 b=4, F t=15 b=5;
+    // iverilog has no deferred assertions.
     let got = ok("module top;\n\
          logic a = 1; logic [3:0] b = 0;\n\
          assert #0 (a) else $display(\"F t=%0t b=%0d\", $time, b);\n\
          initial begin #5 a = 0; #5 b = 4; #5 b = 5; #5 a = 1; #5 b = 6; #5 $display(\"end\"); $finish; end\n\
          endmodule\n");
-    assert_eq!(got, ["F t=5 b=0", "F t=10 b=4", "F t=15 b=5", "end"]);
+    assert_eq!(got, ["F t=5 b=0", "end"]);
 }
 
 #[test]

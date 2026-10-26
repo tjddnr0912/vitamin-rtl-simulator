@@ -615,6 +615,16 @@ impl Elaborator<'_> {
             _ => {}
         }
         let id = self.exprs.len() as u32;
+        // R-SITE (`read_set.rs`): after lowering an append is legal only inside a site.
+        debug_assert!(
+            self.rs_append_ok(),
+            "R-SITE: expression appended outside a site in phase {:?}: {:?}",
+            self.rs.phase,
+            e
+        );
+        if !self.rs.cur.is_empty() {
+            self.rs.exprs.insert(id, self.rs.cur); // ENG-2 provenance (`read_set.rs`)
+        }
         self.exprs.push(e);
         id
     }

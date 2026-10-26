@@ -333,6 +333,7 @@ impl Elaborator<'_> {
                 }),
                 else_s: None,
                 span: sp,
+                assertion: None,
             };
             self.lower_stmt(b, &set);
         }
@@ -377,6 +378,7 @@ impl Elaborator<'_> {
                     )),
                     else_s: None,
                     span: sp,
+                    assertion: None,
                 };
                 self.lower_stmt(b, &gated);
                 continue;
@@ -456,6 +458,7 @@ impl Elaborator<'_> {
                 then_s: Box::new(then_s),
                 else_s: None,
                 span: sp,
+                assertion: None,
             });
         }
         if let Some(il) = any_illegal {
@@ -476,6 +479,7 @@ impl Elaborator<'_> {
                 }),
                 else_s: None,
                 span: sp,
+                assertion: None,
             });
         }
         if stmts.is_empty() {
@@ -488,6 +492,7 @@ impl Elaborator<'_> {
                 then_s: Box::new(sva_block_or_single(stmts, sp)),
                 else_s: None,
                 span: sp,
+                assertion: None,
             };
             self.lower_stmt(b, &wrapped);
         } else {

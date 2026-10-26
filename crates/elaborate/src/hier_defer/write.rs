@@ -227,6 +227,11 @@ impl Elaborator<'_> {
             let resolved = self
                 .hier_lookup(&d.prefix, &d.path)
                 .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key));
+            // R-SITE: the rebuilt chunk's index arithmetic is built under the mark of the
+            // index it wraps (lowered with the statement; a continuous assign has none).
+            let site = (d.idx_eids.first().copied())
+                .or(d.part.map(|p| p.raw_off))
+                .map_or_else(read_set::ReadMark::default, |e| self.mark_of_expr(e));
             let chunk = match resolved {
                 None => {
                     self.error_hier_unresolved(
@@ -257,7 +262,9 @@ impl Elaborator<'_> {
                         self.deny_readonly_write(net, "assign to");
                         poison_chunk()
                     } else if let Some(word) = (d.part.is_none() && !self.event_nets.contains(&net))
-                        .then(|| self.hier_dyn_container_word(net, &d.idx_eids))
+                        .then(|| {
+                            self.with_site(site, |s| s.hier_dyn_container_word(net, &d.idx_eids))
+                        })
                         .flatten()
                     {
                         // T1-8: a hierarchical element WRITE into a dynamic container
@@ -300,7 +307,9 @@ impl Elaborator<'_> {
                         );
                         poison_chunk()
                     } else {
-                        self.build_hier_sel_write_chunk(net, &d.idx_eids, d.part, &path)
+                        self.with_site(site, |s| {
+                            s.build_hier_sel_write_chunk(net, &d.idx_eids, d.part, &path)
+                        })
                     }
                 }
             };
@@ -444,7 +453,9 @@ impl Elaborator<'_> {
             // lowering uses, and a miss simply leaves `lower_expr`'s IR in place.
             let saved_prefix = std::mem::replace(&mut self.cur_prefix, p.prefix.clone());
             let resolvable = self.every_name_resolves(&p.rhs);
-            let new_id = resolvable.then(|| self.lower_expr_ctx(&p.rhs, w));
+            // R-SITE: the re-lowered rhs replaces the old rhs root and takes its mark.
+            let site = self.mark_of_expr(p.expr_id);
+            let new_id = resolvable.then(|| self.with_site(site, |s| s.lower_expr_ctx(&p.rhs, w)));
             self.cur_prefix = saved_prefix;
             // The old subtree becomes garbage, exactly as a fill-bearing rhs does on the
             // ordinary path (there is no golden to preserve).

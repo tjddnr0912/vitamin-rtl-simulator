@@ -176,6 +176,7 @@ fn v2_6_if_else_merge() {
         then_s: Box::new(bassign("y", dec("1"))),
         else_s: Some(Box::new(bassign("y", dec("0")))),
         span: SP,
+        assertion: None,
     };
     let unit = module(
         "m",

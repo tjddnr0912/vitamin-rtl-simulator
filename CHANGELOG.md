@@ -9,6 +9,64 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — what `always_comb` and `@*` wait on follows the IEEE lists
+
+- An `always_comb` / `always_latch` (and a module-item deferred assertion, which is one) waits on
+  every variable read in it or in a function it calls (IEEE 1800-2017 §9.2.2.2.1). A
+  `function void` it calls now counts — automatic or static, and a function called through an
+  output formal, one that writes a module variable, one called in an lvalue index, one called
+  inside another function's body: each one's reads were missed, so the block ran once and kept a
+  stale value where Icarus Verilog, sv2v and Verilator re-run it. A task adds only its
+  arguments: a static task's body reads used to wake the block, and two `always_comb` calling
+  one static task through its shared formal (or one static `function void`) no longer loop to
+  `F-RUN-NO-CONVERGE`.
+- A read covered by what the block itself writes is left out (exception b), per variable and by
+  constant select: the generate-loop pair `any[k] = '0; any[k] |= m[k];` per iteration no longer
+  loops to `F-RUN-NO-CONVERGE`: VeeR EH1's `lsu_bus_buffer` and EL2's `ifu_ic_mem` now run as
+  written (measured with only that local workaround reverted: `TEST_PASSED`, the same cycle counts).
+  A write through a variable index covers nothing.
+- An assertion's action block adds nothing to an `always_comb` (its condition does), as
+  §9.2.2.2.1 says; Icarus Verilog and Verilator re-run the block on an action-only read. A read
+  covered only by a write inside a called function is left out too, as the same clause says; all
+  three tools re-run there. A nonblocking write covers like a blocking one (`v <= a; y = v;` does
+  not re-run on the update of `v`; Icarus Verilog agrees, sv2v and Verilator re-run).
+- A `ref` or `const ref` argument is a read of the block, not a write: a `const ref` actual never
+  covers, and a `ref` actual covers exactly the bits the subroutine writes of it, as the same write
+  spelled in the block would (`t(g)` whose task writes `x[1]` covers `g[1]`, not the rest of `g`);
+  it was treated as an `inout` copy-out, so `always_comb y = f(g);` with `f(const ref logic x)`
+  never re-ran on `g`.
+- A system task or function output argument is a write of the block (§9.2.2.2.1 exception b):
+  `$sscanf(s, "%d", g)`, `$cast(g, e)`, `$value$plusargs("N=%d", g)`, `$sformat(g, ..)`, a
+  `$random(g)` seed, `$readmemh(.., m)`, `aa.first(k)` in an `always_comb` no longer wake it on
+  `g` / `m` / `k`; Verilator agrees where it runs them, Icarus Verilog reads the destination.
+  `always @*` still reads it.
+- Through a hierarchical path the block waits on what its local twin waits on: a hierarchical
+  task's unpacked-array argument in a static task called from `always_comb`, a hierarchical fill
+  (`u.v = '1`), `$readmemh` into a hierarchical associative array, `$bits(u.x)` in a select
+  (they woke the block on reads inside the task or the select that were not the block's).
+- An `always @*` / `@(*)` waits on the identifiers of its statement (§9.4.2.2): a call's
+  arguments, not the body of the static function, `function void` or task it inlines (an argument
+  the body ignores still counts), and not the variable a compound assignment (`v[k] |= m`,
+  `n++`) writes. An `@(*)` inside a static, non-recursive task body waits on its own statement
+  (it waited on nothing, `VITA-W3056 ... it can never wake`, or never woke), and only on that
+  statement, not on the statements after it (those were added when the design also had a
+  hierarchical reference); a static task the design calls hierarchically (`u.st()`) or through an
+  interface (`i.st()`) is elaborated as a frame body and is unchanged (below).
+  `VITA-W3056 in-body @(*) reads no nets` is decided on the finished set: an `@(*)` whose only
+  reads are a hierarchical call's arguments (`@(*) u.w(m, a);`) wakes without the false warning, and
+  one on a hierarchical parameter (`@(*) y = u.P;`) now warns. An `@(*)` inside an automatic or
+  recursive task (a class method or a function body too), or inside a static task called
+  hierarchically or through an interface, is unchanged: it waits on the set taken when
+  the task is elaborated — the body of a static function or task it inlines rather than the call's
+  arguments, the variable a compound assignment writes, no hierarchical reference and no nested
+  task call's argument — and warns from that set.
+- A hierarchical function call or task enable in an `always_comb` (`y = u.f(a)`, `u.tk(a);`)
+  wakes on what it reads; it woke only when the block also read a hierarchical variable. An
+  in-body `@* y = u.q;` in a process or a static, non-recursive task called by its own name no
+  longer panics (inside an automatic or recursive task, or a static task called hierarchically or
+  through an interface, it still does).
+- `.velab` format 38: a format-37 `.velab` or `.vu` is stale (exit 2); rebuild it.
+
 ### Fixed — `release` of a net driven by a delayed continuous assignment
 
 - A `release` of a net or variable driven by a delayed continuous assignment (`assign #3 y = a;`,

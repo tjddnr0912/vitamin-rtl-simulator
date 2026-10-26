@@ -731,6 +731,7 @@ fn task_def(
         body_enums: Vec::new(),
         body: Box::new(body),
         span: SP,
+        is_void_fn: false,
     })
 }
 /// `reg [7:0] name;` as a bare NetVarDecl (for function/task body_decls).
@@ -814,4 +815,96 @@ fn fork_stmt(stmts: Vec<ast::Stmt>, join: ast::JoinKind) -> ast::Stmt {
         join,
         span: SP,
     }
+}
+
+// ── ENG-2 R-SITE: after lowering ends an arena append needs a site ──
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "R-SITE: expression appended outside a site")]
+fn post_lowering_append_outside_a_site_is_refused() {
+    let sink = CollectSink::default();
+    let mut el = Elaborator::new(&sink);
+    el.begin_resolve_phase();
+    let _ = el.const_u32_expr(1, 32);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "R-SITE: statement appended outside a site")]
+fn sealed_statement_append_is_refused() {
+    let sink = CollectSink::default();
+    let mut el = Elaborator::new(&sink);
+    el.begin_resolve_phase();
+    el.seal_read_sets();
+    let _ = el.push_stmt(ir::Stmt::Disable {
+        scope_kind: ir::DisableKind::Scope,
+        target: 0,
+    });
+}
+
+#[test]
+fn post_lowering_append_inside_a_site_takes_its_mark() {
+    let sink = CollectSink::default();
+    let mut el = Elaborator::new(&sink);
+    el.begin_resolve_phase();
+    let m = el.with_read_mark(read_set::MARK_TASK, |s| s.rs.cur);
+    let e = el.with_site(m, |s| s.const_u32_expr(1, 32));
+    assert_eq!(el.mark_of_expr(e), m);
+    assert!(el.rs.cur.is_empty());
+    assert!(!el.rs.in_site);
+}
+
+// ── ENG-2 R3: a system output argument is recorded where the IR holds it ──
+fn fgets_block(el: &mut Elaborator<'_>, record: bool) -> ir::BasicBlock {
+    let s = el.push_expr(ir::Expr::Signal { net: 0, word: None });
+    if record {
+        el.note_sys_dest(s);
+    }
+    let fd = el.const_u32_expr(1, 32);
+    let call = el.push_expr(ir::Expr::SysFunc {
+        which: ir::SysFuncId::Fgets,
+        args: vec![s, fd],
+    });
+    let sid = el.push_stmt(ir::Stmt::BlockingAssign {
+        lhs: whole_net_lvalue(1),
+        rhs: call,
+    });
+    ir::BasicBlock {
+        stmts: vec![sid],
+        term: ir::Terminator::Return,
+    }
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "R3: system function Fgets argument 0")]
+fn sys_dest_census_flags_an_unrecorded_writer() {
+    let sink = CollectSink::default();
+    let mut el = Elaborator::new(&sink);
+    let bb = fgets_block(&mut el, false);
+    let _ = el.comb_read_set_in(
+        read_set::CallKeys::Func,
+        &[bb],
+        0,
+        read_set::ReadSetMode::Comb,
+        read_set::ReadMark::default(),
+    );
+}
+
+#[test]
+fn sys_dest_is_a_write_in_comb_and_a_read_in_star() {
+    let sink = CollectSink::default();
+    let mut el = Elaborator::new(&sink);
+    let bb = fgets_block(&mut el, true);
+    let rs = |el: &Elaborator<'_>, m| {
+        el.comb_read_set_in(
+            read_set::CallKeys::Func,
+            std::slice::from_ref(&bb),
+            0,
+            m,
+            read_set::ReadMark::default(),
+        )
+    };
+    assert_eq!(rs(&el, read_set::ReadSetMode::Comb), Vec::<u32>::new());
+    assert_eq!(rs(&el, read_set::ReadSetMode::Star), vec![0]);
 }

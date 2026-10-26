@@ -288,6 +288,7 @@ fn ft_e7_control_flow_function_framed() {
         then_s: Box::new(bassign("f", dec("1"))),
         else_s: Some(Box::new(bassign("f", dec("0")))),
         span: SP,
+        assertion: None,
     };
     let unit = module(
         "m",

@@ -1027,6 +1027,15 @@ pub enum Stmt {
         then_s: Box<Stmt>,
         else_s: Option<Box<Stmt>>,
         span: Span,
+        /// `Some` when this `if` is the parser's desugar of a simple immediate
+        /// assertion (`assert (c) …` / `assume (c) …`, IEEE 1800-2017 §16.3): the
+        /// directive it was written with. Elaborate reads it for the implicit
+        /// sensitivity only: both arms are lowered as the assertion's action blocks
+        /// (`read_set::MARK_ACTION`, §9.2.2.2.1), the condition as an `if` condition;
+        /// the hoist and SVA rebuilders carry it. Gating the statement on the runtime
+        /// assertion enable (§20.11) is not built (ROADMAP §5.2 row 73). Every other
+        /// `if`, user-written or synthesized, is `None`.
+        assertion: Option<AssertDirective>,
     },
     /// SV `return [expr];` (N7 — used pervasively by class methods). In a value
     /// function/method, `expr` assigns the return var; in a void task/method,
@@ -1203,6 +1212,8 @@ pub enum Stmt {
         then_s: Box<Stmt>,
         else_s: Box<Stmt>,
         span: Span,
+        /// The directive the assertion was written with (`assert` or `assume`).
+        directive: AssertDirective,
     },
     /// Cover property (SVA-REST, IEEE 1800 §16.13): `cover property(@(clk) seq);`.
     /// In simulation this COUNTS sequence matches and reports the hit count at
@@ -1234,6 +1245,16 @@ pub enum AssertDefer {
     Observed,
     /// `assert final` — matures in the Reactive region.
     Reactive,
+}
+/// The directive of an immediate or deferred assertion (IEEE 1800-2017 §16.3,
+/// Table 20-7's directive types). Only `assert` and `assume` parse as an immediate
+/// or deferred assertion; an immediate `cover` is not parsed (loud).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum AssertDirective {
+    /// `assert (c) …` / `assert #0 (c) …` / `assert final (c) …`.
+    Assert,
+    /// `assume (c) …` and its deferred forms.
+    Assume,
 }
 /// SVA implication operator (Phase-3 subset). `|->` checks the consequent in the
 /// SAME clock tick as the antecedent match (overlapping); `|=>` checks it on the
@@ -1922,6 +1943,24 @@ impl Lvalue {
 }
 
 impl Stmt {
+    /// `true` for the parser's desugar of a compound assignment — `lv op= e`, `lv++`,
+    /// `lv--`, `++lv`, `--lv` — into `lv = lv op e` (`try_compound_assign`,
+    /// `parse_pre_incdec`). The desugar is recognized by span identity: its rhs is the
+    /// `Binary` spanning the whole statement, and that `Binary`'s left operand is the
+    /// lvalue's own copy (same span). A written `lv = lv op e` cannot match: its rhs
+    /// starts after the `=`, and its read of `lv` sits at another position (spans are
+    /// positions in the preprocessed text). IEEE 1800-2017 §9.4.2.2 leaves the copy out
+    /// of an `@*` (an identifier that appears only in the lvalue).
+    pub fn is_compound_assign_desugar(&self) -> bool {
+        match self {
+            Stmt::Blocking { lhs, rhs, span, .. } => {
+                rhs.span == *span
+                    && matches!(&rhs.kind, ExprKind::Binary { lhs: copy, .. } if copy.span == lhs.span())
+            }
+            _ => false,
+        }
+    }
+
     /// The source span of this statement — the anchor an elaborate-time diagnostic
     /// points at (`Elaborator::with_span`). Every variant carries one.
     pub fn span(&self) -> Span {
@@ -2110,6 +2149,11 @@ pub struct TaskDef {
     pub body_enums: Vec<TypedefDecl>,
     pub body: Box<Stmt>,
     pub span: Span,
+    /// Written `function void` (the parser reuses the task machinery for it,
+    /// `parse_function_item`). Elaborate reads it for the implicit sensitivity of
+    /// `always_comb` / `always_latch` (IEEE 1800-2017 §9.2.2.2.1): a called FUNCTION
+    /// adds its body's reads, a called task only its arguments. `false` for a task.
+    pub is_void_fn: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct TfPort {

@@ -120,6 +120,7 @@ impl Parser<'_, '_> {
                 then_s: Box::new(assign("1'b1")),
                 else_s: Some(Box::new(inner)),
                 span,
+                assertion: None,
             };
         }
         if let Some(any0) = or_fold(zero_conds) {
@@ -128,6 +129,7 @@ impl Parser<'_, '_> {
                 then_s: Box::new(assign("1'b0")),
                 else_s: Some(Box::new(inner)),
                 span,
+                assertion: None,
             };
         }
         // A UDP is a PRIMITIVE (IEEE 1364 §29): like a gate, it has an output from the

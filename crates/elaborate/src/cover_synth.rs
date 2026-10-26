@@ -113,12 +113,14 @@ pub(crate) fn cov_counter_then(
         }),
         else_s: None,
         span: sp,
+        assertion: None,
     };
     let setb = ast::Stmt::If {
         cond: sva_binary(ast::BinOp::Ge, ctr, n(), sp),
         then_s: Box::new(cov_set_bit_stmt(bitmap, bit, sp)),
         else_s: None,
         span: sp,
+        assertion: None,
     };
     ast::Stmt::Block {
         label: None,
@@ -289,6 +291,7 @@ impl Elaborator<'_> {
             )),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         let mut stmts = vec![incr];
         stmts.extend(regs.nbas);

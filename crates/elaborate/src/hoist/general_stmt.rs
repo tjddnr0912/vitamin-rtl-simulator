@@ -55,6 +55,7 @@ impl Elaborator<'_> {
                 then_s,
                 else_s,
                 span,
+                assertion,
             } if self.general_hoist_ok(cond) && !self.cond_needs_shortcircuit_split(cond) => {
                 let cond2 = self.hoist_inout_general_top(b, cond);
                 Some(S::If {
@@ -62,6 +63,7 @@ impl Elaborator<'_> {
                     then_s: then_s.clone(),
                     else_s: else_s.clone(),
                     span: *span,
+                    assertion: *assertion,
                 })
             }
             // A blocking / non-blocking assign: the rhs, and the LVALUE's index

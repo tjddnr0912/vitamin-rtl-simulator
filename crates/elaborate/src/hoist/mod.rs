@@ -508,6 +508,7 @@ impl Elaborator<'_> {
                 then_s,
                 else_s,
                 span,
+                assertion,
             } if self.expr_has_inout_call(cond)
                 && !self.frame_fn_lowering
                 && !self.has_unhoistable_inout_call(cond)
@@ -519,6 +520,7 @@ impl Elaborator<'_> {
                     then_s: then_s.clone(),
                     else_s: else_s.clone(),
                     span: *span,
+                    assertion: *assertion,
                 })
             }
             S::Blocking {
@@ -561,6 +563,7 @@ impl Elaborator<'_> {
                 then_s,
                 else_s,
                 span,
+                assertion,
             } if self.expr_has_dyn_formal_call(cond)
                 && !self.frame_fn_lowering
                 && !self.has_unhoistable_dyn_formal_call(cond) =>
@@ -571,6 +574,7 @@ impl Elaborator<'_> {
                     then_s: then_s.clone(),
                     else_s: else_s.clone(),
                     span: *span,
+                    assertion: *assertion,
                 })
             }
             S::Blocking {

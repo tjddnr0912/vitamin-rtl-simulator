@@ -178,6 +178,7 @@ impl Parser<'_, '_> {
                 then_s: Box::new(call),
                 else_s: None,
                 span,
+                assertion: None,
             }),
             span,
         })

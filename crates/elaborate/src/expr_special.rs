@@ -424,6 +424,7 @@ impl Elaborator<'_> {
             net: knet,
             word: None,
         });
+        self.note_sys_dest(key); // ENG-2 R3: the engine writes the found key
         let rhs = self.push_expr(ir::Expr::SysFunc {
             which,
             args: vec![handle, key],

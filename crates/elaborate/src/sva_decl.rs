@@ -230,6 +230,7 @@ impl Elaborator<'_> {
                 then_s,
                 else_s,
                 span,
+                assertion,
             } => S::If {
                 cond: self.rewrite_sampled(cond, regs),
                 then_s: Box::new(self.rewrite_sampled_stmt(then_s, regs)),
@@ -237,6 +238,7 @@ impl Elaborator<'_> {
                     .as_ref()
                     .map(|e| Box::new(self.rewrite_sampled_stmt(e, regs))),
                 span: *span,
+                assertion: *assertion,
             },
             S::Block {
                 label,

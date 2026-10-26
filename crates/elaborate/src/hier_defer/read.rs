@@ -60,132 +60,139 @@ impl Elaborator<'_> {
     /// deferred follow-ons).
     pub(crate) fn resolve_deferred_hier_sel(&mut self) {
         let pending = std::mem::take(&mut self.deferred_hier_sel);
+        // R-SITE: each rebuilt select is built under its placeholder's provenance mark (a
+        // read in a task body or an action block stays out of an implicit read set).
         for d in pending {
-            // T1-6: a ROUTED string array is registered under a mangled net name, so the
-            // symbol table cannot find it by the declared one — the same side map the
-            // local resolver consults is checked here, with the same commit-to-scope
-            // walk. Second, so an ordinary net of that name still wins.
-            let Some(net) = self
-                .hier_lookup(&d.prefix, &d.path)
-                .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key))
-            else {
-                // A select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`) is not
-                // built here (this pass resolves nets); say so rather than calling a
-                // name the read path resolves "undeclared" (§4.5.421 review, both
-                // lenses).
-                // §2 🆕 M ⓒ: a select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`,
-                // `u.C[b+:w]`) is a `Select` over the parameter's constant, offset
-                // normalized against its declared LSB — both oracles answer it at every
-                // width; this pass used to say "unsupported" here.
-                if self.hier_lookup_param(&d.prefix, &d.path).is_some()
-                    || self.hier_lookup_wide_param(&d.prefix, &d.path).is_some()
-                {
-                    if let Some(built) = self.build_hier_param_select(&d) {
-                        self.verify_hier_sel_shape(d.eid, built, &d.path);
-                        let e = self.exprs[built as usize].clone();
-                        self.exprs[d.eid as usize] = e;
-                    }
-                    continue;
+            let mark = self.mark_of_expr(d.eid);
+            self.with_site(mark, |s| s.resolve_one_deferred_hier_sel(d));
+        }
+    }
+
+    fn resolve_one_deferred_hier_sel(&mut self, d: DeferredHierSelect) {
+        // T1-6: a ROUTED string array is registered under a mangled net name, so the
+        // symbol table cannot find it by the declared one — the same side map the
+        // local resolver consults is checked here, with the same commit-to-scope
+        // walk. Second, so an ordinary net of that name still wins.
+        let Some(net) = self
+            .hier_lookup(&d.prefix, &d.path)
+            .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key))
+        else {
+            // A select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`) is not
+            // built here (this pass resolves nets); say so rather than calling a
+            // name the read path resolves "undeclared" (§4.5.421 review, both
+            // lenses).
+            // §2 🆕 M ⓒ: a select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`,
+            // `u.C[b+:w]`) is a `Select` over the parameter's constant, offset
+            // normalized against its declared LSB — both oracles answer it at every
+            // width; this pass used to say "unsupported" here.
+            if self.hier_lookup_param(&d.prefix, &d.path).is_some()
+                || self.hier_lookup_wide_param(&d.prefix, &d.path).is_some()
+            {
+                if let Some(built) = self.build_hier_param_select(&d) {
+                    self.verify_hier_sel_shape(d.eid, built, &d.path);
+                    let e = self.exprs[built as usize].clone();
+                    self.exprs[d.eid as usize] = e;
                 }
-                // ENG-1b: a select of a clocking item that has no holder, at its use.
-                if let Some(i) = self.clk_refused_at(&d.prefix, &d.path) {
-                    self.report_clk_refused(i, d.span, &d.prefix);
-                    continue;
-                }
-                self.error_hier_unresolved(
-                    &d.prefix,
-                    &d.path,
-                    format!(
-                        "undeclared hierarchical name `{}` (no such cross-instance net)",
-                        d.path.join(".")
-                    ),
-                );
-                continue;
-            };
-            // T1-6/7: an indexed dynamic container (`u.s[0]` on a dyn array, a queue, or
-            // a routed string array) reads as the word-indexed `Signal` the local
-            // `dyn_select_read` builds — the engine's element read does not care how the
-            // name was reached. `hier_dyn_container_word` is the shared addressing rule;
-            // the WRITE twin calls the SAME function.
-            if d.part.is_none() {
-                if let Some(word) = self.hier_dyn_container_word(net, &d.idx_eids) {
-                    // A recorded shape never names a dynamic container.
-                    self.verify_hier_shape_not_net(d.eid, &d.path, "a dynamic container element");
-                    self.exprs[d.eid as usize] = ir::Expr::Signal {
-                        net,
-                        word: Some(word),
-                    };
-                    continue;
-                }
+                return;
             }
-            // Events and dynamic handles have no indexable readable value here (a dyn
-            // element read routes through `dyn_select_read` at lowering, on a 1-seg
-            // base — never a hierarchical ref). Loud-reject.
-            if self.event_nets.contains(&net) || self.is_dyn_handle_net(net) {
+            // ENG-1b: a select of a clocking item that has no holder, at its use.
+            if let Some(i) = self.clk_refused_at(&d.prefix, &d.path) {
+                self.report_clk_refused(i, d.span, &d.prefix);
+                return;
+            }
+            self.error_hier_unresolved(
+                &d.prefix,
+                &d.path,
+                format!(
+                    "undeclared hierarchical name `{}` (no such cross-instance net)",
+                    d.path.join(".")
+                ),
+            );
+            return;
+        };
+        // T1-6/7: an indexed dynamic container (`u.s[0]` on a dyn array, a queue, or
+        // a routed string array) reads as the word-indexed `Signal` the local
+        // `dyn_select_read` builds — the engine's element read does not care how the
+        // name was reached. `hier_dyn_container_word` is the shared addressing rule;
+        // the WRITE twin calls the SAME function.
+        if d.part.is_none() {
+            if let Some(word) = self.hier_dyn_container_word(net, &d.idx_eids) {
+                // A recorded shape never names a dynamic container.
+                self.verify_hier_shape_not_net(d.eid, &d.path, "a dynamic container element");
+                self.exprs[d.eid as usize] = ir::Expr::Signal {
+                    net,
+                    word: Some(word),
+                };
+                return;
+            }
+        }
+        // Events and dynamic handles have no indexable readable value here (a dyn
+        // element read routes through `dyn_select_read` at lowering, on a 1-seg
+        // base — never a hierarchical ref). Loud-reject.
+        if self.event_nets.contains(&net) || self.is_dyn_handle_net(net) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "a hierarchical indexed read of `{}` is unsupported (an event or a \
+                     dynamic-storage handle has no plain indexable value)",
+                    d.path.join(".")
+                ),
+            );
+            return;
+        }
+        let path = d.path.join(".");
+        // HIER-REST-PS (read): a trailing PART-select whose offset is normalized
+        // against the (element/net) LSB — the READ twin of the write-side `part`
+        // branch. Handled first; the bit/whole lanes below run only when absent.
+        if let Some(p) = d.part {
+            if let Some(e) = self.build_hier_read_part(net, &d.idx_eids, p, &path) {
+                self.verify_hier_sel_shape(d.eid, e, &d.path);
+                let ex = self.exprs[e as usize].clone();
+                self.exprs[d.eid as usize] = ex;
+            }
+            return;
+        }
+        let built = if self.net_is_static_array(net) {
+            // Unpacked array element — single- OR multi-dim, mirroring the local
+            // `lower_array_read` path so `dut.grid[i][j]` reads exactly what a local
+            // `grid[i][j]` would. A partial slice (< D indices) and a bit-of-bit
+            // (> D+1) stay loud.
+            match self.build_hier_array_read(net, &d.idx_eids, &path) {
+                Some(e) => e,
+                None => return,
+            }
+        } else if self.packed_dims.contains_key(&net) {
+            // Multi-dim PACKED element → a bit-slice (mirrors `lower_packed_read`).
+            match self.build_hier_packed_read(net, &d.idx_eids, &path) {
+                Some(e) => e,
+                None => return,
+            }
+        } else {
+            // scalar / vector → a plain bit-select (mirrors the BitSelect arm). A
+            // multi-index chain on a scalar/vector is a bit-of-bit → loud.
+            if d.idx_eids.len() != 1 {
                 self.error(
                     MsgCode::ElabUnsupported,
                     &format!(
-                        "a hierarchical indexed read of `{}` is unsupported (an event or a \
-                         dynamic-storage handle has no plain indexable value)",
-                        d.path.join(".")
+                        "too many indices in hierarchical read of `{path}` (a scalar/vector \
+                         takes a single bit-select)"
                     ),
                 );
-                continue;
+                return;
             }
-            let path = d.path.join(".");
-            // HIER-REST-PS (read): a trailing PART-select whose offset is normalized
-            // against the (element/net) LSB — the READ twin of the write-side `part`
-            // branch. Handled first; the bit/whole lanes below run only when absent.
-            if let Some(p) = d.part {
-                if let Some(e) = self.build_hier_read_part(net, &d.idx_eids, p, &path) {
-                    self.verify_hier_sel_shape(d.eid, e, &d.path);
-                    let ex = self.exprs[e as usize].clone();
-                    self.exprs[d.eid as usize] = ex;
-                }
-                continue;
-            }
-            let built = if self.net_is_static_array(net) {
-                // Unpacked array element — single- OR multi-dim, mirroring the local
-                // `lower_array_read` path so `dut.grid[i][j]` reads exactly what a local
-                // `grid[i][j]` would. A partial slice (< D indices) and a bit-of-bit
-                // (> D+1) stay loud.
-                match self.build_hier_array_read(net, &d.idx_eids, &path) {
-                    Some(e) => e,
-                    None => continue,
-                }
-            } else if self.packed_dims.contains_key(&net) {
-                // Multi-dim PACKED element → a bit-slice (mirrors `lower_packed_read`).
-                match self.build_hier_packed_read(net, &d.idx_eids, &path) {
-                    Some(e) => e,
-                    None => continue,
-                }
-            } else {
-                // scalar / vector → a plain bit-select (mirrors the BitSelect arm). A
-                // multi-index chain on a scalar/vector is a bit-of-bit → loud.
-                if d.idx_eids.len() != 1 {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "too many indices in hierarchical read of `{path}` (a scalar/vector \
-                             takes a single bit-select)"
-                        ),
-                    );
-                    continue;
-                }
-                let base_sig = self.push_expr(ir::Expr::Signal { net, word: None });
-                let offset = self.norm_offset_for_net(net, d.idx_eids[0]);
-                let width = self.const_u32_expr(1, 32);
-                self.push_expr(ir::Expr::Select {
-                    base: base_sig,
-                    offset,
-                    width,
-                    kind: ir::SelKind::Bit,
-                })
-            };
-            self.verify_hier_sel_shape(d.eid, built, &d.path);
-            let e = self.exprs[built as usize].clone();
-            self.exprs[d.eid as usize] = e;
-        }
+            let base_sig = self.push_expr(ir::Expr::Signal { net, word: None });
+            let offset = self.norm_offset_for_net(net, d.idx_eids[0]);
+            let width = self.const_u32_expr(1, 32);
+            self.push_expr(ir::Expr::Select {
+                base: base_sig,
+                offset,
+                width,
+                kind: ir::SelKind::Bit,
+            })
+        };
+        self.verify_hier_sel_shape(d.eid, built, &d.path);
+        let e = self.exprs[built as usize].clone();
+        self.exprs[d.eid as usize] = e;
     }
 
     /// Resolve the N3 deferred hierarchical READ references against the completed
@@ -343,7 +350,10 @@ impl Elaborator<'_> {
             // §5.2 row 27: the placeholder becomes the associative-array marker
             // (`readmem_assoc.rs`), which carries the key type.
             if readmem_assoc {
-                if let Some(m) = self.readmem_assoc_marker(net, &d.path.join(".")) {
+                // R-SITE: the marker's key and signal are built under the placeholder's mark.
+                let mark = self.mark_of_expr(d.eid);
+                let path = d.path.join(".");
+                if let Some(m) = self.with_site(mark, |s| s.readmem_assoc_marker(net, &path)) {
                     self.exprs[d.eid as usize] = m;
                 }
                 continue;

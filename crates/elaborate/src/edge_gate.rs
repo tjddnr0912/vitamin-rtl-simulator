@@ -825,7 +825,9 @@ impl Elaborator<'_> {
         if self.readers_agree(root, v) {
             return;
         }
-        let fresh = self.const_edge_expr(v);
+        // R-SITE: the fresh constant replaces the root and takes its mark.
+        let site = self.mark_of_expr(root);
+        let fresh = self.with_site(site, |s| s.const_edge_expr(v));
         let outs = (self.task_calls_proc.values_mut())
             .chain(self.task_calls_func.values_mut())
             .flat_map(|info| info.out_binds.iter_mut().map(|(_, lv)| lv));

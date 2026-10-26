@@ -834,6 +834,7 @@ impl Elaborator<'_> {
                             // §5.2 row 27: an associative array is loaded one entry
                             // per address (`readmem_assoc_target`).
                             if let Some(eid) = self.readmem_assoc_target(a) {
+                                self.note_sys_dest(eid); // ENG-2 R3
                                 return Some(eid);
                             }
                         }
@@ -842,13 +843,15 @@ impl Elaborator<'_> {
                                 // A2a: $readmemb/h WRITE the memory — a desugared
                                 // array-parameter target is loud ($writemem/$dump
                                 // only READ, so they pass).
+                                let eid = self.push_expr(ir::Expr::Signal { net, word: None });
                                 if matches!(
                                     which,
                                     ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH
                                 ) {
                                     self.deny_readonly_write(net, "$readmem into");
+                                    self.note_sys_dest(eid); // ENG-2 R3
                                 }
-                                return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
+                                return Some(eid);
                             }
                         }
                         // §3 ④: the same argument named HIERARCHICALLY (`dut.ram.mem`).
@@ -872,10 +875,12 @@ impl Elaborator<'_> {
                         // the arm the note exempts never fires on one.
                         if readmem_family && argi == 1 && is_dotted_ident(a) {
                             let eid = self.lower_expr(a);
-                            self.hier_mem_args.insert(
-                                eid,
-                                matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH),
-                            );
+                            let writes =
+                                matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH);
+                            self.hier_mem_args.insert(eid, writes);
+                            if writes {
+                                self.note_sys_dest(eid); // ENG-2 R3 (patched in place)
+                            }
                             return Some(eid);
                         }
                     }
@@ -887,6 +892,13 @@ impl Elaborator<'_> {
         // real-typed argument is illegal (real has no radix form; use $realtobits).
         if let Some(fmt_str) = &fmt_raw {
             self.check_format_real_radix(fmt_str, &arg_ids);
+        }
+        // ENG-2 R3: `$cast` (task form) and `$sformat` / `$swrite*` lowered their
+        // destination once for the checks above and again here — the IR holds this one.
+        if matches!(which, ir::SysTaskId::Cast | ir::SysTaskId::Sformat) {
+            if let Some(&d) = arg_ids.first() {
+                self.note_sys_dest(d);
+            }
         }
         let sid = self.push_stmt(ir::Stmt::SysTask {
             which,

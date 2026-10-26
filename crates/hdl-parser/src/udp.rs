@@ -621,6 +621,7 @@ impl Parser<'_, '_> {
                     then_s: Box::new(hold_stmt()),
                     else_s: Some(Box::new(node)),
                     span,
+                    assertion: None,
                 };
             }
             if let Some(c) = or_fold(xv) {
@@ -629,6 +630,7 @@ impl Parser<'_, '_> {
                     then_s: Box::new(assign_lit("1'bx")),
                     else_s: Some(Box::new(node)),
                     span,
+                    assertion: None,
                 };
             }
             if let Some(c) = or_fold(one) {
@@ -637,6 +639,7 @@ impl Parser<'_, '_> {
                     then_s: Box::new(assign_lit("1'b1")),
                     else_s: Some(Box::new(node)),
                     span,
+                    assertion: None,
                 };
             }
             if let Some(c) = or_fold(zero) {
@@ -645,6 +648,7 @@ impl Parser<'_, '_> {
                     then_s: Box::new(assign_lit("1'b0")),
                     else_s: Some(Box::new(node)),
                     span,
+                    assertion: None,
                 };
             }
             node
@@ -672,6 +676,7 @@ impl Parser<'_, '_> {
             then_s: Box::new(full_cascade),
             else_s: None, // no folded change ⇒ hold the output (empty else)
             span,
+            assertion: None,
         };
         // Re-snapshot shadows LAST (blocking), after all reads — UNCONDITIONAL so the
         // shadow always tracks the latest raw input (folded matching is z/x-agnostic).

@@ -119,6 +119,7 @@ impl Elaborator<'_> {
             target: ret.raw(), // placeholder — patched to the callee entry at resolve
             ret_bb: ret.raw(),
         });
+        self.note_call_site_mark(call_block);
         b.start_block(ret);
         let n = arg_ids.len();
         let call = DeferredHierTaskCall {

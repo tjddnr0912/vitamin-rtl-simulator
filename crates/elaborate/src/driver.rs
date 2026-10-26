@@ -69,6 +69,7 @@ impl<'s> Elaborator<'s> {
             t0_pulse: None,
             t0_decline: None,
             comb_inferred_procs: Vec::new(),
+            rs: Default::default(),
             clocking_inputs: std::collections::BTreeSet::new(),
             clocking_commit: std::collections::BTreeMap::new(),
             clocking_outputs: std::collections::BTreeMap::new(),
@@ -968,20 +969,13 @@ impl<'s> Elaborator<'s> {
         self.defparams.clear();
 
         // §4.5.166 HIER twin: a hierarchical read/write in an implicit
-        // `@(*)`/`always_comb`/`always_latch` — whole-net (`y = dut.q`) OR indexed
-        // (`y = dut.mem[idx]` / `dut.mem[idx] = v`) — lowers behind a placeholder
-        // expr / sentinel chunk, so the referenced net (and any index) was
-        // invisible to `comb_read_set` at process-lowering time and dropped from
-        // the sensitivity list (silent stale; the LOCAL-index twin is fixed in
-        // `collect_lval_reads`). ALL FOUR deferral lanes must arm the recompute —
-        // the whole-net lanes too, else `always_comb y = dut.q` stays stale and
-        // its correctness would hinge on an unrelated indexed ref elsewhere. The
-        // resolvers below patch the real net+index into the stmt/expr arenas;
-        // recompute the affected comb read-sets after.
-        let had_hier_defer = !self.deferred_hier.is_empty()
-            || !self.deferred_hier_sel.is_empty()
-            || !self.deferred_hier_write.is_empty()
-            || !self.deferred_hier_sel_write.is_empty();
+        // `@(*)`/`always_comb`/`always_latch` lowers behind a placeholder expr / sentinel
+        // chunk, so the referenced net (and any index) is invisible until the resolvers
+        // below patch the real net+index into the stmt/expr arenas. ENG-2 R-SETTLE: every
+        // implicit read set is built once, after them (below), for every design.
+        // R-SITE (`read_set.rs`): lowering ends here; from now on an arena append is legal
+        // only inside a site that names the mark the new IR inherits.
+        self.begin_resolve_phase();
         // N3.1: resolve hierarchical INDEXED reads FIRST (their index lowering may
         // itself defer a whole-net hierarchical read into `deferred_hier`)…
         self.resolve_deferred_hier_sel();
@@ -1016,13 +1010,11 @@ impl<'s> Elaborator<'s> {
         // §4.5.601: every placeholder is patched, so decide the late constant edges now —
         // before the multidriver scan below reads a continuous-assign chunk's width.
         self.decide_late_edges();
-        // §4.5.166: now that hier read/write chunks + exprs carry real nets and
-        // index eids, recompute the comb/latch read-sets so the referenced net
-        // (and any index) enters the sensitivity list. Only runs when a hier ref
-        // was deferred (any of the four lanes).
-        if had_hier_defer {
-            self.recompute_comb_sensitivity_after_hier();
-        }
+        // R-SETTLE (`read_set.rs`): every implicit read set — each comb-inferred process
+        // header and each in-body `@(*)` — is computed here, after the last post-lowering
+        // builder or patch, for every design; nothing appends after it.
+        self.recompute_comb_sensitivity_after_hier();
+        self.seal_read_sets();
 
         // S1: hand back the runtime structural-delay lane for any assign that
         // drives a RESOLVED (multi-driven whole-net) net — the check below, and

@@ -176,6 +176,7 @@ impl Elaborator<'_> {
                     target: ret.raw(), // placeholder — patched to the callee entry at resolve
                     ret_bb: ret.raw(),
                 });
+                self.note_call_site_mark(call_block);
                 b.start_block(ret);
                 let call = DeferredHierTaskCall {
                     // R16 §4-1: anchor the resolve-time diagnostics at the enable itself.
@@ -329,6 +330,9 @@ impl Elaborator<'_> {
         // declaration site — the same span the seed resolves.
         let decl = self.decl_loc(task.name.span);
         self.note_subroutine_route(&tname, true, false, decl);
+        // ENG-2: the nets this inline call mints (formal copies, static locals) are a void
+        // function's own variables (exception a, `read_set.rs`).
+        let first_net = self.nets.len();
         // v7: the INLINE (static-lifetime) task path binds each input formal via a
         // formal-WIDTH local net + copy-in assign. A `string` formal lowers to a
         // 1-bit `Wire` net, so that copy-in TRUNCATES the actual (and no `formal_str`
@@ -440,7 +444,7 @@ impl Elaborator<'_> {
             }
         };
         // (caller lvalue, local_net), in arg order — copied out at task exit.
-        let mut copy_out: Vec<(ir::Lvalue, u32)> = Vec::new();
+        let mut copy_out: Vec<(ir::Lvalue, u32, ast::TfDirSpelling)> = Vec::new();
         // V2A: (formal name → caller DynArray NetId) read-only aliases, pushed onto
         // `dyn_subst` around the body lowering below (mirrors the function inline path).
         let mut dyn_binds: Vec<(String, u32)> = Vec::new();
@@ -593,6 +597,7 @@ impl Elaborator<'_> {
                                     lhs: whole_net_lvalue(local),
                                     rhs: rd,
                                 });
+                                self.note_copy_in(cin); // ENG-2 R1 (`read_set.rs`)
                                 b.push_stmt_id(cin);
                             }
                             whole_net_lvalue(caller_net)
@@ -670,6 +675,7 @@ impl Elaborator<'_> {
                                     lhs: whole_net_lvalue(local),
                                     rhs: rd,
                                 });
+                                self.note_copy_in(cin); // ENG-2 R1 (`read_set.rs`)
                                 b.push_stmt_id(cin);
                             }
                             self.lower_lvalue(&lv_ast)
@@ -688,7 +694,7 @@ impl Elaborator<'_> {
                         }
                     };
                     self.out_subst.push((p.name.name.clone(), local));
-                    copy_out.push((out_lval, local));
+                    copy_out.push((out_lval, local, p.dir_spelling));
                 }
             }
         }
@@ -754,19 +760,28 @@ impl Elaborator<'_> {
             );
             self.push_rtn_pkg_scope(pk, &task.name.name, decl_scope::RtnKind::Task, declared);
         }
-        if tlocals.is_empty() {
-            self.inline_task_body(b, &task.body);
+        // ENG-2 (`read_set.rs`): a task body adds nothing to an implicit read set; a void
+        // function's body adds its reads to `always_comb`'s, not to an `@*`'s.
+        let body_mark = if task.is_void_fn {
+            read_set::MARK_VOID_INLINE
         } else {
-            let scope = format!("$itask${tname}$L");
-            self.with_scope(&scope, |s| {
-                let view = crate::block_local::RoutineView {
-                    name: &task.name.name,
-                    body: &task.body,
-                };
-                s.hoist_inline_task_locals(b, &tlocals, &view);
+            read_set::MARK_TASK
+        };
+        self.with_read_mark(body_mark, |s| {
+            if tlocals.is_empty() {
                 s.inline_task_body(b, &task.body);
-            });
-        }
+            } else {
+                let scope = format!("$itask${tname}$L");
+                s.with_scope(&scope, |s| {
+                    let view = crate::block_local::RoutineView {
+                        name: &task.name.name,
+                        body: &task.body,
+                    };
+                    s.hoist_inline_task_locals(b, &tlocals, &view);
+                    s.inline_task_body(b, &task.body);
+                });
+            }
+        });
         if pushed_pkg.is_some() {
             self.pop_rtn_pkg_scope();
         }
@@ -781,7 +796,10 @@ impl Elaborator<'_> {
         // assignment resizes (sign/zero-extends per the formal's signedness) from
         // the formal width to the caller width. For a `return`-bearing body this
         // sits in the convergence exit block, so it runs on every return path.
-        for (caller_lval, local) in &copy_out {
+        // ENG-2 R1: a `const ref` copy-out is never a write of the calling block, a `ref`
+        // one writes what the body writes of the formal — decided in the settle from the
+        // statement's record (`read_set.rs`), never here.
+        for (caller_lval, local, sp) in &copy_out {
             let rd = self.push_expr(ir::Expr::Signal {
                 net: *local,
                 word: None,
@@ -790,7 +808,22 @@ impl Elaborator<'_> {
                 lhs: caller_lval.clone(),
                 rhs: rd,
             });
+            self.rs.copy_out.insert(cout);
+            match sp {
+                ast::TfDirSpelling::Declared => {}
+                ast::TfDirSpelling::Ref => {
+                    self.note_ref_copy(cout, read_set::RefFormal::Ref, *local)
+                }
+                ast::TfDirSpelling::ConstRef => {
+                    self.note_ref_copy(cout, read_set::RefFormal::ConstRef, *local)
+                }
+            }
             b.push_stmt_id(cout);
+        }
+        if task.is_void_fn {
+            self.rs
+                .void_locals
+                .extend(first_net as u32..self.nets.len() as u32);
         }
 
         // pop our frames so sibling/outer code is unaffected.

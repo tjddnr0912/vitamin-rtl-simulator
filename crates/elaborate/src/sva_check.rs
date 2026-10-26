@@ -310,6 +310,7 @@ impl Elaborator<'_> {
             then_s: Box::new(fail_stmt),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         // Clocked body: check FIRST (reads the prior clock's prev/pend), then
         // the NBA updates apply in the NBA region for the next clock.
@@ -332,6 +333,7 @@ impl Elaborator<'_> {
                 then_s: ps,
                 else_s: None,
                 span: sp,
+                assertion: None,
             });
         }
         // `disable iff` reset: clear in-flight obligation state (antecedent
@@ -720,6 +722,7 @@ impl Elaborator<'_> {
             then_s: Box::new(fail_stmt),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         // A pass action is supported (non-vacuous success); but to keep this slice
         // tight we loud-reject a pass action (its success signal would need the same

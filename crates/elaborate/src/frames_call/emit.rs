@@ -460,7 +460,7 @@ impl Elaborator<'_> {
         // §4.5.193: (caller array path, packed-temp net name, formal shape) for each
         // OUTPUT unpacked-fixed array formal — unpacked into the caller array elements
         // in `ret` AFTER the call (the out-bind copied the md-packed slot to the temp).
-        let mut out_array_unpacks: Vec<(ast::HierPath, String, ArrayFormal)> = Vec::new();
+        let mut out_array_unpacks: Vec<(ast::HierPath, String, ArrayFormal, u32)> = Vec::new();
         for (slot, (p, a)) in task.ports.iter().zip(eff_args.iter().copied()).enumerate() {
             let slot = slot as u32;
             let fw = self
@@ -640,7 +640,8 @@ impl Elaborator<'_> {
                                                 },
                                             );
                                             out_binds.push((slot, whole_net_lvalue(packed_net)));
-                                            out_array_unpacks.push((path.clone(), pname, af));
+                                            self.rs.unpack_temps.insert(packed_net); // ENG-2 B2
+                                            out_array_unpacks.push((path.clone(), pname, af, slot));
                                             continue;
                                         }
                                     }
@@ -733,6 +734,7 @@ impl Elaborator<'_> {
             target: self.funcs[fid as usize].entry,
             ret_bb: ret.raw(),
         });
+        self.note_call_site_mark(call_block);
         b.start_block(ret);
         if self.frame_task_lowering {
             // nested: process-LOCAL block key, rebased to global on append.
@@ -756,7 +758,8 @@ impl Elaborator<'_> {
         // `i`; ascending zero-based dims (the only supported multi-dim shape) have declared
         // index == row-major coord, so the decomposed digits index directly. For a 1-D
         // formal `strides == [1]` and the single digit is `i` — byte-identical to §4.5.193.
-        for (arr_path, pname, af) in &out_array_unpacks {
+        for (arr_path, pname, af, slot) in &out_array_unpacks {
+            let s0 = self.stmts.len() as u32;
             let sp = arr_path.span;
             let dec = |v: u32| ast::Expr {
                 kind: ast::ExprKind::IntLit {
@@ -811,6 +814,7 @@ impl Elaborator<'_> {
                 };
                 self.lower_stmt(b, &stmt);
             }
+            self.gate_ref_unpack(fid, *slot, s0); // ENG-2 B2 (`read_set.rs`)
         }
     }
 
@@ -1006,6 +1010,7 @@ impl Elaborator<'_> {
             target: self.funcs[fid as usize].entry,
             ret_bb: ret.raw(),
         });
+        self.note_call_site_mark(call_block);
         b.start_block(ret);
         if self.frame_task_lowering {
             self.pending_task_calls.push((call_block, info));

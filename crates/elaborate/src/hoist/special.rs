@@ -453,6 +453,7 @@ impl Elaborator<'_> {
                 then_s,
                 else_s,
                 span,
+                assertion,
             } if self.rhs_only_hoist_ok(cond) => {
                 let cond2 = self.hoist_rhs_only(b, cond);
                 Some(S::If {
@@ -460,6 +461,7 @@ impl Elaborator<'_> {
                     then_s: then_s.clone(),
                     else_s: else_s.clone(),
                     span: *span,
+                    assertion: *assertion,
                 })
             }
             // The rhs and the lvalue's index expressions, in iverilog's measured order

@@ -589,36 +589,23 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Read-set of a lowered process body: every net referenced on a RHS or a
-    /// branch condition (LHS write targets are NOT reads). Drives implicit
-    /// `@*`/`always_comb` sensitivity. Deterministic ascending net order.
-    pub(crate) fn comb_read_set(&self, body: &[ir::BasicBlock], with_fn_bodies: bool) -> Vec<u32> {
-        self.comb_read_set_in(self.cur_proc, body, 0, with_fn_bodies)
-    }
-
-    /// [`Self::comb_read_set`] over `body`, whose first block is block `base` of
-    /// process `proc` — the key space of `task_calls_proc`. A FRAME TASK CALL's
-    /// actuals are not statements of the body: the copy-in expressions and the
-    /// copy-out lvalues live in `TaskCallInfo` beside the `Terminator::Call`, so
-    /// `always_comb tw(src);` had no read of `src` in its inferred sensitivity
-    /// and ran once (both oracles re-run it: `A=8` then `B=10` after `src = 9`,
-    /// vita `8 / 8`; an `output` actual's task the same). The in-binds are reads
-    /// and the out-bind INDEXES are reads (the written base is not), exactly as
-    /// the assignment arm treats its rhs and lhs.
+    /// The cause of an in-body `@(*)` inside a frame body (a frame task, a frame function,
+    /// a class method — the statement lowered with `in_frame_body` set): every net read by
+    /// a statement of `body` (right-hand sides, lvalue indexes, branch conditions,
+    /// system-task arguments, inlined bodies included), plus the in-binds and out-bind
+    /// indexes of a frame task call keyed `(proc, base + i)` in `task_calls_proc`. `body`'s
+    /// first block is block `base`. Deterministic ascending net order.
     ///
-    /// `with_fn_bodies` (an `always_comb` / `always_latch`, IEEE §9.2.2.2.1 — NOT
-    /// an `always @*` or an in-body `@(*)`, §9.4.2.2, which both oracles leave
-    /// blind to a function's reads): the reads of every frame FUNCTION the body
-    /// calls, transitively, minus the callee's own frame slots. `always_comb n =
-    /// rds();` with `rds = src * 10` ran once (`10 / 10` for both oracles' `10 /
-    /// 40`). A TASK body is not walked: iverilog and the LRM re-run nothing for
-    /// `always_comb tz();` whose body reads `src` (verilator does).
-    pub(crate) fn comb_read_set_in(
+    /// ENG-2 parks this site (R4): this is the walk the site used before ENG-2
+    /// (f9f8ebeb `comb_read_set_in` with `with_fn_bodies = false`, the only value the site
+    /// passed), kept as it was so a frame body's `@(*)` behaves as before. The frame
+    /// classify (`wait_cond_reads_frame_local`) reads the set it returns. Process bodies
+    /// use `read_set.rs`.
+    pub(crate) fn frame_star_read_set(
         &self,
         proc: u32,
         body: &[ir::BasicBlock],
         base: u32,
-        with_fn_bodies: bool,
     ) -> Vec<u32> {
         let mut reads = std::collections::BTreeSet::new();
         let mut calls: Vec<u32> = Vec::new();
@@ -633,64 +620,6 @@ impl Elaborator<'_> {
                         self.collect_lval_reads(lv, &mut reads);
                     }
                 }
-            }
-        }
-        if with_fn_bodies {
-            let mut visited = std::collections::BTreeSet::new();
-            while let Some(fid) = calls.pop() {
-                if !visited.insert(fid) {
-                    continue;
-                }
-                let Some(f) = self.funcs.get(fid as usize) else {
-                    continue;
-                };
-                if f.is_task {
-                    continue;
-                }
-                let lo = self.func_metas.get(fid as usize).map_or(0, |m| m.base_net);
-                let hi = lo.saturating_add(f.locals_len);
-                let mut body_reads = std::collections::BTreeSet::new();
-                let mut bbs = vec![f.entry];
-                let mut seen = std::collections::BTreeSet::new();
-                while let Some(b) = bbs.pop() {
-                    if !seen.insert(b) {
-                        continue;
-                    }
-                    let Some(bb) = self.func_blocks.get(b as usize) else {
-                        continue;
-                    };
-                    self.collect_block_reads(bb, &mut body_reads, &mut calls);
-                    match &bb.term {
-                        ir::Terminator::Goto { target } => bbs.push(*target),
-                        ir::Terminator::Branch {
-                            then_bb, else_bb, ..
-                        } => {
-                            bbs.push(*then_bb);
-                            bbs.push(*else_bb);
-                        }
-                        ir::Terminator::Delay { resume, .. }
-                        | ir::Terminator::Wait { resume, .. } => bbs.push(*resume),
-                        ir::Terminator::Fork {
-                            children,
-                            join,
-                            resume_bb,
-                        } => {
-                            bbs.extend(children.iter().copied());
-                            bbs.push(*join);
-                            bbs.push(*resume_bb);
-                        }
-                        // A nested frame call: its target is a callee entry, walked
-                        // through `calls` if it is a function; continue past it.
-                        ir::Terminator::Call { target, ret_bb } => {
-                            if let Some(nf) = self.funcs.iter().position(|g| g.entry == *target) {
-                                calls.push(nf as u32);
-                            }
-                            bbs.push(*ret_bb);
-                        }
-                        ir::Terminator::Return => {}
-                    }
-                }
-                reads.extend(body_reads.into_iter().filter(|&n| n < lo || n >= hi));
             }
         }
         reads.into_iter().collect()
@@ -748,9 +677,9 @@ impl Elaborator<'_> {
     }
 
     /// [`Self::collect_expr_reads`] that also records every frame FUNCTION called
-    /// (`Expr::Call`'s `func`) in `calls`, for `comb_read_set_in` to walk the
-    /// callee bodies (IEEE 1800 §9.2.2.2.1: an `always_comb` is sensitive to the
-    /// contents of every function it calls).
+    /// (`Expr::Call`'s `func`) in `calls`. (A process body's implicit read set has its own
+    /// walk, `read_set.rs`; this one serves `frame_star_read_set` and
+    /// `collect_block_reads`'s other consumers.)
     pub(crate) fn collect_expr_reads_calls(
         &self,
         eid: u32,

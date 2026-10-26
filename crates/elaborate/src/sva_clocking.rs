@@ -131,6 +131,7 @@ impl Elaborator<'_> {
             }),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         let mut body_a = vec![set_handoff];
         body_a.extend(regs_a.nbas);
@@ -170,6 +171,7 @@ impl Elaborator<'_> {
             }),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         let discharge = ast::Stmt::NonBlocking {
             lhs: ast::Lvalue::Ident(handoff_path),
@@ -188,6 +190,7 @@ impl Elaborator<'_> {
             }),
             else_s: None,
             span: sp,
+            assertion: None,
         };
         let mut body_b = vec![consume];
         body_b.extend(regs_b.nbas);
@@ -314,6 +317,7 @@ impl Elaborator<'_> {
                 then_s: Box::new(sva_nb_set(&handoffs[0], true, sp)),
                 else_s: None,
                 span: sp,
+                assertion: None,
             };
             let mut body = vec![arm];
             body.extend(regs.nbas);
@@ -360,6 +364,7 @@ impl Elaborator<'_> {
                                 then_s: Box::new(sva_error_stmt(sp)),
                                 else_s: None,
                                 span: sp,
+                                assertion: None,
                             },
                             sva_nb_set(&hf, false, sp),
                         ],
@@ -367,6 +372,7 @@ impl Elaborator<'_> {
                     )),
                     else_s: None,
                     span: sp,
+                    assertion: None,
                 });
             }
             // Consume body of hf[i-1].
@@ -378,6 +384,7 @@ impl Elaborator<'_> {
                         then_s: Box::new(sva_nb_set(&handoffs[i], true, sp)),
                         else_s: None,
                         span: sp,
+                        assertion: None,
                     },
                     sva_nb_set(&prev, false, sp),
                 ]
@@ -396,6 +403,7 @@ impl Elaborator<'_> {
                         then_s: Box::new(sva_error_stmt(sp)),
                         else_s: None,
                         span: sp,
+                        assertion: None,
                     },
                     sva_nb_set(&prev, false, sp),
                 ]
@@ -408,6 +416,7 @@ impl Elaborator<'_> {
                         then_s: Box::new(sva_nb_set(hf_final.as_ref().unwrap(), true, sp)),
                         else_s: None,
                         span: sp,
+                        assertion: None,
                     },
                     sva_nb_set(&prev, false, sp),
                 ]
@@ -417,6 +426,7 @@ impl Elaborator<'_> {
                 then_s: Box::new(sva_block_or_single(consume_body, sp)),
                 else_s: None,
                 span: sp,
+                assertion: None,
             });
             body.extend(regs.nbas);
             body.extend(pipeline_nbas);

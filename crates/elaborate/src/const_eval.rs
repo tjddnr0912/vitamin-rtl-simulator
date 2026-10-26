@@ -1723,6 +1723,8 @@ impl Elaborator<'_> {
     /// that position, purely because `hier_mem_args` happens to carry the same fact for
     /// a different reason.
     pub(crate) fn deny_readonly_write_at(&mut self, net: u32, eid: u32, how: &'static str) -> bool {
+        // ENG-2 R3: a system output argument — a write of an `always_comb` (`read_set.rs`).
+        self.note_sys_dest(eid);
         if net == POISON_NET {
             self.hier_write_args.insert(eid, how);
             return false;

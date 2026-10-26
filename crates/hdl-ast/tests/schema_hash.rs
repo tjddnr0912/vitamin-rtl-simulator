@@ -312,9 +312,17 @@ use vita_schema::schema_hash;
 /// Elaborate converts each typed key's index to the key type and keeps the bare
 /// keyword atoms as they were; no sim-ir change, format_version stays. All `.vu`
 /// artifacts are stale.
+/// Re-pinned 2026-10-23 (ENG-2) IMPLICIT READ SET PROVENANCE: `Stmt::If.assertion:
+/// Option<AssertDirective>` (the parser's desugar of an immediate `assert` / `assume`,
+/// IEEE 1800-2017 §16.3), `Stmt::DeferredAssert.directive` and the new `AssertDirective`
+/// enum (row 73's r6 marker shape, without its `ModuleDecl.is_program`), and
+/// `TaskDef.is_void_fn` (a `function void` the parser lowers through the task
+/// machinery). Elaborate reads them for the implicit sensitivity of `always_comb` /
+/// `always @*` (§9.2.2.2.1, §9.4.2.2). All `.vu` artifacts are stale; no sim-ir
+/// change; `format_version` 37 -> 38 for the `.velab` (its read sets changed).
 const EXPECTED: [u8; 32] = [
-    164, 72, 10, 182, 206, 128, 192, 91, 255, 27, 189, 168, 113, 129, 151, 126, 140, 254, 213, 51,
-    124, 52, 250, 13, 148, 14, 210, 91, 254, 156, 234, 221,
+    110, 52, 123, 86, 147, 15, 241, 220, 196, 178, 180, 11, 143, 91, 230, 39, 106, 54, 61, 60, 204,
+    142, 151, 29, 222, 249, 87, 75, 66, 150, 44, 73,
 ];
 
 #[test]

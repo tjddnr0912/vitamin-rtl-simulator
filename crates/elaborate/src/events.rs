@@ -333,6 +333,7 @@ impl Elaborator<'_> {
                 then_s: p.body.clone(),
                 else_s: None,
                 span: p.span,
+                assertion: None,
             }),
             span: p.span,
         })

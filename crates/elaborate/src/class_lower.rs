@@ -282,12 +282,13 @@ impl Elaborator<'_> {
         self.cur_this = Some((this_net, cname.to_string()));
         self.cur_discard = method.discard_net;
         let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
-        // §4.5.437: a class method body is its own `%m` scope — the engine renders
-        // `<process scope>.<class>.<method>` from `func_names` and appends the body's
-        // own block labels, so the recorded chain is RELATIVE (an empty root; the
-        // `$class$C$m` storage segment must not leak into it) and the diagnostic
-        // context of a `$error` inside the body is the `.<class>.<method>` marker
-        // the engine completes with the process scope (`stmt_diag_meta`).
+        let saved_mark = self.enter_unmarked_body(); // ENG-2 (`read_set.rs`)
+                                                     // §4.5.437: a class method body is its own `%m` scope — the engine renders
+                                                     // `<process scope>.<class>.<method>` from `func_names` and appends the body's
+                                                     // own block labels, so the recorded chain is RELATIVE (an empty root; the
+                                                     // `$class$C$m` storage segment must not leak into it) and the diagnostic
+                                                     // context of a `$error` inside the body is the `.<class>.<method>` marker
+                                                     // the engine completes with the process scope (`stmt_diag_meta`).
         let saved_block_scope = std::mem::take(&mut self.block_scope);
         let saved_root = self.block_scope_root.replace(String::new());
         let saved_cm = self
@@ -338,6 +339,7 @@ impl Elaborator<'_> {
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
         self.in_frame_body = saved_frame;
+        self.rs.cur = saved_mark;
         self.block_scope = saved_block_scope;
         self.block_scope_root = saved_root;
         self.cur_class_method = saved_cm;
