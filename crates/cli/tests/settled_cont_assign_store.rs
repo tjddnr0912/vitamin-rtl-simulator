@@ -148,7 +148,7 @@ fn delayed_assigns_at_every_index_position_still_fire_in_declaration_order() {
     // non-contiguous here on purpose — delayed assigns sit at the first, middle and last
     // declaration positions with undelayed ones interleaved — so a filter that lost an
     // index, reordered the survivors, or shifted the mapping between `ci` and the
-    // per-assign tables (`last_ca`, `ca_gen`) shows up as a missing or late value.
+    // per-assign tables (`last_ca`, `ca_slot`) shows up as a missing or late value.
     let o = run("module t;\n\
          reg x; wire d0, u1, d2, u3, d4;\n\
          assign #2 d0 = x;\n\

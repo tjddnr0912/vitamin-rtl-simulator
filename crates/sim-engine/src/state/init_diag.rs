@@ -2,6 +2,14 @@
 
 use super::*;
 
+#[cfg(test)]
+thread_local! {
+    /// Calls of [`SimState::store_image`] on this thread: the operation-mix census
+    /// pinning that a delayed continuous assignment converts once per right-hand-side
+    /// change, not once per visit (`native::dca_cost_tests`).
+    pub(crate) static STORE_IMAGE_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 impl<'a> SimState<'a> {
     pub fn new(
         ir: &'a SimIr,
@@ -719,6 +727,161 @@ impl<'a> SimState<'a> {
         self.store_words(n, 0, net_w, &src)
     }
 
+    /// Is `lhs` a REAL destination? The store's own predicate: a whole-net lvalue
+    /// ([`crate::value::whole_net_dest`], a word of a `real` array included) on a
+    /// net this store holds as real. Asked by [`Self::assign_conversion`] and by the
+    /// delayed continuous assignment's decision (`Scheduler::schedule_delayed_cas`).
+    #[inline]
+    pub(crate) fn real_dest(&self, lhs: &Lvalue) -> bool {
+        crate::value::whole_net_dest(lhs).is_some_and(|n| self.nets[n as usize].is_real)
+    }
+
+    /// Does a write to `lhs` take the WHOLE source value, with no resize to the
+    /// lvalue width? A `string` destination, or an element of a `string` container:
+    /// its net-table width is 0 (dynamic), so a total-width resize would chop the
+    /// value to 1 bit; §6.16 conversion is `dyn_write`'s byte-strip, never a bit
+    /// resize. Read by [`Self::write_lvalue_skipping`] and [`Self::store_image`].
+    #[inline]
+    pub(crate) fn whole_value_dest(&self, lhs: &Lvalue) -> bool {
+        matches!(lhs.chunks.as_slice(), [c]
+            if self.ir.nets[c.net as usize].kind == NetKind::String
+                || self.dyn_str_elem.get(c.net as usize).copied().unwrap_or(false))
+    }
+
+    /// May a continuous assignment write `lhs`? A DENY-list, not a census: a chunk
+    /// on a dynamic container (`dyn_is_handle`: dynamic array, queue, associative
+    /// array, `string`) or a class handle is not static; every other net is.
+    /// IEEE 1800-2017 §6.21 (ieee1800-2017.txt:5435-5437) forbids continuous writes
+    /// to automatic variables, dynamic-array elements and non-static class
+    /// properties. Two mis-calls, both unreachable: a `string` is called not static
+    /// (E3018 refuses it first), an automatic local static (E3010 refuses it first).
+    /// The delayed continuous assignment's decision takes the store image only on
+    /// `true` (`Scheduler::schedule_delayed_cas`); `real dr[]; assign #3 dr[0] = a;`
+    /// (run with W4020) keeps its right-hand-side decision (refusal: Q-CADYNELEM).
+    #[inline]
+    pub(crate) fn ca_static_dest(&self, lhs: &Lvalue) -> bool {
+        lhs.chunks.iter().all(|c| {
+            let n = c.net as usize;
+            !self.dyn_is_handle.get(n).copied().unwrap_or(false)
+                && !self.class_is_handle.get(n).copied().unwrap_or(false)
+        })
+    }
+
+    /// The value a write of `value` to `lhs` stores: [`Self::assign_conversion`],
+    /// then the resize to the lvalue width that [`Self::write_lvalue_skipping`]
+    /// applies before it splits the source into chunks (none for a
+    /// [`Self::whole_value_dest`]), then `write_chunk`'s x / z -> 0 on the bits of
+    /// each chunk on a 2-state net (IEEE 1800-2017 §6.11.3; the tier-3 twin is
+    /// `NetArena::write_chunk`'s `two_state` arm).
+    ///
+    /// ENG-1c: a delayed continuous assignment decides IEEE 1800-2017 §10.3.3 steps
+    /// (b) and (c) and its rise / fall delay on THIS value, not on its right-hand
+    /// side — the bits the store keeps (`wire [3:0] y; assign #4 y = a8;` with `a8`
+    /// 1 then 17 is no change of `y`; `int y; assign #(1,4) y = a;` with `a` 5 then
+    /// `4'bx` is a fall of 5 to 0), and a real for a real destination
+    /// (`assign #(1,4) r = i;` with `i` 3 then 5 is a rise of 3.0 to 5.0). Calling
+    /// the store's own conversion keeps the decision from becoming a second spelling
+    /// of it. Reads only IR-derived tables, so the tier-3 lane gets the same answer.
+    pub(crate) fn store_image(&self, lhs: &Lvalue, value: Value) -> Value {
+        #[cfg(test)]
+        STORE_IMAGE_CALLS.with(|c| c.set(c.get() + 1));
+        let v = self.assign_conversion(lhs, value);
+        if self.whole_value_dest(lhs) {
+            return v;
+        }
+        let total = self.lvalue_width(lhs);
+        let mut v = v.resize(total);
+        if v.unk.iter().any(|&u| u != 0) {
+            // The funnel slices the source MSB-first, one chunk after another.
+            let mut hi = total;
+            for c in &lhs.chunks {
+                let lo = hi.saturating_sub(self.chunk_width(c));
+                if self.two_state.get(c.net as usize).copied().unwrap_or(false) && hi > lo {
+                    // x (val 0 / unk 1) and z (1 / 1) -> 0 on bits lo..hi, a word at a
+                    // time: the funnels' `val &= !unk; unk = 0`, masked to this chunk.
+                    for k in (lo / 64) as usize..=((hi - 1) / 64) as usize {
+                        if k >= v.unk.len() || k >= v.val.len() {
+                            break; // a word the value does not have holds no unknown bit
+                        }
+                        let base = k as u32 * 64;
+                        let (from, to) = (lo.max(base) - base, hi.min(base + 64) - base);
+                        let m = if to - from == 64 {
+                            u64::MAX
+                        } else {
+                            ((1u64 << (to - from)) - 1) << from
+                        };
+                        let u = v.unk[k] & m;
+                        v.val[k] &= !u;
+                        v.unk[k] &= !m;
+                    }
+                }
+                hi = lo;
+            }
+        }
+        v
+    }
+
+    /// The real↔int assignment conversion [`Self::write_lvalue_skipping`] applies to
+    /// `value` before it stores it to `lhs`. The rule is
+    /// [`crate::value::assign_conversion`], shared with the tier-3 arena; what stays
+    /// here is the store-dependent part — "is THIS net real", the integer
+    /// destination's width / signedness, and the destinations that convert in their
+    /// own funnel.
+    pub(crate) fn assign_conversion(&self, lhs: &Lvalue, value: Value) -> Value {
+        // Only a WHOLE-NET lvalue (single Bit chunk, no offset/width) can be a
+        // real destination: a real is dimensionless and never bit/part-selected
+        // (§6.2 makes r[i]/r[hi:lo] illegal at elaborate).
+        //
+        // A CLASS-FIELD destination (a handle net with a word) converts in its
+        // own funnel (`class_field_write_with`) at the field's width — the
+        // handle net's width here is not the field's (a `longint` field
+        // converted at 32 bits and zero-extended). A STRING-element container
+        // (`string sq[$]; sq[1] = 97.2`) converts in `coerce_dyn_elem` too: the
+        // handle's width is 0 here, and a real converted to one bit reached the
+        // string arm as "\x01" (review r1 soundness F1).
+        // …and a WHOLE string variable, whose real conversion is `dyn_write`'s (64
+        // signed bits, then §6.16) rather than the net's one-bit width.
+        let whole_string = lhs.chunks.len() == 1 && {
+            let c = &lhs.chunks[0];
+            c.word.is_none()
+                && c.offset.is_none()
+                && c.width.is_none()
+                && self.ir.nets[c.net as usize].kind == sim_ir::NetKind::String
+        };
+        let funnel_dest = whole_string
+            || lhs.chunks.len() == 1
+                && lhs.chunks[0].word.is_some()
+                && (self
+                    .class_is_handle
+                    .get(lhs.chunks[0].net as usize)
+                    .copied()
+                    .unwrap_or(false)
+                    || self
+                        .dyn_str_elem
+                        .get(lhs.chunks[0].net as usize)
+                        .copied()
+                        .unwrap_or(false));
+        if funnel_dest {
+            return value;
+        }
+        // A real RHS only legally targets a whole scalar int net (concat-LHS of
+        // a real is illegal §6.2). Round to that net's width; for the rare
+        // multi-chunk case round to the total LHS width.
+        //
+        // ⚠️ The widths stay LAZY. This is the hot write funnel (§4.5.332
+        // measured it at 18.9% of a run), and the multi-chunk arm walks every
+        // chunk — the original computed it inside the round arm alone, so
+        // hoisting it unconditionally would put an IR walk on every concat
+        // write that has nothing to do with reals.
+        crate::value::assign_conversion(
+            lhs,
+            value,
+            self.real_dest(lhs),
+            |n| (self.nets[n as usize].width, self.nets[n as usize].signed),
+            || lhs.chunks.iter().map(|c| self.chunk_width(c)).sum(),
+        )
+    }
+
     /// The general write funnel. `write_lvalue` shortcuts the 99.7% case ahead of this;
     /// everything else arrives here exactly as it always did. It is
     /// `write_lvalue_skipping` with no chunk skipped.
@@ -750,68 +913,8 @@ impl<'a> SimState<'a> {
             lhs.chunks.len() > 1 || !skip.iter().any(|&b| b),
             "a chunk skip on a single-chunk lvalue"
         );
-        // ── real↔int assignment coercion (IEEE 1364 §6.2) ──
-        // Only a WHOLE-NET lvalue (single Bit chunk, no offset/width) can be a
-        // real destination: a real is dimensionless and never bit/part-selected
-        // (§6.2 makes r[i]/r[hi:lo] illegal at elaborate). Detect the whole-net
-        // case and consult NetSlot.is_real.
-        // A6 EXTRACTION: the shape test and the 2×2 matrix are now
-        // `value::whole_net_dest` / `value::coerce_assign`, called by this
-        // funnel and by tier-3's. What stays here is the store-dependent part —
-        // "is THIS net real" and the integer destination's width/signedness —
-        // which is the only thing the two stores can legitimately answer
-        // differently. Byte-identical by construction: the arms moved verbatim.
-        let dest_is_real =
-            crate::value::whole_net_dest(lhs).is_some_and(|n| self.nets[n as usize].is_real);
-        // A real RHS only legally targets a whole scalar int net (concat-LHS of
-        // a real is illegal §6.2). Round to that net's width; for the rare
-        // multi-chunk case round to the total LHS width.
-        //
-        // ⚠️ The widths stay LAZY. This is the hot write funnel (§4.5.332
-        // measured it at 18.9% of a run), and the multi-chunk arm walks every
-        // chunk — the original computed it inside the round arm alone, so
-        // hoisting it unconditionally would put an IR walk on every concat
-        // write that has nothing to do with reals.
-        // A CLASS-FIELD destination (a handle net with a word) converts in its
-        // own funnel (`class_field_write_with`) at the field's width — the
-        // handle net's width here is not the field's (a `longint` field
-        // converted at 32 bits and zero-extended). A STRING-element container
-        // (`string sq[$]; sq[1] = 97.2`) converts in `coerce_dyn_elem` too: the
-        // handle's width is 0 here, and a real converted to one bit reached the
-        // string arm as "\x01" (review r1 soundness F1).
-        // …and a WHOLE string variable, whose real conversion is `dyn_write`'s (64
-        // signed bits, then §6.16) rather than the net's one-bit width.
-        let whole_string = lhs.chunks.len() == 1 && {
-            let c = &lhs.chunks[0];
-            c.word.is_none()
-                && c.offset.is_none()
-                && c.width.is_none()
-                && self.ir.nets[c.net as usize].kind == sim_ir::NetKind::String
-        };
-        let funnel_dest = whole_string
-            || lhs.chunks.len() == 1
-                && lhs.chunks[0].word.is_some()
-                && (self
-                    .class_is_handle
-                    .get(lhs.chunks[0].net as usize)
-                    .copied()
-                    .unwrap_or(false)
-                    || self
-                        .dyn_str_elem
-                        .get(lhs.chunks[0].net as usize)
-                        .copied()
-                        .unwrap_or(false));
-        let value = if (dest_is_real || value.is_real) && !funnel_dest {
-            let (int_w, int_signed) = if lhs.chunks.len() == 1 {
-                let n = lhs.chunks[0].net as usize;
-                (self.nets[n].width, self.nets[n].signed)
-            } else {
-                (lhs.chunks.iter().map(|c| self.chunk_width(c)).sum(), false)
-            };
-            crate::value::coerce_assign(dest_is_real, value, int_w, int_signed)
-        } else {
-            value
-        };
+        // ── real↔int assignment coercion (IEEE 1364 §6.2) ── `assign_conversion`.
+        let value = self.assign_conversion(lhs, value);
 
         // ── Round-14 V3/V4: frame-local write lane ──
         // A write to a frame-local net from `run_process` (executing a suspendable task
@@ -873,17 +976,9 @@ impl<'a> SimState<'a> {
         // byte-strip, never a bit resize. N3 Phase 2: a `string s[]` ELEMENT
         // (`s[i] = …`, net kind DynArray but `dyn_str_elem`) is the same — pass
         // the whole value so `dyn_write` stores the byte-string, not 1 bit.
-        if let [c] = lhs.chunks.as_slice() {
-            if self.ir.nets[c.net as usize].kind == NetKind::String
-                || self
-                    .dyn_str_elem
-                    .get(c.net as usize)
-                    .copied()
-                    .unwrap_or(false)
-            {
-                let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
-                return self.write_chunk(c, raw_off, raw_word, &value);
-            }
+        if let ([c], true) = (lhs.chunks.as_slice(), self.whole_value_dest(lhs)) {
+            let (raw_off, raw_word) = offsets.first().copied().unwrap_or((0, 0));
+            return self.write_chunk(c, raw_off, raw_word, &value);
         }
         // Total destination bit width = sum of chunk widths.
         let total: u32 = lhs.chunks.iter().map(|c| self.chunk_width(c)).sum();

@@ -9,6 +9,36 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a delayed continuous assignment decides on the value its target will hold
+
+- `assign #d lhs = rhs;` (and `#(rise, fall[, turnoff])`, a runtime delay, a net-declaration
+  delay, `#0`) compares and times a change on the value the left-hand side stores, as IEEE 1800
+  §10.3.3 describes, not on the right-hand side. A right-hand side wider than its target
+  rescheduled on bits the target drops: `wire [3:0] y; assign #4 y = a8;` with `a8` going 1 then
+  17 inside the delay landed `y = 1` six units after the first change instead of four, and
+  `assign #(4,1) v = y + 1;` took the rising delay for 15 + 1 (Icarus Verilog, sv2v and
+  Verilator agree on the earlier times). The same held for a `real` rounded into a part-select,
+  a concatenation or an integer, and for an `x` or `z` bit arriving at a 2-state target, which
+  stores 0: `int y; assign #(1,4) y = a;` with `a` going from 5 to `4'bx` is a fall to 0 (t+4),
+  where it took the x delay (t+1; Icarus Verilog t+4).
+- A `real` target compares real values: `-0.0` arriving where `+0.0` is scheduled or held
+  changes nothing (it reached the net as `-0.0`), and a new value equal to the one the target
+  holds cancels a pending change, at time 0 and on a word of a `real` array too, at the
+  constant indices a continuous assignment to such an array accepts: an unsized literal, a
+  parameter, `+` / `-` of those (`ra[P-1]`, `ra[1-1]`), in an ascending or descending range
+  (`ra[1]` of `real ra[1:2]`, `real ra[5:4]`), in a generate scope too. Other constant
+  spellings — a sized literal (`ra[1'b1]`, `ra[64'd1]`), `$clog2`, `?:`, a cast, a constant
+  function call — and an array with a negative bound (`real ra[-1:0]`) are refused there
+  (`VITA-E3018`), as before (queued). Its rise / fall
+  delay is chosen by the value — nonzero to zero falls, anything else rises — where it was
+  chosen per bit of the IEEE pattern (`1.0` to `2.0` fell); an integral right-hand side is
+  converted first (`int` 3 to 5 rises). A right-hand side going to `z` stores `0.0` and takes
+  the fall delay (no simulator decides it: recorded).
+- An `assign #0` copy keeps its own time-0 decision: the time-0 copy repair re-wrote it, so
+  `c` read `-0.0` where Icarus Verilog and sv2v read `+0.0`.
+- A continuous assignment to an element of a dynamic array, which IEEE 1800 §6.21 forbids and
+  vitamin still runs (queued for a refusal), keeps deciding on its right-hand side as before.
+
 ### Changed — what `always_comb` and `@*` wait on follows the IEEE lists
 
 - An `always_comb` / `always_latch` (and a module-item deferred assertion, which is one) waits on

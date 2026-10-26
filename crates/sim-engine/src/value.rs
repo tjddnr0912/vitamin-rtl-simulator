@@ -56,6 +56,24 @@ pub(crate) fn real_bits_change_is_event(old: u64, new: u64) -> bool {
     !(old ^ new == SIGN && old & !SIGN == 0)
 }
 
+/// Are two REAL values (`is_real`, 64 IEEE bits in `val[0]`) the same value? Identical
+/// bits, or the signed-zero pair: [`real_bits_change_is_event`]'s one exception, so "a
+/// change that is no event" and "the same value" are not spelled twice. Asked by the
+/// delayed continuous assignment's IEEE 1800-2017 §10.3.3 steps (b) and (c) for a real
+/// destination (`Scheduler::schedule_delayed_cas`).
+///
+/// ⚠️ Identical NaN bits are the same value here, though a NaN is never `==` in IEEE 754:
+/// vita re-decides a delayed rhs on every settle pass, so a NaN that is never "the same"
+/// would reschedule itself forever. iverilog reschedules only when an operand changes,
+/// which needs per-assign operand tracking (recorded split, ROADMAP Q-NANDCA). The caller
+/// checks `is_real` on both sides; an integral value never comes here.
+#[inline]
+pub(crate) fn real_values_same(a: &Value, b: &Value) -> bool {
+    let x = a.val.first().copied().unwrap_or(0);
+    let y = b.val.first().copied().unwrap_or(0);
+    x == y || !real_bits_change_is_event(x, y)
+}
+
 /// The masked word-by-word store a CLOCKING SAMPLE performs, on the raw planes:
 /// copy `v`'s words into `val`/`unk` (missing source words read as 0), mask the
 /// most-significant word to `m`, and report whether any stored bit moved.
@@ -1083,6 +1101,36 @@ pub(crate) fn whole_net_dest(lhs: &sim_ir::Lvalue) -> Option<u32> {
         }
         _ => None,
     }
+}
+
+/// The real↔int conversion a write of `value` to `lhs` applies before the store
+/// resizes it to the lvalue width: [`coerce_assign`] with its integer destination
+/// read off the lvalue — one chunk rounds at that chunk's NET width and sign (so
+/// `x[3] = 1.5` rounds at the net's 32 bits and the resize takes bit 0), a
+/// concatenation at the total lvalue width, unsigned.
+///
+/// The two store-dependent facts arrive as arguments: `dest_is_real` (the store's
+/// [`whole_net_dest`] plus its own "is this net real") and the net's width and sign;
+/// `concat_w` is lazy, because this is the hot write funnel and only the round arm of
+/// a multi-chunk write needs the chunk walk. ONE spelling for the engine store
+/// (`State::assign_conversion`), the tier-3 arena (`NetArena::write_lvalue`) and, through
+/// the engine's, the delayed continuous assignment's decision (`State::store_image`).
+#[inline]
+pub(crate) fn assign_conversion(
+    lhs: &sim_ir::Lvalue,
+    value: Value,
+    dest_is_real: bool,
+    net_int: impl FnOnce(u32) -> (u32, bool),
+    concat_w: impl FnOnce() -> u32,
+) -> Value {
+    if !(dest_is_real || value.is_real) {
+        return value;
+    }
+    let (w, signed) = match lhs.chunks.as_slice() {
+        [c0] => net_int(c0.net),
+        _ => (concat_w(), false),
+    };
+    coerce_assign(dest_is_real, value, w, signed)
 }
 
 /// real↔int ASSIGNMENT coercion (IEEE 1364 §6.2) — the whole 2×2 matrix, in

@@ -221,28 +221,21 @@ impl NetArena {
         // does `real r; r = 5;` store" is the shape that goes silently wrong:
         // the integer arm puts the bit pattern 5 where 5.0 belongs.
         //
-        // The integer width keeps the engine's detail that a single-chunk LHS
-        // rounds to the NET's width and signedness — NOT the chunk's, so
-        // `x[3] = 1.5` rounds at 32 bits and the resize below takes bit 0 — and
-        // it stays LAZY for the reason the engine's twin states.
+        // The integer destination — a single-chunk LHS rounds to the NET's width
+        // and signedness, NOT the chunk's, so `x[3] = 1.5` rounds at 32 bits and
+        // the resize below takes bit 0 — is `value::assign_conversion`'s too
+        // (ENG-1c: shared with the engine store and, through it, the delayed
+        // continuous assignment's decision); the width stays LAZY for the reason
+        // the engine's twin states.
         let dest_is_real =
             crate::value::whole_net_dest(lhs).is_some_and(|n| self.slots[n as usize].is_real);
-        let value = if dest_is_real || value.is_real {
-            // `chunks[0]` is indexed only INSIDE the single-chunk arm — the
-            // engine is empty-safe by construction (a guarded `if` plus a
-            // short-circuiting `&&`), and a mirror that panics where the
-            // original returns is not a mirror.
-            let w = if let [c0] = lhs.chunks.as_slice() {
-                self.slots[c0.net as usize].width
-            } else {
-                lhs.chunks.iter().map(|c| self.chunk_width(ir, c)).sum()
-            };
-            let signed =
-                matches!(lhs.chunks.as_slice(), [c0] if self.slots[c0.net as usize].signed);
-            crate::value::coerce_assign(dest_is_real, value, w, signed)
-        } else {
-            value
-        };
+        let value = crate::value::assign_conversion(
+            lhs,
+            value,
+            dest_is_real,
+            |n| (self.slots[n as usize].width, self.slots[n as usize].signed),
+            || lhs.chunks.iter().map(|c| self.chunk_width(ir, c)).sum(),
+        );
         // Total destination bit width = sum of chunk widths.
         let total: u32 = lhs.chunks.iter().map(|c| self.chunk_width(ir, c)).sum();
 

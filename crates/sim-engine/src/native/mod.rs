@@ -66,6 +66,8 @@ pub mod write;
 // modules (clippy duplicate_mod forbids a per-file include) — see the
 // `extern crate self as sim_engine` note in lib.rs.
 #[cfg(test)]
+mod dca_cost_tests;
+#[cfg(test)]
 #[path = "../../tests/common/mod.rs"]
 mod test_common;
 #[cfg(test)]

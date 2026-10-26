@@ -1205,6 +1205,11 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
             if k.sched.t0_hold.held_now(ci) {
                 continue;
             }
+            // ENG-1c: a delayed driver's time-0 value is its own §10.3.3 decision
+            // (the engine twin in `arm_processes` says why it is not re-written).
+            if ir.cont_assigns[ci].delay.is_some() {
+                continue;
+            }
             let lhs = &ir.cont_assigns[ci].lhs;
             let rhs = ir.cont_assigns[ci].rhs;
             let v = k.k_eval_for_lvalue(lhs, rhs);

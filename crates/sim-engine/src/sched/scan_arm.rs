@@ -575,6 +575,22 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                         .all(|c| net_drivers.get(&c.net) == Some(&1))
             })
             .collect();
+        // ENG-1c: what each delayed driver's §10.3.3 decision compares, asked once
+        // (`CaDest`); an undelayed one never decides, and keeps `Rhs` unread.
+        let ca_dest: Vec<super::CaDest> = st
+            .ir
+            .cont_assigns
+            .iter()
+            .map(|ca| {
+                if ca.delay.is_none() || !st.ca_static_dest(&ca.lhs) {
+                    super::CaDest::Rhs
+                } else if st.real_dest(&ca.lhs) {
+                    super::CaDest::RealImage
+                } else {
+                    super::CaDest::Image
+                }
+            })
+            .collect();
         // DIRTY-SETTLE: split the assigns into "always re-evaluate" and "re-evaluate
         // only when a dependency moved", and build the net → dependents reverse index
         // the write funnel marks through. `ca_deps` certifies skippability; anything it
@@ -702,7 +718,14 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             fork_modes,
             last_ca: vec![None; nca],
             last_ca_drv: vec![None; nca],
-            ca_gen: vec![0; nca],
+            ca_slot: ca_dest
+                .into_iter()
+                .map(|dest| super::CaSlot {
+                    gen: 0,
+                    rhs_seen: None,
+                    dest,
+                })
+                .collect(),
             md_nets,
             ca_md,
             delayed_sole,
@@ -963,7 +986,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
 
     /// Delayed `assign #d y = rhs`: the zero-delay fixpoint has settled, so the
     /// RHS is stable. On each RHS-value CHANGE, schedule an INERTIAL write of
-    /// the new value at `now + d` — bumping `ca_gen[ci]` cancels any still
+    /// the new value at `now + d` — bumping `ca_slot[ci].gen` cancels any still
     /// pending older write for THIS assign (a pulse narrower than d never
     /// lands; a pulse of EXACTLY d survives because pending writes apply at the
     /// tick start, before processes re-change the RHS — both iverilog-pinned
@@ -1050,8 +1073,71 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 None => self.eval_cont_assign(ci, &lhs, ca_rhs),
             };
             self.charge_ca(ci, ca_t0);
-            if self.last_ca[ci].as_ref() == Some(&v) {
-                continue; // RHS unchanged → no new scheduled write
+            // ENG-1c: a right-hand side equal to the one the last decision was made on
+            // decides nothing — one compare, as before the store image. Up to (b) and
+            // (c) the decision reads this driver's own state (`last_ca`, `last_ca_drv`:
+            // written only here and by a landing of the write it scheduled) and tables
+            // fixed at build; `pre_init`, `armed`, `now`, a runtime delay's operands and
+            // a dynamic index's offsets are read only past (b) / (c), which a repeat
+            // never passes: each way the last decision ended — scheduled or landed
+            // (`last_ca` = the image), (b), (c) (`last_ca` = the driven value, or `None`
+            // before any landing: (c) re-cancels) — repeats as no event. A decision
+            // DEFERRED before the initializers records nothing; the next visit decides.
+            if self.ca_slot[ci].rhs_seen.as_ref() == Some(&v) {
+                continue;
+            }
+            self.ca_slot[ci].rhs_seen = Some(v.clone());
+            // ENG-1c, IEEE 1800-2017 §10.3.3: steps (b) and (c) (ieee1800-2017.txt
+            // :10365-10372) and the delay below are decided on the value the
+            // left-hand side will HOLD — the store's own conversion, resize and
+            // 2-state x / z -> 0 (`State::store_image`), carried by `last_ca`,
+            // `last_ca_drv`, the wheel, the time-0 landing and a release's restore
+            // (`released_driver_outputs`). An integral destination compares the
+            // bits it keeps (`wire [3:0] y; assign #4 y = a8;`, `a8` 1 -> 17
+            // inside the delay, is no change: y = 1 lands at t+4, iverilog, sv2v,
+            // verilator); a real destination compares reals. A destination a
+            // continuous assignment may not write (`State::ca_static_dest`: a
+            // dynamic-array element, a class property) keeps the right-hand-side
+            // decision unchanged: an illegal input does not move. Which of the three
+            // is `ca_slot[ci].dest`, asked once at build (`CaDest`).
+            let dest = self.ca_slot[ci].dest;
+            let v = if dest == super::CaDest::Rhs {
+                v
+            } else {
+                self.st.store_image(&lhs, v)
+            };
+            let real = dest == super::CaDest::RealImage;
+            if real {
+                // A real destination, under IEEE 754 equality (`+0.0` and `-0.0`
+                // are one value; identical NaN bits too, the recorded split
+                // Q-NANDCA, `value::real_values_same`). (b): the same value as the
+                // one already scheduled keeps that schedule.
+                if self.last_ca[ci]
+                    .as_ref()
+                    .is_some_and(|p| p.is_real && crate::value::real_values_same(p, &v))
+                {
+                    continue;
+                }
+                // (c): the same value as the left-hand side holds NOW deschedules
+                // the pending write (the generation bump) and schedules nothing —
+                // `assign #2 b = a;` with `a` 1.0 then -0.0 leaves `b` +0.0
+                // (iverilog, sv2v). `last_ca` follows the driven value, so a later
+                // rhs equal to the cancelled one schedules again, and
+                // `delayed_landed_in_settle` keeps reading "the value last
+                // computed is the value driven".
+                if self
+                    .real_lhs_now(ci)
+                    .is_some_and(|cur| crate::value::real_values_same(&cur, &v))
+                {
+                    self.ca_slot[ci].gen += 1;
+                    self.last_ca[ci] = self.last_ca_drv[ci].clone();
+                    continue;
+                }
+            } else if self.last_ca[ci].as_ref() == Some(&v) {
+                // (b), bitwise. (c) is unobservable for an integral destination
+                // (an equal store is no change), and a signed-zero pair is two
+                // values there (`logic [63:0]`).
+                continue; // stored value unchanged → no new scheduled write
             }
             // S1: the per-bit rise/fall/turnoff delay is measured from the value
             // the net CURRENTLY holds — i.e. the last value this assign actually
@@ -1074,14 +1160,15 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // supersedes it when the rhs moves).
             if self.pre_init {
                 let runtime = self.ca_is_runtime_delay(ci);
-                let zero =
-                    !runtime && self.effective_ca_delay(nets, ci, d, old.as_ref(), &v) == Some(0);
+                let zero = !runtime
+                    && self.effective_ca_delay(nets, ci, d, old.as_ref(), &v, real) == Some(0);
                 if runtime || zero {
+                    self.ca_slot[ci].rhs_seen = None; // deferred: the re-settle decides
                     continue;
                 }
             }
             self.last_ca[ci] = Some(v.clone());
-            self.ca_gen[ci] += 1;
+            self.ca_slot[ci].gen += 1;
             // THE LHS OFFSETS MUST COME FROM THE SAME STORE AS THE RHS. This
             // read `self.resolve_lvalue_offsets` unconditionally — the engine's
             // own `EvalCtx` — while the value above already crossed the seam.
@@ -1108,7 +1195,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // The per-transition delay for THIS change — the uniform `d`, the
             // constant rise/fall/turnoff sidecar, or the runtime lane, decided
             // in `effective_ca_delay` (sched/ca_delay.rs). `None` = never fires.
-            let Some(eff_d) = self.effective_ca_delay(nets, ci, d, old.as_ref(), &v) else {
+            let Some(eff_d) = self.effective_ca_delay(nets, ci, d, old.as_ref(), &v, real) else {
                 // The generation bump above still stands, so a write this assign
                 // already had pending is cancelled — the inertial cancel is a
                 // property of the rhs changing, not of the new delay being
@@ -1123,7 +1210,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let tick = self.st.now.saturating_add(eff_d);
             self.delayed_ca.entry(tick).or_default().push((
                 ci as u32,
-                self.ca_gen[ci],
+                self.ca_slot[ci].gen,
                 lhs,
                 v,
                 offs,
@@ -1143,7 +1230,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let mut out = Vec::new();
         if let Some(writes) = self.delayed_ca.remove(&tick) {
             for (ci, gen, lhs, v, offs) in writes {
-                if self.ca_gen[ci as usize] != gen {
+                if self.ca_slot[ci as usize].gen != gen {
                     continue;
                 }
                 self.last_ca_drv[ci as usize] = Some(v.clone());
@@ -1156,6 +1243,44 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// The earliest tick with a pending delayed cont-assign write, if any.
     pub(crate) fn next_delayed_ca(&self) -> Option<u64> {
         self.delayed_ca.keys().next().copied()
+    }
+
+    /// The REAL value the left-hand side of delayed cont-assign `ci` holds now,
+    /// for §10.3.3 step (c), or `None` when it is not a real value this driver
+    /// can name. Asked only for a real destination (`State::real_dest`).
+    ///
+    /// After a landing it is the value last DRIVEN (`last_ca_drv`). Before the
+    /// first one the destination holds `+0.0`: a whole `real` with a SOLE driver
+    /// holds its initial x drive (`delayed_owes_initial_x`), which a real stores
+    /// as `+0.0` (`coerce_assign`: x reads as 0); a word of a static `real` array
+    /// at a CONSTANT index holds its `+0.0` default, and this assign is its only
+    /// driver — not by `delayed_sole` (per NET, false for any element-wise array)
+    /// but by the E3018 gate (`elaborate::cont_var`), which keeps a continuous
+    /// `assign` to a `real` array only as one per element, each at a constant
+    /// index it folds, every element once (iverilog and sv2v refuse a second
+    /// driver of one element). The index is read as the store reads it
+    /// (`sim_ir::selfwidth::offset_value`), but only what the gate's own fold admits
+    /// arrives (`const_expr_u64`: a constant, `+`, `-`; `ra[1]` of `real ra[1:2]`,
+    /// `ra[1-1]`, a folded parameter), in range; `$clog2`, `?:`, a cast, a call, `[-1]` stay
+    /// E3018. A dynamic array's element never comes here (`ca_static_dest`). Any other —
+    /// a shared net, a dynamic index — is not this driver's to name. Measured:
+    /// `real a = -0.0; assign #0 b = a;` leaves `b` +0.0 (iverilog, sv2v), and `a`
+    /// 1.0 then -0.0 under `#3` before anything landed leaves it +0.0 too.
+    fn real_lhs_now(&self, ci: usize) -> Option<Value> {
+        if let Some(d) = &self.last_ca_drv[ci] {
+            return d.is_real.then(|| d.clone());
+        }
+        let ir = self.st.ir;
+        let [c] = ir.cont_assigns[ci].lhs.chunks.as_slice() else {
+            return None;
+        };
+        let len = ir.nets[c.net as usize].array_len;
+        let at_default = match c.word {
+            None => self.delayed_sole[ci] && len <= 1,
+            Some(w) => sim_ir::selfwidth::offset_value(sim_ir::selfwidth::ExprCtx::of(ir), w)
+                .is_ok_and(|k| (0..i128::from(len)).contains(&k)),
+        };
+        at_default.then(|| Value::from_f64(0.0))
     }
 
     /// Does this delayed cont-assign still owe its initial X drive?
@@ -1366,6 +1491,16 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             for &ci in &cn.cas {
                 // ROADMAP §2 🆕 AB: a held copy is evaluated at the release.
                 if self.t0_hold.held_now(ci) {
+                    continue;
+                }
+                // ENG-1c: a DELAYED driver (a `#0` copy that landed in the settle)
+                // is not re-written: its time-0 value is its own §10.3.3 decision,
+                // made by the re-settle's `schedule_delayed_cas` with the
+                // initializers landed, and the re-evaluated rhs would overwrite a
+                // (c)-declined landing (`real r = -0.0; assign #0 c = r;` leaves `c`
+                // +0.0, iverilog and sv2v; the rewrite stored -0.0). Membership and
+                // the suppression below are unchanged. Tier-3 twin: `arm_t0`.
+                if self.st.ir.cont_assigns[ci].delay.is_some() {
                     continue;
                 }
                 let lhs = self.st.ir.cont_assigns[ci].lhs.clone();

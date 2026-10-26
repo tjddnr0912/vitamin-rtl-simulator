@@ -319,10 +319,38 @@ pub(crate) enum T0Trigger {
 /// One INERTIAL-delay continuous-assign write: `(cont-assign index,
 /// generation, lhs, value, per-chunk (offset, word))`. Applied when the
 /// simulation reaches the scheduled tick IF the generation still matches
-/// `ca_gen[ci]` — a later RHS change bumps the generation, so the stale
+/// `ca_slot[ci].gen` — a later RHS change bumps the generation, so the stale
 /// pending write is silently dropped (IEEE inertial pulse filtering: a pulse
 /// narrower than the delay never reaches the LHS; iverilog-pinned live).
 type DelayedWrite = (u32, u64, Lvalue, Value, Offsets);
+
+/// ENG-1c r4: one per-cont-assign record for the delayed decision: the schedule
+/// generation, the raw right-hand side of the last visit that decided (`None`
+/// before the first decision and after a deferred one), and what the decision
+/// compares (`CaDest`). One table, so the scheduler keeps its size.
+pub(crate) struct CaSlot {
+    pub(crate) gen: u64,
+    pub(crate) rhs_seen: Option<Value>,
+    pub(crate) dest: CaDest,
+}
+
+/// What a DELAYED continuous assignment's IEEE 1800-2017 §10.3.3 decision compares
+/// (`Scheduler::schedule_delayed_cas`), decided once per cont-assign in
+/// `Scheduler::new` from its left-hand side: both predicates it asks
+/// (`SimState::ca_static_dest`, `SimState::real_dest`) read only tables filled
+/// before the scheduler exists (`dyn_is_handle`, `class_is_handle`, the nets'
+/// `is_real`), none written after.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CaDest {
+    /// Not a destination a continuous assignment may write (`ca_static_dest`
+    /// false: a dynamic-array element, a class property): the right-hand side
+    /// itself, bitwise.
+    Rhs,
+    /// The store image (`SimState::store_image`), bitwise.
+    Image,
+    /// The store image of a real destination, as reals (`value::real_values_same`).
+    RealImage,
+}
 
 /// V2A-frame (§4.5.173): a frame task call's copy-ins, split by kind — scalar
 /// `(formal slot, evaluated value)` pairs and dynamic-array snapshot `(formal slot,
@@ -449,10 +477,12 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// (IEEE 1364 §7.14: a transition's delay is measured from the value the net
     /// CURRENTLY holds, not the previous RHS — they differ on inertial supersede).
     last_ca_drv: Vec<Option<Value>>,
-    /// Per-cont-assign schedule generation — bumped on every new RHS change,
-    /// invalidating any pending write carrying an older generation (the
-    /// inertial cancel; see `DelayedWrite`).
-    ca_gen: Vec<u64>,
+    /// Per-cont-assign delayed-decision record (`CaSlot`): `gen`, the schedule
+    /// generation — bumped on every new RHS change, invalidating any pending
+    /// write carrying an older generation (the inertial cancel; see
+    /// `DelayedWrite`); `rhs_seen`, the raw right-hand side the last decision was
+    /// made on; `dest`, what the decision compares (`CaDest`).
+    ca_slot: Vec<CaSlot>,
     /// MULTI-DRIVER: nets driven by ≥2 cont-assigns that are ALL whole-net,
     /// non-delayed targets → `(net, driver cont-assign indices, resolution kind)`.
     /// kind 0=WIRE (z yields; equal keeps; conflict→x), 1=WAND (wired-AND),

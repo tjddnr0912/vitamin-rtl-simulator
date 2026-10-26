@@ -19,6 +19,8 @@ mod frame_eval;
 mod heap_move;
 pub(crate) use heap_move::{dyn_changed_move, dyn_elem_move, heap_mark_is_event, HeapMove};
 mod init_diag;
+#[cfg(test)]
+pub(crate) use init_diag::STORE_IMAGE_CALLS;
 mod netread;
 mod task_frames;
 pub(crate) use task_frames::*;

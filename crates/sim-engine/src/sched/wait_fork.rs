@@ -332,10 +332,29 @@ pub(crate) fn resolve_wor_into(acc: &mut Value, d: &Value) {
 pub(crate) fn transition_delay(
     old: Option<&Value>,
     new: &Value,
+    real: bool,
     rise: u64,
     fall: u64,
     toff: u64,
 ) -> u64 {
+    // ENG-1c: a REAL destination's value (`real`: `new` is the store image of a
+    // real destination, `State::store_image`; a raw real right-hand side into a
+    // destination a continuous assignment may not write keeps the per-bit rule,
+    // `State::ca_static_dest`) has no bits to rise or
+    // fall one by one and holds no z. IEEE 1800-2017 §10.3.3 (ieee1800-2017.txt
+    // :10342-10345): "a transition from nonzero to zero" takes the falling delay,
+    // every other one the rising delay, zero being the 754 zero of either sign;
+    // verilator's rule. Per bit, `1.0 -> 2.0` read as a fall (bit 62 clears) and
+    // an integral `3 -> 5` into a real as a fall too. A first drive (`old` None:
+    // the destination holds its initial x) to zero falls, as the per-bit rule
+    // gives an integral first drive to 0. A rhs going to z converts to 0.0 and so
+    // falls (no oracle: iverilog rises on every real transition, verilator never
+    // lands the z; ROADMAP §2 records it). The turn-off delay is never selected.
+    if real {
+        let zero = |v: &Value| v.val.first().copied().unwrap_or(0) & !(1u64 << 63) == 0;
+        let falls = zero(new) && !old.is_some_and(|o| o.is_real && zero(o));
+        return if falls { fall } else { rise };
+    }
     let x_delay = rise.min(fall).min(toff);
     let mut d: Option<u64> = None;
     for i in 0..new.width {

@@ -23,7 +23,9 @@ impl Scheduler<'_, '_> {
     ///   3. the uniform `d` from the frozen `ContAssign.delay`.
     ///
     /// `nets` is the tier-3 seam, threaded from the caller so a delay value is
-    /// read from the SAME store the rhs was read from.
+    /// read from the SAME store the rhs was read from. `real`: `new` is the store
+    /// image of a real destination (ENG-1c), whose rise / fall is the whole
+    /// value's (`transition_delay`).
     ///
     /// `None` is `delay_ticks_of`'s `u64::MAX` never-fires sentinel (a negative
     /// delay amount, integral or real) returned as a state rather than as a
@@ -37,6 +39,7 @@ impl Scheduler<'_, '_> {
         d: u32,
         old: Option<&Value>,
         new: &Value,
+        real: bool,
     ) -> Option<u64> {
         let eff = match self.st.ca_delay_exprs.get(&(ci as u32)).copied() {
             Some((r_eid, f_eid, t_eid, mult, pmult)) => {
@@ -50,7 +53,7 @@ impl Scheduler<'_, '_> {
                     Some(e) => self.ca_delay_ticks(nets, e, mult, pmult),
                     None => rise.min(fall),
                 };
-                transition_delay(old, new, rise, fall, toff)
+                transition_delay(old, new, real, rise, fall, toff)
             }
             // When this cont-assign has differing rise/fall/turnoff delays the
             // net updates atomically at `now + max(per-changed-bit destination
@@ -58,7 +61,7 @@ impl Scheduler<'_, '_> {
             // byte-identical to the behaviour before either sidecar existed.
             None => match self.st.ca_delays.get(&(ci as u32)) {
                 Some(&(rise, fall, toff)) => {
-                    transition_delay(old, new, rise as u64, fall as u64, toff as u64)
+                    transition_delay(old, new, real, rise as u64, fall as u64, toff as u64)
                 }
                 None => d as u64,
             },
