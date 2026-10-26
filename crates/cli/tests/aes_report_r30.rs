@@ -499,7 +499,7 @@ fn run_json_splits_elaborate_from_simulate() {
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(
         d.join("t.sv"),
-        "`timescale 1ns/1ps\nmodule t; int i; initial begin for (i=0;i<20000;i=i+1) ; $finish; end endmodule\n",
+        "`timescale 1ns/1ps\nmodule t; int i; initial begin for (i=0;i<2000000;i=i+1) ; $finish; end endmodule\n",
     )
     .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_vita"))
@@ -514,7 +514,10 @@ fn run_json_splits_elaborate_from_simulate() {
     assert!(j.contains("\"sim_s\""), "no simulate time:\n{j}");
     // Anti-vacuity: the two must be REAL and must add up. A design that spends
     // its time in a loop has to show it under `sim_s`, or the split is a pair of
-    // constants.
+    // constants. The loop is sized so `sim_s` dominates by two orders of magnitude
+    // (debug build, Apple M-series: elab_s ~0.001, sim_s ~0.19), not by the 2x a
+    // 20k-iteration loop gave, which a loaded CI runner's scheduling noise on a
+    // millisecond `elab_s` could invert (a macos-latest CI flake at 9483559e).
     let num = |k: &str| -> f64 {
         j.split(&format!("\"{k}\": "))
             .nth(1)
@@ -523,7 +526,7 @@ fn run_json_splits_elaborate_from_simulate() {
             .unwrap_or_else(|| panic!("no numeric `{k}`:\n{j}"))
     };
     let (wall, elab, sim) = (num("wall_s"), num("elab_s"), num("sim_s"));
-    assert!(sim > elab, "a 20k-iteration loop is simulate time:\n{j}");
+    assert!(sim > elab, "a 2M-iteration loop is simulate time:\n{j}");
     assert!(
         elab + sim <= wall + 1e-6,
         "the parts cannot exceed the whole:\n{j}"

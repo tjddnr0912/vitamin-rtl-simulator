@@ -8386,7 +8386,10 @@ fn pin_loud_codes(src: &str, codes: &[&str], needle: &str) {
         let err = String::from_utf8_lossy(&o.stderr);
         assert_eq!(o.status.code(), Some(1), "backend {be}: {err}");
         assert_eq!(diag_codes(&o), codes, "backend {be} diagnostics:\n{err}");
-        let last = err.lines().filter(|l| l.contains("error[VITA-")).last();
+        let last = err
+            .lines()
+            .filter(|l| l.contains("error[VITA-"))
+            .next_back();
         assert!(
             last.is_some_and(|l| l.contains(needle)),
             "backend {be}: last error lacks `{needle}`:\n{err}"

@@ -2208,21 +2208,43 @@ endmodule
 }
 
 /// control (Q-NANDCA): a NaN from 0/0 through `#2` lands once and is not rescheduled when `z` is rewritten with the same value.
-/// Cell `Q8a_nan_same_bits_delayed`. Oracles: iv "W t=2 b=7ff8000000000000 | A end n=1"; s2v "W t=2 b=7ff8000000000000 | A end n=1"; vl "%Error-DIDNOTCONVERGE: Settle region did not converge after '--converge-limit' of 10000 tries | Aborting...".
+/// Cell `Q8a_nan_same_bits_delayed`. Oracles (aarch64): iv "W t=2 b=7ff8000000000000 | A end n=1"; s2v "W t=2 b=7ff8000000000000 | A end n=1"; vl "%Error-DIDNOTCONVERGE: Settle region did not converge after '--converge-limit' of 10000 tries | Aborting...".
 /// PRE "W t=2 b=7ff8000000000000 | A end n=1".
+///
+/// The NaN's sign bit is not pinned: vita's real arithmetic hands back the CPU's default NaN, so
+/// 0/0 is `7ff8000000000000` on aarch64 and `fff8000000000000` on x86-64 (CI's ubuntu-latest and
+/// RHEL9 runners) — a pre-existing defect against CONTRIBUTING's Linux = macOS output guarantee,
+/// queued as ROADMAP §5.2 Q-NANCANON. Until it lands, the landed value is pinned exactly on every
+/// bit but bit 63 and must be a NaN; Q-NANCANON restores the exact line `W t=2 b=7ff8000000000000`.
 #[test]
 fn q8a_nan_from_zero_by_zero_control() {
-    pin(
-        r##"module top;
+    let src = r##"module top;
   real z = 0.0; real r; real b; int n = 0;
   assign r = z / z;
   assign #2 b = r;
   always @(b) begin n = n + 1; $display("W t=%0t b=%h", $time, $realtobits(b)); end
   initial begin #3 z = 0.0; #3 $display("A end n=%0d", n); $finish; end
 endmodule
-"##,
-        &[r##"W t=2 b=7ff8000000000000"##, r##"A end n=1"##],
-    );
+"##;
+    for be in ["native", "vm", "interp"] {
+        let got = run_on(src, be);
+        assert_eq!(got.len(), 2, "backend {be}: {got:?}");
+        let hex = got[0]
+            .strip_prefix("W t=2 b=")
+            .unwrap_or_else(|| panic!("backend {be}: {got:?}"));
+        let bits =
+            u64::from_str_radix(hex, 16).unwrap_or_else(|e| panic!("backend {be}: {hex}: {e}"));
+        assert!(
+            f64::from_bits(bits).is_nan(),
+            "backend {be}: {hex} is not a NaN"
+        );
+        assert_eq!(
+            bits & !(1u64 << 63),
+            0x7ff8_0000_0000_0000,
+            "backend {be}: {hex} differs from the quiet NaN 7ff8000000000000 outside the sign bit"
+        );
+        assert_eq!(got[1], "A end n=1", "backend {be}");
+    }
 }
 
 // ── Round 2 ──────────────────────────────────────────────────────────────────────────────────────
