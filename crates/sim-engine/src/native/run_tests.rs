@@ -54,7 +54,7 @@ struct MergedSink {
 impl diag::LogSink for MergedSink {
     fn emit(&self, e: diag::LogEvent) {
         let row = match e {
-            diag::LogEvent::RtlOutput(t) => format!("out|{}", t.text),
+            diag::LogEvent::RtlOutput(t) => format!("out|{}", String::from_utf8_lossy(&t.text)),
             diag::LogEvent::Diagnostic(d) => {
                 format!("diag|{:?}|{}|{}", d.severity, d.code.code_num(), d.message)
             }

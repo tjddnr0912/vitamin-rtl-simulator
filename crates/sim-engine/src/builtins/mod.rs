@@ -20,6 +20,7 @@ mod queues_io;
 mod radix_arr;
 mod readmem_assoc;
 mod render;
+mod text_bytes;
 pub(crate) use crv_draw::*;
 pub(crate) use dispatch::*;
 pub(crate) use pattern::*;
@@ -27,6 +28,7 @@ pub(crate) use queues_io::*;
 pub(crate) use radix_arr::*;
 pub(crate) use readmem_assoc::*;
 pub(crate) use render::*;
+pub(crate) use text_bytes::*;
 
 /// Control-flow signal back to the executor.
 pub(crate) enum Ctl {

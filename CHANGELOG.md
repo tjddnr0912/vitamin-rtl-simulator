@@ -9,6 +9,26 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — text output keeps its bytes
+
+- A byte at or above 0x80 in RTL text reaches stdout, the `--log` file, files and MCD / STDOUT /
+  STDERR descriptors, string variables and severity messages unchanged. It was replaced by U+FFFD
+  (`ef bf bd`) or re-encoded as a two-byte UTF-8 sequence (`%c` of `8'hC8` printed `c3 88`). This
+  covers string literals, string variables, packed values (`%s`, `%c`), `%p`, `$timeformat`
+  suffixes, `$sformatf` / `$sformat` / `$swrite` and concatenation, `$strobe` / `$monitor`,
+  `$info` / `$warning` / `$error` / `$fatal` (at run time, inside functions and tasks, in
+  deferred assertions and at elaboration) and `$sscanf` / `$fscanf` format literals, on every
+  backend and in the staged flow. `{s, "!"}` of `string'(16'hC841)` is `c8 41 21`, and
+  `$error("%s", s)` prints `c8 41`, as Icarus Verilog, sv2v and Verilator do.
+- A `%s` / `%c` / `%p` / `%m` field width and a `$timeformat` minimum width count bytes (IEEE
+  1800-2017 §21.2.1.8: a string is 8 bits per character), so `%5s` of `"é"` (two bytes) pads
+  three spaces, as Icarus Verilog, sv2v and Verilator do; it padded four.
+- `$test$plusargs` / `$value$plusargs` compare their query as bytes: a query that ends inside a
+  UTF-8 character matches the argument's bytes, and a query holding a byte above 0x7f no longer
+  matches an argument that spells U+FFFD.
+- File names (`$fopen`, `$readmem*`, `$dumpfile`), `$vita_stage` labels and the command line are
+  converted as before (see the limitations page).
+
 ### Fixed — a delayed continuous assignment decides on the value its target will hold
 
 - `assign #d lhs = rhs;` (and `#(rise, fall[, turnoff])`, a runtime delay, a net-declaration

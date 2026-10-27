@@ -67,21 +67,36 @@ use super::*;
 /// The three domains are asked in the order that cannot lose information: a
 /// `real` first (its bits are an f64, and the hex of an f64 bit pattern is not a
 /// rendering of the number), then a string-domain value (whose bytes are text,
-/// not a magnitude), then the integral `'h` form.
-pub(crate) fn pattern_leaf(v: &Value) -> String {
+/// not a magnitude), then the integral `'h` form. The rendering is BYTES: a string
+/// leaf is its exact bytes between the quotes (verilator 5.052: `%p` of a string
+/// "\310A" is `"` c8 41 `"`).
+pub(crate) fn pattern_leaf(v: &Value) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_leaf(&mut out, v);
+    out
+}
+
+fn push_leaf(out: &mut Vec<u8>, v: &Value) {
     if v.is_real {
         // `%g` — the shortest spelling that reads back as the same number, i.e.
         // what an assignment pattern of a real looks like. Same call the `%p`
         // real path has made since the real arm landed.
-        fmt_real(v, 'g', None, None, false, false, false)
+        out.extend_from_slice(fmt_real(v, 'g', None, None, false, false, false).as_bytes());
     } else if v.is_str {
-        format!("\"{}\"", String::from_utf8_lossy(&v.to_str_bytes()))
+        push_quoted(out, &v.to_str_bytes());
     } else {
         // `'h` + minimal hex = `fmt_radix(.., min_zero, Some(0))`, the exact
         // `%0h` spelling; leading zeros stripped, at least one digit, x/z per
         // §21.2.1.2.
-        format!("'h{}", fmt_radix(v, 4, true, Some(0), false))
+        out.extend_from_slice(b"'h");
+        out.extend_from_slice(fmt_radix(v, 4, true, Some(0), false).as_bytes());
     }
+}
+
+fn push_quoted(out: &mut Vec<u8>, text: &[u8]) {
+    out.push(b'"');
+    out.extend_from_slice(text);
+    out.push(b'"');
 }
 
 /// A non-aggregate under `%p`/`%0p`.
@@ -103,13 +118,13 @@ pub(crate) fn pattern_scalar(
     precision: Option<usize>,
     left_just: bool,
     plus: bool,
-) -> String {
+) -> Vec<u8> {
     if v.is_real {
-        fmt_real(v, 'g', field_width, precision, left_just, min_zero, plus)
+        fmt_real(v, 'g', field_width, precision, left_just, min_zero, plus).into_bytes()
     } else if v.is_str || min_zero {
         justify(&pattern_leaf(v), field_width, left_just)
     } else {
-        justify(&fmt_dec(v), field_width, left_just)
+        justify(fmt_dec(v).as_bytes(), field_width, left_just)
     }
 }
 
@@ -132,47 +147,52 @@ pub(crate) fn pattern_of_net<N: crate::eval::NetReader + ?Sized>(
     st: &SimState,
     nets: &N,
     net: u32,
-) -> Option<String> {
+) -> Option<Vec<u8>> {
     let nv = st.ir.nets.get(net as usize)?;
+    let mut out = b"'{".to_vec();
     match nv.kind {
         sim_ir::NetKind::DynArray | sim_ir::NetKind::Queue => {
             let heap = st.dyn_heap.borrow();
             // A handle that was never `new`ed / pushed has NO heap entry, and
             // IEEE says that IS the empty aggregate — the same lazy contract
             // every other dyn read uses, so `'{}' rather than `x`.
-            let body = match heap.get(net as usize).and_then(|o| o.as_ref()) {
-                Some(crate::state::DynObj::DynArray { elems }) => join_leaves(elems.iter()),
-                Some(crate::state::DynObj::Queue { elems }) => join_leaves(elems.iter()),
-                _ => String::new(),
-            };
-            Some(format!("'{{{body}}}"))
+            match heap.get(net as usize).and_then(|o| o.as_ref()) {
+                Some(crate::state::DynObj::DynArray { elems }) => {
+                    join_items(&mut out, elems.iter(), push_leaf)
+                }
+                Some(crate::state::DynObj::Queue { elems }) => {
+                    join_items(&mut out, elems.iter(), push_leaf)
+                }
+                _ => {}
+            }
         }
         sim_ir::NetKind::Assoc => {
             let heap = st.dyn_heap.borrow();
-            let body = match heap.get(net as usize).and_then(|o| o.as_ref()) {
-                Some(crate::state::DynObj::Assoc { map }) => map
-                    .iter()
-                    .map(|(k, v)| format!("'h{:x}:{}", *k as u64, pattern_leaf(v)))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                _ => String::new(),
-            };
-            Some(format!("'{{{body}}}"))
+            if let Some(crate::state::DynObj::Assoc { map }) =
+                heap.get(net as usize).and_then(|o| o.as_ref())
+            {
+                join_items(&mut out, map.iter(), |o, (k, v)| {
+                    o.extend_from_slice(format!("'h{:x}:", *k as u64).as_bytes());
+                    push_leaf(o, v);
+                });
+            }
         }
         sim_ir::NetKind::AssocStr => {
             let heap = st.dyn_heap.borrow();
-            let body = match heap.get(net as usize).and_then(|o| o.as_ref()) {
-                Some(crate::state::DynObj::AssocStr { map }) => map
-                    .iter()
-                    .map(|(k, v)| format!("\"{}\":{}", String::from_utf8_lossy(k), pattern_leaf(v)))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                _ => String::new(),
-            };
-            Some(format!("'{{{body}}}"))
+            if let Some(crate::state::DynObj::AssocStr { map }) =
+                heap.get(net as usize).and_then(|o| o.as_ref())
+            {
+                // The key is a string: its exact bytes (verilator 5.052 `'{"` c8 41
+                // `":'h5}`).
+                join_items(&mut out, map.iter(), |o, (k, v)| {
+                    push_quoted(o, k);
+                    o.push(b':');
+                    push_leaf(o, v);
+                });
+            }
         }
         // A string's whole value is a `Value`; see the doc above.
-        sim_ir::NetKind::String => None,
+        sim_ir::NetKind::String => return None,
         sim_ir::NetKind::Wire
         | sim_ir::NetKind::Reg
         | sim_ir::NetKind::Logic
@@ -194,13 +214,27 @@ pub(crate) fn pattern_of_net<N: crate::eval::NetReader + ?Sized>(
                     &owned
                 }
             };
-            Some(render_dims(nets, net, dims, 0))
+            out.clear();
+            render_dims(&mut out, nets, net, dims, 0);
+            return Some(out);
         }
     }
+    out.push(b'}');
+    Some(out)
 }
 
-fn join_leaves<'a>(it: impl Iterator<Item = &'a Value>) -> String {
-    it.map(pattern_leaf).collect::<Vec<_>>().join(", ")
+/// `item, item, …` appended to `out`.
+fn join_items<T>(
+    out: &mut Vec<u8>,
+    it: impl Iterator<Item = T>,
+    mut push: impl FnMut(&mut Vec<u8>, T),
+) {
+    for (i, x) in it.enumerate() {
+        if i > 0 {
+            out.extend_from_slice(b", ");
+        }
+        push(out, x);
+    }
 }
 
 /// Row-major recursion over the unpacked dimensions.
@@ -210,21 +244,23 @@ fn join_leaves<'a>(it: impl Iterator<Item = &'a Value>) -> String {
 /// `flatten_word` uses when it lowers `a[i][j]`, so a `%p` render and an element
 /// read agree about which word is which by construction rather than by test.
 fn render_dims<N: crate::eval::NetReader + ?Sized>(
+    out: &mut Vec<u8>,
     nets: &N,
     net: u32,
     dims: &[(i64, u32)],
     base: usize,
-) -> String {
+) {
     let (_, size) = dims[0];
-    let parts: Vec<String> = if dims.len() == 1 {
-        (0..size as usize)
-            .map(|k| pattern_leaf(&nets.read_net(net, Some((base + k) as u32))))
-            .collect()
+    out.extend_from_slice(b"'{");
+    if dims.len() == 1 {
+        join_items(out, 0..size as usize, |o, k| {
+            push_leaf(o, &nets.read_net(net, Some((base + k) as u32)))
+        });
     } else {
         let stride: usize = dims[1..].iter().map(|&(_, n)| n as usize).product();
-        (0..size as usize)
-            .map(|k| render_dims(nets, net, &dims[1..], base + k * stride))
-            .collect()
-    };
-    format!("'{{{}}}", parts.join(", "))
+        join_items(out, 0..size as usize, |o, k| {
+            render_dims(o, nets, net, &dims[1..], base + k * stride)
+        });
+    }
+    out.push(b'}');
 }

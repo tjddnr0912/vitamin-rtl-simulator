@@ -27,7 +27,10 @@ struct SevSink {
 impl LogSink for SevSink {
     fn emit(&self, e: LogEvent) {
         match e {
-            LogEvent::RtlOutput(t) => self.out.borrow_mut().push_str(&t.text),
+            LogEvent::RtlOutput(t) => self
+                .out
+                .borrow_mut()
+                .push_str(&String::from_utf8_lossy(&t.text)),
             LogEvent::Diagnostic(d) => {
                 let t = d.sim_time.map(|t| t.ticks as i64).unwrap_or(-1);
                 self.diags.borrow_mut().push(format!(

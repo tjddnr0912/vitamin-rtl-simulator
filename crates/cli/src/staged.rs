@@ -89,6 +89,7 @@ pub(crate) fn run_velab_lib_gated(
                 location: None,
                 context: Vec::new(),
                 sim_time: None,
+                rtl_message: None,
             }));
             return EXIT_USER_ERROR;
         };
@@ -789,6 +790,7 @@ pub(crate) fn emit_flist_overrides(sink: &dyn LogSink, overrides: &[(String, Str
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
 }

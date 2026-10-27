@@ -5,15 +5,20 @@ use super::*;
 pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
     st: &SimState,
     nets: &N,
-    template: &str,
+    template: &[u8],
     args: &[u32],
     argi: &mut usize,
-    out: &mut String,
+    out: &mut Vec<u8>,
 ) {
-    let mut chars = template.chars().peekable();
+    // Q-STRBYTES: the template is BYTES and so is `out` — RTL text is not UTF-8
+    // (IEEE 1800-2017 §21.2.1.8, 8 bits per character), and a byte >= 0x80 in a
+    // literal, a string value or a packed value must reach every sink unchanged.
+    // Only ASCII bytes are spec / flag syntax, so the walk below consumes exactly
+    // what the old `char` walk consumed.
+    let mut chars = template.iter().copied().peekable();
 
     while let Some(c) = chars.next() {
-        if c != '%' {
+        if c != b'%' {
             out.push(c);
             continue;
         }
@@ -25,7 +30,7 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
         let mut plus = false;
         let mut width_digits = String::new();
         while let Some(&d) = chars.peek() {
-            if d == '-' && width_digits.is_empty() {
+            if d == b'-' && width_digits.is_empty() {
                 // `-` (left-justify) flag: the content right-pads with spaces to
                 // the field width and OVERRIDES the `0` flag (iverilog-pinned:
                 // `%-05d` of 42 → "42   ", spaces not zeros). It must PRECEDE the
@@ -33,18 +38,18 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 // so gating on an empty width run keeps that malformed order loud.
                 left_just = true;
                 chars.next();
-            } else if d == '+' && width_digits.is_empty() {
+            } else if d == b'+' && width_digits.is_empty() {
                 // `+` flag: force a leading `+` on a non-negative SIGNED-decimal
                 // (`%d`) or real (`%f/%e/%g`) value (iverilog ignores it for the
                 // unsigned `%h/%o/%b`, `%t`, `%c`). Order-independent with `-`.
                 plus = true;
                 chars.next();
-            } else if d == '0' && width_digits.is_empty() {
+            } else if d == b'0' && width_digits.is_empty() {
                 min_zero = true;
                 width_digits.push('0');
                 chars.next();
             } else if d.is_ascii_digit() {
-                width_digits.push(d);
+                width_digits.push(d as char);
                 chars.next();
             } else {
                 break;
@@ -52,12 +57,12 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
         }
         let mut prec_digits = String::new();
         let mut has_prec = false;
-        if chars.peek() == Some(&'.') {
+        if chars.peek() == Some(&b'.') {
             has_prec = true;
             chars.next();
             while let Some(&d) = chars.peek() {
                 if d.is_ascii_digit() {
-                    prec_digits.push(d);
+                    prec_digits.push(d as char);
                     chars.next();
                 } else {
                     break;
@@ -80,30 +85,30 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
         } else {
             None
         };
-        let spec = chars.next().unwrap_or('%');
+        let spec = chars.next().unwrap_or(b'%');
         match spec {
-            '%' => out.push('%'),
+            b'%' => out.push(b'%'),
             // P2-11: hierarchical scope of the EXECUTING process (was: always
             // the literal "top"). Strobe/monitor renders restore the
             // REGISTERING process's scope first (FmtCapture.scope).
-            'm' | 'M' => {
+            b'm' | b'M' => {
                 // N1: `%m` inside a subroutine body reports `module.function`
                 // (IEEE §21.2.1) — append the active frame-subroutine name(s), resolved
                 // from FuncId via `func_names`. Empty stack (module-level) ⇒ just
                 // `cur_scope`, byte-identical to before.
                 let scope = m_scope(st);
-                out.push_str(&justify(&scope, field_width, left_just));
+                diag::fmt::push_justified(out, scope.as_bytes(), field_width, left_just);
             }
-            't' | 'T' => {
+            b't' | b'T' => {
                 // `%T` aliases `%t` (consumes one time arg). Full §21.3.2 semantics:
                 // the arg (a time in the DISPLAYING module's unit) is rescaled to the
                 // `$timeformat` units (default: the global precision) and justified
                 // in the min field width (default 20; an explicit `%Nt`/`%0t`
                 // OVERRIDES it — iverilog-pinned).
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&fmt_time_spec(st, &v, field_width, min_zero, left_just));
+                out.extend_from_slice(&fmt_time_spec(st, &v, field_width, min_zero, left_just));
             }
-            'd' | 'D' => {
+            b'd' | b'D' => {
                 let v = next_arg_with(st, nets, args, argi);
                 // IEEE 1364 %d: right-justify in a field width. `%0d` ⇒ minimal;
                 // `%Nd` ⇒ width N; bare `%d` ⇒ the operand's default decimal width
@@ -127,28 +132,31 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 } else {
                     dec_field_width(v.width, v.signed)
                 };
-                out.push_str(&diag::fmt::pad_dec(
-                    &s,
-                    min_zero,
-                    field_width,
-                    left_just,
-                    default_w,
-                ));
+                out.extend_from_slice(
+                    diag::fmt::pad_dec(&s, min_zero, field_width, left_just, default_w).as_bytes(),
+                );
             }
-            'h' | 'H' | 'x' | 'X' => {
+            b'h' | b'H' | b'x' | b'X' => {
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&fmt_radix(&v, 4, min_zero, field_width, left_just));
+                out.extend_from_slice(
+                    fmt_radix(&v, 4, min_zero, field_width, left_just).as_bytes(),
+                );
             }
-            'o' | 'O' => {
+            b'o' | b'O' => {
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&fmt_radix(&v, 3, min_zero, field_width, left_just));
+                out.extend_from_slice(
+                    fmt_radix(&v, 3, min_zero, field_width, left_just).as_bytes(),
+                );
             }
-            'b' | 'B' => {
+            b'b' | b'B' => {
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&fmt_radix(&v, 1, min_zero, field_width, left_just));
+                out.extend_from_slice(
+                    fmt_radix(&v, 1, min_zero, field_width, left_just).as_bytes(),
+                );
             }
-            'f' | 'F' | 'g' | 'G' | 'e' | 'E' => {
+            b'f' | b'F' | b'g' | b'G' | b'e' | b'E' => {
                 let v = next_arg_with(st, nets, args, argi);
+                let spec = spec as char;
                 let s = fmt_real(&v, spec, field_width, precision, left_just, min_zero, plus);
                 // `%E`/`%G` uppercase the exponent letter and non-finite labels
                 // (iverilog: `%E` → "1.5E+20", `%G` → "1E-05", `%E` of inf → "INF").
@@ -157,16 +165,17 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 if spec == 'E' || spec == 'G' {
                     // ASCII-only output (digits/`.`/`-`/`+`/`e`/inf/nan) — uppercase
                     // affects only `e`→`E` and inf/nan→INF/NAN.
-                    out.push_str(&s.to_ascii_uppercase());
+                    out.extend_from_slice(s.to_ascii_uppercase().as_bytes());
                 } else {
-                    out.push_str(&s);
+                    out.extend_from_slice(s.as_bytes());
                 }
             }
-            'c' | 'C' => {
+            b'c' | b'C' => {
+                // The LOW byte itself (§21.2.1.8), not its Latin-1 re-encoding.
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&justify(&char_of(&v).to_string(), field_width, left_just));
+                diag::fmt::push_justified(out, &[char_of(&v)], field_width, left_just);
             }
-            's' | 'S' => {
+            b's' | b'S' => {
                 let e = args.get(*argi).copied();
                 *argi += 1;
                 // Build the content string, then justify it in the field width (a
@@ -197,14 +206,14 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                                     == sim_ir::ConstRepr::StrUtf8
                         ) =>
                     {
-                        // `arg_string`, not a reader-threaded twin: this arm is guarded on
-                        // `Expr::Const` of `StrUtf8` just above, so the value is a string
-                        // LITERAL and its evaluation cannot touch a net. A `_with` twin here
-                        // would carry a parameter no test could pin — the mutation that drops
-                        // it survives by construction, which reads exactly like a real gap.
-                        // `$dumpfile(name)` (dispatch.rs) is the caller that WILL need one,
-                        // and that is S1d-4b-2's, where a test can pin it.
-                        (crate::builtins::arg_string(st, Some(eid)), None)
+                        // No reader: this arm is guarded on `Expr::Const` of `StrUtf8` just
+                        // above, so the value is a string LITERAL and its decode cannot touch
+                        // a net. Its BYTES (Q-STRBYTES): `%s` of "\310A" is c8 41.
+                        let Some(sim_ir::Expr::Const { val }) = st.ir.exprs.get(eid as usize)
+                        else {
+                            unreachable!("matched just above")
+                        };
+                        (crate::builtins::const_bytes(st.ir, *val), None)
                     }
                     // A NESTED `$sformatf` argument (`$sformatf("<%s>", $sformatf(…))`,
                     // and every string CONCAT, which elaborate desugars to exactly that
@@ -238,10 +247,7 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                         let v = st.eval_expr_with(nets, eid);
                         if v.is_str {
                             // v7 P2-C: a STRING-domain value renders its EXACT bytes.
-                            (
-                                String::from_utf8_lossy(&v.to_str_bytes()).into_owned(),
-                                None,
-                            )
+                            (v.to_str_bytes(), None)
                         } else if left_just {
                             // stripped content + default field = reg byte width.
                             let nbytes = (v.width as usize).div_ceil(8).max(1);
@@ -254,22 +260,27 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                             (fmt_packed_chars(&v), None)
                         }
                     }
-                    None => (String::new(), None),
+                    None => (Vec::new(), None),
                 };
                 // Explicit width wins over the packed-reg default; `justify`
                 // right-pads spaces when `-` is set, else left-pads (byte-identical
                 // to the old match when `left_just` is false and `default_w` None).
-                out.push_str(&justify(&content, field_width.or(default_w), left_just));
+                diag::fmt::push_justified(out, &content, field_width.or(default_w), left_just);
             }
             // P0-8③: the remaining IEEE specs CONSUME their argument — leaving
             // them unconsumed shifted every later spec onto the wrong arg.
-            'v' | 'V' => {
+            b'v' | b'V' => {
                 let v = next_arg_with(st, nets, args, argi);
-                out.push_str(&justify(&strength_form(&v), field_width, left_just));
+                diag::fmt::push_justified(
+                    out,
+                    strength_form(&v).as_bytes(),
+                    field_width,
+                    left_just,
+                );
             }
             // binary-dump specs: consume; vitamin emits no text for them (v1 —
             // the IEEE form writes raw bytes, useless in a text log).
-            'u' | 'U' | 'z' | 'Z' => {
+            b'u' | b'U' | b'z' | b'Z' => {
                 let _ = next_arg_with(st, nets, args, argi);
             }
             // `%p` (SV assignment pattern, §21.2.1.7) — the one conversion that
@@ -287,7 +298,7 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
             // struct and a fixed-size array of `string` are not declarable in vita
             // at all (E3010 at the declaration), so `'{x:7, y:-2}` has nothing to
             // render from. That is a declaration gap, not a `%p` gap.
-            'p' | 'P' => {
+            b'p' | b'P' => {
                 let aggregate =
                     args.get(*argi)
                         .copied()
@@ -300,11 +311,11 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 match aggregate {
                     Some(s) => {
                         *argi += 1;
-                        out.push_str(&justify(&s, field_width, left_just));
+                        diag::fmt::push_justified(out, &s, field_width, left_just);
                     }
                     None => {
                         let v = next_arg_with(st, nets, args, argi);
-                        out.push_str(&crate::builtins::pattern_scalar(
+                        out.extend_from_slice(&crate::builtins::pattern_scalar(
                             &v,
                             min_zero,
                             field_width,
@@ -315,17 +326,19 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                     }
                 }
             }
+            // An unknown spec byte is echoed after its `%` (a multi-byte UTF-8
+            // character's continuation bytes follow as ordinary text: same bytes).
             other => {
-                out.push('%');
+                out.push(b'%');
                 out.push(other);
             }
         }
     }
 }
 
-/// `%s` on a packed value: width/8 chars MSB-first, NUL bytes render as
-/// spaces (iverilog live pin, probe t7).
-pub(crate) fn fmt_packed_chars(v: &Value) -> String {
+/// `%s` on a packed value: width/8 bytes MSB-first, NUL bytes render as
+/// spaces (iverilog live pin, probe t7); every other byte is itself.
+pub(crate) fn fmt_packed_chars(v: &Value) -> Vec<u8> {
     diag::fmt::packed_chars(&packed_bytes_msb(v), false)
 }
 
@@ -352,7 +365,7 @@ pub(crate) fn packed_byte(v: &Value, bi: usize) -> u8 {
 /// emitted (an embedded or trailing NUL still becomes a space). An all-NUL value
 /// yields the empty string. iverilog-pinned: 64-bit "hello" → "hello"; "hi\0\0" →
 /// "hi  "; "\0h\0i" → "h i"; all-NUL → "".
-pub(crate) fn fmt_packed_chars_min(v: &Value) -> String {
+pub(crate) fn fmt_packed_chars_min(v: &Value) -> Vec<u8> {
     diag::fmt::packed_chars(&packed_bytes_msb(v), true)
 }
 
@@ -457,15 +470,15 @@ pub(crate) fn fmt_time_spec(
     explicit_width: Option<usize>,
     min_zero: bool,
     left_just: bool,
-) -> String {
-    let (units_exp, prec, suffix, minw): (i32, usize, &str, i64) = match &st.timeformat {
+) -> Vec<u8> {
+    let (units_exp, prec, suffix, minw): (i32, usize, &[u8], i64) = match &st.timeformat {
         Some(tf) => (
             tf.units_exp,
             tf.prec as usize,
-            tf.suffix.as_str(),
+            tf.suffix.as_slice(),
             tf.minw as i64,
         ),
-        None => (st.global_prec_exp as i32, 0, "", 20),
+        None => (st.global_prec_exp as i32, 0, b"", 20),
     };
     let k = units_exp as i64 - st.global_prec_exp as i64;
     let m = st.cur_time_mult.max(1);
@@ -506,25 +519,33 @@ pub(crate) fn fmt_time_spec(
     } else {
         time_digits_shift(&fmt_dec(v), shift, prec)
     };
-    let full = format!("{body}{suffix}");
+    // The suffix is RTL text (bytes) and the width counts bytes (§21.2.1.8).
+    let mut full = body.into_bytes();
+    full.extend_from_slice(suffix);
     let width: i64 = explicit_width.map(|w| w as i64).unwrap_or(minw);
-    let n = full.chars().count() as i64;
+    let n = full.len() as i64;
+    let pad_right = |mut full: Vec<u8>, k: i64| {
+        full.resize(full.len() + k as usize, b' ');
+        full
+    };
     if left_just {
         // `%-Nt`: left-justify (space right-pad) in |width|, overriding `0`.
         let aw = width.abs();
         if n < aw {
-            return format!("{full}{}", " ".repeat((aw - n) as usize));
+            return pad_right(full, aw - n);
         }
     } else if width >= 0 {
         if n < width {
             // `%0Nt`: zero-fill; zeros go before any sign char (iverilog-pinned:
             // `%08t` of -1000 → "000-1000", not sign-aware like `%0Nd`).
-            let fill = if min_zero { "0" } else { " " };
-            return format!("{}{full}", fill.repeat((width - n) as usize));
+            let fill = if min_zero { b'0' } else { b' ' };
+            let mut p = vec![fill; (width - n) as usize];
+            p.extend_from_slice(&full);
+            return p;
         }
     } else if n < -width {
         // Negative min width ⇒ left-justify in |width| (iverilog-pinned).
-        return format!("{full}{}", " ".repeat((-width - n) as usize));
+        return pad_right(full, -width - n);
     }
     full
 }
@@ -585,7 +606,7 @@ pub(crate) fn time_digits_shift(digits: &str, shift: i64, prec: usize) -> String
 /// multi-GiB zero string. The caps sit far above every physical unit (the IEEE
 /// table spans 2…−15) so no real testbench can observe them.
 /// The suffix is %s-coerced NOW: a string-domain value keeps its exact bytes; a
-/// packed value renders its NUL-stripped ASCII form (8'h6E → "n").
+/// packed value renders its NUL-stripped byte form (8'h6E → "n").
 /// OBS-3: a `$vita_stage("label", vals…)` call — a no-op `Display` intercepted by
 /// StmtId. Pure no-op unless `+STAGE_TRACE` armed `stage_enabled`; then append a
 /// `stage.jsonl` line `{v,t,kind:"stage",label,idx,vals[]}` — arg[0] is the label
@@ -687,13 +708,13 @@ pub(crate) fn run_timeformat_with<N: crate::eval::NetReader + ?Sized>(
             None => {
                 let v = crate::builtins::eval_task_arg(sched, nets, eid);
                 if v.is_str {
-                    String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
+                    v.to_str_bytes()
                 } else {
                     fmt_packed_chars_min(&v)
                 }
             }
         },
-        None => String::new(),
+        None => Vec::new(),
     };
     let minw = int_arg(sched, nets, args, 3).clamp(-4096, 4096) as i32;
     sched.st.timeformat = Some(crate::state::TfState {

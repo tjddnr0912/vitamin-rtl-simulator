@@ -894,7 +894,7 @@ pub(crate) fn parse_mem_token(tok: &str, w: u32, hex: bool) -> Value {
 /// v7: route `text` to a descriptor — fd form (bit 31) hits one file; MCD
 /// form broadcasts to every set channel bit (bit 0 = stdout). A bad/closed
 /// fd warns once (W4022) and drops the write, iverilog parity.
-pub(crate) fn file_write(sched: &mut Scheduler, fd: u32, text: &str) {
+pub(crate) fn file_write(sched: &mut Scheduler, fd: u32, text: &[u8]) {
     use std::io::Write as _;
     if fd & 0x8000_0000 != 0 {
         // §21.3.4 pre-opened descriptors. STDOUT (0x8000_0001) routes through
@@ -910,14 +910,14 @@ pub(crate) fn file_write(sched: &mut Scheduler, fd: u32, text: &str) {
                 return;
             }
             0x8000_0002 => {
-                let _ = std::io::stderr().write_all(text.as_bytes());
+                let _ = std::io::stderr().write_all(text);
                 return;
             }
             _ => {}
         }
         match sched.st.files.get_mut(&fd) {
             Some(f) => {
-                let _ = f.write_all(text.as_bytes());
+                let _ = f.write_all(text);
             }
             None => bad_fd_warn(sched, fd),
         }
@@ -935,7 +935,7 @@ pub(crate) fn file_write(sched: &mut Scheduler, fd: u32, text: &str) {
         if fd & (1 << bit) != 0 {
             match sched.st.mcd_files.get_mut(&bit) {
                 Some(f) => {
-                    let _ = f.write_all(text.as_bytes());
+                    let _ = f.write_all(text);
                 }
                 None => bad_fd_warn(sched, fd),
             }

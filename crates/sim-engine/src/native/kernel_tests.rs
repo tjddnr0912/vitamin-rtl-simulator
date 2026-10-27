@@ -1301,7 +1301,7 @@ fn s1d4b2_dispatch_walk(src: &str, name: &str, seed: u64) -> (usize, usize) {
         fn emit(&self, e: diag::LogEvent) {
             self.0.borrow_mut().push(match e {
                 diag::LogEvent::Diagnostic(d) => format!("D:{}", d.message),
-                diag::LogEvent::RtlOutput(t) => format!("R:{}", t.text),
+                diag::LogEvent::RtlOutput(t) => format!("R:{}", String::from_utf8_lossy(&t.text)),
                 diag::LogEvent::Progress(p) => format!("P:{}", p.message),
             });
         }

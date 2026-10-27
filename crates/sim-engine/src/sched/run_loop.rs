@@ -708,7 +708,7 @@ impl Scheduler<'_, '_> {
             // no text — its argument is a diagnostic level, not a value to print.
             let (fd, message) =
                 if matches!(which, sim_ir::SysTaskId::Finish | sim_ir::SysTaskId::Stop) {
-                    (None, String::new())
+                    (None, Vec::new())
                 } else {
                     // A file-directed print consumes `args[0]` as its descriptor,
                     // read NOW like the text (the inline arms read it the same way).
@@ -821,7 +821,7 @@ impl Scheduler<'_, '_> {
                     // (`$write`/`$fwrite` keep none), to stdout or the descriptor.
                     let mut line = rpt.message;
                     if !matches!(which, sim_ir::SysTaskId::Write | sim_ir::SysTaskId::Fwrite) {
-                        line.push('\n');
+                        line.push(b'\n');
                     }
                     match rpt.fd {
                         Some(fd) => crate::builtins::file_write(self, fd, &line),
@@ -934,7 +934,7 @@ impl Scheduler<'_, '_> {
                     ),
                     None => format_args_str(&*self.st, cap.fmt, &cap.args, cap.radix),
                 };
-                line.push('\n');
+                line.push(b'\n');
                 // `$fstrobe` routes to its descriptor; `$strobe` to stdout.
                 match cap.fd {
                     Some(fd) => crate::builtins::file_write(self, fd, &line),
@@ -1067,7 +1067,7 @@ impl Scheduler<'_, '_> {
                         }
                         None => format_args_str(&*self.st, fmt, &args, radix),
                     };
-                    line.push('\n');
+                    line.push(b'\n');
                     // `$fmonitor` routes to its descriptor; `$monitor` to stdout.
                     match fd {
                         Some(fd) => crate::builtins::file_write(self, fd, &line),

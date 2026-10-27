@@ -59,15 +59,15 @@ pub(crate) fn fmt_radix(
     diag::fmt::pad_radix(s, min_zero, field_width, left_just)
 }
 
-pub(crate) fn char_of(v: &Value) -> char {
+pub(crate) fn char_of(v: &Value) -> u8 {
     // IEEE %c: the LOW 8 bits regardless of value width — a wide value with
     // high bits set must not degrade to NUL under the strict no-truncation
-    // `to_u64`. X/Z keeps the old None→0 policy.
+    // `to_u64`. X/Z keeps the old None→0 policy. The byte itself is the output
+    // (Q-STRBYTES: `%c` of 8'hC8 is c8 in iverilog 13, sv2v and verilator 5.052).
     if v.has_xz() {
-        return '\0';
+        return 0;
     }
-    let byte = (v.val.first().copied().unwrap_or(0) & 0xFF) as u8;
-    byte as char
+    (v.val.first().copied().unwrap_or(0) & 0xFF) as u8
 }
 
 /// v5 (C): resolve a dyn-method HANDLE argument (the ExprId of the handle's

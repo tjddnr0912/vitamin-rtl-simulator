@@ -165,6 +165,7 @@ mod tests {
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         })
     }
 

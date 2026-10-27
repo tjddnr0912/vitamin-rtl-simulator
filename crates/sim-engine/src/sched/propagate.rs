@@ -307,6 +307,7 @@ impl Scheduler<'_, '_> {
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: self.st.now }),
+                rtl_message: None,
             }));
         }
         self.st.had_fatal = true;
@@ -543,6 +544,7 @@ impl Scheduler<'_, '_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.st.now }),
+            rtl_message: None,
         }));
         self.st.had_fatal = true;
     }
@@ -744,6 +746,7 @@ impl Scheduler<'_, '_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.st.now }),
+            rtl_message: None,
         }));
         self.st.had_fatal = true;
         self.st.finished = true;
@@ -761,6 +764,7 @@ impl Scheduler<'_, '_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.st.now }),
+            rtl_message: None,
         }));
         self.st.had_fatal = true;
         self.st.finished = true;

@@ -3032,6 +3032,6 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         );
         let text = crate::builtins::format_args_str_with(self.sched.st, self, f, &rest, None);
         self.sched.st.cur_block_scope.replace(saved_scope);
-        Value::from_str_bytes(text.as_bytes())
+        Value::from_str_bytes(&text)
     }
 }

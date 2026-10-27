@@ -153,11 +153,23 @@ column rather than as a fabricated number.
 | `%e` `%E` | yes | real, scientific; the exponent is signed and at least two digits (`1.500000e+03`) |
 | `%g` `%G` | yes | real, the shorter of `%f` and `%e` with trailing zeros stripped, 6 significant digits by default |
 | `%c` `%C` | yes | the low 8 bits as one character, justified in the field width |
-| `%s` `%S` | yes | a string literal decodes to its text; a nested `$sformatf` renders through the same formatter; a string-domain value emits its exact bytes; any other packed value renders as ASCII — bare `%s` pads at the register width with NUL rendered as a space, while `%Ns`, `%0s` and `%-s` strip NUL |
+| `%s` `%S` | yes | a string literal emits its bytes; a nested `$sformatf` renders through the same formatter; a string-domain value emits its exact bytes; any other packed value emits its bytes, one per 8 bits (`%s` of `16'hC841` writes `c8 41`) — bare `%s` pads at the register width with NUL rendered as a space, while `%Ns`, `%0s` and `%-s` strip NUL |
 | `%v` `%V` | yes | strength form, most significant bit first, underscore-joined (`4'b10xz` renders `St1_St0_StX_HiZ`). There is no strength model: a driven bit takes `St` and `z` takes `HiZ` |
 | `%u` `%U` `%z` `%Z` | yes | the argument is consumed and no text is emitted. The standard forms write raw binary bytes, which have no meaning in a text log |
 | `%p` `%P` | yes | an assignment pattern. A whole aggregate renders as a pattern; any other argument renders as a scalar pattern |
 | any other character | no | echoed verbatim as `%` followed by the character |
+
+Text is bytes. Every byte of a string literal, a string variable and a packed value
+reaches the sink unchanged — stdout, the `--log` file, a file or MCD / STDOUT / STDERR
+descriptor, a string variable (`$sformatf`, `$sformat`, `$swrite`, concatenation) and a
+severity message (`$info`, `$warning`, `$error`, `$fatal`, at run time and at
+elaboration) — including bytes at or above 0x80 that are not UTF-8: `%c` of `8'hC8` writes
+the one byte `c8`. A field width counts bytes, as IEEE 1800-2017 §21.2.1.8 has eight bits
+per character: `%5s` of `"é"` (two bytes) pads three spaces, and so do `%c`, `%m`, `%p`
+and the `$timeformat` minimum width. A `$sscanf` / `$fscanf` format literal matches its
+bytes. File names (`$fopen`, `$readmem*`, `$dumpfile`) and `$vita_stage` labels are
+converted to text (see [Limitations](006_limitations.md) §3.1); a plusarg query compares
+bytes, and the command line itself must be UTF-8.
 
 `%E` and `%G` uppercase the exponent letter and the non-finite labels (`INF`,
 `NAN`); `%F` keeps lowercase `inf` and `nan`.

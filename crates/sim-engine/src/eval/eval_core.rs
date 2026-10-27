@@ -448,12 +448,12 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
     }
 
     /// v7: decode an arg ExprId that is a string-literal Const (plusarg
-    /// queries / formats). `None` for anything else.
-    pub(crate) fn const_str_arg(&self, eid: u32) -> Option<String> {
+    /// queries / formats) to its exact bytes. `None` for anything else.
+    pub(crate) fn const_str_arg(&self, eid: u32) -> Option<Vec<u8>> {
         if let Expr::Const { val } = self.ir.exprs.get(eid as usize)? {
             let c = self.ir.consts.get(*val as usize)?;
             if c.repr == sim_ir::ConstRepr::StrUtf8 {
-                return Some(crate::builtins::const_string(self.ir, *val));
+                return Some(crate::builtins::const_bytes(self.ir, *val));
             }
         }
         None

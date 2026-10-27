@@ -30,6 +30,7 @@ extern crate self as sim_engine;
 mod alias;
 mod backend;
 mod builtins;
+mod capture;
 mod eval;
 mod exec;
 #[cfg(feature = "jit")]
@@ -54,9 +55,7 @@ mod width;
 #[cfg(test)]
 mod width_tests;
 
-use std::cell::RefCell;
 use std::io::Write;
-use std::rc::Rc;
 
 use diag::{LogEvent, LogSink, ProgressEvent, RtlText};
 use sim_ir::SimIr;
@@ -76,6 +75,7 @@ pub use native::wprog::WprogDeclines;
 pub fn wprog_decline_reasons() -> &'static [&'static str] {
     native::wprog::decline_reasons()
 }
+pub use capture::simulate_capture;
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{
@@ -688,9 +688,9 @@ struct LogWrite<'a> {
 
 impl Write for LogWrite<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let text = String::from_utf8_lossy(buf).into_owned();
+        // RTL text is bytes (Q-STRBYTES): no UTF-8 step between the engine and the sink.
         self.sink.emit(LogEvent::RtlOutput(RtlText {
-            text,
+            text: buf.to_vec(),
             sim_time: None,
         }));
         Ok(buf.len())
@@ -835,6 +835,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     st.backend = effective_backend;
@@ -996,6 +997,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     // SVA-REST: assertion-control sidecars (gated fires + `$assertoff/on/kill` sites).
@@ -1176,6 +1178,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
                     location: None,
                     context: Vec::new(),
                     sim_time: Some(diag::TimeStamp { ticks: st.now }),
+                    rtl_message: None,
                 }));
             }
         }
@@ -1304,28 +1307,5 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             }
             *b
         }),
-    }
-}
-
-/// Convenience: run a simulation capturing RTL output into a `String` and the
-/// VCD into the file named by `$dumpfile`/`override`. Returns (result, stdout).
-/// Primarily for tests + a simple CLI path.
-pub fn simulate_capture(ir: &SimIr, opts: SimOpts) -> (SimResult, String) {
-    let buf = Rc::new(RefCell::new(String::new()));
-    let sink = CaptureSink { buf: buf.clone() };
-    let result = simulate(ir, &sink, opts);
-    let s = buf.borrow().clone();
-    (result, s)
-}
-
-struct CaptureSink {
-    buf: Rc<RefCell<String>>,
-}
-
-impl LogSink for CaptureSink {
-    fn emit(&self, event: LogEvent) {
-        if let LogEvent::RtlOutput(t) = event {
-            self.buf.borrow_mut().push_str(&t.text);
-        }
     }
 }

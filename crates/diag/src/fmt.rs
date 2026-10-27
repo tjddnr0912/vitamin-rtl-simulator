@@ -32,23 +32,33 @@ pub fn dec_field_width(n: u32, signed: bool) -> usize {
 
 /// Pad `content` to `field_width` (a MINIMUM — never truncates): right-justified, or
 /// left-justified (space right-pad) under the `-` flag. `None` → verbatim. The
-/// plain-content specs (`%c` `%v` `%m` `%s`).
-pub fn justify(content: &str, field_width: Option<usize>, left_just: bool) -> String {
-    match field_width {
-        Some(n) => {
-            let clen = content.chars().count();
-            if clen < n {
-                let pad = " ".repeat(n - clen);
-                if left_just {
-                    format!("{content}{pad}")
-                } else {
-                    format!("{pad}{content}")
-                }
-            } else {
-                content.to_string()
-            }
-        }
-        None => content.to_string(),
+/// plain-content specs (`%c` `%v` `%m` `%s` `%p`). The content is RTL text, i.e.
+/// BYTES, and the width counts bytes: IEEE 1800-2017 §21.2.1.8 ("each 8 bits
+/// representing a single character"); iverilog 13, sv2v and verilator 5.052 pad
+/// `%5s` of "é" (c3 a9) with 3 spaces.
+pub fn justify(content: &[u8], field_width: Option<usize>, left_just: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(content.len().max(field_width.unwrap_or(0)));
+    push_justified(&mut out, content, field_width, left_just);
+    out
+}
+
+/// [`justify`] appended to `out` (no intermediate buffer).
+pub fn push_justified(
+    out: &mut Vec<u8>,
+    content: &[u8],
+    field_width: Option<usize>,
+    left_just: bool,
+) {
+    let pad = match field_width {
+        Some(n) if content.len() < n => n - content.len(),
+        _ => 0,
+    };
+    if left_just {
+        out.extend_from_slice(content);
+        out.resize(out.len() + pad, b' ');
+    } else {
+        out.resize(out.len() + pad, b' ');
+        out.extend_from_slice(content);
     }
 }
 
@@ -115,59 +125,61 @@ pub fn pad_radix(s: String, min_zero: bool, field_width: Option<usize>, left_jus
 }
 
 /// `%s` of a PACKED value given its bytes MSB-first (ceil(width/8) of them, ≥1): a NUL
-/// byte renders as a space. With `min` (`%0s`, or any explicit width / `-`) the
-/// LEADING NUL bytes are dropped instead; an all-NUL value is then "".
-pub fn packed_chars(bytes_msb_first: &[u8], min: bool) -> String {
-    let mut s = String::with_capacity(bytes_msb_first.len());
-    let mut started = !min;
-    for &byte in bytes_msb_first {
-        if !started {
-            if byte == 0 {
-                continue;
-            }
-            started = true;
-        }
-        s.push(if byte == 0 { ' ' } else { byte as char });
-    }
-    s
+/// byte renders as a space; every other byte is itself (RTL text is bytes — a value
+/// byte 0xC8 is the output byte 0xC8, not a two-byte UTF-8 re-encoding). With `min`
+/// (`%0s`, or any explicit width / `-`) the LEADING NUL bytes are dropped instead; an
+/// all-NUL value is then empty.
+pub fn packed_chars(bytes_msb_first: &[u8], min: bool) -> Vec<u8> {
+    let start = if min {
+        bytes_msb_first
+            .iter()
+            .position(|&b| b != 0)
+            .unwrap_or(bytes_msb_first.len())
+    } else {
+        0
+    };
+    bytes_msb_first[start..]
+        .iter()
+        .map(|&b| if b == 0 { b' ' } else { b })
+        .collect()
 }
 
 /// Parse the flags/width run after `%` (IEEE §21.2.1.3, iverilog-pinned): `-`
 /// (left-justify; must precede the digits), `+`, a leading `0` (zero-pad; also
 /// counts as the width run so bare `%0d` yields `Some(0)`), digits, and `.prec`.
-/// Returns `(left_just, plus, min_zero, field_width, precision)` and leaves `chars`
-/// at the spec letter.
-pub fn parse_flags<I: Iterator<Item = char>>(
-    chars: &mut std::iter::Peekable<I>,
+/// Returns `(left_just, plus, min_zero, field_width, precision)` and leaves `bytes`
+/// at the spec byte. The template is bytes; only ASCII bytes are ever consumed here.
+pub fn parse_flags<I: Iterator<Item = u8>>(
+    bytes: &mut std::iter::Peekable<I>,
 ) -> (bool, bool, bool, Option<usize>, Option<usize>) {
     let (mut left_just, mut plus, mut min_zero) = (false, false, false);
     let mut width_digits = String::new();
-    while let Some(&d) = chars.peek() {
-        if d == '-' && width_digits.is_empty() {
+    while let Some(&d) = bytes.peek() {
+        if d == b'-' && width_digits.is_empty() {
             left_just = true;
-            chars.next();
-        } else if d == '+' && width_digits.is_empty() {
+            bytes.next();
+        } else if d == b'+' && width_digits.is_empty() {
             plus = true;
-            chars.next();
-        } else if d == '0' && width_digits.is_empty() {
+            bytes.next();
+        } else if d == b'0' && width_digits.is_empty() {
             min_zero = true;
             width_digits.push('0');
-            chars.next();
+            bytes.next();
         } else if d.is_ascii_digit() {
-            width_digits.push(d);
-            chars.next();
+            width_digits.push(d as char);
+            bytes.next();
         } else {
             break;
         }
     }
     let mut precision = None;
-    if chars.peek() == Some(&'.') {
-        chars.next();
+    if bytes.peek() == Some(&b'.') {
+        bytes.next();
         let mut p = String::new();
-        while let Some(&d) = chars.peek() {
+        while let Some(&d) = bytes.peek() {
             if d.is_ascii_digit() {
-                p.push(d);
-                chars.next();
+                p.push(d as char);
+                bytes.next();
             } else {
                 break;
             }
@@ -211,18 +223,35 @@ mod tests {
         assert_eq!(pad_radix("0041".into(), true, Some(0), false), "41");
         assert_eq!(pad_radix("41".into(), true, Some(4), false), "0041");
         assert_eq!(pad_radix("0a".into(), false, Some(4), true), "0a  ");
-        assert_eq!(packed_chars(&[0, b'h', b'i'], false), " hi");
-        assert_eq!(packed_chars(&[0, b'h', 0, b'i'], true), "h i");
-        assert_eq!(packed_chars(&[0, 0], true), "");
-        let mut it = "-05d".chars().peekable();
+        assert_eq!(packed_chars(&[0, b'h', b'i'], false), b" hi");
+        assert_eq!(packed_chars(&[0, b'h', 0, b'i'], true), b"h i");
+        assert_eq!(packed_chars(&[0, 0], true), b"");
+        let mut it = "-05d".bytes().peekable();
         assert_eq!(parse_flags(&mut it), (true, false, true, Some(5), None));
-        assert_eq!(it.next(), Some('d'));
-        let mut it = "0h".chars().peekable();
+        assert_eq!(it.next(), Some(b'd'));
+        let mut it = "0h".bytes().peekable();
         assert_eq!(parse_flags(&mut it), (false, false, true, Some(0), None));
-        let mut it = "8.3f".chars().peekable();
+        let mut it = "8.3f".bytes().peekable();
         assert_eq!(
             parse_flags(&mut it),
             (false, false, false, Some(8), Some(3))
         );
+    }
+
+    /// Q-STRBYTES: text is bytes. A packed byte >= 0x80 is itself (iverilog 13, sv2v
+    /// and verilator 5.052 print `%s` of 16'hC841 as c8 41), and a field width counts
+    /// bytes (all three pad `%5s` of "é" = c3 a9 with 3 spaces: §21.2.1.8).
+    #[test]
+    fn text_is_bytes_and_widths_count_bytes() {
+        assert_eq!(packed_chars(&[0xC8, b'A'], false), [0xC8, b'A']);
+        assert_eq!(packed_chars(&[0, 0xFF, 0, 0x80], true), [0xFF, b' ', 0x80]);
+        assert_eq!(justify(&[0xC3, 0xA9], Some(5), false), b"   \xC3\xA9");
+        assert_eq!(justify(&[0xC3, 0xA9], Some(5), true), b"\xC3\xA9   ");
+        assert_eq!(justify(&[0xC8], Some(1), false), [0xC8]);
+        assert_eq!(justify(b"abc", Some(2), false), b"abc");
+        assert_eq!(justify(b"abc", None, true), b"abc");
+        let mut it = [b'5', 0xC8].into_iter().peekable();
+        assert_eq!(parse_flags(&mut it), (false, false, false, Some(5), None));
+        assert_eq!(it.next(), Some(0xC8));
     }
 }

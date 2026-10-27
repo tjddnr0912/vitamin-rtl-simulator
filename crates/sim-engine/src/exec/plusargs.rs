@@ -51,27 +51,33 @@ pub(crate) fn effect(ir: &SimIr, plusargs: &[String], rhs: u32) -> PlusargsOutco
         }
         _ => (u32::MAX, None),
     };
+    // The format literal is RTL text and the prefix match is on BYTES (Q-STRBYTES
+    // C1: `$value$plusargs("\310=%s")` against `+\xEF\xBF\xBD=ab` is a miss in
+    // iverilog 13, sv2v and verilator 5.052).
     let fmt = match ir.exprs.get(fmt_eid as usize) {
-        Some(sim_ir::Expr::Const { val }) => crate::builtins::const_string(ir, *val),
+        Some(sim_ir::Expr::Const { val }) => crate::builtins::const_bytes(ir, *val),
         _ => return (miss, None, None),
     };
     let Some(net) = var_net else {
         return (miss, None, None);
     };
     // split "prefix%C" — elaborate validated exactly one supported spec.
-    let Some(pct) = fmt.find('%') else {
+    let Some(pct) = fmt.iter().position(|&b| b == b'%') else {
         // degenerate no-spec format: a pure test probe, nothing written.
-        let hit = plusargs.iter().any(|p| p.starts_with(&fmt));
+        let hit = plusargs.iter().any(|p| p.as_bytes().starts_with(&fmt));
         return (Value::from_i128(hit as i128, 32, true), None, None);
     };
     let prefix = &fmt[..pct];
-    let conv = fmt[pct + 1..].chars().next().unwrap_or('d');
-    let Some(rest) = plusargs
+    let conv = fmt.get(pct + 1).map_or('d', |&b| b as char);
+    // The value text after the prefix: its bytes for `%s`, its (lossy) text for a
+    // numeric parse, whose digits are ASCII.
+    let Some(rest_bytes) = plusargs
         .iter()
-        .find_map(|p| p.strip_prefix(prefix).map(|r| r.to_string()))
+        .find_map(|p| p.as_bytes().strip_prefix(prefix))
     else {
         return (miss, None, None); // MISS: var untouched
     };
+    let rest = String::from_utf8_lossy(rest_bytes).into_owned();
     let radix: u32 = match conv {
         'd' | 'D' => 10,
         'h' | 'H' | 'x' | 'X' => 16,
@@ -85,7 +91,7 @@ pub(crate) fn effect(ir: &SimIr, plusargs: &[String], rhs: u32) -> PlusargsOutco
     let mut invalid = false;
     let value = if radix == 0 {
         // %s: pack the raw bytes MSB-first (IEEE §5.9 string packing).
-        let bytes = rest.as_bytes();
+        let bytes = rest_bytes;
         let w = (bytes.len() as u32 * 8).max(8);
         let mut v = Value::zeros(w, false);
         for (i, &by) in bytes.iter().rev().enumerate() {

@@ -262,7 +262,7 @@ impl<'a> SimState<'a> {
                 None => crate::builtins::format_args_str(self, f0, rest, None),
             };
             self.cur_block_scope.replace(saved_scope);
-            return Value::from_str_bytes(text.as_bytes());
+            return Value::from_str_bytes(&text);
         }
         // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
         // ⚠️ THE FOURTH SITE THAT ASKS THIS QUESTION, and the one every FRAME body
@@ -1201,6 +1201,7 @@ impl<'a> SimState<'a> {
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: self.now }),
+                rtl_message: None,
             }));
         }
     }
@@ -1237,6 +1238,7 @@ impl<'a> SimState<'a> {
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: self.now }),
+                rtl_message: None,
             }));
         }
     }
@@ -1325,6 +1327,7 @@ impl<'a> SimState<'a> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 
@@ -1342,6 +1345,7 @@ impl<'a> SimState<'a> {
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: self.now }),
+                rtl_message: None,
             }));
         }
     }
@@ -1365,28 +1369,19 @@ impl<'a> SimState<'a> {
         sid: u32,
     ) {
         use crate::SeverityKind as K;
-        // One spelling, shared with the statement-path emitter — see `SeverityKind`.
-        let (severity, code) = sev.diag_class();
         // §4.5.426: `%m` inside a named block of this frame body (`stmt_scopes`).
         let saved_scope = self
             .cur_block_scope
             .replace(self.stmt_scopes.get(&sid).cloned().unwrap_or_default());
-        let mut message = crate::builtins::format_args_str(self, fmt, args, None);
+        let message = crate::builtins::format_args_str(self, fmt, args, None);
         self.cur_block_scope.replace(saved_scope);
-        if message.is_empty() {
-            message = code.title().to_string();
-        }
         // #10: same sid-keyed lookup as `emit_severity_message` — the two
-        // paths must report the same place for the same statement.
+        // paths must report the same place for the same statement. The message is
+        // RTL text (bytes): one diagnostic spelling for both paths, `severity_diag`.
         let (location, context) = self.stmt_diag_meta(sid);
-        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-            severity,
-            code,
-            message,
-            location,
-            context,
-            sim_time: Some(TimeStamp { ticks: self.now }),
-        }));
+        let time = Some(TimeStamp { ticks: self.now });
+        let d = crate::builtins::severity_diag(sev, message, location, context, time);
+        self.sink.emit(LogEvent::Diagnostic(d));
         match sev {
             K::Fatal => self.call_fatal.set(true),
             K::Error => self.had_error.set(true),
@@ -1452,6 +1447,7 @@ impl<'a> SimState<'a> {
             location,
             context,
             sim_time: Some(TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 
@@ -1536,6 +1532,7 @@ impl<'a> SimState<'a> {
                     location: None,
                     context: Vec::new(),
                     sim_time: Some(TimeStamp { ticks: self.now }),
+                    rtl_message: None,
                 }));
             }
             // Finish THIS in-flight eval cleanly with all-X; the scheduler will
@@ -1747,7 +1744,7 @@ impl<'a> SimState<'a> {
                         };
                         self.cur_block_scope.replace(saved_scope);
                         if matches!(which, sim_ir::SysTaskId::Display) {
-                            s.push('\n');
+                            s.push(b'\n');
                         }
                         self.sink.emit(LogEvent::RtlOutput(diag::RtlText {
                             text: s,

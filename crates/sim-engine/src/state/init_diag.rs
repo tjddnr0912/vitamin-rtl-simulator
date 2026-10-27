@@ -229,19 +229,6 @@ impl<'a> SimState<'a> {
         }
     }
 
-    /// FMT-CACHE: decode a format/string const, memoized by ConstId. The
-    /// expensive bit-unpack + UTF-8 validation (`const_string`) runs once per
-    /// const; later calls clone the cached text. Byte-identical to calling
-    /// `const_string(self.ir, cid)` directly.
-    pub(crate) fn fmt_const_string(&self, cid: u32) -> String {
-        let mut cache = self.fmt_cache.borrow_mut();
-        let slot = &mut cache[cid as usize];
-        if slot.is_none() {
-            *slot = Some(crate::builtins::const_string(self.ir, cid).into_boxed_str());
-        }
-        slot.as_deref().unwrap().to_string()
-    }
-
     /// B1: derive the per-net frame-local routing tables from `func_table` (the
     /// `dyn_is_handle` build pattern). VALIDATES the hand-built/elaborated sidecar
     /// (index alignment + in-range slots) and latches a loud fatal rather than
@@ -484,6 +471,7 @@ impl<'a> SimState<'a> {
                 location,
                 context,
                 sim_time: Some(diag::TimeStamp { ticks: self.now }),
+                rtl_message: None,
             }));
         }
         cell.set(n.saturating_add(1));
@@ -549,6 +537,7 @@ impl<'a> SimState<'a> {
             location,
             context,
             sim_time: Some(diag::TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 
@@ -569,6 +558,7 @@ impl<'a> SimState<'a> {
             location: None,
             context: Vec::new(),
             sim_time: Some(diag::TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 
@@ -584,6 +574,7 @@ impl<'a> SimState<'a> {
             location: None,
             context: Vec::new(),
             sim_time: Some(diag::TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
         self.had_fatal = true;
         self.finished = true;
@@ -608,6 +599,7 @@ impl<'a> SimState<'a> {
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(diag::TimeStamp { ticks: self.now }),
+                rtl_message: None,
             }));
         }
         self.had_fatal = true;

@@ -189,6 +189,7 @@ pub(crate) fn emit_frontend_error(
         location: Some(loc_from_span(map, lo, hi)),
         context: Vec::new(),
         sim_time: None,
+        rtl_message: None,
     }));
 }
 
@@ -316,6 +317,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             location: Some(loc),
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     if pp.has_errors() {
@@ -367,6 +369,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             )),
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     if !parse_errors.is_empty() {
@@ -393,6 +396,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
         return None;
     };
@@ -414,6 +418,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             location: Some(loc_from_span(&pp.map, span.lo as usize, span.hi as usize)),
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     // Resolve each module's `timescale by file order (region offsets and module spans
@@ -447,6 +452,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     } else if !rt.ungoverned.is_empty() {
         // IEEE 1800-2017 §3.14.2.2: if ANY module in the design has a `timescale,
@@ -479,6 +485,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
     let includes: Vec<(String, [u8; 32])> = pp

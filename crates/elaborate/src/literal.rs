@@ -602,8 +602,10 @@ pub fn unescape_str_literal_reporting(raw: &str) -> (Vec<u8>, Vec<NonStdEscape>)
     (bytes, odd)
 }
 
-/// The unescaped UTF-8 text of a string literal (lossy for any non-UTF-8 bytes,
-/// which never occur in a Verilog format string). Used by the §4.1a static gate.
+/// The unescaped text of a string literal as Rust text: a LOSSY view (an escape such
+/// as `"\310"` is a non-UTF-8 byte and becomes U+FFFD here). For the ASCII-only
+/// scans (the §4.1a static gate, format arity and spec scans); RTL text itself is
+/// [`unescape_str_literal_bytes`].
 pub fn parse_str_literal_text(raw: &str) -> String {
     String::from_utf8_lossy(&unescape_str_literal_bytes(raw)).into_owned()
 }

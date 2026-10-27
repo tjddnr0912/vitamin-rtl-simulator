@@ -658,6 +658,7 @@ impl SimState<'_> {
                     location: None,
                     context: Vec::new(),
                     sim_time: Some(diag::TimeStamp { ticks: self.now }),
+                    rtl_message: None,
                 }));
             }
         }
@@ -676,6 +677,7 @@ impl SimState<'_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 
@@ -739,6 +741,7 @@ impl SimState<'_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 

@@ -376,7 +376,7 @@ impl Kernel for Scheduler<'_, '_> {
             .replace(self.st.expr_scopes.get(&rhs).cloned().unwrap_or_default());
         let text = crate::builtins::format_args_str(&*self.st, fmt, &rest, None);
         self.st.cur_block_scope.replace(saved);
-        Value::from_str_bytes(text.as_bytes())
+        Value::from_str_bytes(&text)
     }
     fn k_disable_fork(&mut self) {
         // IEEE §9.6.3: terminate every ACTIVE DESCENDANT of the calling

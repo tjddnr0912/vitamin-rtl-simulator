@@ -546,10 +546,13 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             // the query (iverilog-pinned prefix rule). The query is a string
             // LITERAL (elaborate enforces); a hand-built non-literal is X.
             SysFuncId::TestPlusargs => {
+                // The query is RTL text: compared as BYTES against each plusarg
+                // (Q-STRBYTES C1: `$test$plusargs("\310")` against `+\xEF\xBF\xBD` is 0
+                // in iverilog 13, sv2v and verilator 5.052).
                 let q = args.first().and_then(|&a| self.const_str_arg(a));
                 match q {
                     Some(q) => {
-                        let hit = self.plusargs.iter().any(|p| p.starts_with(&q));
+                        let hit = self.plusargs.iter().any(|p| p.as_bytes().starts_with(&q));
                         Value::from_i128(hit as i128, 32, true)
                     }
                     None => Value::xs(32, true),
@@ -698,15 +701,13 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 let mut bytes: Vec<u8> = Vec::new();
                 for &p in args.iter().skip(1) {
                     if let Some(s) = self.const_str_arg(p) {
-                        bytes.extend_from_slice(s.as_bytes());
+                        bytes.extend_from_slice(&s);
                     } else {
                         let v = self.eval(p);
                         if v.is_str {
                             bytes.extend_from_slice(&v.to_str_bytes());
                         } else {
-                            bytes.extend_from_slice(
-                                crate::builtins::fmt_packed_chars(&v).as_bytes(),
-                            );
+                            bytes.extend_from_slice(&crate::builtins::fmt_packed_chars(&v));
                         }
                     }
                 }

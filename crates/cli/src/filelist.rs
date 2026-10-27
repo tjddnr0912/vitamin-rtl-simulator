@@ -255,6 +255,7 @@ impl Expander<'_> {
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
 
@@ -266,6 +267,7 @@ impl Expander<'_> {
             location: None,
             context: Vec::new(),
             sim_time: None,
+            rtl_message: None,
         }));
     }
 

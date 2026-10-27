@@ -14,7 +14,9 @@ struct OutSink(RefCell<String>);
 impl LogSink for OutSink {
     fn emit(&self, e: LogEvent) {
         if let LogEvent::RtlOutput(t) = e {
-            self.0.borrow_mut().push_str(&t.text);
+            self.0
+                .borrow_mut()
+                .push_str(&String::from_utf8_lossy(&t.text));
         }
     }
 }

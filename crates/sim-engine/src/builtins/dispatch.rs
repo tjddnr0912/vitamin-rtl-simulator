@@ -703,7 +703,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
             if sched.st.call_fatal.get() && !sched.st.finished {
                 return Ctl::Continue; // see `fatal_latched_while_rendering` below
             }
-            s.push('\n');
+            s.push(b'\n');
             write_out(sched.st, &s);
             Ctl::Continue
         }
@@ -872,7 +872,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 radix,
             );
             if matches!(which, SysTaskId::Fdisplay) {
-                text.push('\n');
+                text.push(b'\n');
             }
             match fd {
                 Some(fd) => file_write(sched, fd, &text),
@@ -1009,7 +1009,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     _ => None,
                 });
             if let Some(net) = dest {
-                let v = Value::from_str_bytes(text.as_bytes());
+                let v = Value::from_str_bytes(&text);
                 let lv = sim_ir::Lvalue {
                     chunks: vec![sim_ir::LvalChunk {
                         net,

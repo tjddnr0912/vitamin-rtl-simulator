@@ -22,7 +22,10 @@ struct RunSink {
 impl LogSink for RunSink {
     fn emit(&self, e: LogEvent) {
         match e {
-            LogEvent::RtlOutput(t) => self.out.borrow_mut().push_str(&t.text),
+            LogEvent::RtlOutput(t) => self
+                .out
+                .borrow_mut()
+                .push_str(&String::from_utf8_lossy(&t.text)),
             LogEvent::Diagnostic(d) => self.diags.borrow_mut().push(format!(
                 "{}[{}]: {}",
                 d.severity.token(),

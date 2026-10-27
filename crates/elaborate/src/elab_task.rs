@@ -45,11 +45,14 @@ impl Elaborator<'_> {
                 return true;
             }
         };
+        // The message is RTL text: it travels as bytes (Q-STRBYTES R5), so a byte
+        // >= 0x80 in the literal reaches stderr unchanged (sv2v + iverilog and
+        // verilator's compile-time text print `$info("\310A")` as c8 41).
         match kind {
-            "info" => self.info_code(MsgCode::ElabUserInfo, &msg),
-            "warning" => self.warn_code(MsgCode::ElabUserWarning, &msg),
-            "error" => self.error(MsgCode::ElabUserError, &msg),
-            _ => self.error(MsgCode::ElabUserFatal, &msg),
+            "info" => self.rtl_diag(Severity::Info, MsgCode::ElabUserInfo, msg),
+            "warning" => self.rtl_diag(Severity::Warning, MsgCode::ElabUserWarning, msg),
+            "error" => self.rtl_diag(Severity::Error, MsgCode::ElabUserError, msg),
+            _ => self.rtl_diag(Severity::Error, MsgCode::ElabUserFatal, msg),
         }
         self.cur_span = saved;
         true
@@ -58,39 +61,38 @@ impl Elaborator<'_> {
     /// Render `fmt, args…` from constants. `None` when an argument is not constant.
     /// Field rules (`%5d`, `%-8s`, `%04h`, bare `%d` default width, `%s` of a packed
     /// value) are `diag::fmt`, the SAME functions the runtime renderer calls — a
-    /// second renderer must inherit the runtime's rules, not re-derive them.
-    fn elab_task_message(&mut self, args: &[ast::Expr]) -> Option<String> {
+    /// second renderer must inherit the runtime's rules, not re-derive them. The
+    /// text is BYTES, like the runtime's (Q-STRBYTES): the literal decodes byte-exact
+    /// and every width counts bytes.
+    fn elab_task_message(&mut self, args: &[ast::Expr]) -> Option<Vec<u8>> {
         let Some(first) = args.first() else {
-            return Some(String::new());
+            return Some(Vec::new());
         };
         // `const_str_in_scope` yields the RAW literal (quotes and escapes kept — it is
         // re-emitted as a string const elsewhere); decode it here.
-        let fmt = crate::literal::parse_str_literal_text(&self.const_str_in_scope(first)?);
-        let mut out = String::new();
+        let fmt = crate::literal::unescape_str_literal_bytes(&self.const_str_in_scope(first)?);
+        let mut out = Vec::new();
         let mut ai = 1usize;
-        let mut chars = fmt.chars().peekable();
+        let mut chars = fmt.iter().copied().peekable();
         while let Some(c) = chars.next() {
-            if c != '%' {
+            if c != b'%' {
                 out.push(c);
                 continue;
             }
             let (left_just, plus, min_zero, field_width, _prec) =
                 diag::fmt::parse_flags(&mut chars);
-            let spec = chars.next()?;
+            let spec = chars.next()? as char;
             match spec {
-                '%' => out.push('%'),
+                '%' => out.push(b'%'),
                 'm' | 'M' => {
-                    out.push_str(&diag::fmt::justify(
-                        &self.display_prefix(),
-                        field_width,
-                        left_just,
-                    ));
+                    let scope = self.display_prefix();
+                    diag::fmt::push_justified(&mut out, scope.as_bytes(), field_width, left_just);
                 }
                 's' | 'S' => {
                     let a = args.get(ai)?;
                     ai += 1;
                     let content = match self.const_str_in_scope(a) {
-                        Some(s) => crate::literal::parse_str_literal_text(&s),
+                        Some(s) => crate::literal::unescape_str_literal_bytes(&s),
                         None => {
                             let v = self.const_eval_in_scope(a)?;
                             let (w, _) = self.elab_arg_shape(a).unwrap_or((32, true));
@@ -111,7 +113,7 @@ impl Elaborator<'_> {
                             diag::fmt::packed_chars(&bytes, left_just || field_width.is_some())
                         }
                     };
-                    out.push_str(&diag::fmt::justify(&content, field_width, left_just));
+                    diag::fmt::push_justified(&mut out, &content, field_width, left_just);
                 }
                 'd' | 'D' | 'h' | 'H' | 'x' | 'X' | 'b' | 'B' | 'o' | 'O' | 'c' | 'C' => {
                     let a = args.get(ai)?;
@@ -148,39 +150,31 @@ impl Elaborator<'_> {
                             if plus && !text.starts_with('-') {
                                 text.insert(0, '+');
                             }
-                            out.push_str(&diag::fmt::pad_dec(
-                                &text,
+                            let dw = diag::fmt::dec_field_width(w, signed);
+                            let t = diag::fmt::pad_dec(&text, min_zero, field_width, left_just, dw);
+                            out.extend_from_slice(t.as_bytes());
+                        }
+                        'h' | 'x' | 'o' | 'b' => {
+                            let per = match spec.to_ascii_lowercase() {
+                                'h' | 'x' => 4,
+                                'o' => 3,
+                                _ => 1,
+                            };
+                            let t = diag::fmt::pad_radix(
+                                radix(bits, per),
                                 min_zero,
                                 field_width,
                                 left_just,
-                                diag::fmt::dec_field_width(w, signed),
-                            ));
+                            );
+                            out.extend_from_slice(t.as_bytes());
                         }
-                        'h' | 'x' => out.push_str(&diag::fmt::pad_radix(
-                            radix(bits, 4),
-                            min_zero,
+                        // `%c`: the low byte itself (runtime parity), not a Latin-1 char.
+                        _ => diag::fmt::push_justified(
+                            &mut out,
+                            &[(bits & 0xff) as u8],
                             field_width,
                             left_just,
-                        )),
-                        'o' => out.push_str(&diag::fmt::pad_radix(
-                            radix(bits, 3),
-                            min_zero,
-                            field_width,
-                            left_just,
-                        )),
-                        'b' => out.push_str(&diag::fmt::pad_radix(
-                            radix(bits, 1),
-                            min_zero,
-                            field_width,
-                            left_just,
-                        )),
-                        _ => out.push_str(&diag::fmt::justify(
-                            &char::from_u32((bits & 0xff) as u32)
-                                .unwrap_or('?')
-                                .to_string(),
-                            field_width,
-                            left_just,
-                        )),
+                        ),
                     }
                 }
                 _ => return None,
@@ -212,5 +206,17 @@ impl Elaborator<'_> {
             }
             _ => None,
         }
+    }
+
+    /// A diagnostic whose message is RTL text (an elaboration `$info`/`$warning`/
+    /// `$error`/`$fatal`): the bytes travel verbatim (`Diagnostic::rtl`). An Error
+    /// counts and caps exactly as [`Self::error`].
+    pub(crate) fn rtl_diag(&mut self, severity: Severity, code: MsgCode, text: Vec<u8>) {
+        if severity == Severity::Error && self.count_error_capped() {
+            return;
+        }
+        let (location, context) = (self.cur_location(), self.cur_context());
+        let d = Diagnostic::rtl(severity, code, text, location, context, None);
+        self.sink.emit(LogEvent::Diagnostic(d));
     }
 }

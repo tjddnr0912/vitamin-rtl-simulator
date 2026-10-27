@@ -1387,6 +1387,7 @@ impl Elaborator<'_> {
                     location: s.loc.clone(),
                     context: s.ctx.clone(),
                     sim_time: None,
+                    rtl_message: None,
                 }));
             }
             let blk = self.processes[s.proc as usize]

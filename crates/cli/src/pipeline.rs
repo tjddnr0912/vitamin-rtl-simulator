@@ -367,6 +367,7 @@ pub(crate) fn emit_artifact_error(sink: &dyn LogSink, e: &vita_artifact::Artifac
         location: None,
         context: Vec::new(),
         sim_time: None,
+        rtl_message: None,
     }));
     EXIT_STALE
 }
@@ -635,6 +636,7 @@ pub(crate) fn run_vcmp_gated(
                     location: None,
                     context: Vec::new(),
                     sim_time: None,
+                    rtl_message: None,
                 }));
                 return EXIT_USER_ERROR;
             }

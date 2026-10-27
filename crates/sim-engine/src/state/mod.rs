@@ -71,8 +71,8 @@ pub struct TfState {
     pub units_exp: i32,
     /// Fraction digits (integer args TRUNCATE to this many; reals round via %f).
     pub prec: u32,
-    /// Suffix text, %s-coerced at the `$timeformat` call (string or packed ASCII).
-    pub suffix: String,
+    /// Suffix text, %s-coerced at the `$timeformat` call (string or packed bytes).
+    pub suffix: Vec<u8>,
     /// Minimum field width; negative ⇒ LEFT-justify in |minw| (iverilog-pinned).
     pub minw: i32,
 }
@@ -142,8 +142,8 @@ pub(crate) struct DeferredReport {
     /// The action's `SysTaskId`: the newline for a print, the control for
     /// `$finish`/`$stop`.
     pub which: sim_ir::SysTaskId,
-    /// The action text, fully rendered at REACH (reach-time arg values).
-    pub message: String,
+    /// The action text, fully rendered at REACH (reach-time arg values): bytes.
+    pub message: Vec<u8>,
     /// The descriptor of a file-directed print, read at REACH like the text
     /// (`u32::MAX` = unusable, warned at maturation as the inline arm warns).
     /// `None` = stdout.
@@ -824,8 +824,8 @@ pub(crate) struct SimState<'a> {
     /// FMT-CACHE: lazily memoized decode of each format/string `Const` (indexed
     /// by ConstId) so a `$display`/`$write` in a loop unpacks the packed const
     /// once instead of every call. `RefCell` because the format path runs on the
-    /// read side (`&self`); byte-identical (`const_string` is a pure fn of cid).
-    pub fmt_cache: std::cell::RefCell<Vec<Option<Box<str>>>>,
+    /// read side (`&self`); byte-identical (`const_bytes` is a pure fn of cid).
+    pub fmt_cache: std::cell::RefCell<Vec<Option<Box<[u8]>>>>,
     /// R14: the per-body execution profile accumulators, or `None` on a run
     /// that did not ask for one. `Option` and not an always-present empty `Vec`
     /// because that is what makes the hot-path cost ONE null test: the two

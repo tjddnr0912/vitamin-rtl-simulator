@@ -258,9 +258,10 @@ impl StderrSink {
         self.verbosity >= 2
     }
 
-    fn tee(&self, line: &str) {
+    /// `--log` copy of every line, as BYTES: RTL text is not UTF-8 (Q-STRBYTES).
+    fn tee(&self, line: &[u8]) {
         if let Some(w) = &self.log {
-            let _ = w.borrow_mut().write_all(line.as_bytes());
+            let _ = w.borrow_mut().write_all(line);
         }
     }
 
@@ -272,15 +273,15 @@ impl StderrSink {
     /// producer behaviour: stop quietly. NOTE: this also swallows a non-pipe
     /// write failure (e.g. ENOSPC on a redirected stdout) — a truncated
     /// transcript instead of a loud panic, the usual Unix CLI convention.
-    fn out_write(s: &str) {
+    fn out_write(s: &[u8]) {
         use std::io::Write as _;
-        let _ = std::io::stdout().write_all(s.as_bytes());
+        let _ = std::io::stdout().write_all(s);
     }
 
     /// Broken-pipe-safe stderr write (same rationale as [`Self::out_write`]).
-    fn err_write(s: &str) {
+    fn err_write(s: &[u8]) {
         use std::io::Write as _;
-        let _ = std::io::stderr().write_all(s.as_bytes());
+        let _ = std::io::stderr().write_all(s);
     }
 
     /// doc-13 counts summary epilogue (`errors=E warnings=W notes=N`) — the
@@ -293,8 +294,9 @@ impl StderrSink {
             self.warnings.get(),
             self.notes.get()
         );
-        Self::err_write(&format!("{line}\n"));
-        self.tee(&format!("{line}\n"));
+        let line = format!("{line}\n");
+        Self::err_write(line.as_bytes());
+        self.tee(line.as_bytes());
     }
 
     fn render_diagnostic(&self, d: &Diagnostic) {
@@ -334,19 +336,25 @@ impl StderrSink {
         // unrelated diagnostics (`VITA-W3056` is the generic simplification
         // channel), and seeing the mnemonic is how a reader learns that
         // suppressing it is wider than the line they are looking at.
+        //
+        // The message goes out as BYTES (`message_bytes`): a severity task's message
+        // is RTL text and keeps every byte (Q-STRBYTES R5); code-authored text is
+        // its own UTF-8.
         let head = format!(
-            "{}[{}] {}: {}{whose}{when}",
+            "{}[{}] {}: ",
             d.severity.token(),
             d.code.code_num(),
             d.code.mnemonic(),
-            d.message
         );
-        let line = match &d.location {
-            Some(loc) => format!("{}:{}:{}: {}", loc.file, loc.line, loc.col, head),
+        let mut line = match &d.location {
+            Some(loc) => format!("{}:{}:{}: {head}", loc.file, loc.line, loc.col),
             None => head,
-        };
-        Self::err_write(&format!("{line}\n"));
-        self.tee(&format!("{line}\n"));
+        }
+        .into_bytes();
+        line.extend_from_slice(d.message_bytes());
+        line.extend_from_slice(format!("{whose}{when}\n").as_bytes());
+        Self::err_write(&line);
+        self.tee(&line);
     }
 }
 
@@ -361,10 +369,11 @@ impl LogSink for StderrSink {
         match event {
             LogEvent::Diagnostic(d) => self.render_diagnostic(&d),
             LogEvent::Progress(p) => {
+                let line = format!("{}\n", p.message);
                 if self.verbosity >= 1 {
-                    Self::out_write(&format!("{}\n", p.message));
+                    Self::out_write(line.as_bytes());
                 }
-                self.tee(&format!("{}\n", p.message));
+                self.tee(line.as_bytes());
             }
             LogEvent::RtlOutput(t) => {
                 if self.verbosity >= 1 {

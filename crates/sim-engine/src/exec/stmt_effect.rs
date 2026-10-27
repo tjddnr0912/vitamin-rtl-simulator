@@ -198,10 +198,10 @@ pub(crate) fn sscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
         _ => return Value::from_i128(-1, 32, true),
     };
     let src: Vec<u8> = k.k_eval(args[0]).to_str_bytes();
+    // The format literal's exact bytes (§21.3.4.3 b: an ordinary character matches
+    // the next input character; "\310" is the byte c8, not U+FFFD).
     let fmt: Vec<u8> = match k.k_ir().exprs.get(args[1] as usize) {
-        Some(sim_ir::Expr::Const { val }) => {
-            crate::builtins::const_string(k.k_ir(), *val).into_bytes()
-        }
+        Some(sim_ir::Expr::Const { val }) => crate::builtins::const_bytes(k.k_ir(), *val),
         _ => return Value::from_i128(-1, 32, true),
     };
     let dsts: Vec<u32> = args[2..]
@@ -252,6 +252,10 @@ pub(crate) fn fopen<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
     // directly; a runtime STRING value (`is_str`) renders its exact bytes; any
     // other packed value is treated as ASCII in a reg (NUL-stripped) — all three
     // are valid `$fopen` argument forms (§21.3, iverilog parity).
+    // A file name is an OS boundary (Q-STRBYTES L1: APFS refuses a name that is not
+    // UTF-8, so a byte-exact name cannot be Linux = macOS identical): the two
+    // spellings stay as they were — U+FFFD for a literal or a string value, one
+    // Latin-1 char per byte for a packed value.
     fn resolve<K: Kernel + ?Sized>(k: &K, a: u32) -> String {
         if let Some(sim_ir::Expr::Const { val }) = k.k_ir().exprs.get(a as usize) {
             return crate::builtins::const_string(k.k_ir(), *val);
@@ -260,7 +264,8 @@ pub(crate) fn fopen<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
         if v.is_str {
             String::from_utf8_lossy(&v.to_str_bytes()).into_owned()
         } else {
-            crate::builtins::fmt_packed_chars_min(&v)
+            let bytes = crate::builtins::fmt_packed_chars_min(&v);
+            bytes.iter().map(|&b| b as char).collect()
         }
     }
     let Some(&a0) = args.first() else {
@@ -459,9 +464,7 @@ pub(crate) fn fscanf<K: Kernel + ?Sized>(k: &mut K, rhs: u32) -> Value {
         return bad;
     };
     let fmt: Vec<u8> = match k.k_ir().exprs.get(args[1] as usize) {
-        Some(sim_ir::Expr::Const { val }) => {
-            crate::builtins::const_string(k.k_ir(), *val).into_bytes()
-        }
+        Some(sim_ir::Expr::Const { val }) => crate::builtins::const_bytes(k.k_ir(), *val),
         _ => return bad,
     };
     let dsts: Vec<u32> = args[2..]

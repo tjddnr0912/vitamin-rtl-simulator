@@ -357,6 +357,24 @@ impl<'s> Elaborator<'s> {
     /// → `location: None`; the byte span (when relevant) goes into `message`.
     /// HOOK: when elaborate grows a span side-table, fill `SourceLoc` here.
     pub(crate) fn error(&mut self, code: MsgCode, msg: &str) {
+        if self.count_error_capped() {
+            return;
+        }
+        let location = self.cur_location();
+        let context = self.cur_context();
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Error,
+            code,
+            message: msg.to_string(),
+            location,
+            context,
+            sim_time: None,
+            rtl_message: None,
+        }));
+    }
+
+    /// Count one error; `true` when it is past the cap and must not be emitted.
+    pub(crate) fn count_error_capped(&mut self) -> bool {
         self.had_error = true;
         self.error_count += 1;
         // ELAB-ERR-CAP: past the cap, suppress the flood (one final notice at the
@@ -373,20 +391,12 @@ impl<'s> Elaborator<'s> {
                     location: None,
                     context: Vec::new(),
                     sim_time: None,
+                    rtl_message: None,
                 }));
             }
-            return;
+            return true;
         }
-        let location = self.cur_location();
-        let context = self.cur_context();
-        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-            severity: Severity::Error,
-            code,
-            message: msg.to_string(),
-            location,
-            context,
-            sim_time: None,
-        }));
+        false
     }
 
     /// [`Self::error`] anchored at an EXPLICIT span rather than `cur_span` — the
@@ -429,6 +439,7 @@ impl<'s> Elaborator<'s> {
             location,
             context,
             sim_time: None,
+            rtl_message: None,
         }));
     }
 
@@ -629,25 +640,12 @@ impl<'s> Elaborator<'s> {
             location,
             context,
             sim_time: None,
+            rtl_message: None,
         }));
     }
 
     /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
     /// `W-ELAB-FEATURE-LIMIT`).
-    /// An INFO-severity diagnostic with an explicit code (an elaboration `$info`).
-    pub(crate) fn info_code(&mut self, code: MsgCode, msg: &str) {
-        let location = self.cur_location();
-        let context = self.cur_context();
-        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-            severity: Severity::Info,
-            code,
-            message: msg.to_string(),
-            location,
-            context,
-            sim_time: None,
-        }));
-    }
-
     pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
         let location = self.cur_location();
         let context = self.cur_context();
@@ -658,6 +656,7 @@ impl<'s> Elaborator<'s> {
             location,
             context,
             sim_time: None,
+            rtl_message: None,
         }));
     }
 

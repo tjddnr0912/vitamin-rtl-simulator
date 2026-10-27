@@ -77,6 +77,7 @@ impl SimState<'_> {
                     location: None,
                     context: Vec::new(),
                     sim_time: Some(TimeStamp { ticks: self.now }),
+                    rtl_message: None,
                 }));
             }
             return Some(
@@ -248,7 +249,7 @@ impl SimState<'_> {
                             None => crate::builtins::format_args_str(self, *fmt, args, radix),
                         };
                         if matches!(which, sim_ir::SysTaskId::Display) {
-                            s.push('\n');
+                            s.push(b'\n');
                         }
                         self.sink.emit(LogEvent::RtlOutput(diag::RtlText {
                             text: s,
@@ -793,6 +794,7 @@ impl SimState<'_> {
             location: None,
             context: Vec::new(),
             sim_time: Some(TimeStamp { ticks: self.now }),
+            rtl_message: None,
         }));
     }
 

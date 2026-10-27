@@ -125,6 +125,7 @@ pub(crate) fn preopened_close_warn(sched: &mut Scheduler, fd: u32) {
             sim_time: Some(diag::TimeStamp {
                 ticks: sched.st.now,
             }),
+            rtl_message: None,
         }));
 }
 
@@ -145,11 +146,12 @@ pub(crate) fn bad_fd_warn(sched: &mut Scheduler, fd: u32) {
             sim_time: Some(diag::TimeStamp {
                 ticks: sched.st.now,
             }),
+            rtl_message: None,
         }));
 }
 
-pub(crate) fn write_out(st: &mut SimState, text: &str) {
-    let _ = st.out.write_all(text.as_bytes());
+pub(crate) fn write_out(st: &mut SimState, text: &[u8]) {
+    let _ = st.out.write_all(text);
 }
 
 /// P1-1: execute a severity task (doc-13 §Severity), optionally against an
@@ -183,30 +185,19 @@ pub(crate) fn run_severity_with<N: crate::eval::NetReader + ?Sized>(
 pub(crate) fn emit_severity_message(
     sched: &mut Scheduler,
     sev: crate::SeverityKind,
-    mut message: String,
+    message: Vec<u8>,
     sid: u32,
 ) -> Ctl {
     use crate::SeverityKind as K;
-    use diag::{Diagnostic, LogEvent, TimeStamp};
-    // One spelling, shared with the frame-path emitter — see `SeverityKind`.
-    let (severity, code) = sev.diag_class();
-    if message.is_empty() {
-        message = code.title().to_string();
-    }
     // #10: file:line:col + instance path, resolved at elaborate time and keyed
     // by this statement's sid (a deferred assert passes its ACTION sid — the
     // report points at the `$error`, not the maturation site).
     let (location, context) = sched.st.stmt_diag_meta(sid);
-    sched.st.sink.emit(LogEvent::Diagnostic(Diagnostic {
-        severity,
-        code,
-        message,
-        location,
-        context,
-        sim_time: Some(TimeStamp {
-            ticks: sched.st.now,
-        }),
-    }));
+    let time = Some(diag::TimeStamp {
+        ticks: sched.st.now,
+    });
+    let d = severity_diag(sev, message, location, context, time);
+    sched.st.sink.emit(diag::LogEvent::Diagnostic(d));
     match sev {
         K::Fatal => Ctl::Fatal,
         K::Error => {
@@ -242,6 +233,7 @@ pub(crate) fn dumpvars_with<N: crate::eval::NetReader + ?Sized>(
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: st.now }),
+                rtl_message: None,
             }));
         }
         return;
@@ -268,6 +260,7 @@ pub(crate) fn dumpvars_with<N: crate::eval::NetReader + ?Sized>(
                     location: None,
                     context: Vec::new(),
                     sim_time: Some(TimeStamp { ticks: st.now }),
+                    rtl_message: None,
                 }));
             }
         }
@@ -304,6 +297,7 @@ pub(crate) fn dumpvars_with<N: crate::eval::NetReader + ?Sized>(
                 location: None,
                 context: Vec::new(),
                 sim_time: Some(TimeStamp { ticks: st.now }),
+                rtl_message: None,
             }));
             st.fst_target = None;
             return;
@@ -776,12 +770,9 @@ pub(crate) fn word0(store: &sim_ir::BitPacked, width: u32) -> sim_ir::BitPacked 
 
 // ── argument / const string helpers ────────────────────────────────────────
 
-/// Read a string from a $dumpfile/$display arg ExprId → Const{StrUtf8} → bytes.
-pub(crate) fn arg_string(st: &SimState, eid: Option<u32>) -> String {
-    arg_string_with::<crate::state::SimState>(st, None, eid)
-}
-
-/// `arg_string` against an ALTERNATE net store (tier-3 seam, S1d-4d-2 round 2).
+/// The `$dumpfile` name argument as text, optionally against an ALTERNATE net store
+/// (tier-3 seam, S1d-4d-2 round 2). A file name is an OS boundary (Q-STRBYTES L1):
+/// the lossy `const_string` view, as before.
 ///
 /// ⚠️ This function does NOT return early for a non-`Const` argument, and a
 /// comment in `native/kernel.rs` claimed it did — which is what let `$dumpfile`
@@ -805,52 +796,6 @@ pub(crate) fn arg_string_with<N: crate::eval::NetReader + ?Sized>(
     }
 }
 
-/// Resolve an ExprId that is a `Const{val}` into its const string (format str).
-pub(crate) fn expr_const_string(st: &SimState, eid: u32) -> String {
-    if let sim_ir::Expr::Const { val } = &st.ir.exprs[eid as usize] {
-        st.fmt_const_string(*val) // FMT-CACHE: memoized by ConstId
-    } else {
-        String::new()
-    }
-}
-
-/// Decode a `ConstVal` (StrUtf8 → text; numeric → packed bytes).
-pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
-    let c = &ir.consts[cid as usize];
-    let nbytes = c.width.div_ceil(8) as usize;
-    let mut bytes = Vec::with_capacity(nbytes);
-    // StrUtf8 packs in IEEE §5.9 order (v6): the FIRST character is the MOST
-    // significant byte — read the value top byte down to recover source order.
-    for b in (0..nbytes).rev() {
-        let bit = (b as u32) * 8;
-        let w = (bit / 64) as usize;
-        let s = bit % 64;
-        let byte = if s <= 56 {
-            (c.bits.val.get(w).copied().unwrap_or(0) >> s) as u8
-        } else {
-            let lo = c.bits.val.get(w).copied().unwrap_or(0) >> s;
-            let hi = c.bits.val.get(w + 1).copied().unwrap_or(0) << (64 - s);
-            (lo | hi) as u8
-        };
-        bytes.push(byte);
-    }
-    while bytes.last() == Some(&0) {
-        bytes.pop();
-    }
-    // …and, for a NUMERIC constant, the leading ones: the padding of a value wider than
-    // its text (§6.16 — NUL characters are ignored when an integral value is used as a
-    // string), the rule `value_str_bytes` already applies to a non-constant argument. A
-    // `parameter [8*16-1:0] F = "k.hex"` used as a file name opened `"\0…\0k.hex"`
-    // where both oracles open `k.hex`. A string LITERAL keeps its bytes: `%s` of
-    // `"\000a"` renders the NUL (both oracles print it as a space), and its length counts.
-    let lead = if c.repr == sim_ir::ConstRepr::Numeric {
-        bytes.iter().take_while(|&&b| b == 0).count()
-    } else {
-        0
-    };
-    String::from_utf8_lossy(&bytes[lead..]).into_owned()
-}
-
 // ── $display format engine (4-state aware) ─────────────────────────────────
 
 /// Render a task's args, optionally against an ALTERNATE net store.
@@ -868,7 +813,7 @@ pub(crate) fn render_task_args<N: crate::eval::NetReader + ?Sized>(
     fmt: Option<u32>,
     args: &[u32],
     radix: Option<u8>,
-) -> String {
+) -> Vec<u8> {
     match nets {
         Some(n) => format_args_str_with(sched.st, n, fmt, args, radix),
         None => format_args_str(sched.st, fmt, args, radix),
@@ -996,7 +941,7 @@ pub(crate) fn format_args_str(
     fmt: Option<u32>,
     args: &[u32],
     radix: Option<u8>,
-) -> String {
+) -> Vec<u8> {
     format_args_str_with(st, st, fmt, args, radix)
 }
 
@@ -1031,8 +976,10 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
     fmt: Option<u32>,
     args: &[u32],
     radix: Option<u8>,
-) -> String {
-    let mut out = String::new();
+) -> Vec<u8> {
+    // The rendered text is BYTES (Q-STRBYTES): every byte of a literal, a string
+    // value and a packed value reaches the caller unchanged.
+    let mut out = Vec::new();
     let mut argi = 0usize;
     // ORDER SEAM: this function holds BOTH the reader and (through `st`) the
     // diagnostic sink, which makes it the one place a deferred out-of-range
@@ -1057,7 +1004,7 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
         // else, so they cannot touch a net. Giving them a reader would add a
         // parameter no test could ever pin — the mutation that drops it survives
         // by construction, which is indistinguishable from a real gap.
-        let template = expr_const_string(st, fmt_eid);
+        let template = expr_const_bytes(st, fmt_eid);
         render_template(st, nets, &template, args, &mut argi, &mut out);
     }
     // IEEE 1364-2005 §17.1 (P0-8): any argument NOT consumed by a format
@@ -1079,7 +1026,7 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
                 // consume the args that follow, exactly like a string literal.
                 // Previously a runtime string fell through to push_default_radix
                 // and printed as a packed-ASCII decimal (silently wrong).
-                let text = String::from_utf8_lossy(&v.to_str_bytes()).into_owned();
+                let text = v.to_str_bytes();
                 render_template(st, nets, &text, args, &mut argi, &mut out);
             } else {
                 push_default_radix(&v, &mut out, radix);
@@ -1089,38 +1036,27 @@ pub(crate) fn format_args_str_with<N: crate::eval::NetReader + ?Sized>(
     out
 }
 
-/// The argument ExprId IFF it is a string-literal constant (`ConstRepr::StrUtf8`).
-pub(crate) fn str_const_of_expr(st: &SimState, eid: u32) -> Option<String> {
-    if let sim_ir::Expr::Const { val } = &st.ir.exprs[eid as usize] {
-        if st.ir.consts[*val as usize].repr == sim_ir::ConstRepr::StrUtf8 {
-            return Some(st.fmt_const_string(*val)); // FMT-CACHE
-        }
-    }
-    None
-}
-
 /// Default-radix rendering of an argument with no format spec: a padded `%d`
 /// field (`%g` for a real) — or, under a b/o/h task variant (P1-5), the padded
 /// `%b`/`%o`/`%h` form (same `fmt_radix` the explicit specs use; iverilog joins
 /// these fields with no separator).
-pub(crate) fn push_default_radix(v: &Value, out: &mut String, radix: Option<u8>) {
-    if v.is_real {
-        out.push_str(&fmt_real(v, 'g', None, None, false, false, false));
-        return;
-    }
-    match radix {
-        Some(2) => out.push_str(&fmt_radix(v, 1, false, None, false)),
-        Some(8) => out.push_str(&fmt_radix(v, 3, false, None, false)),
-        Some(16) => out.push_str(&fmt_radix(v, 4, false, None, false)),
-        _ => {
-            let s = fmt_dec(v);
-            let fw = dec_field_width(v.width, v.signed);
-            if s.len() < fw {
-                out.push_str(&" ".repeat(fw - s.len()));
+pub(crate) fn push_default_radix(v: &Value, out: &mut Vec<u8>, radix: Option<u8>) {
+    let s = if v.is_real {
+        fmt_real(v, 'g', None, None, false, false, false)
+    } else {
+        match radix {
+            Some(2) => fmt_radix(v, 1, false, None, false),
+            Some(8) => fmt_radix(v, 3, false, None, false),
+            Some(16) => fmt_radix(v, 4, false, None, false),
+            _ => {
+                let s = fmt_dec(v);
+                let fw = dec_field_width(v.width, v.signed);
+                out.resize(out.len() + fw.saturating_sub(s.len()), b' ');
+                s
             }
-            out.push_str(&s);
         }
-    }
+    };
+    out.extend_from_slice(s.as_bytes());
 }
 
 /// iverilog-style `%v` strength form: per-bit St0/St1/StX/HiZ, MSB-first, joined
@@ -1140,12 +1076,4 @@ pub(crate) fn strength_form(v: &Value) -> String {
         })
         .collect::<Vec<_>>()
         .join("_")
-}
-
-/// Pad `content` to `field_width` (a MINIMUM — a longer string is never
-/// truncated): right-justified by default, or left-justified (space right-pad)
-/// under the `-` flag. Used by the plain-content specs `%c`/`%v`/`%m`/`%s`, which
-/// iverilog justifies in an explicit field width. `None` width → content verbatim.
-pub(crate) fn justify(content: &str, field_width: Option<usize>, left_just: bool) -> String {
-    diag::fmt::justify(content, field_width, left_just)
 }
