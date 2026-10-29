@@ -226,8 +226,15 @@ uninstantiated module under `-s` and an untaken `generate` branch do not). Veril
 ### 1.5 Format specifiers that consume without printing
 
 `%u`, `%U`, `%z` and `%Z` consume their argument and emit no text. The IEEE forms write
-raw binary bytes, which are useless in a text log; Icarus Verilog emits them. `%l` is
-cosmetic. Every other specifier the engine implements — including `%v` (strength form),
+raw binary bytes, which are useless in a text log; Icarus Verilog emits them. An argument
+with no binary form — a `real`, a `string`, a class handle, a call returning `string` or
+declared without a return range — is refused (`E3009`) under a literal format, in every task,
+and so is a `$fscanf` / `$sscanf` `%u` / `%z` the scan can reach. A `$sscanf` `%*u` / `%*z`
+after an assigning conversion with nothing assigned after it is not: vita gives the count and
+values the format before it gives. It is refused when the format before it has no assigning
+conversion (a -1 / 0 question at the end of the input), and an unsuppressed zero-width conversion
+after it (`%0d`) is refused by design. A `%u` after a zero-width conversion (`%0d%u`) is never
+reached and is not refused: the call returns what it returned before. `%l` is cosmetic. Every other specifier the engine implements — including `%v` (strength form),
 `%p` (assignment pattern) and the `-` and `+` flags — renders normally; see
 [System Tasks](005_system-tasks.md).
 

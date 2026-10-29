@@ -893,6 +893,7 @@ impl Elaborator<'_> {
         if let Some(fmt_str) = &fmt_raw {
             self.check_format_real_radix(fmt_str, &arg_ids);
         }
+        self.check_format_unformatted_args(&conv, value_args, &arg_ids, spec_shift);
         // ENG-2 R3: `$cast` (task form) and `$sformat` / `$swrite*` lowered their
         // destination once for the checks above and again here — the IR holds this one.
         if matches!(which, ir::SysTaskId::Cast | ir::SysTaskId::Sformat) {
@@ -924,6 +925,117 @@ impl Elaborator<'_> {
             self.file_directed_stmts.insert(sid);
         }
         Some(sid)
+    }
+
+    /// IEEE 1800-2017 §21.2.1.2 (ieee1800-2017.txt:28651-28654): `%u` / `%z`, like every
+    /// integer format, take an integral argument, and a `real`, a `string` or a class
+    /// handle is none — there is no 2- or 4-value binary representation to write.
+    /// Refused under a literal format, at the argument `conv[k]` lands on: `conv` is
+    /// [`arg_conv_specs`], the renderer's own walk, and `shift` skips the file
+    /// family's descriptor or `$sformat`'s destination (or `$sformatf`'s format);
+    /// `ast_args[i]` is the source of `arg_ids[i]`. A format read at run time has no
+    /// literal to check; the renderer consumes the argument and writes nothing there, as
+    /// for every `%u` / `%z` (`render.rs`, the `%u` arm; the encoder is §5.2 P-PCTU).
+    pub(crate) fn check_format_unformatted_args(
+        &mut self,
+        conv: &[char],
+        ast_args: &[ast::Expr],
+        arg_ids: &[u32],
+        shift: usize,
+    ) {
+        for (k, &c) in conv.iter().enumerate() {
+            if !matches!(c, 'u' | 'U' | 'z' | 'Z') {
+                continue;
+            }
+            let Some(&e) = arg_ids.get(k + shift) else {
+                continue;
+            };
+            let what = if self.expr_is_real(e) {
+                "real"
+            } else if self.ir_expr_is_string(e) {
+                "string"
+            } else if ast_args
+                .get(k + shift)
+                .is_some_and(|a| self.ast_handle_kind(a) == crate::classes::HKind::Handle)
+            {
+                "class handle"
+            } else if let Some((callee, returns_string)) = ast_args
+                .get(k + shift)
+                .and_then(|a| self.unformatted_call_proxy(a))
+            {
+                if returns_string {
+                    "string"
+                } else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "`%{c}` of a call to `{callee}`, declared without a return range: vita \
+                             records a class-typed return like a one-bit one and cannot tell them \
+                             apart (IEEE 1800-2017 §21.2.1.2: an integral argument only)"
+                        ),
+                    );
+                    continue;
+                }
+            } else {
+                continue;
+            };
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "`%{c}` is not defined on a {what} argument (IEEE 1800-2017 §21.2.1.2: an integral argument only)"
+                ),
+            );
+        }
+    }
+
+    /// P-PCTU r2: `(callee, returns_string)` when `a` is a call — a function, a method
+    /// through a handle, or a method of the enclosing class — whose declared return is
+    /// `string` (K3: not integral, and the lowered call is not typed string) or has the
+    /// implicit one-bit shape (the C4 proxy: no range, `ParamType::Implicit`, not
+    /// 2-state). A class-typed return is recorded in exactly that shape (hdl-parser
+    /// `functask.rs` `parse_function_def`, the typedef arm: a class has no range), so
+    /// the shape is a superset of "returns a class handle".
+    fn unformatted_call_proxy(&self, a: &ast::Expr) -> Option<(String, bool)> {
+        let mut e = a;
+        while let ast::ExprKind::Paren { inner } = &e.kind {
+            e = inner;
+        }
+        let ast::ExprKind::Call { name, .. } = &e.kind else {
+            return None;
+        };
+        let segs = &name.segments;
+        let shape = |f: &ast::FunctionDef| {
+            if f.ret_string {
+                Some(true)
+            } else {
+                (f.range.is_none()
+                    && matches!(f.ret_type, ast::ParamType::Implicit)
+                    && !f.ret_two_state)
+                    .then_some(false)
+            }
+        };
+        let hit = if segs.len() == 1 {
+            if let Some(f) = self.lookup_func(&segs[0].name) {
+                shape(f)
+            } else if let Some((_, cls)) = &self.cur_this {
+                let (_, m) = self.class_find_method(cls, &segs[0].name)?;
+                shape(m.func.as_ref()?)
+            } else {
+                return None;
+            }
+        } else {
+            let (_, cls, meth) = self.resolve_class_member(name)?;
+            let (_, m) = self.class_find_method(&cls, &meth)?;
+            shape(m.func.as_ref()?)
+        };
+        let returns_string = hit?;
+        Some((
+            segs.iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join("."),
+            returns_string,
+        ))
     }
 
     /// P1-1: lower `$fatal([finish_number][, fmt, args…])` / `$error`/`$warning`/
@@ -966,6 +1078,7 @@ impl Elaborator<'_> {
         if let Some(fmt_str) = &fmt_raw {
             self.check_format_real_radix(fmt_str, &arg_ids);
         }
+        self.check_format_unformatted_args(&conv, value_args, &arg_ids, 0);
         let sid = self.push_stmt(ir::Stmt::SysTask {
             which: ir::SysTaskId::Display,
             fmt,

@@ -29,6 +29,20 @@ changed for a user of the simulator.
 - File names (`$fopen`, `$readmem*`, `$dumpfile`), `$vita_stage` labels and the command line are
   converted as before (see the limitations page).
 
+### Changed — `%u` / `%z` of an argument with no binary form are E3009 (were consumed silently)
+
+- `%u` / `%U` / `%z` / `%Z` of a `real`, a `string` or a class handle, and of a call to a function
+  declared to return `string` or declared without a return range, are refused (`E3009`) under a
+  literal format: IEEE 1800-2017 §21.2.1.2 takes an integral argument only. A one-bit function
+  declared without a range (`function f(input x)`, `function logic f`) is refused too, because
+  vita records a class-typed return in the same shape. Every other `%u` / `%z` still emits no text.
+- A `$fscanf` / `$sscanf` format whose `%u` / `%z` (the binary read, §21.3.4.3) the scan can reach
+  is refused (`E3009`); the scan stopped there and read nothing. A `$sscanf` suppressed read
+  (`%*u` / `%*z`) after an assigning conversion, with nothing assigned after it, is not refused:
+  vita gives the count and values the format before the `%*u` gives. It stays refused when the
+  format before it has no assigning conversion (`%*d%*u`: a -1 / 0 question at the end of the
+  input), and an unsuppressed zero-width conversion after it (`%0d`) is refused by design.
+
 ### Fixed — a delayed continuous assignment decides on the value its target will hold
 
 - `assign #d lhs = rhs;` (and `#(rise, fall[, turnoff])`, a runtime delay, a net-declaration

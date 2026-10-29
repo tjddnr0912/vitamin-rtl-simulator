@@ -155,7 +155,7 @@ column rather than as a fabricated number.
 | `%c` `%C` | yes | the low 8 bits as one character, justified in the field width |
 | `%s` `%S` | yes | a string literal emits its bytes; a nested `$sformatf` renders through the same formatter; a string-domain value emits its exact bytes; any other packed value emits its bytes, one per 8 bits (`%s` of `16'hC841` writes `c8 41`) — bare `%s` pads at the register width with NUL rendered as a space, while `%Ns`, `%0s` and `%-s` strip NUL |
 | `%v` `%V` | yes | strength form, most significant bit first, underscore-joined (`4'b10xz` renders `St1_St0_StX_HiZ`). There is no strength model: a driven bit takes `St` and `z` takes `HiZ` |
-| `%u` `%U` `%z` `%Z` | yes | the argument is consumed and no text is emitted. The standard forms write raw binary bytes, which have no meaning in a text log |
+| `%u` `%U` `%z` `%Z` | yes | the argument is consumed and no text is emitted. The standard forms write raw binary bytes, which have no meaning in a text log. An argument with no binary form is refused (`E3009`): a `real`, a `string`, a class handle, and a call to a function declared to return `string` or declared without a return range (vita records a class-typed return in that shape and cannot tell the two apart) |
 | `%p` `%P` | yes | an assignment pattern. A whole aggregate renders as a pattern; any other argument renders as a scalar pattern |
 | any other character | no | echoed verbatim as `%` followed by the character |
 
@@ -657,6 +657,7 @@ was available at entry, and 0 when input was present but nothing converted.
 | `%h` `%H` `%x` `%X` | yes | radix 16; the 4-state digits `x X z Z ?` are honoured |
 | `%o` `%O` | yes | radix 8; 4-state digits honoured |
 | `%b` `%B` | yes | radix 2; 4-state digits honoured |
+| `%u` `%U` `%z` `%Z` | no | the binary read is refused (`E3009`) when the scan can reach it; after a conversion the scan always stops at (an unsupported specifier, an explicit `0` width), it is never reached and is not refused. A `$sscanf` suppressed read (`%*u`, `%*z`) after an assigning conversion (one without `*`), with no assigning conversion after it, is not refused either: vita gives the count and values the format before the `%*u` gives. It is refused when the format before it has no assigning conversion (`%*d%*u`: a -1 / 0 question at the end of the input), and an unsuppressed zero-width conversion after it (`%0d`) is refused by design — IEEE 1800-2017 does not say whether a width-0 field reads nothing; a `$fscanf` one is refused: the file position after the call differs |
 | any other specifier | no | the scan stops at that conversion |
 
 ### File refusals
@@ -677,6 +678,7 @@ All `VITA-E3009`:
 | `$fscanf` / `$sscanf` fewer than two arguments | `$fscanf/$sscanf take (source, format, args...)` |
 | `$fscanf` / `$sscanf` non-literal format | `$fscanf/$sscanf need a string-literal format` |
 | `$fscanf` / `$sscanf` destination not a plain variable | `$fscanf/$sscanf destination arguments must be plain variables` |
+| `$fscanf` / `$sscanf` format with a `%u` / `%z` the scan can reach (not a `$sscanf` `%*u` / `%*z` after an assigning conversion with nothing assigned after it) | ``$fscanf/$sscanf `%u` (a binary read, IEEE 1800-2017 §21.3.4.3) is not supported`` |
 | a read-only destination on any of the above | the read-only write refusal, naming the call |
 | an intra-assignment delay on `$fopen`, `$fgetc`, `$feof`, `$ungetc`, `$fgets`, `$fread`, `$fscanf`, `$sscanf` or `$sformatf` | `intra-assignment delay on <call> is unsupported` |
 | `$sformatf` non-literal format | `$sformatf needs a string-literal format` |

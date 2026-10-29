@@ -525,14 +525,17 @@ impl Elaborator<'_> {
             Some(ast::ExprKind::StrLit { raw }) => arg_conv_specs(&parse_str_literal_text(raw)),
             _ => Vec::new(),
         };
-        args.iter()
+        let ids: Vec<u32> = args
+            .iter()
             .enumerate()
             .map(|(i, a)| {
                 let is_pattern =
                     matches!(i.checked_sub(1).and_then(|k| conv.get(k)), Some('p' | 'P'));
                 self.lower_fmt_value_arg(a, is_pattern)
             })
-            .collect()
+            .collect();
+        self.check_format_unformatted_args(&conv, args, &ids, 1);
+        ids
     }
 
     /// True when `e` names an aggregate that `%p` OUGHT to render but the engine
