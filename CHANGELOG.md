@@ -9,6 +9,31 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — a constant that divides by a wrapped zero is E3009
+
+- A parameter or a declaration range bound whose value divides by zero at the expression's width
+  is refused (`E3009`) instead of taking a value. `16'd1 % ('1 + 1'b1)` divides by the 32-bit sum
+  `'1 + 1'b1`, which is 0, so it is `x` (IEEE 1800-2017 §11.4.3); vita folded the divisor at
+  unlimited width and answered `1 % 2^32`: `localparam logic [31:0] C = (16'd1 % ('1 + 1'b1)) + 1;`
+  was 2 and `logic [((16'd1 % ('1 + 1'b1)) + 1):0] d;` was 3 bits (Icarus Verilog and Verilator:
+  `x`; an `x` range bound is illegal, §6.9.1). The same holds for `/`, for `0 ** -k` with a base
+  that is 0 at its width (Table 11-4), and for every parameter binder (module, generate block,
+  instance, package) and the four declaration-bound sinks (a packed dimension, a parameter's
+  declared range and the two unpacked-dimension sinks). The message names the operand and its
+  width: "the divisor of the `%` (the `+` operation) is 0 in its 32-bit context, so the `%` is `x`".
+  The origin named is the one whose `x` reaches the result (not one absorbed, shifted out or
+  truncated away beside it, and the taken arm's under a known `?:` condition). Each operator keeps
+  one origin, the left operand's while it owns a surviving `x` bit there, else the right's; when a
+  later operator or truncation removes that origin's bits the message says "an operation in it is
+  `x`" without naming one, even where the other operand's `x` survives. An `x` range bound is refused
+  even where an earlier instance of the same declaration took the one-bit default.
+- Kept, as before: an `x` that an operator absorbs (`& 32'd0`, `| '1`, a shift that moves every
+  `x` bit out, the untaken arm of a known condition) keeps its value; a parameter whose
+  value has 0 under every `x` bit (`localparam int L = 16'd0 % ('1 + 1'b1);` is 0, IEEE's 2-state
+  value; a `logic` parameter of that shape reads `x` in Icarus Verilog and still binds 0); an
+  expression that names a real parameter or holds a real literal; an override, an enum label and
+  a generate-case scrutinee (each still takes the unlimited fold first); a parameter wider than 64 bits.
+
 ### Fixed — text output keeps its bytes
 
 - A byte at or above 0x80 in RTL text reaches stdout, the `--log` file, files and MCD / STDOUT /

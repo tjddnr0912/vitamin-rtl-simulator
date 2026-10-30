@@ -671,8 +671,25 @@ and only the import binding is missing, so it is loud, never silent.
 
 Every arithmetic and comparison operator folds a named parameter at any width, including
 `/`, `%`, `**`, `<<<`, the reductions, `$clog2`, `$bits` and `$isunknown`. Two boundaries
-are deliberate. A constant `x / 0` or `x % 0` is `x` under §11.4.3 and a parameter has no
-unknown plane, so the fold declines and the caller stays loud with the divisor named. And
+are deliberate. A constant `x / 0`, `x % 0` or `0 ** -k` is `x` under §11.4.3 and a parameter
+has no unknown plane, so it is refused (`E3009`) with the divisor or base named — also where the
+zero exists only at the expression's width: `16'd1 % ('1 + 1'b1)` divides by the 32-bit sum
+`'1 + 1'b1`, which wraps to 0, so `localparam int L = (16'd1 % ('1 + 1'b1)) + 1;` and
+`logic [((16'd1 % ('1 + 1'b1)) + 1):0] d;` are refused ("the divisor of the `%` (the `+`
+operation) is 0 in its 32-bit context"); they folded to 2 and a 3-bit `d` before. The message names
+the origin whose `x` reaches the result — not one an operator absorbed, shifted out or truncated
+away beside it. Each operator keeps one origin (the left operand's while it owns a surviving `x`
+bit, else the right's); when a later operator or truncation removes that origin's bits the message
+says "an operation in it is `x`" without naming one, even where the other operand's `x` survives. It
+names the taken arm's origin even when the untaken arm of a `?:` also divides by zero. An `x`
+range bound is refused even where an earlier instance of the same declaration took the one-bit
+default. An x that an operator
+absorbs is not refused: `(16'd1 % ('1 + 1'b1)) & 32'd0`, an x shifted out of the result, the
+untaken arm under a known condition. Two kinds of position keep their earlier value: a parameter
+whose fallback value has 0 under every x bit (`localparam int L = 16'd0 % ('1 + 1'b1);` is 0, as
+IEEE's 2-state `int`; a `logic` parameter reads x there and vita cannot tell the two apart yet),
+and an expression holding a real-valued name or literal. A bound that neither constant walk folds
+keeps the one-bit default described below. And
 the super-linear division kernels are budgeted at elaboration: a constant `/` or `%` up to
 about 65536 bits folds, and a wider one is refused in milliseconds instead of running for
 minutes. The runtime lane answers that same shape with `X` above its own cap (§4.5).
