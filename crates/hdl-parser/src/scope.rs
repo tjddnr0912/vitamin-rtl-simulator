@@ -15,13 +15,7 @@ impl Parser<'_, '_> {
     /// block its own scope.
     pub(crate) fn snapshot_scope(&self) -> ScopeSnapshot {
         ScopeSnapshot {
-            typedefs: self.typedefs.clone(),
-            struct_layouts: self.struct_layouts.clone(),
-            sym_struct_layouts: self.sym_struct_layouts.clone(),
-            unpacked_struct_layouts: self.unpacked_struct_layouts.clone(),
-            unpacked_bind: self.unpacked_bind.clone(),
-            enum_defs: self.enum_defs.clone(),
-            union_type_names: self.union_type_names.clone(),
+            type_names: self.type_names.clone(),
             var_struct: self.var_struct.clone(),
             var_unpacked_struct: self.var_unpacked_struct.clone(),
             record_array_vars: self.record_array_vars.clone(),
@@ -103,13 +97,7 @@ impl Parser<'_, '_> {
     }
 
     pub(crate) fn restore_scope(&mut self, s: ScopeSnapshot) {
-        self.typedefs = s.typedefs;
-        self.struct_layouts = s.struct_layouts;
-        self.sym_struct_layouts = s.sym_struct_layouts;
-        self.unpacked_struct_layouts = s.unpacked_struct_layouts;
-        self.unpacked_bind = s.unpacked_bind;
-        self.enum_defs = s.enum_defs;
-        self.union_type_names = s.union_type_names;
+        self.type_names = s.type_names;
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;
         self.record_array_vars = s.record_array_vars;
@@ -137,60 +125,12 @@ impl Parser<'_, '_> {
     /// iverilog rejects) or a module-local type into a later module — both silent-
     /// wrong. Var-struct bindings are fully restored (unit-local, never leak).
     pub(crate) fn restore_scope_unit(&mut self, s: ScopeSnapshot) {
-        // typedefs / struct_layouts / enum_defs: revert to the snapshot, then
-        // re-add the `::`-qualified twins the unit created (absent from the snap).
-        let new_td: Vec<(String, TypeInfo)> = self
-            .typedefs
-            .iter()
-            .filter(|(k, _)| k.contains("::") && !s.typedefs.contains_key(*k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        self.typedefs = s.typedefs;
-        self.typedefs.extend(new_td);
-        let new_sl: Vec<(String, StructLayout)> = self
-            .struct_layouts
-            .iter()
-            .filter(|(k, _)| k.contains("::") && !s.struct_layouts.contains_key(*k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        self.struct_layouts = s.struct_layouts;
-        self.struct_layouts.extend(new_sl);
-        // A symbolic layout is module-local and has no `pkg::` twin.
-        self.sym_struct_layouts = s.sym_struct_layouts;
-        // Round-9: unpacked-struct layouts scope exactly like `struct_layouts` —
-        // keep the `pkg::T` twins this unit added, drop its bare names.
-        let new_usl: Vec<(String, RecordDef)> = self
-            .unpacked_struct_layouts
-            .iter()
-            .filter(|(k, _)| k.contains("::") && !s.unpacked_struct_layouts.contains_key(*k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        self.unpacked_struct_layouts = s.unpacked_struct_layouts;
-        self.unpacked_struct_layouts.extend(new_usl);
-        let new_ub: Vec<(String, u64)> = self
-            .unpacked_bind
-            .iter()
-            .filter(|(k, _)| k.contains("::") && !s.unpacked_bind.contains_key(*k))
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
-        self.unpacked_bind = s.unpacked_bind;
-        self.unpacked_bind.extend(new_ub);
-        let new_ed: Vec<(String, EnumDef)> = self
-            .enum_defs
-            .iter()
-            .filter(|(k, _)| k.contains("::") && !s.enum_defs.contains_key(*k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        self.enum_defs = s.enum_defs;
-        self.enum_defs.extend(new_ed);
-        let new_un: Vec<String> = self
-            .union_type_names
-            .iter()
-            .filter(|k| k.contains("::") && !s.union_type_names.contains(*k))
-            .cloned()
-            .collect();
-        self.union_type_names = s.union_type_names;
-        self.union_type_names.extend(new_un);
+        // Every type slot reverts to the snapshot, except that a `::`-qualified name
+        // keeps a slot the unit added where the snapshot has none (a package twin);
+        // a symbolic layout is module-local and has no `pkg::` twin, so its slot is
+        // restored whole (`unit_kept`).
+        let kept = Self::unit_kept(&self.type_names, &s.type_names);
+        self.restore_type_names_unit(s.type_names, &kept);
         // Var-struct bindings are unit-local and never leak → full restore.
         self.var_struct = s.var_struct;
         self.var_unpacked_struct = s.var_unpacked_struct;

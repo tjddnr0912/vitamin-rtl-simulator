@@ -92,8 +92,8 @@ impl Parser<'_, '_> {
         Some(Self::dec_lit(u32::try_from(v).ok()?, span))
     }
 
-    /// Register the `pkg::n` twin of the package-scope type `n` in `typedefs` and
-    /// answer the scoped key. The twin's three dimension containers are re-spelled
+    /// Register the `pkg::n` typedef twin of the package-scope type `n` and answer
+    /// the scoped key. The twin's three dimension containers are re-spelled
     /// through `respell_pkg_dims` / `respell_pkg_unpacked` so a bound naming one of
     /// the package's OWN constants reads `pkg::W` — the bare name is undefined
     /// wherever the twin is used without importing it (§4.5.415).
@@ -101,19 +101,30 @@ impl Parser<'_, '_> {
     /// Shared by the `endpackage` typedef pass and its type-parameter twin: the
     /// aggregate sub-maps (struct / enum / union) stay with the typedef caller,
     /// which is the only one whose node can BE an aggregate.
+    ///
+    /// §5.2 row 66: the twin's typedef slot is the bare name's (same declaration,
+    /// registration number and layout key) with the re-spelled dims in the slot; a
+    /// bare name with no typedef slot leaves the twin's untouched.
     pub(crate) fn register_pkg_typedef_twin(&mut self, pkg: &str, n: &str) -> String {
         let scoped = format!("{pkg}::{n}");
-        if let Some(mut ti) = self.typedefs.get(n).cloned() {
-            if let Some(r) = ti.range.take() {
-                ti.range = self.respell_pkg_dims(pkg, &[r]).pop();
+        if let Some(type_rec::Slot::Td(mut t)) = self.tn_slot(n, type_rec::Kind::Td) {
+            if let Some(mut ti) = self.td_of(&t) {
+                if let Some(r) = ti.range.take() {
+                    ti.range = self.respell_pkg_dims(pkg, &[r]).pop();
+                }
+                if !ti.packed.is_empty() {
+                    ti.packed = self.respell_pkg_dims(pkg, &ti.packed);
+                }
+                if !ti.unpacked.is_empty() {
+                    ti.unpacked = self.respell_pkg_unpacked(pkg, &ti.unpacked);
+                }
+                t.dims = Some(Box::new(type_rec::TwinDims {
+                    range: ti.range,
+                    packed: ti.packed,
+                    unpacked: ti.unpacked,
+                }));
             }
-            if !ti.packed.is_empty() {
-                ti.packed = self.respell_pkg_dims(pkg, &ti.packed);
-            }
-            if !ti.unpacked.is_empty() {
-                ti.unpacked = self.respell_pkg_unpacked(pkg, &ti.unpacked);
-            }
-            self.typedefs.insert(scoped.clone(), ti);
+            self.tn_set(&scoped, type_rec::Slot::Td(t));
         }
         scoped
     }

@@ -65,32 +65,30 @@ impl Parser<'_, '_> {
             total: total.clone(),
             reg,
         };
-        self.register_decl(reg, DeclType::Sym(layout.clone()));
-        self.sym_struct_layouts.insert(tname.name.clone(), layout);
-        self.union_type_names.remove(&tname.name);
+        self.register_decl(reg, DeclType::Sym(layout));
+        self.tn_set(&tname.name, type_rec::Slot::Sym(DeclKey(reg)));
+        self.tn_clear(&tname.name, type_rec::Kind::Union);
         let msb = Self::sym_sub_one(total, start);
-        self.typedefs.insert(
-            tname.name.clone(),
-            TypeInfo {
-                kind: struct_kind,
-                signed: struct_signed,
-                range: Some(Range {
-                    msb,
-                    lsb: Self::dec_lit(0, start),
-                    span: start,
-                }),
-                packed: Vec::new(),
-                class_name: None,
-                unpacked: Vec::new(),
-                shape_param: None,
-                enum_type: false,
-                // Laid out per instance from a bound this parse could not fold.
-                layout_exact: false,
-                pattern_members: None,
-                layout_reg: None,
-                bind: 0,
-            },
-        );
+        let info = TypeInfo {
+            kind: struct_kind,
+            signed: struct_signed,
+            range: Some(Range {
+                msb,
+                lsb: Self::dec_lit(0, start),
+                span: start,
+            }),
+            packed: Vec::new(),
+            class_name: None,
+            unpacked: Vec::new(),
+            shape_param: None,
+            enum_type: false,
+            // Laid out per instance from a bound this parse could not fold.
+            layout_exact: false,
+            pattern_members: None,
+            layout_reg: None,
+            bind: 0,
+        };
+        self.put_type_info(&tname.name, info);
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
@@ -249,11 +247,11 @@ impl Parser<'_, '_> {
     /// packed width EXPRESSION (elaborate folds it per instance) with the struct's
     /// whole-value signedness. A 2-state one stays loud, like the numeric twin.
     pub(crate) fn sym_typedef_cast(&self, name: &str) -> Option<(Expr, bool)> {
-        let info = self.typedefs.get(name)?;
+        let info = self.td(name)?;
         if !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg) {
             return None;
         }
-        let l = self.sym_struct_layouts.get(name)?;
+        let l = self.sym_layout(name)?;
         Some((l.total.clone(), info.signed))
     }
 }

@@ -103,17 +103,22 @@ impl Parser<'_, '_> {
         self.register_decl(
             reg,
             DeclType::Packed {
-                layout: layout.clone(),
+                layout,
                 union: true,
             },
         );
-        self.struct_layouts.insert(tname.name.clone(), layout);
-        // A union shares the `struct_layouts` map (for `u.field` member reads) but
-        // its overlay layout (all fields at offset 0, width = MAX) is NOT a packed
-        // concat — so it is recorded here to EXCLUDE it from the `'{…}` pattern
-        // desugar (which would wrongly concatenate the fields). Pattern on a union
-        // stays loud.
-        self.union_type_names.insert(tname.name.clone());
+        self.tn_set(
+            &tname.name,
+            type_rec::Slot::Packed(type_rec::PackedSlot {
+                key: DeclKey(reg),
+                respelled: None,
+            }),
+        );
+        // A union shares the packed slot (for `u.field` member reads) but its overlay
+        // layout (all fields at offset 0, width = MAX) is NOT a packed concat — so it
+        // is flagged here to EXCLUDE it from the `'{…}` pattern desugar (which would
+        // wrongly concatenate the fields). Pattern on a union stays loud.
+        self.tn_set(&tname.name, type_rec::Slot::Union);
         // §7.2.1: an all-2-state union is itself 2-state (defaults to 0); any
         // 4-state member makes the whole union 4-state (defaults to X).
         let union_kind =
@@ -122,23 +127,21 @@ impl Parser<'_, '_> {
             } else {
                 NetVarKind::Logic
             };
-        self.typedefs.insert(
-            tname.name.clone(),
-            TypeInfo {
-                kind: union_kind,
-                signed: union_signed,
-                range: Some(Self::dec_range(total.saturating_sub(1))),
-                packed: Vec::new(),
-                class_name: None,
-                unpacked: Vec::new(),
-                shape_param: None,
-                enum_type: false,
-                layout_exact: Self::members_layout_exact(&members, each_exact),
-                pattern_members: None,
-                layout_reg: Some(reg),
-                bind: 0,
-            },
-        );
+        let info = TypeInfo {
+            kind: union_kind,
+            signed: union_signed,
+            range: Some(Self::dec_range(total.saturating_sub(1))),
+            packed: Vec::new(),
+            class_name: None,
+            unpacked: Vec::new(),
+            shape_param: None,
+            enum_type: false,
+            layout_exact: Self::members_layout_exact(&members, each_exact),
+            pattern_members: None,
+            layout_reg: Some(reg),
+            bind: 0,
+        };
+        self.put_type_info(&tname.name, info);
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,

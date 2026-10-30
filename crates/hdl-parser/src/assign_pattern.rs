@@ -108,18 +108,15 @@ impl Parser<'_, '_> {
     /// registration (`TypeInfo::bind`).
     pub(crate) fn stamp_type_bind(&mut self, name: &str) {
         let n = self.next_type_reg();
-        if let Some(info) = self.typedefs.get_mut(name) {
-            info.bind = n;
-        }
+        self.tn_stamp_td(name, n);
     }
 
     /// §5.2 row 36: the number of the unpacked record `scoped` an import is about to
     /// copy (`u64::MAX` — newest — for a record with no number); `None` when there is
     /// none.
     pub(crate) fn imported_record_bind(&self, scoped: &str) -> Option<u64> {
-        self.unpacked_struct_layouts
-            .contains_key(scoped)
-            .then(|| self.unpacked_bind.get(scoped).copied().unwrap_or(u64::MAX))
+        self.record_def(scoped)?;
+        Some(self.record_bind(scoped).unwrap_or(u64::MAX))
     }
 
     /// §5.2 row 36: an import wrote `bare`'s typedef entry (`td`, its number in the
@@ -132,14 +129,14 @@ impl Parser<'_, '_> {
         };
         if un.is_some() && !record_last {
             let n = self.next_type_reg();
-            self.unpacked_bind.insert(bare.to_string(), n);
+            self.tn_set(bare, type_rec::Slot::RecordBind(n));
         }
         if td.is_some() {
             self.stamp_type_bind(bare);
         }
         if un.is_some() && record_last {
             let n = self.next_type_reg();
-            self.unpacked_bind.insert(bare.to_string(), n);
+            self.tn_set(bare, type_rec::Slot::RecordBind(n));
         }
     }
 
@@ -148,11 +145,13 @@ impl Parser<'_, '_> {
     /// it. Every other kind writes the typedef entry, so this entry is the kind the
     /// name denotes where it is read.
     pub(crate) fn typedef_is_freshest(&self, name: &str) -> bool {
-        let Some(info) = self.typedefs.get(name) else {
+        let Some(info) = self.td(name) else {
             return false;
         };
-        !self.unpacked_struct_layouts.contains_key(name)
-            || self.unpacked_bind.get(name).is_some_and(|b| *b < info.bind)
+        if self.record_def(name).is_none() {
+            return true;
+        }
+        self.record_bind(name).is_some_and(|b| b < info.bind)
     }
 
     /// §10.9 (§5.2 row 36): the type key of a primary that names a TYPE — a bare
@@ -164,8 +163,7 @@ impl Parser<'_, '_> {
             ExprKind::PkgScoped { pkg, name } => format!("{}::{}", pkg.name, name.name),
             _ => return None,
         };
-        (self.typedefs.contains_key(&key) || self.unpacked_struct_layouts.contains_key(&key))
-            .then_some(key)
+        (self.has_td(&key) || self.record_def(&key).is_some()).then_some(key)
     }
 
     /// §10.9 (§5.2 row 36): a typed assignment pattern `T'{…}` (cursor at `'`, `ty`
@@ -254,11 +252,11 @@ impl Parser<'_, '_> {
     /// re-declaring the name leaves the old layout behind; it is refused. A packed struct
     /// declared after a same-named record or per-instance struct is the newest and runs.
     fn typed_pattern_layout(&self, key: &str) -> Option<&StructLayout> {
-        let layout = self.struct_layouts.get(key)?;
-        let info = self.typedefs.get(key)?;
+        let layout = self.packed_layout(key)?;
+        let info = self.td(key)?;
         (info.layout_reg == Some(layout.reg)
             && !info.signed
-            && !self.union_type_names.contains(key)
+            && !self.is_union(key)
             && self.typedef_is_freshest(key))
         .then_some(layout)
     }

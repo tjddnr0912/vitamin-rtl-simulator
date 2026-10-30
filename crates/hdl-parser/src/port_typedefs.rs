@@ -53,8 +53,7 @@ impl Parser<'_, '_> {
             return None;
         }
         let nm = self.type_name_key();
-        let is_struct =
-            self.struct_layouts.contains_key(&nm) || self.sym_struct_layouts.contains_key(&nm);
+        let is_struct = self.packed_layout(&nm).is_some() || self.sym_layout(&nm).is_some();
         // §3.a ⑤: a MULTI-DIMENSIONAL packed VECTOR typedef is now carried — the
         // seventh slot hands its inner dims to the caller, which composes them
         // exactly as the declaration binder does (`decls.rs::parse_typed_decl`), so
@@ -156,7 +155,7 @@ impl Parser<'_, '_> {
         // the port name is next (unpacked structs are absent from `typedefs`, so a
         // fall-through would otherwise leave the name unconsumed and cascade).
         let nm = self.type_name_key();
-        if self.unpacked_struct_layouts.contains_key(&nm) {
+        if self.record_def(&nm).is_some() {
             self.eat_scope_qualifier();
             let span = self.cur_span();
             self.bump(); // consume the type-name token so the port name is next
@@ -207,7 +206,7 @@ impl Parser<'_, '_> {
         // carries no class binding). A multi-dim packed vector typedef (§4.5.418)
         // returns its inner dims in the sixth slot; the caller flattens the formal and
         // binds the dims for the body rewrite, as for the inline spelling.
-        let is_struct = self.struct_layouts.contains_key(&nm);
+        let is_struct = self.packed_layout(&nm).is_some();
         // A class handle stays honest-loud (the TfPort shape carries no class
         // binding).
         if info.class_name.is_some() {

@@ -67,7 +67,7 @@ impl Parser<'_, '_> {
             }
             // §5.2 row 67b: the nested member stores the KEY of the declaration `nm`
             // names here; the stored name only names it.
-            let nested = self.struct_layouts.get(&nm).map(|l| TyRef {
+            let nested = self.packed_layout(&nm).map(|l| TyRef {
                 name: self.stable_type_key(&nm),
                 key: DeclKey(l.reg),
             });
@@ -140,7 +140,7 @@ impl Parser<'_, '_> {
         };
         self.anon_member_depth -= 1;
         item?;
-        let Some(info) = self.typedefs.get(&key).cloned() else {
+        let Some(info) = self.td(&key) else {
             self.error_at(start, "a laid-out anonymous struct/union member type");
             return None;
         };
@@ -179,21 +179,24 @@ impl Parser<'_, '_> {
         if nm.contains("::") {
             return nm.to_string();
         }
-        let Some(bare) = self.struct_layouts.get(nm) else {
+        let Some(bare) = self.packed_layout(nm) else {
             return nm.to_string();
         };
         let suffix = format!("::{nm}");
-        let mut cands: Vec<&String> = self
-            .struct_layouts
-            .iter()
-            .filter(|(k, v)| k.ends_with(&suffix) && *v == bare)
-            .map(|(k, _)| k)
-            .collect();
-        cands.sort();
-        cands
-            .first()
-            .map(|k| (*k).clone())
-            .unwrap_or_else(|| nm.to_string())
+        let cands: Vec<String> = {
+            let mut c: Vec<String> = self
+                .type_names
+                .iter()
+                .filter(|(k, s)| {
+                    k.ends_with(&suffix)
+                        && s.packed.as_ref().and_then(|p| self.packed_of(p)) == Some(bare)
+                })
+                .map(|(k, _)| k.clone())
+                .collect();
+            c.sort();
+            c
+        };
+        cands.into_iter().next().unwrap_or_else(|| nm.to_string())
     }
 
     /// `typedef struct packed { <type> f1, f2; … } name;` (Phase-2). Members are

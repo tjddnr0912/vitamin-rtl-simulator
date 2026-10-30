@@ -11,7 +11,7 @@ impl Parser<'_, '_> {
     /// (`bit`) typedef — those need per-field or 2-state-coercion semantics the
     /// size+sign desugar cannot reproduce.
     pub(crate) fn simple_typedef_cast(&self, name: &str) -> Option<(i64, bool)> {
-        let info = self.typedefs.get(name)?;
+        let info = self.td(name)?;
         if info.class_name.is_some()
             || !info.packed.is_empty()
             // §3 ⑤: there is no cast to an UNPACKED array, and the size+sign
@@ -26,7 +26,7 @@ impl Parser<'_, '_> {
         // `cap_t'(decoded_cap)` truncates the wider record to the struct's bits
         // (both oracles). A 2-state struct stays loud with the 2-state vector
         // typedef (the size cast would not coerce X/Z).
-        if self.struct_layouts.contains_key(name) {
+        if self.packed_layout(name).is_some() {
             let w = self.bits_of_type_name(name)?;
             return Some((i64::from(w), info.signed));
         }
@@ -70,7 +70,7 @@ impl Parser<'_, '_> {
             // a scoped `pkg::rec_t` decl / `pkg::rec_t'()` would not resolve. Every
             // packed-path caller re-checks `typedefs` after this, so a scoped
             // unpacked key still routes only to the unpacked decl path.
-            if self.typedefs.contains_key(&key) || self.unpacked_struct_layouts.contains_key(&key) {
+            if self.has_td(&key) || self.record_def(&key).is_some() {
                 return Some(key);
             }
         }
@@ -90,10 +90,10 @@ impl Parser<'_, '_> {
     pub(crate) fn peek_typedef_name(&self) -> Option<TypeInfo> {
         if let Some(key) = self.scoped_type_key() {
             // Scoped `pkg::t`: resolve the package-scoped twin key (collision-safe).
-            return self.typedefs.get(&key).cloned();
+            return self.td(&key);
         }
         if self.is_ident() {
-            return self.typedefs.get(self.cur_text()).cloned();
+            return self.td(self.cur_text());
         }
         None
     }
@@ -278,7 +278,7 @@ impl Parser<'_, '_> {
             // multi-dim-packed typedef cannot be represented by the enum's
             // `Option<Range>` base model — honest-loud.
             let nm = self.type_name_key();
-            if self.struct_layouts.contains_key(&nm)
+            if self.packed_layout(&nm).is_some()
                 || info.class_name.is_some()
                 || info.signed
                 || !info.packed.is_empty()
@@ -393,7 +393,7 @@ impl Parser<'_, '_> {
         // rides into the AST `Enum` node so a label reference is lowered with the enum's
         // sign, not the value-inferred one — a positive label of a signed enum stays signed.
         let enum_signed = info.signed;
-        self.typedefs.insert(tname.name.clone(), info);
+        self.put_type_info(&tname.name, info);
         self.stamp_type_bind(&tname.name);
         // Const-foldable enum base WIDTH in bits, for the label-range check below.
         // `None` = skip the check (fail-open, never over-rejects) when the base range
@@ -483,14 +483,8 @@ impl Parser<'_, '_> {
             if foldable && !folded.is_empty() {
                 // §5.2 row 67b: the enum's declaration key (`decl_key.rs`).
                 let reg = self.next_type_reg();
-                self.register_decl(reg, DeclType::Enum(folded.clone()));
-                self.enum_defs.insert(
-                    tname.name.clone(),
-                    EnumDef {
-                        labels: folded,
-                        reg,
-                    },
-                );
+                self.register_decl(reg, DeclType::Enum(folded));
+                self.tn_set(&tname.name, type_rec::Slot::Enm(DeclKey(reg)));
             }
         }
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -529,23 +523,21 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::Semi, "';'");
-        self.typedefs.insert(
-            tname.name.clone(),
-            TypeInfo {
-                kind,
-                signed,
-                range: range.clone(),
-                packed: packed.clone(),
-                class_name: None,
-                unpacked,
-                shape_param: None,
-                enum_type: false,
-                layout_exact,
-                pattern_members: None,
-                layout_reg: None,
-                bind: 0,
-            },
-        );
+        let info = TypeInfo {
+            kind,
+            signed,
+            range: range.clone(),
+            packed: packed.clone(),
+            class_name: None,
+            unpacked,
+            shape_param: None,
+            enum_type: false,
+            layout_exact,
+            pattern_members: None,
+            layout_reg: None,
+            bind: 0,
+        };
+        self.put_type_info(&tname.name, info);
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
@@ -602,32 +594,23 @@ impl Parser<'_, '_> {
         // struct only when that is what its base names where the alias stands — not
         // when an unpacked record declared later shadows a same-named struct, whose
         // entry here it would otherwise copy (`typedef_is_freshest`).
-        let mut alias_info = info.clone();
-        if !self.typedef_is_freshest(&base_name) {
-            alias_info.layout_reg = None;
+        // The alias's typedef slot is the base's (the same declaration), with its own
+        // registration number and, unless the base is the freshest, no layout key.
+        let freshest = self.typedef_is_freshest(&base_name);
+        if let Some(type_rec::Slot::Td(mut t)) = self.tn_slot(&base_name, type_rec::Kind::Td) {
+            if !freshest {
+                t.layout_reg = None;
+            }
+            self.tn_set(&alias, type_rec::Slot::Td(t));
         }
-        self.typedefs.insert(alias.clone(), alias_info);
         self.stamp_type_bind(&alias);
-        match self.struct_layouts.get(&base_name).cloned() {
-            Some(layout) => {
-                self.struct_layouts.insert(alias.clone(), layout);
-            }
-            None => {
-                self.struct_layouts.remove(&alias);
-            }
-        }
-        match self.enum_defs.get(&base_name).cloned() {
-            Some(defs) => {
-                self.enum_defs.insert(alias.clone(), defs);
-            }
-            None => {
-                self.enum_defs.remove(&alias);
-            }
-        }
-        if self.union_type_names.contains(&base_name) {
-            self.union_type_names.insert(alias.clone());
-        } else {
-            self.union_type_names.remove(&alias);
+        for k in [
+            type_rec::Kind::Packed,
+            type_rec::Kind::Enm,
+            type_rec::Kind::Union,
+        ] {
+            let v = self.tn_slot(&base_name, k);
+            self.tn_mirror(&alias, k, v);
         }
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
@@ -713,14 +696,8 @@ impl Parser<'_, '_> {
             // §5.2 row 67b: the record's number is also its declaration key.
             let bind = self.next_type_reg();
             self.register_decl(bind, DeclType::Record(members.clone()));
-            self.unpacked_struct_layouts.insert(
-                tname.name.clone(),
-                RecordDef {
-                    members: members.clone(),
-                    reg: bind,
-                },
-            );
-            self.unpacked_bind.insert(tname.name.clone(), bind);
+            self.tn_set(&tname.name, type_rec::Slot::Record(DeclKey(bind)));
+            self.tn_set(&tname.name, type_rec::Slot::RecordBind(bind));
             return Some(ModuleItem::Typedef(TypedefDecl {
                 name: tname,
                 kind: TypedefKind::Struct { members },
@@ -795,16 +772,22 @@ impl Parser<'_, '_> {
         self.register_decl(
             reg,
             DeclType::Packed {
-                layout: layout.clone(),
+                layout,
                 union: false,
             },
         );
-        self.struct_layouts.insert(tname.name.clone(), layout);
-        // If a union with the same name was defined in an earlier module, retract it
-        // from union_type_names so this struct definition wins (consistent with
-        // struct_layouts last-writer-wins semantics; otherwise a later same-named
-        // struct var would be wrongly excluded from '{…} pattern desugar).
-        self.union_type_names.remove(&tname.name);
+        self.tn_set(
+            &tname.name,
+            type_rec::Slot::Packed(type_rec::PackedSlot {
+                key: DeclKey(reg),
+                respelled: None,
+            }),
+        );
+        // If a union with the same name was defined in an earlier module, retract the
+        // union flag so this struct definition wins (consistent with the packed slot's
+        // last-writer-wins semantics; otherwise a later same-named struct var would be
+        // wrongly excluded from '{…} pattern desugar).
+        self.tn_clear(&tname.name, type_rec::Kind::Union);
         // §7.2.1: an all-2-state struct is itself 2-state — back it with a 2-state
         // `bit` vector so it defaults to 0, not X (matches iverilog). Any 4-state
         // member (`logic`/`integer`/`time`/net) makes the whole struct 4-state.
@@ -814,23 +797,21 @@ impl Parser<'_, '_> {
             } else {
                 NetVarKind::Logic
             };
-        self.typedefs.insert(
-            tname.name.clone(),
-            TypeInfo {
-                kind: struct_kind,
-                signed: struct_signed,
-                range: Some(Self::dec_range(total.saturating_sub(1))),
-                packed: Vec::new(),
-                class_name: None,
-                unpacked: Vec::new(),
-                shape_param: None,
-                enum_type: false,
-                layout_exact,
-                pattern_members,
-                layout_reg: Some(reg),
-                bind: 0,
-            },
-        );
+        let info = TypeInfo {
+            kind: struct_kind,
+            signed: struct_signed,
+            range: Some(Self::dec_range(total.saturating_sub(1))),
+            packed: Vec::new(),
+            class_name: None,
+            unpacked: Vec::new(),
+            shape_param: None,
+            enum_type: false,
+            layout_exact,
+            pattern_members,
+            layout_reg: Some(reg),
+            bind: 0,
+        };
+        self.put_type_info(&tname.name, info);
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,

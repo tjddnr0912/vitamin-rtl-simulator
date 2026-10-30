@@ -48,9 +48,8 @@ impl Parser<'_, '_> {
             .peek_typedef_name()
             .expect("assoc_typedef_key_ahead saw a typedef name");
         let key = self.type_name_key();
-        let refused = info.shape_param.is_some()
-            || self.struct_layouts.contains_key(&key)
-            || !info.layout_exact;
+        let refused =
+            info.shape_param.is_some() || self.packed_layout(&key).is_some() || !info.layout_exact;
         if refused {
             self.error(
                 "an associative-array key type whose layout is fixed where it is declared \

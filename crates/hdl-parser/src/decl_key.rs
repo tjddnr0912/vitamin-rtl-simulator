@@ -1,20 +1,20 @@
-//! §5.2 row 67b: declaration keys. The type maps (`struct_layouts`,
-//! `sym_struct_layouts`, `unpacked_struct_layouts`, `enum_defs`) are keyed by type
-//! NAME and scoped: a routine, a block, a generate block, a class or an import that
-//! declares a name again puts another declaration under it. A variable bound to a
-//! type, and a packed struct member of a nested struct type, therefore store the KEY
-//! of the declaration they bound — a number one declaration owns for the whole parse
+//! §5.2 row 67b: declaration keys. The type name table (`type_rec.rs`: a name's
+//! packed, per-instance, record and enum slots) is keyed by type NAME and scoped: a
+//! routine, a block, a generate block, a class or an import that declares a name
+//! again puts another declaration under it. A variable bound to a type, and a packed
+//! struct member of a nested struct type, therefore store the KEY of the declaration
+//! they bound — a number one declaration owns for the whole parse
 //! (`Parser::next_type_reg`, never restored) — and every access reads that
 //! declaration's layout from `decl_types`, which no scope restore touches. No access
 //! looks the type name up again where it is used.
 //!
-//! The key travels with each map entry (`StructLayout::reg`, `SymStructLayout::reg`,
-//! `RecordDef::reg`, `EnumDef::reg`), so a copy — a chained alias, an import, a
+//! Each slot holds the declaration's key (`StructLayout::reg` and
+//! `SymStructLayout::reg` carry it too), so a copy — a chained alias, an import, a
 //! package twin, a scope restore — carries the declaration's key with it. A binding
-//! site takes the key from the entries standing under the type name where it binds, in
+//! site takes the key from the slots standing under the type name where it binds, in
 //! the order the member reads take them (`var_struct_ref`: packed struct or union,
 //! then packable record, then per-instance struct; a record or an enum binding takes
-//! the record or enum entry), so in the declaring scope every read answers as before;
+//! the record or enum slot), so in the declaring scope every read answers as before;
 //! which entry the name SHOULD denote where two kinds stand under it is a by-name
 //! question this key does not change (ROADMAP §2 struct-binding-by-name).
 
@@ -44,43 +44,6 @@ pub(crate) enum DeclType {
     Record(Vec<StructMember>),
     /// An enum whose labels fold at parse time.
     Enum(Vec<(String, i64)>),
-}
-
-/// An unpacked record type's entry in `unpacked_struct_layouts`: its members and its
-/// declaration key.
-#[derive(Clone)]
-pub(crate) struct RecordDef {
-    pub(crate) members: Vec<StructMember>,
-    pub(crate) reg: u64,
-}
-
-impl std::ops::Deref for RecordDef {
-    type Target = Vec<StructMember>;
-    fn deref(&self) -> &Vec<StructMember> {
-        &self.members
-    }
-}
-
-/// An enum type's entry in `enum_defs`: its labels and its declaration key. Two
-/// entries are equal when their labels are (the key records where the labels came
-/// from; the package body's freshness test compares labels, as before).
-#[derive(Clone)]
-pub(crate) struct EnumDef {
-    pub(crate) labels: Vec<(String, i64)>,
-    pub(crate) reg: u64,
-}
-
-impl PartialEq for EnumDef {
-    fn eq(&self, other: &Self) -> bool {
-        self.labels == other.labels
-    }
-}
-
-impl std::ops::Deref for EnumDef {
-    type Target = Vec<(String, i64)>;
-    fn deref(&self) -> &Vec<(String, i64)> {
-        &self.labels
-    }
 }
 
 impl Parser<'_, '_> {
@@ -144,7 +107,7 @@ impl Parser<'_, '_> {
 
     /// The binding of a packed struct or union type `name` as this scope reads it.
     pub(crate) fn packed_ref(&self, name: &str) -> Option<TyRef> {
-        self.struct_layouts.get(name).map(|l| TyRef {
+        self.packed_layout(name).map(|l| TyRef {
             name: name.to_string(),
             key: DeclKey(l.reg),
         })
@@ -152,7 +115,7 @@ impl Parser<'_, '_> {
 
     /// The binding of a per-instance struct type `name`.
     pub(crate) fn sym_ref(&self, name: &str) -> Option<TyRef> {
-        self.sym_struct_layouts.get(name).map(|l| TyRef {
+        self.sym_layout(name).map(|l| TyRef {
             name: name.to_string(),
             key: DeclKey(l.reg),
         })
@@ -160,7 +123,7 @@ impl Parser<'_, '_> {
 
     /// The binding of an unpacked record type `name`.
     pub(crate) fn record_ref(&self, name: &str) -> Option<TyRef> {
-        self.unpacked_struct_layouts.get(name).map(|r| TyRef {
+        self.record_def(name).map(|r| TyRef {
             name: name.to_string(),
             key: DeclKey(r.reg),
         })
@@ -168,7 +131,7 @@ impl Parser<'_, '_> {
 
     /// The binding of an enum type `name`.
     pub(crate) fn enum_ref(&self, name: &str) -> Option<TyRef> {
-        self.enum_defs.get(name).map(|e| TyRef {
+        self.enum_def(name).map(|e| TyRef {
             name: name.to_string(),
             key: DeclKey(e.reg),
         })
@@ -183,11 +146,14 @@ impl Parser<'_, '_> {
     /// the NAME should denote there is a by-name question this key does not change
     /// (ROADMAP §2 struct-binding-by-name).
     pub(crate) fn var_struct_ref(&self, name: &str) -> Option<TyRef> {
-        self.packed_ref(name)
-            .or_else(|| {
-                self.packable_record_layout(name)
-                    .and_then(|_| self.record_ref(name))
-            })
-            .or_else(|| self.sym_ref(name))
+        if let Some(t) = self.packed_ref(name) {
+            return Some(t);
+        }
+        if self.packable_record_layout(name).is_some() {
+            if let Some(t) = self.record_ref(name) {
+                return Some(t);
+            }
+        }
+        self.sym_ref(name)
     }
 }

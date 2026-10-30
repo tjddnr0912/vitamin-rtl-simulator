@@ -787,13 +787,13 @@ impl Parser<'_, '_> {
         // desugar, applied here to its decl-init `= '{…}` (§10.9.1).
         // §5.2 row 67b: each binding stores a declaration key, taken in the member
         // reads' order where several entries stand under the name (`var_struct_ref`).
-        if let Some(ty) = self
-            .struct_layouts
-            .contains_key(&tyname)
-            .then(|| self.var_struct_ref(&tyname))
-            .flatten()
-        {
-            let is_union = self.union_type_names.contains(&tyname);
+        let packed_ty = if self.packed_layout(&tyname).is_some() {
+            self.var_struct_ref(&tyname)
+        } else {
+            None
+        };
+        if let Some(ty) = packed_ty {
+            let is_union = self.is_union(&tyname);
             for n in &mut names {
                 self.var_struct.insert(n.name.name.clone(), ty.clone());
                 // A scalar STRUCT (not union, no unpacked dims) is eligible for the
@@ -824,12 +824,12 @@ impl Parser<'_, '_> {
         // §3 ⑤ ⓒ: a symbolic-layout struct binds the name for the member desugar
         // (scalar, packed array, 1-D unpacked array) and nothing else — no `'{…}`
         // pattern, no decl-init desugar (both stay loud downstream).
-        if let Some(ty) = self
-            .sym_struct_layouts
-            .contains_key(&tyname)
-            .then(|| self.var_struct_ref(&tyname))
-            .flatten()
-        {
+        let sym_ty = if self.sym_layout(&tyname).is_some() {
+            self.var_struct_ref(&tyname)
+        } else {
+            None
+        };
+        if let Some(ty) = sym_ty {
             for n in &names {
                 self.var_struct.insert(n.name.name.clone(), ty.clone());
                 if any_packed {

@@ -18,9 +18,7 @@ impl Parser<'_, '_> {
                 None
             }
         })?;
-        if !self.unpacked_struct_layouts.contains_key(&key) {
-            return None;
-        }
+        self.record_def(&key)?;
         let q = self.scope_qualifier_len();
         if matches!(
             self.peek_at(q + 1),
@@ -83,7 +81,7 @@ impl Parser<'_, '_> {
     /// (not packable → a record ARRAY of it stays loud, deferred to a heterogeneous
     /// heap). Mirrors the `parse_typedef_struct` packed layout loop.
     pub(crate) fn packable_record_layout(&self, tyname: &str) -> Option<StructLayout> {
-        self.packable_members_layout(self.unpacked_struct_layouts.get(tyname)?)
+        self.packable_members_layout(self.record_def(tyname)?.members)
     }
 
     /// [`Self::packable_record_layout`] over a record's member list (§5.2 row 67b:
@@ -165,9 +163,7 @@ impl Parser<'_, '_> {
             return None;
         }
         let tyname = self.cur_text().to_string();
-        if !self.unpacked_struct_layouts.contains_key(&tyname) {
-            return None;
-        }
+        self.record_def(&tyname)?;
         // Need `<type> <ident>` and a packable layout; else leave it to the caller.
         if !matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident))) {
             return None;
@@ -233,7 +229,7 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';'");
         // §5.2 row 67b: every binding below stores the record's declaration key.
         let rec = self.record_ref(&tyname)?;
-        let members = self.unpacked_struct_layouts.get(&tyname)?.members.clone();
+        let members = self.record_def(&tyname)?.members.clone();
         let mut out = Vec::new();
         for n in &names {
             if !n.unpacked.is_empty() {
@@ -592,9 +588,7 @@ impl Parser<'_, '_> {
         };
         self.var_struct.insert(name.to_string(), ty);
         // A union, and a symbolic-layout struct (§3 ⑤ ⓒ), take no `'{…}` desugar.
-        if !self.union_type_names.contains(struct_name)
-            && !self.sym_struct_layouts.contains_key(struct_name)
-        {
+        if !self.is_union(struct_name) && self.sym_layout(struct_name).is_none() {
             self.struct_scalar_vars.insert(name.to_string());
         }
     }

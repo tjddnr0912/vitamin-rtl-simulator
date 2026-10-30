@@ -63,7 +63,7 @@ impl Parser<'_, '_> {
             return None;
         }
         // Clone the (small) label list up front so the `name` arm can mutate
-        // `self.pending_enum_name_fns` without holding a borrow of `self.enum_defs`.
+        // `self.pending_enum_name_fns` without holding a borrow of `self.decl_types`.
         // §5.2 row 67b: the labels of the enum the variable bound; its stored name
         // only spells the `.name()` function's stem.
         let ty = self.var_enum.get(&path.segments[0].name)?.clone();

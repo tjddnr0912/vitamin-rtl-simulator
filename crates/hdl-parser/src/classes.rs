@@ -113,7 +113,11 @@ impl Parser<'_, '_> {
             }
         }
         for n in names {
-            self.typedefs.entry(n.clone()).or_insert(TypeInfo {
+            // Never over a typedef of the name already in scope.
+            if self.has_td(&n) {
+                continue;
+            }
+            let info = TypeInfo {
                 kind: NetVarKind::ClassHandle,
                 signed: false,
                 range: None,
@@ -126,7 +130,8 @@ impl Parser<'_, '_> {
                 pattern_members: None,
                 layout_reg: None,
                 bind: 0,
-            });
+            };
+            self.put_type_info(&n, info);
         }
     }
 

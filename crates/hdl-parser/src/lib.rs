@@ -126,6 +126,7 @@ mod sym_struct;
 mod type_param_packed;
 mod type_param_shape;
 mod type_params;
+mod type_rec;
 mod typedefs;
 mod udp;
 mod udp_table;
@@ -282,15 +283,16 @@ struct TypeInfo {
     /// entry was declared with. It travels with the entry (a chained alias, an
     /// import, a package twin copy it); `None` for every other type — a vector, an
     /// enum, a per-instance struct, a type parameter, a class. A typed assignment
-    /// pattern `T'{…}` lowers against `struct_layouts[T]` only when the two agree.
+    /// pattern `T'{…}` lowers against `T`'s packed layout slot only when the two agree.
     layout_reg: Option<u64>,
     /// §5.2 row 36: when this name was last registered as a type of any kind — a
     /// number from the one counter every type registration draws from
     /// (`Parser::next_type_reg`): a typedef of any kind, an import of the name. A
     /// package twin copies it with the entry, keeping the package's own order. An
     /// unpacked record of the name, which writes no entry here, records its number in
-    /// `unpacked_bind`; a typed assignment pattern takes `T` as the packed struct only
-    /// when this entry is the fresher of the two. Read by nothing else.
+    /// the name's `record_bind` slot (`type_rec.rs`); a typed assignment pattern takes
+    /// `T` as the packed struct only when this entry is the fresher of the two. Read by
+    /// nothing else.
     bind: u64,
 }
 
@@ -378,7 +380,7 @@ type SymGeom = (Expr, Expr, bool, Option<Ident>);
 /// `[E:0]`), each offset the sum of the widths above it (MSB-first), the total
 /// the sum of all — and every emitted part-select / declared range carries them
 /// for elaborate to fold with the instance's parameter values. Such a struct is
-/// NOT in `struct_layouts`: every consumer keyed there (the `'{…}` pattern, a
+/// NOT in a packed layout slot: every consumer reading that slot (the `'{…}` pattern, a
 /// union, `$bits(T)`, a nested-member chain, a member sub-select) stays loud
 /// exactly as before, and only the consumers that take a `SymGeom` see it.
 #[derive(Clone)]
@@ -515,26 +517,20 @@ struct PkgBindings {
 /// typedef DEFINITION or struct/enum-typed VAR declaration and restored when the
 /// block ends, so a local name is visible inside the block but does NOT leak out
 /// or clobber a same-named outer name (which would be a silent-wrong — iverilog
-/// scopes both). The TYPE-name-keyed maps scope a body-local `typedef`
+/// scopes both). The TYPE-name table scopes a body-local `typedef`
 /// (§4.5.51); the VAR-name-keyed maps scope a block-local struct/enum variable
 /// whose name shadows an outer struct/enum variable (else a later outer
 /// `x.field` would desugar against the inner layout — `b` instead of `bb`).
 struct ScopeSnapshot {
-    // TYPE-name-keyed (a body-local typedef definition).
-    typedefs: std::collections::HashMap<String, TypeInfo>,
-    struct_layouts: std::collections::HashMap<String, StructLayout>,
-    sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
-    unpacked_struct_layouts: std::collections::HashMap<String, RecordDef>,
-    unpacked_bind: std::collections::HashMap<String, u64>,
-    enum_defs: std::collections::HashMap<String, EnumDef>,
-    union_type_names: std::collections::HashSet<String>,
+    // TYPE-name-keyed (a body-local typedef definition): §5.2 row 66's name table.
+    type_names: std::collections::HashMap<String, type_rec::NameSlots>,
     // VAR-name-keyed (a block-local struct/enum variable shadowing an outer one).
     var_struct: std::collections::HashMap<String, TyRef>,
     var_unpacked_struct: std::collections::HashMap<String, TyRef>,
     // N3: a dynamic array of a PACKABLE record (`rec_t arr[]`, all-integral members) →
     // the record type name. `arr` lowers to a single `DynArray` net of the packed-
     // struct total width; `arr[i].field` is a part-select on the element (offsets
-    // computed on demand from `unpacked_struct_layouts` via `packable_record_layout`).
+    // computed on demand from the name's record slot via `packable_record_layout`).
     record_array_vars: std::collections::HashMap<String, TyRef>,
     // N3 heterogeneous heap (SoA): a dyn array of a NON-uniform record (mixed 2-/4-state,
     // or a string/real member) → the record type name. Each member becomes its own typed
@@ -690,15 +686,14 @@ pub struct Parser<'t, 's> {
     /// `case … inside`); every other identifier token spelled `inside` is a NAME use
     /// (`api.rs`, `TopItem::InsideNameUse`).
     inside_kw_at: Vec<usize>,
-    /// SV user-defined type names (`typedef … name;`) → resolved underlying type.
-    /// Accumulates across the source unit; lets `name var;` parse as a typed decl.
-    typedefs: std::collections::HashMap<String, TypeInfo>,
-    /// Packed-struct type name → flat bit layout (for `s.field` desugaring).
-    struct_layouts: std::collections::HashMap<String, StructLayout>,
-    /// §3 ⑤ ⓒ: packed structs whose layout is symbolic (a member width names an
-    /// overridable parameter) — disjoint from `struct_layouts`, module-local (a
-    /// package parameter is a localparam and folds).
-    sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
+    /// §5.2 row 66: every declared type's `TypeInfo`, by its declaration key
+    /// (`type_rec.rs`). Never restored with a scope, like `decl_types`.
+    type_infos: std::collections::HashMap<DeclKey, TypeInfo>,
+    /// §5.2 row 66: the type NAMES in scope — per name, one slot per kind of entry
+    /// (typedef, packed struct or union, per-instance struct, unpacked record, folding
+    /// enum, union flag), each kept by its own rule (`type_rec.rs`). Accumulates
+    /// across the source unit; scoped through `ScopeSnapshot`.
+    type_names: std::collections::HashMap<String, type_rec::NameSlots>,
     /// §4.5.437: the TYPE parameters of the current module-like (`parameter type T`),
     /// by name — the width parameter each desugars to and the default's signedness.
     type_params: std::collections::HashMap<String, type_params::TypeParam>,
@@ -768,8 +763,8 @@ pub struct Parser<'t, 's> {
     /// `ScopeSnapshot`; a same-named declaration unbinds it.
     packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     /// The `pkg::P` twins of `packed_md_params`, captured at `endpackage` for a
-    /// scoped read `p::P[i]`. Unit-scoped (never cleared), like `struct_layouts`'s
-    /// scoped keys.
+    /// scoped read `p::P[i]`. Unit-scoped (never cleared), like the `pkg::` twins'
+    /// type slots.
     packed_md_scoped: std::collections::HashMap<String, Vec<Range>>,
     /// §3 ⑤ⓖ: while a function body with a multi-dimensional packed return type is
     /// parsed, the function's name — its return variable (IEEE §13.4.1), bound in
@@ -778,17 +773,6 @@ pub struct Parser<'t, 's> {
     /// Its selects are held to the shapes the flat twin carries (`packed_md.rs`).
     /// `None` everywhere else.
     md_ret_var: Option<(String, bool)>,
-    /// Round-9: UNPACKED struct (record) type name → its members (each keeps its
-    /// OWN type — a `string`/`int` member can't share a flat vector). A scalar
-    /// variable of this type desugars to N independent member nets `k$field`
-    /// (no aggregate storage in v1); accumulates across the source unit like
-    /// `struct_layouts` (scoped `pkg::T` twins added at `endpackage`).
-    unpacked_struct_layouts: std::collections::HashMap<String, RecordDef>,
-    /// §5.2 row 36: the `TypeInfo::bind` number of each `unpacked_struct_layouts`
-    /// entry — when the name was registered as an unpacked record (a declaration, an
-    /// import, a package twin). Scoped exactly like `unpacked_struct_layouts`; read only
-    /// by the typed assignment pattern.
-    unpacked_bind: std::collections::HashMap<String, u64>,
     /// Round-9: variable name → its UNPACKED-struct type name (module-scoped;
     /// cleared per module). Drives the `k.field` → `k$field` member-net desugar.
     var_unpacked_struct: std::collections::HashMap<String, TyRef>,
@@ -796,11 +780,6 @@ pub struct Parser<'t, 's> {
     /// N3 SoA record arrays (var → typename): a NON-uniform record dyn array whose
     /// members each became a `$unp$arr$field` typed dyn array (module-scoped).
     record_soa_vars: std::collections::HashMap<String, TyRef>,
-    /// Packed-union type names. Unions share `struct_layouts` (for `u.field`
-    /// reads) but their overlay layout is NOT a packed concat, so a union var is
-    /// kept OUT of `struct_scalar_vars` and its `'{…}` pattern stays loud.
-    /// Accumulates across the source unit (type names are not module-scoped).
-    union_type_names: std::collections::HashSet<String>,
     /// §3 ⑤ⓓ: how many ANONYMOUS packed struct/union member types this parse has
     /// laid out (`parse_anon_member_type`); the next one's ordinal, so each minted
     /// type key is unique within the parsed unit.
@@ -931,12 +910,6 @@ pub struct Parser<'t, 's> {
     /// loop with no break/continue is byte-identical). The top entry is the
     /// innermost loop.
     loop_labels: Vec<LoopLabels>,
-    /// SV §6.19.5 enum methods. `typedef enum` name → its ordered `(label, value)`
-    /// list, BUT only when every label value is literal-foldable (`const_lit`);
-    /// an enum with a non-foldable label value (e.g. `B = SOME_PARAM`) is omitted,
-    /// so `x.method()` on it stays a loud error (correct-or-loud). Accumulates
-    /// across the source unit (typedef enums are file-scoped like `typedefs`).
-    enum_defs: std::collections::HashMap<String, EnumDef>,
     /// Variable name → its enum type name (module-scoped; cleared per module like
     /// `var_struct`). Lets `x.first/last/next/prev/name/num` desugar to literals /
     /// ternary chains over the enum's labels.
@@ -947,7 +920,8 @@ pub struct Parser<'t, 's> {
     /// container) with the type spelled as the package's `pkg::t` twin. `import
     /// pkg::X;` / `import pkg::*;` replay them into the importing scope so
     /// `ExcCauseIrqNm.lower_cause` / `ev.name()` desugar in a module exactly as they
-    /// do inside the package. Unit-scoped (never cleared), like `typedefs`.
+    /// do inside the package. Unit-scoped (never cleared), like the `pkg::` twins'
+    /// type slots.
     pkg_bindings: std::collections::HashMap<String, PkgBindings>,
     /// Names whose CURRENT struct/enum binding came from a WILDCARD import replay
     /// (never a local declaration). An explicit `import r::X` may drop only such a
@@ -1060,9 +1034,8 @@ impl<'t, 's> Parser<'t, 's> {
             node_count: 0,
             node_budget_blown: false,
             inside_kw_at: Vec::new(),
-            typedefs: std::collections::HashMap::new(),
-            struct_layouts: std::collections::HashMap::new(),
-            sym_struct_layouts: std::collections::HashMap::new(),
+            type_infos: std::collections::HashMap::new(),
+            type_names: std::collections::HashMap::new(),
             type_params: std::collections::HashMap::new(),
             cu_type_params: std::collections::HashMap::new(),
             pkg_type_param_names: std::collections::BTreeSet::new(),
@@ -1070,8 +1043,6 @@ impl<'t, 's> Parser<'t, 's> {
             shape_uncarried: std::collections::HashMap::new(),
             shape_alias: std::collections::HashMap::new(),
             overridable_params: std::collections::HashSet::new(),
-            unpacked_struct_layouts: std::collections::HashMap::new(),
-            unpacked_bind: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),
             record_array_vars: std::collections::HashMap::new(),
             record_soa_vars: std::collections::HashMap::new(),
@@ -1083,7 +1054,6 @@ impl<'t, 's> Parser<'t, 's> {
             packed_md_params: std::collections::HashMap::new(),
             packed_md_scoped: std::collections::HashMap::new(),
             md_ret_var: None,
-            union_type_names: std::collections::HashSet::new(),
             anon_member_types: 0,
             anon_member_depth: 0,
             type_reg_last: 0,
@@ -1106,7 +1076,6 @@ impl<'t, 's> Parser<'t, 's> {
             pkg_exports: std::collections::BTreeMap::new(),
             cu_type_names: std::collections::BTreeSet::new(),
             loop_labels: Vec::new(),
-            enum_defs: std::collections::HashMap::new(),
             var_enum: std::collections::HashMap::new(),
             pkg_bindings: std::collections::HashMap::new(),
             wildcard_bound: std::collections::HashSet::new(),

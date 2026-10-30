@@ -23,8 +23,8 @@ impl Parser<'_, '_> {
         //
         // Round-9 PKG2: the casting type may be package-scoped (`pkg::T'(e)`),
         // which parses as a `PkgScoped` primary. The parser registers a
-        // `"pkg::T"` twin of each package typedef in `self.typedefs` /
-        // `struct_layouts` / `union_type_names`, so `simple_typedef_cast` resolves
+        // `"pkg::T"` twin of each package typedef (its typedef, packed and union
+        // slots, `type_rec.rs`), so `simple_typedef_cast` resolves
         // the scoped key exactly like a bare name. A scoped SIZE cast
         // `pkg::WIDTH'(e)` (WIDTH a localparam, not a typedef) returns `None` here
         // and falls through to the `Size` arm unchanged — a genuine size cast.
@@ -59,7 +59,7 @@ impl Parser<'_, '_> {
             // folds per instance — so only the 2-STATE axis of this position stays
             // uncarried (a cast node has no kind field for `shape_kind` to move).
             let cast_shape: Option<Ident> = if sized.is_some() {
-                match self.typedefs.get(key).cloned() {
+                match self.td(key) {
                     Some(info) => {
                         let sp = self.carried_shape_param(&info, start);
                         match &sp {
@@ -176,14 +176,14 @@ impl Parser<'_, '_> {
     /// stays a normal expression, loud in elaborate) for a class-handle alias or an
     /// unknown name.
     pub(crate) fn bits_of_type_name(&self, name: &str) -> Option<u32> {
-        if let Some(layout) = self.struct_layouts.get(name) {
-            return Some(if self.union_type_names.contains(name) {
+        if let Some(layout) = self.packed_layout(name) {
+            return Some(if self.is_union(name) {
                 layout.fields.iter().map(|f| f.2).max().unwrap_or(0)
             } else {
                 layout.fields.iter().map(|f| f.2).sum()
             });
         }
-        let info = self.typedefs.get(name)?;
+        let info = self.td(name)?;
         // Only an INTEGRAL alias has a fixed `$bits` here. A `real`/`realtime` (64-bit,
         // but `member_width_kind` gives a bogus 1) / `string` (dynamic) / class-handle
         // alias returns None → the site stays a normal expr (loud in elaborate) rather

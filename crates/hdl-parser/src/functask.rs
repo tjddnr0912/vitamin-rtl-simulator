@@ -490,7 +490,7 @@ impl Parser<'_, '_> {
         }
         if net_or_var.is_none() && range.is_none() {
             let tname = self.type_name_key();
-            let is_enum = self.enum_defs.contains_key(&tname);
+            let is_enum = self.enum_def(&tname).is_some();
             let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
             if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
                 typedef_shape = pre_shape;

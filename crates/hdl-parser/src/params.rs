@@ -635,14 +635,14 @@ impl Parser<'_, '_> {
         }
         if let Some(tn) = &pfx.tyname {
             // §5.2 row 67b: the declaration key, in the member reads' order (`var_struct_ref`).
-            if let Some(ty) = self
-                .struct_layouts
-                .contains_key(tn)
-                .then(|| self.var_struct_ref(tn))
-                .flatten()
-            {
+            let ty = if self.packed_layout(tn).is_some() {
+                self.var_struct_ref(tn)
+            } else {
+                None
+            };
+            if let Some(ty) = ty {
                 self.var_struct.insert(name.name.clone(), ty);
-                if !self.union_type_names.contains(tn) {
+                if !self.is_union(tn) {
                     self.struct_scalar_vars.insert(name.name.clone());
                     value = self.desugar_struct_assign_pattern(&name.name, value);
                 }
@@ -746,18 +746,15 @@ impl Parser<'_, '_> {
         let tyname = tyname.map(str::to_owned);
         let is_struct = tyname
             .as_deref()
-            .is_some_and(|t| self.struct_layouts.contains_key(t));
+            .is_some_and(|t| self.packed_layout(t).is_some());
         let is_enum = tyname
             .as_deref()
-            .is_some_and(|t| self.enum_defs.contains_key(t));
+            .is_some_and(|t| self.enum_def(t).is_some());
         // A union array binds `var_struct` only, like its variable twin: no member
         // desugar and no `'{…}` element desugar (a union overlay is kept loud
         // there), so its elements are the packed literals the array path already
         // lowers.
-        let is_union = is_struct
-            && self
-                .union_type_names
-                .contains(tyname.as_deref().unwrap_or(""));
+        let is_union = is_struct && self.is_union(tyname.as_deref().unwrap_or(""));
         let Some(vk) = var_kind else {
             self.error(
                 "an explicit data type on an array parameter (`localparam int …` — an implicit-typed array parameter is unsupported in v1)",

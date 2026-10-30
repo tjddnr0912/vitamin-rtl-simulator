@@ -551,10 +551,10 @@ impl Parser<'_, '_> {
         // — an `Alias` node that nonetheless writes a layout) can be told apart from a
         // plain vector alias that merely LEAVES a stale same-name entry from another
         // package. Only a package needs this; a module never runs the twin pass.
-        let (struct_before, enum_before) = if end_kw == Kw::Endpackage {
-            (self.struct_layouts.clone(), self.enum_defs.clone())
+        let names_before = if end_kw == Kw::Endpackage {
+            self.type_names.clone()
         } else {
-            (Default::default(), Default::default())
+            Default::default()
         };
 
         // body until the end keyword — with forward-progress guard (BLOCKER B3).
@@ -704,73 +704,90 @@ impl Parser<'_, '_> {
                     // type-parameter pass below.
                     let scoped = self.register_pkg_typedef_twin(&pkg, &n);
                     // Was `n`'s struct/enum layout (re)written by THIS package body?
-                    // `Struct`/`Enum` nodes own their map unconditionally; an `Alias`
+                    // `Struct`/`Enum` nodes own their slot unconditionally; an `Alias`
                     // is fresh only if its aggregate entry differs from the pre-body
                     // snapshot (chained-alias-of-aggregate), never when it is a stale
-                    // cross-package leftover.
+                    // cross-package leftover. The comparison is of the layouts and
+                    // labels themselves (`StructLayout` / label equality), not of their
+                    // keys: two packages' equal layouts are not fresh.
+                    let packed_before = names_before
+                        .get(&n)
+                        .and_then(|s| s.packed.as_ref())
+                        .and_then(|p| self.packed_of(p));
                     let struct_fresh = match td.kind {
-                        TypedefKind::Struct { .. } => self.struct_layouts.contains_key(&n),
+                        TypedefKind::Struct { .. } => self.packed_layout(&n).is_some(),
                         TypedefKind::Alias { .. } => {
-                            self.struct_layouts.get(&n) != struct_before.get(&n)
-                                && self.struct_layouts.contains_key(&n)
+                            self.packed_layout(&n) != packed_before
+                                && self.packed_layout(&n).is_some()
                         }
                         TypedefKind::Enum { .. } => false,
                     };
+                    let labels_before = names_before
+                        .get(&n)
+                        .and_then(|s| s.enm)
+                        .and_then(|k| self.decl_labels(k));
                     let enum_fresh = match td.kind {
                         // Unlike a struct (whose layout is ALWAYS written), an `Enum`
-                        // node writes `enum_defs[n]` only when its labels are literal-
+                        // node writes the enum slot only when its labels are literal-
                         // foldable; a non-foldable enum (`{X = SOME_PARAM}`) leaves a
                         // same-name entry from another package intact — so, exactly like
                         // an `Alias`, it is fresh only when THIS body changed the entry
                         // (else the enum methods on a scoped var stay honest-loud rather
                         // than silently binding the wrong package's labels).
                         TypedefKind::Enum { .. } | TypedefKind::Alias { .. } => {
-                            self.enum_defs.get(&n) != enum_before.get(&n)
-                                && self.enum_defs.contains_key(&n)
+                            self.enum_def(&n).map(|e| e.labels) != labels_before
+                                && self.enum_def(&n).is_some()
                         }
                         TypedefKind::Struct { .. } => false,
                     };
                     if struct_fresh {
-                        if let Some(mut sl) = self.struct_layouts.get(&n).cloned() {
-                            // §3 ⑤ ⓓ: a nested member's bare key is this package's
-                            // own type (declared earlier in the body, so its twin is
-                            // already registered) — re-spell it `pkg::t` so the twin
-                            // an importer copies still chains (`stable_type_key`).
-                            // §5.2 row 67b: only the stored NAME is re-spelled; the
-                            // member keeps its declaration key, which is what a chain
-                            // or a nested `'{…}` reads.
-                            for f in &mut sl.fields {
-                                if let Some(k) = &mut f.8 {
-                                    if !k.name.contains("::") {
-                                        let sk = format!("{pkg}::{}", k.name);
-                                        if self.struct_layouts.contains_key(&sk) {
-                                            k.name = sk;
+                        // §3 ⑤ ⓓ: a nested member's bare key is this package's
+                        // own type (declared earlier in the body, so its twin is
+                        // already registered) — re-spell it `pkg::t` so the twin
+                        // an importer copies still chains (`stable_type_key`).
+                        // §5.2 row 67b: only the stored NAME is re-spelled; the
+                        // member keeps its declaration key, which is what a chain
+                        // or a nested `'{…}` reads.
+                        if let Some(type_rec::Slot::Packed(mut p)) =
+                            self.tn_slot(&n, type_rec::Kind::Packed)
+                        {
+                            if let Some(mut sl) = self.packed_of(&p).cloned() {
+                                let mut respelled = false;
+                                for f in &mut sl.fields {
+                                    if let Some(k) = &mut f.8 {
+                                        if !k.name.contains("::") {
+                                            let sk = format!("{pkg}::{}", k.name);
+                                            if self.packed_layout(&sk).is_some() {
+                                                k.name = sk;
+                                                respelled = true;
+                                            }
                                         }
                                     }
                                 }
+                                if respelled {
+                                    p.respelled = Some(Box::new(sl));
+                                }
                             }
-                            self.struct_layouts.insert(scoped.clone(), sl);
+                            self.tn_set(&scoped, type_rec::Slot::Packed(p));
                         }
                         // A union is a struct-layout overlay; its flag rides with the
                         // (fresh) layout twin.
-                        if self.union_type_names.contains(&n) {
-                            self.union_type_names.insert(scoped.clone());
+                        if let Some(u) = self.tn_slot(&n, type_rec::Kind::Union) {
+                            self.tn_set(&scoped, u);
                         }
                     }
-                    // Round-9: an UNPACKED struct is never in `struct_layouts`, so it
-                    // needs its own `pkg::T` layout twin (map membership is the gate —
-                    // only an unpacked-struct typedef puts its name here).
-                    if let Some(usl) = self.unpacked_struct_layouts.get(&n).cloned() {
-                        self.unpacked_struct_layouts.insert(scoped.clone(), usl);
-                    }
-                    // §5.2 row 36: the twin keeps the record's number (the package's
-                    // own order of its registrations).
-                    if let Some(b) = self.unpacked_bind.get(&n).copied() {
-                        self.unpacked_bind.insert(scoped.clone(), b);
+                    // Round-9: an UNPACKED struct has no packed slot, so it needs its
+                    // own `pkg::T` record twin (slot presence is the gate — only an
+                    // unpacked-struct typedef sets it). §5.2 row 36: the twin keeps the
+                    // record's number (the package's own order of its registrations).
+                    for k in [type_rec::Kind::Record, type_rec::Kind::RecordBind] {
+                        if let Some(v) = self.tn_slot(&n, k) {
+                            self.tn_set(&scoped, v);
+                        }
                     }
                     if enum_fresh {
-                        if let Some(ed) = self.enum_defs.get(&n).cloned() {
-                            self.enum_defs.insert(scoped, ed);
+                        if let Some(e) = self.tn_slot(&n, type_rec::Kind::Enm) {
+                            self.tn_set(&scoped, e);
                         }
                     }
                 }

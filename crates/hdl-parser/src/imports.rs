@@ -2,31 +2,6 @@
 
 use super::*;
 
-/// Copy each `prefix`-keyed twin in `map` (`p::st`) to its bare name (`st`) as a
-/// wildcard import's per-name decision in `binds` says. A name with no decision is not
-/// a type the package exports (a layout it keeps for a type it imported).
-fn copy_wildcard_twins<V: Clone>(
-    map: &mut std::collections::HashMap<String, V>,
-    prefix: &str,
-    binds: &std::collections::BTreeMap<String, WildcardBind>,
-) {
-    let twins: Vec<(String, V)> = map
-        .iter()
-        .filter_map(|(k, v)| k.strip_prefix(prefix).map(|b| (b.to_string(), v.clone())))
-        .collect();
-    for (b, v) in twins {
-        match binds.get(&b) {
-            Some(WildcardBind::Replace) => {
-                map.insert(b, v);
-            }
-            Some(WildcardBind::IfAbsent) => {
-                map.entry(b).or_insert(v);
-            }
-            Some(WildcardBind::Skip) | None => {}
-        }
-    }
-}
-
 impl Parser<'_, '_> {
     /// v7 P2-D: `import pkg::*;` / `import pkg::sym;` — the whole statement,
     /// INCLUDING a comma list (IEEE 1800 §26.8 `package_import_declaration` is
@@ -102,26 +77,19 @@ impl Parser<'_, '_> {
                 self.scope_type_names.insert(bare.clone());
                 self.note_type_rebound(&bare);
                 // §5.2 row 36: the import is the name's newest registration.
-                let td_from = self.typedefs.get(&scoped).map(|i| i.bind);
+                let td_from = self.td(&scoped).map(|i| i.bind);
                 let un_from = self.imported_record_bind(&scoped);
-                if let Some(v) = self.typedefs.get(&scoped).cloned() {
-                    self.typedefs.insert(bare.clone(), v);
-                }
-                if let Some(v) = self.struct_layouts.get(&scoped).cloned() {
-                    self.struct_layouts.insert(bare.clone(), v);
-                }
-                if let Some(v) = self.enum_defs.get(&scoped).cloned() {
-                    self.enum_defs.insert(bare.clone(), v);
-                }
-                // G6: UNPACKED struct typedefs live only in `unpacked_struct_layouts`
-                // (never in `typedefs`), so a bare `rec_t r;` after `import p::rec_t`
-                // needs the scoped twin copied here too, exactly like the packed kinds.
-                if let Some(v) = self.unpacked_struct_layouts.get(&scoped).cloned() {
-                    self.unpacked_struct_layouts.insert(bare.clone(), v);
+                // Each slot the twin has is copied (an UNPACKED record's included —
+                // G6: a bare `rec_t r;` after `import p::rec_t` needs it, exactly like
+                // the packed kinds); a slot of another kind under `bare` stays.
+                for k in type_rec::Kind::COPIED {
+                    if let Some(v) = self.tn_slot(&scoped, k) {
+                        self.tn_set(&bare, v);
+                    }
                 }
                 self.restamp_imported_type(&bare, td_from, un_from);
-                if self.union_type_names.contains(&scoped) {
-                    self.union_type_names.insert(bare);
+                if let Some(v) = self.tn_slot(&scoped, type_rec::Kind::Union) {
+                    self.tn_set(&bare, v);
                 }
             }
             None => {
@@ -139,10 +107,10 @@ impl Parser<'_, '_> {
                 // wrote base's layout under the unit's `st` (`12 2 2 003` where all
                 // three oracles print `12 4 8 0ff`).
                 let offered: std::collections::BTreeSet<String> = self
-                    .typedefs
-                    .keys()
-                    .chain(self.unpacked_struct_layouts.keys())
-                    .filter_map(|k| k.strip_prefix(&prefix).map(str::to_string))
+                    .type_names
+                    .iter()
+                    .filter(|(_, s)| s.td.is_some() || s.record.is_some())
+                    .filter_map(|(k, _)| k.strip_prefix(&prefix).map(str::to_string))
                     .collect();
                 let binds: std::collections::BTreeMap<String, WildcardBind> = offered
                     .iter()
@@ -163,37 +131,47 @@ impl Parser<'_, '_> {
                     .map(|(b, bind)| {
                         let writes = |present: bool| *bind == WildcardBind::Replace || !present;
                         let scoped = format!("{prefix}{b}");
+                        let td_present = self.has_td(b);
                         let td = self
-                            .typedefs
-                            .get(&scoped)
-                            .filter(|_| writes(self.typedefs.contains_key(b)))
+                            .td(&scoped)
+                            .filter(|_| writes(td_present))
                             .map(|i| i.bind);
+                        let un_present = self.record_def(b).is_some();
                         let un = self
                             .imported_record_bind(&scoped)
-                            .filter(|_| writes(self.unpacked_struct_layouts.contains_key(b)));
+                            .filter(|_| writes(un_present));
                         (b.clone(), td, un)
                     })
                     .collect();
-                copy_wildcard_twins(&mut self.typedefs, &prefix, &binds);
-                copy_wildcard_twins(&mut self.struct_layouts, &prefix, &binds);
-                copy_wildcard_twins(&mut self.enum_defs, &prefix, &binds);
-                // G6: wildcard-copy UNPACKED struct typedefs too (see the explicit arm).
-                copy_wildcard_twins(&mut self.unpacked_struct_layouts, &prefix, &binds);
+                // Per SLOT: an `IfAbsent` name gains a kind only where it has no slot of
+                // that kind. G6: UNPACKED struct typedefs too (see the explicit arm).
+                self.copy_wildcard_slots(type_rec::Kind::Td, &prefix, &binds);
+                self.copy_wildcard_slots(type_rec::Kind::Packed, &prefix, &binds);
+                self.copy_wildcard_slots(type_rec::Kind::Enm, &prefix, &binds);
+                self.copy_wildcard_slots(type_rec::Kind::Record, &prefix, &binds);
                 for (b, td, un) in stamps {
                     self.restamp_imported_type(&b, td, un);
                 }
-                let un: Vec<String> = self
-                    .union_type_names
-                    .iter()
-                    .filter_map(|k| k.strip_prefix(&prefix).map(|b| b.to_string()))
-                    .filter(|b| {
-                        matches!(
-                            binds.get(b),
-                            Some(WildcardBind::Replace | WildcardBind::IfAbsent)
-                        )
-                    })
-                    .collect();
-                self.union_type_names.extend(un);
+                // The union flag of every bound name whose twin is a union.
+                let mut un: Vec<String> = {
+                    let mut v: Vec<String> = self
+                        .type_names
+                        .iter()
+                        .filter(|(_, s)| s.union)
+                        .filter_map(|(k, _)| k.strip_prefix(&prefix).map(|b| b.to_string()))
+                        .collect();
+                    v.sort();
+                    v
+                };
+                un.retain(|b| {
+                    matches!(
+                        binds.get(b),
+                        Some(WildcardBind::Replace | WildcardBind::IfAbsent)
+                    )
+                });
+                for b in &un {
+                    self.tn_set(b, type_rec::Slot::Union);
+                }
             }
         }
         // §3 ⑤: replay the package's struct/enum NAME bindings so a member access /
@@ -319,20 +297,22 @@ impl Parser<'_, '_> {
             return ty.to_string();
         }
         let scoped = format!("{pkg}::{ty}");
-        if !self.struct_layouts.contains_key(&scoped) {
-            if let Some(l) = self.struct_layouts.get(ty).cloned() {
-                self.struct_layouts.insert(scoped.clone(), l);
-                if self.union_type_names.contains(ty) {
-                    self.union_type_names.insert(scoped.clone());
+        // A `p::ty` slot is added only where the twin has none of that kind (never
+        // over a slot the body itself registered), slot by slot.
+        if self.packed_layout(&scoped).is_none() {
+            if let Some(l) = self.tn_slot(ty, type_rec::Kind::Packed) {
+                self.tn_set(&scoped, l);
+                if let Some(u) = self.tn_slot(ty, type_rec::Kind::Union) {
+                    self.tn_set(&scoped, u);
                 }
             }
         }
-        if !self.enum_defs.contains_key(&scoped) {
-            if let Some(e) = self.enum_defs.get(ty).cloned() {
-                self.enum_defs.insert(scoped.clone(), e);
+        if self.enum_def(&scoped).is_none() {
+            if let Some(e) = self.tn_slot(ty, type_rec::Kind::Enm) {
+                self.tn_set(&scoped, e);
             }
         }
-        if self.struct_layouts.contains_key(&scoped) || self.enum_defs.contains_key(&scoped) {
+        if self.packed_layout(&scoped).is_some() || self.enum_def(&scoped).is_some() {
             scoped
         } else {
             ty.to_string()

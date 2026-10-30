@@ -255,43 +255,40 @@ impl Parser<'_, '_> {
                     Some(r) => (Some(r), Vec::new()),
                     None => Self::type_param_typedef_dims(&carried_packed, &width_name, span),
                 };
-            self.typedefs.insert(
-                name.name.clone(),
-                TypeInfo {
-                    kind: if tv.two_state {
-                        NetVarKind::Bit
-                    } else {
-                        NetVarKind::Logic
-                    },
-                    signed: tv.signed,
-                    range: td_range,
-                    packed: td_packed,
-                    class_name: None,
-                    // §3 ⑤ⓕ: the dims of an unpacked-array default ride the typedef,
-                    // which is what every DECLARATION binder already reads
-                    // (`decls.rs` stamps them onto each declarator, and the tf-port
-                    // formal reads the same map) — so `T v;` is the explicit
-                    // `logic [T$w-1:0] v [0:2]` it would have been written as. For an
-                    // OVERRIDABLE one the extents are the synthesized names, so the
-                    // same stamp follows an override.
-                    unpacked: carried.clone(),
-                    // §3 ⑤ⓕ: a NON-overridable alias type parameter (`localparam type
-                    // U = T`, or a body `parameter type U = T` in a module that has a
-                    // header) still carries a shape: its `U$s` VALUE is the expression
-                    // `T$s`, an ordinary parameter elaborate folds per instance. Only a
-                    // non-overridable parameter of a CONCRETE type (`shape_expr` None)
-                    // has nothing to carry.
-                    shape_param: (overridable || tv.shape_expr.is_some())
-                        .then(|| shape_name.clone()),
-                    // §3.b cont-array-typedef-elem: the default type's parts are not
-                    // tracked here.
-                    enum_type: false,
-                    layout_exact: false,
-                    pattern_members: None,
-                    layout_reg: None,
-                    bind: 0,
+            let info = TypeInfo {
+                kind: if tv.two_state {
+                    NetVarKind::Bit
+                } else {
+                    NetVarKind::Logic
                 },
-            );
+                signed: tv.signed,
+                range: td_range,
+                packed: td_packed,
+                class_name: None,
+                // §3 ⑤ⓕ: the dims of an unpacked-array default ride the typedef,
+                // which is what every DECLARATION binder already reads
+                // (`decls.rs` stamps them onto each declarator, and the tf-port
+                // formal reads the same map) — so `T v;` is the explicit
+                // `logic [T$w-1:0] v [0:2]` it would have been written as. For an
+                // OVERRIDABLE one the extents are the synthesized names, so the
+                // same stamp follows an override.
+                unpacked: carried.clone(),
+                // §3 ⑤ⓕ: a NON-overridable alias type parameter (`localparam type
+                // U = T`, or a body `parameter type U = T` in a module that has a
+                // header) still carries a shape: its `U$s` VALUE is the expression
+                // `T$s`, an ordinary parameter elaborate folds per instance. Only a
+                // non-overridable parameter of a CONCRETE type (`shape_expr` None)
+                // has nothing to carry.
+                shape_param: (overridable || tv.shape_expr.is_some()).then(|| shape_name.clone()),
+                // §3.b cont-array-typedef-elem: the default type's parts are not
+                // tracked here.
+                enum_type: false,
+                layout_exact: false,
+                pattern_members: None,
+                layout_reg: None,
+                bind: 0,
+            };
+            self.put_type_info(&name.name, info);
             self.stamp_type_bind(&name.name);
             // §3 ⑤ⓕ: `U$s = T$s` — record the alias so an UNCARRIED use of `U` marks
             // `T`'s guard, not a name no guard reads. Resolved transitively at insert,
@@ -530,24 +527,20 @@ impl Parser<'_, '_> {
                 }
                 self.bump();
                 let shape_expr = self
-                    .typedefs
-                    .get(&key)
-                    .and_then(|i| i.shape_param.clone())
+                    .td(&key)
+                    .and_then(|i| i.shape_param)
                     .map(|n| Self::ident_expr(&n, span));
                 // §3.b: an alias inherits the aliased parameter's DECLARED range —
                 // the typedef registered for it holds the same dims this one gets.
                 let decl_range = if tp.packed.is_empty() {
-                    self.typedefs.get(&key).and_then(|i| i.range.clone())
+                    self.td(&key).and_then(|i| i.range)
                 } else {
                     None
                 };
                 return Some(TypeValue {
                     width: Self::ident_expr(&tp.width_name, span),
                     signed: tp.signed,
-                    two_state: self
-                        .typedefs
-                        .get(&key)
-                        .is_some_and(|i| i.kind == NetVarKind::Bit),
+                    two_state: self.td(&key).is_some_and(|i| i.kind == NetVarKind::Bit),
                     unpacked: tp.unpacked.clone(),
                     shape_expr,
                     // §3.a ⑤: an ALIAS (`parameter type U = T`, a pass-through
@@ -558,10 +551,10 @@ impl Parser<'_, '_> {
                 });
             }
             let info = self.peek_typedef_name()?;
-            if self.struct_layouts.contains_key(&key)
-                || self.sym_struct_layouts.contains_key(&key)
-                || self.enum_defs.contains_key(&key)
-                || self.union_type_names.contains(&key)
+            if self.packed_layout(&key).is_some()
+                || self.sym_layout(&key).is_some()
+                || self.enum_def(&key).is_some()
+                || self.is_union(&key)
                 || info.class_name.is_some()
                 // §3 ⑤ⓕ: the `T$w`/`T$s` value-parameter desugar has no dim slot, so
                 // the dims travel beside it — through the typedef this group
@@ -757,12 +750,12 @@ impl Parser<'_, '_> {
         if self.local_decl_names.contains(key) {
             return None;
         }
-        let info = self.typedefs.get(key)?;
+        let info = self.td(key)?;
         if !matches!(
             info.kind,
             NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
-        ) || self.struct_layouts.contains_key(key)
-            || self.sym_struct_layouts.contains_key(key)
+        ) || self.packed_layout(key).is_some()
+            || self.sym_layout(key).is_some()
         {
             return None;
         }
@@ -857,12 +850,12 @@ impl Parser<'_, '_> {
             }
             return Some((Self::ident_expr(&tp.width_name, span), tp.signed));
         }
-        let info = self.typedefs.get(key)?;
+        let info = self.td(key)?;
         if !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg)
             || !info.packed.is_empty()
             || !info.unpacked.is_empty() // §3 ⑤: no dim slot in the desugar
-            || self.struct_layouts.contains_key(key)
-            || self.sym_struct_layouts.contains_key(key)
+            || self.packed_layout(key).is_some()
+            || self.sym_layout(key).is_some()
         {
             return None;
         }
@@ -888,7 +881,7 @@ impl Parser<'_, '_> {
         if self.is_ident() {
             let key = self.type_name_key();
             let is_type = self.type_params.contains_key(&key)
-                || (self.typedefs.contains_key(&key)
+                || (self.has_td(&key)
                     && !self.const_locals.contains_key(&key)
                     && !self.overridable_params.contains(&key));
             if !is_type {
