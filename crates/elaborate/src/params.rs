@@ -1070,8 +1070,20 @@ impl Elaborator<'_> {
     /// Without a fill, this is exactly `const_eval_in_scope`. `'1` into a 64-bit
     /// param therefore yields all-64-ones, not the 32-bit `0xFFFFFFFF`.
     pub(crate) fn eval_param_init(&self, e: &ast::Expr, meta: Option<(u32, bool)>) -> Option<i64> {
+        self.param_init_x(e, meta).ok().flatten()
+    }
+
+    /// [`Self::eval_param_init`]'s body. `Err(why)` is a REFUSAL (§5.2 Q-XFALLBACK): the
+    /// width-aware walk proved an `x` inside the declared width that the width-unlimited
+    /// fallback would have bound as a value — see `binder_x_refusal` for the rule. The
+    /// binder chain then declines (E3009, `param_value_unfoldable`'s x arm).
+    pub(crate) fn param_init_x(
+        &self,
+        e: &ast::Expr,
+        meta: Option<(u32, bool)>,
+    ) -> Result<Option<i64>, crate::XWhy> {
         if let (Some((w, _)), Some((kind, raw))) = (meta, expr_as_fill(e)) {
-            return fill_to_i64(kind, raw, w);
+            return Ok(fill_to_i64(kind, raw, w));
         }
         // A fill INSIDE the initializer (`'1 ^ 1'b0`, `'0 - 1'b1`, `('1 > 8'd200)`) is
         // sized by the region it sits in (§5.7.1, §11.6.1), and the region of a sized
@@ -1098,23 +1110,24 @@ impl Elaborator<'_> {
         // `(N65 >>> 1) | '0` is the same silent-wrong at HEAD, through the fill door.
         // Row 14's declared-vs-inferred provenance wall is untouched: a NAME still
         // declines, so nothing reads a width off `param_meta`.
+        // §5.2 Q-XFALLBACK: the walk's x evidence, kept for the refusal test below.
+        let mut ev = (crate::CFold::No, 0);
         if let Some((w, s)) = meta {
             if w <= 64
                 && (crate::param_query::ast_contains_fill(e) || self.param_init_width_aware_ok(e))
                 && self.const_ctx_within_i64(e)
             {
-                if let Some(v) = self.eval_const_assign(
-                    e,
-                    &BTreeMap::new(),
-                    &ConstWidths::new(),
-                    0,
-                    Some((w, s)),
-                ) {
-                    return Some(v);
+                match self.fold_assign(e, &BTreeMap::new(), &ConstWidths::new(), 0, Some((w, s))) {
+                    crate::CFold::Val(v) => return Ok(Some(v)),
+                    f => ev = (f, w),
                 }
             }
         }
-        self.const_eval_in_scope(e)
+        let u = self.const_eval_in_scope(e);
+        match self.binder_x_refusal(e, ev.0, ev.1, u) {
+            Some(why) => Err(why),
+            None => Ok(u),
+        }
     }
 
     /// The declared default of a parameter whose DECLARED TYPE is integral but whose
@@ -1224,7 +1237,17 @@ impl Elaborator<'_> {
     /// expression", so three declarations rejected for three unrelated reasons were
     /// indistinguishable. Both are fixed here: the caret goes on the INITIALIZER, and
     /// [`Self::unfoldable_reason`] names the innermost sub-expression that failed.
-    pub(crate) fn param_value_unfoldable(&mut self, what: &str, name: &str, value: &ast::Expr) {
+    ///
+    /// §5.2 Q-XFALLBACK: `meta` is the binder's declared `(width, signed)`, so a value the
+    /// binder REFUSED as `x` says so — before the specific reasons (see the arm), which a
+    /// literal `1 / 0` the value evaluates still reaches ("divides by zero").
+    pub(crate) fn param_value_unfoldable(
+        &mut self,
+        what: &str,
+        name: &str,
+        value: &ast::Expr,
+        meta: Option<(u32, bool)>,
+    ) {
         let unknown_fill = const_eval::fill_literal_ast(value)
             .map(|(raw, kind)| (raw.to_string(), kind))
             .filter(|(raw, kind)| literal::fill_is_unknown(raw, *kind));
@@ -1233,9 +1256,21 @@ impl Elaborator<'_> {
                 "{what} `{name}` is declared `{raw}`, which this parameter model cannot \
                  hold — a parameter value has no x/z plane"
             ),
-            None => match self.unfoldable_reason(value) {
-                Some(why) => format!("{what} `{name}` value is not a constant: {why}"),
-                None => format!("{what} `{name}` value is not a foldable constant expression"),
+            // ⚠️ The x arm FIRST: `param_x_reason` answers only when the width-unlimited walk
+            // FOLDED the value (the binder refused what it would have bound), and that walk
+            // evaluates only the taken arm of a `?:` — so any node `unfoldable_reason` (which
+            // walks EVERY arm) could name is in an untaken arm, and naming it named an
+            // operation the value never evaluates (lens C-W2 / F3: `1'b1 ? (X % 0) : (1 / 0)`
+            // said "the `/` operation divides by zero"). A literal `1 / 0` the value DOES
+            // evaluate leaves the unlimited walk unfolded, so it keeps the specific reason.
+            None => match self.param_x_reason(value, meta) {
+                Some(r) => {
+                    format!("{what} `{name}` value is `x`: {r}, and a parameter has no x/z plane")
+                }
+                None => match self.unfoldable_reason(value) {
+                    Some(why) => format!("{what} `{name}` value is not a constant: {why}"),
+                    None => format!("{what} `{name}` value is not a foldable constant expression"),
+                },
             },
         };
         self.error_at(MsgCode::ElabUnsupported, value.span, &msg);
@@ -2434,7 +2469,7 @@ impl Elaborator<'_> {
             // Unfoldable param value = LOUD error, never a silent 0 (P0-5);
             // 0 is only the post-error recovery value.
             let v = chosen_val.unwrap_or_else(|| {
-                self.param_value_unfoldable("parameter", &p.name.name, &p.value);
+                self.param_value_unfoldable("parameter", &p.name.name, &p.value, meta);
                 0
             });
             let v = self.coerce_param_value_with(v, meta);

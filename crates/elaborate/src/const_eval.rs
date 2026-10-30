@@ -968,8 +968,32 @@ impl Elaborator<'_> {
     /// §2 🆕 L ⓦ: a function CALL that did not fold is loud too — `logic
     /// [nosuch(2)-1:0]` and `[dbl(W)-1:0]` with `dbl` outside the interpreter's
     /// subset were a silent 1-bit net where both oracles reject the declaration.
+    ///
+    /// §5.2 Q-XFALLBACK: a bound that DID fold is refused when its own width-aware walk
+    /// proves it `x` (a divisor or a `**` base that is 0 at the bound's width) under the
+    /// certificate — the value came from the width-unlimited fallback, and an x bound is
+    /// illegal (IEEE 1800-2017 §6.9.1 packed, §7.4.2 unpacked). The sink keeps the value as
+    /// post-error recovery.
     pub(crate) fn check_const_range_bound(&mut self, e: &ast::Expr, folded: Option<i64>) {
         if folded.is_some() {
+            // ⚠️ Its OWN dedup set: the `None` path below marks a span in
+            // `reported_bad_bounds` even when it prints nothing (the documented 1-bit
+            // default), so an instance whose bound folded to nothing silenced a later
+            // instance's `x` bound of the same declaration (lens F1, dd1).
+            if self.reported_x_bounds.contains(&(e.span.lo, e.span.hi)) {
+                return;
+            }
+            if let Some(r) = self.bound_x_reason(e) {
+                self.reported_x_bounds.insert((e.span.lo, e.span.hi));
+                self.error_at(
+                    MsgCode::ElabUnsupported,
+                    e.span,
+                    &format!(
+                        "this range bound is `x`: {r}, and a range bound shall not contain x or z \
+                         (IEEE 1800-2017 §6.9.1, §7.4.2)"
+                    ),
+                );
+            }
             return;
         }
         // ⚠️ A declaration's range is folded MORE THAN ONCE — the net-creation walk and

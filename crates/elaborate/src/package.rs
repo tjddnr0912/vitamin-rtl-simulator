@@ -859,10 +859,16 @@ impl Elaborator<'_> {
                         }
                     }
                     let v = folded.unwrap_or_else(|| {
+                        // §5.2 Q-XFALLBACK: a value the binder refused as `x` says so after
+                        // the pinned prefix.
+                        let x = self
+                            .param_x_reason(&p.value, pmeta)
+                            .map(|r| format!(": its value is `x`: {r}"))
+                            .unwrap_or_default();
                         self.error(
                             MsgCode::ElabUnsupported,
                             &format!(
-                                "package parameter `{}` value is not a foldable constant",
+                                "package parameter `{}` value is not a foldable constant{x}",
                                 p.name.name
                             ),
                         );

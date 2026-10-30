@@ -118,7 +118,7 @@ impl Elaborator<'_> {
     /// self width (zero = context-sized fill)? This is what makes the self-determined walk mask at
     /// every step instead of degrading to the unlimited domain somewhere inside
     /// (its documented contract) — the tier-3 bound fold requires it.
-    fn ast_selfwidths_all_known(&self, e: &ast::Expr) -> bool {
+    pub(crate) fn ast_selfwidths_all_known(&self, e: &ast::Expr) -> bool {
         // `Some(0)` is a fill, or a region of fills — context-sized, and the walk
         // sizes it (one bit with nothing around it). Refusing it here sent
         // `{('1)+1{8'hA5}}` to the engine's lowering, which sized the fill to one bit
@@ -241,7 +241,7 @@ impl Elaborator<'_> {
 
     /// Condition 1: does any bare name in `e` resolve through an inline
     /// substitution stack rather than the param scope the const domain reads?
-    fn ast_mentions_substituted_name(&self, e: &ast::Expr) -> bool {
+    pub(crate) fn ast_mentions_substituted_name(&self, e: &ast::Expr) -> bool {
         if let ast::ExprKind::Ident(p) = &e.kind {
             if p.segments.len() == 1 {
                 let n = &p.segments[0].name;

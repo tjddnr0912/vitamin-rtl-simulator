@@ -673,27 +673,25 @@ impl Elaborator<'_> {
         self.decl_split(|| self.const_range_bound_fold_at(e))
     }
 
+    /// The router's body is `range_bound_fold_ev` (`const_fn_width/fold.rs`), which also
+    /// carries the x evidence a range bound refuses on (§5.2 Q-XFALLBACK); this is it with
+    /// the evidence dropped. A bound with a parameter select folds self-determined only.
+    /// §2 🆕 L (aa): the same self-determined rule for a bound WITHOUT a select —
+    /// `localparam logic [3:0] C = 15, D = 1; logic [C+D:0] v;` is one bit in both
+    /// oracles and was 17 here (the i64 walk carried the 4-bit sum). The i64 walk
+    /// stays the fallback, so nothing that folded before declines now.
+    /// A self-determined bound above `i32::MAX` is not a bound any declaration can
+    /// mean (the net cap is 2^20): `logic [W-1:0]` with an UNSIGNED 8-bit `W = 0`
+    /// is 4294967295 there, where verilator reads −1 and iverilog 0 (an oracle
+    /// split on an absurd shape); the i64 walk keeps the pre-existing graceful
+    /// reading (ROADMAP §2 row 11) instead of a width-cap error.
     fn const_range_bound_fold_at(&self, e: &ast::Expr) -> Option<i64> {
-        if self.ast_has_param_select(e) {
-            return self.const_int_selfdet(e);
-        }
-        // §2 🆕 L (aa): the same self-determined rule for a bound WITHOUT a select —
-        // `localparam logic [3:0] C = 15, D = 1; logic [C+D:0] v;` is one bit in both
-        // oracles and was 17 here (the i64 walk carried the 4-bit sum). The i64 walk
-        // stays the fallback, so nothing that folded before declines now.
-        // A self-determined bound above `i32::MAX` is not a bound any declaration can
-        // mean (the net cap is 2^20): `logic [W-1:0]` with an UNSIGNED 8-bit `W = 0`
-        // is 4294967295 there, where verilator reads −1 and iverilog 0 (an oracle
-        // split on an absurd shape); the i64 walk keeps the pre-existing graceful
-        // reading (ROADMAP §2 row 11) instead of a width-cap error.
-        self.const_int_selfdet(e)
-            .filter(|v| *v <= i64::from(i32::MAX))
-            .or_else(|| self.const_eval_in_scope(e))
+        self.range_bound_fold_ev(e, false).map(|(v, _)| v)
     }
 
     /// Does `e` contain a foldable parameter SELECT anywhere? See
     /// [`Self::const_range_bound_fold`], its only caller.
-    fn ast_has_param_select(&self, e: &ast::Expr) -> bool {
+    pub(crate) fn ast_has_param_select(&self, e: &ast::Expr) -> bool {
         if matches!(
             &e.kind,
             ast::ExprKind::BitSelect { .. }

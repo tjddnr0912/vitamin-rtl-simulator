@@ -93,6 +93,7 @@ impl<'s> Elaborator<'s> {
             gen_ctr: 0,
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
+            reported_x_bounds: std::collections::BTreeSet::new(),
             edge_recs: Vec::new(),
             edge_index: std::collections::BTreeMap::new(),
             use_recs: Vec::new(),

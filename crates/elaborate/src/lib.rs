@@ -1519,6 +1519,10 @@ struct Elaborator<'s> {
     /// declaration's range is folded by more than one pass, so without this the same
     /// bound is reported once per pass.
     reported_bad_bounds: std::collections::BTreeSet<(u32, u32)>,
+    /// Spans of range bounds already refused as `x` (§5.2 Q-XFALLBACK) — a set of their own:
+    /// sharing `reported_bad_bounds` let a sibling instance whose bound folded to nothing
+    /// (and printed nothing) silence a later instance's `x` bound.
+    reported_x_bounds: std::collections::BTreeSet<(u32, u32)>,
     /// Every constant edge a funnel built (part-select widths, indexed widths, replication
     /// counts) and how it was decided (`edge_gate.rs`, §4.5.601).
     edge_recs: Vec<EdgeRec>,

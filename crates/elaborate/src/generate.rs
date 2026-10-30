@@ -886,6 +886,7 @@ impl Elaborator<'_> {
                                 "generate-scope parameter",
                                 &p.name.name,
                                 &p.value,
+                                meta,
                             );
                         }
                     }

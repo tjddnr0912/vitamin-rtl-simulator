@@ -764,7 +764,7 @@ impl Elaborator<'_> {
                             }
                         }
                         let v = folded.unwrap_or_else(|| {
-                            self.param_value_unfoldable("parameter", &p.name.name, &p.value);
+                            self.param_value_unfoldable("parameter", &p.name.name, &p.value, meta);
                             0
                         });
                         // Same as the generate-scope twin: `meta` already encodes

@@ -98,7 +98,7 @@ impl Elaborator<'_> {
     /// Is `x` a bare name some import of this scope could have bound from a package
     /// REAL? Conservative on purpose (a local declaration shadowing the import answers
     /// `true` too): its only use is to decline.
-    fn names_imported_real(&self, x: &ast::Expr) -> bool {
+    pub(crate) fn names_imported_real(&self, x: &ast::Expr) -> bool {
         let ast::ExprKind::Ident(p) = &x.kind else {
             return false;
         };
