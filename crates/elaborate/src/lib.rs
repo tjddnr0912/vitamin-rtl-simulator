@@ -550,6 +550,17 @@ struct Elaborator<'s> {
     // The bare name of the function the constant interpreter is running, beside
     // `const_call_pkg` — see `pkg_fn_own`.
     const_call_fn: std::cell::RefCell<Option<String>>,
+    /// §5.2 Q-AESINK: the running constant call's fabricated storage: a local's or the return
+    /// variable's bits no statement has written, with its declaration. One Vec, a running
+    /// call's records from `const_unwritten_base` up. Absent or a zero mask = nothing fabricated.
+    const_unwritten: std::cell::RefCell<Vec<const_fn::ConstUnwritten>>,
+    /// Where the running call's records start in `const_unwritten`.
+    const_unwritten_base: std::cell::Cell<usize>,
+    /// The running call's records with bits: 0 is all the read and write paths test.
+    const_unwritten_live: std::cell::Cell<u32>,
+    /// §5.2 Q-AESINK: what `const_unwritten` read, for the whole elaboration, never cleared;
+    /// drained last into `Sidecars.const_seed_reads`.
+    const_seed_reads: std::cell::RefCell<BTreeSet<ConstSeedRead>>,
     pkg_tasks: BTreeMap<String, BTreeMap<String, ast::TaskDef>>,
     /// v7 P2-D: compilation-unit-scope `import` items — applied to every
     /// module elaboration (IEEE visibility is decl-order; TBs put them first).

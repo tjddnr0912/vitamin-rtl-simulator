@@ -3,7 +3,7 @@
 //!
 //! Two consumers opt in, and each can only REFUSE (turn a value into E3009), never produce
 //! one: a parameter binder ([`Elaborator::eval_param_init`]) and a declaration's range bound
-//! (`check_const_range_bound`). Q-AESINK's sinks call the same three pieces with their own text:
+//! (`check_const_range_bound`). Row 76's sinks call the same three pieces with their own text:
 //! a `fold_*` entry, [`Elaborator::x_certified`] and [`Elaborator::x_reason`].
 
 use super::fold::{ones, XKind};
@@ -25,7 +25,7 @@ impl Elaborator<'_> {
     ///   `PX` is not certified).
     ///
     /// `envw` is the caller's certified local widths (a constant function's formals and body
-    /// locals, Q-AESINK): a name it holds is certified by it and is never a real binding.
+    /// locals, row 76): a name it holds is certified by it and is never a real binding.
     /// Every caller in this row passes an empty map. ⚠️ `declared_override_widths` has no
     /// local arm, so a tree naming a local that is not also a declared parameter is not
     /// certified today.

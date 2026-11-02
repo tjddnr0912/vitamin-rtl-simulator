@@ -487,6 +487,16 @@ pub struct InstanceInfo {
     pub parent: Option<u32>,
 }
 
+/// One variable the constant interpreter read while some of its bits were a fabricated 0
+/// (§5.2 Q-AESINK). `decl_span` is the declaration's identifier, `(lo, hi)`. A span has no file
+/// id, so the whole triple is the set's order: two declarations collapse only if all three match.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConstSeedRead {
+    pub function: String,
+    pub variable: String,
+    pub decl_span: (u32, u32),
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Sidecars {
     pub fork_modes: ForkModeTable,
@@ -494,6 +504,15 @@ pub struct Sidecars {
     /// Static design hierarchy (one entry per elaborated instance, in index order) for
     /// the `--hier-tree` / `--inst-paths` exports. EMPTY ⇒ not requested / no instances.
     pub instances_info: Vec<InstanceInfo>,
+    /// §5.2 Q-AESINK: every fabricated 0 the constant interpreter read in this elaboration, a
+    /// run-time probe's discarded fold included. Non-empty is the design-wide mark: a constant
+    /// depending on a fabricated 0 was computed after this set gained that read, in this
+    /// process, whatever channel carried it (a stored binding, a net width, a generate arm, a
+    /// loop count). It over-marks (`crates/cli/tests/const_seed_mark.rs`, `marks_over_*`). It
+    /// speaks of vita's own run, not an IEEE run (ROADMAP §5.2 Q-AESINK).
+    /// Read by that test only: not serialized, and no decision reads it yet (ROADMAP §5.2, the
+    /// 4-state rule: no per-step stand-down, in any lane).
+    pub const_seed_reads: std::collections::BTreeSet<ConstSeedRead>,
     /// OBS-1b: per covergroup-instance coverage manifest (see [`CovgInstMeta`]).
     /// EMPTY ⇒ no covergroups ⇒ no `coverage.json` payload. Golden-neutral.
     pub coverage_manifest: Vec<CovgInstMeta>,

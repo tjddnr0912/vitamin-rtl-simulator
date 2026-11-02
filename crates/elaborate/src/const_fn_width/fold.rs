@@ -5,7 +5,7 @@
 //! entries in `const_fn_width.rs`; the first, second and fourth are `fold_*(..).legacy()` over
 //! the bodies here, so every existing caller reads exactly the `Option` it read before.
 //!
-//! ⭐ THE CONTRACT (the interface Q-AESINK builds on). [`CFold`] is `Val(v)` exactly where
+//! ⭐ THE CONTRACT (the interface row 76's result channel builds on). [`CFold`] is `Val(v)` exactly where
 //! the old walk answered `Some(v)`, and `Four` or `No` exactly where it answered `None` (G1,
 //! G2). `Four { v, x, why }` says more than `None`: bit `i` of `x` is IEEE `x` at the region
 //! width `why.ctx_w` (G3) — an x ORIGIN is a `/` or `%` whose divisor is 0 at the region width,

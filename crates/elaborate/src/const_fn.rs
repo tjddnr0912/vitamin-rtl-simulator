@@ -175,6 +175,35 @@ pub(crate) fn const_binop(op: ast::BinOp, a: i64, b: i64) -> Option<i64> {
     }
 }
 
+/// §5.2 Q-AESINK: one entry of `Elaborator::const_unwritten`.
+pub(crate) struct ConstUnwritten {
+    /// `None`: the running function's return variable (`const_call_fn`), so a call pays no
+    /// allocation for it.
+    name: Option<String>,
+    /// The bits no statement has written. 0 leaves the record in place: a loop body's next
+    /// declaration re-arms it without allocating.
+    bits: u64,
+    /// The declaration those bits belong to.
+    decl: ast::Span,
+    /// `exec_const_select_write` numbers bits as this declaration does, so a select write
+    /// clears the bits it names. A whole write clears them whatever the numbering.
+    numbered: bool,
+    /// Another declaration of the name shares this env slot (the env is flat): no write says
+    /// whose storage it wrote, so no write clears a bit.
+    shadowed: bool,
+}
+
+/// Does this declaration's TEXT say `[N:0]`, the numbering `exec_const_select_write` writes by
+/// (`ConstWidths` holds no LSB and no direction)? No range is an atom's or a scalar's own. A name
+/// or an expression in a bound proves nothing, whatever it folds to: a fold answers at the call's
+/// scope (§2 🆕 AG, 🆕 AF), and a type parameter's `[T$w-1:0]` has lost the override's LSB.
+fn const_range_numbered(range: Option<&ast::Range>) -> bool {
+    range.is_none_or(|r| {
+        matches!(r.msb.kind, ast::ExprKind::IntLit { kind: ast::IntLitKind::Decimal, .. })
+            && matches!(&r.lsb.kind, ast::ExprKind::IntLit { kind: ast::IntLitKind::Decimal, raw } if raw == "0")
+    })
+}
+
 /// §4.5.186 constant-function interpreter control flow: fell off the end (`Normal`)
 /// or hit a `return [expr]` (`Return`). A break/continue is not modeled (its stmt
 /// falls to the interpreter's loud `_` arm), so only these two are needed.
@@ -906,7 +935,10 @@ impl Elaborator<'_> {
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                 let n = &path.segments[0].name;
                 match env.get(n) {
-                    Some(v) => Some(*v),
+                    Some(v) => {
+                        self.const_seed_read(n);
+                        Some(*v)
+                    }
                     None if envw.contains_key(n) => None,
                     // §2 🆕 L ⓦ: inside a PACKAGE function's body the package's own
                     // constants are already in `env`; a name it does not declare must
@@ -1086,9 +1118,9 @@ impl Elaborator<'_> {
             // so `M_ADDR_WIDTH[i*32 +: 32]` had no arm at all.
             //
             // The span rule is `select_span`, the same one the part-select WRITE
-            // above folds with. A select of a const-function LOCAL still declines
-            // (the base resolver answers only for parameters), which keeps that
-            // shape honestly loud rather than guessed.
+            // above folds with. A select of a const-function LOCAL declines only when
+            // no constant has its name (h52_local_ctl): the base resolver has no `envw`
+            // guard, so beside one it reads the constant's word (ROADMAP §2, h52_*).
             ast::ExprKind::BitSelect { .. }
             | ast::ExprKind::PartSelect { .. }
             | ast::ExprKind::IndexedPart { .. } => {
@@ -1210,7 +1242,11 @@ impl Elaborator<'_> {
                 return None;
             }
             let (v, w, s) = match envw.get(&seg.name).copied() {
-                Some((w, s)) if (1..=64).contains(&w) => (*env.get(&seg.name)?, w, s),
+                Some((w, s)) if (1..=64).contains(&w) => {
+                    let v = *env.get(&seg.name)?;
+                    self.const_seed_read(&seg.name);
+                    (v, w, s)
+                }
                 Some(_) => return None, // declared here, shape unknown or too wide
                 None => {
                     let v = self.lookup_scoped(&seg.name)?;
@@ -1276,6 +1312,110 @@ impl Elaborator<'_> {
         Some(coerce_int_width(v as i64, w, sg))
     }
 
+    /// §5.2 Q-AESINK: `name`'s `width` bits are fabricated from here on, in the storage `decl`
+    /// declares. `insert`: a loop body's declaration re-arms, and keeps a shadowed record shadowed.
+    /// Width 0 is an unknown width, every bit (no select write can reach it).
+    fn const_seed(&self, name: &str, width: u32, decl: ast::Span, numbered: bool) {
+        let bits = if width == 0 || width >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << width) - 1
+        };
+        let live = &self.const_unwritten_live;
+        let mut table = self.const_unwritten.borrow_mut();
+        if let Some(r) = self.const_record(&mut table, name) {
+            live.set(live.get() + u32::from(r.bits == 0));
+            r.bits = bits;
+            r.decl = decl;
+            r.numbered = numbered;
+            return;
+        }
+        let ret = self.const_call_fn.borrow().as_deref() == Some(name);
+        table.push(ConstUnwritten {
+            name: (!ret).then(|| name.to_string()),
+            bits,
+            decl,
+            numbered,
+            shadowed: false,
+        });
+        live.set(live.get() + 1);
+    }
+
+    /// `name`'s record in the running call: `const_unwritten` from `const_unwritten_base` up.
+    fn const_record<'t>(
+        &self,
+        table: &'t mut [ConstUnwritten],
+        name: &str,
+    ) -> Option<&'t mut ConstUnwritten> {
+        let run = self.const_call_fn.borrow();
+        table[self.const_unwritten_base.get()..]
+            .iter_mut()
+            .find(|r| r.name.as_deref().or(run.as_deref()) == Some(name))
+    }
+
+    /// `mask`'s bits of a record are written.
+    fn const_clear(&self, r: &mut ConstUnwritten, mask: u64) {
+        let live = &self.const_unwritten_live;
+        live.set(live.get() - u32::from(r.bits != 0 && r.bits & !mask == 0));
+        r.bits &= !mask;
+    }
+
+    /// A declaration of `name` at `decl`. The env is flat, so a live record of another
+    /// declaration now shares its slot with this one, and no later write says whose storage it
+    /// wrote: the record goes shadowed. The same span is a loop body's re-entry, not a shadow.
+    fn const_redeclared(&self, name: &str, decl: ast::Span) {
+        if self.const_unwritten_live.get() == 0 {
+            return;
+        }
+        if let Some(r) = self.const_record(&mut self.const_unwritten.borrow_mut(), name) {
+            r.shadowed |= r.bits != 0 && r.decl != decl;
+        }
+    }
+
+    /// A write of all of `name`: nothing fabricated is left, unless the record is shadowed.
+    #[inline]
+    fn const_written(&self, name: &str) {
+        if self.const_unwritten_live.get() != 0 {
+            self.const_written_at(name);
+        }
+    }
+
+    #[inline(never)]
+    fn const_written_at(&self, name: &str) {
+        if let Some(r) = self.const_record(&mut self.const_unwritten.borrow_mut(), name) {
+            if !r.shadowed {
+                self.const_clear(r, u64::MAX);
+            }
+        }
+    }
+
+    /// A read of `name`'s value: with an unwritten bit it is a read of a fabricated 0. The mask
+    /// is the whole variable's, so a read of a written bit of a partly written local records too
+    /// (over-mark). The one env read that is not a read of the value is the select merge
+    /// (`exec_const_select_write`): a function building its value bit by bit never reads a seed.
+    #[inline]
+    fn const_seed_read(&self, name: &str) {
+        if self.const_unwritten_live.get() != 0 {
+            self.const_seed_read_at(name);
+        }
+    }
+
+    #[inline(never)]
+    fn const_seed_read_at(&self, name: &str) {
+        let mut table = self.const_unwritten.borrow_mut();
+        let Some(r) = self.const_record(&mut table, name) else {
+            return;
+        };
+        let (bits, decl) = (r.bits, r.decl);
+        if bits != 0 {
+            self.const_seed_reads.borrow_mut().insert(ConstSeedRead {
+                function: self.const_call_fn.borrow().clone().unwrap_or_default(),
+                variable: name.to_string(),
+                decl_span: (decl.lo, decl.hi),
+            });
+        }
+    }
+
     /// Bind ONE body/block declaration into the interpreter's env pair — the single
     /// spelling both declaration sites share.
     ///
@@ -1325,18 +1465,28 @@ impl Elaborator<'_> {
         // §4.5.589: a body-local declaration's range is the routine's own text.
         let win = self.decl_local_win();
         let armed = self.decl_enter(&win, false);
+        let kind = self.shape_kind(d.kind, &d.shape_param);
         let m = self.const_decl_wsign(
-            self.shape_kind(d.kind, &d.shape_param),
+            kind,
             d.range.as_ref(),
             &d.packed,
             self.shape_signed(d.signed, &d.shape_param),
         );
         self.decl_exit(armed);
+        let width = m.map_or(0, |x| x.0);
+        let numbered = |n: &ast::DeclName| {
+            d.packed.is_empty() && n.unpacked.is_empty() && const_range_numbered(d.range.as_ref())
+        };
         for n in &d.names {
+            self.const_redeclared(&n.name.name, n.name.span);
             envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
             match &n.init {
                 None => {
                     env.insert(n.name.name.clone(), 0);
+                    // A 2-state 0 is IEEE's own (§6.8).
+                    if !net_kind_is_two_state(kind) {
+                        self.const_seed(&n.name.name, width, n.name.span, numbered(n));
+                    }
                 }
                 // ⚠️ `m.is_none()` means the DECLARED WIDTH did not fold (its range calls
                 // the function being folded, say). A value bound at an unknown width is
@@ -1348,9 +1498,13 @@ impl Elaborator<'_> {
                 Some(e) if m.is_some() => match self.eval_const_assign(e, env, envw, depth, m) {
                     Some(v) => {
                         env.insert(n.name.name.clone(), v);
+                        self.const_written(&n.name.name);
                     }
+                    // Unbound, so a read is loud, but a select write merges into
+                    // `unwrap_or(0)`: every bit is fabricated, any kind (a41).
                     None => {
                         env.remove(&n.name.name);
+                        self.const_seed(&n.name.name, width, n.name.span, numbered(n));
                     }
                 },
                 Some(_) => {
@@ -1533,6 +1687,12 @@ impl Elaborator<'_> {
         }
         let saved_pkg = self.const_call_pkg.replace(pkg);
         let saved_fn = self.const_call_fn.replace(Some(name.to_string()));
+        // §5.2 Q-AESINK: arguments folded above, against the caller's record. A formal's DEFAULT
+        // did too, with this call's env: a default naming a formal that shares a seeded caller
+        // local's name over-marks; a formal is never seeded, so it cannot under-mark.
+        let top = self.const_unwritten.borrow().len();
+        let saved_base = self.const_unwritten_base.replace(top);
+        let saved_live = self.const_unwritten_live.replace(0);
         let mut body = || -> Option<i64> {
             // The body's declarations run at the BODY's depth — the same `depth + 1`
             // the body itself gets below, and the reason a self-referential
@@ -1542,6 +1702,10 @@ impl Elaborator<'_> {
             }
             // The function-name return variable is itself a declared target.
             envw.insert(name.to_string(), (rw, rs));
+            if !env.contains_key(name) && !f.ret_two_state {
+                let numbered = f.ret_packed.is_empty() && const_range_numbered(f.range.as_ref());
+                self.const_seed(name, rw, f.name.span, numbered);
+            }
             env.entry(name.to_string()).or_insert(0);
             let mut steps: u64 = 0;
             let ret = match self.exec_const_stmt(
@@ -1553,7 +1717,11 @@ impl Elaborator<'_> {
                 &mut steps,
             )? {
                 ConstFlow::Return(Some(v)) => v,
-                ConstFlow::Return(None) | ConstFlow::Normal => *env.get(name)?,
+                ConstFlow::Return(None) | ConstFlow::Normal => {
+                    let v = *env.get(name)?;
+                    self.const_seed_read(name);
+                    v
+                }
             };
             Some(coerce_int_width(ret, rw, rs))
         };
@@ -1564,6 +1732,16 @@ impl Elaborator<'_> {
         self.decl_exit(cleared);
         self.const_call_pkg.replace(saved_pkg);
         self.const_call_fn.replace(saved_fn);
+        debug_assert_eq!(
+            self.const_unwritten_live.get() as usize,
+            self.const_unwritten.borrow()[top..]
+                .iter()
+                .filter(|r| r.bits != 0)
+                .count()
+        );
+        self.const_unwritten.borrow_mut().truncate(top);
+        self.const_unwritten_base.set(saved_base);
+        self.const_unwritten_live.set(saved_live);
         r
     }
 
@@ -1624,6 +1802,13 @@ impl Elaborator<'_> {
         let cur = env.get(name).copied().unwrap_or(0) as u64;
         let out = (cur & !mask) | (((v as u64) & field) << lo);
         env.insert(name.clone(), out as i64);
+        if self.const_unwritten_live.get() != 0 {
+            if let Some(r) = self.const_record(&mut self.const_unwritten.borrow_mut(), name) {
+                if r.numbered && !r.shadowed {
+                    self.const_clear(r, mask);
+                }
+            }
+        }
         Some(ConstFlow::Normal)
     }
 
@@ -1689,6 +1874,7 @@ impl Elaborator<'_> {
                 let tw = envw.get(&path.segments[0].name).copied();
                 let v = self.eval_const_assign(rhs, env, envw, depth, tw)?;
                 env.insert(path.segments[0].name.clone(), v);
+                self.const_written(&path.segments[0].name);
                 Some(ConstFlow::Normal)
             }
             ast::Stmt::If {

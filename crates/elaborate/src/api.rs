@@ -231,6 +231,8 @@ pub fn elaborate_located_params(
         ca_delay_exprs: std::mem::take(&mut el.ca_delay_exprs),
         net_names: el.net_name_table(), // BEFORE finish() consumes `el`
         instances_info: std::mem::take(&mut el.instances_info),
+        // Last: the class tables and the tables above can still run the interpreter.
+        const_seed_reads: el.const_seed_reads.take(),
     };
     if el.had_error {
         (None, sc)
