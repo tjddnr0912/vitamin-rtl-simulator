@@ -423,6 +423,29 @@ without an arithmetic, bitwise, shift or conditional operator; a select written
 directly on a call of such a function (`f(x)[1]`) is refused. Build the value in a
 local variable and return it where those do not hold.
 
+Inside a package, a named packed struct may hold a packed array of a packed struct,
+`elem_t [N-1:0] m`, with one `[hi:0]` dimension and an element named bare in its own package or
+as `pkg::name`, by its own declaration: a packed struct with no sign keyword whose members are
+`logic` or `logic [N:0]` (one descending dimension, LSB 0, or none), the bare name of a
+`typedef logic [D:0]` of the same package (D a decimal literal) that no packed struct or union in
+`$unit` or a wildcard-imported package also names, or, one level down, a `struct packed` with no
+sign keyword of one or more such `logic` members, anonymous or named bare in the same package.
+Each of these types is declared at the top of the package, not in a subroutine body, and its name
+is not escaped; a name reached through an import, a chained alias or `$unit` is refused. A
+typedef alias of such an element, `typedef elem_t [hi:0] a_t;`, a parameter of that alias and an
+ANSI port `pkg::a_t p` with no dimension or default after its name take the same spelling; a
+function return and a function or task ANSI formal written `input` take `v_t [l:r]`, `v_t` such a
+`typedef logic [D:0]` and `l` and `r` integer literals. `s.m[2].q` is an ordinary select; `s.m[2]` reads as one, and a whole-element write
+of an element wider than one bit is refused, as on the keyword member. An element index that is
+not a decimal literal must be `V`, `L*V`, `L*V+L`, `L-V` or `V+L`, with `L` a decimal literal and
+`V` an `int` or `int unsigned` `for` variable in `always_comb` or a genvar in a continuous assign;
+such a select writes only by a plain blocking assign in `always_comb`, as an `output` actual of a
+task or function or an `inout` actual of a task called there, or by a plain continuous assign,
+one of a list included. A run-time index past the dimension reads `x` and writes nothing; a literal one is
+refused. Anything else on such a member is refused and the message names the form, except an
+assignment pattern where the parser does not see it as a whole right-hand side, which keeps the
+keyword member's E3009; a module or `$unit` typedef keeps its own refusal.
+
 Loud on a typedef: an unpacked-array typedef as a function return type, use as an
 enum base or as a packed-struct member; `a_t'(e)`; `$bits` of a `[]`, `[$]` or `[string]` typedef;
 and dimensions written on both the typedef and the declarator, because the

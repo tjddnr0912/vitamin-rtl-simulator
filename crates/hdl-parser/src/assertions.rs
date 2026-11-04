@@ -224,6 +224,15 @@ impl Parser<'_, '_> {
     /// separately. Dangling-else: in `assert (c) if (x) a; else b;` the else binds
     /// to the inner if and the assert gets the synthesized default.
     pub(crate) fn parse_assert(&mut self) -> Stmt {
+        // An assertion reports later than the loop that reached it, so the loop's
+        // names are no index in it (`structs/member_array.rs`).
+        let outer_idx = std::mem::take(&mut self.idx_scope);
+        let s = self.parse_assert_stmt();
+        self.idx_scope = outer_idx;
+        s
+    }
+
+    fn parse_assert_stmt(&mut self) -> Stmt {
         let start = self.cur_span();
         // The directive the assertion was written with: `stmt.rs` routes `assume`
         // here too. It travels on the desugared statement so elaborate gates the

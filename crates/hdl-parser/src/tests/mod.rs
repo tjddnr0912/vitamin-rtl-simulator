@@ -1,5 +1,6 @@
 use super::*;
 
+mod composed_member;
 mod expr_t;
 mod inst_gen;
 mod misc_forms;

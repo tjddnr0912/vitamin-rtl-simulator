@@ -357,6 +357,7 @@ impl Parser<'_, '_> {
 
     pub(crate) fn parse_assign_or_call(&mut self) -> Stmt {
         let start = self.cur_span();
+        self.lval_site = self.in_always_comb;
         let lhs = self.parse_lvalue();
         // SV §11.4.1/§11.4.2 statement form: `lvalue += e;` / `lvalue++;` desugar to
         // a blocking `lvalue = lvalue <op> …`. An expression-embedded `a = i++` is

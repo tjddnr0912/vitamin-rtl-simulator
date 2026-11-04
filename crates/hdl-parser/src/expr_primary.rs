@@ -316,6 +316,9 @@ impl Parser<'_, '_> {
                 // Extracted to a non-inlined helper so the (rare) struct-field
                 // locals never inflate `expr_primary`'s frame on the hot paren-
                 // recursion path (the MAX_EXPR_DEPTH stack budget is frame-sized).
+                if self.peek() == Some(T::LBracket) && self.composed_member_ahead(&path) {
+                    return self.composed_member_read(&path);
+                }
                 if let Some((base, geom, _nested)) = self.struct_field_select(&path) {
                     return self.struct_member_expr(base, geom, path.span);
                 }

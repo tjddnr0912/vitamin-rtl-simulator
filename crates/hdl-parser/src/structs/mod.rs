@@ -1,6 +1,7 @@
 //! struct declarations — split out of the original `hdl-parser` lib.rs (mechanical move).
 
 mod decl;
+mod member_array;
 
 use super::*;
 
@@ -71,8 +72,12 @@ impl Parser<'_, '_> {
                 name: self.stable_type_key(&nm),
                 key: DeclKey(l.reg),
             });
+            self.refuse_nested_holder(&nm);
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
+            if self.composed_ok && self.peek() == Some(TokenKind::LBracket) {
+                return Some(self.composed_member_type(&nm, &info));
+            }
             return Some((
                 info.kind,
                 info.signed,
@@ -216,17 +221,33 @@ impl Parser<'_, '_> {
         let mut members = Vec::new();
         let mut nested_keys = Vec::new();
         let mut shape_keys = Vec::new();
+        let mut arrays = Vec::new();
+        let mut forms = Vec::new();
         let mut each_exact = true;
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
+            let form = self.member_form_ahead();
             let Some((kind, signed, range, packed_dims, nested, shape, exact)) =
                 self.parse_struct_member_type(sign_carried)
             else {
                 break;
             };
+            let array = self.pending_member_array.take();
+            let form = MemberForm {
+                ty: form,
+                dims: usize::from(range.is_some()) + packed_dims.len(),
+            };
             each_exact &= exact;
             while let Some(name) = self.ident() {
+                forms.push(form);
+                if let Some((elem, count)) = &array {
+                    arrays.push(MemberArray {
+                        name: name.name.clone(),
+                        elem: elem.clone(),
+                        count: *count,
+                    });
+                }
                 members.push(StructMember {
                     name,
                     kind,
@@ -247,6 +268,8 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close struct body");
+        self.member_arrays_out = arrays;
+        self.member_forms_out = forms;
         Some((members, nested_keys, shape_keys, each_exact))
     }
 
@@ -291,6 +314,20 @@ impl Parser<'_, '_> {
                 rhs,
             } => self.source_literal(lhs) && self.source_literal(rhs),
             _ => false,
+        }
+    }
+
+    /// §5.2 row 41: `e` is a decimal literal written in the source, its text its lexeme
+    /// (`source_literal`), and its value; no sign, no operator, no fold.
+    pub(crate) fn written_decimal(&self, e: &Expr) -> Option<i64> {
+        match &e.kind {
+            ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw,
+            } if self.src.get(e.span.lo as usize..e.span.hi as usize) == Some(raw.as_str()) => {
+                Self::const_lit(e)
+            }
+            _ => None,
         }
     }
 

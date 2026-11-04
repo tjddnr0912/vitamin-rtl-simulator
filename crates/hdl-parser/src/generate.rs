@@ -127,7 +127,10 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';' after generate-for cond");
         let step = self.parse_gen_assign(true);
         self.expect(TokenKind::RParen, "')' after generate-for header");
+        self.idx_scope
+            .push((init.lvalue.name.clone(), IdxKind::Genvar));
         let (label, body) = self.parse_gen_branch();
+        self.idx_scope.pop();
         if let Some(v) = shadowed {
             self.const_locals.insert(init.lvalue.name.clone(), v);
         }
@@ -352,7 +355,9 @@ impl Parser<'_, '_> {
                                             // review: q's value read through r's layout at module scope).
         let snap = self.snapshot_scope();
         self.enter_generate_type_scope();
+        self.gen_depth += 1;
         let items = self.parse_gen_items_until(&|p| p.at_kw(Kw::End) || p.at_eof());
+        self.gen_depth -= 1;
         self.restore_scope(snap);
         self.expect(TokenKind::Word(WordKind::Keyword(Kw::End)), "'end'");
         self.opt_block_label(); // optional `: end_label` (no AST slot → discard)
@@ -387,6 +392,7 @@ impl Parser<'_, '_> {
             // `[1:0][3:0] P` read the module's `P[1]` as `0` where every tool reads `a`).
             let snap = self.snapshot_scope();
             self.enter_generate_type_scope();
+            self.gen_depth += 1;
             let mut items = Vec::new();
             if let Some(it) = self.parse_gen_item() {
                 items.push(it);
@@ -394,6 +400,7 @@ impl Parser<'_, '_> {
             while !self.pending_module_items.is_empty() {
                 items.push(GenItem::Item(Box::new(self.pending_module_items.remove(0))));
             }
+            self.gen_depth -= 1;
             self.restore_scope(snap);
             (None, items)
         }

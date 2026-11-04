@@ -19,6 +19,27 @@ fn deep_paren_nesting_errors_cleanly() {
     );
 }
 
+/// A packed-array member's index re-enters expression parsing once per level, under
+/// the same cap.
+#[test]
+fn deep_member_index_nesting_errors_cleanly() {
+    let depth = 20_000;
+    let src = format!(
+        "package p; typedef struct packed {{ logic q; }} e_t;
+         typedef struct packed {{ e_t [3:0] m; }} r_t; endpackage
+         module t; import p::*; r_t s; wire y; assign y = {}0{}; endmodule",
+        "s.m[".repeat(depth),
+        "].q".repeat(depth)
+    );
+    let (toks, le) = hdl_lexer::lex(&src);
+    assert!(le.is_empty());
+    let (_su, pe) = hdl_parser::parse(&toks, &src);
+    assert!(
+        !pe.is_empty(),
+        "deep nesting must produce a parse error (not a crash)"
+    );
+}
+
 /// Realistic nesting depths stay accepted.
 #[test]
 fn shallow_nesting_still_parses() {

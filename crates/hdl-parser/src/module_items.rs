@@ -397,6 +397,7 @@ impl Parser<'_, '_> {
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
         self.struct_packed_array_vars.clear();
+        self.module_struct_vars.clear();
         self.var_enum.clear();
         self.packed_md_params.clear();
         self.wildcard_bound.clear();
@@ -689,6 +690,7 @@ impl Parser<'_, '_> {
             // import must shadow a unit item of that name, as a typedef's does.
             exported.extend(tp_stems.iter().cloned());
             self.pkg_exports.insert(pkg.clone(), exported);
+            self.rekey_composed_aliases(&pkg);
             for it in &body {
                 if let ModuleItem::Typedef(td) = it {
                     let n = td.name.name.clone();

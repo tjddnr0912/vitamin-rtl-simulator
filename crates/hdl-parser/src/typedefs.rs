@@ -151,7 +151,10 @@ impl Parser<'_, '_> {
         // later `t v;`/`t'(x)` resolves). An alias/struct/union needs nothing from
         // elaborate → return None; a body enum (allow_enum) RETURNS its node so the
         // caller carries the labels to elaborate (round-5 Gap B).
-        match self.parse_typedef() {
+        let outer = std::mem::replace(&mut self.in_body_typedef, true);
+        let it = self.parse_typedef();
+        self.in_body_typedef = outer;
+        match it {
             Some(ModuleItem::Typedef(td)) if is_enum => Some(td),
             _ => None,
         }
@@ -503,7 +506,9 @@ impl Parser<'_, '_> {
     pub(crate) fn parse_typedef_alias(&mut self, start: Span) -> Option<ModuleItem> {
         let kind = self.net_var_kind().unwrap();
         self.bump(); // kind keyword
+        let sign_at = self.pos;
         let signed = self.signed_eff(Some(kind));
+        let sign_written = self.pos != sign_at;
         let range = self.opt_range();
         let packed = self.opt_packed_dims();
         self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
@@ -523,6 +528,15 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::Semi, "';'");
+        // §5.2 row 41: the one written form of a vector type name an element's member
+        // may name (`decl_sites`): `logic`, no sign keyword, one `[D:0]` in decimal.
+        let page = kind == NetVarKind::Logic
+            && !sign_written
+            && packed.is_empty()
+            && unpacked.is_empty()
+            && range.as_ref().is_some_and(|r| {
+                self.written_decimal(&r.msb).is_some() && self.written_decimal(&r.lsb) == Some(0)
+            });
         let info = TypeInfo {
             kind,
             signed,
@@ -537,7 +551,10 @@ impl Parser<'_, '_> {
             layout_reg: None,
             bind: 0,
         };
-        self.put_type_info(&tname.name, info);
+        let key = self.put_type_info(&tname.name, info);
+        if page {
+            self.note_decl_site(key, &tname.name, SiteForm::PageVector);
+        }
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
@@ -570,6 +587,9 @@ impl Parser<'_, '_> {
         self.bump(); // base typedef name
                      // honest-loud: PACKED dims before the new name (`typedef base_t [3:0] a_t;`).
         if self.peek() == Some(TokenKind::LBracket) {
+            if self.in_package && !self.first_if_arm_only && !self.in_body_typedef {
+                return self.parse_composed_alias(start, &base_name, &info);
+            }
             self.error(
                 "a simple chained typedef alias (adding packed dimensions to an aliased type is unsupported in v1)",
             );
@@ -664,13 +684,27 @@ impl Parser<'_, '_> {
         // unaffected (offsets ignore sign) and each member keeps its OWN signedness, so
         // `s.field` reads stay member-typed. Absent the keyword ⇒ unsigned (byte-identical
         // to the pre-existing behaviour for every non-`signed` struct).
+        let sign_at = self.pos;
         let struct_signed = if packed {
             self.opt_signed().unwrap_or(false)
         } else {
             false
         };
-        let (members, nested_keys, shape_keys, each_exact) =
-            self.parse_struct_member_list(packed)?;
+        // §5.2 row 41: the form a packed-array member's element may name (`decl_sites`):
+        // named, no sign keyword.
+        let site = anon.is_none() && self.pos == sign_at;
+        // The one parent of an `elem_t [hi:0]` member (`structs/member_array.rs`): an
+        // anonymous member type, a union, an unpacked record and a body-local typedef
+        // are not.
+        let outer_composed = std::mem::replace(
+            &mut self.composed_ok,
+            anon.is_none() && packed && self.in_package && !self.in_body_typedef,
+        );
+        let list = self.parse_struct_member_list(packed);
+        self.composed_ok = outer_composed;
+        let (members, nested_keys, shape_keys, each_exact) = list?;
+        let arrays = std::mem::take(&mut self.member_arrays_out);
+        let forms = std::mem::take(&mut self.member_forms_out);
         let layout_exact = Self::members_layout_exact(&members, each_exact);
         let tname = self.anon_or_typedef_name(start, anon)?;
         if !packed {
@@ -713,6 +747,7 @@ impl Parser<'_, '_> {
             .iter()
             .any(|m| !matches!(self.member_flat_dims(m.kind, &m.range, &m.packed_dims), Some((f, _)) if f > 0))
         {
+            self.refuse_symbolic_holder(&arrays, start);
             return self.register_sym_struct(
                 start,
                 members,
@@ -768,7 +803,12 @@ impl Parser<'_, '_> {
                     .collect::<Vec<_>>()
             });
         let reg = self.next_type_reg();
-        let layout = StructLayout { fields, reg };
+        let layout = StructLayout {
+            fields,
+            reg,
+            arrays,
+            forms,
+        };
         self.register_decl(
             reg,
             DeclType::Packed {
@@ -811,7 +851,10 @@ impl Parser<'_, '_> {
             layout_reg: Some(reg),
             bind: 0,
         };
-        self.put_type_info(&tname.name, info);
+        let key = self.put_type_info(&tname.name, info);
+        if site {
+            self.note_decl_site(key, &tname.name, SiteForm::Struct);
+        }
         self.stamp_type_bind(&tname.name);
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,

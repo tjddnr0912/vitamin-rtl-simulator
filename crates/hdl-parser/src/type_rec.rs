@@ -249,11 +249,14 @@ impl Parser<'_, '_> {
 
 // ── accessors: one per kind; each answers what that kind's name map answered ──
 impl Parser<'_, '_> {
+    /// The typedef slot `n` names here.
+    pub(crate) fn td_slot(&self, n: &str) -> Option<&TdSlot> {
+        self.slots(n).and_then(|s| s.td.as_ref())
+    }
+
     /// The typedef `n` names here (the former `typedefs` map's `get(n).cloned()`).
     pub(crate) fn td(&self, n: &str) -> Option<TypeInfo> {
-        self.slots(n)
-            .and_then(|s| s.td.as_ref())
-            .and_then(|t| self.td_of(t))
+        self.td_slot(n).and_then(|t| self.td_of(t))
     }
 
     /// `n` names a typedef here (the former `typedefs` map's `contains_key`).
@@ -350,8 +353,8 @@ impl Parser<'_, '_> {
 
     /// A typedef-writing producer's registration: the declaration's `TypeInfo` under
     /// a fresh key (drawn here, immediately before the name's typedef slot is set),
-    /// and `n`'s typedef slot pointing at it.
-    pub(crate) fn put_type_info(&mut self, n: &str, info: TypeInfo) {
+    /// and `n`'s typedef slot pointing at it. Returns the key.
+    pub(crate) fn put_type_info(&mut self, n: &str, info: TypeInfo) -> DeclKey {
         let key = DeclKey(self.next_type_reg());
         let slot = TdSlot {
             key,
@@ -362,6 +365,7 @@ impl Parser<'_, '_> {
         let prev = self.type_infos.insert(key, info);
         debug_assert!(prev.is_none(), "a type_infos key is drawn once");
         self.tn_set(n, Slot::Td(slot));
+        key
     }
 
     /// S3: a wildcard import's copy of one kind's `prefix`-keyed twins (`p::st`) to

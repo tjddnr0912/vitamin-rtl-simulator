@@ -218,7 +218,15 @@ impl Parser<'_, '_> {
         let pre_tyname = self.type_name_key();
         let mut continued = false;
         let pre_shape = pre_info.as_ref().and_then(|i| i.shape_param.clone());
-        let typedef_ty = if net_or_var.is_none() {
+        let alias_ty = if net_or_var.is_none() {
+            self.try_alias_port()
+        } else {
+            None
+        };
+        let alias_port = alias_ty.is_some();
+        let typedef_ty = if alias_port {
+            alias_ty
+        } else if net_or_var.is_none() {
             self.try_port_typedef()
         } else {
             None
@@ -312,6 +320,7 @@ impl Parser<'_, '_> {
             }
         } else {
             self.ansi_prev_struct = port_struct_name.clone().map(|sn| (sn, typedef_one_dim));
+            self.ansi_prev_alias = alias_port;
         }
         let name = self.ident().unwrap_or(Ident {
             name: String::new(),
@@ -353,7 +362,12 @@ impl Parser<'_, '_> {
                 typedef_one_dim,
                 !packed.is_empty(),
             );
+            self.note_struct_port(&name.name, unpacked.is_empty() && packed.is_empty());
         }
+        self.refuse_alias_port_tail(
+            alias_port || (continued && self.ansi_prev_alias),
+            !unpacked.is_empty(),
+        );
         let default = if self.eat(TokenKind::Eq) {
             Some(self.expr(0))
         } else {
@@ -562,6 +576,7 @@ impl Parser<'_, '_> {
         // fold must not answer the outer value for this scope's name.
         self.const_locals.remove(n);
         self.var_class.remove(n);
+        self.mask_composed_index_name(n);
     }
 
     /// Drop every variable-keyed binding of `n` (V1–V10: struct / enum / packed-md /
@@ -891,7 +906,9 @@ impl Parser<'_, '_> {
             None
         };
         let mut assigns = Vec::new();
+        let outer_assign = std::mem::replace(&mut self.in_cont_assign, true);
         loop {
+            self.lval_site = delay.is_none();
             let lv = self.parse_lvalue();
             self.expect(TokenKind::Eq, "'=' in assign");
             let rhs = self.expr(0);
@@ -903,6 +920,7 @@ impl Parser<'_, '_> {
                 break;
             }
         }
+        self.in_cont_assign = outer_assign;
         self.expect(TokenKind::Semi, "';'");
         Some(ContinuousAssign {
             delay,

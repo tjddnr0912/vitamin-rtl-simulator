@@ -500,7 +500,10 @@ impl Parser<'_, '_> {
     pub(crate) fn parse_array_with_postfix(&mut self, lhs: Expr) -> Expr {
         self.bump(); // `with`
         self.expect(TokenKind::LParen, "'(' to open a `with` iterator clause");
+        // The clause's iterator hides the loop names around it (`structs/member_array.rs`).
+        let outer_idx = std::mem::take(&mut self.idx_scope);
         let with_expr = self.expr(0);
+        self.idx_scope = outer_idx;
         self.expect(TokenKind::RParen, "')' to close a `with` iterator clause");
         let span = lhs.span.to(self.prev_span());
         let (mut path, args) = match lhs.kind {

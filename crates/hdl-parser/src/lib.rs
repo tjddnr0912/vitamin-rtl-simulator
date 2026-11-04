@@ -446,6 +446,86 @@ type MemberType = (
     Option<Ident>,
     bool,
 );
+/// A member of a packed struct declared `elem_t [hi:0] m`, a packed array of a packed
+/// struct (`structs/member_array.rs`). The member is laid out as its keyword twin
+/// `logic [hi:0][W-1:0] m`; this marker is what tells it from one, and the element's
+/// declaration is read through `elem.key` at each use. `count` is `hi + 1`.
+#[derive(Clone)]
+struct MemberArray {
+    name: String,
+    elem: TyRef,
+    count: u32,
+}
+
+/// How a packed struct member's type was written, recorded at its declaration
+/// (§5.2 row 41, `structs/member_array.rs`): what its first token names, and the
+/// dimensions written after it. What the field tuple does not keep.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct MemberForm {
+    ty: FormType,
+    dims: usize,
+}
+
+/// What the first token of a packed struct member's type names (`MemberForm`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FormType {
+    /// A built-in type keyword with no sign keyword after it: `logic [3:0] q`.
+    Keyword(NetVarKind),
+    /// The bare name of a `typedef logic [D:0] n;` this container declared (`decl_sites`).
+    PageVector,
+    /// The bare name of a packed struct typedef this container declared, its typedef
+    /// and packed slots one declaration's.
+    Struct,
+    /// Any other type: a type parameter, an enum, a chained, imported, scoped, escaped or
+    /// `$unit` name, a typedef of another form, a keyword with a sign keyword after it.
+    Other,
+    /// An anonymous `struct packed { … }` or `union packed { … }` with no sign keyword.
+    Anonymous,
+}
+
+/// Where a declaration a packed-array member's element may name was written
+/// (`Parser::decl_sites`).
+struct DeclSite {
+    container: u64,
+    name: String,
+    form: SiteForm,
+}
+
+/// The two declaration forms a `DeclSite` records.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SiteForm {
+    PageVector,
+    Struct,
+}
+
+/// What a package-level `typedef elem_t [hi:0] name;` stands for: not a typedef (no
+/// slot in the name table, so a variable of the type stays refused) but the type of an
+/// ANSI port or a package parameter. `outer` is `[hi:0]`, `elem` is `[W-1:0]`, and
+/// `elem_key` is the element struct's type key.
+#[derive(Clone)]
+struct ComposedAlias {
+    outer: Range,
+    elem: Range,
+    elem_key: String,
+}
+
+/// What a name in `Parser::idx_scope` is: a loop variable the run-time element index of
+/// a composed member may name (`for (int V`, `for (genvar V`), or anything else that
+/// binds a name inside a loop body.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IdxKind {
+    ForInt,
+    Genvar,
+    Other,
+}
+
+/// What `Parser::module_struct_vars` records of a name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StructVarKind {
+    Var,
+    Port,
+}
+
 #[derive(Clone)]
 struct StructLayout {
     fields: Vec<StructFieldLayout>,
@@ -456,6 +536,14 @@ struct StructLayout {
     /// holds the same number: a variable binding or a nested member stores it, and
     /// reads the layout from `Parser::decl_types` (`decl_key.rs`).
     reg: u64,
+    /// The members declared `elem_t [hi:0] m`; empty for every layout that parsed
+    /// before such a member existed (`structs/member_array.rs`).
+    arrays: Vec<MemberArray>,
+    /// How each member's type was written, index-parallel to `fields` for a packed
+    /// struct `parse_struct_type` laid out; empty for a union and a record. Read only
+    /// through a declaration key (`decl_packed`), never by name, so `PartialEq` leaves
+    /// it out and no layout comparison a program already made moves.
+    forms: Vec<MemberForm>,
 }
 /// Two layouts are equal when their members are, a nested member type compared by
 /// the name it is stored under: `reg` and the nested keys record where a layout came
@@ -469,6 +557,12 @@ impl PartialEq for StructLayout {
                     == (&b.0, b.1, b.2, b.3, b.4, b.5, b.6, b.7)
                     && a.8.as_ref().map(|t| &t.name) == b.8.as_ref().map(|t| &t.name)
             })
+            && self.arrays.len() == other.arrays.len()
+            && self
+                .arrays
+                .iter()
+                .zip(&other.arrays)
+                .all(|(a, b)| (&a.name, a.count, &a.elem.name) == (&b.name, b.count, &b.elem.name))
     }
 }
 impl StructLayout {
@@ -488,6 +582,11 @@ impl StructLayout {
             .iter()
             .find(|(n, ..)| n == name)
             .and_then(|f| f.8.as_ref())
+    }
+
+    /// The `elem_t [hi:0]` record of member `name`, if it was declared so.
+    fn member_array(&self, name: &str) -> Option<&MemberArray> {
+        self.arrays.iter().find(|a| a.name == name)
     }
 }
 
@@ -689,6 +788,19 @@ pub struct Parser<'t, 's> {
     /// §5.2 row 66: every declared type's `TypeInfo`, by its declaration key
     /// (`type_rec.rs`). Never restored with a scope, like `decl_types`.
     type_infos: std::collections::HashMap<DeclKey, TypeInfo>,
+    /// §5.2 row 41: the declarations a packed-array struct member's element may name, by
+    /// their `TypeInfo` key: a named packed struct typedef, and a vector typedef written
+    /// `typedef logic [D:0] n;` (D a decimal literal), each with the container it was
+    /// written in and the name it declared. Written only where those parse, outside a
+    /// subroutine or block body and for an unescaped name (`note_decl_site`); never
+    /// restored with a scope: a key is drawn once, so a slot that copies it finds the
+    /// declaration's own site, and the reader compares the container and the name
+    /// (`structs/member_array.rs`).
+    decl_sites: std::collections::HashMap<DeclKey, DeclSite>,
+    /// §5.2 row 41: a body-local `typedef` (`parse_body_typedef_def`) is being parsed:
+    /// it records no `decl_sites` entry, holds no packed-array member and declares no
+    /// alias of one.
+    in_body_typedef: bool,
     /// §5.2 row 66: the type NAMES in scope — per name, one slot per kind of entry
     /// (typedef, packed struct or union, per-instance struct, unpacked record, folding
     /// enum, union flag), each kept by its own rule (`type_rec.rs`). Accumulates
@@ -999,6 +1111,39 @@ pub struct Parser<'t, 's> {
     ///   a `pk::f(…)` call reaches refuses (`VITA-E3009`) a design PRE runs (a lone
     ///   `unique if` there is refused already).
     first_if_arm_only: bool,
+    /// While the member list of a package-level, named `struct packed` is parsed: a
+    /// member may be declared `elem_t [hi:0] m` (`structs/member_array.rs`).
+    composed_ok: bool,
+    /// The `(element, count)` of the member type `parse_struct_member_type` just
+    /// resolved, taken by the member list for each of its declarators.
+    pending_member_array: Option<(TyRef, u32)>,
+    /// The `MemberArray` list of the member list that just ended, taken by
+    /// `parse_struct_type` for the layout.
+    member_arrays_out: Vec<MemberArray>,
+    /// The `MemberForm` of each member of the member list that just ended, taken by
+    /// `parse_struct_type` for the layout.
+    member_forms_out: Vec<MemberForm>,
+    /// `typedef elem_t [hi:0] name;` by key: bare while its package body is parsed,
+    /// `pkg::name` from `endpackage` on. Unit-scoped, like the `pkg::` twins.
+    composed_aliases: std::collections::HashMap<String, ComposedAlias>,
+    /// The names bound by the loops around the cursor, innermost last; the fact a
+    /// run-time element index of a composed member is admitted on.
+    idx_scope: Vec<(String, IdxKind)>,
+    /// The body of an `always_comb` is being parsed.
+    in_always_comb: bool,
+    /// A continuous assign is being parsed.
+    in_cont_assign: bool,
+    /// Armed by the two assignment forms whose target may take a run-time element
+    /// index of a composed member, taken by the next `parse_lvalue`.
+    lval_site: bool,
+    /// How many generate blocks the cursor is inside.
+    gen_depth: u32,
+    /// The scalar struct variables declared at the top of the module-like and its ANSI
+    /// struct ports. Cleared at every container start.
+    module_struct_vars: std::collections::HashMap<String, StructVarKind>,
+    /// The previous ANSI port took its type from a `ComposedAlias`, for a bare
+    /// continuation.
+    ansi_prev_alias: bool,
     /// The `lo` of every `Stmt::If` that `parse_if` parsed as the statement right
     /// after an `else` whose next written token is `if`. `parse_unique_priority`
     /// follows an `else if` series only through these. An immediate `assert` /
@@ -1035,6 +1180,8 @@ impl<'t, 's> Parser<'t, 's> {
             node_budget_blown: false,
             inside_kw_at: Vec::new(),
             type_infos: std::collections::HashMap::new(),
+            decl_sites: std::collections::HashMap::new(),
+            in_body_typedef: false,
             type_names: std::collections::HashMap::new(),
             type_params: std::collections::HashMap::new(),
             cu_type_params: std::collections::HashMap::new(),
@@ -1088,6 +1235,18 @@ impl<'t, 's> Parser<'t, 's> {
             in_program: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
             first_if_arm_only: false,
+            composed_ok: false,
+            pending_member_array: None,
+            member_arrays_out: Vec::new(),
+            member_forms_out: Vec::new(),
+            composed_aliases: std::collections::HashMap::new(),
+            idx_scope: Vec::new(),
+            in_always_comb: false,
+            in_cont_assign: false,
+            lval_site: false,
+            gen_depth: 0,
+            module_struct_vars: std::collections::HashMap::new(),
+            ansi_prev_alias: false,
             else_if_at: std::collections::BTreeSet::new(),
         }
     }

@@ -278,6 +278,7 @@ impl Parser<'_, '_> {
         // pass only ever sees its own occurrences (the rename helper's block arm
         // also stops at any inner redeclaration). An unlabeled wrapping block
         // lowers byte-identically to lowering the For alone.
+        let int_kw = self.at_kw(Kw::Int);
         let typed_init = if self.net_var_kind().is_some() {
             self.parse_for_typed_init()
         } else if let Some(info) = self.peek_block_typedef_decl() {
@@ -295,11 +296,23 @@ impl Parser<'_, '_> {
             None => self.parse_for_assign(), // `i = 0`, no trailing ';'
         });
         self.expect(TokenKind::Semi, "';' after for-init");
+        // The header's own name binds from its condition on (`structs/member_array.rs`).
+        if let Some((decl, _, orig)) = &typed_init {
+            let kind = if int_kw && decl.range.is_none() && decl.packed.is_empty() {
+                IdxKind::ForInt
+            } else {
+                IdxKind::Other
+            };
+            self.idx_scope.push((orig.name.clone(), kind));
+        }
         let cond = self.expr(0);
         self.expect(TokenKind::Semi, "';' after for-cond");
         let step = Box::new(self.parse_for_assign()); // `i = i+1`, no trailing ';'
         self.expect(TokenKind::RParen, "')'");
         let (body, break_used) = self.parse_loop_body(start);
+        if typed_init.is_some() {
+            self.idx_scope.pop();
+        }
         let span = start.to(self.prev_span());
 
         let mut for_stmt = Stmt::For {
@@ -535,11 +548,13 @@ impl Parser<'_, '_> {
         }
         self.expect(TokenKind::RBracket, "']'");
         self.expect(TokenKind::RParen, "')'");
+        self.idx_scope.push((ivar.name.clone(), IdxKind::Other));
         // break/continue target THIS foreach. `continue` wraps the user body in
         // `$continue`, whose exit falls through to the `__st = next` advance (so
         // the iterator still advances after a continue); `break` wraps the
         // synthesized while below.
         let (mut body, break_used) = self.parse_loop_body(start);
+        self.idx_scope.pop();
         let span = start.to(self.prev_span());
         // v1 elaborate FLATTENS block-locals into the module namespace (no
         // per-block scoping), so a decl named like an outer variable would be
@@ -704,7 +719,12 @@ impl Parser<'_, '_> {
         }
         self.expect(TokenKind::RBracket, "']'");
         self.expect(TokenKind::RParen, "')'");
+        let scope = self.idx_scope.len();
+        for (id, _) in &named {
+            self.idx_scope.push((id.name.clone(), IdxKind::Other));
+        }
         let (body, break_used) = self.parse_loop_body(start);
+        self.idx_scope.truncate(scope);
         let span = start.to(self.prev_span());
         self.build_multi_foreach(&arr, &named, body, break_used, start, span)
     }

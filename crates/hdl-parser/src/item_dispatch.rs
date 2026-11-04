@@ -148,7 +148,9 @@ impl Parser<'_, '_> {
         }
         // typedef-name declaration: `color_t c, d;` where `color_t` was typedef'd.
         if let Some(info) = self.peek_typedef_name() {
-            return self.parse_typed_decl(info).map(ModuleItem::NetVar);
+            let d = self.parse_typed_decl(info);
+            self.note_module_struct_vars(d.as_ref());
+            return d.map(ModuleItem::NetVar);
         }
         // procedural blocks → REAL parsing (PR2).
         if matches!(

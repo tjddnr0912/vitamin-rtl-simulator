@@ -9,6 +9,32 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a packed array of a packed struct as a package struct's member
+
+- Inside a package, `elem_t [N-1:0] m` as a member of a named packed struct now composes, with one
+  `[hi:0]` dimension and an element named bare in its own package or as `pkg::name`, by its own
+  declaration (not a typedef alias of it): a packed struct with no sign keyword whose members are
+  `logic` or `logic [N:0]` (one descending dimension, LSB 0, or none), the bare name of a
+  `typedef logic [D:0]` of the same package (D a decimal literal) that no packed struct or union
+  in `$unit` or a wildcard-imported package also names, or, one level down, a `struct packed`
+  with no sign keyword of one or more such `logic` members, anonymous or named bare in the same
+  package; each type declared at the top of the package, its name not escaped: every OpenTitan
+  `*_reg_pkg` multireg member. So do a typedef alias of that element, a parameter of the alias
+  and an ANSI port `pkg::alias p` with no dimension or default after its name; and, for such a
+  `typedef logic [D:0]` `v_t`, a function return and a function or task ANSI formal written
+  `input` of type `v_t [l:r]`, `l` and `r` integer literals. They were E2002. `s.m[2].q` reads and writes as the flat part-select,
+  and `s.m[2]` reads as one; a whole-element write `s.m[2] = …` of an element wider than one bit
+  is E2002, as on the keyword member. `s.m[i].q` reads and writes with `i` an `int` or
+  `int unsigned` `for` variable in `always_comb` or a genvar in a continuous assign. A run-time
+  index out of the dimension reads `x` and writes nothing; a literal index out of it is E2002.
+- Kept loud: every other member, alias, return or formal form (an enum member, a signed struct or
+  a struct two levels down in the element among them, and an element, member type or base reached
+  through an import, a chained alias, `$unit`, an escaped name or a subroutine body), an index or an assignment form past that
+  rule, and a pattern onto such a struct. Each is E2002 and names the form, except a pattern the
+  parser does not see as the whole right-hand side of a declaration or an assignment (a function
+  argument or return, a cast, a comparison, a port actual), which is E3009 with the text it has on
+  the keyword member. No declaration, select or byte of a design that already compiled moves.
+
 ### Changed — a constant that divides by a wrapped zero is E3009
 
 - A parameter or a declaration range bound whose value divides by zero at the expression's width

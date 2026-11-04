@@ -291,7 +291,10 @@ impl Parser<'_, '_> {
             };
             expl1 = self.opt_signed();
             signed = expl0.or(expl1).unwrap_or(atom_signed);
-        } else if let Some(info) = self.peek_block_typedef_decl() {
+        } else if let Some(info) = self
+            .peek_block_typedef_decl()
+            .or_else(|| self.peek_alias_param())
+        {
             // §3 ⑤ (IEEE §6.20.2 / §A.2.1.1 `data_type` param_assignment): a USER type
             // leads — `localparam exc_cause_t E = '{…}`, `parameter lfsr_seed_t S = …`,
             // `localparam p::u Q = …`. Resolved here to the same (kind, sign, range)

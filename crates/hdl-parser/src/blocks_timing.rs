@@ -121,7 +121,9 @@ impl Parser<'_, '_> {
             _ => None,
         };
 
+        let outer_comb = std::mem::replace(&mut self.in_always_comb, kind == ProcKind::AlwaysComb);
         let body = Box::new(self.parse_statement());
+        self.in_always_comb = outer_comb;
         ProceduralBlock {
             kind,
             sensitivity,

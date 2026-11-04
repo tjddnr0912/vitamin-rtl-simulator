@@ -390,6 +390,7 @@ impl Parser<'_, '_> {
 
     /// LHS = concat of selects/idents only. Parse directly to `Lvalue`.
     pub(crate) fn parse_lvalue(&mut self) -> Lvalue {
+        let site = std::mem::take(&mut self.lval_site);
         if self.peek() == Some(TokenKind::LBrace) {
             let start = self.cur_span();
             self.bump();
@@ -435,6 +436,8 @@ impl Parser<'_, '_> {
             // `k$field` (a plain Ident). A trailing sub-select (`k.field[i] = …`)
             // flows through the `loop` below on the member net, like any net.
             Lvalue::Ident(mangled)
+        } else if self.peek() == Some(TokenKind::LBracket) && self.composed_chain_ahead(&path) {
+            self.composed_member_lval(&path, site)
         } else if let Some((base, (off, w, asc, _sgn, dbase, stride), nested)) =
             self.struct_field_select(&path)
         {

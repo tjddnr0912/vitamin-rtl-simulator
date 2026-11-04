@@ -160,7 +160,9 @@ impl Parser<'_, '_> {
     #[inline(never)]
     pub(crate) fn parse_with_constraints_in_class(&mut self, call: &HierPath) -> Vec<Expr> {
         let scope = self.enter_with_block_scope(call);
+        let outer_idx = std::mem::take(&mut self.idx_scope);
         let constraints = self.parse_with_constraints();
+        self.idx_scope = outer_idx;
         if let Some(s) = scope {
             self.restore_scope_boxed(s);
         }

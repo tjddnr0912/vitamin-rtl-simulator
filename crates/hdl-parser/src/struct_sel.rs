@@ -377,6 +377,11 @@ impl Parser<'_, '_> {
         // packable UNPACKED record (§4.5.191 fixed record array) — both yield the
         // same `StructLayout::field()` `(off, w, asc, sgn, dbase, stride)` shape.
         let l = self.decl_struct_layout(ty.key)?;
+        // An `elem_t [hi:0]` member of an array element stays refused: this path has
+        // no element stride to add (`structs/member_array.rs`).
+        if l.member_array(field).is_some() {
+            return None;
+        }
         let g = l.field(field)?;
         Some((g, l.nested_of(field).cloned()))
     }

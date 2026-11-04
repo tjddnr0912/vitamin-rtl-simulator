@@ -30,6 +30,8 @@ impl Parser<'_, '_> {
         // for a signed packed struct. Member overlay/layout and per-member signedness are
         // unaffected. Absent the keyword ⇒ unsigned (byte-identical for every prior union).
         let union_signed = self.opt_signed().unwrap_or(false);
+        // A union member is never an `elem_t [hi:0]` (`structs/member_array.rs`).
+        let outer_composed = std::mem::replace(&mut self.composed_ok, false);
         self.expect(TokenKind::LBrace, "'{' for union body");
         let mut members = Vec::new();
         let mut nested_keys = Vec::new();
@@ -63,6 +65,7 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close union body");
+        self.composed_ok = outer_composed;
         let tname = self.anon_or_typedef_name(start, anon)?;
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
@@ -99,7 +102,12 @@ impl Parser<'_, '_> {
             })
             .collect();
         let reg = self.next_type_reg();
-        let layout = StructLayout { fields, reg };
+        let layout = StructLayout {
+            fields,
+            reg,
+            arrays: Vec::new(),
+            forms: Vec::new(),
+        };
         self.register_decl(
             reg,
             DeclType::Packed {

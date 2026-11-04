@@ -168,6 +168,9 @@ impl Parser<'_, '_> {
                 if matches!(k, Kw::Int) && range.is_some() {
                     self.reject_packed_dims_on_nonvector(NetVarKind::Int, true);
                 }
+            } else if let Some((r, md)) = self.try_composed_return() {
+                range = r;
+                ret_md = md;
             } else if let Some(info) = self.peek_block_typedef_decl() {
                 // §3 ⑤ⓕ: `FunctionDef` has no shape slot, so a `function T f;` keeps
                 // `T`'s STRICT shape guard (the design stays loud, never silently
@@ -492,7 +495,12 @@ impl Parser<'_, '_> {
             let tname = self.type_name_key();
             let is_enum = self.enum_def(&tname).is_some();
             let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
-            if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
+            if let Some((r, md)) = self.try_composed_formal(dir, dir_present) {
+                net_or_var = Some(NetVarKind::Logic);
+                range = r;
+                typedef_signed = Some(false);
+                md_dims = md;
+            } else if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
                 typedef_shape = pre_shape;
                 net_or_var = Some(k);
                 range = r;

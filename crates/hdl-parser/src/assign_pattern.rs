@@ -576,6 +576,10 @@ impl Parser<'_, '_> {
         // layout is the declaration `ty` names, and a nested member recurses into the
         // declaration its type named where the enclosing type was declared.
         let layout = self.decl_struct_layout(ty);
+        if layout.as_ref().is_some_and(|l| !l.arrays.is_empty()) {
+            self.refuse_holder_pattern(rhs.span);
+            return rhs;
+        }
         let nested: Vec<Option<TyRef>> = match &layout {
             Some(l) => l.fields.iter().map(|f| f.8.clone()).collect(),
             None => return rhs,
