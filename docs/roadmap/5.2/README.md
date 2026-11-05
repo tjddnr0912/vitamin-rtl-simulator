@@ -8,12 +8,14 @@
 * Q-AESINK landed (§4.5.633);
 * row 41's page half landed (§4.5.634; its residue keeps slot 41 · L2 after 68), so L2 empties and is not refilled;
 * Q-DECLTYPE landed (§4.5.635, its one slice S12: every declaration's type facts in one `hdl_ast::DataType`, with Q-PARAM2STATE's record half), so C0 · L1 runs Q-SYMMIX, then Q-PARAM2STATE's value half S1v, then the first batch (Q-MEMBSRC's carrier, 46, 24, 31), and Q-NETSHAPE, its elaborate half, follows beside Q-SIDETABLES (owner, 2026-11-05);
+* Q-SYMMIX parked 2026-11-06 behind Q-VALRULES fix (d) after three premise rounds, nothing landed (W/qsymmix/RULINGS-premise3.txt), keeping C0 · L1, and S1v's rule (C) lanes a symbolic struct, an md packed parameter or a symbolic typedef / type parameter reaches wait on fix (d);
 * Q-PKRDLSB parked 2026-11-02, T3 took C3 row 29's page half, which parked 2026-11-04 behind Q-PARAM2STATE;
 * T3 empties and is not refilled (owner, 2026-11-04, replacing the refill rule of 2026-11-02): rows 33 (L1) and 41 (L2) finished in their slots (row 41 ended 2026-11-04, §4.5.634; row 33 parked 2026-11-04), an emptied slot is not refilled;
 * rows 29, 33 and 41 have ended, so one slot runs the queue one row at a time, batch verify kept, with auto-fill off: the next row waits for the owner (owner, 2026-11-05).
+* The owner named the next rows (2026-11-06): Q-VALRULES fix (d) as a code row at C0 · L1, then Q-SYMMIX's re-entry, then S1v, then batch 1.
 * TW5 at row 33's park: five rows filed, Q-TYPEOVERVAL, Q-FRAMEREAL, Q-FRAMECONCAT, Q-ENUMCONV and Q-PORTDEFAULT (176–180 · any), within the cap of 6;
 * Q-FRAMECAWAKE, measured only inside row 33's frame, and Q-FRAMEDEFAULT, row 33's residue in its record, are not filed (W/row33/park/REMEASURE-addendum.txt).
-* Parked, each keeping its slot: Q-WITHREAL, Q-XNONINT and Q-INLITEM (1 · L1), P-PCTU (6 · T3), Q-DLYCAT (7 · L1), row 29's page half (C3 · T3), row 33 (C1 · L1), row 29's full form (9 · T3), Q-NESTCAT (in row 74), Q-TPCARRIER (29 · L2), Q-MEMBSRC's read half (32 · L2), Q-BITSTYPE, Q-REALSPLIT and Q-REALTWIN (42 · T3), Q-ALWINTRA (153 · any), Q-PKRDLSB (163 · any).
+* Parked, each keeping its slot: Q-SYMMIX (C0 · L1), Q-WITHREAL, Q-XNONINT and Q-INLITEM (1 · L1), P-PCTU (6 · T3), Q-DLYCAT (7 · L1), row 29's page half (C3 · T3), row 33 (C1 · L1), row 29's full form (9 · T3), Q-NESTCAT (in row 74), Q-TPCARRIER (29 · L2), Q-MEMBSRC's read half (32 · L2), Q-BITSTYPE, Q-REALSPLIT and Q-REALTWIN (42 · T3), Q-ALWINTRA (153 · any), Q-PKRDLSB (163 · any).
 
 * Real-design first: every defect row has a corpus witness except rows 1–8, which an external report or its fix path reproduced.
 * A slice that moves a corpus page re-pins that row's refusal in the same commit (`DRIFTED` otherwise) and reports the page before and after.

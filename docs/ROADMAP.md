@@ -10,10 +10,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 296 | 184 | 112 | oracle split or none 66 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 300 | 186 | 114 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 189 | 154 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 190 | 155 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 637 | 399 | 238 | | | |
+| total | | 642 | 402 | 240 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -165,6 +165,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - type-param-array-sign — [a constant array typed by a type parameter keeps the default type's sign](roadmap/2/type-param-array-sign.md) · OPEN
 - 🆕 AJ — [an ANSI port continuation keeps its type parameter's default type](roadmap/2/new-AJ.md) · OPEN
 - 🆕 AK — [a non-ANSI `input signed` port redeclared as an unsigned net reads unsigned](roadmap/2/new-AK.md) · OPEN
+- respell-drops-const-type — [a package md parameter's use site reads an imported constant as a 32-bit integer](roadmap/2/respell-drops-const-type.md) · OPEN
 
 ### Constant domain (i64)
 > The i64 constant folder's limits: wraps, masked overflow, unset variables read as 0, replication counts; mostly open, a few held by design
@@ -289,6 +290,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - assoc-concat-target — [an associative element as a concatenation-target chunk is not written](roadmap/2/assoc-concat-target.md) · OPEN
 - nested-select-of-bit — [a nested part-select read of a bit-select is accepted](roadmap/2/nested-select-of-bit.md) · OPEN
 - net-variable-select-assign — [a continuous assign to a net through a variable select runs, sticky](roadmap/2/net-variable-select-assign.md) · OPEN
+- md-select-index-context — [an md packed parameter's select index is evaluated in the offset's context](roadmap/2/md-select-index-context.md) · OPEN
 
 ### Class fields
 > Class property bounds, defaults and name binding inside a class body; open, one blocked on field-key normalisation
@@ -488,6 +490,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - comb-port-chain-slots — [comb time-0 pass slots in a port chain, a checker and a named event](roadmap/2/comb-port-chain-slots.md)
 - self-timed-before-initial — [a self-timed `always` written before the `initial` that drives it](roadmap/2/self-timed-before-initial.md)
 - held-assign-t0-read — [a time-0 read of a held continuous assign's output before release](roadmap/2/held-assign-t0-read.md)
+- overcap-typedef-bits — [`$bits` of a typedef wider than the v1 cap gives a value](roadmap/2/overcap-typedef-bits.md)
+- typed-signed-bound-oracle-split — [verilator and sv2v read a typed signed negative range bound as unsigned](roadmap/2/typed-signed-bound-oracle-split.md)
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 > Loud shapes that could become correct support: numbered items (3.a), small residues by area (3.b) and shapes kept loud on purpose (3.c).
@@ -576,6 +580,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - anon-member-dims — [packed dimensions after an anonymous struct or union member body](roadmap/3.b/anon-member-dims.md) · OPEN
 - member-width-genvar — [a struct member width over a genvar in a generate-block typedef](roadmap/3.b/member-width-genvar.md) · OPEN
 - anon-enum-member — [an anonymous `enum` as a struct member is rejected](roadmap/3.b/anon-enum-member.md) · OPEN
+- sym-member-user-cast — [a cast in a symbolic struct member's range is refused](roadmap/3.b/sym-member-user-cast.md) · OPEN
 
 **Constants / parameters**
 
@@ -833,14 +838,15 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-05): Q-DECLTYPE landed (§4.5.635); one slot runs the queue, the next row waits for the owner; TW5 at 33's park; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-06): Q-SYMMIX parked; next Q-VALRULES fix (d) in code, Q-SYMMIX, S1v, batch 1 (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| Q-SYMMIX | C0 · L1 | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
+| Q-VALRULES | C0 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
+| Q-SYMMIX | C0 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
@@ -882,7 +888,6 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-HANDLERET | 10 · any | [two routes into a class handle skip the handle check](roadmap/5.2/Q-HANDLERET.md) | ① |
 | Q-STRCATSEL | 10 · any | [a select on a string concatenation reads the packed vector](roadmap/5.2/Q-STRCATSEL.md) | ① |
 | Q-STRWAIT | 10 · any | [a `wait` on a string comparison never wakes](roadmap/5.2/Q-STRWAIT.md) | ① |
-| Q-VALRULES | 10 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
 | 74 | 10 · L1 | [ET: the expression-type funnel (string, real or integral, and width)](roadmap/5.2/74.md) | ① F |
 | Q-STRTERN | 10 · L1 | [a `?:` with a string arm is not typed as a string](roadmap/5.2/Q-STRTERN.md) | ② |
 | Q-STRCASTLIT | 10 · L1 | [`string'(<literal>)` lowers to a bare literal, not a string](roadmap/5.2/Q-STRCASTLIT.md) | ② |

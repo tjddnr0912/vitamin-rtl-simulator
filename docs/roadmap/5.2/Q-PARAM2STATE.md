@@ -2,6 +2,7 @@
 * slot: its AST / SchemaHash change lands inside Q-DECLTYPE's S12, its value half changes values only
 * slot: its record half (the signing keyword and the declared kind on `ParamDecl`) lands inside Q-DECLTYPE's S12 (owner, 2026-11-05)
 * slot: its value half S1v (every binder obeys the record) runs at C0 · L1 after Q-SYMMIX, before the first batch (owner, 2026-11-05, it was 17 · L2, or inside row 70 if one re-pin)
+* slot: S1v runs after Q-VALRULES fix (d) and Q-SYMMIX's re-entry, before batch 1 (owner, 2026-11-06)
 * slot: the row closes when S1v lands, not at S12
 * slot: before Q-OVRXPLANE, 76, Q-TPCARRIER and Q-MEMBSRC
 * slot: row 29's page half waits on it, PARKED 2026-11-04
@@ -24,6 +25,8 @@
 * Q-XFALLBACK (§4.5.632) keeps a fallback with 0 under every x bit because it cannot tell `int` from `logic` here: 51 pair cells stay silent at a 4-state target (`X ^ X`, `X - X`, `X * 16'h0000`, `16'h0000 * X`, `X % 16'd1`, `16'h0000 / X`, `('1 + 1'b1) ** (-1)`, `(16'hFFFF + 16'd1) ** (-1)` at 8 and 16 bits, `X >> 16`, `X >> 40`, `X >>> 40`, `(X << 8) >> 24`, `X \| 16'hFFFF`, `(X \| 16'hFF00) \| 16'h00FF`, at 8- to 64-bit parameters; X = `16'd1 % ('1 + 1'b1)`; iverilog and verilator x at a `logic` parameter, 0 at an `int` one: W/qxfb/plan/pairs, runB EXPECT_F2LOSS), and the 2-state pins s2a–s2f (`localparam int L = 16'd0 % ('1 + 1'b1);` 0) stay
 * fix: once the state is recorded a 4-state target refuses them
 * fix: S1v = rule (C) and E7' of W/qdecltype/plan2/PLAN-r2.txt R2, reading the record S12 lands, after Q-SYMMIX
+* note: with Q-SYMMIX parked, S1v's rule (C) waits on Q-VALRULES fix (d) for t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec (P1), kw_m01_mdparam, kw_m03_mdparam_dim, kw_m04_mdsel, kw_m05_mdsel_lsbmix (P2), kw_t01_tdbits_prod, kw_t02_tdbits_dim, kw_t06_cast, kw_tp01_typeparam, kw_tp02_typeparam1d (P3)
+* S1v may land only lanes no symbolic struct, md packed parameter or symbolic typedef / type parameter reaches (owner decision 2026-11-05 "Q-SYMMIX + S1v one batch" then needs the owner again)
 * note: S12 records the signing token each arm's fold reads (`hdl-parser/src/params.rs:292-293`, `:332-333`: the first or the second keyword on the keyword and integer arms, the first on the typedef, string, real, realtime and time arms), Implicit when none is written
 * note: S12 records the kind as the keyword's, Implicit with no type keyword, or not recorded for enum, struct, union, type-parameter and class typedefs (W/qdecltype/plan3/PLAN-s12.txt D2 c5, M8)
 * witness: k7_specparam `specparam signed SP = 4'hF;` `specparam [3:0] SR = 4'hF;` `$display("A sp=%0d sr=%0d bsp=%0d", SP, SR, $bits(SP));`: PRE `A sp=15 sr=15 bsp=4` at exit 0 (`hdl-parser/src/params.rs:198` parses `specparam` as a localparam), iverilog `t.sv:2: syntax error` `t.sv:2: error: Invalid module item.`, sv2v `` t.sv:2:3: Parse error: missing expected `endmodule` ``, verilator `%Error: t.sv:2:13: syntax error, unexpected signed, expecting IDENTIFIER or IDENTIFIER-for-pathpulse or randomize`
