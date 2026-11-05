@@ -1,6 +1,6 @@
 (§5.2 Q-PARAM2STATE · rank ① · source Q-DECLSELBOUND plan (Q1, P2); Q-MEMBSRC PLAN4 design review D4-1 (2026-10-28)) (a parameter's declared 2-state type is not recorded):
 * slot: an AST / SchemaHash change
-* slot: inside row 70 if one re-pin
+* slot: Q-DECLTYPE's first slice, so it runs at Q-DECLTYPE's slot C0 · L1 (owner, 2026-11-05; it was 17 · L2, or inside row 70 if one re-pin)
 * slot: before Q-OVRXPLANE, 76, Q-TPCARRIER and Q-MEMBSRC
 * slot: row 29's page half waits on it, PARKED 2026-11-04
 * a parameter's declared type is not recorded whole: its 2-state identity (`hdl-parser/src/params.rs:521-541` parses `var_kind` and drops it; `ParamType` {Implicit, Integer, Real, Realtime, Time}), so an invalid select of a `bit` parameter (IEEE 1800-2017 §11.5.1, ieee1800-2017.txt:12351–12353: 0) cannot be told from a `logic` one's (x): `localparam bit [15:8] VB = 8'hA5; logic [VB[C + 3'd1]:0] d;` (C = 3'd7) IEEE n=1 = PRE, the same over `logic` VP IEEE illegal, PRE n=1 silent

@@ -3,7 +3,7 @@
 Open work, one line per item: id, title and a link to its detail doc, and its status or slot when it has one. Format, filing, census: [roadmap/README.md](roadmap/README.md).
 
 ## Summary
-> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 634 open, 395 startable.
+> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 635 open, 396 startable.
 
 Recount from the lines below in every docs step; the iteration report shows this table; the census rule is in the notes ([notes](roadmap/README.md))
 
@@ -19,10 +19,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
 | §6 | G2 observability (OBS) | 6 stages + 10 | 15 | 1 | call tree: two lowering paths 1 | ④ | |
 | study/03 | workload corpus | 3 | 0 | 3 | named prerequisite 3 | real-design | 31, 47, 53 |
-| §5.b | performance / hardening | 20 | 10 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
+| §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 634 | 395 | 239 | | | |
+| total | | 635 | 396 | 239 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -798,7 +798,7 @@ Below the correctness ladder; a row resumes only when its re-entry condition fir
 | `drain_range_diags` early-out | rejected | zero gain | none |
 
 ### 5.b Open performance and hardening residues
-> Twenty open performance and hardening residues: ten startable, six blocked on a prerequisite, four held or trigger-gated.
+> Twenty-one open performance and hardening residues: eleven startable, six blocked on a prerequisite, four held or trigger-gated.
 
 - 4b-r — [the native backend does not pool its scratch buffers](roadmap/5.b/4b-r.md) · OPEN
 - 5c — [frame bodies never enter `wprog`](roadmap/5.b/5c.md) · BLOCKED
@@ -820,6 +820,7 @@ Below the correctness ladder; a row resumes only when its re-entry condition fir
 - T0-HOLD-CHAIN — [held time-0 assign chains cost quadratic time](roadmap/5.b/T0-HOLD-CHAIN.md) · BLOCKED
 - CORPUS-FETCH-GUARD — [`corpus-runner fetch` removes clean clones it misreads as stale](roadmap/5.b/CORPUS-FETCH-GUARD.md) · OPEN
 - STORE-STACK-POS — [store-path speed depends on where frames sit on the stack](roadmap/5.b/STORE-STACK-POS.md) · OPEN
+- Q-EXECSEM — [census of the operations each executor spells on its own, no code](roadmap/5.b/Q-EXECSEM.md) · OPEN
 
 ### 5.c Current state
 > Where the backend stands today: the default executor, the product build, the CI corpus gate and codegen.
@@ -837,12 +838,15 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 
 | # | slot | item | rank |
 |---|---|---|---|
+| Q-DECLTYPE | C0 · L1 | [one declaration-type record, from the AST to elaborate's nets](roadmap/5.2/Q-DECLTYPE.md) | — F |
+| Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
 | 29 | C3 · T3 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 46 | C4 · L1 | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
 | 24 | C5 · L2 | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 31 | C6 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
+| Q-SIDETABLES | C7 · L1 | [one engine side-table record, below sim-engine](roadmap/5.2/Q-SIDETABLES.md) | — F |
 | Q-VARBASEWR | C8 · T3 | [a variable-base `+:` write into a multi-dimensional packed element](roadmap/5.2/Q-VARBASEWR.md) | ② F |
 | 35 | C9 · L1 | [a replication inside an assignment pattern is refused at parse](roadmap/5.2/35.md) | ② S |
 | 68 | C10 · L2 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
@@ -875,6 +879,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-HANDLERET | 10 · any | [two routes into a class handle skip the handle check](roadmap/5.2/Q-HANDLERET.md) | ① |
 | Q-STRCATSEL | 10 · any | [a select on a string concatenation reads the packed vector](roadmap/5.2/Q-STRCATSEL.md) | ① |
 | Q-STRWAIT | 10 · any | [a `wait` on a string comparison never wakes](roadmap/5.2/Q-STRWAIT.md) | ① |
+| Q-VALRULES | 10 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
 | 74 | 10 · L1 | [ET: the expression-type funnel (string, real or integral, and width)](roadmap/5.2/74.md) | ① F |
 | Q-STRTERN | 10 · L1 | [a `?:` with a string arm is not typed as a string](roadmap/5.2/Q-STRTERN.md) | ② |
 | Q-STRCASTLIT | 10 · L1 | [`string'(<literal>)` lowers to a bare literal, not a string](roadmap/5.2/Q-STRCASTLIT.md) | ② |
@@ -889,7 +894,6 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-UNSZXPAD | 15 · T3 | [an unsized x / z literal is zero-extended past 32 bits](roadmap/5.2/Q-UNSZXPAD.md) | ① |
 | Q-STRNUL | 16 · L1 | [strings keep interior NUL bytes that IEEE removes](roadmap/5.2/Q-STRNUL.md) | ① S |
 | 26 | 16 · L1 | [`$sformatf` as a task argument and inside `?:` is refused](roadmap/5.2/26.md) | ② S |
-| Q-PARAM2STATE | 17 · L2 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | Q-STRWIDTH | 18 · T3 | [the empty string literal folds as 1 bit instead of 8](roadmap/5.2/Q-STRWIDTH.md) | ① |
 | Q-2STINVSEL | 19 · L1 | [an invalid select of a 2-state variable reads x, not 0](roadmap/5.2/Q-2STINVSEL.md) | ① |
 | Q-OVRXPLANE | 20 · L2 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
