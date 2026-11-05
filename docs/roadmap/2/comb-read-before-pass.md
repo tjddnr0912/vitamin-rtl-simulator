@@ -1,0 +1,2 @@
+(§2 comb-read-before-pass · in Oracle splits (recorded, not chased)) (a declaration-fed `always_comb` read at time 0 before its pass):
+* a constant or declaration-fed `always_comb` read at t0 before its pass (an `initial`'s first slice, a reader another t0 write woke, a t0-posedge flop: q_const_comb_first, s583_v01, s583_v03, x3, r1, r2, f2, f2b) — split (vita = iverilog `xx`; verilator the value; after one `#0` vita reads the value, iverilog `xx`)

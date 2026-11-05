@@ -1,0 +1,2 @@
+(§2 comb-t0-pass-order · in Oracle splits (recorded, not chased)) (time-0 passes of several `always_comb` / `always_latch` blocks):
+* `always_comb` / `always_latch` t0 passes of several blocks — split (vita forward source order, one per batch with a settle after each; iverilog reverse source order; verilator dependency order): from a quiet source a forward chain reports at t0 in iverilog only (tg1, tg3, tg4, tg6, tg8, tg10, tg13, tg14), a consumer-first chain in vita only (§2 🆕 AA)

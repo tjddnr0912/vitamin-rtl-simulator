@@ -1,0 +1,4 @@
+(§2 zero-width-refusal-optin · BLOCKED · in Ranges / bounds / selects) (row 65's zero-width refusal is opt-in, so text folded at use stays silent):
+* Row 65's constant-position refusal of a zero-or-negative indexed width is opt-in (`edge_gate.rs` `zero_width_claim_is_sound`), so a zero width in text folded where it is used keeps the earlier silent default: a package routine's or typedef's text, a `$unit` routine or declaration, a class in a package, a package typed localparam (d.f_pkg_lp_typed_used `Q=4294967295 b=32`, d.k_unit_decl `b=1`, d.s_class_pkg_scoped `b=1`), a module typedef or routine read in a generate block that redeclares a name, a routine declared in a generate block (s3.gen_fn_local `r=1`), and a width a call or `$bits` computes
+* all three oracles refuse
+* status: BLOCKED (rows 46, 68, 71: the declaring-scope fold)

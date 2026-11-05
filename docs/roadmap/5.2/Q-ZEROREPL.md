@@ -1,0 +1,9 @@
+(§5.2 Q-ZEROREPL · rank ① · source row 40 plan O8 (W/row40/PLAN.txt §10); Q-NESTCAT r2 lens-sound F3–F5) (the zero-count replication rule admits illegal shapes and refuses legal ones):
+* slot: its string half lands in row 74 with Q-NESTCAT
+* the run-time zero-count rule (IEEE 1800-2017 §11.4.12.1: a zero replication is legal only as a direct operand of a concatenation that has an operand of positive size; `elaborate/src/expr_main.rs`, the packed `Concat` arm) admits a zero part without the positive-operand test: `r = {{0{8'h41}}}` runs (`[] 0`) and IEEE's illegal `{{{0{8'h41}}}, 8'h42}` is `0042` at exit 0, where verilator 5.052 reports ZEROREPL and iverilog 13.0 refuses (Q-NESTCAT r2 lens-sound F3 s1a s1b2; row 40 plan r_alone `45c`, r_allzero `000`; §2 "A zero-count replication nested inside a concatenation")
+* symptom: and it refuses two legal shapes: a parenthesised zero part `{a, ({0{8'h41}})}` (F4 s1p s1q; neither zero grant looks through parentheses, Z09 `{s, ({0{8'h41}})}`) and a zero part in a packed replication's value list `{2{8'h61, {0{8'h41}}}}` (F5 s1l), E3009 where iverilog 13.0 = sv2v = verilator 5.052 give a value (`6161`; row 40 plan x_paren, r_body, b_unpalone_z, b_unpbody_z)
+* scope: the run-time width walkers answer the same rule
+* note: the negative-count message cites §11.4.12.2
+* evidence: PRE 3e541d67
+* symptom: the string route has no zero grant: `r = {a, {0{8'h41}}}` (a = "a") is E3009 "a replication count of zero is only legal as a direct operand of a concatenation (IEEE §11.4.12.1)", iverilog 13.0 = sv2v = verilator 5.052 `Z7 [a] 1` (W/qnestcat/replan4/cells/c z7)
+* note: that half lands with Q-NESTCAT in row 74, after the cast, select and `wait` consumers (Q-NESTCAT r2b's grant moved C01, K01 and K05 from E3009 to wrong values), and Q-NESTCAT needs it (r1 without it: `r = {{a}, {0{8'h41}}}` `[a] 1` = all three → E3009; n12 n13 n15 t14 → E3009)

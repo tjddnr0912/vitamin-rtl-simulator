@@ -1,0 +1,5 @@
+(§2 🆕 AG · OPEN · in Start-order rows) (a constant call in a generate block binds the module's same-named function):
+* the constant lane has no generate scoping: `const_func_table` is module-level (`instance.rs:521`), so a constant call in a generate block binds the module's same-named function (x_gen_fn `P=7 bw=8`, iverilog `P=3 bw=4`; verilator refuses a generate-scoped constant function, IEEE 1800-2023 §13.4.3; staged two-CU st2 `c.g.P=5`, iverilog 3), and a module routine's header called from a generate block folds at the block's prefix (g_ret_modpar `P=232`, g_for_ret_par over a genvar `W`, rv558_gen `P=255`; both oracles `P=8`, `P=15`; rv560_genwide loud)
+* fix: generate routines registered per scope in the constant table (the root of §3.b `gen-rtn-edges`' constant-call half: one slice) and a routine's header folded at its declaring prefix (`rtn_decl_scope` as the window key)
+* iverilog (generate functions), 2 oracles (a module routine at a generate call site)
+* status: OPEN (§5.2 row 3)

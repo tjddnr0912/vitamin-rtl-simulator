@@ -1,0 +1,10 @@
+(§3.b readmem-assoc-loud · OPEN · in System tasks & file I/O) (`$readmemh` into an associative array: addresses and targets still refused):
+* scope: `$readmemh` / `$readmemb` into an associative array runs since §4.5.617 (one entry per address; local, generate-scope and cross-instance targets)
+* these stay refused by name: at run time (W4023, the load stops there) an address that is not a value of the key type — an `@` line, a start or finish argument, or the address after the last word (kw_int_big `[int]` `@7fffffff 11 5a`: verilator `k=7fffffff`, `k=80000000` (-2^31); ty_u8_trunc `[bit [7:0]]` `@1fe`: verilator key `fe`; ty_u8_wrap `@fe 01 02 03`: verilator wraps to key 0; ty_s8 `[byte signed]` `@ff`: verilator key -1; ty_b32_start_neg start -1 into `[bit [31:0]]`: verilator `ffffffff` then 0; kw_longint `@ffffffffffffffff` into `[longint]`: verilator -1) — the address is truncated / reinterpreted by verilator's cast, §21.4 stops at "the highest address in the memory", and a keyword key's index is read uncast (the §2 keyword-index line), so there is no single reading
+* a word before any `@` into a SIGNED key with no start argument (kw_int_noat: verilator starts at 0, §21.4 at "the lowest address in the memory")
+* an x / z start or finish (kw_int_x_start: verilator loads from 0)
+* and at elaboration (E3009) a `[string]` key (verilator: `$readmemh address/key must be integral (IEEE 1800-2023 21.4.1)`), an element type that is not integral (a class handle: e9_el_class_show, e9_hier_class, e7_el_class_noreader; verilator `$readmemh array values must be integral`), and an array that a `wait` condition reads (the §2 heap-`wait` line; sens_wake, r4_wait_num: verilator `woke t=5 n=2`)
+* an element select as the target (`$readmemh(f, mem[5])`, constant, variable or hierarchical index, any key type) keeps PRE's W4023 `$readmem target is not a memory` (verilator: `Unsupported: $readmemh into other than unpacked or associative array`)
+* `$writememh` / `$writememb` of an associative array keeps PRE's refusal (verilator writes it)
+* oracles: verilator + hand-IEEE §21.4
+* status: OPEN

@@ -1,0 +1,6 @@
+(§2 import-ambiguity-adjacency · OPEN · in Scoping / imports / block-locals) (import ambiguity follows adjacency, not the reference's position):
+* Import ambiguity follows adjacency, not the reference's position (§4.5.591: `package.rs` `wildcard_prior`, `imports_adjacent`, `scope_item_starts`): two wildcard imports of one name with any item of the scope between them keep their pre-§4.5.591 binding, so a reference after the second binds the first package's where iverilog and sv2v refuse (n04 `import pa::*; wire w; import pb::*;` `n04 P=3`; iverilog `Ambiguous use of 'P'. It is exported by both 'pa' and by 'pb'.`, sv2v `identifier "P" ambiguously refers to the definitions in any of pa, pb`), two ≤64-bit constants with a reference between are E3010 where all three oracles answer the first (c25, oracles `rn A=3 P=3`), and in a package body the later package wins (c07 `pr A=3 B=5`, c32 `pnw A=3 B=9`, D24 `d24 Z=3 Y=5`; 3 oracles `B=3`, `B=3`, `Y=3`)
+* fix: bind a wildcard name at its first reference (§26.3) and refuse a reference after a second offer
+* pins `import_one_binding_per_key.rs` `known_wrong_an_unrelated_item_between_two_wildcard_imports`, `known_wrong_a_package_reference_between_two_wildcard_imports`
+* oracles: 3 oracles
+* status: OPEN

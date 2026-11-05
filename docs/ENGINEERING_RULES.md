@@ -6,7 +6,7 @@ The rulebook for changing vita: how work is decided, measured, reviewed and gate
 
 This file is canonical for method, overriding any document disagreeing on it. Merge a rule learned while implementing into the matching section as one line. The file does not grow: a slice adding a rule makes room by merging or compressing rows (`wc -c` after the slice ≤ before).
 
-Before implementing read your role's sections (§3.2); no agent reads or is handed the whole file. Open work is in ROADMAP.md; the user-facing surface a change must keep true is in manual/.
+Before implementing read your role's sections (§3.2); no agent reads or is handed the whole file. Open work is in ROADMAP.md and roadmap/; the user-facing surface a change must keep true is in manual/.
 
 Vocabulary:
 
@@ -15,7 +15,7 @@ Vocabulary:
 | silent-wrong | A wrong answer with no diagnostic and a success exit; the outcome this repository exists to prevent |
 | honest-loud | A refusal or diagnostic naming what the tool cannot do; always safe, never as good as support |
 | correct support | The construct runs and its value matches the oracle |
-| PRE | The binary built from the pre-change tree, extracted with `git archive <branch>` into a scratch directory, built separately |
+| PRE | The binary built separately from the pre-change tree (`git archive <branch>` into a scratch directory) |
 | POST | The binary built with the change applied |
 | lens | An adversarial reviewer with a fixed attack method, differential or soundness; §3.7 sets how many |
 | census | An enumeration, from source, of every site able to reach a question, each cell measured, not argued |
@@ -185,7 +185,7 @@ Each design or code change gets adversarial review at its tier (§3.7).
 | Rule | Prevents |
 |---|---|
 | Separate roles: author, moderator, reviewer, recorder | Self-validation |
-| Give a review a checklist: the brief's questions, the touched rule sections, a preview/ spec only where one covers the change | A review inspecting whatever it happens to notice |
+| Give a review a checklist: the brief's questions, the touched rule sections, a preview/ spec only where one covers the change | A review inspecting only what it notices |
 | Review 4 axes: architecture/system integration, performance/efficiency, maintainability/readability, robustness/testability | Unasked classes |
 
 ### 3.2 The briefing
@@ -196,7 +196,7 @@ Each design or code change gets adversarial review at its tier (§3.7).
 | Freeze, hash binary (staged: `--features separate-bins`; soundness mutants: own `CARGO_TARGET_DIR`); mid-measurement edit a copy, re-review after; after a mid-round blocking fix re-freeze, naming the binary measured | Mixed builds |
 | Brief measurement table (cell × oracle × PRE/POST × class) as a file, opening "attack outside this table"; budget in tool calls, designs (on overrun: findings, next steps); clean is good, never invent findings | Waste, noise |
 | Prove non-vacuity: byte-identity counts only if the fast arm fires, firing count, observed args recorded | Vacuous identity |
-| Excerpt this file per role: every role §1, §2.1–§2.2; implementer §4 + touched §2, §5 subsections; differential lens §3.1–§3.3, §3.5, §6, §7.3; soundness lens §3.1–§3.2, §3.4–§3.5, §4 + touched §2, §5 subsections; L lens both sets; adoption and regression verdicts §3.5–§3.7, §6.3; planner, premise judge §3.6–§3.7, §4, §5.5, §7.3 (planner also §10.2); gate or corpus run none (CONTRIBUTING › The gate). Extract with `sed -n '/^### 3\.3 /,/^###* [0-9]/p'` | Bloated contexts |
+| Excerpt this file per role: every role §1, §2.1–§2.2; implementer, soundness lens §4 + touched §2, §5 subsections (lens also §3.1–§3.2, §3.4–§3.5); differential lens §3.1–§3.3, §3.5, §6, §7.3; L lens both sets; adoption and regression verdicts §3.5–§3.7, §6.3; planner, premise judge §3.6–§3.7, §4, §5.5, §7.3 (planner also §10.2); gate or corpus run none (CONTRIBUTING › The gate). Extract with `sed -n '/^### 3\.3 /,/^###* [0-9]/p'` | Bloated contexts |
 
 ### 3.3 The differential lens
 
@@ -289,7 +289,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 | Census each producer (constructors, struct literals, field writes, direct plane writes; aliases, pass-throughs re-seed defaults), not a green suite, before weakening a defensive check or never-positive guard and when briefing a new per-instance carrier (key, param); check routed predicates vs stored value | Unproven invariants |
 | Before any build, give the plan a premise table, a row per input its admission or decision reads (type or sign keyword, width, base, bound, value, initializer spelling, a narrowing theorem's invariant: "stored canonical", "only once, here, or never"; one a build or fix adds, before use): AST/IR field keeping it; producer census (every writer grepped); lossy or not (a writer dropping, folding, retyping or truncating it, shown by a PRE counterexample cell; a demoted lifetime: §7.3); disposition: trust, refuse by source spelling, or name the producer row a prerequisite now. Admit through the AST no token no field keeps faithfully: where the IR loses a type's identity or 2-state-ness, gate on the declaration's text; a parser-folded bound: §5.5. | Trusting a lossy producer as source text; narrowing on a false premise; misrecorded kinds passing type checks |
 | Enumerate the resource (each argument the engine writes back) and everything a moved site sets, not your edits or motivating field; two fields one function sets are usually one fact; a guard citing another as model is a census of two | Half-moved facts, copied omissions |
-| Before building, or accepting a wall ("this capability does not exist", "the executor cannot"), find any function implementing the rule (count sites that should call it but do not); before accepting a wall or building a reverted slice's prereq or a rejected construct's infra, find the nearest working spelling (one scope over, a sibling consumer carrying the guard) and what it calls; fresh-probe the simplest form, check interior mutability and routing, replace a caller's special-case assumption with a lookup (special case an identity, IR byte-identical); grep for a structure recording the property or partial support; in a routing census or a self-contradicting tool, find the correct site: it is proof and spec; an additive-looking parser gap may be a storage or evaluation-model gap | Rebuilt machinery; partly called rules |
+| Before building, or accepting a wall ("this capability does not exist", "the executor cannot"), find any function implementing the rule (count sites that should call it but do not); for a wall, a reverted slice's prereq or a rejected construct's infra, also find the nearest working spelling (one scope over, a sibling consumer carrying the guard) and what it calls; fresh-probe the simplest form, check interior mutability and routing, replace a caller's special-case assumption with a lookup (special case an identity, IR byte-identical); grep for a structure recording the property or partial support; in a routing census or a self-contradicting tool, find the correct site: it is proof and spec; an additive-looking parser gap may be a storage or evaluation-model gap | Rebuilt machinery; partly called rules |
 | Open population path of any set a check reads (no positional zip of formals); keep eligibility and process sets identical; check input set first if a feature works in one place only | Empty, mismatched sets |
 | Read a per-net predicate via the element loop, not `read_net(net, None)` (element 0 of an unpacked array) | Element-0 verdicts |
 | Search a concept's collectors by constructor, not name, and a source scan by prefix, not one family member | Uncounted siblings |
@@ -658,8 +658,8 @@ A test has teeth if a wrong implementation fails it: a mutation that must die, a
 |---|---|
 | Run a battery narrow-first after an unmutated baseline passes with a `Compiling` line: each mutant on `cargo nextest run --locked --no-fail-fast -p <mutated crates> -p cli --lib --test <killer files>` (without `--lib`, `--test` filters every package), a kill needing a compiled run and a failed named killer; re-run every narrow survivor or stale run and three killed mutants as parity controls at `--workspace --locked --no-fail-fast`, a control differing in verdict or killer failing the battery; record each killer (narrow can false-survive, never false-kill) | False survivals; one killer as many; a 36x cost per mutant |
 | Count non-termination, crash, leak, retried failures as kills (`FAIL`, `TRY 1 FAIL`, `TIMEOUT`, `SIGSEGV`/`SIGABRT`/`ABORT`, `LEAK-FAIL`); re-run a non-termination kill against own tests only; take a hang out of the battery, measured once by hand | Hangs scored as survived; a child still writing to the pipe |
-| Write every mutant's expected outcome before running the battery | A wrong expectation passing as another death |
-| Add no parameter that no mutation can kill, and before adding a test row name the mutant that would survive without it | Dead parameters; rows that decide nothing |
+| Write every mutant's expected outcome before the battery | A wrong expectation passing as another death |
+| Add no parameter no mutation can kill; before adding a test row name the mutant surviving without it | Dead parameters; rows that decide nothing |
 | Pin a correctness argument: imagine the mutation inverting it and commit the design killing it in the same commit | Reasoning with no pin |
 | Treat survival, a fake one too, as unexplained: find who re-decides the value, build the one working discriminator however awkward (a defect-finding step), argue equivalence in code only after failing, prove unreachability by deliberate failure; separate "gate weak" from "mutation insufficient"; read clustered survivors as a test-axis diagnosis, stating their common property in one sentence | Real gaps closed on paper; discarded defects; one-by-one chasing |
 | Gate every emitted table, workload, golden or differential with an asymmetric one-line upstream mutation (one end of data path) that must move it, pinning the change its numbers must stay invariant under | Unmovable digests; cancelling mutations |
@@ -767,23 +767,22 @@ A test has teeth if a wrong implementation fails it: a mutation that must die, a
 
 | Rule | Prevents |
 |---|---|
-| Record a finished slice only in its commit message (`§4.5.N`, bug, mechanism, byte-identity, review): no archive entry, snapshot row, lessons entry or REMAINING_WORK rewrite; find a past slice with `git log --grep` | Per-slice doc writes no later step reads |
-| Keep ROADMAP to open work, one line per item, and put no gate or test counts in any document | Prose and counts going stale |
-| Write a queue edit, deferrals included, into the canonical queue only, deleting mirrors, never syncing them; give a question one canonical section, split where two are needed; verify a doc migration by sorted line sets (`comm -23`), not headings | Stale copies; items lost in a move |
+| Record a finished slice only in its commit message (`§4.5.N`, bug, mechanism, byte-identity, review): no archive entry, snapshot row, lessons entry or REMAINING_WORK rewrite; find it with `git log --grep` | Per-slice doc writes no later step reads |
+| Keep ROADMAP to open work, one line per item (id, title, link; status or slot if any), its text in its detail doc (roadmap/README.md); no gate or test counts in any document; write a queue edit, deferrals included, into the canonical queue only, deleting, never syncing, mirrors; give a question one canonical section, split where two are needed; verify a doc migration by sorted line sets (`comm -23`) or per-item token multisets, not headings | Prose, counts and copies going stale; a list line holding a record; items lost in a move |
 | Treat a document enumerating a parallel-table set as code, updated in the same edit; say what a constant is for, pointing at its canonical site, never restating it; grep the number when a bump ships | Enumerations and constants decaying; a restated constant freezing |
 | Re-prove in this file any property a comment asserts: diff both bodies for "twin of", check "duplication avoided" against the code, read the rule's other copies, re-verify every sentence of a comment block you open to fix one | Copied or neighbouring claims false |
-| Name what actually holds an invariant, and the reason an implementation is there when it must be named | Leaning on a false argument |
+| Name what actually holds an invariant, and why an implementation is there when it must be named | Leaning on a false argument |
 | Say what a temporary workaround is for, removing it with the root fix; delete a caller-less macro or helper, recording why | Workaround defects; toothless gates |
 
 ### 10.4 Tooling and machine safety
 
 | Rule | Prevents |
 |---|---|
-| For a scripted splice, assert the anchor exists, then verify the result and read 20 lines either side of the insertion point | A stolen doc block; no-match as success |
-| Require a full diff and an oracle re-verification for any agent given write access | An unnoticed whole-file replacement |
+| For a scripted splice, assert the anchor exists, then verify the result and read 20 lines either side of the insertion | A stolen doc block; no-match as success |
+| Require a full diff and oracle re-verification of any agent given write access | An unnoticed whole-file replacement |
 | Make each edit an independent write, grepping that it landed before the comment or report, a multi-edit script reporting failures and continuing; after a result not visibly complete re-establish state (`git status --short`, `git diff --stat`; re-read a write; re-run a command) | Reasoning about writes that did not land |
 | Rebuild after changing build configuration (product and oracle share a target path); verify a feature flag with `cargo tree -p <crate> --no-default-features -e features`, then rebuild and test as CONTRIBUTING › Cargo features, The product-shape axis say | Testing a binary you did not mean |
-| Never run two full suites concurrently, add no pre-emptive build before the test runner, and never send an uncatchable kill to a runner mid-build | Shared-path flakes; double builds; stale locks |
+| Never run two full suites at once, add no pre-emptive build before the test runner, send no uncatchable kill to a runner mid-build | Shared-path flakes; double builds; stale locks |
 | Redirect a gate's output to a file, its exit code captured apart (`cargo … > x.log 2>&1; T=$?`); after an unavoidable pipe read zsh `${pipestatus[1]}` or bash `${PIPESTATUS[0]}`, not `$?`; write a parallel process's log line in one write, aggregation flagging contamination on a value outside the known set | Failures read as green; torn rows |
 | Wait on a process identifier (`while kill -0 $PID; do sleep …; done`), never a `pgrep -f` pattern matching the waiting shell; run a wait's predicate once by hand before arming it, prefer an inspected artifact's condition, kill the wait when the answer arrives another way | Deadlock; waiting on a string never written |
 | Grep every site deciding a default before flipping it; a revert is an edit: specify the deleted range by line, grep deleted symbols for surviving references, check adjacent tests, documents and helpers survived | Partial flips; invisibly deleted tests |

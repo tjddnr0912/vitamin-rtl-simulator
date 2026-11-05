@@ -1,0 +1,2 @@
+(§2 self-timed-before-initial · in Oracle splits (recorded, not chased)) (a self-timed `always` written before the `initial` that drives it):
+* a self-timed `always` (no header) written before the `initial` that drives it, at t0 — split (vita = iverilog: source order, a `unique` miss on x reports at t0; verilator starts the `initial` first): s1s_case (iverilog `Time: 0`, `Time: 1`), s3_case (`Time: 0`, `Time: 2`), s1s_selftimed_first, s3_child_selftimed_tbL (the `if` chains, §4.5.585), s583 v04

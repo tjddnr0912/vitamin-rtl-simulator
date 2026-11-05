@@ -1,0 +1,7 @@
+(§2 wait-heap-container · OPEN · in Delays / events) (a `wait` over a heap container's element or method never wakes):
+* A `wait` over a heap container's element or method never wakes when the container's elements are written — queues, dynamic arrays and associative arrays alike: w9_queue_size `wait (q.size() == 2)` after two `push_back`, w9_dyn_elem `wait (d[1] == 5)` after `d[1] = 5`, w9_assoc_elem_typed `wait (mem[16] == 8'h5a)` on `[bit [31:0]]`, r4_wait_val_ew / r4_wait_num_ew / r4_wait_exists_ew over `bit [7:0] mem [int]` (`mem[16]`, `mem.num() == 2`, `mem.exists(16)`) each print only `end`, no diagnostic, on PRE 77231d42 (verilator `woke t=5` for each, `woke t=5 n=2` / `woke t=5 v=5a` for the `$readmemh` twins r4_wait_num / r4_wait_exists, `t=5 n=2 5a` for sens_wake): the engine re-checks a `WaitCause::Expr` waiter after a net change (`sched/propagate.rs`), and an element write to heap storage is not one
+* `always_comb`, `always @*`, `assign` and `$monitor` over the same reads do wake.
+* Since §4.5.617 a `$readmem*` into an associative array that any `wait` condition reads (directly, through a method or an element, hierarchically, or inside a called function) is refused by name (E3009) rather than opened onto this
+* prerequisite candidate for that refusal and for every heap-container `wait`: a heap write wakes the expression waiters that read its handle
+* oracles: verilator
+* status: OPEN

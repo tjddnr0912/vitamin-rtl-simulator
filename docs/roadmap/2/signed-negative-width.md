@@ -1,0 +1,4 @@
+(§2 signed-negative-width · OPEN · in Ranges / bounds / selects) (a signed parameter holding a negative indexed width reads unsigned):
+* A signed parameter holding a negative indexed width reads as its unsigned bit pattern in a constant position: `P[0 +: N]` with `localparam logic signed [3:0] N = 4'sb1000` sizes `logic [P[0 +: N]:0]` from width 8 (`b=4`, = iverilog and sv2v; verilator refuses) where the run-time select refuses it as negative (§4.5.601) and a negative sized literal width is refused (§4.5.607): `const_param_select` declines the signed width and the wide fold's `IndexedPart` arm (`const_wide.rs`, `fold_count`) reads it unsigned, in every constant consumer (row 65 review round 1, sound N2)
+* hand-IEEE (verilator answers the sign axis two ways, row 65 F2 ruling)
+* status: OPEN

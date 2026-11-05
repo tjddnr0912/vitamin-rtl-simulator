@@ -1,0 +1,5 @@
+(§2 bits-flat-prescan · OPEN · in Scoping / imports / block-locals) (`$bits` reads the flat prescan before the scope-aware net table):
+* `$bits` reads the flat decl-order prescan (`bits_prescan`, `bits_of_view`) before the scope-aware net table in every nested scope, so a generate block's, a routine's, a begin-block's or an interface's own declaration answers with a same-named outer one (an interface body reads its instantiating module's): z01 gen whole `A=32`, z02 function-local, z03 block-local (all three 16), z04 gen unpacked view 32 (8), z05 gen replication `ffffffff` (`ff`), z06 gen 1-D vs module unpacked 8 (1), f13 and d32 block-local unpacked vs module localparam 1 (8), d11 gen shadow 8 (4), i04 interface `B=32` (16), a07 fork-local `01` (Verilator `ff`), a19, a27, a29, a35, a44 typedef-at-use over a nested constant 1-2 (8-16), a22 concurrent-assertion action `01`
+* PRE=POST (§4.5.605's select arms decline in a nested scope and do nothing in an interface body)
+* the B-stage fix applies the scope gate to every prescan read
+* status: OPEN

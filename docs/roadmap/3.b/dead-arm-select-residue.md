@@ -1,0 +1,9 @@
+(§3.b dead-arm-select-residue · OPEN · in Nets / timing) (a reversed select in a never-taken `if` arm, by condition shape):
+* scope: a reversed `[m:l]` select in a procedural `if` arm a constant condition never selects runs since §4.5.608 (row 17) only where the condition folds from known integral constants under `!`, `&&`, `||` and the relational and equality operators and the arm's own statements hold the select
+* still E3009 where all three oracles run it (Icarus Verilog elaborates only the taken arm): a condition with `$clog2` (`$clog2(N) > 0`), arithmetic (`N - 1`), a unary minus (`PU > -1`), an x/z bit (`if (1'bx)`), a variable under `&&` (`N > 1 && g`, all three `tid=5a`), a string parameter (`MODE == "SLOW"`, a common idiom), `==?`, a parameter wider than 64 bits, a hierarchical `$bits` (`$bits(u.X)`, a placeholder until the deferred pass: dead by the real width, still refused; all three `tid=5b`), a hierarchical parameter read (`u.P == 4`, `top.u.P`, `u.C[3:0] == 4'h6`) or a generate-scope localparam read by name (`blk.L == 3`, `gen[1].L == 0`; iverilog `tid=5b`)
+* a select an abandoned first lowering leaves behind (a fill re-lowered at the target width, `y = {tid[3:4], 6'd0} | '1`, all three `tid=5b y=00`)
+* a select reversed by a negative bound (`g[CL-1:0]`, the edge decision's refusal; `t1=5a t2=da t4=da`), on a multi-dimensional packed array (`p[3:4]`, `p=5511223344`), hierarchical (`u.tid[7:8]`) or in an event expression (`@(tid[7:8])`)
+* note: a static block-local initializer in the arm runs before any procedure starts (IEEE 1800 §6.8), so its refusal stands.
+* Over-acceptance (an oracle split): a function inlined into the dead arm whose body holds an unconditional reversed select, called from no live site, runs (never executed; iverilog refuses the body, `part select a[3:4] is out of order`; verilator warns SELRANGE and runs: `tid=5b r=00`)
+* evidence: row 17's grounding and round-1 review cells
+* status: OPEN

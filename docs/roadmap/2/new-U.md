@@ -1,0 +1,7 @@
+(§2 🆕 U · BLOCKED · in Start-order rows) (a genvar, enum label or narrow import over a wide constant reads the wide value):
+* the wide→narrow half (U-b; §4.5.591 closed the import half): a genvar (and its generate-routine replay), an enum label (module, package, a bare generate region) or an explicit narrow import (over a wildcard or `$unit` >64-bit constant) rebinds `params` and leaves the key's >64-bit / string entry, which `bare_ident_route` and `wide_name_bits` read first (A1D `i=18446744073709551625 K=9`, B2D `E1=18446744073709551616 K=0`, Egr, Iwn_val `P=18446744073709551625 K=9`, Icue_wn, Ghr, Gnr_fn; 3 oracles `i=0 K=0` / `i=1 K=1`, `E1=1 K=1`, `P=3 K=3`)
+* cause: writers `generate.rs` genvar arm, `frames_reserve.rs` `with_rtn_decl_scope`, `instance.rs` `bind_enum_labels_of`, `package.rs` explicit narrow arm
+* fix: take the key's wide / string / real entry (and `hier_param_range`, the replay's `param_range`) around a genvar and put it back after, labels in the wildcard skip set, an explicit narrow removing the losing wide and its `param_meta` (§4.5.591's prototype: 42 grounding cells silent→correct, 5 loud→value = oracles)
+* pins `import_one_binding_per_key.rs` `held_*`, `must_stay_loud_*`, `generate_case_and_wildcard_prerequisites.rs` `p1_a_genvar_under_a_wide_constant`
+* 3 oracles
+* status: BLOCKED (🆕 AE: the corrected narrow value reaches the constant interpreter where PRE's wide one was refused, through an override or a localparam alias, so no opt-in contains it: Gw_cae `W=0` / `W=1`, Iwn_kae `W=3`, Gw_kae; 3 oracles `W=x`)

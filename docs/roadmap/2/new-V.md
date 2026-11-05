@@ -1,0 +1,9 @@
+(§2 🆕 V · BLOCKED · in Start-order rows) (a generate-scope parameter stays bound across the four generate walks):
+* each of the four `GenPhase` walks (`instance.rs` Nets, VarInit, Logic, Instances) re-runs `generate.rs` `elaborate_gen_item` (`GenItem::Case`, `elaborate_gen_if`, `GenItem::For`), and a generate-scope parameter is bound at its position in every walk and never unbound (`generate.rs` `(_, ModuleItem::Param)`), so a walk after Nets reads the previous walk's inner binding where Nets read the outer object or none, and a forward reference mixes arms (nets from the Nets arm, processes and instances from a later one): d1p `k 8 bits=4`, V04x `k 8 bits=6`, I4 `then`, F3 `L0 L1 L2`, Z0c `local 8 bits=4`
+* iverilog refuses d1p, prints `one 1 bits=6`, `else`, `L0`, `pkg 9 bits=4`
+* §4.5.592 recorded the Nets decision per construct instance (prefix, kind, span), verified it in each later walk and was reverted whole after three rounds, every mismatch policy failing: an E3010 on any mismatch refuses legal designs PRE prints right (DL01, DL06, DL08 `@bits=4`, DL03 `@Q=10`, DL11 `@w=9 bits=4`, = iverilog; refusing only where an arm builds something still refuses R3a, R3b, R3m)
+* a silent replay where the Nets walk read every input exposes 🆕 AE (Z1g: PRE loud, replay `P=0000`, iverilog `L0 w=10 P=xxxx`)
+* a silent replay where neither arm builds anything misses that every walk re-binds the arm's parameters (SN6: iverilog, sv2v, verilator and PRE `P=1`, replay `P=9`) and drops the range report each walk makes (R3q: PRE and 3 oracles refuse, replay `@bits=4`)
+* fix: bind each generate level's own parameters by position in every walk as Nets does (the "Scoping" later-walk reads line), so the walks decide alike by construction
+* oracles: iverilog + hand-IEEE §26.3 (sv2v and verilator are no oracle here: "Oracle splits")
+* status: BLOCKED (the "Scoping" later-walk reads line; 🆕 AE for a decision it moves: Z1g, and AE5–AE9 under a scope-wide pre-bind)

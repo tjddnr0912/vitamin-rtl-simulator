@@ -1,0 +1,8 @@
+(§5.2 Q-CADYNELEM · rank ① · source Q-RELDELAY r2 lens-diff N3 (C09), r2 D7 (C09b C09c), r2 lens-sound N2 (h1 h2 h5)) (a continuous assign to a dynamic array or queue element is accepted):
+* a continuous assignment to an element of a dynamically sized array or queue is accepted, against IEEE 1800-2017 §6.21 ("elements of dynamically sized array variables shall not be written with nonblocking, continuous, or procedural continuous assignments"): `int da[]; assign da[0] = a;` runs (C09b: vita `S t=1 da0=0 \| S t=2 da0=1`; C09c `int da[] = '{0, 0}; assign da[1] = a;`: vita `S t=1 da1=90 \| S t=2 da1=1`, with W4020 `dyn index out of range or X (write ignored) [at time 0]`), and so does an element chunk of a delayed concatenation lvalue (C09; h1 `assign #2 {d[0], y} = {a, b};` with `logic [3:0] d[]`, h2 a queue element `q[0]`, h5 `{d[1], v}`)
+* oracles: iverilog aborts (`netlist.cc:771: failed assertion`) or refuses (C09 `the number of indices (2) is greater than the number of dimensions (1)`), sv2v does not parse C09 C09b h1 h2 h5 (`Parse error`) and runs C09c as a 64-bit vector (`S t=1 da1=90 \| S t=2 da1=1`, = vita), verilator refuses (`Dynamically-sized variable not allowed in continuous assignment`, `%Error-CONTASSINIT`)
+* note: the only way a release reaches the native heap-chunk escape (`is_heap_net \|\| skip`, h1 `S t=6 y=0110 d0=1010`)
+* symptom: a `real` element too (`real dr[]; assign #3 dr[0] = a;`, P01b: vita `S t=6 bits=8000000000000000`; two such drivers of one element run with no multi-driver check, P27b `d0=1.000000`), where ENG-1c keeps the right-hand-side decision rather than the store image (its round 1 moved both)
+* fix: refuse by name
+* status: pre-existing
+* source: ENG-1c r1 lens-sound F-D (N19 P01 P01b P27 P27b)

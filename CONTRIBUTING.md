@@ -325,7 +325,7 @@ pull request, and needs one approval. Force-pushing to `main` is not permitted.
 | [`docs/ENGINEERING_RULES.md`](docs/ENGINEERING_RULES.md) | the canonical method: the accuracy ladder, census and review procedure |
 | [`docs/preview/`](docs/preview/) | the design specifications |
 | [`docs/manual/`](docs/manual/) | the user manual |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | every open work item |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | every open work item, one line each (id, title, link, status or slot when it has one); each item's text in its detail doc in [`docs/roadmap/`](docs/roadmap/README.md), which gives the format |
 | [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) | the one-screen snapshot and the queue |
 | [`docs/history/`](docs/history/) | completed work, the development log, review documents and dated plans |
 | [`docs/README.md`](docs/README.md) | the documentation map |

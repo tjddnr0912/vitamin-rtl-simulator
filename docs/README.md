@@ -19,7 +19,7 @@ any of them.
 |---|---|---|---|
 | 1 | [manual/](manual/) | Current | how to use the simulator — install, CLI, supported language, system tasks, limits, error codes. Chapters `000`–`007`, in order |
 | 2 | [REMAINING_WORK.md](REMAINING_WORK.md) | Current | one screen: what stands between HEAD and the two goals, and what is queued next |
-| 3 | [ROADMAP.md](ROADMAP.md) | Current | every open item, by section — silent-wrong defects, loud-to-supported promotions, performance, observability |
+| 3 | [ROADMAP.md](ROADMAP.md) | Current | every open item, by section — silent-wrong defects, loud-to-supported promotions, performance, observability; one line per item (id, title, link, status or slot when it has one), each item's text in its detail doc in [roadmap/](roadmap/README.md), cut into bullets only at the text's own top-level sentence ends and `; ` |
 | 4 | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) | Current | how work is done here: the correct-or-loud ladder, the census and review method, and the rule each lesson produced. Read before implementing |
 | 5 | [PROBE_CATALOG.md](PROBE_CATALOG.md) | Current | pre-existing defects a review measured outside a slice's fix path, one row each with repro and oracle values |
 

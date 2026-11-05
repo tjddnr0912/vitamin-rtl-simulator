@@ -1,0 +1,7 @@
+(§5.2 Q-PCTUREC · rank ① S) (`%u` / `%z` of an unpacked struct or union need its member layout):
+* `%u` / `%z` of an unpacked record need its identity at the format argument (IEEE 1800-2017 §21.2.1.2, ieee1800-2017.txt:28668–28671: each member in declaration order; a union its first member): a packable unpacked struct lowers to a bare `logic [W-1:0]` (`hdl-parser/src/structs/decl.rs:466–505`) known only to the parser's name-keyed maps (§4.5.571), so with P-PCTU's encoder `%u` of `'{8'h41, 16'h4243}` writes the flat `43424100` where IEEE writes `41000000 43420000` — 22 shapes (module, block, task / function local, array / dynamic / queue element `rq[0]` `rq[$]`, task formal and output, hierarchical, package, 2-state, `c ? us : us2`) + 6 the language refuses and vita accepts (`us + 0`, `{us}`, `~us`, `us[7:0]`, `us[3]`, `c ? us : 24'h0`: PROBE_CATALOG's unpacked-struct-operand root)
+* verilator prints the `%p` text, sv2v the flat vector, iverilog refuses
+* first: a record channel from row 66's TypeRec to the format argument (an AST / sim-ir change is an owner decision: SchemaHash) or a refusal the walk guarantees
+* exit: the 28 lines IEEE or loud.
+* P-PCTU also waits for the 5 handle shapes: Q-CLSRET (`u0.getc()`, `sel ? getc(0) : getc(1)`), row 74 ET with a handle kind (`c ? h1 : h2`, `c ? h : null`, `hq[1]`: `ast_handle_kind` has no `?:` or container-element arm), row 75 DH (the hierarchical call)
+* source: P-PCTU r2 plan (W/ppctu/PLAN2.txt § 5; cells W/ppctu/plan2 cells un_*, cells3 un_hier, pcells r_* rs_*)

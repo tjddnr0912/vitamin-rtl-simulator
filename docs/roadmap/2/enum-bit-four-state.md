@@ -1,0 +1,5 @@
+(§2 enum-bit-four-state · OPEN · in Size cast / signedness) (a `typedef enum bit` stores and reads 4-state values):
+* `typedef enum bit [7:0]` stores 4-state (reads x, keeps `X`; the parser records `enum bit [N]` as `Logic`, `hdl-parser/src/typedefs.rs:351`, and a function returning one gets `ret_two_state` false, `functask.rs:201`: d01rt `repeat (fd(a2))` over a never-assigned `enum bit [3:0]` local `n=2`, d05rt over such a return `n=0`, iverilog and verilator `n=1`, `n=2`; a continuous or procedural write keeps x too, ENG-1c r2 lenses: S12 `e_t y; assign #(1,4) y = e_t'(a);` with `a` 01 → xx → 01 vita `W t=11 y=x \| W t=24 y=1`, iverilog = verilator `W t=14 y=0 \| W t=21 y=1`; E01 undelayed vita `y=xx`, iverilog = verilator `00`; E02 procedural, the same; q4g, and q4g4 a packed struct with an `enum bit` member; q4g5 `y = e_t'(4'bx01z)` vita `y=x01z`, iverilog = verilator `0010`)
+* prerequisite of §3 ⑤ⓕ's enum base and of §2 🆕 AE's `repeat` cut
+* oracles: 2 oracles
+* status: OPEN (§5.2 row 8)

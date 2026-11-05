@@ -1,0 +1,3 @@
+(§5.2 Q-SRCBYTES · rank ② · source Q-STRBYTES plan probe p12) (a source file that is not UTF-8 is refused):
+* a source file that is not UTF-8 is refused: `error[VITA-E8005]: cannot read 't.sv': stream did not contain valid UTF-8` (PRE 9d60771d; `std::fs::read_to_string`, `cli/src/frontend.rs:1038` and the other source readers) where iverilog 13.0 and verilator 5.052 take a Latin-1 byte in a string literal and print it (`"\xC8A"` → `c8 41`, len 2; sv2v decodes the byte to U+FFFD itself, len 4, so it is no oracle for raw source bytes)
+* fix: decide where source bytes become text (string literals and comments byte-exact, identifiers ASCII), census every source reader and the lexer's `&str`

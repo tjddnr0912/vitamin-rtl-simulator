@@ -1,0 +1,2 @@
+(§2 let-shadow-width · in Oracle splits (recorded, not chased)) (a `let` declaration shadowing an outer parameter read as a constant width):
+* a `let` declaration shadowing an outer parameter read as a constant width (t.let_label_blk, t.let_decl_mod_unit; row 65 review round 3) — no oracle (iverilog sorry, sv2v a parse error, verilator an internal error or "VAR but expected a task/function"): PRE reads the outer parameter, also at run time (`n=0`), and row 65's zero-width claim refuses it as zero

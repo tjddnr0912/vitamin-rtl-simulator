@@ -1,0 +1,8 @@
+(§5.2 Q-PATNOREC · rank ② · source row 41 plan §16 F3 (W/row41/PLAN.txt)) (a keyed assignment pattern with no target record is refused at two page lines):
+* slot: page row
+* slot: TW1 at row 41's landing, §4.5.634: as C rows the four page rows would put OT-12 at 19 against 16 at the last check, +3 where TW1 stops at +2, so the C slot is a fresh opus-plan's (W/program/q6-2026-10-31/REPLAN.txt D6)
+* slot: `any` until then
+* a keyed assignment pattern with no target record is E3009 at two page lines, one funnel: the 4 at `hmac.sv:699:13` are `hmac_core.sv:197 / 199 / 201 / 203`, `'{data: .., mask: '1}` in ternary arms onto `sha_fifo32_t`, whose member has a named bound (`logic [WordByte32-1:0] mask`) so `pattern_members` is None (W/row41/r1/filed/w_terpat4.sv E3009, the literal-bound twin w_terpat2 runs, sv2v and verilator `A x=fffffffff|A x=12345678f|A x=fffffffff`, iverilog syntax error; `hmac_core.sv:134` `'{default:'0}` on a vector is not the stop: w_vecdef, w_vecdef2 PRE = sv2v = verilator, and replacing the six `'{default:'0}` leaves all 4)
+* symptom: `adc_ctrl_core.sv:57` `assign aon_filter_ctl[0][k] = '{min_v: .., ..}`, 16 at `adc_ctrl.sv:85:17`, a keyed pattern onto a struct element of a packed array (w_elem1 `f_t [3:0] g; assign g[k] = '{..}`, w_mdelem md: E3009, sv2v and verilator `A g=39ce7`, `A g=c631839ce7`)
+* hmac, adc_ctrl.
+* The text the funnel prints, `a keyed assignment pattern ... is supported for a packed-struct target`, is printed on a packed-struct target (row 41's holder and its keyword twin alike, W/row41/lens-sound/sets/h/h01_kwpat_fnarg.sv: PRE = POST)

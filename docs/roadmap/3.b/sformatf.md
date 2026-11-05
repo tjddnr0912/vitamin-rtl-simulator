@@ -1,0 +1,6 @@
+(§3.b sformatf · OPEN · in System tasks & file I/O) (`$sformatf` inside a ternary, short-circuit or task argument):
+* symptom: `$sformatf` in a ternary / short-circuit / task argument (`format_args_str`)
+* witness: corpus witness row-9 O12, the EL2 / EH1 tb's `tb_top.sv:2488` (verilator `      #7|x=3c`; iverilog and sv2v refuse the tb's ternary types)
+* a first cut was reverted at its review (2026-10-20, seven blocking findings), and the re-plan meets four named prerequisites: an x `?:` condition over two string arms (the x-merge of two strings, hand-IEEE §11.4.11: iverilog aborts, verilator is 2-state), a hoisted arm keeping its order against a non-inert sibling and the condition (`$display("B %0d %0d", $random, c ? slen($sformatf("abc")) : 7)`), an intra-assignment-delay string assign keeping its value, and a mixed string / integral `?:` keeping its `lower_string_concat_parts` cast
+* symptom: in the same lane PRE is silent-wrong where `sformatf_expr_ok` (`strings.rs`, `frames_body.rs`) licenses a `$sformatf` under a `?:` arm (`s = {a, ((v ? slen($sformatf(…)) : 9) == 4) ? "Y" : "N"}` `[AN]`, a framed `return c ? slen($sformatf(…)) : 9` `flen2=1`; iverilog and verilator `[AY]`, `flen2=4`), a separable first half
+* status: OPEN (§5.2 row 26)

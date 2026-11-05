@@ -1,0 +1,8 @@
+(§5.b NBA-GROWTH · OPEN) (nothing bounds the NBAs or forked processes piled up in one time step):
+* symptom: nothing bounds the pending NBAs or forked processes one time step can pile up
+* F4027 (`max_body_steps`) bounds steps, not memory, so a plain `always` with a zero-delay pass holding a non-blocking assignment grows to GB before it fires (PRE, under a 1.5 GB watchdog: `always begin if (en) @(posedge clk) q <= d; q2 <= d; end` with `en` 0, 1.53 GB in 0.69 s; four NBAs, 1.69 GB in 0.56 s; `begin repeat (cnt) @(posedge clk); q2 <= d; end` with `cnt` 0, 1.57 GB in 1.20 s; `always begin fork @(posedge clk) q <= d; join_none end`, 1.51 GB in 1.45 s; under a 6 GB cap the first fires F4027 at 4.7 GB and the four-NBA one does not before 6 GB; the §4.5.597 review's u1–u3 twins; m15 `always fork #1 a = ~a; join_none` with `initial #3 $finish;` prints F4027 and is still killed at 2.4 GB in 3.01 s, verilator 5.052 `M a=0 b=0 n=0`, iverilog 13.0 `t.sv:4: error: always process does not have any delay.`; a37 `always fork #5 clk = ~clk; x = 1; join_any` 2.0 GB in 7.54 s, iverilog the same error (W/qalwintra/r2/lens-diff/cells/d5); a4t, `always #1 x = ~x;` waking a design's own zero-time NBA loop of a 1 Mbit vector, 2.1 GB in 0.57 s, iverilog and sv2v killed at 1.7 GB in 0.45 s, verilator `%Error-DIDNOTCONVERGE: Inactive region did not converge after '--converge-limit' of 10000 tries` (W/qalwintra/review-design/r2/cells/b11/a4t_twin))
+* `sched/propagate.rs::schedule_nba`, `native/kernel.rs` (`nba`), the fork spawn
+* fix: F4027 or a sibling fatal also bounds pending NBAs and live processes per step
+* oracles: no oracle needed (a guard)
+* note: §5.2 Q-ALWBUDGET is the same guard on one pass
+* status: OPEN

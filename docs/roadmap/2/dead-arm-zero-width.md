@@ -1,0 +1,7 @@
+(§2 dead-arm-zero-width · OPEN · in Ranges / bounds / selects) (a zero-or-negative indexed width in a dead `?:` arm runs the live arm):
+* A zero-or-negative indexed width that only the constant domain reads in the UNSELECTED arm of a constant `?:` runs on the live arm: a parameter value (z.lp_tern_dead `localparam logic [7:0] X = (N > 0) ? P[0 +: N] : 8'h33`, `N = 0`: `X=33`; y.lp_tern_int `X=51`), a declaration bound (y.decl_range_tern `b=4`), a generate condition (y.genif_tern `o=22`), an enum value (y.enum_val `e=7`), an override (y.override_tern `W=4`), a package localparam (y.pkg_lp_tern `X=33`), a generate-block or genvar-dependent one (w.gen_lp_dead_tern, w.genvar_dead_tern `X=33`)
+* every oracle that parses them refuses (IEEE 1800-2017 §11.5.1; sv2v prints the package one)
+* the constant domain's `Ternary` arms never fold the dead arm (`const_eval_in_scope`, the wide fold, the constant-function interpreter), so a fix is the shared fold or every constant consumer (row 65 left it; F tier)
+* an undefined name there binds the same way (Q-XFALLBACK lens D D-3: `localparam int P = 1'b1 ? 2 : NOSUCH;` `P=2` and a declaration bound `[(1'b1 ? 3 : NOSUCH):0]` `b=4` on PRE 719e37d2, the taken-arm twin E3009 "undefined name `NOSUCH`"; iverilog 13.0 "Unable to bind parameter", verilator 5.052 "Can't find definition of variable", sv2v → iverilog `P=2` / `b=4`; IEEE 1800-2017 §6.5, ieee1800-2017.txt:3544: data shall be declared before they are used)
+* oracles: 3 oracles
+* status: OPEN

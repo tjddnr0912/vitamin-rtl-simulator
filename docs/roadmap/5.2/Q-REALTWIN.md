@@ -1,0 +1,10 @@
+(§5.2 Q-REALTWIN · rank ① F · source row 48 design r4 (R4-2, R4-3); review r3 R3-F2; review r4 R4-F3 R4-F7 R4-F10) (an exact real parameter's integer twin is read as an integral name):
+* slot: PARKED 2026-10-29 behind row 74: its rule text (W/row48/DESIGN4.txt R4-1, R4-2) is not a build spec — it failed review r4 and re-derives on row 74's operand-typing census
+* slot: after Q-REALSPLIT: removing the twin read first sends rs_twin3 into the whole-region fold and turns its right 1 into 2
+* symptom: V′, §2 "Real" (the import lane's twin) — an exact real parameter is also bound as an i64 twin in the integral maps (`instance.rs:720–738`, the generate and package binders, the import lane `apply_import_consts` `package.rs:1387`, the interface view, overrides `params.rs:1726`), and the integral walks read the twin as an integral name: `parameter real R = 4;` `R / 8` is 0 where iverilog, sv2v → iverilog and verilator give 1
+* cause: row 48's typing census, 15 producer and reader sites
+* exit cells, PRE | iverilog | sv2v → iverilog | verilator: silent → value r1_twin `gi=F|A1=0 A2=1 A3=0 A4=2 A5=6` | `gi=T|A1=1 A2=1 A3=1 A4=3 A5=5` (= sv2v = verilator), r1_twin2 `gc=ZERO p=0` (verilator `gc=DEF p=1`, iverilog refuses), r1_tdtwin A1, A3 0, 0 (iverilog and verilator 1, 1), rs_twin3 A2 `((R / 8 > 0) + 3) / 2` 1 | 2 | 2 | 2, mx_xc_td B2 0 | 1 | 1 | 1, mx_pc_td C1 -56 | -55 | -55 | -55, im_exact / im_wild (`import p::PX;` / `import p::*;`) A1 0, A3 2 (iverilog and verilator 1, 3), k_impfn (a constant function's `return PX / 8 * 16;` over the wildcard-imported real) 0 | 8 | 8 | 8 (review r4 R4-F10)
+* witness: silent → loud rs_twin6 `logic [R / 8 + 1 : 0]` 2 bits (iverilog 3, verilator refuses)
+* pins: must not move rs_twin3 A1 1, rs_twin4 (`gi=T bw=4 asz=4`; a strict §6.9.1 reading, :4258, would refuse it too: owner question O29), r1_tdtwin A2 1, im_exact / im_wild A2 1, mx_xc_td B1 1, mx_pc_td C2 -44
+* fix: the re-derive closes (review r3, r4): R3-F2, R4-F3 (the import lane typed by its innermost binding: k_sh1–k_sh7), R4-F7's twin admission (`signing_operand_admitted`'s parameter arm `select_scope.rs:381–382`)
+* status: pre-existing

@@ -1,0 +1,2 @@
+(§2 comb-port-chain-slots · in Oracle splits (recorded, not chased)) (comb time-0 pass slots in a port chain, a checker and a named event):
+* comb t0 pass slots in a port chain (t3g: vita = verilator, iverilog reports at t0), a first-batch-woken checker reading an implicit-only comb (t3k: vita = iverilog's two W4031) and a named event a comb's t0 pass triggers (n1: vita = iverilog `E1 t=0 y=01`, verilator nothing) — split

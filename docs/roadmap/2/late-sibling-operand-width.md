@@ -1,0 +1,5 @@
+(§2 late-sibling-operand-width · OPEN · in Ranges / bounds / selects) (an operand sized from a late-folding sibling takes 32 bits):
+* An operand sized from a sibling whose width folds only after elaboration takes 32 bits outside the fill rule §4.5.601 added (a fill beside such a sibling is spelled `~1'b0` for the run to size: o01–o12, g01–g07, x04, x06, x07 now right): a static function's copy-in and its body's assignments (`inline_bind.rs:173` `bind_formal_actual`, `expr_ctx.rs:503` `resize_inline_assign`, `inline_body_ctx.rs:279` `lower_leaf_in_ctx`; c04 `dup2(f[gb.L-1:0])` `000003ff`, c04c, x09 `xxxxXfff`; verilator and sv2v `0000001f`, `0000007f`), a wildcard compare (`wildcard_eq.rs:28` `unwrap_or(32)`, `:201`), `expr_size_ctx.rs:608`, a hoisted case selector (`stmt_flow.rs:539`) (§4.5.601 step-0 census of lowering-time reads of an undecided width)
+* fix: each reader records the width it assumed for §4.5.601's decision pass, or takes the F2 spelling
+* oracles: 2 oracles
+* status: OPEN

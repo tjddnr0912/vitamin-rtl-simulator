@@ -1,0 +1,8 @@
+(§5.2 Q-REFILLEGAL · rank — · source ENG-2 r3 B2 re-plan OP-3 (RWIDE, RNARROW, RCR2R, RCR2RW)) (IEEE-illegal `ref` actuals are accepted and written through the copy-out):
+* IEEE-illegal `ref` actuals are accepted and the actual is written through the copy-out: a formal of a non-equivalent type (`ref logic [1:0] x` on `logic [3:0] g`, `ref logic [7:0] x` on 4 bits; verilator "Ref argument requires matching types") and a `const ref` passed on to a `ref` (verilator "Assigning to const ref variable")
+* and an actual §13.5.2 does not allow (ieee1800-2017.txt:14798–14802: a variable, a class property, a member of an unpacked structure or an element of an unpacked array): a part-select, a bit-select or a packed-struct member runs and is written through (`task automatic t(ref logic [3:0] r); r = 4'h9; endtask … t(v[9:6]);` `A e22 v=001001000000`; a function's `ref` `f(v[9:6])`, a bit `t(v[6])` `v=000001000000`, a hierarchical `top.t(h[9:6])`, a whole member `t(h.a)` on `ref logic [7:0]` `h=111111110000`; PRE 9d60771d, every backend), verilator on `t(v[9:6])` `Function/task ref argument is not of allowed type`, iverilog (`sorry: Reference ports not supported yet.`) and sv2v (`Parse error: unexpected token 'ref'`) have no `ref`
+* a member sub-select `t(h.a[13:10])` is E3009 `nested lvalue select (v1: single-level)` (row 24's lane)
+* pre-existing (PRE = POST)
+* IEEE 1800-2017 §13.5.2 :14777 (equivalent types), :14840-14841
+* fix: refuse each by name
+* source: row 24 r2 lens-diff (e/ref_plain, f/fn_ref_plain, f/task_ref_bit_plain, e/ref_whole_member), r3 probe ch2 / ch3 (`*ref.P`, `*ref_bit.P`)

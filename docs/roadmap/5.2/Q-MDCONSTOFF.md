@@ -1,0 +1,21 @@
+(§5.2 Q-MDCONSTOFF · rank ① · source Q-RELDELAY r3 lens-diff F2 (p01 p09 p18 u04), F1 (n26 m03 m06)) (the multi-driver check skips selects with a constant offset):
+* slot: after Q-IDXVALUE, by code
+* slot: `packed.rs`: D12 file check at start
+* a continuous-assignment select whose CONSTANT offset the multi-driver check (`check_whole_net_multidriver`, `elaborate/src/netdecl.rs`) does not read is skipped as dynamic, so an overlap through it runs unresolved: the check reads a constant offset through the store's own fold (`sim_ir::const_chunk_written_bits` → `sim_ir::selfwidth::offset_value`: numeric and string literals, `+`, `-`, `$clog2` of one constant), the rest is skipped.
+* Measured (vita silent where iverilog = sv2v print x at the shared bit, unless noted): a multiply, K13 `for (genvar i = 0; i < 2; i++) assign y[2*i+1 -: 2] = a[2*i +: 2];` + `assign y[1] = b;` vita `S t=1 y=1101`, iverilog = sv2v `11x1`
+* p01 `y[2*i+3 -: 2]` + `y[2]` vita `S t=1 y=1000zz \| S t=2 y=0111zz`, iverilog = sv2v `100xzz \| 011xzz`
+* p09 `y[3*1 -: 2]` + `y[2]` vita `S t=1 y=zz10zz \| S t=2 y=zz11zz`, iverilog = sv2v `zz1xzz \| zz1xzz`
+* a unary minus, K07 `wire [0:3] y; assign y[-1 +: 2] = a; assign y[0] = b;` vita `S t=1 y=0zzz`, iverilog = sv2v `xzzz`
+* m06 `wire [-3:2] y; y[-1 +: 2]` + `y[0]` vita `S t=1 y=zz10zz`, iverilog = sv2v `zz1xzz`
+* n26 `wire [5:0] y; y[-1 +: 3]` + `y[0]` and m03 `wire [3:-2] y; y[-1 -: 3]` + `y[-2]` vita `S t=1 y=zzzz10` (iverilog and sv2v: `sorry: part selects straddling the start of signal`; IEEE 1800-2017 §11.5.1 by hand the shared bit is 1 vs 0, x)
+* e16 `wire [1:-2] y; y[-1 +: 2]` + `y[0]`
+* a shift, q09 `y[1 << 2 +: 2]`
+* a conditional (q01), a constant function call (q02), `$rtoi` (q07), a concatenation (q03; g05, whose indexed twin is E3001)
+* a cast, k01 `$unsigned(4'sb1111)`, k02 `$signed(4'd..)`, k03, k04 k05 (sums with them), c01 `y[4'(3) +: 2]` and c03 `y[signed'(4'd3) +: 2]` beside `y[3]` (vita `zzz10zzz` on every build, iverilog = sv2v x at bit 3)
+* a `$clog2` the arm declines: c64 `$clog2(65'h1_0000_0000_0000_0000)`, cN `$clog2($clog2(256))`, cStr `$clog2("\005")`, and a signed argument (the arm declines a negative signed one; IEEE 1800-2017 §20.8.1 treats the argument as unsigned, and vita's store does): c_negarg `y[$clog2(4'sb1000) +: 2]` beside `y[3]` (no E3001; alone vita `S y=zzz11zzz`, 8 -> 3, iverilog = sv2v `zzzzzzzz`, disqualified by §20.8.1, verilator `00011000`), k_clog_negarg_vs4 `y[$clog2(4'sb1111) +: 2]` beside `y[4]` (vita `S t=1 y=zz11zzzz \| S t=2 y=zz00zzzz`, 15 -> 4, the overlap at bit 4 missed; iverilog = sv2v `zzz0zzzz \| zzz1zzzz`, no write, disqualified; verilator `00100000 \| 00010000`)
+* a narrow signed sum on a `[N:0]` net, lowered as a sign-extending concatenation (a11, `2'sd1 + 4'sd1`)
+* and the `$signed(..)`-sealed normalization on a net whose low bound is not 0 or that ascends, which also skips the string-literal and `$clog2` leaves there: u04 `localparam integer B = 3; wire [0:5] y; assign y[3 +: 2] = a; assign y[B+1] = b;` vita `S t=1 y=zzz10z \| S t=2 y=zzz11z`, iverilog = sv2v `zzz1xz \| zzz1xz`, b03 b06 a13 i19 K11, sums on `[10:3]` / `[0:7]` (a01 a02), `65'sh..5` on `[10:3]` (a04), `$clog2(8)` on `[0:7]` (a05), a string literal on `[10:3]` / `[0:7]` / `[3:-4]` (sNZ sASC sNEG, s07 s08), g03's twin (`y[P:P+1]` on an ascending net is skipped while `y[P +: 2]` is E3001)
+* a packed element, p18 `wire [3:0][1:0] y; assign y[1] = a; assign y[1] = b;` vita `S t=1 y=zzzz00zz \| S t=2 y=zzzz10zz`, iverilog = sv2v `zzzzxxzz \| zzzzx0zz`
+* first: fold a constant index tree to a `Const` at the index boundary (`lower_index_expr_inner`, the value from the same fold) so every normalization path hands the store and the check a literal (row 48: today `packed.rs:350–353` replaces the tree only where the two folds disagree, so a `Const` where they agree changes every constant index's lowered IR — golden IR, ER §8.1 A/B; a negative offset waits for Q-IDXVALUE's one offset domain: `const_u32_expr(n, 32)` is unsigned and `const_bound_u32` declines a negative)
+* pre-existing
+* source: r3 lens-sound S2 (K07 K13), r4 C2, r5 re-plan Q6 / Q7, r5 design review C3, r5 lens-diff N1 (c_negarg), r5 lens-sound L5-N5 (k_clog_negarg_vs4)

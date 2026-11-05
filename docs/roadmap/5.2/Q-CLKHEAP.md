@@ -1,0 +1,4 @@
+(§5.2 Q-CLKHEAP · rank ② · source ENG-1 r2 (H11 H16 K02 K02c K02d K02e K08 K10)) (clocking items over unpacked arrays, strings and queues get a heap-aware holder):
+* a clocking input or output over an unpacked array (integral elements too), a `string`, a queue, a dynamic or an associative array has no holder: since ENG-1b (§4.5.622) a use of the item is refused by name at the first use and an unused item is harmless (PRE was silent-wrong: the sample and drive copied the handle's storage word, a string input read back blank, a string output never reached its signal, a queue input read `0` or `x`, and the backends split: K02 K02c K02d K02e K10 native `v=0`, vm / interp `v=x`)
+* fix: this row is the lift: a per-element and heap-aware sample and drive in both lanes (`commit_clocking_sample`, both stores; string ~+40 / dynamic ~+60 lines)
+* source: ENG-1b r1 (CK_arr_int_in, CK_unpacked_real_used_elem, CL_contassign_arr)

@@ -1,0 +1,5 @@
+(§5.2 Q-CAREALCAT · rank ① · source ENG-1c r1 lens-sound F-E (N21, P23)) (a `real` operand in a concatenation target of a continuous assign is accepted):
+* symptom: a `real` operand in a concatenation left-hand side of a continuous assignment is accepted, against IEEE 1800-2017 Table 11-1 (ieee1800-2017.txt:11383: `{}` operands are integral): `real a = 0.0; real b; assign #3 {b} = a;` with `a` 1.0 then -0.0 runs (N21: vita `S t=6 bits=0000000000000000`, BASE §4.5.626 `8000000000000000`; iverilog and sv2v refuse `concatenation operand can no be real: b`, verilator runs `S t=6 bits=8000000000000000`), and so does `{b, w} = a` (P23 `S t=5 b=0.000000 w=1`; all three refuse, verilator `Expected integral input to CONCAT`)
+* cause: `{b}` lowers to the same lvalue as `b`, so ENG-1c's real-destination decision reaches it (a move on an illegal input; the other illegal continuous-assignment lvalue ENG-1c moves, a non-constant select, is Q-CALHSEL's: F-Y)
+* fix: refuse by name at elaborate
+* status: pre-existing
