@@ -300,7 +300,7 @@ pub struct FuncMeta {
     /// slab (no restore → the deepest write clobbers = the iverilog-faithful
     /// static-lifetime corruption). The only storage-policy discriminator.
     pub is_automatic: bool,
-    /// Declared return self-width (`FunctionDef.range`; `integer` ⇒ 32, signed).
+    /// Declared return self-width (`FunctionDef.dtype.range`; `integer` ⇒ 32, signed).
     /// Hoisted because `Expr::Call` has no net id of its own — `width.rs` sizes
     /// the call from this.
     pub ret_width: u32,

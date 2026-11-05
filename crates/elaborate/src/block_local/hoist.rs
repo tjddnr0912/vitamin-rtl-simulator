@@ -32,9 +32,10 @@ impl Elaborator<'_> {
         // A scalar `string s = expr;` block-local has no foldable
         // net.init field, so it always rides this t0 pre-sweep (a
         // dimensioned string was loud-rejected in `elaborate_netvar_decl`).
-        let scalar_string =
-            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
-        if netvar_kind_is_var(d.kind) || scalar_string {
+        let scalar_string = matches!(d.dtype.net(), ast::NetVarKind::String)
+            && d.dtype.range.is_none()
+            && d.dtype.packed_dims().is_empty();
+        if netvar_kind_is_var(d.dtype.net()) || scalar_string {
             for name in &d.names {
                 let Some(init) = &name.init else { continue };
                 let push = if scalar_string {
@@ -206,8 +207,9 @@ impl Elaborator<'_> {
                 return;
             }
         }
-        let string_local =
-            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
+        let string_local = matches!(d.dtype.net(), ast::NetVarKind::String)
+            && d.dtype.range.is_none()
+            && d.dtype.packed_dims().is_empty();
         let dyn_storage = string_local
             || d.names.iter().any(|n| {
                 n.unpacked.iter().any(|dim| {
@@ -260,9 +262,9 @@ impl Elaborator<'_> {
                     // guarantees nothing overwrites it afterwards.
                     let const_immune = n.init.as_ref().is_some_and(|init| {
                         let (w, ..) = self.range_to_dims(
-                            self.shape_kind(d.kind, &d.shape_param),
-                            d.range.as_ref(),
-                            self.shape_signed(d.signed, &d.shape_param),
+                            self.shape_kind(d.dtype.net(), &d.shape_param),
+                            d.dtype.range.as_ref(),
+                            self.shape_signed(d.dtype.signed, &d.shape_param),
                         );
                         fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                     }) && stmt_never_assigns_ident(stmts, nm);
@@ -393,7 +395,7 @@ impl Elaborator<'_> {
         // `sa[0]="zz"` and its read-back resolved through DIFFERENT
         // resolvers (the write reached the block-local scalar, the read the
         // routed array), so `R=zz,yy` became a silent `R=,` at exit 0.
-        let shadowed_string_array = if matches!(d.kind, ast::NetVarKind::String) {
+        let shadowed_string_array = if matches!(d.dtype.net(), ast::NetVarKind::String) {
             d.names
                 .iter()
                 .find(|n| self.has_fixed_string_array_storage(&n.name.name, n.name.span))
@@ -445,7 +447,7 @@ impl Elaborator<'_> {
             // silent-wrong. A WRITE-ONLY string coalesces harmlessly (its
             // truncated write is discarded), so gate on a READ to avoid
             // over-rejecting the common param-gated / dead-store shape.
-            let new_str_read = matches!(d.kind, ast::NetVarKind::String)
+            let new_str_read = matches!(d.dtype.net(), ast::NetVarKind::String)
                 && d.names.first().is_some_and(|n| {
                     let nm = &n.name.name;
                     stmts.iter().any(|st| stmt_reads_ident(st, nm))
@@ -539,9 +541,9 @@ impl Elaborator<'_> {
                 // unaffected. dyn/string collisions were already loud above;
                 // `range_to_dims` is packed-only, so skip them here.
                 let (nw, _, _, nsig) = self.range_to_dims(
-                    self.shape_kind(d.kind, &d.shape_param),
-                    d.range.as_ref(),
-                    self.shape_signed(d.signed, &d.shape_param),
+                    self.shape_kind(d.dtype.net(), &d.shape_param),
+                    d.dtype.range.as_ref(),
+                    self.shape_signed(d.dtype.signed, &d.shape_param),
                 );
                 for n in &d.names {
                     let nm = &n.name.name;
@@ -559,7 +561,7 @@ impl Elaborator<'_> {
                     };
                     if self.is_dyn_handle_net(ex)
                         || self.is_string_net(ex)
-                        || matches!(d.kind, ast::NetVarKind::String)
+                        || matches!(d.dtype.net(), ast::NetVarKind::String)
                     {
                         return;
                     }
@@ -652,9 +654,9 @@ impl Elaborator<'_> {
                 // constant needs no re-init, and the const `net.init` handles t0.
                 let const_immune = n.init.as_ref().is_some_and(|init| {
                     let (w, ..) = self.range_to_dims(
-                        self.shape_kind(d.kind, &d.shape_param),
-                        d.range.as_ref(),
-                        self.shape_signed(d.signed, &d.shape_param),
+                        self.shape_kind(d.dtype.net(), &d.shape_param),
+                        d.dtype.range.as_ref(),
+                        self.shape_signed(d.dtype.signed, &d.shape_param),
                     );
                     fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                 }) && stmt_never_assigns_ident(stmts, nm);

@@ -250,10 +250,12 @@ impl Parser<'_, '_> {
                 }
                 members.push(StructMember {
                     name,
-                    kind,
-                    signed,
-                    range: range.clone(),
-                    packed_dims: packed_dims.clone(),
+                    dtype: hdl_ast::DataType::new_net(
+                        kind,
+                        signed,
+                        range.clone(),
+                        packed_dims.clone(),
+                    ),
                     span: m_start.to(self.prev_span()),
                 });
                 nested_keys.push(nested.clone());
@@ -281,7 +283,8 @@ impl Parser<'_, '_> {
     pub(crate) fn members_layout_exact(members: &[StructMember], each_exact: bool) -> bool {
         each_exact
             && members.windows(2).all(|w| {
-                Self::member_kind_two_state(w[0].kind) == Self::member_kind_two_state(w[1].kind)
+                Self::member_kind_two_state(w[0].dtype.net())
+                    == Self::member_kind_two_state(w[1].dtype.net())
             })
     }
 
@@ -502,9 +505,11 @@ impl Parser<'_, '_> {
                 // R6: each expanded member inherits the whole port's spelling, so a
                 // `ref cfg_t c` member still reports itself as `ref`.
                 dir_spelling: port.dir_spelling,
-                net_or_var: Some(m.kind),
-                signed: m.signed,
-                range: m.range.clone(),
+                dtype: hdl_ast::DataType::new_tf_port(
+                    Some(m.dtype.net()),
+                    m.dtype.signed,
+                    m.dtype.range.clone(),
+                ),
                 name: Ident {
                     name: Self::unpacked_member_net(&port.name.name, &m.name.name),
                     span: port.name.span,

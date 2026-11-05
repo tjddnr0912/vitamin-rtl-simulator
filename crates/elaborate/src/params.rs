@@ -219,7 +219,7 @@ impl Elaborator<'_> {
     /// literal makes it `real`, a string literal a string. A declared type or range
     /// is a context the value is converted into (§6.24.1, §5.9).
     pub(crate) fn param_is_untyped(p: &ast::ParamDecl) -> bool {
-        p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit)
+        p.dtype.range.is_none() && matches!(p.ty, ast::ParamType::Implicit)
     }
 
     /// The string value of an UNTYPED parameter's declared default: its LITERAL first,
@@ -298,19 +298,19 @@ impl Elaborator<'_> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
-        if let Some(r) = &p.range {
+        if let Some(r) = &p.dtype.range {
             match (
                 self.const_range_bound_fold(&r.msb),
                 self.const_range_bound_fold(&r.lsb),
             ) {
-                (Some(m), Some(l)) => Some((m.abs_diff(l) as u32 + 1, p.signed)),
+                (Some(m), Some(l)) => Some((m.abs_diff(l) as u32 + 1, p.dtype.signed)),
                 _ => None, // unfoldable bound: leave it value-inferred (loud elsewhere)
             }
         } else if matches!(p.ty, ast::ParamType::Integer) {
             // `int`/`integer` are 32-bit; signedness comes from the decl (signed by
             // default, `int unsigned` / `unsigned integer` flip it — the parser sets
-            // `p.signed` accordingly).
-            Some((32, p.signed))
+            // `p.dtype.signed` accordingly).
+            Some((32, p.dtype.signed))
         } else if matches!(p.ty, ast::ParamType::Time) {
             // §6.11.2: `time` is a 64-bit UNSIGNED integer type, so its width comes
             // from the declaration and never from the initializer — the same rule the
@@ -326,7 +326,7 @@ impl Elaborator<'_> {
             // The signedness half is the one that shows as a wrong VALUE rather than
             // a wrong `$bits`: `localparam time B = -8'sd2` printed `-2` at 8 signed
             // bits where both oracles print `18446744073709551614`, because `time` is
-            // unsigned. `p.signed` is not consulted — the parser cannot produce a
+            // unsigned. `p.dtype.signed` is not consulted — the parser cannot produce a
             // signed `time` parameter (`localparam time signed X` is E2002), and the
             // four sibling containers that already carry this rule all spell it the
             // same way: `hdl-parser/src/params.rs:999`/`:960`, `cover_bins.rs:153`,
@@ -374,7 +374,7 @@ impl Elaborator<'_> {
                 // ⚠️ DECLARED PROVENANCE ON THE OVERRIDDEN LANE (§6.20.2). Reaching
                 // this tail already means the declaration is `Implicit` with no range
                 // — the `Integer` and `Time` arms above are declared TYPES and the
-                // `p.range` arm above is a declared RANGE, and all three legitimately
+                // `p.dtype.range` arm above is a declared RANGE, and all three legitimately
                 // survive an override. An initializer literal does not: §6.20.2 gives
                 // an untyped, unranged parameter the range of its FINAL override
                 // value, and the literal whose width this arm reports has been
@@ -832,7 +832,7 @@ impl Elaborator<'_> {
     /// answered 0 where both oracles answer 1 (ascending index 26 is internal bit
     /// `hi − 26` = 5). Direction, not LSB, is what `norm_offset_for_range` needs.
     ///
-    /// Reads the SAME `p.range` as [`Self::param_decl_width`].
+    /// Reads the SAME `p.dtype.range` as [`Self::param_decl_width`].
     /// [`Self::param_decl_range`] told whether this declaration's DEFAULT is what binds.
     ///
     /// ⚠️ The distinction is §6.20.2's, and it is the same one `param_decl_width_opt`
@@ -851,7 +851,7 @@ impl Elaborator<'_> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
-        let Some(r) = p.range.as_ref() else {
+        let Some(r) = p.dtype.range.as_ref() else {
             // No declared range: the width is a fact only when a TYPE or a LITERAL
             // states it. `lo = 0`, descending — an offset no-op.
             let (w, _) = self.param_decl_width_opt(p, true, default_binds)?;
@@ -1724,7 +1724,7 @@ impl Elaborator<'_> {
     /// body, generate scope, package scope) so the answer does not depend on where
     /// the declaration sits.
     pub(crate) fn check_param_decl_range(&mut self, p: &ast::ParamDecl) {
-        if let Some(r) = &p.range {
+        if let Some(r) = &p.dtype.range {
             if !matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
                 let m = self.const_range_bound_fold(&r.msb);
                 let l = self.const_range_bound_fold(&r.lsb);
@@ -1983,7 +1983,7 @@ impl Elaborator<'_> {
             // (`parameter signed P`) is left alone: the oracles split on it (iverilog
             // binds the integer, verilator the real). Only an override that also folded to
             // an i64 is taken: one that did not is already loud at the collector.
-            if real_default.is_none() && untyped && !p.signed {
+            if real_default.is_none() && untyped && !p.dtype.signed {
                 if let (Some(rv), Some(Some(ov))) =
                     (ovr_real, ovr_by_name.get(p.name.name.as_str()).copied())
                 {
@@ -2110,7 +2110,7 @@ impl Elaborator<'_> {
             // Did the meta come from the OPERATOR channel? Then its value must come
             // from there too — the two halves are one answer (`override_self_value`).
             let self_meta_binds = matches!(p.ty, ast::ParamType::Implicit)
-                && p.range.is_none()
+                && p.dtype.range.is_none()
                 && !default_binds
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && ovr_bits.is_none()
@@ -2122,7 +2122,7 @@ impl Elaborator<'_> {
             // fixed while the value column is still cut at the default's width.
             // Mirrors that arm's predicate exactly (the `ovr_fill` arm precedes it).
             let ovr_bits_binds = matches!(p.ty, ast::ParamType::Implicit)
-                && p.range.is_none()
+                && p.dtype.range.is_none()
                 && !default_binds
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && ovr_bits.is_some();
@@ -2136,7 +2136,7 @@ impl Elaborator<'_> {
             // this refusal.
             if !default_binds
                 && matches!(p.ty, ast::ParamType::Implicit)
-                && p.range.is_none()
+                && p.dtype.range.is_none()
                 && ovr.elem_select.contains(p.name.name.as_str())
                 && ovr_bits.is_none()
             {
@@ -2173,12 +2173,12 @@ impl Elaborator<'_> {
                 // default literal was, where the chain below sized it from the DEFAULT
                 // and bound −1 at 32 bits. A declared type or range still wins.
                 if matches!(p.ty, ast::ParamType::Implicit)
-                    && p.range.is_none()
+                    && p.dtype.range.is_none()
                     && ovr_fill.contains_key(p.name.name.as_str())
                 {
                     Some((1, false))
                 } else if matches!(p.ty, ast::ParamType::Implicit)
-                    && p.range.is_none()
+                    && p.dtype.range.is_none()
                     && ovr_bits.is_some()
                 {
                     // §6.20.2 (§2 row 25, the wide channel): an UNTYPED, unranged
@@ -2199,9 +2199,9 @@ impl Elaborator<'_> {
                     // keyword `#(.N(8'hA5))` and `#(.N(~8'h5A))` both stay unsigned (165)
                     // on both arms, and a signed override literal `#(.S(8'shA5))` was
                     // already right.
-                    ovr_bits.map(|c| (c.width, c.signed || p.signed))
+                    ovr_bits.map(|c| (c.width, c.signed || p.dtype.signed))
                 } else if matches!(p.ty, ast::ParamType::Implicit)
-                    && p.range.is_none()
+                    && p.dtype.range.is_none()
                     && ovr_self_meta.is_some()
                 {
                     // §6.20.2 (§2 row 25, the OPERATOR half): same rule as the arm
@@ -2230,13 +2230,13 @@ impl Elaborator<'_> {
                     // wrong 32 bits, this arm printed `165` at the right 8, and both
                     // oracles say `-91` at 8.
                     //
-                    // Only the `signed` DIRECTION is recoverable here. `p.signed == false`
+                    // Only the `signed` DIRECTION is recoverable here. `p.dtype.signed == false`
                     // means either `unsigned` was written or nothing was — a default, not
                     // a fact — so the `unsigned` twin (`parameter unsigned Q = 1` +
                     // `#(.Q(-8'sd91))`, both oracles `165`) keeps its pre-existing answer
                     // and is recorded in ROADMAP §2: closing it needs an `is_sign_declared`
                     // companion on `ast::ParamDecl`.
-                    ovr_self_meta.map(|(w, sg)| (w, sg || p.signed))
+                    ovr_self_meta.map(|(w, sg)| (w, sg || p.dtype.signed))
                 } else {
                     self.param_decl_width_declared_overridden(p)
                         .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))
@@ -2341,7 +2341,7 @@ impl Elaborator<'_> {
                     // (40 > 33). Both oracles bind `100000003` in every spelling.
                     //
                     // For ≤64 bits this is the IDENTITY where it fires: `meta` here IS
-                    // `(c.width, c.signed || p.signed)` from the same `ovr_bits` that
+                    // `(c.width, c.signed || p.dtype.signed)` from the same `ovr_bits` that
                     // supplies `bits`, so `resize_bits(bits, c.width, c.width, ..)`
                     // returns its input. Where the DEFAULT was WIDER than the override
                     // (`#(.P(8'hFF))` on `parameter P = 64'd1`) the old path resized UP
@@ -2511,7 +2511,7 @@ impl Elaborator<'_> {
                 .or_else(|| {
                     if default_binds
                         || !matches!(p.ty, ast::ParamType::Implicit)
-                        || p.range.is_some()
+                        || p.dtype.range.is_some()
                     {
                         return None;
                     }
@@ -2530,7 +2530,7 @@ impl Elaborator<'_> {
             // zero-extends (`000000000f0f0f10`, both oracles `ffffffff0f0f0f10`).
             //
             // ⚠️ Except a SIGNED override onto a declaration with no `signed` keyword.
-            // `p.signed` is false both for "no keyword" (the override's sign binds) and
+            // `p.dtype.signed` is false both for "no keyword" (the override's sign binds) and
             // for the `unsigned` keyword (§12.2.1: the keyword survives the override),
             // and the AST cannot tell them apart (ROADMAP §2 records the missing field),
             // so the recorded sign may be wrong there. Un-guessing that combination
@@ -2550,8 +2550,8 @@ impl Elaborator<'_> {
             // a `signed` keyword, whose fill the chain above still records unsigned (both
             // oracles bind the signed −1): that record is not a fact, so it stays a guess.
             let fill_types = matches!(p.ty, ast::ParamType::Implicit)
-                && p.range.is_none()
-                && !p.signed
+                && p.dtype.range.is_none()
+                && !p.dtype.signed
                 && ovr_fill.contains_key(p.name.name.as_str());
             let typed_sign = if fill_types {
                 Some(false)
@@ -2562,7 +2562,7 @@ impl Elaborator<'_> {
             } else {
                 None
             };
-            let override_typed = typed_sign.is_some_and(|s| !s || p.signed);
+            let override_typed = typed_sign.is_some_and(|s| !s || p.dtype.signed);
             let guessed = if default_binds {
                 self.ast_reads_guessed_param(&p.value)
             } else {

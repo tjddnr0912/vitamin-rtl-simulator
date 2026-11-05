@@ -1008,7 +1008,7 @@ impl Elaborator<'_> {
             if f.ret_string {
                 Some(true)
             } else {
-                (f.range.is_none()
+                (f.dtype.range.is_none()
                     && matches!(f.ret_type, ast::ParamType::Implicit)
                     && !f.ret_two_state)
                     .then_some(false)

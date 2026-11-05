@@ -65,12 +65,15 @@ impl Parser<'_, '_> {
             return Dim::Dyn;
         }
         Dim::Assoc(AssocKey::Typed(Box::new(AssocKeyType {
-            kind: info.kind,
-            signed: info.signed,
-            range: info.range,
-            packed: info.packed,
+            // A typedef-named key writes no signing keyword.
+            dtype: DataType::new_assoc_key(
+                info.kind,
+                Signing::Implicit,
+                info.signed,
+                info.range,
+                info.packed,
+            ),
             named: true,
-            explicit_sign: false,
             span,
         })))
     }

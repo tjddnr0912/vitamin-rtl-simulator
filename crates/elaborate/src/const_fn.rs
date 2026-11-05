@@ -1459,23 +1459,25 @@ impl Elaborator<'_> {
         envw: &mut ConstWidths,
         depth: u32,
     ) -> Option<()> {
-        if !netvar_kind_is_int_const(d.kind) {
+        if !netvar_kind_is_int_const(d.dtype.net()) {
             return None; // real/string/array local → loud
         }
         // §4.5.589: a body-local declaration's range is the routine's own text.
         let win = self.decl_local_win();
         let armed = self.decl_enter(&win, false);
-        let kind = self.shape_kind(d.kind, &d.shape_param);
+        let kind = self.shape_kind(d.dtype.net(), &d.shape_param);
         let m = self.const_decl_wsign(
             kind,
-            d.range.as_ref(),
-            &d.packed,
-            self.shape_signed(d.signed, &d.shape_param),
+            d.dtype.range.as_ref(),
+            d.dtype.packed_dims(),
+            self.shape_signed(d.dtype.signed, &d.shape_param),
         );
         self.decl_exit(armed);
         let width = m.map_or(0, |x| x.0);
         let numbered = |n: &ast::DeclName| {
-            d.packed.is_empty() && n.unpacked.is_empty() && const_range_numbered(d.range.as_ref())
+            d.dtype.packed_dims().is_empty()
+                && n.unpacked.is_empty()
+                && const_range_numbered(d.dtype.range.as_ref())
         };
         for n in &d.names {
             self.const_redeclared(&n.name.name, n.name.span);
@@ -1623,7 +1625,7 @@ impl Elaborator<'_> {
             if p.dir != ast::PortDir::Input || !p.unpacked.is_empty() {
                 return None; // output/inout/ref or unpacked-array formal → loud
             }
-            if let Some(k) = p.net_or_var {
+            if let Some(k) = p.dtype.port() {
                 if !netvar_kind_is_int_const(k) {
                     return None; // real/string/… formal → loud
                 }
@@ -1637,12 +1639,12 @@ impl Elaborator<'_> {
             let tw = self.with_decl_hdr(&win, |s| {
                 s.const_decl_wsign(
                     s.shape_kind(
-                        p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
+                        p.dtype.port().unwrap_or(ast::NetVarKind::Logic),
                         &p.shape_param,
                     ),
-                    p.range.as_ref(),
+                    p.dtype.range.as_ref(),
                     &[],
-                    s.shape_signed(p.signed, &p.shape_param),
+                    s.shape_signed(p.dtype.signed, &p.shape_param),
                 )
             })?;
             // An explicit ARGUMENT folds at the CALLER's depth: it descends a
@@ -1703,7 +1705,8 @@ impl Elaborator<'_> {
             // The function-name return variable is itself a declared target.
             envw.insert(name.to_string(), (rw, rs));
             if !env.contains_key(name) && !f.ret_two_state {
-                let numbered = f.ret_packed.is_empty() && const_range_numbered(f.range.as_ref());
+                let numbered =
+                    f.ret_packed.is_empty() && const_range_numbered(f.dtype.range.as_ref());
                 self.const_seed(name, rw, f.name.span, numbered);
             }
             env.entry(name.to_string()).or_insert(0);

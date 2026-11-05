@@ -48,10 +48,12 @@ impl Parser<'_, '_> {
             while let Some(name) = self.ident() {
                 members.push(StructMember {
                     name,
-                    kind,
-                    signed,
-                    range: range.clone(),
-                    packed_dims: packed_dims.clone(),
+                    dtype: hdl_ast::DataType::new_net(
+                        kind,
+                        signed,
+                        range.clone(),
+                        packed_dims.clone(),
+                    ),
                     span: m_start.to(self.prev_span()),
                 });
                 nested_keys.push(nested.clone());
@@ -69,7 +71,7 @@ impl Parser<'_, '_> {
         let tname = self.anon_or_typedef_name(start, anon)?;
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
-            match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {
+            match self.member_flat_dims(m.dtype.net(), &m.dtype.range, m.dtype.packed_dims()) {
                 Some((flat, stride)) if flat > 0 => widths.push((flat, stride)),
                 _ => {
                     self.error_at(
@@ -92,10 +94,10 @@ impl Parser<'_, '_> {
                     m.name.name.clone(),
                     0u32,
                     *w,
-                    self.member_ascending(&m.range),
-                    m.signed,
-                    Self::member_kind_two_state(m.kind),
-                    self.member_dbase(&m.range),
+                    self.member_ascending(&m.dtype.range),
+                    m.dtype.signed,
+                    Self::member_kind_two_state(m.dtype.net()),
+                    self.member_dbase(&m.dtype.range),
                     *stride,
                     nested.clone(),
                 )
@@ -129,13 +131,17 @@ impl Parser<'_, '_> {
         self.tn_set(&tname.name, type_rec::Slot::Union);
         // §7.2.1: an all-2-state union is itself 2-state (defaults to 0); any
         // 4-state member makes the whole union 4-state (defaults to X).
-        let union_kind =
-            if !members.is_empty() && members.iter().all(|m| Self::member_kind_two_state(m.kind)) {
-                NetVarKind::Bit
-            } else {
-                NetVarKind::Logic
-            };
+        let union_kind = if !members.is_empty()
+            && members
+                .iter()
+                .all(|m| Self::member_kind_two_state(m.dtype.net()))
+        {
+            NetVarKind::Bit
+        } else {
+            NetVarKind::Logic
+        };
         let info = TypeInfo {
+            decl_kind: TypeKind::NotRecorded,
             kind: union_kind,
             signed: union_signed,
             range: Some(Self::dec_range(total.saturating_sub(1))),

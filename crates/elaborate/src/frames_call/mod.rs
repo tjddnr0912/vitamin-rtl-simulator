@@ -139,8 +139,12 @@ impl Elaborator<'_> {
             ast::ParamType::Time => ast::NetVarKind::Time,
             ast::ParamType::Implicit => ast::NetVarKind::Reg,
         };
-        let (w, _msb, _lsb, signed) =
-            self.range_to_dims_opt(kind, func.range.as_ref(), func.signed, allow_neg_lsb);
+        let (w, _msb, _lsb, signed) = self.range_to_dims_opt(
+            kind,
+            func.dtype.range.as_ref(),
+            func.dtype.signed,
+            allow_neg_lsb,
+        );
         (w, signed)
     }
 

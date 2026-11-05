@@ -33,7 +33,7 @@ impl Elaborator<'_> {
         width: u32,
     ) -> Option<DeclRange> {
         let r = self.param_decl_range_opt(p, default_binds).or_else(|| {
-            (matches!(p.ty, ast::ParamType::Implicit) && p.range.is_none())
+            (matches!(p.ty, ast::ParamType::Implicit) && p.dtype.range.is_none())
                 .then_some((0, width, false))
         })?;
         (r.1 == width).then_some(r)

@@ -62,14 +62,14 @@ impl Elaborator<'_> {
         decl: &ast::DeclName,
     ) -> ArrayConstMeta {
         let (w, msb, lsb, signed) = self.range_to_dims(
-            self.shape_kind(d.kind, &d.shape_param),
-            d.range.as_ref(),
-            self.shape_signed(d.signed, &d.shape_param),
+            self.shape_kind(d.dtype.net(), &d.shape_param),
+            d.dtype.range.as_ref(),
+            self.shape_signed(d.dtype.signed, &d.shape_param),
         );
         let (elem_w, _) = self.const_array_elem_geom(d);
-        let has_range = d.range.is_some()
+        let has_range = d.dtype.range.is_some()
             || matches!(
-                d.kind,
+                d.dtype.net(),
                 ast::NetVarKind::Integer
                     | ast::NetVarKind::Byte
                     | ast::NetVarKind::Shortint
@@ -77,7 +77,7 @@ impl Elaborator<'_> {
                     | ast::NetVarKind::Longint
                     | ast::NetVarKind::Time
             );
-        let packed_dims = d.packed.len() as u32 + u32::from(has_range);
+        let packed_dims = d.dtype.packed_dims().len() as u32 + u32::from(has_range);
         let _ = w;
         ArrayConstMeta {
             count: self.const_array_elem_count(decl),

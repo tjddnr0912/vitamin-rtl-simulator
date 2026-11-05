@@ -62,9 +62,9 @@ impl Parser<'_, '_> {
             for (n, v) in [(&na, d.msb.clone()), (&nb, d.lsb.clone())] {
                 decls.push(ParamDecl {
                     kind,
-                    signed: false,
+                    // A desugared bound or shape parameter: written untyped, no signing keyword.
+                    dtype: DataType::new_param(TypeKind::Implicit, Signing::Implicit, false, None),
                     ty: ParamType::Implicit,
-                    range: None,
                     name: Ident {
                         name: n.clone(),
                         span,

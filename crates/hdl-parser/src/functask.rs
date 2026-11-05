@@ -268,8 +268,7 @@ impl Parser<'_, '_> {
         (
             FunctionDef {
                 automatic,
-                signed,
-                range,
+                dtype: hdl_ast::DataType::new_function_return(signed, range),
                 ret_packed: ret_dims,
                 ret_type,
                 ret_two_state,
@@ -594,9 +593,7 @@ impl Parser<'_, '_> {
         let port = TfPort {
             dir,
             dir_spelling,
-            net_or_var,
-            signed,
-            range,
+            dtype: hdl_ast::DataType::new_tf_port(net_or_var, signed, range),
             name,
             unpacked,
             default,
@@ -607,9 +604,9 @@ impl Parser<'_, '_> {
             span: start.to(self.prev_span()),
         };
         let next_type = (
-            port.net_or_var,
-            port.signed,
-            port.range.clone(),
+            port.dtype.port(),
+            port.dtype.signed,
+            port.dtype.range.clone(),
             struct_name,
             enum_name,
             dims,
@@ -1020,9 +1017,7 @@ impl Parser<'_, '_> {
                 // R6: the non-ANSI formal-decl form has no `ref` spelling to record
                 // (the direction slot here only reads `input`/`output`/`inout`).
                 dir_spelling: TfDirSpelling::Declared,
-                net_or_var,
-                signed,
-                range: range.clone(),
+                dtype: hdl_ast::DataType::new_tf_port(net_or_var, signed, range.clone()),
                 name,
                 unpacked,
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)

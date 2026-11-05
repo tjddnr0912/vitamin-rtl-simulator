@@ -162,7 +162,7 @@ pub(crate) fn expr_reads_only_locals(
 /// (a flat value carrying no packed dims), so `p[k]` folds as a BIT-select — silently
 /// wrong (`p[0]` yields bit 0, not byte `[7:0]`). `build_frame_set` routes such a
 /// function to the (correct) frame path when self-contained; a non-routable one is
-/// loud-rejected in `reduce_function_body`. Only MULTI-dim packed (`d.packed`
+/// loud-rejected in `reduce_function_body`. Only MULTI-dim packed (`d.dtype.packed_dims()`
 /// non-empty) counts — a 1-D `logic [7:0] p; p[0]` is a legitimate bit-select. A
 /// whole-use md-packed local (no select) folds correctly (flat value) → NOT flagged.
 pub(crate) fn body_selects_mdpacked_local(f: &ast::FunctionDef) -> bool {
@@ -170,7 +170,7 @@ pub(crate) fn body_selects_mdpacked_local(f: &ast::FunctionDef) -> bool {
     let mut decls = f.body_decls.clone();
     collect_block_local_decls(&f.body, &mut decls);
     for d in &decls {
-        if !d.packed.is_empty() {
+        if !d.dtype.packed_dims().is_empty() {
             for n in &d.names {
                 names.insert(n.name.name.clone());
             }

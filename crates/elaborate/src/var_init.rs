@@ -23,9 +23,10 @@ impl Elaborator<'_> {
         // the other variable initializers. Only a SCALAR string is registered as a
         // net (`elaborate_netvar_decl` rejects packed/unpacked dims), so a dimensioned
         // string's init is skipped here too (the decl already errored loud).
-        let scalar_string =
-            matches!(d.kind, ast::NetVarKind::String) && d.range.is_none() && d.packed.is_empty();
-        if !netvar_kind_is_var(d.kind) && !scalar_string {
+        let scalar_string = matches!(d.dtype.net(), ast::NetVarKind::String)
+            && d.dtype.range.is_none()
+            && d.dtype.packed_dims().is_empty();
+        if !netvar_kind_is_var(d.dtype.net()) && !scalar_string {
             return;
         }
         for name in &d.names {
@@ -110,7 +111,7 @@ impl Elaborator<'_> {
         // initializer is a one-time t0 assignment (`collect_var_init_drivers`), NOT
         // a continuous driver. Without this guard a `string s = "x";` would gain a
         // spurious `assign s = "x"` that fights later procedural writes (silent-wrong).
-        if netvar_kind_is_var(d.kind) || matches!(d.kind, ast::NetVarKind::String) {
+        if netvar_kind_is_var(d.dtype.net()) || matches!(d.dtype.net(), ast::NetVarKind::String) {
             // A variable's initializer is handled by `collect_var_init_drivers`
             // (a pre-sweep, so the synthesized `initial` runs before user blocks);
             // here a variable decl contributes no continuous driver.

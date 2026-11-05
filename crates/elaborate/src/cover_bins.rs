@@ -140,18 +140,20 @@ impl Elaborator<'_> {
             // help here: it returns None for a Call.)
             ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => {
                 match self.lookup_func(&name.segments[0].name) {
-                    Some(f) => match &f.range {
+                    Some(f) => match &f.dtype.range {
                         Some(r) => match (
                             self.const_eval_in_scope(&r.msb),
                             self.const_eval_in_scope(&r.lsb),
                         ) {
-                            (Some(m), Some(l)) => ((m - l).unsigned_abs() as u32 + 1, f.signed),
+                            (Some(m), Some(l)) => {
+                                ((m - l).unsigned_abs() as u32 + 1, f.dtype.signed)
+                            }
                             _ => DEFAULT,
                         },
                         None => match f.ret_type {
                             ast::ParamType::Integer => (32, true),
                             ast::ParamType::Time => (64, false),
-                            _ => (1, f.signed), // implicit scalar / real
+                            _ => (1, f.dtype.signed), // implicit scalar / real
                         },
                     },
                     None => DEFAULT,

@@ -257,10 +257,13 @@ impl Elaborator<'_> {
         // so pass `&[]` — the multi-dim-packed-element reject never fires for formals.
         let cls = self.classify_unpacked_array(
             &p.unpacked,
-            p.range.as_ref(),
+            p.dtype.range.as_ref(),
             &[],
-            self.shape_signed(p.signed, &p.shape_param),
-            self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+            self.shape_signed(p.dtype.signed, &p.shape_param),
+            self.shape_kind(
+                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                &p.shape_param,
+            ),
         );
         // §4.5.202 (+§4.5.205): a MULTI-DIM unpacked-array FORMAL (`int m[2][2]`,
         // `m[1:0][2:0]`, mixed directions) is supported. Element access `m[i][j]` routes
@@ -449,7 +452,7 @@ impl Elaborator<'_> {
             && p.unpacked.len() == 1
             && matches!(p.unpacked[0], ast::Dim::Dyn)
             && !matches!(
-                p.net_or_var,
+                p.dtype.port(),
                 Some(
                     ast::NetVarKind::String
                         | ast::NetVarKind::Real
@@ -469,7 +472,7 @@ impl Elaborator<'_> {
             && p.unpacked.len() == 1
             && matches!(p.unpacked[0], ast::Dim::Dyn)
             && !matches!(
-                p.net_or_var,
+                p.dtype.port(),
                 Some(
                     ast::NetVarKind::String
                         | ast::NetVarKind::Real

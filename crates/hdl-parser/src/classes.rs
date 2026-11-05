@@ -118,6 +118,7 @@ impl Parser<'_, '_> {
                 continue;
             }
             let info = TypeInfo {
+                decl_kind: TypeKind::NotRecorded,
                 kind: NetVarKind::ClassHandle,
                 signed: false,
                 range: None,
@@ -163,11 +164,8 @@ impl Parser<'_, '_> {
         Some(NetVarDecl {
             integral_typedef: false,
             pattern_members: Vec::new(),
-            kind: NetVarKind::VirtualIface,
-            signed: false,
+            dtype: hdl_ast::DataType::new_net(NetVarKind::VirtualIface, false, None, Vec::new()),
             shape_param: None,
-            range: None,
-            packed: Vec::new(),
             delay: None,
             names,
             lifetime: None,

@@ -870,20 +870,20 @@ impl Elaborator<'_> {
                     continue;
                 }
                 // An omitted kind is the default net type.
-                let kind = self.port_net_kind(p.net_or_var, &p.shape_param);
+                let kind = self.port_net_kind(p.dtype.port(), &p.shape_param);
                 // §7.4.2 / §4.5.359: a port declared with a negative bound
                 // (`input logic [-3:0] p`) is sized `|msb-lsb|+1` like any other net.
                 // The opt-in and `record_declared_bounds` below are one unit.
-                let odd_bound = self.declared_odd_bound(p.range.as_ref()).is_some();
+                let odd_bound = self.declared_odd_bound(p.dtype.range.as_ref()).is_some();
                 let (mut width, mut msb, lsb, signed) = self.range_to_dims_opt(
                     self.shape_kind(kind, &p.shape_param),
-                    p.range.as_ref(),
-                    self.shape_signed(p.signed, &p.shape_param),
+                    p.dtype.range.as_ref(),
+                    self.shape_signed(p.dtype.signed, &p.shape_param),
                     odd_bound,
                 );
                 // A packed multi-dim port (`input [1:0][7:0] m`) is a flat vector.
-                let packed_ext = self.packed_extents(p.range.as_ref(), &p.packed);
-                if !p.packed.is_empty() {
+                let packed_ext = self.packed_extents(p.dtype.range.as_ref(), p.dtype.packed_dims());
+                if !p.dtype.packed_dims().is_empty() {
                     width = packed_ext
                         .iter()
                         .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)));
@@ -921,7 +921,7 @@ impl Elaborator<'_> {
                         init,
                     },
                 );
-                self.record_declared_bounds(&p.name.name, p.range.as_ref());
+                self.record_declared_bounds(&p.name.name, p.dtype.range.as_ref());
                 // §3.a ⑤ⓚ: an ANSI struct port other than `inout` (`struct_arm.rs`).
                 if p.unpacked.is_empty() && p.dir != ast::PortDir::Inout {
                     self.record_pattern_target(&p.name.name, &p.pattern_members);
@@ -929,14 +929,14 @@ impl Elaborator<'_> {
                 if p.unpacked.is_empty()
                     && p.shape_param.is_none()
                     && type_texts.iter().any(|&(lo, first)| {
-                        packed_pattern::first_dim_written(lo, first, p.range.as_ref())
+                        packed_pattern::first_dim_written(lo, first, p.dtype.range.as_ref())
                     })
                 {
                     if let Some(&(_, n, _)) = packed_ext.first() {
                         self.record_packed_default_target(&p.name.name, n);
                     }
                 }
-                if !p.packed.is_empty() {
+                if !p.dtype.packed_dims().is_empty() {
                     if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
                         self.packed_dims.insert(id, packed_ext);
                     }
@@ -946,8 +946,8 @@ impl Elaborator<'_> {
                         if cont_array::inline_elem_type(
                             p.span.lo,
                             p.name.span.lo,
-                            p.range.as_ref(),
-                            &p.packed,
+                            p.dtype.range.as_ref(),
+                            p.dtype.packed_dims(),
                             p.shape_param.is_some(),
                         ) {
                             self.inline_elem_arrays.insert(id);
@@ -995,7 +995,13 @@ impl Elaborator<'_> {
                 // $size/$dimensions) — and the UNPACKED half was `&[]` because ports
                 // could not carry unpacked dims at all until they parsed.
                 if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
-                    self.record_dim_desc(id, kind, p.range.as_ref(), &p.packed, &p.unpacked);
+                    self.record_dim_desc(
+                        id,
+                        kind,
+                        p.dtype.range.as_ref(),
+                        p.dtype.packed_dims(),
+                        &p.unpacked,
+                    );
                 }
                 // WAND/WOR: a port net declared `output wand`/`wor` (etc.) also
                 // needs its resolution-kind sidecar — multi-driven INSIDE the

@@ -22,10 +22,11 @@ impl Parser<'_, '_> {
     ) -> Option<ModuleItem> {
         let mut widths: Vec<Expr> = Vec::with_capacity(members.len());
         for (m, nested) in members.iter().zip(&nested_keys) {
-            let w = match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {
-                Some((flat, _)) if flat > 0 => Some(Self::dec_lit(flat, m.span)),
-                _ => self.sym_member_width(m, nested.is_some()),
-            };
+            let w =
+                match self.member_flat_dims(m.dtype.net(), &m.dtype.range, m.dtype.packed_dims()) {
+                    Some((flat, _)) if flat > 0 => Some(Self::dec_lit(flat, m.span)),
+                    _ => self.sym_member_width(m, nested.is_some()),
+                };
             match w {
                 Some(w) => widths.push(w),
                 None => {
@@ -45,20 +46,29 @@ impl Parser<'_, '_> {
         let mut below: Vec<Expr> = Vec::new();
         for ((m, w), sp) in members.iter().zip(&widths).zip(&shape_keys).rev() {
             let off = Self::sum_of(&below, m.span);
-            // §3 ⑤ⓕ: `m.signed` is the DEFAULT's sign; when the member names an
+            // §3 ⑤ⓕ: `m.dtype.signed` is the DEFAULT's sign; when the member names an
             // overridable `parameter type T` the read emits `SigningParam(T$s)` and
             // folds the instance's sign instead.
-            fields.push((m.name.name.clone(), off, w.clone(), m.signed, sp.clone()));
+            fields.push((
+                m.name.name.clone(),
+                off,
+                w.clone(),
+                m.dtype.signed,
+                sp.clone(),
+            ));
             below.push(w.clone());
         }
         fields.reverse();
         let total = Self::sum_of(&widths, start);
-        let struct_kind =
-            if !members.is_empty() && members.iter().all(|m| Self::member_kind_two_state(m.kind)) {
-                NetVarKind::Bit
-            } else {
-                NetVarKind::Logic
-            };
+        let struct_kind = if !members.is_empty()
+            && members
+                .iter()
+                .all(|m| Self::member_kind_two_state(m.dtype.net()))
+        {
+            NetVarKind::Bit
+        } else {
+            NetVarKind::Logic
+        };
         let reg = self.next_type_reg();
         let layout = SymStructLayout {
             fields,
@@ -70,6 +80,7 @@ impl Parser<'_, '_> {
         self.tn_clear(&tname.name, type_rec::Kind::Union);
         let msb = Self::sym_sub_one(total, start);
         let info = TypeInfo {
+            decl_kind: TypeKind::NotRecorded,
             kind: struct_kind,
             signed: struct_signed,
             range: Some(Range {
@@ -104,15 +115,15 @@ impl Parser<'_, '_> {
     /// table declined for any other reason keeps the numeric path's refusal.
     pub(crate) fn sym_member_width(&self, m: &StructMember, nested: bool) -> Option<Expr> {
         if nested
-            || !m.packed_dims.is_empty()
+            || !m.dtype.packed_dims().is_empty()
             || !matches!(
-                m.kind,
+                m.dtype.net(),
                 NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
             )
         {
             return None;
         }
-        let r = m.range.as_ref()?;
+        let r = m.dtype.range.as_ref()?;
         if self.const_bound(&r.lsb) != Some(0) || !self.names_an_overridable(&r.msb)? {
             return None;
         }

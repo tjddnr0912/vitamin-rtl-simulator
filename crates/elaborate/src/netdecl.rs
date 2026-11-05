@@ -113,22 +113,22 @@ impl Elaborator<'_> {
         // ⓑ-breadth (§25.9): a `virtual INTERFACE vif;` handle is NOT a net — it is
         // a STATIC ALIAS resolved in the post-instance pass (`resolve_virtual_ifaces`),
         // AFTER the bound interface instances are flattened. No net here.
-        if d.kind == ast::NetVarKind::VirtualIface {
+        if d.dtype.net() == ast::NetVarKind::VirtualIface {
             return;
         }
-        if !net_kind_supported(d.kind) {
+        if !net_kind_supported(d.dtype.net()) {
             self.error(MsgCode::ElabUnsupported, "unsupported net/var kind (v1)");
             // still emit a Wire-shaped net per name so references resolve.
         }
         // Multi-dim PACKED array (`logic [3:0][7:0]`): the net is a flat vector of
         // `product(packed widths)` bits; a select `m[i]` is a bit-slice. Computed once
         // per decl (shared by all names; unpacked dims are per-name).
-        let packed_ext = self.packed_extents(d.range.as_ref(), &d.packed);
+        let packed_ext = self.packed_extents(d.dtype.range.as_ref(), d.dtype.packed_dims());
         // a named event carries NO range/init/array surface (IEEE §6.17) —
         // loud, then the bare counter net is still created so refs resolve.
-        if matches!(d.kind, ast::NetVarKind::Event)
-            && (d.range.is_some()
-                || !d.packed.is_empty()
+        if matches!(d.dtype.net(), ast::NetVarKind::Event)
+            && (d.dtype.range.is_some()
+                || !d.dtype.packed_dims().is_empty()
                 || d.names
                     .iter()
                     .any(|n| n.init.is_some() || !n.unpacked.is_empty()))
@@ -161,18 +161,18 @@ impl Elaborator<'_> {
                 .iter()
                 .any(|x| matches!(x, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)));
             let neg_lsb = self
-                .declared_neg_lsb(d.range.as_ref())
+                .declared_neg_lsb(d.dtype.range.as_ref())
                 .filter(|_| !dyn_storage);
             let asc_lsb = self
-                .declared_asc_lsb(d.range.as_ref())
+                .declared_asc_lsb(d.dtype.range.as_ref())
                 .filter(|_| !dyn_storage);
             let (mut width, mut msb, lsb, signed) = self.range_to_dims_opt(
-                self.shape_kind(d.kind, &d.shape_param),
-                d.range.as_ref(),
-                self.shape_signed(d.signed, &d.shape_param),
+                self.shape_kind(d.dtype.net(), &d.shape_param),
+                d.dtype.range.as_ref(),
+                self.shape_signed(d.dtype.signed, &d.shape_param),
                 neg_lsb.is_some() || asc_lsb.is_some(),
             );
-            if !d.packed.is_empty() {
+            if !d.dtype.packed_dims().is_empty() {
                 width = packed_ext
                     .iter()
                     .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)));
@@ -182,13 +182,16 @@ impl Elaborator<'_> {
             // width 0 / array_len 0; the engine heap holds the bytes (dyn
             // precedent). Reads materialize is_str packed values; writes
             // strip leading NULs through the funnel.
-            if matches!(d.kind, ast::NetVarKind::String) {
+            if matches!(d.dtype.net(), ast::NetVarKind::String) {
                 // N6: a FIXED `string` ARRAY (`string files[0:1]` / `string f[4]`) — a
                 // single fixed unpacked dim, no packed/range — desugars to N scalar
                 // `NetKind::String` element nets (`<name>$sae$<i>`); `files[K]` (CONST K)
                 // resolves to the K-th net. A dynamic (`string s[]`) / multi-dim /
                 // init-pattern array stays loud (correct-or-loud) via the reject below.
-                if d.range.is_none() && d.packed.is_empty() && !decl.unpacked.is_empty() {
+                if d.dtype.range.is_none()
+                    && d.dtype.packed_dims().is_empty()
+                    && !decl.unpacked.is_empty()
+                {
                     // T1: a ZERO-BASED ASCENDING fixed string array routes to the
                     // DYNAMIC representation instead of N per-element nets. Measured
                     // capability parity (23 shapes, fixed vs dyn, iverilog-differential)
@@ -328,8 +331,8 @@ impl Elaborator<'_> {
                     }
                     _ => None,
                 };
-                if let Some(kind) =
-                    str_container_kind.filter(|_| d.range.is_none() && d.packed.is_empty())
+                if let Some(kind) = str_container_kind
+                    .filter(|_| d.dtype.range.is_none() && d.dtype.packed_dims().is_empty())
                 {
                     let Ok(queue_bound) = self.queue_dim_bound(&decl.unpacked[0]) else {
                         continue;
@@ -379,7 +382,10 @@ impl Elaborator<'_> {
                     }
                     continue;
                 }
-                if d.range.is_some() || !d.packed.is_empty() || !decl.unpacked.is_empty() {
+                if d.dtype.range.is_some()
+                    || !d.dtype.packed_dims().is_empty()
+                    || !decl.unpacked.is_empty()
+                {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a string variable takes no packed/unpacked dimensions (v7)",
@@ -470,7 +476,9 @@ impl Elaborator<'_> {
                     // stays loud too — those use runtime methods.
                     let init_is_pattern = match &init.kind {
                         ast::ExprKind::AssignPattern(_) => true,
-                        ast::ExprKind::Concat { .. } => !matches!(d.kind, ast::NetVarKind::String),
+                        ast::ExprKind::Concat { .. } => {
+                            !matches!(d.dtype.net(), ast::NetVarKind::String)
+                        }
                         _ => false,
                     };
                     // §7.5.1: `byte b[] = new[20];` — a sizing constructor is a legal
@@ -498,12 +506,15 @@ impl Elaborator<'_> {
                 // N3 Phase 2: a `real r[]` DYNAMIC ARRAY is supported (element-real
                 // heap). A real/realtime element in a QUEUE/ASSOC, and `event`
                 // anywhere, stay loud (correct-or-loud — not yet plumbed).
-                let is_real_dyn =
-                    matches!(d.kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime)
-                        && handle_kind == ir::NetKind::DynArray;
-                if matches!(d.kind, ast::NetVarKind::Event)
-                    || (matches!(d.kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime)
-                        && !is_real_dyn)
+                let is_real_dyn = matches!(
+                    d.dtype.net(),
+                    ast::NetVarKind::Real | ast::NetVarKind::Realtime
+                ) && handle_kind == ir::NetKind::DynArray;
+                if matches!(d.dtype.net(), ast::NetVarKind::Event)
+                    || (matches!(
+                        d.dtype.net(),
+                        ast::NetVarKind::Real | ast::NetVarKind::Realtime
+                    ) && !is_real_dyn)
                 {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -511,7 +522,7 @@ impl Elaborator<'_> {
                     );
                     continue;
                 }
-                if !net_is_variable(d.kind) && !is_real_dyn {
+                if !net_is_variable(d.dtype.net()) && !is_real_dyn {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "dynamic storage must be a VARIABLE kind (reg/logic/integer/time), not a net",
@@ -537,7 +548,7 @@ impl Elaborator<'_> {
                         signed,
                         array_len: 0, // the handle marker — elements live in the engine heap
                         dir,
-                        init: default_init(self.shape_kind(d.kind, &d.shape_param), width),
+                        init: default_init(self.shape_kind(d.dtype.net(), &d.shape_param), width),
                     },
                 );
                 if self.nets.len() as u32 > next_id {
@@ -550,7 +561,7 @@ impl Elaborator<'_> {
                     // §5.2 row 27: the element kinds `$readmem*` can load.
                     if handle_kind == ir::NetKind::Assoc
                         && crate::readmem_assoc::assoc_elem_kind_is_integral(
-                            self.shape_kind(d.kind, &d.shape_param),
+                            self.shape_kind(d.dtype.net(), &d.shape_param),
                         )
                     {
                         self.assoc_integral_elem.insert(next_id);
@@ -558,7 +569,7 @@ impl Elaborator<'_> {
                     // IEEE §7.5.2: a 2-state element type defaults to 0, not X.
                     // The handle skips `record_dim_desc`, so flag it here so the
                     // `two_state_nets` sidecar reaches the engine's `new[]` fill.
-                    if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+                    if net_kind_is_two_state(self.shape_kind(d.dtype.net(), &d.shape_param)) {
                         self.two_state_heap_handles.insert(next_id);
                     }
                     // N3 Phase 2: a `real r[]` element-real dyn array — the engine
@@ -572,7 +583,7 @@ impl Elaborator<'_> {
                     // the outer packed element. Record the handle so the select arms
                     // refuse it (`dyn_md_elem_select`); `packed_dims` is NOT touched —
                     // other consumers key on it and the handle has no static extents.
-                    if !d.packed.is_empty() {
+                    if !d.dtype.packed_dims().is_empty() {
                         self.dyn_md_elem.insert(next_id);
                     }
                 }
@@ -582,8 +593,11 @@ impl Elaborator<'_> {
             // A scalar 32-bit object-id net (0 = null), recorded in
             // `class_handle_nets` (engine routing) + `net_class` (static type for
             // field/method resolution). The object lives in the engine heap.
-            if matches!(d.kind, ast::NetVarKind::ClassHandle) {
-                if d.range.is_some() || !d.packed.is_empty() || !decl.unpacked.is_empty() {
+            if matches!(d.dtype.net(), ast::NetVarKind::ClassHandle) {
+                if d.dtype.range.is_some()
+                    || !d.dtype.packed_dims().is_empty()
+                    || !decl.unpacked.is_empty()
+                {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a class handle takes no packed/unpacked dimensions (N7 MVP)",
@@ -680,11 +694,11 @@ impl Elaborator<'_> {
             // itself depending on whether the initializer happened to fold. The value now
             // always rides the pre-sweep, which the engine runs before arming anything, so
             // it still produces no event and still lands before every user process.
-            let init = default_init(self.shape_kind(d.kind, &d.shape_param), width);
+            let init = default_init(self.shape_kind(d.dtype.net(), &d.shape_param), width);
             self.add_net(
                 &decl.name.name,
                 ir::NetVar {
-                    kind: map_net_kind_or_wire(self.shape_kind(d.kind, &d.shape_param)),
+                    kind: map_net_kind_or_wire(self.shape_kind(d.dtype.net(), &d.shape_param)),
                     width,
                     msb,
                     lsb,
@@ -694,7 +708,7 @@ impl Elaborator<'_> {
                     init,
                 },
             );
-            if matches!(d.kind, ast::NetVarKind::Event) {
+            if matches!(d.dtype.net(), ast::NetVarKind::Event) {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
                     self.event_nets.insert(id);
@@ -704,10 +718,10 @@ impl Elaborator<'_> {
             // engine (looked up post-add, robust to a duplicate-decl skip). The
             // net itself is a plain Wire in the IR; the sidecar drives multi-driver
             // resolution only.
-            if matches!(d.kind, ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
+            if matches!(d.dtype.net(), ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
-                    if matches!(d.kind, ast::NetVarKind::Wand) {
+                    if matches!(d.dtype.net(), ast::NetVarKind::Wand) {
                         self.wired_and_nets.insert(id);
                     } else {
                         self.wired_or_nets.insert(id);
@@ -757,6 +771,7 @@ impl Elaborator<'_> {
                     // range is normalized, so without this a waveform viewer numbers the
                     // bits `[5:0]` where iverilog numbers them `[3:-2]`).
                     if let Some(m) = d
+                        .dtype
                         .range
                         .as_ref()
                         .and_then(|r| self.const_range_bound_fold(&r.msb))
@@ -795,9 +810,9 @@ impl Elaborator<'_> {
             if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
                 self.record_dim_desc(
                     id,
-                    self.shape_kind(d.kind, &d.shape_param),
-                    d.range.as_ref(),
-                    &d.packed,
+                    self.shape_kind(d.dtype.net(), &d.shape_param),
+                    d.dtype.range.as_ref(),
+                    d.dtype.packed_dims(),
                     &decl.unpacked,
                 );
             }
@@ -817,8 +832,8 @@ impl Elaborator<'_> {
                     if cont_array::inline_elem_type(
                         d.span.lo,
                         first,
-                        d.range.as_ref(),
-                        &d.packed,
+                        d.dtype.range.as_ref(),
+                        d.dtype.packed_dims(),
                         d.shape_param.is_some(),
                     ) {
                         self.inline_elem_arrays.insert(id);
@@ -832,7 +847,7 @@ impl Elaborator<'_> {
             }
             // Record packed-dim extents for a multi-dim packed net so a select can be
             // lowered to the right bit-slice.
-            if !d.packed.is_empty() {
+            if !d.dtype.packed_dims().is_empty() {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
                     self.packed_dims.insert(id, packed_ext.clone());
@@ -844,7 +859,7 @@ impl Elaborator<'_> {
             if decl.unpacked.is_empty()
                 && !d.const_param
                 && d.shape_param.is_none()
-                && packed_pattern::first_dim_written(d.span.lo, first, d.range.as_ref())
+                && packed_pattern::first_dim_written(d.span.lo, first, d.dtype.range.as_ref())
             {
                 if let Some(&(_, n, _)) = packed_ext.first() {
                     self.record_packed_default_target(&decl.name.name, n);

@@ -120,7 +120,7 @@ fn put<'a>(sites: &mut Sites<'a>, name: &'a str, site: Site) {
 /// `string` one (the parser keeps no `string` keyword) takes its type from its value.
 fn param_site(p: &ast::ParamDecl) -> Site {
     let typed = matches!(p.ty, ast::ParamType::Integer)
-        || (matches!(p.ty, ast::ParamType::Implicit) && p.range.is_some());
+        || (matches!(p.ty, ast::ParamType::Implicit) && p.dtype.range.is_some());
     if typed {
         Site::TopTyped
     } else {

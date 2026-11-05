@@ -172,9 +172,9 @@ impl Parser<'_, '_> {
                 && (header || !self.has_param_header);
             decls.push(ParamDecl {
                 kind,
-                signed: false,
+                // A desugared bound or shape parameter: written untyped, no signing keyword.
+                dtype: DataType::new_param(TypeKind::Implicit, Signing::Implicit, false, None),
                 ty: ParamType::Implicit,
-                range: None,
                 name: Ident {
                     name: width_name.clone(),
                     span: name.span,
@@ -184,9 +184,9 @@ impl Parser<'_, '_> {
             });
             decls.push(ParamDecl {
                 kind,
-                signed: false,
+                // A desugared bound or shape parameter: written untyped, no signing keyword.
+                dtype: DataType::new_param(TypeKind::Implicit, Signing::Implicit, false, None),
                 ty: ParamType::Implicit,
-                range: None,
                 name: Ident {
                     name: shape_name.clone(),
                     span: name.span,
@@ -256,6 +256,7 @@ impl Parser<'_, '_> {
                     None => Self::type_param_typedef_dims(&carried_packed, &width_name, span),
                 };
             let info = TypeInfo {
+                decl_kind: TypeKind::NotRecorded,
                 kind: if tv.two_state {
                     NetVarKind::Bit
                 } else {
@@ -379,9 +380,9 @@ impl Parser<'_, '_> {
             for (n, v) in [(&na, a), (&nb, b)] {
                 decls.push(ParamDecl {
                     kind,
-                    signed: false,
+                    // A desugared bound or shape parameter: written untyped, no signing keyword.
+                    dtype: DataType::new_param(TypeKind::Implicit, Signing::Implicit, false, None),
                     ty: ParamType::Implicit,
-                    range: None,
                     name: Ident {
                         name: n.clone(),
                         span,

@@ -370,14 +370,14 @@ fn item_reads<'a>(it: &'a ast::GenItem, out: &mut Vec<&'a str>) -> bool {
     };
     match b.as_ref() {
         ast::ModuleItem::Param(p) => {
-            p.range.as_ref().is_none_or(|r| range_reads(r, out)) && expr_reads(&p.value, out)
+            p.dtype.range.as_ref().is_none_or(|r| range_reads(r, out)) && expr_reads(&p.value, out)
         }
         ast::ModuleItem::NetVar(d) => {
             d.delay.is_none()
                 && d.class_type.is_none()
                 && d.class_args.is_empty()
-                && d.range.as_ref().is_none_or(|r| range_reads(r, out))
-                && d.packed.iter().all(|r| range_reads(r, out))
+                && d.dtype.range.as_ref().is_none_or(|r| range_reads(r, out))
+                && d.dtype.packed_dims().iter().all(|r| range_reads(r, out))
                 && d.shape_param.as_ref().is_none_or(|s| {
                     out.push(&s.name);
                     true
@@ -399,13 +399,13 @@ fn item_reads<'a>(it: &'a ast::GenItem, out: &mut Vec<&'a str>) -> bool {
                         .iter()
                         .all(|l| l.value.as_ref().is_none_or(|v| expr_reads(v, out)))
             }
-            ast::TypedefKind::Alias { range, packed, .. } => {
-                range.as_ref().is_none_or(|r| range_reads(r, out))
-                    && packed.iter().all(|r| range_reads(r, out))
+            ast::TypedefKind::Alias { dtype } => {
+                dtype.range.as_ref().is_none_or(|r| range_reads(r, out))
+                    && dtype.packed_dims().iter().all(|r| range_reads(r, out))
             }
             ast::TypedefKind::Struct { members } => members.iter().all(|m| {
-                m.range.as_ref().is_none_or(|r| range_reads(r, out))
-                    && m.packed_dims.iter().all(|r| range_reads(r, out))
+                m.dtype.range.as_ref().is_none_or(|r| range_reads(r, out))
+                    && m.dtype.packed_dims().iter().all(|r| range_reads(r, out))
             }),
         },
         ast::ModuleItem::Genvar { .. } | ast::ModuleItem::Import(_) => true,

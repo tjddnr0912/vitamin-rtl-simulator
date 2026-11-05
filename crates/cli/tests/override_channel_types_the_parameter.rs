@@ -749,9 +749,10 @@ endmodule
 }
 
 /// NOT this slice, pinned as measured: a SIGNED override onto a declaration with no `signed`
-/// keyword stays a guessed type, because `ast::ParamDecl.signed` is false both for no keyword
-/// and for the `unsigned` keyword (ROADMAP §2 "Index sealing", the `parameter unsigned`
-/// bullet). So `#(.P(-3))`, `#(.P(-8'sd3))` and `#(.P(5))` keep the pre-slice casts:
+/// keyword stays a guessed type, because `ast::ParamDecl.dtype.signed` is false both for no
+/// keyword and for `unsigned`, and the keyword record `dtype.signing()` has no reader yet
+/// (Q-PARAM2STATE ; ROADMAP §2 "Index sealing", the `parameter unsigned` bullet). So
+/// `#(.P(-3))`, `#(.P(-8'sd3))` and `#(.P(5))` keep the pre-slice casts:
 /// `64'(~(P + 32'd1))` over `-3` is `0000000000000001` here where both oracles print
 /// `ffffffff00000001`. Un-guessing them fixed those and, on `parameter unsigned P = 1` +
 /// `#(.P(-8'sd91))` (the last `check`, which must not move), turned the right `64'(P >> 1)`

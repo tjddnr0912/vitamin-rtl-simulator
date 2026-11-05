@@ -307,10 +307,10 @@ pub enum PortList {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct AnsiPort {
     pub dir: PortDir,
-    pub net_or_var: Option<NetVarKind>, // None ⇒ default wire
-    pub signed: bool,
-    pub range: Option<Range>, // packed [msb:lsb] (the FIRST/outer packed dim)
-    pub packed: Vec<Range>,   // ADDITIONAL packed dims: `[3:0][7:0]` ⇒ range=[3:0], packed=[[7:0]]
+    /// The port's data type ([`DataType::new_port`]): kind `Implicit` ⇒ no net/var
+    /// keyword (default wire), `range` the FIRST/outer packed dim, `packed_dims()` the
+    /// ADDITIONAL ones (`[3:0][7:0]` ⇒ range=[3:0], packed=[[7:0]]).
+    pub dtype: DataType,
     pub name: Ident,
     /// UNPACKED dims, written AFTER the name: `output logic [7:0] o [4]`
     /// (IEEE 1800 §23.2.2.3). Same type and role as `DeclName::unpacked` and
@@ -325,9 +325,10 @@ pub struct AnsiPort {
     /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
     /// every declaration written with an explicit type, which is every declaration
     /// that predates the carrier. `signed` / the 2-state half of the kind are
-    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
-    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
-    /// the same way `range` already names `T$w` so the WIDTH follows.
+    /// parse-time scalars stamped from the DEFAULT type (`dtype.signed`, `dtype`'s
+    /// kind); elaborate folds `T$s` per INSTANCE (bit 0 = signed, bit 1 = 2-state) and
+    /// lets the override's shape win, the same way `dtype.range` already names `T$w` so
+    /// the WIDTH follows.
     pub shape_param: Option<Ident>,
     /// §3.b cont-array-typedef-elem: the data type is a user typedef of an integral
     /// packed type other than an enum — a packed struct or union, or an alias of a
@@ -615,10 +616,9 @@ pub enum TypedefKind {
     /// `typedef logic [7:0] byte_t;` — a plain type alias. The parser resolves
     /// `byte_t x;` to this underlying net/var type directly; elaborate is a no-op.
     Alias {
-        kind: NetVarKind,
-        signed: bool,
-        range: Option<Range>,
-        packed: Vec<Range>,
+        /// The aliased type ([`DataType::new_net`]): kind, effective sign, first packed
+        /// dim and the further ones, as a `NetVarDecl` of the type would carry them.
+        dtype: DataType,
     },
     /// `typedef struct packed { logic [7:0] a; logic [3:0] b; } pkt_t;` — a packed
     /// struct. The parser lays members MSB-first into one flat `logic` vector and
@@ -635,17 +635,15 @@ pub struct EnumLabel {
 
 /// One packed-struct member: `logic [7:0] a;`. v1 members are scalar/vector
 /// net/var types with a constant-literal range (no nested struct / param width).
-/// `packed_dims` carries the INNER packed dims of a multi-dimensional packed member
-/// (`logic [1:0][3:0] m` → `range = [1:0]`, `packed_dims = [[3:0]]`); it is empty for
-/// an ordinary single-dim member. The member's flat bit width is `range` width ×
-/// ∏(`packed_dims` widths); each first-level element (`m[i]`) is ∏(`packed_dims`) bits.
+/// `dtype.packed_dims()` carries the INNER packed dims of a multi-dimensional packed
+/// member (`logic [1:0][3:0] m` → `range = [1:0]`, packed dims `[[3:0]]`); it is empty
+/// for an ordinary single-dim member. The member's flat bit width is `range` width ×
+/// ∏(packed dim widths); each first-level element (`m[i]`) is ∏(packed dims) bits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct StructMember {
     pub name: Ident,
-    pub kind: NetVarKind,
-    pub signed: bool,
-    pub range: Option<Range>,
-    pub packed_dims: Vec<Range>,
+    /// The member's data type ([`DataType::new_net`]).
+    pub dtype: DataType,
     pub span: Span,
 }
 
@@ -659,9 +657,10 @@ pub struct DefparamItem {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct PortDecl {
     pub dir: PortDir,
-    pub net_or_var: Option<NetVarKind>, // e.g. `output reg`
-    pub signed: bool,
-    pub range: Option<Range>,
+    /// The declaration's data type ([`DataType::new_port`]; `output reg` ⇒ kind
+    /// `Kind(Reg)`, no keyword ⇒ `Implicit`). One packed dim: `packed_dims()` is empty
+    /// (a multi-dimensional typedef is refused here).
+    pub dtype: DataType,
     pub names: Vec<Ident>, // `input [3:0] a, b;`
     /// UNPACKED dims per name, parallel to `names` (empty vec = scalar). A
     /// separate vector rather than a declarator type so the frozen `names`
@@ -671,9 +670,10 @@ pub struct PortDecl {
     /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
     /// every declaration written with an explicit type, which is every declaration
     /// that predates the carrier. `signed` / the 2-state half of the kind are
-    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
-    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
-    /// the same way `range` already names `T$w` so the WIDTH follows.
+    /// parse-time scalars stamped from the DEFAULT type (`dtype.signed`, `dtype`'s
+    /// kind); elaborate folds `T$s` per INSTANCE (bit 0 = signed, bit 1 = 2-state) and
+    /// lets the override's shape win, the same way `dtype.range` already names `T$w` so
+    /// the WIDTH follows.
     pub shape_param: Option<Ident>,
     pub span: Span,
 }
@@ -682,9 +682,16 @@ pub struct PortDecl {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct ParamDecl {
     pub kind: ParamKind,
-    pub signed: bool,
+    /// The declared type ([`DataType::new_param`]): the signing keyword and the
+    /// declared kind as written (a record no reader trusts yet — Q-PARAM2STATE), the
+    /// effective sign, and the range (the product range of a multi-dimensional packed
+    /// prefix: the packed dims are not recorded here).
+    pub dtype: DataType,
+    /// The parameter's VALUE class (`int` = `integer` = `Integer`; `bit` / `logic` /
+    /// `reg` / `byte` … = `Implicit` + a range). Not the declared kind: see
+    /// `dtype.kind()`. The two disagree by construction (the header array twin keeps
+    /// `Implicit` here while `dtype` records `parameter int A [2]`'s `Kind(Int)`).
     pub ty: ParamType,
-    pub range: Option<Range>,
     pub name: Ident,
     pub value: Expr, // RHS const-expr (required)
     pub span: Span,
@@ -706,10 +713,10 @@ pub enum ParamType {
 // ──────────────────────────── NetVarDecl ────────────────────────────
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct NetVarDecl {
-    pub kind: NetVarKind,
-    pub signed: bool,
-    pub range: Option<Range>, // packed/vector [msb:lsb] (the FIRST/outer packed dim)
-    pub packed: Vec<Range>,   // ADDITIONAL packed dims: `logic [3:0][7:0]` ⇒ packed=[[7:0]]
+    /// The declaration's data type ([`DataType::new_net`]): kind, effective sign,
+    /// `range` the packed/vector [msb:lsb] (the FIRST/outer packed dim) and
+    /// `packed_dims()` the ADDITIONAL ones (`logic [3:0][7:0]` ⇒ packed=[[7:0]]).
+    pub dtype: DataType,
     /// IEEE §6.1.3 net declaration delay (`wire #3 w = a;` / `wire #(2,3) w = a;`).
     /// Applies to EVERY net-declaration-assignment in this decl, identical to a
     /// delay on the equivalent `assign #d net = expr;`. `None` = no delay (the
@@ -722,7 +729,7 @@ pub struct NetVarDecl {
     /// enclosing function/task default. Honored only on a frame function/task
     /// body_decl (IEEE §6.21; iverilog rejects the override outright).
     pub lifetime: Option<bool>,
-    /// N7: when `kind == ClassHandle`, the declared class name (`Packet p;` ⇒
+    /// N7: when `dtype`'s kind is `ClassHandle`, the declared class name (`Packet p;` ⇒
     /// `Some("Packet")`). `None` for every non-class declaration.
     pub class_type: Option<Ident>,
     /// ⓑ-breadth (§8.25): a parameterized class handle's specialization arguments
@@ -740,9 +747,10 @@ pub struct NetVarDecl {
     /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
     /// every declaration written with an explicit type, which is every declaration
     /// that predates the carrier. `signed` / the 2-state half of the kind are
-    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
-    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
-    /// the same way `range` already names `T$w` so the WIDTH follows.
+    /// parse-time scalars stamped from the DEFAULT type (`dtype.signed`, `dtype`'s
+    /// kind); elaborate folds `T$s` per INSTANCE (bit 0 = signed, bit 1 = 2-state) and
+    /// lets the override's shape win, the same way `dtype.range` already names `T$w` so
+    /// the WIDTH follows.
     pub shape_param: Option<Ident>,
     /// §3.b cont-array-typedef-elem: the data type is a user typedef of an integral
     /// packed type other than an enum — a packed struct or union, or an alias of a
@@ -823,23 +831,19 @@ pub enum AssocKey {
 }
 
 /// §5.2 row 20: the integral type of an associative-array key, as written (or as
-/// the typedef it names resolved to). `kind` is the data-type keyword (`Bit`,
-/// `Logic`, `Reg`, `Int`, `Integer`, `Byte`, `Shortint`, `Longint`, `Time`),
-/// `signed` the effective signing, `range` / `packed` the packed dimensions, and
-/// `named` whether the key was spelled by a typedef name (`[addr_t]`) rather than
-/// by keywords, and `explicit_sign` whether a `signed` / `unsigned` keyword was
-/// written. A bare keyword atom with neither (`[int]`, `[byte]`, …) is the spelling
-/// that predates row 20, and elaborate keeps that spelling's pre-row-20 index,
-/// `foreach`, iteration-variable, copy and `%p` behaviour; `[int signed]` was never
-/// accepted before and is a typed key.
+/// the typedef it names resolved to). `dtype` ([`DataType::new_assoc_key`]) holds the
+/// data-type keyword as its kind (`Bit`, `Logic`, `Reg`, `Int`, `Integer`, `Byte`,
+/// `Shortint`, `Longint`, `Time`), the effective sign, the packed dimensions, and the
+/// signing keyword as written (`Implicit` when none was, which a typedef-named key
+/// always is); `named` says whether the key was spelled by a typedef name
+/// (`[addr_t]`) rather than by keywords. A bare keyword atom with no signing keyword
+/// (`[int]`, `[byte]`, …) is the spelling that predates row 20, and elaborate keeps
+/// that spelling's pre-row-20 index, `foreach`, iteration-variable, copy and `%p`
+/// behaviour; `[int signed]` was never accepted before and is a typed key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct AssocKeyType {
-    pub kind: NetVarKind,
-    pub signed: bool,
-    pub range: Option<Range>,
-    pub packed: Vec<Range>,
+    pub dtype: DataType,
     pub named: bool,
-    pub explicit_sign: bool,
     pub span: Span,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
@@ -889,6 +893,261 @@ pub enum NetVarKind {
     /// every `vif.member` access is symbol-aliased to that instance's flattened net.
     /// Dynamic / conditional re-binding is a v1 loud-reject (never silent).
     VirtualIface,
+}
+
+/// IEEE 1800-2017 A.2.2.1 `signing ::= signed | unsigned`, as written on a
+/// declaration: `Implicit` when no keyword was written. The EFFECTIVE sign is
+/// [`DataType::signed`]; this only says which keyword the source spelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum Signing {
+    Implicit,
+    Signed,
+    Unsigned,
+}
+
+impl Signing {
+    /// The keyword a parser's `Option<bool>` signing slot read: `None` ⇒ none was
+    /// written, `Some(true)` ⇒ `signed`, `Some(false)` ⇒ `unsigned`.
+    pub fn from_written(written: Option<bool>) -> Signing {
+        match written {
+            None => Signing::Implicit,
+            Some(true) => Signing::Signed,
+            Some(false) => Signing::Unsigned,
+        }
+    }
+}
+
+/// The kind half of a declaration's [`DataType`]: three answers a reader can tell
+/// apart. Read it through [`TypeKind::net`] / [`TypeKind::port`] where the container
+/// always records one, and match it exhaustively anywhere else (no `_` arm: a
+/// `NotRecorded` read as `Implicit` is a wrong answer, not a default).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum TypeKind {
+    /// No data-type keyword and no type name (A.2.2.1 `implicit_data_type`): a port
+    /// or formal with no net/var keyword, an untyped parameter.
+    Implicit,
+    /// The kind as the parser keeps it — resolved through a typedef where the
+    /// declaration names one. On nets this is the NET TYPE (`wire`, `tri`, …), which
+    /// A.2.2.1's `data_type` does not hold (A.2.1.3 `net_type`).
+    Kind(NetVarKind),
+    /// The parser keeps no kind a reader may trust: a parameter typed by an enum, a
+    /// struct (exact, symbolic or a chained alias of one), a union or a type
+    /// parameter, and every function return.
+    NotRecorded,
+}
+
+impl TypeKind {
+    /// The kind of a container that always records one (a net or variable, a struct
+    /// member, an associative key, a typedef alias).
+    pub fn net(self) -> NetVarKind {
+        match self {
+            TypeKind::Kind(k) => k,
+            TypeKind::Implicit | TypeKind::NotRecorded => {
+                unreachable!("a net / variable / member / key data type records its kind")
+            }
+        }
+    }
+
+    /// A port's or formal's net/var keyword: `None` when none was written.
+    pub fn port(self) -> Option<NetVarKind> {
+        match self {
+            TypeKind::Implicit => None,
+            TypeKind::Kind(k) => Some(k),
+            TypeKind::NotRecorded => unreachable!("a port data type records its keyword"),
+        }
+    }
+}
+
+/// The data type of one declaration, held whole by every declaration container
+/// (`NetVarDecl`, `AnsiPort`, `PortDecl`, `TfPort`, `StructMember`, `AssocKeyType`,
+/// `ParamDecl`, `FunctionDef`'s return, `TypedefKind::Alias`). IEEE 1800-2017
+/// A.2.2.1: `data_type ::= integer_vector_type [signing] {packed_dimension} | …`;
+/// unpacked dimensions belong to the declarator (`DeclName::unpacked`,
+/// `AnsiPort::unpacked`, …), not here.
+///
+/// Built only through one constructor per container family, each admitting only
+/// that family's states: a net, member, key or alias always has `Kind(_)`; only a
+/// parameter and an associative key record a signing keyword; only a parameter can be
+/// `NotRecorded`, and a function return always is.
+///
+/// * `kind` — [`TypeKind`]. On a `ParamDecl` it is the declared-kind record
+///   (`int` ≠ `integer`, `bit` ≠ `logic` ≠ `reg`). Elsewhere it is the parser's
+///   resolved kind, which is lossy for `enum bit [N]` (recorded `Logic`, §2
+///   enum-bit-four-state) — nothing here says so. On an `AnsiPort` whose `iface` is
+///   set, `Implicit` is a placeholder (an interface port has no data type).
+/// * `signing` — the keyword written ([`Signing`]), `None` = NOT RECORDED: recorded
+///   on `ParamDecl` and `AssocKeyType` only.
+/// * `signed` — the EFFECTIVE sign every reader reads. It is NOT a function of
+///   (`signing`, `kind`): `typedef logic signed [3:0] st; st v;` writes no keyword on
+///   `v` and `v` is signed; a struct's `packed signed` and a type parameter's default
+///   type stamp it too.
+/// * `range` — the first (outer) packed dimension as the declaration carries it; the
+///   PRODUCT range where the parser flattened a multi-dimensional packed type
+///   (`ParamDecl`, `TfPort`, a `FunctionDef` return).
+/// * packed dims ([`DataType::packed_dims`]) — the further packed dimensions, outer
+///   first: `Some` on every container that keeps them (empty = one dimension), `None`
+///   = NOT RECORDED where the parser flattened (`ParamDecl`, `TfPort`, `FunctionDef`:
+///   the dims live in the parser's `packed_md` binding, and a return's in
+///   `FunctionDef::ret_packed`).
+///
+/// Type facts kept OUTSIDE this record: `shape_param` (a type parameter's override
+/// replaces the default-stamped `signed` and 2-state kind per instance — `kind` /
+/// `signed` here are the DEFAULT's), `integral_typedef`, `pattern_members`, `iface`,
+/// `class_type` / `class_args`, `ParamDecl::ty` (the value class; it disagrees with
+/// `kind` by construction at the header array twin, which keeps `ty: Implicit`),
+/// `FunctionDef::{ret_packed, ret_type, ret_two_state, ret_string}`,
+/// `TypedefKind::Enum`'s base, and the parser's unpacked-array typedef dims: those
+/// are part of the named type (IEEE 1800-2017 §6.18 `typedef data_type
+/// type_identifier { variable_dimension }`) but reach the declaration as its
+/// declarator's unpacked dims, so for such a typedef `DataType` is not the whole type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+#[non_exhaustive]
+pub struct DataType {
+    kind: TypeKind,
+    signing: Option<Signing>,
+    pub signed: bool,
+    pub range: Option<Range>,
+    packed: Option<Vec<Range>>,
+}
+
+impl DataType {
+    /// A net / variable declaration, a struct member or a typedef alias: the kind is
+    /// always recorded, the signing keyword never is, the packed dims always are.
+    pub fn new_net(
+        kind: NetVarKind,
+        signed: bool,
+        range: Option<Range>,
+        packed: Vec<Range>,
+    ) -> DataType {
+        DataType {
+            kind: TypeKind::Kind(kind),
+            signing: None,
+            signed,
+            range,
+            packed: Some(packed),
+        }
+    }
+
+    /// A module port (`AnsiPort`, `PortDecl`): `net_or_var` is the net/var keyword
+    /// (`None` ⇒ none written ⇒ `Implicit`).
+    pub fn new_port(
+        net_or_var: Option<NetVarKind>,
+        signed: bool,
+        range: Option<Range>,
+        packed: Vec<Range>,
+    ) -> DataType {
+        DataType {
+            kind: net_or_var.map_or(TypeKind::Implicit, TypeKind::Kind),
+            signing: None,
+            signed,
+            range,
+            packed: Some(packed),
+        }
+    }
+
+    /// A task / function formal: as [`DataType::new_port`], with its packed dims
+    /// flattened into `range` by the parser (not recorded).
+    pub fn new_tf_port(
+        net_or_var: Option<NetVarKind>,
+        signed: bool,
+        range: Option<Range>,
+    ) -> DataType {
+        DataType {
+            kind: net_or_var.map_or(TypeKind::Implicit, TypeKind::Kind),
+            signing: None,
+            signed,
+            range,
+            packed: None,
+        }
+    }
+
+    /// An associative-array key type: the kind is always recorded, and so is the
+    /// signing keyword as written (`Implicit` for a typedef-named key).
+    pub fn new_assoc_key(
+        kind: NetVarKind,
+        signing: Signing,
+        signed: bool,
+        range: Option<Range>,
+        packed: Vec<Range>,
+    ) -> DataType {
+        DataType {
+            kind: TypeKind::Kind(kind),
+            signing: Some(signing),
+            signed,
+            range,
+            packed: Some(packed),
+        }
+    }
+
+    /// A value parameter: every kind state is legal, the signing keyword is always
+    /// recorded, the packed dims never are (`range` is the product range).
+    pub fn new_param(
+        kind: TypeKind,
+        signing: Signing,
+        signed: bool,
+        range: Option<Range>,
+    ) -> DataType {
+        DataType {
+            kind,
+            signing: Some(signing),
+            signed,
+            range,
+            packed: None,
+        }
+    }
+
+    /// A function return: neither the kind nor the signing keyword nor the packed
+    /// dims are recorded (`FunctionDef`'s `ret_*` fields carry them).
+    pub fn new_function_return(signed: bool, range: Option<Range>) -> DataType {
+        DataType {
+            kind: TypeKind::NotRecorded,
+            signing: None,
+            signed,
+            range,
+            packed: None,
+        }
+    }
+
+    /// The kind record (match it exhaustively).
+    pub fn kind(&self) -> TypeKind {
+        self.kind
+    }
+
+    /// The kind of a container that always records one ([`TypeKind::net`]).
+    pub fn net(&self) -> NetVarKind {
+        self.kind.net()
+    }
+
+    /// A port's or formal's net/var keyword ([`TypeKind::port`]).
+    pub fn port(&self) -> Option<NetVarKind> {
+        self.kind.port()
+    }
+
+    /// The signing keyword as written; `None` = not recorded for this container.
+    pub fn signing(&self) -> Option<Signing> {
+        self.signing
+    }
+
+    /// The packed dims record: `None` where the parser flattened them.
+    pub fn packed_record(&self) -> Option<&[Range]> {
+        self.packed.as_deref()
+    }
+
+    /// The further packed dims of a container that keeps them (outer first).
+    pub fn packed_dims(&self) -> &[Range] {
+        match &self.packed {
+            Some(p) => p,
+            None => unreachable!("the packed dims of a flattened declaration are not recorded"),
+        }
+    }
+
+    /// Mutable [`DataType::packed_dims`] (a monomorphizer substituting bounds).
+    pub fn packed_dims_mut(&mut self) -> &mut Vec<Range> {
+        match &mut self.packed {
+            Some(p) => p,
+            None => unreachable!("the packed dims of a flattened declaration are not recorded"),
+        }
+    }
 }
 
 impl NetVarKind {
@@ -2102,11 +2361,14 @@ pub enum GenCaseItem {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct FunctionDef {
     pub automatic: bool,
-    pub signed: bool,
-    pub range: Option<Range>,
+    /// The return type ([`DataType::new_function_return`]): the effective sign and
+    /// the range (the product range of a multi-dimensional return). Its kind is not
+    /// recorded (`ret_type`, `ret_two_state` and `ret_string` carry it) and neither are
+    /// its packed dims (`ret_packed` holds them).
+    pub dtype: DataType,
     /// §3 ⑤ⓖ: the packed dimensions of a return type that has more than one
     /// (`function logic [2:0][3:0] f`, or a typedef that declares them), outer
-    /// first. The parser declares the return FLAT — `range` is then the product
+    /// first. The parser declares the return FLAT — `dtype.range` is then the product
     /// range — and rewrites the body's selects on the return variable against these
     /// dims (`packed_md.rs`), so nothing that sizes the return reads this field.
     /// Elaborate reads it for one purpose: a select on a CALL of such a function
@@ -2161,9 +2423,10 @@ pub struct TfPort {
     /// R6: the source spelling of `dir` when it desugars (`ref`/`const ref` →
     /// `Inout`). Diagnostics only — see `TfDirSpelling`.
     pub dir_spelling: TfDirSpelling,
-    pub net_or_var: Option<NetVarKind>,
-    pub signed: bool,
-    pub range: Option<Range>,
+    /// The formal's data type ([`DataType::new_tf_port`]): kind `Implicit` ⇒ no
+    /// net/var keyword ; `range` is the product range of a multi-dimensional packed
+    /// formal (flattened by the parser: the packed dims are not recorded here).
+    pub dtype: DataType,
     pub name: Ident,
     /// IEEE §13.3: an unpacked-array formal (`input logic [63:0] words [0:7]`).
     /// The dims that follow the port NAME. Empty for a scalar/vector formal.
@@ -2175,9 +2438,10 @@ pub struct TfPort {
     /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
     /// every declaration written with an explicit type, which is every declaration
     /// that predates the carrier. `signed` / the 2-state half of the kind are
-    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
-    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
-    /// the same way `range` already names `T$w` so the WIDTH follows.
+    /// parse-time scalars stamped from the DEFAULT type (`dtype.signed`, `dtype`'s
+    /// kind); elaborate folds `T$s` per INSTANCE (bit 0 = signed, bit 1 = 2-state) and
+    /// lets the override's shape win, the same way `dtype.range` already names `T$w` so
+    /// the WIDTH follows.
     pub shape_param: Option<Ident>,
     pub span: Span,
 }
@@ -2186,6 +2450,89 @@ pub struct TfPort {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each `DataType` constructor admits only its family's states (the type has no
+    /// other producer: private fields, `#[non_exhaustive]`, no `Default`).
+    #[test]
+    fn each_data_type_constructor_admits_only_its_familys_states() {
+        let span = Span::new(0, 1);
+        let e = || Expr {
+            kind: ExprKind::Ident(HierPath {
+                segments: vec![Ident {
+                    name: "W".to_string(),
+                    span,
+                }],
+                span,
+            }),
+            span,
+        };
+        let r = || {
+            Some(Range {
+                msb: e(),
+                lsb: e(),
+                span,
+            })
+        };
+        // net / variable / member / alias: a kind always, no keyword, packed kept.
+        let n = DataType::new_net(NetVarKind::Bit, true, r(), vec![]);
+        assert_eq!(n.kind(), TypeKind::Kind(NetVarKind::Bit));
+        assert_eq!(n.net(), NetVarKind::Bit);
+        assert_eq!(n.signing(), None);
+        assert_eq!(n.packed_record(), Some(&[][..]));
+        assert!(n.signed && n.range.is_some());
+        // port: the keyword or none, never NotRecorded ; no signing ; packed kept.
+        let p = DataType::new_port(None, false, None, vec![]);
+        assert_eq!((p.kind(), p.port()), (TypeKind::Implicit, None));
+        let p = DataType::new_port(Some(NetVarKind::Wire), false, None, vec![]);
+        assert_eq!(p.port(), Some(NetVarKind::Wire));
+        assert_eq!(p.signing(), None);
+        assert!(p.packed_record().is_some());
+        // formal: as a port, packed dims not recorded.
+        let t = DataType::new_tf_port(None, false, r());
+        assert_eq!(
+            (t.kind(), t.signing(), t.packed_record()),
+            (TypeKind::Implicit, None, None)
+        );
+        // associative key: a kind and a keyword always.
+        let a = DataType::new_assoc_key(NetVarKind::Int, Signing::Unsigned, false, None, vec![]);
+        assert_eq!(a.kind(), TypeKind::Kind(NetVarKind::Int));
+        assert_eq!(a.signing(), Some(Signing::Unsigned));
+        assert!(a.packed_record().is_some());
+        // parameter: every kind state, a keyword always, packed never.
+        for kind in [
+            TypeKind::Implicit,
+            TypeKind::Kind(NetVarKind::Logic),
+            TypeKind::NotRecorded,
+        ] {
+            let q = DataType::new_param(kind, Signing::Implicit, false, None);
+            assert_eq!(
+                (q.kind(), q.signing(), q.packed_record()),
+                (kind, Some(Signing::Implicit), None)
+            );
+        }
+        // function return: nothing but the sign and the range.
+        let f = DataType::new_function_return(true, r());
+        assert_eq!(
+            (f.kind(), f.signing(), f.packed_record()),
+            (TypeKind::NotRecorded, None, None)
+        );
+        assert!(f.signed && f.range.is_some());
+        assert_eq!(Signing::from_written(None), Signing::Implicit);
+        assert_eq!(Signing::from_written(Some(true)), Signing::Signed);
+        assert_eq!(Signing::from_written(Some(false)), Signing::Unsigned);
+    }
+
+    #[test]
+    #[should_panic(expected = "records its kind")]
+    fn a_kind_reader_refuses_a_parameter_record() {
+        DataType::new_param(TypeKind::NotRecorded, Signing::Implicit, false, None).net();
+    }
+
+    #[test]
+    #[should_panic(expected = "not recorded")]
+    fn a_packed_dims_reader_refuses_a_flattened_declaration() {
+        let _ = DataType::new_tf_port(None, false, None).packed_dims();
+    }
 
     /// Round-trip a Box-recursive `Expr` tree through postcard (proves serde works
     /// on the Box-recursive AST — the primary goal of the dev-dep).

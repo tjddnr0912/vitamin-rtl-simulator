@@ -115,7 +115,7 @@ impl Elaborator<'_> {
         let mut port_widths: Vec<(String, u32)> = Vec::with_capacity(ports.len());
         let mut widths_ok = true;
         for p in ports {
-            let mut w: u64 = match &p.range {
+            let mut w: u64 = match &p.dtype.range {
                 Some(r) => {
                     match (
                         self.const_range_bound_fold(&r.msb),
@@ -130,7 +130,7 @@ impl Elaborator<'_> {
                 }
                 None => 1,
             };
-            for r in &p.packed {
+            for r in p.dtype.packed_dims() {
                 match (
                     self.const_range_bound_fold(&r.msb),
                     self.const_range_bound_fold(&r.lsb),

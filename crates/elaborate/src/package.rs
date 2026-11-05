@@ -1268,7 +1268,7 @@ impl Elaborator<'_> {
         param_names: &std::collections::BTreeSet<String>,
         vars: &mut BTreeMap<String, u32>,
     ) {
-        if d.kind.is_net() {
+        if d.dtype.net().is_net() {
             self.error(
                 MsgCode::ElabUnsupported,
                 "a net declaration is not a package item (IEEE §26.2: a package \
@@ -1277,7 +1277,7 @@ impl Elaborator<'_> {
             return;
         }
         if !matches!(
-            d.kind,
+            d.dtype.net(),
             ast::NetVarKind::Reg
                 | ast::NetVarKind::Logic
                 | ast::NetVarKind::Integer

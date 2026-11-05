@@ -205,6 +205,7 @@ impl Parser<'_, '_> {
         // Track explicit-`signed` PRESENCE alongside the folded bool: the A2a
         // array desugar must mirror `signed_eff` (explicit wins, else the atom
         // default) — the folded bool alone conflates "absent" with `false`.
+        // `param_dtype` records the same token as the `ParamDecl`'s signing keyword.
         let expl0 = self.opt_signed();
         let mut signed = expl0.unwrap_or(false);
         // SV typed parameter: a data-type KIND keyword may lead — `parameter int W`,
@@ -233,6 +234,9 @@ impl Parser<'_, '_> {
         // any dims written on the name; empty for every prefix that parsed before.
         let mut typedef_unpacked: Vec<Dim> = Vec::new();
         let mut string_kw = false;
+        // The declared kind `ParamDecl::dtype` records (`param_dtype`): every arm below
+        // writes it, with no default.
+        let decl_kind: TypeKind;
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -291,6 +295,7 @@ impl Parser<'_, '_> {
             };
             expl1 = self.opt_signed();
             signed = expl0.or(expl1).unwrap_or(atom_signed);
+            decl_kind = var_kind.map_or(TypeKind::Implicit, TypeKind::Kind);
         } else if let Some(info) = self
             .peek_block_typedef_decl()
             .or_else(|| self.peek_alias_param())
@@ -299,13 +304,18 @@ impl Parser<'_, '_> {
             // leads — `localparam exc_cause_t E = '{…}`, `parameter lfsr_seed_t S = …`,
             // `localparam p::u Q = …`. Resolved here to the same (kind, sign, range)
             // `parse_typed_decl` gives the equivalent variable, so the scalar
-            // `ParamDecl` below is exactly what `parameter logic [W-1:0]`/`int`/…
-            // would have produced (declared-width provenance, no AST change). The
+            // `ParamDecl` below has the value class, sign and range `parameter logic
+            // [W-1:0]`/`int`/… would have produced (declared-width provenance); its
+            // `dtype` kind is the entry's own record (`TypeInfo::decl_kind`), which is
+            // `NotRecorded` for an enum, struct, union or type-parameter type. The
             // `<type> <name>` shape is what `peek_block_typedef_decl` asserts, so a
             // header continuation `, T = 2` (a value named like a type) is untouched.
             let key = self.type_name_key();
             self.eat_scope_qualifier();
             self.bump(); // the type-name identifier
+                         // The entry's own record, written by the constructor that knows its family
+                         // (never re-looked-up by name: a composed alias is not in the typedef table).
+            decl_kind = info.decl_kind;
             match self.typedef_param_shape(&info) {
                 Ok((t, k, forced, explicit, packed, unpacked)) => {
                     ty = t;
@@ -360,6 +370,11 @@ impl Parser<'_, '_> {
                 }
                 _ => ParamType::Implicit,
             };
+            decl_kind = if string_kw {
+                TypeKind::Kind(NetVarKind::String)
+            } else {
+                var_kind.map_or(TypeKind::Implicit, TypeKind::Kind)
+            };
         }
         // A typedef prefix carries its OWN range (a typedef's packed dimension) as
         // `explicit_range`, so an A2a array parameter of that type (`localparam u A[2]`)
@@ -391,8 +406,24 @@ impl Parser<'_, '_> {
             tyname,
             packed_dims,
             typedef_unpacked,
+            decl_kind,
             string_kw,
         }
+    }
+
+    /// The data type a `ParamDecl` of this prefix records: the prefix's declared
+    /// kind, the signing token the prefix's sign fold read (`expl0.or(expl1)`: the
+    /// keyword and `integer` arms read either position, every other arm only the
+    /// leading one, `expl1` staying `None` there), and the declaration's effective
+    /// sign and (flattened) range. The body scalar and the module-header array twin
+    /// both record through here, so the twin's record is the scalar's.
+    pub(crate) fn param_dtype(pfx: &ParamPrefix, signed: bool, range: Option<Range>) -> DataType {
+        DataType::new_param(
+            pfx.decl_kind,
+            Signing::from_written(pfx.expl0.or(pfx.expl1)),
+            signed,
+            range,
+        )
     }
 
     /// The scalar-parameter shape of a resolved typedef: `(ParamType, var_kind,
@@ -400,7 +431,11 @@ impl Parser<'_, '_> {
     /// `parse_param_prefix` build for `int`/`byte`/…/`logic [r]` (an atom's fixed
     /// width is `forced`, a vector's dimension is `explicit`, and the non-vector
     /// dimension reject reads only `explicit`), so a typedef'd parameter and its
-    /// spelled-out twin are one AST. `Err` = a type a scalar `ParamDecl` cannot carry without
+    /// spelled-out twin get one value class, sign and range. They are not one AST:
+    /// `ParamDecl::dtype` records the typedef's declared kind (`TypeInfo::decl_kind`,
+    /// `NotRecorded` for an enum, a struct — exact, symbolic or a chained alias of
+    /// one — a union and a type parameter) and the signing keyword written on the
+    /// parameter, not the typedef's. `Err` = a type a scalar `ParamDecl` cannot carry without
     /// losing something (a class handle / net / event / container is not a
     /// parameter type) — loud. A multi-dimensional packed vector typedef (§3 ⑤ ⓐ)
     /// returns its extra dims as the fifth field; the parameter is declared flat
@@ -519,6 +554,7 @@ impl Parser<'_, '_> {
             tyname: _,
             packed_dims,
             typedef_unpacked,
+            decl_kind: _,
             string_kw,
         } = pfx.clone();
         // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
@@ -531,7 +567,7 @@ impl Parser<'_, '_> {
         // would come out 1 bit.
         //
         // Found because the string constant domain's width gate (§4.5.370) reads
-        // `p.range.is_none()` to mean "this declaration states no width", which was
+        // `p.dtype.range.is_none()` to mean "this declaration states no width", which was
         // false for exactly these three keywords — `localparam bit P = {"A","B"}`
         // folded to 16 bits where both oracles say 1. The same gap made
         // `localparam bit P = 8'hFF` read 255 at 8 bits where both oracles say 1.
@@ -656,9 +692,8 @@ impl Parser<'_, '_> {
         }
         Some(ParamItem::Scalar(ParamDecl {
             kind,
-            signed,
+            dtype: Self::param_dtype(pfx, signed, range),
             ty,
-            range,
             name,
             value,
             span: start.to(self.prev_span()),
@@ -814,10 +849,7 @@ impl Parser<'_, '_> {
             integral_typedef: false,
             pattern_members: Vec::new(),
             shape_param: None,
-            kind: vk,
-            signed,
-            range: explicit_range,
-            packed: Vec::new(),
+            dtype: hdl_ast::DataType::new_net(vk, signed, explicit_range, Vec::new()),
             delay: None,
             names: vec![DeclName {
                 name,
@@ -862,7 +894,7 @@ impl Parser<'_, '_> {
                     // recorded 16 for both, or declined. An UNTYPED declaration keeps the
                     // i64 fold: its type is the initializer's own (§6.20.2) and the two
                     // oracles disagree about that case (16 / 0 — ROADMAP §2 🆕 L).
-                    let typed = !matches!((&p.ty, &p.range), (ParamType::Implicit, None));
+                    let typed = !matches!((&p.ty, &p.dtype.range), (ParamType::Implicit, None));
                     let ctx_v = (typed && w > 0)
                         .then(|| self.try_const_index_wc(&p.value, w))
                         .flatten()
@@ -923,10 +955,10 @@ impl Parser<'_, '_> {
                 (_, false) => v >= 0 && v < (1i64 << w),
             }
         };
-        match (&p.ty, &p.range) {
+        match (&p.ty, &p.dtype.range) {
             (ParamType::Implicit, None) => i32::try_from(v).is_ok(),
             (ParamType::Integer, None) => {
-                if p.signed {
+                if p.dtype.signed {
                     i32::try_from(v).is_ok()
                 } else {
                     u32::try_from(v).is_ok()
@@ -940,7 +972,7 @@ impl Parser<'_, '_> {
                             .ok()
                             .and_then(|d| d.checked_add(1))
                             .unwrap_or(64);
-                        fits_width(w, p.signed)
+                        fits_width(w, p.dtype.signed)
                     }
                     _ => true,
                 }
@@ -976,7 +1008,7 @@ impl Parser<'_, '_> {
         let (pat, w) = Self::based_lit_pattern(raw, sized)?;
         let tick = raw.find('\'')?;
         let signed = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
-        let declared_w: u64 = match (&p.ty, &p.range) {
+        let declared_w: u64 = match (&p.ty, &p.dtype.range) {
             (ParamType::Implicit, None) => u64::from(w),
             (ParamType::Integer, None) => 32,
             (ParamType::Time, None) => 64,
@@ -1012,20 +1044,23 @@ impl Parser<'_, '_> {
     /// `integer` are 32, `time` 64 unsigned, a declared range its folded width.
     /// `0` = unknown (the range did not fold): the width-aware twin declines there.
     fn param_const_shape(&self, p: &ParamDecl, based: Option<(i64, u32, bool)>) -> (u32, bool) {
-        match (&p.ty, &p.range) {
+        match (&p.ty, &p.dtype.range) {
             (ParamType::Implicit, None) => match based {
                 Some((_, w, s)) => (w, s),
                 None => (32, true),
             },
-            (ParamType::Integer, None) => (32, p.signed),
+            (ParamType::Integer, None) => (32, p.dtype.signed),
             (ParamType::Time, None) => (64, false),
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
                 match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
-                    (Some(a), Some(b)) => (u32::try_from(a.abs_diff(b) + 1).unwrap_or(0), p.signed),
-                    _ => (0, p.signed),
+                    (Some(a), Some(b)) => (
+                        u32::try_from(a.abs_diff(b) + 1).unwrap_or(0),
+                        p.dtype.signed,
+                    ),
+                    _ => (0, p.dtype.signed),
                 }
             }
-            _ => (0, p.signed),
+            _ => (0, p.dtype.signed),
         }
     }
 

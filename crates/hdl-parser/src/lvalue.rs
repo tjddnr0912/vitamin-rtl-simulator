@@ -213,12 +213,14 @@ impl Parser<'_, '_> {
                 let span = start.to(self.prev_span());
                 self.expect(TokenKind::RBracket, "']'");
                 return Some(Dim::Assoc(AssocKey::Typed(Box::new(AssocKeyType {
-                    kind,
-                    signed,
-                    range,
-                    packed,
+                    dtype: DataType::new_assoc_key(
+                        kind,
+                        Signing::from_written(signing),
+                        signed,
+                        range,
+                        packed,
+                    ),
                     named: false,
-                    explicit_sign: signing.is_some(),
                     span,
                 }))));
             }

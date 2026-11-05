@@ -235,8 +235,7 @@ impl Parser<'_, '_> {
         });
         FunctionDef {
             automatic: false,
-            signed: false,
-            range: None,
+            dtype: hdl_ast::DataType::new_function_return(false, None),
             ret_packed: Vec::new(),
             ret_type: ParamType::Implicit,
             ret_two_state: false,
@@ -246,13 +245,15 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 dir: PortDir::Input,
                 dir_spelling: TfDirSpelling::Declared,
-                net_or_var: None,
-                signed: port_signed,
-                range: Some(Range {
-                    msb: Self::i64_lit(63, span),
-                    lsb: Self::i64_lit(0, span),
-                    span,
-                }),
+                dtype: hdl_ast::DataType::new_tf_port(
+                    None,
+                    port_signed,
+                    Some(Range {
+                        msb: Self::i64_lit(63, span),
+                        lsb: Self::i64_lit(0, span),
+                        span,
+                    }),
+                ),
                 name: mk_ident("x"),
                 unpacked: Vec::new(),
                 default: None,

@@ -57,7 +57,7 @@ impl Elaborator<'_> {
                     return None;
                 };
                 let f = self.lookup_func(&seg.name)?;
-                Some((f.signed, ast_func_return_width(f)?))
+                Some((f.dtype.signed, ast_func_return_width(f)?))
             }
             IntLit { kind, raw } => {
                 // A fill literal (`'0`/`'1`) is unsigned and context-filled — it never

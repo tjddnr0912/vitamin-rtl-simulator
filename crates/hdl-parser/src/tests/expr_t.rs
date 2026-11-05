@@ -95,7 +95,7 @@ fn t6_range_is_expr() {
     let ModuleItem::NetVar(nv) = &m.body[0] else {
         panic!()
     };
-    let r = nv.range.as_ref().unwrap();
+    let r = nv.dtype.range.as_ref().unwrap();
     assert_eq!(bin(&r.msb).0, BinOp::Sub);
     assert!(matches!(r.lsb.kind, ExprKind::IntLit { .. }));
 }

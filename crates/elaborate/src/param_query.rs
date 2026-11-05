@@ -890,7 +890,7 @@ impl Elaborator<'_> {
     /// `None` when there is no fill, or the walk declines (x/z fill, >64 bits) — the
     /// caller's chain then answers as before.
     pub(crate) fn untyped_fill_init(&self, p: &ast::ParamDecl) -> Option<(i64, (u32, bool))> {
-        if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
+        if !matches!(p.ty, ast::ParamType::Implicit) || p.dtype.range.is_some() {
             return None;
         }
         if !ast_any(&p.value, &|x| {
@@ -948,7 +948,7 @@ impl Elaborator<'_> {
     /// already covers OUT of that class — so it is scoped to that lane explicitly and
     /// the "contains a reduction" conjunct still makes no semantic claim.
     pub(crate) fn param_init_kept_loud(&self, p: &ast::ParamDecl) -> bool {
-        if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
+        if !matches!(p.ty, ast::ParamType::Implicit) || p.dtype.range.is_some() {
             return false;
         }
         // An initializer holding a FILL takes `untyped_fill_init` — the width-aware

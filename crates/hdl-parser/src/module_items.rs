@@ -490,9 +490,14 @@ impl Parser<'_, '_> {
                         } else if let Some(dn) = d.names.first() {
                             params.push(ParamDecl {
                                 kind: pfx.kind,
-                                signed: d.signed,
+                                // The scalar's record (`param_dtype`) with the array
+                                // declaration's own sign and element range.
+                                dtype: Self::param_dtype(
+                                    &pfx,
+                                    d.dtype.signed,
+                                    d.dtype.range.clone(),
+                                ),
                                 ty: ParamType::Implicit,
-                                range: d.range.clone(),
                                 name: dn.name.clone(),
                                 value: dn.init.clone().unwrap_or_else(|| Expr {
                                     kind: ExprKind::AssignPattern(Vec::new()),

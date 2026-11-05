@@ -364,10 +364,12 @@ impl Parser<'_, '_> {
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Alias {
-                kind: NetVarKind::Logic,
-                signed: false,
-                range: Some(outer),
-                packed: vec![elem_range],
+                dtype: hdl_ast::DataType::new_net(
+                    NetVarKind::Logic,
+                    false,
+                    Some(outer),
+                    vec![elem_range],
+                ),
             },
             span: start.to(self.prev_span()),
         }))
@@ -458,6 +460,9 @@ impl Parser<'_, '_> {
             return None;
         }
         Some(TypeInfo {
+            // The same kind as `kind` below: every composed alias the parser admits has
+            // `logic` members (a `bit` or `logic signed` member is refused above).
+            decl_kind: TypeKind::Kind(NetVarKind::Logic),
             kind: NetVarKind::Logic,
             signed: false,
             range: Some(a.outer.clone()),
@@ -842,7 +847,7 @@ impl Parser<'_, '_> {
     /// A module-item declaration of struct variables, outside any generate block.
     pub(crate) fn note_module_struct_vars(&mut self, d: Option<&NetVarDecl>) {
         let Some(d) = d else { return };
-        if self.gen_depth != 0 || !d.packed.is_empty() {
+        if self.gen_depth != 0 || !d.dtype.packed_dims().is_empty() {
             return;
         }
         for n in d.names.iter().filter(|n| n.unpacked.is_empty()) {

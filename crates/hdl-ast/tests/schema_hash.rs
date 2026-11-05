@@ -320,9 +320,16 @@ use vita_schema::schema_hash;
 /// machinery). Elaborate reads them for the implicit sensitivity of `always_comb` /
 /// `always @*` (§9.2.2.2.1, §9.4.2.2). All `.vu` artifacts are stale; no sim-ir
 /// change; `format_version` 37 -> 38 for the `.velab` (its read sets changed).
+/// Re-pinned 2026-11-05 (§5.2 Q-DECLTYPE S12) ONE DECLARATION DATA TYPE: `NetVarDecl`,
+/// `AnsiPort`, `PortDecl`, `TfPort`, `StructMember`, `AssocKeyType`, `ParamDecl`,
+/// `FunctionDef` and `TypedefKind::Alias` swap their type fields (`kind` /
+/// `net_or_var`, `signed`, `range`, `packed` / `packed_dims`, `explicit_sign`) for
+/// one `dtype: DataType` (new `DataType`, `TypeKind`, `Signing`), and a parameter
+/// records its signing keyword and declared kind there (no reader yet). hdl-ast only:
+/// no sim-ir change, format_version stays 38. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    110, 52, 123, 86, 147, 15, 241, 220, 196, 178, 180, 11, 143, 91, 230, 39, 106, 54, 61, 60, 204,
-    142, 151, 29, 222, 249, 87, 75, 66, 150, 44, 73,
+    70, 46, 70, 21, 26, 247, 142, 95, 131, 69, 91, 110, 6, 192, 30, 39, 211, 231, 235, 233, 123,
+    157, 18, 203, 37, 151, 48, 181, 232, 189, 173, 245,
 ];
 
 #[test]

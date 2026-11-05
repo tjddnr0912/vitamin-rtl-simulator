@@ -164,10 +164,7 @@ impl Parser<'_, '_> {
             let ispan = iface.span;
             return AnsiPort {
                 dir: PortDir::Input, // placeholder — iface ports carry no dir
-                net_or_var: None,
-                signed: false,
-                range: None,
-                packed: Vec::new(),
+                dtype: hdl_ast::DataType::new_port(None, false, None, Vec::new()),
                 name,
                 unpacked: Vec::new(),
                 default: None,
@@ -304,10 +301,10 @@ impl Parser<'_, '_> {
             && !signed
         {
             if let Some(p) = prev {
-                net_or_var = p.net_or_var;
-                signed = p.signed;
-                range = p.range.clone();
-                packed = p.packed.clone();
+                net_or_var = p.dtype.port();
+                signed = p.dtype.signed;
+                range = p.dtype.range.clone();
+                packed = p.dtype.packed_dims().to_vec();
                 integral_typedef = p.integral_typedef;
                 pattern_members = p.pattern_members.clone();
                 continued = true;
@@ -384,10 +381,7 @@ impl Parser<'_, '_> {
         self.ansi_prev_pattern_ty = Some(ty);
         AnsiPort {
             dir,
-            net_or_var,
-            signed,
-            range,
-            packed,
+            dtype: hdl_ast::DataType::new_port(net_or_var, signed, range, packed),
             name,
             unpacked,
             default,
@@ -517,9 +511,7 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';'");
         Some(PortDecl {
             dir,
-            net_or_var,
-            signed,
-            range,
+            dtype: hdl_ast::DataType::new_port(net_or_var, signed, range, Vec::new()),
             names,
             unpacked,
             shape_param,
@@ -624,10 +616,7 @@ impl Parser<'_, '_> {
         Some(NetVarDecl {
             integral_typedef: false,
             pattern_members: Vec::new(),
-            kind,
-            signed,
-            range,
-            packed,
+            dtype: hdl_ast::DataType::new_net(kind, signed, range, packed),
             delay,
             shape_param: None,
             names,
@@ -880,11 +869,8 @@ impl Parser<'_, '_> {
         // instead of `info.kind` / `info_signed`, which are the DEFAULT type's.
         let shape_param = self.carried_shape_param(&info, start);
         Some(NetVarDecl {
-            kind: info.kind,
-            signed: info_signed,
-            range: info_range,
+            dtype: hdl_ast::DataType::new_net(info.kind, info_signed, info_range, info_packed),
             shape_param,
-            packed: info_packed,
             delay: None,
             names,
             lifetime: None,

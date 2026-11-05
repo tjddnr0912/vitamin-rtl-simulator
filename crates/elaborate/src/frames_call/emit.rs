@@ -189,8 +189,10 @@ impl Elaborator<'_> {
                 }
                 continue;
             }
-            let kind =
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let kind = self.shape_kind(
+                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                &p.shape_param,
+            );
             // ⚠️ Bind the SIGN from this call rather than folding the range twice:
             // `range_to_dims` EMITS diagnostics, so a second call with the same
             // arguments printed the same warning (and counted the same error)
@@ -199,8 +201,8 @@ impl Elaborator<'_> {
             let armed = self.decl_enter(&hdr_win, true);
             let (w, _, _, formal_signed) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
-                p.range.as_ref(),
-                self.shape_signed(p.signed, &p.shape_param),
+                p.dtype.range.as_ref(),
+                self.shape_signed(p.dtype.signed, &p.shape_param),
             );
             self.decl_exit(armed);
             // A package routine's DEFAULT actual resolves in the package (§13.5.4).
@@ -540,7 +542,7 @@ impl Elaborator<'_> {
                         // passed and its heap payload was destroyed by a 1-bit
                         // real→int cast (`range_to_dims(String, None)` = width 1).
                         let kind = self.shape_kind(
-                            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                            p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
                             &p.shape_param,
                         );
                         let fs = self

@@ -275,7 +275,7 @@ impl Elaborator<'_> {
         out: &mut Vec<ClassField>,
     ) {
         // Class-typed (handle) member: a 32-bit object-id, default null (0).
-        if matches!(d.kind, ast::NetVarKind::ClassHandle) {
+        if matches!(d.dtype.net(), ast::NetVarKind::ClassHandle) {
             let ct = d.class_type.as_ref().map(|i| i.name.clone());
             for n in &d.names {
                 if !n.unpacked.is_empty() {
@@ -304,14 +304,17 @@ impl Elaborator<'_> {
         }
         // Real members are deferred (the heap default-init + read/write would
         // need a real lane) — loud, not a silent X-as-real.
-        if matches!(d.kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime) {
+        if matches!(
+            d.dtype.net(),
+            ast::NetVarKind::Real | ast::NetVarKind::Realtime
+        ) {
             self.error(
                 MsgCode::ElabUnsupported,
                 "real class members are outside the N7 MVP",
             );
             return;
         }
-        if matches!(d.kind, ast::NetVarKind::String) {
+        if matches!(d.dtype.net(), ast::NetVarKind::String) {
             self.error(
                 MsgCode::ElabUnsupported,
                 "string class members are outside the N7 MVP",
@@ -319,16 +322,16 @@ impl Elaborator<'_> {
             return;
         }
         let (base_w, _, _, signed) = self.range_to_dims(
-            self.shape_kind(d.kind, &d.shape_param),
-            d.range.as_ref(),
-            self.shape_signed(d.signed, &d.shape_param),
+            self.shape_kind(d.dtype.net(), &d.shape_param),
+            d.dtype.range.as_ref(),
+            self.shape_signed(d.dtype.signed, &d.shape_param),
         );
         let mut width = base_w;
-        for pr in &d.packed {
+        for pr in d.dtype.packed_dims() {
             let (pw, _, _, _) = self.range_to_dims(ast::NetVarKind::Logic, Some(pr), false);
             width = width.saturating_mul(pw.max(1));
         }
-        let four_state = !net_kind_is_two_state(d.kind);
+        let four_state = !net_kind_is_two_state(d.dtype.net());
         for n in &d.names {
             if !n.unpacked.is_empty() {
                 self.error(
@@ -581,7 +584,10 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in ports.iter().enumerate() {
             if matches!(
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                self.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param
+                ),
                 ast::NetVarKind::String
             ) {
                 let slot = i + 1; // `this` occupies slot 0
@@ -618,12 +624,14 @@ impl Elaborator<'_> {
             s.net_class.insert(tn, cname_s.clone());
             // slots 1..=nports: declared formals.
             for p in &ports {
-                let kind =
-                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                let kind = s.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param,
+                );
                 let (w, msb, lsb, signed) = s.range_to_dims(
                     s.shape_kind(kind, &p.shape_param),
-                    p.range.as_ref(),
-                    s.shape_signed(p.signed, &p.shape_param),
+                    p.dtype.range.as_ref(),
+                    s.shape_signed(p.dtype.signed, &p.shape_param),
                 );
                 let net = s.nets.len() as u32;
                 s.add_net(

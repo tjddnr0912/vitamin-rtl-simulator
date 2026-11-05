@@ -340,6 +340,7 @@ impl Parser<'_, '_> {
             // `base_signed` was resolved to `Some(..)` in the synth arm above. The AST
             // `base` (synthesized range) drives the separate label-width path.
             TypeInfo {
+                decl_kind: TypeKind::NotRecorded,
                 kind: ak,
                 signed: base_signed.unwrap_or(false),
                 range: None,
@@ -357,6 +358,7 @@ impl Parser<'_, '_> {
             match &base {
                 // Vector base (`enum logic [N] …`): defaults UNSIGNED, honors explicit `signed`.
                 Some(r) => TypeInfo {
+                    decl_kind: TypeKind::NotRecorded,
                     kind: NetVarKind::Logic,
                     signed: base_signed.unwrap_or(false),
                     range: Some(r.clone()),
@@ -377,6 +379,7 @@ impl Parser<'_, '_> {
                 // `integer`/`time` route through it, so only the base-less/illegal case lands
                 // here. Defaults SIGNED, honors explicit `unsigned` — §4.5.153.
                 None => TypeInfo {
+                    decl_kind: TypeKind::NotRecorded,
                     kind: NetVarKind::Int,
                     signed: base_signed.unwrap_or(true),
                     range: None,
@@ -538,6 +541,7 @@ impl Parser<'_, '_> {
                 self.written_decimal(&r.msb).is_some() && self.written_decimal(&r.lsb) == Some(0)
             });
         let info = TypeInfo {
+            decl_kind: TypeKind::Kind(kind),
             kind,
             signed,
             range: range.clone(),
@@ -559,10 +563,7 @@ impl Parser<'_, '_> {
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Alias {
-                kind,
-                signed,
-                range,
-                packed,
+                dtype: hdl_ast::DataType::new_net(kind, signed, range, packed),
             },
             span: start.to(self.prev_span()),
         }))
@@ -635,10 +636,7 @@ impl Parser<'_, '_> {
         Some(ModuleItem::Typedef(TypedefDecl {
             name: tname,
             kind: TypedefKind::Alias {
-                kind: info.kind,
-                signed: info.signed,
-                range: info.range,
-                packed: info.packed,
+                dtype: hdl_ast::DataType::new_net(info.kind, info.signed, info.range, info.packed),
             },
             span: start.to(self.prev_span()),
         }))
@@ -745,7 +743,7 @@ impl Parser<'_, '_> {
         // symbolic layout (`register_sym_struct`) — or reports the member.
         if members
             .iter()
-            .any(|m| !matches!(self.member_flat_dims(m.kind, &m.range, &m.packed_dims), Some((f, _)) if f > 0))
+            .any(|m| !matches!(self.member_flat_dims(m.dtype.net(), &m.dtype.range, m.dtype.packed_dims()), Some((f, _)) if f > 0))
         {
             self.refuse_symbolic_holder(&arrays, start);
             return self.register_sym_struct(
@@ -759,7 +757,7 @@ impl Parser<'_, '_> {
         }
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
-            match self.member_flat_dims(m.kind, &m.range, &m.packed_dims) {
+            match self.member_flat_dims(m.dtype.net(), &m.dtype.range, m.dtype.packed_dims()) {
                 Some((flat, stride)) if flat > 0 => widths.push((flat, stride)),
                 _ => {
                     self.error_at(
@@ -781,10 +779,10 @@ impl Parser<'_, '_> {
                 m.name.name.clone(),
                 off,
                 *w,
-                self.member_ascending(&m.range),
-                m.signed,
-                Self::member_kind_two_state(m.kind),
-                self.member_dbase(&m.range),
+                self.member_ascending(&m.dtype.range),
+                m.dtype.signed,
+                Self::member_kind_two_state(m.dtype.net()),
+                self.member_dbase(&m.dtype.range),
                 *stride,
                 nested.clone(),
             ));
@@ -831,13 +829,17 @@ impl Parser<'_, '_> {
         // §7.2.1: an all-2-state struct is itself 2-state — back it with a 2-state
         // `bit` vector so it defaults to 0, not X (matches iverilog). Any 4-state
         // member (`logic`/`integer`/`time`/net) makes the whole struct 4-state.
-        let struct_kind =
-            if !members.is_empty() && members.iter().all(|m| Self::member_kind_two_state(m.kind)) {
-                NetVarKind::Bit
-            } else {
-                NetVarKind::Logic
-            };
+        let struct_kind = if !members.is_empty()
+            && members
+                .iter()
+                .all(|m| Self::member_kind_two_state(m.dtype.net()))
+        {
+            NetVarKind::Bit
+        } else {
+            NetVarKind::Logic
+        };
         let info = TypeInfo {
+            decl_kind: TypeKind::NotRecorded,
             kind: struct_kind,
             signed: struct_signed,
             range: Some(Self::dec_range(total.saturating_sub(1))),

@@ -139,7 +139,7 @@ endmodule
     ));
     assert!(matches!(
         m.body[1],
-        ModuleItem::NetVar(ref d) if matches!(d.kind, NetVarKind::String)
+        ModuleItem::NetVar(ref d) if matches!(d.dtype.net(), NetVarKind::String)
     ));
     // the initial body holds `x = p::W` — walk to the PkgScoped expr.
     let ModuleItem::Proc(ref pb) = m.body[3] else {
@@ -310,12 +310,12 @@ fn ft1_parse_ansi_function_def() {
     };
     assert_eq!(f.name.name, "add1");
     assert!(!f.automatic);
-    assert!(f.range.is_some(), "expected [7:0] return range");
+    assert!(f.dtype.range.is_some(), "expected [7:0] return range");
     assert_eq!(f.ret_type, ParamType::Implicit);
     assert_eq!(f.ports.len(), 1);
     assert_eq!(f.ports[0].dir, PortDir::Input);
     assert_eq!(f.ports[0].name.name, "x");
-    assert!(f.ports[0].range.is_some());
+    assert!(f.ports[0].dtype.range.is_some());
     // body: a single blocking assign `add1 = x + 1`
     let Stmt::Blocking { lhs, rhs, .. } = &*f.body else {
         panic!("expected single Blocking body, got {:?}", f.body);

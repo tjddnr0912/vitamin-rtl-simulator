@@ -156,9 +156,9 @@ impl Elaborator<'_> {
                     // pre-size is recorded there), so the whole kind qualifies: every
                     // string local owns per-name storage that cannot be shared by a
                     // flatten.
-                    let string_local = matches!(d.kind, ast::NetVarKind::String)
-                        && d.range.is_none()
-                        && d.packed.is_empty();
+                    let string_local = matches!(d.dtype.net(), ast::NetVarKind::String)
+                        && d.dtype.range.is_none()
+                        && d.dtype.packed_dims().is_empty();
                     let dyn_storage = string_local
                         || n.unpacked.iter().any(|dim| {
                             matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
@@ -231,10 +231,10 @@ impl Elaborator<'_> {
         &mut self,
         d: &ast::NetVarDecl,
     ) -> Option<(u32, u32, Vec<(i64, u32, bool)>)> {
-        if d.packed.is_empty() {
+        if d.dtype.packed_dims().is_empty() {
             return None;
         }
-        let ext = self.packed_extents(d.range.as_ref(), &d.packed);
+        let ext = self.packed_extents(d.dtype.range.as_ref(), d.dtype.packed_dims());
         let w = ext
             .iter()
             .fold(1u32, |a, &(_, pw, _)| a.saturating_mul(pw.max(1)));
@@ -255,9 +255,9 @@ impl Elaborator<'_> {
     ) {
         self.packed_dims.insert(net, ext);
         let dd = self.compute_dim_desc(
-            self.shape_kind(d.kind, &d.shape_param),
-            d.range.as_ref(),
-            &d.packed,
+            self.shape_kind(d.dtype.net(), &d.shape_param),
+            d.dtype.range.as_ref(),
+            d.dtype.packed_dims(),
             unpacked,
         );
         self.dim_desc.insert(net, dd);
@@ -298,16 +298,16 @@ impl Elaborator<'_> {
             // a frame-local SCALAR `string` is a different thing entirely (a slab-stored
             // `NetKind::String`, §4.5.167) and never reaches here, because it has no
             // unpacked dimension.
-            let str_elem = matches!(d.kind, ast::NetVarKind::String);
+            let str_elem = matches!(d.dtype.net(), ast::NetVarKind::String);
             if unpacked.len() == 1
                 && matches!(unpacked[0], ast::Dim::Dyn)
-                && d.packed.is_empty()
-                && (ast_kind_is_bit_vector(d.kind) || str_elem)
+                && d.dtype.packed_dims().is_empty()
+                && (ast_kind_is_bit_vector(d.dtype.net()) || str_elem)
             {
                 let (w, msb, lsb, signed) = self.range_to_dims(
-                    self.shape_kind(d.kind, &d.shape_param),
-                    d.range.as_ref(),
-                    self.shape_signed(d.signed, &d.shape_param),
+                    self.shape_kind(d.dtype.net(), &d.shape_param),
+                    d.dtype.range.as_ref(),
+                    self.shape_signed(d.dtype.signed, &d.shape_param),
                 );
                 let net = self.nets.len() as u32;
                 self.add_net(
@@ -323,14 +323,17 @@ impl Elaborator<'_> {
                         signed: signed && !str_elem,
                         array_len: 0, // heap handle — elements live in the engine heap
                         dir: ir::PortDir::Internal,
-                        init: default_init(self.shape_kind(d.kind, &d.shape_param), w.max(1)),
+                        init: default_init(
+                            self.shape_kind(d.dtype.net(), &d.shape_param),
+                            w.max(1),
+                        ),
                     },
                 );
                 if str_elem {
                     self.string_elem_dyn_nets.insert(net);
                 }
                 // IEEE §7.5.2: a 2-state element defaults to 0 (not X) on `new[]` fill.
-                if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+                if net_kind_is_two_state(self.shape_kind(d.dtype.net(), &d.shape_param)) {
                     self.two_state_heap_handles.insert(net);
                 }
                 return net;
@@ -343,7 +346,7 @@ impl Elaborator<'_> {
             // flattens row-major through the same chain walk, and a partial index is
             // rejected — one shared set, so the frame-local and module-scope forms cannot
             // drift apart.
-            if str_elem && d.packed.is_empty() {
+            if str_elem && d.dtype.packed_dims().is_empty() {
                 if let Some(geom) = self.fixed_string_geom(unpacked) {
                     let net = self.nets.len() as u32;
                     self.add_net(
@@ -366,10 +369,10 @@ impl Elaborator<'_> {
             }
             if let Some(Ok(af)) = self.classify_unpacked_array(
                 unpacked,
-                d.range.as_ref(),
-                &d.packed,
-                self.shape_signed(d.signed, &d.shape_param),
-                self.shape_kind(d.kind, &d.shape_param),
+                d.dtype.range.as_ref(),
+                d.dtype.packed_dims(),
+                self.shape_signed(d.dtype.signed, &d.shape_param),
+                self.shape_kind(d.dtype.net(), &d.shape_param),
             ) {
                 let (count, elem_w) = (af.count, af.elem_w);
                 // §4.5.199: `count` = product of every unpacked dim, and `ext` gets one
@@ -384,30 +387,30 @@ impl Elaborator<'_> {
                     ir::NetVar {
                         // Whole md-packed slot is unsigned (`signed:false`); the element's
                         // signedness lives in `frame_arr_formal_meta` (`$signed` re-stamp).
-                        // A 2-state element defaults to 0 via `default_init(self.shape_kind(d.kind, &d.shape_param), w)`
+                        // A 2-state element defaults to 0 via `default_init(self.shape_kind(d.dtype.net(), &d.shape_param), w)`
                         // (an unpacked array of `int` inits to 0, of `logic` to X).
-                        kind: frame_local_net_kind(self.shape_kind(d.kind, &d.shape_param)),
+                        kind: frame_local_net_kind(self.shape_kind(d.dtype.net(), &d.shape_param)),
                         width: w,
                         msb: w.saturating_sub(1),
                         lsb: 0,
                         signed: false,
                         array_len: 1,
                         dir: ir::PortDir::Internal,
-                        init: default_init(self.shape_kind(d.kind, &d.shape_param), w),
+                        init: default_init(self.shape_kind(d.dtype.net(), &d.shape_param), w),
                     },
                 );
                 self.packed_dims.insert(net, ext);
                 let dd = self.compute_dim_desc(
-                    self.shape_kind(d.kind, &d.shape_param),
-                    d.range.as_ref(),
+                    self.shape_kind(d.dtype.net(), &d.shape_param),
+                    d.dtype.range.as_ref(),
                     &[],
                     unpacked,
                 );
                 self.dim_desc.insert(net, dd);
                 self.frame_arr_formal_meta.insert(net, af);
-                if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+                if net_kind_is_two_state(self.shape_kind(d.dtype.net(), &d.shape_param)) {
                     self.intro_kind
-                        .insert(net, self.shape_kind(d.kind, &d.shape_param));
+                        .insert(net, self.shape_kind(d.dtype.net(), &d.shape_param));
                 }
                 return net;
             }
@@ -417,11 +420,11 @@ impl Elaborator<'_> {
         let pinfo = self.frame_packed_width(d);
         // §7.4.2 / §4.5.359: a subprogram LOCAL with a negative bound is sized like any
         // other net. Opt-in and record are one unit (see `record_declared_bounds_for`).
-        let odd_bound = self.declared_odd_bound(d.range.as_ref()).is_some();
+        let odd_bound = self.declared_odd_bound(d.dtype.range.as_ref()).is_some();
         let (mut w, mut msb, lsb, signed) = self.range_to_dims_opt(
-            self.shape_kind(d.kind, &d.shape_param),
-            d.range.as_ref(),
-            self.shape_signed(d.signed, &d.shape_param),
+            self.shape_kind(d.dtype.net(), &d.shape_param),
+            d.dtype.range.as_ref(),
+            self.shape_signed(d.dtype.signed, &d.shape_param),
             odd_bound,
         );
         if let Some((pw, pmsb, _)) = &pinfo {
@@ -429,18 +432,18 @@ impl Elaborator<'_> {
             msb = *pmsb;
         }
         let net = self.nets.len() as u32;
-        self.record_declared_bounds_for(net, d.range.as_ref());
+        self.record_declared_bounds_for(net, d.dtype.range.as_ref());
         self.add_net(
             name,
             ir::NetVar {
-                kind: frame_local_net_kind(self.shape_kind(d.kind, &d.shape_param)),
+                kind: frame_local_net_kind(self.shape_kind(d.dtype.net(), &d.shape_param)),
                 width: w,
                 msb,
                 lsb,
                 signed,
                 array_len: 1,
                 dir: ir::PortDir::Internal,
-                init: default_init(self.shape_kind(d.kind, &d.shape_param), w),
+                init: default_init(self.shape_kind(d.dtype.net(), &d.shape_param), w),
             },
         );
         if let Some((_, _, ext)) = pinfo {
@@ -451,9 +454,9 @@ impl Elaborator<'_> {
         if !unpacked.is_empty() {
             self.frame_array_local.insert(net);
         }
-        if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+        if net_kind_is_two_state(self.shape_kind(d.dtype.net(), &d.shape_param)) {
             self.intro_kind
-                .insert(net, self.shape_kind(d.kind, &d.shape_param));
+                .insert(net, self.shape_kind(d.dtype.net(), &d.shape_param));
         }
         net
     }
@@ -712,7 +715,7 @@ impl Elaborator<'_> {
                 matches!(p.dir, ast::PortDir::Input)
                     && p.unpacked.is_empty()
                     && !matches!(
-                        self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                        self.shape_kind(p.dtype.port().unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                         ast::NetVarKind::String
                     )
             })
@@ -730,7 +733,10 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in func.ports.iter().enumerate() {
             if matches!(
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                self.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param
+                ),
                 ast::NetVarKind::String
             ) {
                 if i < 64 {
@@ -757,7 +763,7 @@ impl Elaborator<'_> {
             decl_scope::RtnKind::Func,
         );
         let armed = self.decl_enter(&hdr_win, true);
-        let ret_odd_bound = self.declared_odd_bound(func.range.as_ref()).is_some();
+        let ret_odd_bound = self.declared_odd_bound(func.dtype.range.as_ref()).is_some();
         let (ret_width, ret_signed) = self.func_return_dims_opt(func, ret_odd_bound);
         self.decl_exit(armed);
         let ret_is_real = matches!(
@@ -788,12 +794,14 @@ impl Elaborator<'_> {
                 // §4.5.176 makes `foreach(c[i])` / `c.first(k)` work inside the body. A
                 // STRAIGHT-LINE dyn-formal function still takes the R2 inline alias path.
                 if s.is_input_dyn_array_formal(p) {
-                    let kind =
-                        s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                    let kind = s.shape_kind(
+                        p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                        &p.shape_param,
+                    );
                     let (w, msb, lsb, signed) = s.range_to_dims(
                         s.shape_kind(kind, &p.shape_param),
-                        p.range.as_ref(),
-                        s.shape_signed(p.signed, &p.shape_param),
+                        p.dtype.range.as_ref(),
+                        s.shape_signed(p.dtype.signed, &p.shape_param),
                     );
                     let net = s.nets.len() as u32;
                     s.add_net(
@@ -846,10 +854,10 @@ impl Elaborator<'_> {
                             s.packed_dims.insert(net, ext);
                             let dd = s.compute_dim_desc(
                                 s.shape_kind(
-                                    p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
                                     &p.shape_param,
                                 ),
-                                p.range.as_ref(),
+                                p.dtype.range.as_ref(),
                                 &[],
                                 &p.unpacked,
                             );
@@ -862,7 +870,7 @@ impl Elaborator<'_> {
                             // 2-state element array; a 4-state `logic`/`reg` element keeps
                             // X/Z (not registered).
                             let ekind = s.shape_kind(
-                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
                                 &p.shape_param,
                             );
                             if net_kind_is_two_state(ekind) {
@@ -872,8 +880,8 @@ impl Elaborator<'_> {
                         Err(_) => {
                             let (w, msb, lsb, signed) = s.range_to_dims(
                                 s.shape_kind(ast::NetVarKind::Reg, &p.shape_param),
-                                p.range.as_ref(),
-                                s.shape_signed(p.signed, &p.shape_param),
+                                p.dtype.range.as_ref(),
+                                s.shape_signed(p.dtype.signed, &p.shape_param),
                             );
                             s.add_net(
                                 &p.name.name,
@@ -892,18 +900,20 @@ impl Elaborator<'_> {
                     }
                     continue;
                 }
-                let kind =
-                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                let kind = s.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param,
+                );
                 // §7.4.2 / §4.5.359, same unit as the local above.
-                let odd_bound = s.declared_odd_bound(p.range.as_ref()).is_some();
+                let odd_bound = s.declared_odd_bound(p.dtype.range.as_ref()).is_some();
                 let (w, msb, lsb, signed) = s.range_to_dims_opt(
                     s.shape_kind(kind, &p.shape_param),
-                    p.range.as_ref(),
-                    s.shape_signed(p.signed, &p.shape_param),
+                    p.dtype.range.as_ref(),
+                    s.shape_signed(p.dtype.signed, &p.shape_param),
                     odd_bound,
                 );
                 let net = s.nets.len() as u32;
-                s.record_declared_bounds_for(net, p.range.as_ref());
+                s.record_declared_bounds_for(net, p.dtype.range.as_ref());
                 s.add_net(
                     &p.name.name,
                     ir::NetVar {
@@ -930,7 +940,7 @@ impl Elaborator<'_> {
             }
             // [n_params]: the function-named RETURN var (declared range/sign).
             let ret_net = s.nets.len() as u32;
-            s.record_declared_bounds_for(ret_net, func.range.as_ref());
+            s.record_declared_bounds_for(ret_net, func.dtype.range.as_ref());
             s.add_net(
                 &ret_name,
                 ir::NetVar {
@@ -1173,7 +1183,7 @@ impl Elaborator<'_> {
                 // in/out/inout binds).
                 let scalar_ok = p.unpacked.is_empty()
                     && !matches!(
-                        self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                        self.shape_kind(p.dtype.port().unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                         ast::NetVarKind::String
                     );
                 // §4.5.207 / item 1: a FIXED unpacked-array formal of ANY direction is
@@ -1205,7 +1215,10 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in task.ports.iter().enumerate() {
             if matches!(
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                self.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param
+                ),
                 ast::NetVarKind::String
             ) {
                 if i < 64 {
@@ -1231,12 +1244,14 @@ impl Elaborator<'_> {
             let armed = s.decl_enter(&hdr_win, true);
             // [0..n_params): formals (input AND output, declared order).
             for p in &task.ports {
-                let kind =
-                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                let kind = s.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param,
+                );
                 let (w, msb, lsb, signed) = s.range_to_dims(
                     s.shape_kind(kind, &p.shape_param),
-                    p.range.as_ref(),
-                    s.shape_signed(p.signed, &p.shape_param),
+                    p.dtype.range.as_ref(),
+                    s.shape_signed(p.dtype.signed, &p.shape_param),
                 );
                 let net = s.nets.len() as u32;
                 // V2A-frame (§4.5.173): an `input` DYNAMIC-array formal (`byte b[]`) is a
@@ -1305,17 +1320,17 @@ impl Elaborator<'_> {
                         s.packed_dims.insert(net, ext);
                         let dd = s.compute_dim_desc(
                             s.shape_kind(
-                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
                                 &p.shape_param,
                             ),
-                            p.range.as_ref(),
+                            p.dtype.range.as_ref(),
                             &[],
                             &p.unpacked,
                         );
                         s.dim_desc.insert(net, dd);
                         s.frame_arr_formal_meta.insert(net, af);
                         let ekind = s.shape_kind(
-                            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                            p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
                             &p.shape_param,
                         );
                         if net_kind_is_two_state(ekind) {

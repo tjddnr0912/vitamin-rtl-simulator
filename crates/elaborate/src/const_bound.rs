@@ -424,10 +424,10 @@ impl Elaborator<'_> {
             .is_some_and(|(w, _)| w >= 32)
             && f.ports
                 .iter()
-                .all(|p| Self::decl_is_wide(p.net_or_var, p.range.as_ref()))
+                .all(|p| Self::decl_is_wide(p.dtype.port(), p.dtype.range.as_ref()))
             && f.body_decls
                 .iter()
-                .all(|d| Self::decl_is_wide(Some(d.kind), d.range.as_ref()))
+                .all(|d| Self::decl_is_wide(Some(d.dtype.net()), d.dtype.range.as_ref()))
             && self.const_stmt_width_safe(&f.body, depth);
         self.const_call_pkg.replace(saved_pkg);
         safe
@@ -447,7 +447,7 @@ impl Elaborator<'_> {
         use ast::Stmt as S;
         let decls_ok = |ds: &[ast::NetVarDecl]| {
             ds.iter()
-                .all(|d| Self::decl_is_wide(Some(d.kind), d.range.as_ref()))
+                .all(|d| Self::decl_is_wide(Some(d.dtype.net()), d.dtype.range.as_ref()))
         };
         match s {
             S::Block { decls, stmts, .. } => {

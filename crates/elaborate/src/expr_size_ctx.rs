@@ -301,7 +301,7 @@ impl Elaborator<'_> {
                     ast::ParamType::Time => ast::NetVarKind::Time,
                     ast::ParamType::Implicit => ast::NetVarKind::Reg,
                 };
-                Some(crate::array_geom::kind_signedness(kind, f.signed))
+                Some(crate::array_geom::kind_signedness(kind, f.dtype.signed))
             }
             // A HIERARCHICAL call `u.hf(x)` — the callee's DECLARED return sign,
             // read from the child module's `FunctionDef` by the same rule the

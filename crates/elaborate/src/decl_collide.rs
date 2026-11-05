@@ -373,7 +373,7 @@ fn param_kind(p: &ast::ParamDecl) -> DeclKind {
 /// Net versus variable, read off the declaration's own kind so the refusal uses
 /// the word the user would.
 fn netvar_kind(d: &ast::NetVarDecl) -> DeclKind {
-    if d.kind.is_net() {
+    if d.dtype.net().is_net() {
         DeclKind::Net
     } else {
         DeclKind::Variable

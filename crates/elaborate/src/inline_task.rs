@@ -401,13 +401,15 @@ impl Elaborator<'_> {
                     decl_scope::RtnKind::Task,
                 );
                 for p in &task.ports {
-                    let kind = self
-                        .shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                    let kind = self.shape_kind(
+                        p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                        &p.shape_param,
+                    );
                     let armed = self.decl_enter(&hdr_win, true);
                     let (w, msb, lsb, signed) = self.range_to_dims(
                         self.shape_kind(kind, &p.shape_param),
-                        p.range.as_ref(),
-                        self.shape_signed(p.signed, &p.shape_param),
+                        p.dtype.range.as_ref(),
+                        self.shape_signed(p.dtype.signed, &p.shape_param),
                     );
                     self.decl_exit(armed);
                     let local = self.nets.len() as u32;
@@ -521,7 +523,7 @@ impl Elaborator<'_> {
                     // moves a heap HANDLE for such a formal and a packed VALUE for
                     // every other one, so the two domains must agree end to end —
                     // which only this arm can check, because the actual lives here.
-                    let formal_is_string = matches!(p.net_or_var, Some(ast::NetVarKind::String));
+                    let formal_is_string = matches!(p.dtype.port(), Some(ast::NetVarKind::String));
                     let out_lval: ir::Lvalue = match &a.kind {
                         ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                             let caller_net = self

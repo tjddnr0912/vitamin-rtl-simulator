@@ -781,8 +781,8 @@ impl Elaborator<'_> {
                             // A plain scalar VAR (not a net, not a string, no unpacked
                             // dims) with an initializer — its init re-runs at block entry
                             // (emitted as a plain `x = init` blocking).
-                            let scalar_var = netvar_kind_is_var(d.kind)
-                                && !matches!(d.kind, ast::NetVarKind::String)
+                            let scalar_var = netvar_kind_is_var(d.dtype.net())
+                                && !matches!(d.dtype.net(), ast::NetVarKind::String)
                                 && n.init.is_some()
                                 && n.unpacked.is_empty();
                             // A scalar `string` local with an initializer. Its re-init is
@@ -791,7 +791,7 @@ impl Elaborator<'_> {
                             // reallocate), which is why `begin automatic string s; s = "a";
                             // … end` already worked — only the decl-init spelling was left
                             // out of family D, for no reason the emission path shares.
-                            let string_var = matches!(d.kind, ast::NetVarKind::String)
+                            let string_var = matches!(d.dtype.net(), ast::NetVarKind::String)
                                 && n.init.is_some()
                                 && n.unpacked.is_empty();
                             // BL2/BL3 (round-19): a DYNAMIC-STORAGE block-local — a single

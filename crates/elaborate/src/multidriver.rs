@@ -642,7 +642,7 @@ impl Elaborator<'_> {
                 declared.insert(p.name.name.as_str());
                 if p.dir == ast::PortDir::Output
                     && !body_decls.contains(p.name.name.as_str())
-                    && netvar_kind_is_var(self.port_net_kind(p.net_or_var, &p.shape_param))
+                    && netvar_kind_is_var(self.port_net_kind(p.dtype.port(), &p.shape_param))
                 {
                     vars.push(MdVar {
                         name: p.name.name.clone(),
@@ -656,7 +656,7 @@ impl Elaborator<'_> {
         }
         for item in body {
             match item {
-                ast::ModuleItem::NetVar(d) if netvar_kind_is_var(d.kind) => {
+                ast::ModuleItem::NetVar(d) if netvar_kind_is_var(d.dtype.net()) => {
                     for n in &d.names {
                         vars.push(MdVar {
                             name: n.name.name.clone(),
@@ -669,7 +669,7 @@ impl Elaborator<'_> {
                 }
                 ast::ModuleItem::PortDecl(pd) => {
                     let is_var = pd.dir == ast::PortDir::Output
-                        && netvar_kind_is_var(self.port_net_kind(pd.net_or_var, &pd.shape_param));
+                        && netvar_kind_is_var(self.port_net_kind(pd.dtype.port(), &pd.shape_param));
                     for (i, n) in pd.names.iter().enumerate() {
                         // `insert` is false for a name already declared: the net
                         // builder skips it the same way.

@@ -298,11 +298,12 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';' after for-init");
         // The header's own name binds from its condition on (`structs/member_array.rs`).
         if let Some((decl, _, orig)) = &typed_init {
-            let kind = if int_kw && decl.range.is_none() && decl.packed.is_empty() {
-                IdxKind::ForInt
-            } else {
-                IdxKind::Other
-            };
+            let kind =
+                if int_kw && decl.dtype.range.is_none() && decl.dtype.packed_dims().is_empty() {
+                    IdxKind::ForInt
+                } else {
+                    IdxKind::Other
+                };
             self.idx_scope.push((orig.name.clone(), kind));
         }
         let cond = self.expr(0);
@@ -400,10 +401,7 @@ impl Parser<'_, '_> {
             integral_typedef: false,
             pattern_members: Vec::new(),
             shape_param: None,
-            kind,
-            signed,
-            range,
-            packed,
+            dtype: hdl_ast::DataType::new_net(kind, signed, range, packed),
             delay: None,
             names: vec![DeclName {
                 name: synth.clone(),
@@ -643,10 +641,7 @@ impl Parser<'_, '_> {
             integral_typedef: false,
             pattern_members: Vec::new(),
             shape_param: None,
-            kind: NetVarKind::Integer,
-            signed: true,
-            range: None,
-            packed: Vec::new(),
+            dtype: hdl_ast::DataType::new_net(NetVarKind::Integer, true, None, Vec::new()),
             delay: None,
             names: vec![DeclName {
                 name: id.clone(),
@@ -765,10 +760,7 @@ impl Parser<'_, '_> {
             integral_typedef: false,
             pattern_members: Vec::new(),
             shape_param: None,
-            kind: NetVarKind::Integer,
-            signed: true,
-            range: None,
-            packed: Vec::new(),
+            dtype: hdl_ast::DataType::new_net(NetVarKind::Integer, true, None, Vec::new()),
             delay: None,
             names: vec![DeclName {
                 name: id.clone(),

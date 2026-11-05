@@ -770,10 +770,10 @@ impl Elaborator<'_> {
                 _ => None,
             }
         };
-        if matches!(d.kind, ast::NetVarKind::String) {
+        if matches!(d.dtype.net(), ast::NetVarKind::String) {
             return; // dynamic length — $bits on a string stays loud
         }
-        let elem: u64 = match d.kind {
+        let elem: u64 = match d.dtype.net() {
             // §4.5.155: fixed-width integer atoms (IEEE §6.11.1) carry no range, so
             // the `$bits` prescan must report the KIND width — mirroring `range_to_dims`
             // — not the rangeless `None => 1` default below (which made
@@ -789,14 +789,14 @@ impl Elaborator<'_> {
             | ast::NetVarKind::Time
             | ast::NetVarKind::Event => 64,
             _ => {
-                let mut w = match &d.range {
+                let mut w = match &d.dtype.range {
                     None => 1u64,
                     Some(r) => match fold_range(self, r) {
                         Some(w) => w,
                         None => return,
                     },
                 };
-                for r in &d.packed {
+                for r in d.dtype.packed_dims() {
                     match fold_range(self, r) {
                         Some(pw) => w = w.saturating_mul(pw),
                         None => return,
@@ -822,14 +822,14 @@ impl Elaborator<'_> {
                 }
             }
             let non_integral = matches!(
-                d.kind,
+                d.dtype.net(),
                 ast::NetVarKind::Real
                     | ast::NetVarKind::Realtime
                     | ast::NetVarKind::Event
                     | ast::NetVarKind::ClassHandle
                     | ast::NetVarKind::VirtualIface
             );
-            let bit_selectable = d.packed.is_empty() && !non_integral;
+            let bit_selectable = d.dtype.packed_dims().is_empty() && !non_integral;
             self.bits_prescan.insert(
                 n.name.name.clone(),
                 (elem, dims, bit_selectable, non_integral),

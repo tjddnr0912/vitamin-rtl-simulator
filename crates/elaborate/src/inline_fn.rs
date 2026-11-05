@@ -55,7 +55,9 @@ pub(crate) fn ast_func_return_width(f: &ast::FunctionDef) -> Option<u32> {
         ast::ParamType::Integer => Some(32),
         ast::ParamType::Time => Some(64),
         ast::ParamType::Real | ast::ParamType::Realtime => None,
-        ast::ParamType::Implicit => ast_kind_range_width(ast::NetVarKind::Reg, f.range.as_ref()),
+        ast::ParamType::Implicit => {
+            ast_kind_range_width(ast::NetVarKind::Reg, f.dtype.range.as_ref())
+        }
     }
 }
 
@@ -87,15 +89,15 @@ pub(crate) fn body_needs_context_width(
     for p in &f.ports {
         classify(
             &p.name.name,
-            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
-            p.range.as_ref(),
+            p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+            p.dtype.range.as_ref(),
         );
     }
     let mut decls = f.body_decls.clone();
     collect_block_local_decls(&f.body, &mut decls);
     for d in &decls {
         for n in &d.names {
-            classify(&n.name.name, d.kind, d.range.as_ref());
+            classify(&n.name.name, d.dtype.net(), d.dtype.range.as_ref());
         }
     }
     // The return var: `real`/`realtime` is not a bit-width context (skip); an integral
@@ -122,10 +124,13 @@ impl Elaborator<'_> {
         if f.ret_string || matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
-        if let Some(r) = &f.range {
+        if let Some(r) = &f.dtype.range {
             let hi = self.const_range_bound_fold(&r.msb)?;
             let lo = self.const_range_bound_fold(&r.lsb)?;
-            return Some((u32::try_from((hi - lo).unsigned_abs() + 1).ok()?, f.signed));
+            return Some((
+                u32::try_from((hi - lo).unsigned_abs() + 1).ok()?,
+                f.dtype.signed,
+            ));
         }
         match f.ret_type {
             ast::ParamType::Integer => Some((32, true)), // `int`/`integer` are 32-bit signed
@@ -467,15 +472,17 @@ impl Elaborator<'_> {
                 actual_ids.push(self.placeholder_expr());
                 continue;
             }
-            let kind =
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let kind = self.shape_kind(
+                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                &p.shape_param,
+            );
             // §4.5.589: the formal's range is the callee's own text (`decl_scope.rs`);
             // the actual itself stays the caller's.
             let armed = self.decl_enter(&hdr_win, true);
             let (w, _, _, _) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
-                p.range.as_ref(),
-                self.shape_signed(p.signed, &p.shape_param),
+                p.dtype.range.as_ref(),
+                self.shape_signed(p.dtype.signed, &p.shape_param),
             );
             self.decl_exit(armed);
             // §13.5.3 / §11.6.1: the actual is ASSIGNED to the formal, so the formal's
@@ -726,13 +733,15 @@ impl Elaborator<'_> {
             if self.is_input_dyn_array_formal(p) {
                 continue;
             }
-            let kind =
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let kind = self.shape_kind(
+                p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                &p.shape_param,
+            );
             let armed = self.decl_enter(hdr_win, true);
             let (w, _, _, formal_signed) = self.range_to_dims(
                 self.shape_kind(kind, &p.shape_param),
-                p.range.as_ref(),
-                self.shape_signed(p.signed, &p.shape_param),
+                p.dtype.range.as_ref(),
+                self.shape_signed(p.dtype.signed, &p.shape_param),
             );
             self.decl_exit(armed);
             let bound =
@@ -783,7 +792,7 @@ impl Elaborator<'_> {
             collect_block_local_decls(&func.body, &mut block_locals);
             let mut seen: BTreeMap<String, bool> = BTreeMap::new();
             for d in &block_locals {
-                let is_str = matches!(d.kind, ast::NetVarKind::String);
+                let is_str = matches!(d.dtype.net(), ast::NetVarKind::String);
                 for n in &d.names {
                     match seen.get(&n.name.name) {
                         Some(&prev) if prev != is_str => {
@@ -817,14 +826,14 @@ impl Elaborator<'_> {
             // heap value (a resize to the 1-bit `range_to_dims(String)` width corrupts it,
             // so `s < t` on two string locals compared as 1-bit packed = silent-wrong).
             let is_handle = matches!(
-                d.kind,
+                d.dtype.net(),
                 ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
             );
             let armed = self.decl_enter(hdr_win, true);
             let (mut w, _, _, signed) = self.range_to_dims(
-                self.shape_kind(d.kind, &d.shape_param),
-                d.range.as_ref(),
-                self.shape_signed(d.signed, &d.shape_param),
+                self.shape_kind(d.dtype.net(), &d.shape_param),
+                d.dtype.range.as_ref(),
+                self.shape_signed(d.dtype.signed, &d.shape_param),
             );
             let packed_w = self.frame_packed_width(d);
             self.decl_exit(armed);
@@ -838,7 +847,8 @@ impl Elaborator<'_> {
             }
             // The RESOLVED kind (a type parameter names its kind through
             // `shape_param`), the same one `range_to_dims` sized the local with.
-            let local_two_state = net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param));
+            let local_two_state =
+                net_kind_is_two_state(self.shape_kind(d.dtype.net(), &d.shape_param));
             for n in &d.names {
                 if !is_handle {
                     local_dims.insert(n.name.name.clone(), (w, signed));
@@ -855,7 +865,7 @@ impl Elaborator<'_> {
                 // compare (`s < t`) on two string LOCALS routes to `StrCmp` (§4.5.81).
                 self.formal_str.push((
                     n.name.name.clone(),
-                    matches!(d.kind, ast::NetVarKind::String),
+                    matches!(d.dtype.net(), ast::NetVarKind::String),
                 ));
             }
         }
@@ -886,7 +896,7 @@ impl Elaborator<'_> {
         // `ast_func_return_width` already answers `None` for a real/realtime return.
         let mut non_bv: std::collections::BTreeSet<String> = decls
             .iter()
-            .filter(|d| !ast_kind_is_bit_vector(d.kind))
+            .filter(|d| !ast_kind_is_bit_vector(d.dtype.net()))
             .flat_map(|d| d.names.iter())
             .map(|n| n.name.name.clone())
             .collect();

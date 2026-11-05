@@ -233,6 +233,16 @@ impl ParseError {
 /// (32-bit signed); a future `typedef logic [7:0] byte_t;` would carry its range.
 #[derive(Clone)]
 struct TypeInfo {
+    /// The DECLARED kind a parameter of this type records (`ParamDecl`'s
+    /// `dtype.kind()`, through `ParamPrefix::decl_kind`): `Kind(k)` for an alias of a
+    /// keyword type (`string` included) and for a composed alias (its members are
+    /// `logic`), `NotRecorded` for an enum, a struct (exact or symbolic), a union, a
+    /// type parameter and a class — `kind` below is then the storage the parser lays
+    /// the type out as, not a kind a reader may trust. Written by the constructor that
+    /// knows the family, never inferred from the other fields (a symbolic struct's
+    /// flags match a plain alias's), and copied with the entry by every clone (a
+    /// chained alias, an import, a package twin). Read only by `parse_param_prefix`.
+    decl_kind: TypeKind,
     kind: NetVarKind,
     signed: bool,
     range: Option<Range>,
@@ -246,9 +256,9 @@ struct TypeInfo {
     ///
     /// ⚠️ Deliberately NOT on `hdl_ast::TypedefKind::Alias`. That node is a frozen
     /// SchemaHash type: a field there flips the golden root hash and invalidates
-    /// every `.velab`. These dims only have to survive from the typedef to the
-    /// declaration, which is one parse — this parser-internal map is the whole
-    /// carrier, and the declaration it reaches already has `DeclName.unpacked`.
+    /// every `.vu` (the serialised AST ; `.velab` holds sim-ir). These dims only have
+    /// to survive from the typedef to the declaration, which is one parse — this
+    /// parser-internal map is the whole carrier; the declaration has `DeclName.unpacked`.
     unpacked: Vec<Dim>,
     /// §3 ⑤ⓕ: the name of the shape parameter (`T$s`) when this entry came from an
     /// OVERRIDABLE `parameter type T` (directly, or through a chained alias of one).
@@ -640,7 +650,7 @@ struct ScopeSnapshot {
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
     /// §4.5.425: names declared `struct_t [N:0] v` (a PACKED array of a packed struct,
-    /// `NetVarDecl { range: [N:0], packed: [struct flat range] }`): `v[i].field` desugars
+    /// `NetVarDecl` whose `dtype` has range `[N:0]` and packed dims `[struct flat range]`): `v[i].field` desugars
     /// to a part-select on the packed element exactly as `struct_1d_array_vars` does
     /// on an unpacked element (the geometry is the element's either way).
     struct_packed_array_vars: std::collections::HashSet<String>,
@@ -732,6 +742,11 @@ struct ParamPrefix {
     /// the dims written on the name; empty for every prefix that parsed before ⇒
     /// byte-identical.
     typedef_unpacked: Vec<Dim>,
+    /// The declared kind a `ParamDecl` of this prefix records (`param_dtype`): the
+    /// keyword's kind (`string` ⇒ `Kind(String)`), the typedef entry's
+    /// `TypeInfo::decl_kind` for a user type, `Implicit` when no type keyword was
+    /// written. Set in each arm of `parse_param_prefix`.
+    decl_kind: TypeKind,
     /// The prefix was the `string` keyword, which leaves no other trace here (`ty` is
     /// `Implicit`, `var_kind` `None`, the same as `parameter [3:0][1:0] P`). §3 ⑤ⓐ's
     /// pattern rewrite reads it: `string` takes no packed dimensions, so such a

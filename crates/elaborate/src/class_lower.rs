@@ -270,7 +270,10 @@ impl Elaborator<'_> {
         let fs_base = self.formal_str.len();
         for p in m_ports {
             let is_str = matches!(
-                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
+                self.shape_kind(
+                    p.dtype.port().unwrap_or(ast::NetVarKind::Reg),
+                    &p.shape_param
+                ),
                 ast::NetVarKind::String
             );
             self.formal_str.push((p.name.name.clone(), is_str));

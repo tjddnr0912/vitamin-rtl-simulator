@@ -149,7 +149,7 @@ pub(crate) fn body_binding_hazard(
     let mut owner: HashMap<String, usize> = HashMap::new(); // name -> declaring block (0 = top)
     let mut formals: HashSet<String> = HashSet::new();
     for p in &func.ports {
-        if p.range.as_ref().is_some_and(|r| !lit(r))
+        if p.dtype.range.as_ref().is_some_and(|r| !lit(r))
             || !p.unpacked.iter().all(lit_dim)
             || p.shape_param.is_some()
         {
@@ -164,8 +164,8 @@ pub(crate) fn body_binding_hazard(
         return Some(DECL);
     }
     let mut decl_ok = |d: &ast::NetVarDecl, blk: usize, owner: &mut HashMap<String, usize>| {
-        if d.range.as_ref().is_some_and(|r| !lit(r))
-            || !d.packed.iter().all(lit)
+        if d.dtype.range.as_ref().is_some_and(|r| !lit(r))
+            || !d.dtype.packed_dims().iter().all(lit)
             || d.shape_param.is_some()
             || d.class_type.is_some()
         {
@@ -366,7 +366,7 @@ impl Elaborator<'_> {
             ast::ParamType::Real | ast::ParamType::Realtime => return None,
             ast::ParamType::Integer => (31, 0),
             ast::ParamType::Time => (63, 0),
-            ast::ParamType::Implicit => match &func.range {
+            ast::ParamType::Implicit => match &func.dtype.range {
                 None => (0, 0),
                 // A bound that names something folds where the CALL is, like the body
                 // (`body_binding_hazard`): `function [K:0] f` called under a generate

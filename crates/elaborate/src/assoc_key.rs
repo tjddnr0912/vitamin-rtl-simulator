@@ -62,7 +62,7 @@ impl Elaborator<'_> {
             return Ok(None);
         };
         use ast::NetVarKind as K;
-        let atom = match kt.kind {
+        let atom = match kt.dtype.net() {
             K::Int | K::Integer => Some(32u64),
             K::Byte => Some(8),
             K::Shortint => Some(16),
@@ -73,7 +73,7 @@ impl Elaborator<'_> {
             Some(w) => w,
             None => {
                 let mut w: u64 = 1;
-                for r in kt.range.iter().chain(kt.packed.iter()) {
+                for r in kt.dtype.range.iter().chain(kt.dtype.packed_dims().iter()) {
                     let (Some(m), Some(l)) = (
                         self.const_range_bound_fold(&r.msb),
                         self.const_range_bound_fold(&r.lsb),
@@ -100,7 +100,7 @@ impl Elaborator<'_> {
             );
             return Err(());
         }
-        if width == 64 && !kt.signed {
+        if width == 64 && !kt.dtype.signed {
             self.error(
                 MsgCode::ElabUnsupported,
                 "an associative-array key of a 64-bit UNSIGNED type (`longint unsigned`, \
@@ -112,18 +112,23 @@ impl Elaborator<'_> {
         // Exactly the spellings PRE accepted (round-2 soundness R2-1): a bare atom,
         // no typedef name, no `signed`/`unsigned` keyword. `[int signed]` was E2002
         // before row 20 and is a typed key.
+        let no_sign_keyword = match kt.dtype.signing() {
+            Some(ast::Signing::Implicit) => true,
+            Some(ast::Signing::Signed | ast::Signing::Unsigned) => false,
+            None => unreachable!("an associative-array key records its signing keyword"),
+        };
         let legacy = !kt.named
-            && !kt.explicit_sign
-            && kt.signed
-            && kt.range.is_none()
-            && kt.packed.is_empty()
+            && no_sign_keyword
+            && kt.dtype.signed
+            && kt.dtype.range.is_none()
+            && kt.dtype.packed_dims().is_empty()
             && matches!(
-                kt.kind,
+                kt.dtype.net(),
                 K::Int | K::Integer | K::Byte | K::Shortint | K::Longint
             );
         Ok(Some(AssocKeyShape {
             width: width as u32,
-            signed: kt.signed,
+            signed: kt.dtype.signed,
             legacy,
         }))
     }

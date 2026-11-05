@@ -46,7 +46,7 @@ impl SelectScope {
         if let ast::PortList::Ansi(ports) = &module.ports {
             for p in ports {
                 let integral = !matches!(
-                    p.net_or_var,
+                    p.dtype.port(),
                     Some(
                         ast::NetVarKind::Real
                             | ast::NetVarKind::Realtime
@@ -55,10 +55,10 @@ impl SelectScope {
                     )
                 );
                 if integral
-                    && p.range.is_some()
+                    && p.dtype.range.is_some()
                     && p.iface.is_none()
                     && p.shape_param.is_none()
-                    && p.packed.is_empty()
+                    && p.dtype.packed_dims().is_empty()
                     && p.unpacked.is_empty()
                 {
                     sc.vector_ports.insert(p.name.name.clone());

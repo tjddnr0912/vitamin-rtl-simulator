@@ -166,8 +166,8 @@ pub(crate) fn subst_range(r: &mut Option<Range>, map: &std::collections::BTreeMa
 }
 
 pub(crate) fn subst_netvar(d: &mut NetVarDecl, map: &std::collections::BTreeMap<String, Expr>) {
-    subst_range(&mut d.range, map);
-    for p in &mut d.packed {
+    subst_range(&mut d.dtype.range, map);
+    for p in d.dtype.packed_dims_mut() {
         subst_expr(&mut p.msb, map);
         subst_expr(&mut p.lsb, map);
     }
@@ -308,13 +308,13 @@ pub(crate) fn subst_class_item(it: &mut ClassItem, map: &std::collections::BTree
             }
         }
         ClassItem::Func { def, .. } => {
-            subst_range(&mut def.range, map);
+            subst_range(&mut def.dtype.range, map);
             for p in &mut def.ret_packed {
                 subst_expr(&mut p.msb, map);
                 subst_expr(&mut p.lsb, map);
             }
             for p in &mut def.ports {
-                subst_range(&mut p.range, map);
+                subst_range(&mut p.dtype.range, map);
             }
             for d in &mut def.body_decls {
                 subst_netvar(d, map);
@@ -330,7 +330,7 @@ pub(crate) fn subst_class_item(it: &mut ClassItem, map: &std::collections::BTree
         }
         ClassItem::Task { def, .. } => {
             for p in &mut def.ports {
-                subst_range(&mut p.range, map);
+                subst_range(&mut p.dtype.range, map);
             }
             for d in &mut def.body_decls {
                 subst_netvar(d, map);
@@ -714,11 +714,11 @@ pub(crate) fn rename_ident_in_stmt(s: &mut Stmt, from: &str, to: &str) {
             // decl INITIALIZERS and dimension exprs reference outer names too
             // (review finding 2026-06-11 — they live outside `stmts`).
             for d in decls.iter_mut() {
-                if let Some(r) = &mut d.range {
+                if let Some(r) = &mut d.dtype.range {
                     fix_expr(&mut r.msb, from, to);
                     fix_expr(&mut r.lsb, from, to);
                 }
-                for r in &mut d.packed {
+                for r in d.dtype.packed_dims_mut() {
                     fix_expr(&mut r.msb, from, to);
                     fix_expr(&mut r.lsb, from, to);
                 }

@@ -92,16 +92,16 @@ impl Parser<'_, '_> {
             // A `string`/`real`/handle/event member is NOT a bit-vector — `member_width_
             // kind` would give it a bogus default 1-bit width (silently corrupting the
             // field), so gate on the integral KIND FIRST → non-packable → loud.
-            if !Self::member_kind_is_integral(m.kind) {
+            if !Self::member_kind_is_integral(m.dtype.net()) {
                 return None;
             }
             // A multi-dim packed member inside a RECORD ARRAY (`rec_t a[N]; a[i].m[j]`)
             // needs the element-stride sub-select on the array element's shared net — a
             // follow-on. Keep it correct-or-LOUD here (non-packable → scalar/loud path).
-            if !m.packed_dims.is_empty() {
+            if !m.dtype.packed_dims().is_empty() {
                 return None;
             }
-            match self.member_width_kind(m.kind, &m.range) {
+            match self.member_width_kind(m.dtype.net(), &m.dtype.range) {
                 Some(w) if w > 0 => widths.push(w),
                 _ => return None,
             }
@@ -116,8 +116,12 @@ impl Parser<'_, '_> {
         // cannot — so a mixed record ARRAY is correct-or-LOUD (never a silent X), like a
         // non-packable (string/real) record. An all-2-state OR all-4-state record is
         // fine (uniform kind). (Adversarial soundness review RANK 1.)
-        let any_two_state = members.iter().any(|m| Self::member_kind_two_state(m.kind));
-        let any_four_state = members.iter().any(|m| !Self::member_kind_two_state(m.kind));
+        let any_two_state = members
+            .iter()
+            .any(|m| Self::member_kind_two_state(m.dtype.net()));
+        let any_four_state = members
+            .iter()
+            .any(|m| !Self::member_kind_two_state(m.dtype.net()));
         if any_two_state && any_four_state {
             return None;
         }
@@ -130,10 +134,10 @@ impl Parser<'_, '_> {
                 m.name.name.clone(),
                 off,
                 *w,
-                self.member_ascending(&m.range),
-                m.signed,
-                Self::member_kind_two_state(m.kind),
-                self.member_dbase(&m.range),
+                self.member_ascending(&m.dtype.range),
+                m.dtype.signed,
+                Self::member_kind_two_state(m.dtype.net()),
+                self.member_dbase(&m.dtype.range),
                 1u32, // elem_stride: multi-dim members were rejected above
                 None, // a nested struct member never reaches a record layout
             ));
@@ -209,14 +213,16 @@ impl Parser<'_, '_> {
             integral_typedef: false,
             pattern_members: Vec::new(),
             shape_param: None,
-            kind: if all_two_state {
-                NetVarKind::Bit
-            } else {
-                NetVarKind::Logic
-            },
-            signed: false,
-            range: Some(self.synth_bit_range(w, span)),
-            packed: Vec::new(),
+            dtype: hdl_ast::DataType::new_net(
+                if all_two_state {
+                    NetVarKind::Bit
+                } else {
+                    NetVarKind::Logic
+                },
+                false,
+                Some(self.synth_bit_range(w, span)),
+                Vec::new(),
+            ),
             delay: None,
             names: decl_names,
             lifetime: None,
@@ -265,14 +271,16 @@ impl Parser<'_, '_> {
                             integral_typedef: false,
                             pattern_members: Vec::new(),
                             shape_param: None,
-                            kind: if all_two_state {
-                                NetVarKind::Bit
-                            } else {
-                                NetVarKind::Logic
-                            },
-                            signed: false,
-                            range: Some(self.synth_bit_range(w, n.name.span)),
-                            packed: Vec::new(),
+                            dtype: hdl_ast::DataType::new_net(
+                                if all_two_state {
+                                    NetVarKind::Bit
+                                } else {
+                                    NetVarKind::Logic
+                                },
+                                false,
+                                Some(self.synth_bit_range(w, n.name.span)),
+                                Vec::new(),
+                            ),
                             delay: None,
                             names: vec![DeclName {
                                 name: n.name.clone(),
@@ -297,7 +305,10 @@ impl Parser<'_, '_> {
                     // heap). A nested-struct / event / class member has no dyn-array
                     // form → falls through to loud. `arr[i].field` / `new[]` / `'{…}` are
                     // desugared to native dyn ops at the use sites.
-                    if members.iter().all(|m| Self::member_kind_soa_ok(m.kind)) {
+                    if members
+                        .iter()
+                        .all(|m| Self::member_kind_soa_ok(m.dtype.net()))
+                    {
                         let field_inits: Vec<Option<Expr>> = match &n.init {
                             Some(e) => match self.soa_field_inits(members.len(), e) {
                                 Some(v) => v.into_iter().map(Some).collect(),
@@ -320,10 +331,12 @@ impl Parser<'_, '_> {
                                 integral_typedef: false,
                                 pattern_members: Vec::new(),
                                 shape_param: None,
-                                kind: m.kind,
-                                signed: m.signed,
-                                range: m.range.clone(),
-                                packed: Vec::new(),
+                                dtype: hdl_ast::DataType::new_net(
+                                    m.dtype.net(),
+                                    m.dtype.signed,
+                                    m.dtype.range.clone(),
+                                    Vec::new(),
+                                ),
                                 delay: None,
                                 names: vec![DeclName {
                                     name: Ident {
@@ -376,14 +389,16 @@ impl Parser<'_, '_> {
                             integral_typedef: false,
                             pattern_members: Vec::new(),
                             shape_param: None,
-                            kind: if all_two_state {
-                                NetVarKind::Bit
-                            } else {
-                                NetVarKind::Logic
-                            },
-                            signed: false,
-                            range: Some(self.synth_bit_range(w, n.name.span)),
-                            packed: Vec::new(),
+                            dtype: hdl_ast::DataType::new_net(
+                                if all_two_state {
+                                    NetVarKind::Bit
+                                } else {
+                                    NetVarKind::Logic
+                                },
+                                false,
+                                Some(self.synth_bit_range(w, n.name.span)),
+                                Vec::new(),
+                            ),
                             delay: None,
                             names: vec![DeclName {
                                 name: n.name.clone(),
@@ -410,7 +425,10 @@ impl Parser<'_, '_> {
                     // (`push_back`/`pop_*`/`insert`/`delete`) fan out per field at the use
                     // sites (`try_soa_queue_method_stmt`, `try_soa_assign`). All-or-loud: a
                     // member with no array form (nested struct / event / class) stays loud.
-                    if members.iter().all(|m| Self::member_kind_soa_ok(m.kind)) {
+                    if members
+                        .iter()
+                        .all(|m| Self::member_kind_soa_ok(m.dtype.net()))
+                    {
                         self.record_soa_vars
                             .insert(n.name.name.clone(), rec.clone());
                         for m in &members {
@@ -418,10 +436,12 @@ impl Parser<'_, '_> {
                                 integral_typedef: false,
                                 pattern_members: Vec::new(),
                                 shape_param: None,
-                                kind: m.kind,
-                                signed: m.signed,
-                                range: m.range.clone(),
-                                packed: Vec::new(),
+                                dtype: hdl_ast::DataType::new_net(
+                                    m.dtype.net(),
+                                    m.dtype.signed,
+                                    m.dtype.range.clone(),
+                                    Vec::new(),
+                                ),
                                 delay: None,
                                 names: vec![DeclName {
                                     name: Ident {
@@ -487,14 +507,16 @@ impl Parser<'_, '_> {
                     integral_typedef: false,
                     pattern_members: Vec::new(),
                     shape_param: None,
-                    kind: if all_two_state {
-                        NetVarKind::Bit
-                    } else {
-                        NetVarKind::Logic
-                    },
-                    signed: false,
-                    range: Some(self.synth_bit_range(w, n.name.span)),
-                    packed: Vec::new(),
+                    dtype: hdl_ast::DataType::new_net(
+                        if all_two_state {
+                            NetVarKind::Bit
+                        } else {
+                            NetVarKind::Logic
+                        },
+                        false,
+                        Some(self.synth_bit_range(w, n.name.span)),
+                        Vec::new(),
+                    ),
                     delay: None,
                     names: vec![DeclName {
                         name: n.name.clone(),
@@ -517,10 +539,12 @@ impl Parser<'_, '_> {
                     integral_typedef: false,
                     pattern_members: Vec::new(),
                     shape_param: None,
-                    kind: m.kind,
-                    signed: m.signed,
-                    range: m.range.clone(),
-                    packed: Vec::new(),
+                    dtype: hdl_ast::DataType::new_net(
+                        m.dtype.net(),
+                        m.dtype.signed,
+                        m.dtype.range.clone(),
+                        Vec::new(),
+                    ),
                     delay: None,
                     names: vec![DeclName {
                         name: Ident {

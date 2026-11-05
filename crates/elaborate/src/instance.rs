@@ -977,11 +977,11 @@ impl Elaborator<'_> {
         // that path merges the port direction itself).
         for item in &module.body {
             if let ast::ModuleItem::PortDecl(pd) = item {
-                let kind = self.port_net_kind(pd.net_or_var, &pd.shape_param);
+                let kind = self.port_net_kind(pd.dtype.port(), &pd.shape_param);
                 let (width, msb, lsb, signed) = self.range_to_dims(
                     self.shape_kind(kind, &pd.shape_param),
-                    pd.range.as_ref(),
-                    self.shape_signed(pd.signed, &pd.shape_param),
+                    pd.dtype.range.as_ref(),
+                    self.shape_signed(pd.dtype.signed, &pd.shape_param),
                 );
                 let dir = map_port_dir(pd.dir);
                 let init = default_init(kind, width);
@@ -1042,7 +1042,7 @@ impl Elaborator<'_> {
                             if desc.iter().any(|&d| d) {
                                 self.array_dim_desc.insert(id, desc);
                             }
-                            self.record_dim_desc(id, kind, pd.range.as_ref(), &[], dims);
+                            self.record_dim_desc(id, kind, pd.dtype.range.as_ref(), &[], dims);
                             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0)
                             {
                                 self.array_dims.insert(id, dim_extents.clone());
@@ -1127,7 +1127,7 @@ impl Elaborator<'_> {
         // bound interface instances exist, so the member alias can be wired.
         for item in &module.body {
             if let ast::ModuleItem::NetVar(d) = item {
-                if d.kind == ast::NetVarKind::VirtualIface {
+                if d.dtype.net() == ast::NetVarKind::VirtualIface {
                     self.elaborate_virtual_iface(d, &module.body);
                 }
             }

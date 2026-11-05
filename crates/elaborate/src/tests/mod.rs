@@ -81,10 +81,7 @@ fn netvar(
         integral_typedef: false,
         pattern_members: Vec::new(),
         shape_param: None,
-        kind,
-        signed,
-        range,
-        packed: Vec::new(),
+        dtype: hdl_ast::DataType::new_net(kind, signed, range, Vec::new()),
         delay: None,
         names: names
             .iter()
@@ -152,7 +149,12 @@ fn logic_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
     let ast::ModuleItem::NetVar(mut d) = reg_mem(bit_msb, depth_msb, name) else {
         unreachable!()
     };
-    d.kind = ast::NetVarKind::Logic;
+    d.dtype = hdl_ast::DataType::new_net(
+        ast::NetVarKind::Logic,
+        d.dtype.signed,
+        d.dtype.range.clone(),
+        d.dtype.packed_dims().to_vec(),
+    );
     ast::ModuleItem::NetVar(d)
 }
 
@@ -161,14 +163,16 @@ fn reg_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
         integral_typedef: false,
         pattern_members: Vec::new(),
         shape_param: None,
-        kind: ast::NetVarKind::Reg,
-        signed: false,
-        range: Some(ast::Range {
-            msb: dec(&bit_msb.to_string()),
-            lsb: dec("0"),
-            span: SP,
-        }),
-        packed: Vec::new(),
+        dtype: hdl_ast::DataType::new_net(
+            ast::NetVarKind::Reg,
+            false,
+            Some(ast::Range {
+                msb: dec(&bit_msb.to_string()),
+                lsb: dec("0"),
+                span: SP,
+            }),
+            Vec::new(),
+        ),
         delay: None,
         names: vec![ast::DeclName {
             name: ident(name),
@@ -362,15 +366,17 @@ fn ansi_port(dir: ast::PortDir, range: Option<(&str, &str)>, name: &str) -> ast:
         pattern_members: Vec::new(),
         shape_param: None,
         dir,
-        net_or_var: None,
-        signed: false,
-        range: range.map(|(m, l)| ast::Range {
-            // bounds are exprs (may reference a param like `W-1`)
-            msb: parse_range_expr(m),
-            lsb: parse_range_expr(l),
-            span: SP,
-        }),
-        packed: Vec::new(),
+        dtype: hdl_ast::DataType::new_port(
+            None,
+            false,
+            range.map(|(m, l)| ast::Range {
+                // bounds are exprs (may reference a param like `W-1`)
+                msb: parse_range_expr(m),
+                lsb: parse_range_expr(l),
+                span: SP,
+            }),
+            Vec::new(),
+        ),
         name: ident(name),
         unpacked: Vec::new(),
         iface: None,
@@ -392,9 +398,13 @@ fn parse_range_expr(s: &str) -> ast::Expr {
 fn param(name: &str, value: u32) -> ast::ParamDecl {
     ast::ParamDecl {
         kind: ast::ParamKind::Parameter,
-        signed: false,
+        dtype: hdl_ast::DataType::new_param(
+            ast::TypeKind::Implicit,
+            ast::Signing::Implicit,
+            false,
+            None,
+        ),
         ty: ast::ParamType::Implicit,
-        range: None,
         name: ident(name),
         value: dec(&value.to_string()),
         span: SP,
@@ -613,14 +623,16 @@ fn wire_range_expr(msb: ast::Expr, names: &[&str]) -> ast::ModuleItem {
         integral_typedef: false,
         pattern_members: Vec::new(),
         shape_param: None,
-        kind: ast::NetVarKind::Wire,
-        signed: false,
-        range: Some(ast::Range {
-            msb,
-            lsb: dec("0"),
-            span: SP,
-        }),
-        packed: Vec::new(),
+        dtype: hdl_ast::DataType::new_net(
+            ast::NetVarKind::Wire,
+            false,
+            Some(ast::Range {
+                msb,
+                lsb: dec("0"),
+                span: SP,
+            }),
+            Vec::new(),
+        ),
         delay: None,
         names: names
             .iter()
@@ -677,13 +689,15 @@ fn tf_port(dir: ast::PortDir, range: Option<(u32, u32)>, name: &str) -> ast::TfP
         shape_param: None,
         dir,
         dir_spelling: ast::TfDirSpelling::Declared,
-        net_or_var: None,
-        signed: false,
-        range: range.map(|(m, l)| ast::Range {
-            msb: dec(&m.to_string()),
-            lsb: dec(&l.to_string()),
-            span: SP,
-        }),
+        dtype: hdl_ast::DataType::new_tf_port(
+            None,
+            false,
+            range.map(|(m, l)| ast::Range {
+                msb: dec(&m.to_string()),
+                lsb: dec(&l.to_string()),
+                span: SP,
+            }),
+        ),
         name: ident(name),
         unpacked: Vec::new(),
         default: None,
@@ -699,12 +713,14 @@ fn func_def(
 ) -> ast::ModuleItem {
     ast::ModuleItem::Func(ast::FunctionDef {
         automatic: false,
-        signed: false,
-        range: range.map(|(m, l)| ast::Range {
-            msb: dec(&m.to_string()),
-            lsb: dec(&l.to_string()),
-            span: SP,
-        }),
+        dtype: hdl_ast::DataType::new_function_return(
+            false,
+            range.map(|(m, l)| ast::Range {
+                msb: dec(&m.to_string()),
+                lsb: dec(&l.to_string()),
+                span: SP,
+            }),
+        ),
         ret_packed: Vec::new(),
         ret_type: ast::ParamType::Implicit,
         ret_two_state: false,
@@ -740,14 +756,16 @@ fn netvar_decl_reg(name: &str) -> ast::NetVarDecl {
         integral_typedef: false,
         pattern_members: Vec::new(),
         shape_param: None,
-        kind: ast::NetVarKind::Reg,
-        signed: false,
-        range: Some(ast::Range {
-            msb: dec("7"),
-            lsb: dec("0"),
-            span: SP,
-        }),
-        packed: Vec::new(),
+        dtype: hdl_ast::DataType::new_net(
+            ast::NetVarKind::Reg,
+            false,
+            Some(ast::Range {
+                msb: dec("7"),
+                lsb: dec("0"),
+                span: SP,
+            }),
+            Vec::new(),
+        ),
         delay: None,
         names: vec![ast::DeclName {
             name: ident(name),

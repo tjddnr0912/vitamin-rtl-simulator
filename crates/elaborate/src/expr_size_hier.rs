@@ -226,18 +226,18 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                 continue;
             }
             if let Some(h) = net_shape(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Wire),
-                p.signed,
-                p.range.as_ref(),
-                &p.packed,
+                p.dtype.port().unwrap_or(ast::NetVarKind::Wire),
+                p.dtype.signed,
+                p.dtype.range.as_ref(),
+                p.dtype.packed_dims(),
                 &p.unpacked,
                 p.shape_param.as_ref(),
                 None,
             ) {
                 f.nets.insert(p.name.name.clone(), h);
             } else if is_real_scalar(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Wire),
-                &p.packed,
+                p.dtype.port().unwrap_or(ast::NetVarKind::Wire),
+                p.dtype.packed_dims(),
                 &p.unpacked,
             ) {
                 f.real_nets.insert(p.name.name.clone());
@@ -252,10 +252,10 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                         continue;
                     }
                     if let Some(h) = net_shape(
-                        d.kind,
-                        d.signed,
-                        d.range.as_ref(),
-                        &d.packed,
+                        d.dtype.net(),
+                        d.dtype.signed,
+                        d.dtype.range.as_ref(),
+                        d.dtype.packed_dims(),
                         &n.unpacked,
                         d.shape_param.as_ref(),
                         d.class_type.as_ref(),
@@ -263,7 +263,7 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                         f.nets.insert(n.name.name.clone(), h);
                     } else if d.shape_param.is_none()
                         && d.class_type.is_none()
-                        && is_real_scalar(d.kind, &d.packed, &n.unpacked)
+                        && is_real_scalar(d.dtype.net(), d.dtype.packed_dims(), &n.unpacked)
                     {
                         f.real_nets.insert(n.name.name.clone());
                     }
@@ -438,9 +438,13 @@ fn param_slots(m: &ast::ModuleDecl, seen: &BTreeMap<String, u32>) -> Option<Vec<
         // a ranged or `signed` untyped declaration, and every 1-bit vector kind
         // (the parser gives `parameter logic P` a `[0:0]`) are width channels
         // this fold does not model, so the slot stays unbound. A bare
-        // `parameter unsigned P` is recorded by the parser as plain untyped
-        // (the keyword is dropped), so it binds exactly as the binder binds it.
-        let ty = match (p.ty, p.range.is_some(), p.signed) {
+        // `parameter unsigned P` reads as plain untyped here: the parser records
+        // its keyword (`dtype.signing()`) but neither this fold nor the binder reads
+        // it yet, so it binds exactly as the binder binds it. A typedef-typed
+        // parameter reads as its spelled-out twin (`ty`, `range`, `signed`), also
+        // where `dtype.kind()` records `NotRecorded` (an enum, struct, union or
+        // type-parameter type).
+        let ty = match (p.ty, p.dtype.range.is_some(), p.dtype.signed) {
             (ast::ParamType::Implicit, false, false) => Some(ast::ParamType::Implicit),
             (ast::ParamType::Integer, false, true) => Some(ast::ParamType::Integer),
             _ => None,
@@ -534,9 +538,9 @@ fn func_ret_shape(f: &ast::FunctionDef) -> Option<(WidthFact, bool)> {
     let w = match ast_func_return_width(f) {
         Some(0) => return None,
         Some(w) => WidthFact::Lit(w),
-        None => WidthFact::Range(f.range.clone()?),
+        None => WidthFact::Range(f.dtype.range.clone()?),
     };
-    Some((w, crate::array_geom::kind_signedness(kind, f.signed)))
+    Some((w, crate::array_geom::kind_signedness(kind, f.dtype.signed)))
 }
 
 impl Elaborator<'_> {
@@ -894,14 +898,14 @@ impl Elaborator<'_> {
             if !matches!(p.dir, ast::PortDir::Input) {
                 return None;
             }
-            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+            let kind = p.dtype.port().unwrap_or(ast::NetVarKind::Reg);
             if matches!(kind, ast::NetVarKind::String) {
                 return None;
             }
             let h = net_shape(
                 kind,
-                p.signed,
-                p.range.as_ref(),
+                p.dtype.signed,
+                p.dtype.range.as_ref(),
                 &[],
                 &p.unpacked,
                 p.shape_param.as_ref(),
