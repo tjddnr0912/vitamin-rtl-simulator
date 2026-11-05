@@ -4,12 +4,15 @@
 * A row is a single root or one funnel's roots (an oracle, a corpus row's pinned oracle counting; outside walls and oracle splits).
 * A row that needs a format bump takes it.
 * Same-root rows are one slice, and their order is a measurement (a value lane lands before a guard over an unlimited fold is deleted).
-* State (2026-11-04): Q-ALWINTRA parked 2026-11-02 behind Q-ALWBUDGET, L1 takes C1 33;
+* State (2026-11-04): Q-ALWINTRA parked 2026-11-02 behind Q-ALWBUDGET, L1 took C1 33, which parked 2026-11-04 behind Q-TYPEOVERVAL, so L1 empties;
 * Q-AESINK landed (§4.5.633);
 * row 41's page half landed (§4.5.634; its residue keeps slot 41 · L2 after 68), so L2 empties and is not refilled;
 * Q-PKRDLSB parked 2026-11-02, T3 took C3 row 29's page half, which parked 2026-11-04 behind Q-PARAM2STATE;
-* T3 empties and is not refilled (owner, 2026-11-04, replacing the refill rule of 2026-11-02): rows 33 (L1) and 41 (L2) finish in their slots (row 41 ended 2026-11-04, §4.5.634), an emptied slot is not refilled, and once both end one slot runs the queue one row at a time, batch verify kept.
-* Parked, each keeping its slot: Q-WITHREAL, Q-XNONINT and Q-INLITEM (1 · L1), P-PCTU (6 · T3), Q-DLYCAT (7 · L1), row 29's page half (C3 · T3), row 29's full form (9 · T3), Q-NESTCAT (in row 74), Q-TPCARRIER (29 · L2), Q-MEMBSRC's read half (32 · L2), Q-BITSTYPE, Q-REALSPLIT and Q-REALTWIN (42 · T3), Q-ALWINTRA (153 · any), Q-PKRDLSB (163 · any).
+* T3 empties and is not refilled (owner, 2026-11-04, replacing the refill rule of 2026-11-02): rows 33 (L1) and 41 (L2) finished in their slots (row 41 ended 2026-11-04, §4.5.634; row 33 parked 2026-11-04), an emptied slot is not refilled;
+* rows 29, 33 and 41 have ended, so one slot runs the queue one row at a time, batch verify kept, with auto-fill off: the next row waits for the owner (owner, 2026-11-05).
+* TW5 at row 33's park: five rows filed, Q-TYPEOVERVAL, Q-FRAMEREAL, Q-FRAMECONCAT, Q-ENUMCONV and Q-PORTDEFAULT (176–180 · any), within the cap of 6;
+* Q-FRAMECAWAKE, measured only inside row 33's frame, and Q-FRAMEDEFAULT, row 33's residue in its record, are not filed (W/row33/park/REMEASURE-addendum.txt).
+* Parked, each keeping its slot: Q-WITHREAL, Q-XNONINT and Q-INLITEM (1 · L1), P-PCTU (6 · T3), Q-DLYCAT (7 · L1), row 29's page half (C3 · T3), row 33 (C1 · L1), row 29's full form (9 · T3), Q-NESTCAT (in row 74), Q-TPCARRIER (29 · L2), Q-MEMBSRC's read half (32 · L2), Q-BITSTYPE, Q-REALSPLIT and Q-REALTWIN (42 · T3), Q-ALWINTRA (153 · any), Q-PKRDLSB (163 · any).
 
 * Real-design first: every defect row has a corpus witness except rows 1–8, which an external report or its fix path reproduced.
 * A slice that moves a corpus page re-pins that row's refusal in the same commit (`DRIFTED` otherwise) and reports the page before and after.

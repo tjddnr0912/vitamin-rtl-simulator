@@ -11,4 +11,9 @@
 * the fix must not hand the literal to today's real evaluator, which folds a region that mentions a real whole in f64 (`((1.0 < 2) + 2) / 2` is 2, all three 1), so `((1ns < 2) + 2) / 2`, 1 today on all four, would turn wrong
 * review r3 (R3-F6), other timescales: under 1ps/1ps `3ns / 2000`, `(3ns / 2000) > 1` and `2500ps / 1000` PRE 1, 0, 2 where iverilog and verilator give 2, 1, 3 (sv2v → iverilog 0, 0, 0: not an oracle for a time literal), under 1ns/1ps `2ns / 4` and `(2ns / 4) > 0` PRE 0, 0 (1, 1) and `1500ps * 2` E3009 (3)
 * row 48 r4: an untyped `parameter PT = 3ns / 2;` binds the integral 1 (`PT * 2` 2, a `localparam real` copy 1.000; iverilog and verilator 3, 1.500: §5.8 realtime, §6.20.2 real)
+* row 33 r1: a package parameter's time literal binds at the wrong unit, a plain program: `` `timescale 1ns/1ps `` with `package p; parameter time T = 3ns; endpackage` and `#T` (v_td) `R 3000000`, verilator 3000
+* `$display("%0d", T)` for 1ns (v_t) `R 1000`, verilator and iverilog `R 1`, sv2v `R 0`
+* the module form is right (v_tm)
+* W/row33/lens-sound/c6
+* PRE 79814020 and main's e0888973 alike (W/row33/park/REMEASURE-addendum.txt)
 * silent-wrong, pre-existing

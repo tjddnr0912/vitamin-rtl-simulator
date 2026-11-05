@@ -7,5 +7,12 @@
 * the other halves are rows: `$unit` routines 🆕 AF, generate routines 🆕 AG, the instance-array prepass 🆕 AH, an imported routine's origin (the "Scoping" import line), the text PRE refuses (§3.b `pkg-text-open`)
 * rv558_ovr's `$bits(P)` 32 (oracles 4) is the "Index sealing" override-leaf line, w05615 / w05639's `P=1000` (oracles 8) 🆕 AC's interpreter ranges
 * a package in another staged compilation unit is refused (PROBE_CATALOG §4.5.589)
+* ① a package function's local array dimension folds in the calling instance's scope, a legal program (row 33 r3, PLAN4 F4: the frame lowering of a package routine's local, shared code; filed here because Q-FRAMEDEFAULT, row 33's residue row in its record docs.patch, does not exist while row 33 is parked; W/row33/plan4/p4; PRE 79814020 and main's e0888973 alike): g_dim `package p; parameter int unsigned V = 5; function automatic int g(); bit a [V]; return $size(a); endfunction endpackage module t; import p::*; localparam int unsigned V = 4; initial begin #1 $display("R %0d", g()); $finish; end endmodule` `R 4`, sv2v → iverilog, verilator and iverilog `R 5`
+* over enum labels, p's `MT = 4'h5` under t's `MT = 4'h6` (g_diml) `R 6`, all three `R 5`
+* `p::g()` with no import under t's `V = 4` (g_dimsc) `R 4`, all three `R 5`
+* no shadow (g_dimctl) `R 5` on all
+* body reads are right (g_called, g_calledl, g_ctl `R 5`)
+* k22b (a package function writing a module's variable, illegal) runs `R ok` on the same route
+* silent-wrong, pre-existing
 * 3 oracles
 * status: OPEN (the task half)

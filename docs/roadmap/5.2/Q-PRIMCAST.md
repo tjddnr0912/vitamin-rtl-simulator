@@ -4,6 +4,10 @@
 * fix: §4.5.562's design, the arm opted in per consumer with the consumer's own context and never in the shared walk (§4.5.562 was reverted after three blocking rounds, each a lane folding without its context: all-x at the bitwise, widen and work-cap sites, a class-field `fold_init` lane, a generate-scope real shadow, `{byte'(-1){1'b1}}` accepted)
 * census every `fold_region` caller first
 * a region holding a real-typed leaf (as Q-XFALLBACK: the binding, never the keyword) keeps PRE's route (row 48 r4: `parameter PX = 1.5;` with `int'(PX * 3) + byte'(200)` stays PRE's -51, all three; r3: `int'(((1.5 < 2) + 2) / 2)` stays PRE's 2 — iverilog, sv2v and verilator 1: the unlimited walk's cast arm `const_fn.rs:752` hands the operand to the real evaluator, which folds it whole in f64; Q-REALSPLIT, the real hand-off, parked behind row 74 — and `int'(1.5 * 3) + byte'(200)` stays -51, all three)
+* parameter values row 33's lens read (W/row33/lens-diff/p13): c01187 `logic [64:0] LP = longint'(8'shFF)` PRE 0ffffffffffffffff, oracles 1ffffffffffffffff
+* c00138 `{4{8'sd127}} ^ shortint'(L)` PRE 180808080, oracles 07f7f8080
+* c00413 `$dimensions(N4) < SN ^ 2'sb11` PRE f, oracles 3, no cast in the last, this row's census reads it
+* PRE 79814020 and main's e0888973 alike (W/row33/park/REMEASURE-addendum.txt)
 * exit: the two cells above at the ≤64-bit binders, `byte'(260)` in the interpreter (with row 76) and as a width (`$bits`: Q-BITSTYPE, parked behind row 74)
 * must not move: §4.5.562's round cells, the 999 agreeing parity cells, the 3,059 cells
 * pre-existing

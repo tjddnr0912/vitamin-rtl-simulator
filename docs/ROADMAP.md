@@ -827,17 +827,17 @@ Below the correctness ladder; a row resumes only when its re-entry condition fir
 Default backend `native` (tier 3); product `--no-default-features` = one executor; the corpus runs blocking in CI on 3 OSes; codegen off. ([notes](roadmap/5/README.md))
 
 ## 5.2 Queue (start order)
-> The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and once row 33 ends one slot runs the queue
+> The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-04): row 41 ended, row 33 finishes in its slot, an emptied slot is not refilled, then one slot runs the queue; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-04): rows 29, 41 ended, 33 parked; one slot runs the queue, the next row waits for the owner; TW5 at 33's park; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| 33 | C1 · L1 | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
+| 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
 | 29 | C3 · T3 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 46 | C4 · L1 | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
@@ -1040,6 +1040,11 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-PKGPARPAT | 173 · any | [a package parameter with a keyed struct pattern value is not folded](roadmap/5.2/Q-PKGPARPAT.md) | ② |
 | Q-PKGUNIQ | 174 · any | [a package call reaching a `unique` violation is refused, on four OpenTitan pages](roadmap/5.2/Q-PKGUNIQ.md) | ② |
 | Q-NETCAP | 175 · any | [the v1 net and variable count cap stops two OpenTitan pages](roadmap/5.2/Q-NETCAP.md) | ② |
+| Q-TYPEOVERVAL | 176 · any | [a cast or `$bits` of a name binds a visible typedef over the scope's own value](roadmap/5.2/Q-TYPEOVERVAL.md) | ① |
+| Q-FRAMEREAL | 177 · any | [a real assigned to an element of a frame-local array is not rounded](roadmap/5.2/Q-FRAMEREAL.md) | ① |
+| Q-FRAMECONCAT | 178 · any | [a concatenation assigned to a frame-local unpacked array fills it in reverse](roadmap/5.2/Q-FRAMECONCAT.md) | ① |
+| Q-ENUMCONV | 179 · any | [an implicit conversion to an enum is accepted](roadmap/5.2/Q-ENUMCONV.md) | — |
+| Q-PORTDEFAULT | 180 · any | [an ANSI port default is parsed and never lowered](roadmap/5.2/Q-PORTDEFAULT.md) | ① |
 
 Do not start:
 

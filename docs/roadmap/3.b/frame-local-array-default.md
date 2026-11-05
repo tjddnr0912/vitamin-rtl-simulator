@@ -4,4 +4,4 @@
 * the frame lowering fills the local's elements (nearest: `frame-array`)
 * oracles: verilator and sv2v → iverilog `A o=0`
 * witness: row-9 R08, every OpenTitan page
-* status: OPEN (§5.2 row 33)
+* status: OPEN (§5.2 row 33, PARKED 2026-11-04 behind Q-TYPEOVERVAL)
