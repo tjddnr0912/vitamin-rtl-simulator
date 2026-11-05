@@ -11,3 +11,5 @@
 * a door into Q-TPCARRIER (W/qtpcarrier/plan/k/k03: `{inv(N)}` into a `T`-typed name, hand-IEEE §11.12 `8'hF8`)
 * PRE 01cac4b3
 * silent-wrong, pre-existing
+* witness (2026-11-05, Q-DECLTYPE grounding g1/let_formal_typed): `let f(logic [3:0] x) = x + 1'b1;` `$display("R f=%0d", f(5'h1E));` PRE `R f=31` at exit 0, hand-IEEE 15 (§11.12, ieee1800-2017.txt:12999: the actual is cast to the formal's type, 5'h1E -> 4'hE), iverilog `t.sv:2: sorry: let declarations (f) are not currently supported.`, sv2v `` t.sv:2:3: Parse error: missing expected `endmodule` ``, verilator `%Error-UNSUPPORTED: t.sv:2:9: Unsupported: let typed ports`
+* note: Q-DECLTYPE's S12 leaves `let` formals out (`LetDecl` formals are names only), each fill moves values, so it stays this row's

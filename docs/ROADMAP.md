@@ -3,17 +3,17 @@
 Open work, one line per item: id, title and a link to its detail doc, and its status or slot when it has one. Format, filing, census: [roadmap/README.md](roadmap/README.md).
 
 ## Summary
-> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 635 open, 396 startable.
+> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 637 open, 399 startable.
 
 Recount from the lines below in every docs step; the iteration report shows this table; the census rule is in the notes ([notes](roadmap/README.md))
 
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 295 | 182 | 113 | oracle split or none 66 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 296 | 184 | 112 | oracle split or none 66 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 188 | 153 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 189 | 154 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 635 | 396 | 239 | | | |
+| total | | 637 | 399 | 238 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -163,6 +163,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - Double call — [a sized cast over a signed call calls it twice](roadmap/2/Double-call.md) · OPEN
 - Element sign — [an unpacked element's sign is read for single-segment names only](roadmap/2/Element-sign.md) · OPEN
 - type-param-array-sign — [a constant array typed by a type parameter keeps the default type's sign](roadmap/2/type-param-array-sign.md) · OPEN
+- 🆕 AJ — [an ANSI port continuation keeps its type parameter's default type](roadmap/2/new-AJ.md) · OPEN
+- 🆕 AK — [a non-ANSI `input signed` port redeclared as an unsigned net reads unsigned](roadmap/2/new-AK.md) · OPEN
 
 ### Constant domain (i64)
 > The i64 constant folder's limits: wraps, masked overflow, unset variables read as 0, replication counts; mostly open, a few held by design
@@ -210,7 +212,6 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - signed-string-default — [`signed` on a string default is dropped](roadmap/2/signed-string-default.md) · OPEN
 - fill-override-wide-default — [a fill override onto a >64-bit default binds at its width](roadmap/2/fill-override-wide-default.md) · OPEN
 - unsigned-param-signed-override — [a `parameter unsigned` with a signed override binds signed](roadmap/2/unsigned-param-signed-override.md) · OPEN
-- signed-flag-other-sources — [a parameter's signed flag is set by sources other than the `signed` keyword](roadmap/2/signed-flag-other-sources.md) · RECORD
 - instance-array-override-width — [an instance-array parameter takes a sibling array's override width](roadmap/2/instance-array-override-width.md) · OPEN
 
 ### Inline / frame binds
@@ -548,6 +549,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - inside-name-use — [a design using `inside` as a name refuses every `case … inside`](roadmap/3.b/inside-name-use.md) · OPEN
 - pkg-scoped-task — [a package-scoped task call `pk::t()` as a statement is rejected](roadmap/3.b/pkg-scoped-task.md) · OPEN
 - time-signed-param — [`parameter time signed` is rejected by the parser](roadmap/3.b/time-signed-param.md) · OPEN
+- param-time-unsigned — [a signing keyword after `time` on a parameter is refused](roadmap/3.b/param-time-unsigned.md) · OPEN
 - based-ws — [a space inside a based literal (`64'sh FFFF`) is a lexer error](roadmap/3.b/based-ws.md) · OPEN
 - tf-localparam — [`localparam` inside a task body is rejected](roadmap/3.b/tf-localparam.md) · OPEN
 - blk-automatic — [an `automatic` declaration in a block of a task body is rejected](roadmap/3.b/blk-automatic.md) · OPEN
@@ -831,14 +833,14 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-04): rows 29, 41 ended, 33 parked; one slot runs the queue, the next row waits for the owner; TW5 at 33's park; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-05): Q-DECLTYPE landed (§4.5.635); one slot runs the queue, the next row waits for the owner; TW5 at 33's park; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| Q-DECLTYPE | C0 · L1 | [one declaration-type record, from the AST to elaborate's nets](roadmap/5.2/Q-DECLTYPE.md) | — F |
+| Q-SYMMIX | C0 · L1 | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
@@ -847,6 +849,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 24 | C5 · L2 | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 31 | C6 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
 | Q-SIDETABLES | C7 · L1 | [one engine side-table record, below sim-engine](roadmap/5.2/Q-SIDETABLES.md) | — F |
+| Q-NETSHAPE | C7 · L1 | [one net-shape record in elaborate, written only by add_net](roadmap/5.2/Q-NETSHAPE.md) | — F |
 | Q-VARBASEWR | C8 · T3 | [a variable-base `+:` write into a multi-dimensional packed element](roadmap/5.2/Q-VARBASEWR.md) | ② F |
 | 35 | C9 · L1 | [a replication inside an assignment pattern is refused at parse](roadmap/5.2/35.md) | ② S |
 | 68 | C10 · L2 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
@@ -1049,6 +1052,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-FRAMECONCAT | 178 · any | [a concatenation assigned to a frame-local unpacked array fills it in reverse](roadmap/5.2/Q-FRAMECONCAT.md) | ① |
 | Q-ENUMCONV | 179 · any | [an implicit conversion to an enum is accepted](roadmap/5.2/Q-ENUMCONV.md) | — |
 | Q-PORTDEFAULT | 180 · any | [an ANSI port default is parsed and never lowered](roadmap/5.2/Q-PORTDEFAULT.md) | ① |
+| Q-SVALOCALKIND | 181 · any | [an SVA local variable's declared 2-state kind is dropped](roadmap/5.2/Q-SVALOCALKIND.md) | ① |
 
 Do not start:
 

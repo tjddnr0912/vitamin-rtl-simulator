@@ -12,3 +12,4 @@
 * fix: (c) width questions about an expression answered from its lowering (lower, then selfwidth), not by an AST walk that models it
 * note: size (grep counts, not effort): (a) 1 new fn and 3 call sites in 3 files
 * note: (b) and (c) 135 call sites (`const_eval_in_scope` 98, `const_eval_u32` 10, `const_self_width` 27), 102 `pub(crate)` Option fns in `const_*.rs` (ratchet b.) and 4 `expr_size` / `const_*width` files
+* evidence: a hierarchical signed leaf read in a size cast and in a plain assignment gives two values in one run (W/qdecltype/plan/cells/p18b_envfold_untyped: `r1=65535 r2=-1`, iverilog and verilator -1 -1 ; §2 hier-leaf-inline-region)

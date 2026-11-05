@@ -1,5 +1,6 @@
 (§5.2 Q-SIDETABLES · rank — F · source W/review/structure-2026-11-04/REPORT.txt S7 items 1 + 4) (one engine side-table record, below sim-engine):
-* slot: right after the first batch's boundary verify (D8: the batch of the first five open rows from the head — Q-DECLTYPE, Q-MEMBSRC's carrier, 46, 24, 31) (owner, 2026-11-05)
+* slot: right after the first batch's boundary verify (D8: Q-MEMBSRC's carrier, 46, 24, 31, with Q-DECLTYPE's S12, Q-SYMMIX and Q-PARAM2STATE's value half landed before it) (owner, 2026-11-05)
+* slot: beside Q-NETSHAPE, which goes first is the owner's call
 * slot: no row waits on it, and it spans elaborate, cli and sim-engine, so it runs at a batch boundary, with no row under way
 * slot: a `.velab` `format_version` bump, so it runs alone (D12)
 * symptom: the engine side tables are declared 3–5 times and carried by hand: `elaborate/src/tables.rs:501`, `sim-engine/src/lib.rs:231`, `cli/src/lib.rs:433`, `sim-engine/src/state/mod.rs:247`, `elaborate/src/lib.rs:277`

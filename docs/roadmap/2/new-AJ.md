@@ -1,0 +1,16 @@
+(§2 🆕 AJ · OPEN · in Size cast / signedness) (an ANSI port continuation keeps its type parameter's default type):
+* symptom: in an ANSI port list a continuation name (`input T a, b`) copies the previous port's type fields but not its type-parameter shape (`shape_param`), so with `T` overridden `b` keeps the default type's sign and kind at exit 0 (`hdl-parser/src/decls.rs:300-313`)
+* note: the task and function formal continuation inherits the whole type, its typedef shape included (`hdl-parser/src/functask.rs:519-546`), and is right (n1_tf_cont PRE = iverilog)
+* witness: d1_tp_cont `module m #(parameter type T = logic [3:0]) (input T a, b, output int ra, output int rb); assign ra = a; assign rb = b; endmodule` `logic signed [3:0] x = 4'sb1000; logic signed [3:0] y = 4'sb1000;` `m #(.T(logic signed [3:0])) u(.a(x), .b(y), .ra(ra), .rb(rb));` `$display("R ra=%0d rb=%0d", ra, rb);`
+  * PRE `R ra=-8 rb=8` at exit 0, iverilog, sv2v → iverilog and verilator `R ra=-8 rb=-8`
+  * the twin d1_tp_twin `input T a, input T b`: PRE, iverilog, sv2v → iverilog and verilator `R ra=-8 rb=-8`
+* witness: d2_tp_cont2st the same header over `output logic [3:0] ra, output logic [3:0] rb`, `logic [3:0] x = 4'bx01x; logic [3:0] y = 4'bx01x;` `m #(.T(bit [3:0])) u(.a(x), .b(y), .ra(ra), .rb(rb));` `$display("R ra=%b rb=%b", ra, rb);`: PRE `R ra=0010 rb=x01x`, iverilog and verilator `R ra=0010 rb=0010`, sv2v → iverilog `R ra=x01x rb=x01x`
+* witness: n1_three `(input T a, b, c, output int ra, rb, rc)` with `m #(.T(logic signed [3:0])) u(.a(x), .b(x), .c(x), …)` (x = `4'sb1000`) and `m #(.T(byte)) v(.a(8'h80), .b(8'h80), .c(8'h80), …)`, `$display("R ra=%0d rb=%0d rc=%0d vb=%0d vc=%0d", ra, rb, rc, v.rb, v.rc);`: PRE `R ra=-8 rb=8 rc=8 vb=128 vc=128`, iverilog `R ra=-8 rb=-8 rc=-8 vb=-128 vc=-128`
+* witness: n1_out_cont `(input logic [3:0] a, output T y, z)` `assign y = a; assign z = a;` with `m #(.T(logic signed [3:0])) u(.a(4'b1000), .y(y), .z(z));` into `wire [7:0] y, z`, `$display("R y=%b z=%b", y, z);`: PRE `R y=11111000 z=00001000`, iverilog `R y=11111000 z=11111000`
+* witness: n1_rev, the default `parameter type T = logic signed [3:0]` overridden `m #(.T(logic [3:0])) u(.a(4'b1000), .b(4'b1000), …)` and `m #(.T(logic signed [7:0])) w(.a(8'h80), .b(8'h80), …)`, `$display("R ra=%0d rb=%0d sa=%0d sb=%0d", ra, rb, sa, sb);`: PRE `R ra=8 rb=-8 sa=-128 sb=-128`, iverilog `R ra=8 rb=8 sa=-128 sb=-128` (the continuation keeps the default type in both directions)
+* witness: n1_mixed_dir `(input T a, b, input logic [3:0] c, d, output int ra, rb, rc, rd)` with `m #(.T(logic signed [3:0])) u(4'b1000, 4'b1000, 4'b1000, 4'b1000, ra, rb, rc, rd);`: PRE `R ra=-8 rb=8 rc=8 rd=8`, iverilog `R ra=-8 rb=-8 rc=8 rd=8`
+* note: Q-DECLTYPE's S12 (§4.5.635) keeps it byte-identical: `shape_param` stays outside `DataType`, and copying the whole `dtype` at the continuation would move these values
+* oracles: iverilog, sv2v → iverilog and verilator (d1_tp_cont, d2_tp_cont2st), iverilog (n1_three, n1_out_cont, n1_rev, n1_mixed_dir)
+* note: silent-wrong, pre-existing (PRE 92805863 = POST)
+* status: OPEN
+* source: W/main_d7/2026-11-05/qdecl-d1 (d1_tp_cont, d1_tp_twin), W/qdecltype/design1/cells/d2_tp_cont2st, W/qdecltype/lens1/diff/c6 (S12 design review N-1, differential lens D-N3)

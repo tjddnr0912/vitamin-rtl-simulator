@@ -7,6 +7,7 @@
 * State (2026-11-04): Q-ALWINTRA parked 2026-11-02 behind Q-ALWBUDGET, L1 took C1 33, which parked 2026-11-04 behind Q-TYPEOVERVAL, so L1 empties;
 * Q-AESINK landed (§4.5.633);
 * row 41's page half landed (§4.5.634; its residue keeps slot 41 · L2 after 68), so L2 empties and is not refilled;
+* Q-DECLTYPE landed (§4.5.635, its one slice S12: every declaration's type facts in one `hdl_ast::DataType`, with Q-PARAM2STATE's record half), so C0 · L1 runs Q-SYMMIX, then Q-PARAM2STATE's value half S1v, then the first batch (Q-MEMBSRC's carrier, 46, 24, 31), and Q-NETSHAPE, its elaborate half, follows beside Q-SIDETABLES (owner, 2026-11-05);
 * Q-PKRDLSB parked 2026-11-02, T3 took C3 row 29's page half, which parked 2026-11-04 behind Q-PARAM2STATE;
 * T3 empties and is not refilled (owner, 2026-11-04, replacing the refill rule of 2026-11-02): rows 33 (L1) and 41 (L2) finished in their slots (row 41 ended 2026-11-04, §4.5.634; row 33 parked 2026-11-04), an emptied slot is not refilled;
 * rows 29, 33 and 41 have ended, so one slot runs the queue one row at a time, batch verify kept, with auto-fill off: the next row waits for the owner (owner, 2026-11-05).

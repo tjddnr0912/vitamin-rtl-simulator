@@ -3,3 +3,5 @@
 * prerequisite of §3 ⑤ⓕ's enum base and of §2 🆕 AE's `repeat` cut
 * oracles: 2 oracles
 * status: OPEN (§5.2 row 8)
+* witness (2026-11-05, Q-DECLTYPE grounding g1/enum_bit_init): `typedef enum bit [1:0] {A = 2'd1, B = 2'd2} e_t;` `typedef enum logic [1:0] {C = 2'd1, D = 2'd2} f_t;` `e_t v; f_t w;` read before any write: PRE `R v=xx w=xx`, iverilog `R v=00 w=xx`, verilator `R v=00 w=00` (2-state: not an oracle for w), sv2v → iverilog `R v=zz w=zz`, hand-IEEE v=00 w=xx (Table 6-7, ieee1800-2017.txt:4237: an enum's default is its base type's)
+* note: Q-DECLTYPE's S12 records a parameter typed by an enum typedef as kind not recorded (the parser keeps `Logic` for `enum bit`), so no reader treats it as 2-state until this item records the base kind
