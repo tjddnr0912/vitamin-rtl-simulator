@@ -42,5 +42,11 @@
 * F24 REFUSAL-AS-VALUE, seven instances, each a refusal slice A added meeting a PRE composition (W/qvalrulesd/RULINGS-premise5.txt)
 * EVALUATION-ORDER, 14 sites where the record folded the lsb that PRE's consumer skipped, a stack overflow and up to 48x the wall where PRE refused at once (W/qvalrulesd/RULINGS-premise6.txt), closed by the two constructors (W/qvalrulesd/RULINGS-premise7.txt)
 * note: for (b): the evaluator reads a missing width or a declined fold as a value (`elaborate/src/const_fn.rs:1484`, `:1674` `unwrap_or((0, false))`, unlimited; `inline_fold.rs:79`; `const_fn_width.rs:623` and `inline_fn.rs:131` `.ok()?`; `params.rs:302`'s pair match), so it cannot tell declined from refused, which every later refusal meets (F24; W/qvalrulesd/plan6/filings.txt F24)
+* note: for (b) (2026-11-09): Q-SYMMIX parks behind (b) → row 74 and re-enters on it with spelling (C), a per-member count node folded where PRE folds, with no minted names (owner decision O3, §5.2 Q-SYMMIX)
+* note: for (b): without one evaluator (C) costs one arm in each of the 11 elaborate evaluators that know `$clog2` and in `sim-ir/src/names.rs:96`, with (b) one arm in its one evaluator (W/qsymmix/replan2/PLAN.txt P3, W/qsymmix/replan3/PLAN.txt R5)
+* note: for (b): the 11 (W/qvalrulesd/GROUND.txt, `grep -rn '"\$clog2"'`, lines on fix (d)'s base) are 5 folds: `const_eval_in_scope` (`const_fn.rs:421`), `eval_const_env` (`:1027`), `fold_ctx` (`const_fn_width/fold.rs:652`), `env_fold` (`expr_size_hier.rs:748`), `fold_region` (`const_wide.rs:1053`)
+* 5 classifiers: `sys_fn_is_integer` (`const_fn_width.rs:65`), `is_other_sys_call` (`edge_gate.rs:633`), `real_conversion_is_folded` (`param_query.rs:122`), `expr_exact` (`expr_size_hier_exact.rs:44`), `expr_is_inert` (`hoist/sformatf.rs:126`)
+* and 1 runtime map, `map_sysfunc` (`systask.rs:307`), whose name is `sim-ir/src/names.rs:96`
+* note: for (b): the same census names the evaluators a width tree reaches that are not keyed on `$clog2`: `const_int_selfdet` (`const_fn.rs:605`), `const_bound_u32` (`const_bound.rs:44`), `lower_expr` (`expr_main.rs:1133`)
 * scope: what is left is the census and the design (a)–(c), measure only, just before row 74, which takes the design
 * the lane variants' unification and the four refusals are S1v's (Q-PARAM2STATE), not this row's

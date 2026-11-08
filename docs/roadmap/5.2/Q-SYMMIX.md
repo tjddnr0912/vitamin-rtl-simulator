@@ -1,4 +1,7 @@
 (§5.2 Q-SYMMIX · rank ① · source Q-DECLTYPE plan round 2 (W/qdecltype/plan2/PLAN-r2.txt R7 F12)) (a symbolic struct over a signed and an unsigned parameter is laid out wrong):
+* slot: PARKED 2026-11-09 behind Q-VALRULES (b) → row 74, to re-enter with spelling (C), keeping C0 · L1 while parked (owner decision O3, W/qsymmix/replan3/PLAN.txt OWNER DECISIONS)
+* slot: S1v (Q-PARAM2STATE's value half) runs next at C0 · L1 as batch 0 (owner, 2026-11-09)
+* slot: the two lines above supersede the slot lines below (the re-entry at C0 · L1 of 2026-11-08, the order of 2026-11-05 and 2026-11-06)
 * slot: re-enters at C0 · L1, next, since Q-VALRULES fix (d) slice A landed (§4.5.636; owner's order 2026-11-06: fix (d), then this row's re-entry, then S1v, then batch 1)
 * slot: after Q-DECLTYPE's S12 lands, before Q-PARAM2STATE's value half S1v, which it blocks (owner, 2026-11-05)
 * slot: alone or in one batch with S1v, ahead of the first batch, the owner's call
@@ -44,5 +47,81 @@
 * outside the file by its rule, so the re-entry meets them where they were: F1's alias slot (`hdl-parser/src/typedefs.rs`, a table: `range_rules.rs` OUTSIDE list) and F2's `$bits` fold in elaborate (an evaluator, the same list)
 * the record's count carries no `integer` limit since R1c moved to S1v, so an exact struct total past 2^31-1 meets no limit on that path: the re-entry censuses such totals or keeps its lane's PRE cap (UNMEASURED, W/qvalrulesd/plan7/filings.txt N7-2)
 * evidence: slice A leaves the row's cells as PRE: c01_alias_bits_lp `A x=3 b=8`, e01_asc_lp `A bv=14 ba=10`, c20_twin_bogus `A bo=18 bz=12 bw=6` byte-equal to PRE, and the 56 rows of W/qsymmix/premise3 in the cells of record show no difference (W/qvalrulesd/plan8/PLAN.txt D5, prototype p7c ae4ce705, the build r4 = p7c on all cells)
+* PARKED 2026-11-09 after the re-entry's evidence round and premise rounds 4 and 5 each met a BLOCKING on the minted route (W/qsymmix/RULINGS-reentry-ev.txt, RULINGS-premise4.txt, RULINGS-premise5.txt, each D7-confirmed by main)
+* nothing landed: `git diff cc4d0257 -- crates/` is empty
+* note: this park supersedes the re-entry lines above (the re-entry when fix (d) lands, the owner's order of 2026-11-06), and the re-entry bullets of 2026-11-08 stay as the sites the next re-entry starts from
+* re-entry route: the minted one, where the parser mints each symbolic member's bounds as a localparam pair that elaborate's body binder binds per instance (`s_t$1$0$sr` / `s_t$1$0$sw` on V1u, `sym 2 0 width` on TK5)
+* re-entry route: V1u (9f6e58ac, W/qsymmix/replan/PLAN.txt), then V1u-M3+DR (24be002e, re-plan 1, W/qsymmix/replan2/PLAN.txt), then TK5 (50c180b9, re-plan 2, W/qsymmix/replan3/PLAN.txt), PRE vita-main 8c970e9b (= cc4d0257)
+* route x scope (evidence round B-1): h15h_unit_hdr, a `$unit` typedef after `endmodule` naming module m's L3 under a top header `parameter L3 = 4'd7`
+  * PRE rc 1 (7 x E3009, a false cause)
+  * V1u rc 0 `A bv=28 ba=26 ...` (loud → value) (W/qsymmix/replan/ev/cells2/h15h_unit_hdr)
+  * oracles: iverilog `` Unable to bind parameter `L3' in `$unit' ``, verilator `Can't find definition of variable: 'L3'`
+  * IEEE 1800-2017 §23.9 (ieee1800-2017.txt:33529-33535) makes it an error
+* note: the minted pair binds in the instantiating module's scope, after top's header parameters, not where the typedef is: the caller-scope class (F25, W/qvalrulesd/RULINGS-premise5.txt B1), a root class seen before (ER §3.6)
+* note: PRE has the same scope leak (h15t, h15h read top's L3) and is loud by accident
+* route x scope (premise round 4 B-1, the second BLOCKING on this axis): a typedef in a blockless `generate ... endgenerate` region is minted
+* `parse_gen_items_until` (`hdl-parser/src/generate.rs:54`) raises no `gen_depth` (only `:358` block and `:395` branch do), so the pair drains at `generate.rs:58-62` and the generate binder, which has no DR, binds it
+* witness: a1_genregion_out PRE rc 0 `A bv=20 ba=18 bb=2`
+  * oracles: iverilog = verilator `A bv=4 ba=2 bb=2`
+  * V1u-M3+DR rc 1 `` t.sv:3:5: error[VITA-E3009] ... undefined name `s_t$1$0$sw` is not allowed in a constant range bound [in top.u] `` (wrong → loud, a false cause, a minted name printed)
+* witness: a12_genregion_twoinst PRE `A top.u1 bv=20 ..` `A top.u2 bv=5 ba=1 bb=4`
+  * oracles: iverilog = verilator u1 `bv=4 ba=2 bb=2`, u2 `bv=5 ba=1 bb=4`
+  * V1u-M3+DR rc 1, the same E3009 (u2 right → loud)
+* witness: a4_genregion_unused_str (an unused struct, a string override) PRE rc 0 `A N=97` = iverilog = sv2v → iverilog = verilator
+  * V1u-M3+DR rc 1 `` generate-scope parameter `s_t$1$0$sr` value is not a constant: undefined name `N` ... `` and `` ... `s_t$1$0$sw` value is not a constant: undefined name `s_t$1$0$sr` ... `` (an added refusal) (W/qsymmix/premise4/cells)
+* note: the anonymous member-type route (`hdl-parser/src/structs/mod.rs:144`) was outside the same census (F1b: a10 moves right, a13 prints `o_t$4$0$sw`)
+* note: the root both times: the mint was decided by a predicate over parser state (`in_package`, `gen_depth`, `mint_container`) the walk does not guarantee, and the items went down the shared channel `pending_module_items`, which four loops drain (W/qsymmix/replan3/PLAN.txt P1 K1)
+* binder arm (evidence round B-3): the minted pair does not reach `bind_one_param` (`elaborate/src/params.rs:1780`) as the re-entry plan's P1 said
+* its route is `elaborate/src/instance.rs:706-792` and `generate.rs:836-890` (`instance.rs:703` `targets` is false for a minted name)
+* binder arm (premise round 4 B-2): the body binder's string arm (`elaborate/src/instance.rs:717`) runs before the DR point (`:766`) and takes `$sr` over a bare string name, so the refusal prints the minted name
+* census: the arms `check_param_decl_range` `:712`, string `:717`, real `:719`, wide `:762-765`, fold / DR `:766`
+* witness: c7_r_bare_str (`logic [N : 0] a`, `m #(.N("a")) u();`) PRE `` undefined name `N` is not allowed in a constant range bound ``
+  * V1u-M3+DR `` t.sv:2:3: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `s_t$1$0$sr` is not a constant is not allowed in a constant range bound [in top.u] `` (rc 1 on both)
+  * oracles: verilator `A bv=100 ba=98`, sv2v → iverilog `A bv=116 ba=98` (W/qsymmix/premise4/cells/c7_r_bare_str)
+* note: the wide shape (c8, a bare 65-bit N) loses PRE's true cause `` `N` is wider than 64 bits, so it has no integral constant value for a width / range bound ... ``
+* name space (premise round 4 B-3): `$` is legal in a simple identifier
+* witness: b5_plain_collide_after (`localparam s_t$1$0$sw = 7;` after the typedef) PRE rc 0 `A bv=20 ba=18 u=7`
+  * oracles: iverilog = verilator `u=7`
+  * V1u-M3+DR rc 1 `` duplicate declaration of parameter `s_t$1$0$sw`: this `localparam` repeats ... `` (an added refusal on a PRE rc 0 cell)
+* note: escaped names do not collide (b1, b2), and PRE has the class itself on its own generated names (b8_pre_carrier_collide, §2 generated-name-collision)
+* evaluation phase (premise round 5 B-A, I17): a body constant function enters `const_func_table` (`elaborate/src/instance.rs:537-542`) before `bind_params` (`:656`)
+* so a header default, a body parameter or an enum label calling it sizes the struct while the minted names are unbound, where PRE's composed tree reads a header parameter already bound
+* witness: j4c_hdr_cfunc_local (header `parameter P = f()`, f's local `s_t x; x = '1; return x;`) PRE `A P=511 bv=9`
+  * oracles: iverilog = sv2v → iverilog = verilator `A P=511 bv=9`
+  * TK5 `A P=1 bv=9` at rc 0 (right → wrong, silent) (W/qsymmix/premise5/cells)
+* witness: j4j_body_lp_cfunc_local_before_td (`localparam P = f();` before the typedef, the same f): the same three texts
+* witness: j4k `P=511` / `P=8191` → `P=1` / `P=1`, j4m right → loud, j4p right → loud with a false cause (`folds to two different constants`)
+* note: main's D7 (W/main_d7/2026-11-09/qsymmix-p5) reads the same j4c and j4j texts
+* note: the route trace saw no read there (j4c: no DECLSRC, DECLMISS or SINK event), so "0 hazard reads over 627" was measured by a probe that cannot see it
+* note: under it fires PRE's own silent default for a constant-function local whose width does not fold (§2 const-fn-local-unbound-width, j4r)
+* census: 3 caller kinds (a header default, a body parameter before the typedef, an enum label before the typedef) x 3 sizing sites (`const_fn.rs:1645` formal, `:1455-1471` local, `:1709` return)
+* name-keyed record (premise round 5 B-C, I18): TK5's run-start source record `sym_mint_decl` is keyed by the bare name, and REG (`next_type_reg`) counts per Parser, so a `velab -L` compose of separately compiled units repeats a name
+* witness: j5b_mcu_class_diffspan (a.sv module m reads N, b.sv module k reads M) PRE `` undefined name `M` is not allowed in a constant range bound `` and the same for `N`, errors=2
+  * TK5 `` undefined name `sym 2 0 width` is not allowed in a constant range bound `` twice, errors=2 (a minted name printed)
+* note: round 4's D1 ruling had named it: the refusal's record per declaration, never name-keyed (W/qsymmix/RULINGS-premise4.txt D1)
+* note: round 5 also met B-B (the funnel keyed on message text rewrote the user's `-G` text, j3c) and B-D (added cascade lines with a false cause on rc 1 cells, j3e, j3f, j5d), each seen before
+* trip wire: named before round 5 (W/qsymmix/replan3/PLAN.txt VERDICT): a minted item drained off the body loop's own typedef item, a minted name printed by any diagnostic, or a pass reading a minted name between the header-parameter binding and the body binder where PRE folds (I17)
+* trip wire: in round 5 or the build it ends the minted route, the fallback the owner's O3
+* trip wire: tripped on two of its three parts, I17 by B-A (j4c, j4j, j4k, j4m, j4p) and the printed minted name by B-C (j5b), so the minted route ends (W/qsymmix/RULINGS-premise5.txt)
+* re-entry: spelling (C), a per-member count node folded where PRE folds, with no minted names
+* so the name space (K8), the name reach and phase (K9, I17), the text funnel (I7, I9) and the source record (I18) vanish, and the refusal text is PRE's by construction (W/qsymmix/replan3/PLAN.txt R5)
+* re-entry: (C) fixes the sign composition only, not caller scope (q1a, q1j stay PRE: the node folds in the consumer's scope), and it is not prototyped (U4)
+* re-entry: (C) waits on Q-VALRULES (b) → row 74: as a node today it costs one arm in each of the 11 elaborate evaluators and `sim-ir/src/names.rs:96`, after (b) one arm in its one evaluator (W/qsymmix/replan2/PLAN.txt P3)
+* note: closing I17 by construction inside the minted route (a minted name read unbound folds its source in place) needs the same arm in every evaluator, the same cost as (C) (W/qsymmix/replan3/PLAN.txt R5)
+* evidence: the 627-cell set, W/qsymmix/replan2/all.lst (536 unique) + W/qsymmix/replan3/p4.lst (54, premise round 4's cells) + new.lst, new2.lst, new3.lst, new4.lst (38, n01-n44)
+* evidence: compared by `W/qsymmix/replan3/cmp3.py` (38b504aa), premise round 5's cells beside them (W/qsymmix/premise5/cells, j1-j6)
+* evidence: on the 627 TK5 measured SAME 529, w→r 62, l→r 2, k→v? 4, l→v? 3, v?→v? 14, l→l 13
+* 0 r→w, 0 r→l, 0 v?→loud, 0 added errors, 0 new kills, 0 WALL>2x (W/qsymmix/replan3/cmp3_tk5.tsv f55ec769, PLAN.txt P3)
+* note: the 627 claims were measured with the minted route's probes, and round 5's j4 cells moved PRE-right designs wrong outside them, so (C) re-measures every claim
+* evidence: the prototypes are evidence, not patches to restore (ER §3.6)
+  * TK5 `W/qsymmix/replan/x/bin/vita-tk5` (50c180b9, its diff `W/qsymmix/replan3/proto/tk5.diff` fb1ac8a8)
+  * V1u-M3+DR `W/qsymmix/replan/x/bin/vita-v1um3dr` (24be002e)
+  * V1u-T (20e6f743, 534 of 536 SAME, two claims)
+* evidence: Q6 (static, W/qsymmix/replan2/q6/q6.txt), 31 unique OpenTitan structs: 14 pass PRE's gate, 13 of them at module-item level, tlul_sram_byte.sv:150 in a block, none run (U3)
+* evidence: the 13 are tlul_adapter_sram.sv:231 and :236, otbn_loop_controller.sv:52, prim_arbiter_tree_dup.sv:52, prim_sram_arbiter.sv:46, kmac_msgfifo.sv:97, rv_core_ibex_addr_trans.sv:22, prim_generic_flash_bank.sv:109
+* and i3c_buffer.sv:65, i3c_target_trx.sv:313, i3c_controller_trx.sv:216, ibex_lockstep.sv:243 and :357
+* re-entry: the first cells for (C) are the minted route's counterexamples (h15h_unit_hdr, a1_genregion_out, a12_genregion_twoinst, a4_genregion_unused_str, c7_r_bare_str, b5_plain_collide_after, j4c, j4j, j4k, j4m, j4p, j5b)
+* then the 627 and Q6's 13 structs
+* note: S1v runs first now, so the cells needing both rows (t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec) stay wrong and are claimed on S1v's page (Q-PARAM2STATE)
 * status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic

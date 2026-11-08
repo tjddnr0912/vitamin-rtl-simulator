@@ -10,7 +10,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 301 | 186 | 115 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 305 | 190 | 115 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
 | §3.b | loud → correct-support, small | 190 | 155 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 643 | 402 | 241 | | | |
+| total | | 647 | 406 | 241 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -166,6 +166,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - 🆕 AJ — [an ANSI port continuation keeps its type parameter's default type](roadmap/2/new-AJ.md) · OPEN
 - 🆕 AK — [a non-ANSI `input signed` port redeclared as an unsigned net reads unsigned](roadmap/2/new-AK.md) · OPEN
 - respell-drops-const-type — [a package md parameter's use site reads an imported constant as a 32-bit integer](roadmap/2/respell-drops-const-type.md) · OPEN
+- body-typedef-sym-mix — [a function-body symbolic struct over mixed-sign parameters is laid out wrong](roadmap/2/body-typedef-sym-mix.md) · OPEN
 
 ### Constant domain (i64)
 > The i64 constant folder's limits: wraps, masked overflow, unset variables read as 0, replication counts; mostly open, a few held by design
@@ -291,6 +292,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - nested-select-of-bit — [a nested part-select read of a bit-select is accepted](roadmap/2/nested-select-of-bit.md) · OPEN
 - net-variable-select-assign — [a continuous assign to a net through a variable select runs, sticky](roadmap/2/net-variable-select-assign.md) · OPEN
 - md-select-index-context — [an md packed parameter's select index is evaluated in the offset's context](roadmap/2/md-select-index-context.md) · OPEN
+- xz-range-lsb — [an x / z or zero-divisor lsb of a declared range folds to 0](roadmap/2/xz-range-lsb.md) · OPEN
 
 ### Class fields
 > Class property bounds, defaults and name binding inside a class body; open, one blocked on field-key normalisation
@@ -369,6 +371,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - gen-real-param-shadow — [a generate `real` parameter does not shadow an outer integral one](roadmap/2/gen-real-param-shadow.md) · BLOCKED
 - gen-param-later-walk — [a later generate walk reads a parameter declared after its reference](roadmap/2/gen-param-later-walk.md) · OPEN
 - generate-param-overridable — [a generate-block parameter is treated as overridable](roadmap/2/generate-param-overridable.md) · RECORD
+- const-fn-local-unbound-width — [a header default's constant function sizes a local by an unbound body localparam](roadmap/2/const-fn-local-unbound-width.md) · OPEN
+- generated-name-collision — [a generated name a user identifier can spell collides with it](roadmap/2/generated-name-collision.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -839,15 +843,15 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-08): Q-VALRULES fix (d) slice A landed (§4.5.636); next Q-SYMMIX, S1v, batch 1 (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-09, owner): Q-SYMMIX parked behind Q-VALRULES (b) → 74; next S1v (batch 0), batch 1; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| Q-SYMMIX | C0 · L1 | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
+| Q-SYMMIX | C0 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
 | 29 | C3 · T3 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |

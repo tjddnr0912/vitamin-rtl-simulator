@@ -3,6 +3,7 @@
 * slot: its record half (the signing keyword and the declared kind on `ParamDecl`) lands inside Q-DECLTYPE's S12 (owner, 2026-11-05)
 * slot: its value half S1v (every binder obeys the record) runs at C0 · L1 after Q-SYMMIX, before the first batch (owner, 2026-11-05, it was 17 · L2, or inside row 70 if one re-pin)
 * slot: S1v runs after Q-VALRULES fix (d) and Q-SYMMIX's re-entry, before batch 1 (owner, 2026-11-06)
+* slot: S1v runs next at C0 · L1 as batch 0, since Q-SYMMIX parked behind Q-VALRULES (b) → row 74 (owner decision O3, 2026-11-09), and this supersedes the S1v slot lines above that put it after Q-SYMMIX
 * slot: the row closes when S1v lands, not at S12
 * slot: before Q-OVRXPLANE, 76, Q-TPCARRIER and Q-MEMBSRC
 * slot: row 29's page half waits on it, PARKED 2026-11-04
@@ -48,11 +49,31 @@
 * note: the PRE readers a refusal must not ride, each reading a None or an Err as a value (RULINGS-premise5.txt, plan7/filings.txt S1v-3, lines as on R): `elaborate/src/const_fn.rs:1484` and `:1674` `unwrap_or((0, false))` (an unlimited width), `:1476` `m.map_or(0, …)`, `inline_fold.rs:79`, `const_fn_width.rs:623` and `inline_fn.rs:131` `.ok()?`, `params.rs:302`'s pair match
 * note: a refusal of a real out-of-domain bound no output reads is accepted only with a true cause at a declared bound (c03, W/qvalrulesd/build3/cells/fa/c03; r02, r06; plan7/filings.txt S1v-5)
 * witness: x / z bounds read silently as widths: both_xz `A b=1` (W/qvalrulesd/lens4/diff/cells/d3/both_xz), and 15 x-path cells `b=1 l=x r=x` (RULINGS-lens2.txt F18)
+* witness: an x / z or zero-divisor lsb of a net folds to 0 (hand/xlsb `A bn=10 bm=10 bk=10 bj=10 bw=15`, verilator refuses four of the five: §2 xz-range-lsb)
 * witness: an x the bound masks, x04 x05 x10 x33: PRE wrong, iverilog = sv2v = verilator right, and R1x there names a false cause (RULINGS-lens2.txt F-C)
 * witness: a net in a package routine's formal range passes: pkg_formal `package q; int pv; function automatic int h(input logic [pv : h(1)] a); return a; endfunction endpackage` with `localparam int K = q::h(5);` and `$display("A k=%0d", K)` PRE `A k=5` at exit 0, iverilog ``t.sv:3: error: A reference to a net or variable (`pv') is not allowed in a constant expression.``, verilator `%Error: t.sv:3:41: Expecting expression to be constant, but variable isn't const: 'pv'` (W/qvalrulesd/lens4/diff/cells/d2r/pkg_formal)
 * note: any S1v change keeps the record's evaluation order: a bound fold may call a constant function, recurse or cost seconds, so a new consumer takes `range_facts` (the lsb only once the msb folded), and a pair site moved to that order is a visible `PAIR_SITES` edit with its cell (W/qvalrulesd/plan8/filings.txt E1, E7)
 * note: for the same reason a check of a value-neutral S1v step compares the exit code, the signal and the wall, not only the bytes (W/qvalrulesd/plan8/filings.txt E1, E7)
 * note: `Lane::LiteralNet` and `Lane::StructMember` differ only at |m - l| = u64::MAX, where LiteralNet wraps to 0 in release: S1v merges them after measuring that edge (W/qvalrulesd/plan5/filings.txt F20)
+* note: batch 0 attribution (main's ruling Q3, W/qsymmix/BRIEF-reentry-plan.txt): a cell move belongs to the row whose rule produces it
+* Q-SYMMIX owns the layout composition (member widths, offsets, totals, the alias slot, the `$bits` of a symbolic struct), S1v the parameter value rule (the dropped `unsigned` keyword, R1v, the four refusals)
+* note: a cell that needs both rows (t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec and any like them) stays wrong, must not turn right → wrong or wrong → loud with a false cause, is named, and is claimed on S1v's page
+* note: Q-SYMMIX parked 2026-11-09 behind Q-VALRULES (b) → row 74, so those cells stay wrong through S1v, and the P1, P2 and P3 cells above keep PRE's layout until Q-SYMMIX re-enters with (C)
+* S1v item F-2 (W/qsymmix/replan/PLAN.txt F-2): an untyped parameter over `$bits` of a symbolic typedef or type parameter is typed unsigned, where `$bits` returns an integer (IEEE 1800-2017 §20.6.2)
+* witness: hand/bitsneg `parameter L3 = 4'd15;` `typedef logic [L3 - 5'sd13 : 0] t_t;` `localparam M = $bits(t_t) - 8;` `localparam W = (M < 0) ? 1 - M : M + 1;` `logic [$bits(t_t) - 8 : 0] n;` PRE vita-main 8c970e9b `A m=4294967291 w=4294967292 bn=6`
+  * oracles: iverilog = verilator `A m=-5 w=6 bn=6`, sv2v → iverilog `A m=34359738363 w=34359738364 bn=4294967292` (W/qsymmix/park2/m/bitsneg/RES.txt)
+* witness: q14_fed_neg `typedef struct packed { logic [$bits(t_t) - 8 : 0] a; logic [L3 - 5'sd14 : 0] b; } s_t;` over the same t_t: PRE rc 1 with three E3009 lines, the first `a PART select of a net declared with a negative low bound ... is not yet supported` (a false cause)
+  * oracles: iverilog = verilator `A bv=8 ba=6`, sv2v → iverilog `A bv=4294967294 ba=4294967292` (W/qsymmix/park2/m/q14_fed_neg/RES.txt)
+* note: F-2 is not covered by the S1v text above (W/qsymmix/RULINGS-reentry-ev.txt E3): a filing for S1v's page, the `$bits` lowering its site (W/qsymmix/replan3/PLAN.txt P6)
+* S1v item F-1a (W/qsymmix/replan/PLAN.txt F-1): a declined declared range on a parameter silently takes 32 bits, covered by rule only (R1x, C1, R1c and the bound range rule above), its cells not named before (W/qsymmix/RULINGS-reentry-ev.txt E3)
+* witness: hand/xrange `module top #(parameter N = 4, parameter Z = 0);` `localparam logic [N / Z : 0] P = 0;` `$display("A bp=%0d", $bits(P));` PRE vita-main 8c970e9b `A bp=32` at exit 0
+  * oracles: verilator `%Error: t.sv:2:23: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)`, iverilog `A bp=1`, sv2v → iverilog `A bp=x` (W/qsymmix/park2/m/xrange/RES.txt)
+* witness: hand/wrange `parameter [32:0] PW = 33'h1_0000_0003;` `localparam logic [PW : 0] P = 0;` `$display("A bp=%0d", $bits(P));` PRE vita-main 8c970e9b `A bp=4` (the width truncated to 32 bits)
+  * oracles: iverilog `A bp=4`, sv2v → iverilog `A bp=4294967300`, verilator `%Error: t.sv:3:21: Value too wide for 32-bits expected in this context 33'h100000003` (W/qsymmix/park2/m/wrange/RES.txt)
+* note: for S1v's design (Q-SYMMIX premise round 4 J4, W/qsymmix/RULINGS-premise4.txt D1): a refusal raised at fold time over an eagerly bound name adds refusals on an unused struct
+* witness: c10_unused_x (`m #(.N(4'b1x11)) u();`, N read only by an unused symbolic struct's member bound) PRE rc 0 `A N=11`
+  * oracles: iverilog = sv2v → iverilog `A N=X`, verilator `%Error: t.sv:2:36: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)` (W/qsymmix/premise4/cells/c10_unused_x)
+* note: the ruling measured it on the minted route, which binds eagerly per instance, and named the lazy order (each caller's evaluation order, ER §5.1 row 2) as needed in either row order
 * note: S12 records the signing token each arm's fold reads (`hdl-parser/src/params.rs:292-293`, `:332-333`: the first or the second keyword on the keyword and integer arms, the first on the typedef, string, real, realtime and time arms), Implicit when none is written
 * note: S12 records the kind as the keyword's, Implicit with no type keyword, or not recorded for enum, struct, union, type-parameter and class typedefs (W/qdecltype/plan3/PLAN-s12.txt D2 c5, M8)
 * witness: k7_specparam `specparam signed SP = 4'hF;` `specparam [3:0] SR = 4'hF;` `$display("A sp=%0d sr=%0d bsp=%0d", SP, SR, $bits(SP));`: PRE `A sp=15 sr=15 bsp=4` at exit 0 (`hdl-parser/src/params.rs:198` parses `specparam` as a localparam), iverilog `t.sv:2: syntax error` `t.sv:2: error: Invalid module item.`, sv2v `` t.sv:2:3: Parse error: missing expected `endmodule` ``, verilator `%Error: t.sv:2:13: syntax error, unexpected signed, expecting IDENTIFIER or IDENTIFIER-for-pathpulse or randomize`
