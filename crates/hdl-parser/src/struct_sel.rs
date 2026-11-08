@@ -721,9 +721,12 @@ impl Parser<'_, '_> {
                 self.bump();
                 let last = self.expr(0);
                 match (Self::const_lit(&first), Self::const_lit(&last)) {
-                    (Some(a), Some(b)) if (ascending && a <= b) || (!ascending && a >= b) => {
-                        let lo = a.min(b).max(0) as u32;
-                        let width = (a - b).unsigned_abs() as u32 + 1;
+                    (Some(a), Some(b))
+                        if (ascending && !hdl_ast::range_rules::descending(a, b))
+                            || (!ascending && !hdl_ast::range_rules::ascending(a, b)) =>
+                    {
+                        let lo = hdl_ast::range_rules::low_u32_clamped(a, b);
+                        let width = hdl_ast::range_rules::Lane::PartSelectSub.width_u32(a, b);
                         let dir = if ascending {
                             PartDir::MinusColon
                         } else {
@@ -873,7 +876,8 @@ impl Parser<'_, '_> {
                 match (Self::const_lit(&first), Self::const_lit(&last)) {
                     // In-direction range, both bounds inside the field [dbase, dbase+w).
                     (Some(a), Some(b))
-                        if ((asc && a <= b) || (!asc && a >= b))
+                        if ((asc && !hdl_ast::range_rules::descending(a, b))
+                            || (!asc && !hdl_ast::range_rules::ascending(a, b)))
                             && a >= dbase as i64
                             && b >= dbase as i64
                             && a < hi

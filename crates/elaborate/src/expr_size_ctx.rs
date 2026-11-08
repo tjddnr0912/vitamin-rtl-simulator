@@ -574,7 +574,8 @@ impl Elaborator<'_> {
                 }
                 let m = self.const_eval_in_scope(msb)?;
                 let l = self.const_eval_in_scope(lsb)?;
-                u32::try_from(m.abs_diff(l) + 1).ok()
+                // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling over a second evaluator's bounds (env_fold, D1 R2) ; S1v unifies ; second evaluator filed as F12.
+                hdl_ast::range_rules::Lane::LiteralNet.count_u32(m, l)
             }
             K::IndexedPart { width, .. } => u32::try_from(self.const_eval_in_scope(width)?).ok(),
             K::IntLit { kind, raw } => {

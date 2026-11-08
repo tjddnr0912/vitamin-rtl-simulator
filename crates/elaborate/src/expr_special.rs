@@ -683,21 +683,7 @@ impl Elaborator<'_> {
             return Some(self.const_x32_expr()); // 0-dim / out-of-range ⇒ X (iverilog)
         }
         let (left, right) = dims[(d - 1) as usize];
-        let val = match name {
-            "$left" => left,
-            "$right" => right,
-            "$low" => left.min(right),
-            "$high" => left.max(right),
-            "$size" => (left - right).abs() + 1,
-            "$increment" => {
-                if left >= right {
-                    1
-                } else {
-                    -1
-                }
-            }
-            _ => return None,
-        };
+        let val = hdl_ast::range_rules::dim_query(name, left, right)?;
         Some(self.int_result_expr(val))
     }
 
@@ -772,7 +758,10 @@ impl Elaborator<'_> {
                     // range's (§11.5.1), so they fold through the range-bound funnel.
                     let m = self.const_range_bound_fold(msb)?;
                     let l = self.const_range_bound_fold(lsb)?;
-                    u32::try_from(m.abs_diff(l)).ok()?.checked_add(1)
+                    // Q-VALRULES (d) lane variant StructMember: PRE's own spelling for a
+                    // select span (two select indices, not the record ; `const_array.rs`
+                    // calls the same lane) ; S1v unifies.
+                    hdl_ast::range_rules::Lane::StructMember.count_u32(m, l)
                 })
             }
             ast::ExprKind::IndexedPart { base, width, .. } => {
@@ -824,7 +813,7 @@ impl Elaborator<'_> {
             if depth > dims.len() {
                 return None; // indexing into packed space → lowering path
             }
-            let rem: u64 = dims[depth..].iter().product();
+            let rem: u64 = hdl_ast::range_rules::dims_product_u64(dims[depth..].iter().copied());
             u32::try_from(elem.saturating_mul(rem)).ok()
         };
         let from_table = |me: &Self| -> Option<u32> {
@@ -842,10 +831,9 @@ impl Elaborator<'_> {
                 // field as an upper bound made `$bits` of a partially-indexed array view
                 // off by one on every 0-based dim (`int a[2][3]` → `$bits(a[0])` counted
                 // 4 elements) and arbitrarily wrong on a non-0-based one. iverilog-pinned.
-                let rem: u64 = dims[idxs.len()..]
-                    .iter()
-                    .map(|&(_, size)| u64::from(size))
-                    .product();
+                let rem: u64 = hdl_ast::range_rules::dims_product_u64(
+                    dims[idxs.len()..].iter().map(|&(_, size)| u64::from(size)),
+                );
                 return u32::try_from(rem * w).ok();
             }
             if let ast::ExprKind::Ident(p) = &e.kind {

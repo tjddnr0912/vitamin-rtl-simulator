@@ -235,9 +235,7 @@ impl Elaborator<'_> {
             return None;
         }
         let ext = self.packed_extents(d.dtype.range.as_ref(), d.dtype.packed_dims());
-        let w = ext
-            .iter()
-            .fold(1u32, |a, &(_, pw, _)| a.saturating_mul(pw.max(1)));
+        let w = hdl_ast::range_rules::dims_width_sat(ext.iter().map(|&(_, pw, _)| pw));
         Some((w, w.saturating_sub(1), ext))
     }
 

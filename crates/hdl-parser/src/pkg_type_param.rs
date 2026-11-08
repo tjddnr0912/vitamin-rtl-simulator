@@ -80,7 +80,7 @@ impl Parser<'_, '_> {
     /// registering a truncated bound.
     fn folded_bound(v: i64, span: Span) -> Option<Expr> {
         if v < 0 {
-            let m = u32::try_from(v.unsigned_abs()).ok()?;
+            let m = hdl_ast::range_rules::neg_bound_magnitude(v)?;
             return Some(Expr {
                 kind: ExprKind::Unary {
                     op: UnOp::Minus,

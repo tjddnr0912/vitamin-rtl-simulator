@@ -135,9 +135,10 @@ impl Elaborator<'_> {
             {
                 af.dims.iter().enumerate().all(|(k, &(flo, fsize, fasc))| {
                     let (m, l) = dims[k];
-                    let actual_lo = m.min(l).max(0) as u32;
-                    let actual_asc = m < l;
-                    let actual_size = (m.abs_diff(l) + 1).min(u32::MAX as u64) as u32;
+                    let actual_lo = hdl_ast::range_rules::low_u32_clamped(m, l);
+                    let actual_asc = hdl_ast::range_rules::ascending(m, l);
+                    // Q-VALRULES (d) lane variant ArrayFormal: PRE's own spelling over an ACTUAL's recorded dims (downstream of the record), min-clamped ; S1v unifies.
+                    let actual_size = hdl_ast::range_rules::Lane::ArrayFormal.width_u32(m, l);
                     actual_lo == flo && actual_size == fsize && actual_asc == fasc
                 })
             }
@@ -199,9 +200,10 @@ impl Elaborator<'_> {
             {
                 af.dims.iter().enumerate().all(|(k, &(flo, fsize, fasc))| {
                     let (m, l) = dims[k];
-                    let actual_lo = m.min(l).max(0) as u32;
-                    let actual_asc = m < l;
-                    let actual_size = (m.abs_diff(l) + 1).min(u32::MAX as u64) as u32;
+                    let actual_lo = hdl_ast::range_rules::low_u32_clamped(m, l);
+                    let actual_asc = hdl_ast::range_rules::ascending(m, l);
+                    // Q-VALRULES (d) lane variant ArrayFormal: PRE's own spelling over an ACTUAL's recorded dims (downstream of the record), min-clamped ; S1v unifies.
+                    let actual_size = hdl_ast::range_rules::Lane::ArrayFormal.width_u32(m, l);
                     actual_lo == flo && actual_size == fsize && actual_asc == fasc
                 })
             }
@@ -323,13 +325,10 @@ impl Elaborator<'_> {
                     _ => return Some(Err("a non-constant or non-positive unpacked-array size")),
                 },
                 ast::Dim::Range(r) => {
-                    let (m, l) = match (
-                        self.const_range_bound_fold(&r.msb),
-                        self.const_range_bound_fold(&r.lsb),
-                    ) {
-                        (Some(m), Some(l)) => (m, l),
-                        _ => return Some(Err("a non-constant unpacked-array bound")),
+                    let Ok(f) = self.range_facts_pair(r) else {
+                        return Some(Err("a non-constant unpacked-array bound"));
                     };
+                    let (m, l) = (f.msb, f.lsb);
                     // §4.5.206/211: negative bounds are always loud. A NON-ZERO base is supported
                     // for ANY direction — `array_formal_ext_dims` sets the packed dim's `lo` so
                     // `flatten_word` normalizes `idx-lo` on BOTH the actual pack (`lower_array_
@@ -346,9 +345,13 @@ impl Elaborator<'_> {
                     if m < 0 || l < 0 {
                         return Some(Err("a negative unpacked-array bound"));
                     }
-                    let lo = m.min(l) as u32;
-                    let ascending = m < l;
-                    (lo, (m.abs_diff(l) + 1) as u32, ascending)
+                    let lo = hdl_ast::range_rules::low_u32(m, l);
+                    let ascending = hdl_ast::range_rules::ascending(m, l);
+                    (
+                        lo,
+                        hdl_ast::range_rules::Lane::FormalDims.width_u32(m, l),
+                        ascending,
+                    )
                 }
                 ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_) => {
                     return Some(Err("a dynamic / queue / associative formal dimension"))
@@ -359,7 +362,7 @@ impl Elaborator<'_> {
         // `count` = total elements (product); saturating so a pathological product cannot
         // panic (the width guard below caps the slot). `ascending` = the FIRST dim's
         // direction (the §7.6 positional-copy check consumes it for 1-D formals only).
-        let count: u32 = dims.iter().fold(1u32, |a, &(_, s, _)| a.saturating_mul(s));
+        let count: u32 = hdl_ast::range_rules::dims_count_sat(dims.iter().map(|&(_, s, _)| s));
         let ascending = dims[0].2;
         // G3: a signed element is supported — the md-packed element read is a part-select
         // (unsigned per §11.5.1), so `lower_packed_read` re-stamps `$signed` on a whole-
@@ -385,17 +388,14 @@ impl Elaborator<'_> {
                 w
             }
             Some(r) => {
-                let (m, l) = match (
-                    self.const_range_bound_fold(&r.msb),
-                    self.const_range_bound_fold(&r.lsb),
-                ) {
-                    (Some(m), Some(l)) => (m, l),
-                    _ => return Some(Err("a non-constant element width")),
+                let Ok(f) = self.range_facts_pair(r) else {
+                    return Some(Err("a non-constant element width"));
                 };
+                let (m, l) = (f.msb, f.lsb);
                 if l != 0 || m < 0 {
                     return Some(Err("a non-zero-LSB element range (`[hi:0]` only)"));
                 }
-                (m.abs_diff(l) + 1) as u32
+                hdl_ast::range_rules::Lane::FormalDims.width_u32(m, l)
             }
         };
         Some(Ok(ArrayFormal {

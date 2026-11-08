@@ -968,10 +968,7 @@ impl Parser<'_, '_> {
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
                 match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                     (Some(a), Some(b)) => {
-                        let w = u32::try_from(a.abs_diff(b))
-                            .ok()
-                            .and_then(|d| d.checked_add(1))
-                            .unwrap_or(64);
+                        let w = hdl_ast::range_rules::Lane::ParamFits.width_u32(a, b);
                         fits_width(w, p.dtype.signed)
                     }
                     _ => true,
@@ -1015,7 +1012,7 @@ impl Parser<'_, '_> {
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
                 let a = self.const_bound(&r.msb)?;
                 let b = self.const_bound(&r.lsb)?;
-                a.abs_diff(b) + 1
+                hdl_ast::range_rules::Lane::Wide64.width_u64(a, b)
             }
             _ => return None,
         };
@@ -1054,7 +1051,7 @@ impl Parser<'_, '_> {
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
                 match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                     (Some(a), Some(b)) => (
-                        u32::try_from(a.abs_diff(b) + 1).unwrap_or(0),
+                        hdl_ast::range_rules::Lane::ParamSigned.width_u32(a, b),
                         p.dtype.signed,
                     ),
                     _ => (0, p.dtype.signed),

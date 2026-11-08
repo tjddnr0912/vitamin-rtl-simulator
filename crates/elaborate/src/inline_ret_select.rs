@@ -59,15 +59,11 @@ pub(crate) struct RetSelGeom {
 impl RetSelGeom {
     /// The internal bit position (0 = LSB) of declared index `idx`.
     fn internal(&self, idx: i64) -> i64 {
-        if self.msb >= self.lsb {
-            idx - self.lsb
-        } else {
-            self.lsb - idx
-        }
+        hdl_ast::range_rules::index_position(self.msb, self.lsb, idx)
     }
 
     fn descending(&self) -> bool {
-        self.msb >= self.lsb
+        !hdl_ast::range_rules::ascending(self.msb, self.lsb)
     }
 }
 
@@ -379,17 +375,18 @@ impl Elaborator<'_> {
                     {
                         return None;
                     }
-                    (
-                        self.const_range_bound_fold(&r.msb)?,
-                        self.const_range_bound_fold(&r.lsb)?,
-                    )
+                    {
+                        let f = self.range_facts(r).ok()?;
+                        (f.msb, f.lsb)
+                    }
                 }
             },
         };
         if msb < 0 || lsb < 0 {
             return None;
         }
-        let width = u32::try_from(msb.abs_diff(lsb) + 1).ok()?;
+        // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling, over msb / lsb from range_facts just above (the count exact, no limit) ; S1v unifies.
+        let width = hdl_ast::range_rules::Lane::LiteralNet.count_u32(msb, lsb)?;
         (width == ret_w).then_some(RetSelGeom { msb, lsb, width })
     }
 
@@ -429,10 +426,10 @@ impl Elaborator<'_> {
                 let l = self.const_bound_signed(lsb).ok_or(NOT_CONST)?;
                 // §11.5.1: a part-select runs in the declared direction; both
                 // 4-state oracles reject `f[0:3]` on a `[7:0]` return.
-                if m != l && (m > l) != geom.descending() {
+                if m != l && hdl_ast::range_rules::descending(m, l) != geom.descending() {
                     return Err("with a part-select reversed against its declared range");
                 }
-                Ok((m.min(l), m.max(l)))
+                Ok(hdl_ast::range_rules::low_high(m, l))
             }
             ast::Lvalue::IndexedPart {
                 offset, width, dir, ..
@@ -483,9 +480,8 @@ impl Elaborator<'_> {
             Err(why) => return Some(self.refuse_ret_select(fname, why, scope)),
         };
         let (ia, ib) = (geom.internal(a), geom.internal(b));
-        let (lo, hi) = (ia.min(ib), ia.max(ib));
-        let Some(n) = u32::try_from(hi - lo + 1)
-            .ok()
+        let (lo, hi) = hdl_ast::range_rules::low_high(ia, ib);
+        let Some(n) = hdl_ast::range_rules::span_u32_checked(lo, hi)
             .filter(|&n| u64::from(n) <= MAX_NET_WIDTH)
         else {
             return Some(self.refuse_ret_select(fname, "wider than a net may be", scope));
@@ -545,7 +541,7 @@ impl Elaborator<'_> {
             return Some(true);
         }
         let (c_lo, c_hi) = (c_lo as u32, c_hi as u32);
-        let kept = c_hi - c_lo + 1;
+        let kept = hdl_ast::range_rules::span_u32(c_lo, c_hi);
         let val = if kept == n {
             v
         } else {

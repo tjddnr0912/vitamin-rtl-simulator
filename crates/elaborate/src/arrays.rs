@@ -168,10 +168,9 @@ impl Elaborator<'_> {
             }
             let (ext, dirs) = Self::packed_split(&pdims);
             let offset = self.flatten_word(&ext, trailing, &dirs, IndexDomain::PackedElem);
-            let elem_w: u64 = pdims[trailing.len()..]
-                .iter()
-                .map(|&(_, w, _)| w as u64)
-                .product();
+            let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+                pdims[trailing.len()..].iter().map(|&(_, w, _)| w as u64),
+            );
             let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
             return self.push_expr(ir::Expr::Select {
                 base: val,
@@ -256,10 +255,9 @@ impl Elaborator<'_> {
                 }
                 let (ext, dirs) = Self::packed_split(&pdims);
                 let offset = self.flatten_word(&ext, trailing, &dirs, IndexDomain::PackedElem);
-                let elem_w: u64 = pdims[trailing.len()..]
-                    .iter()
-                    .map(|&(_, w, _)| w as u64)
-                    .product();
+                let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+                    pdims[trailing.len()..].iter().map(|&(_, w, _)| w as u64),
+                );
                 let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
                 out.push(ir::LvalChunk {
                     net,
@@ -650,7 +648,7 @@ impl Elaborator<'_> {
             );
             return true;
         }
-        let n: u64 = t_res.iter().map(|&(_, s)| s as u64).product();
+        let n: u64 = hdl_ast::range_rules::dims_product_u64(t_res.iter().map(|&(_, s)| s as u64));
         if n > ARRAY_COPY_UNROLL_CAP {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -820,9 +818,8 @@ impl Elaborator<'_> {
         // Bound the expansion before building it — `lower_array_assign_pattern`'s own
         // unroll cap fires only AFTER flattening, which would mean materialising the
         // clones first. Same number, checked earlier.
-        let total: u64 = dims
-            .iter()
-            .fold(1u64, |a, &(_, w)| a.saturating_mul(w as u64));
+        let total: u64 =
+            hdl_ast::range_rules::dims_product_sat_u64(dims.iter().map(|&(_, w)| w as u64));
         if total > 4096 {
             self.error(
                 MsgCode::ElabUnsupported,

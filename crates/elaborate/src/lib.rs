@@ -269,10 +269,8 @@ pub(crate) type DefparamOverride = (
     Option<f64>,
 );
 
-/// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the
-/// provenance maps (`param_range`, `pkg_const_range`) carry, named so the save/restore
-/// lists that shuttle it stay readable.
-pub(crate) type DeclRange = (i64, u32, bool);
+/// The range record and its rules live in `hdl_ast::range_rules` (ER §5.1).
+pub(crate) use hdl_ast::range_rules::{DeclRange, RangeFacts, RangeUnfolded};
 
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,

@@ -178,7 +178,7 @@ impl Elaborator<'_> {
     ) -> Option<i64> {
         let (val, lo_n, hi_n, dlo, dwidth, asc) =
             self.const_select_resolved(e, env, envw, depth)?;
-        let n = (hi_n - lo_n + 1) as u32;
+        let n = hdl_ast::range_rules::span_u32_wrap(lo_n, hi_n);
         if n > 63 {
             // 64 unsigned magnitude bits do not fit the i64 const domain — the same
             // boundary `const_placement_env` spells out. Declining keeps the loud.
@@ -253,7 +253,8 @@ impl Elaborator<'_> {
         if dlo == 0 && !asc {
             return None;
         }
-        let n = u32::try_from(hi_n.checked_sub(lo_n)?.checked_add(1)?).ok()?;
+        // Q-VALRULES (d) select span (lens2 CD1): PRE's own checked spelling ; S1v unifies.
+        let n = hdl_ast::range_rules::span_u32_checked_steps(lo_n, hi_n)?;
         // A narrow base names at most 64 bits inside its declaration, so a longer
         // select is an overhang the integer lane never answered; a wide base's select
         // is as long as its declaration allows (`bp_zero` sizes both planes).
@@ -407,15 +408,15 @@ impl Elaborator<'_> {
             // An earlier `(asc, a <= b)` table put the descending equal-endpoint case
             // in the reject arm, so `W[5:5]` declined while `A[26:26]` folded.
             match asc {
-                true if a <= b => (a, b),
-                false if a >= b => (b, a),
+                true if !hdl_ast::range_rules::descending(a, b) => (a, b),
+                false if !hdl_ast::range_rules::ascending(a, b) => (b, a),
                 _ => return None,
             }
         } else {
             // A bit-select and an indexed part-select name a numeric span outright
             // (`b +: w` is `b ..= b+w-1` whatever the direction), so there is no
             // order to check.
-            (a.min(b), a.max(b))
+            hdl_ast::range_rules::low_high(a, b)
         };
         Some((val, lo_n, hi_n, dlo, dwidth, asc))
     }
@@ -673,6 +674,49 @@ impl Elaborator<'_> {
         self.decl_split(|| self.const_range_bound_fold_at(e))
     }
 
+    /// The range record ([`crate::RangeFacts`]) of `r`: both bounds by this router, the count
+    /// exact (no limit). The ONLY way a consumer gets a count, width, size, offset or
+    /// direction from a declared range (ER §5.1).
+    ///
+    /// EVALUATION ORDER ([`crate::RangeFacts::lazy`]): the lsb is folded only once the msb
+    /// folded -- PRE's `let m = fold(msb)?; let l = fold(lsb)?;`. A bound fold can call a
+    /// constant function, recurse through a routine's own return range or cost seconds, and
+    /// a failed msb is what stops it (V/premise6 B1 / B2). A new consumer takes this order.
+    pub(crate) fn range_facts(
+        &self,
+        r: &ast::Range,
+    ) -> Result<crate::RangeFacts, crate::RangeUnfolded> {
+        self.range_facts_if(r, |_| true)
+    }
+
+    /// [`Self::range_facts`] with a gate on the msb: the lsb is folded only once the msb
+    /// folded AND `gate(msb)` holds, else `Err` -- PRE's `fold(msb) == Some(0) && fold(lsb)..`.
+    pub(crate) fn range_facts_if(
+        &self,
+        r: &ast::Range,
+        gate: impl FnOnce(i64) -> bool,
+    ) -> Result<crate::RangeFacts, crate::RangeUnfolded> {
+        crate::RangeFacts::lazy(
+            || self.const_range_bound_fold(&r.msb).filter(|&m| gate(m)),
+            || self.const_range_bound_fold(&r.lsb),
+        )
+    }
+
+    /// The record of `r` in PRE's PAIR order ([`crate::RangeFacts::pair`]): both bounds folded,
+    /// msb first, before either is looked at -- PRE's `match (fold(msb), fold(lsb))`. Only for
+    /// the consumers PRE spelled that way (the list in `hdl-ast/tests/range_rules_home.rs`,
+    /// `PAIR_SITES`): there the lsb's fold after a failed msb is PRE's own work, and skipping
+    /// it would change what a run does (a recursion PRE enters, the time it takes).
+    pub(crate) fn range_facts_pair(
+        &self,
+        r: &ast::Range,
+    ) -> Result<crate::RangeFacts, crate::RangeUnfolded> {
+        crate::RangeFacts::pair(
+            self.const_range_bound_fold(&r.msb),
+            self.const_range_bound_fold(&r.lsb),
+        )
+    }
+
     /// The router's body is `range_bound_fold_ev` (`const_fn_width/fold.rs`), which also
     /// carries the x evidence a range bound refuses on (§5.2 Q-XFALLBACK); this is it with
     /// the evidence dropped. A bound with a parameter select folds self-determined only.
@@ -723,6 +767,6 @@ impl Elaborator<'_> {
             &crate::const_fn_width::ConstWidths::new(),
             0,
         )?;
-        u32::try_from(hi_n - lo_n + 1).ok()
+        hdl_ast::range_rules::span_u32_checked(lo_n, hi_n)
     }
 }

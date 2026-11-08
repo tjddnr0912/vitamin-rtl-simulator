@@ -777,7 +777,8 @@ impl Elaborator<'_> {
                 if m < 0 || l < 0 {
                     return None;
                 }
-                let w = m.abs_diff(l) + 1;
+                // Q-VALRULES (d) lane variant Wide64: PRE's own spelling over a second evaluator's bounds (fold_width, D1 R3 / P11) ; S1v unifies ; second evaluator filed as F12.
+                let w = hdl_ast::range_rules::Lane::Wide64.width_u64(m, l);
                 (w <= MAX_NET_WIDTH).then_some(w as u32)
             }
         }
@@ -952,6 +953,7 @@ impl Elaborator<'_> {
         }
         let m = self.const_eval_in_scope(msb)?;
         let l = self.const_eval_in_scope(lsb)?;
-        u32::try_from(m.abs_diff(l) + 1).ok()
+        // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling over a second evaluator's hierarchical bounds (env_fold, D1 R4) ; S1v unifies ; second evaluator filed as F12.
+        hdl_ast::range_rules::Lane::LiteralNet.count_u32(m, l)
     }
 }

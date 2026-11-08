@@ -299,12 +299,12 @@ impl Elaborator<'_> {
             return None;
         }
         if let Some(r) = &p.dtype.range {
-            match (
-                self.const_range_bound_fold(&r.msb),
-                self.const_range_bound_fold(&r.lsb),
-            ) {
-                (Some(m), Some(l)) => Some((m.abs_diff(l) as u32 + 1, p.dtype.signed)),
-                _ => None, // unfoldable bound: leave it value-inferred (loud elsewhere)
+            match self.range_facts_pair(r) {
+                Ok(f) => Some((
+                    hdl_ast::range_rules::Lane::ParamRange.width_u32(f.msb, f.lsb),
+                    p.dtype.signed,
+                )),
+                Err(_) => None, // unfoldable bound: leave it value-inferred (loud elsewhere)
             }
         } else if matches!(p.ty, ast::ParamType::Integer) {
             // `int`/`integer` are 32-bit; signedness comes from the decl (signed by
@@ -857,8 +857,7 @@ impl Elaborator<'_> {
             let (w, _) = self.param_decl_width_opt(p, true, default_binds)?;
             return Some((0, w, false));
         };
-        let m = self.const_range_bound_fold(&r.msb)?;
-        let l = self.const_range_bound_fold(&r.lsb)?;
+        let f = self.range_facts(r).ok()?;
         // ⚠️⚠️ A NEGATIVE declared bound (`[3:-2]`, `[-2:3]`) used to DECLINE, because
         // `DeclRange`'s `lo` was a `u32` and the `min(l).max(0)` written before that
         // recorded a LIE: an ascending `[-2:3]` recorded `(0, 6, true)` and turned
@@ -867,8 +866,7 @@ impl Elaborator<'_> {
         // truthful record. §4.5.448 widened `lo` to `i64`, so the range below is the
         // declaration — and the keys that gain an entry are EXACTLY the ones with a
         // negative bound, every other key being unchanged.
-        let lo = m.min(l);
-        Some((lo, m.abs_diff(l) as u32 + 1, m < l))
+        Some(f.decl_range())
     }
 
     /// Bind a constant VALUE at `key`, and CLEAR any declared range recorded for the

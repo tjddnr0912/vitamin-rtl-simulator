@@ -73,7 +73,11 @@ impl Elaborator<'_> {
             PartSelect { msb, lsb, .. } => {
                 let m = ast_decimal_lit_i64(msb)?;
                 let l = ast_decimal_lit_i64(lsb)?;
-                Some((false, u32::try_from(m.abs_diff(l) + 1).ok()?))
+                // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling for bounds that are literals the parser wrote ; S1v unifies.
+                Some((
+                    false,
+                    hdl_ast::range_rules::Lane::LiteralNet.count_u32(m, l)?,
+                ))
             }
             IndexedPart { width, .. } => {
                 Some((false, u32::try_from(ast_decimal_lit_i64(width)?).ok()?))

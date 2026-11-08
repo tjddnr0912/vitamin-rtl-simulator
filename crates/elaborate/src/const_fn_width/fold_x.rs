@@ -132,10 +132,14 @@ impl Elaborator<'_> {
             &ConstWidths::new(),
             0,
         );
-        if let CFold::Val(v) = first {
-            if v <= i64::from(i32::MAX) {
-                return Some((v, None));
-            }
+        // Q-VALRULES (d) slice A: the bound value rule (F1a) lives in `hdl_ast::range_rules`.
+        let v1 = if let CFold::Val(v) = first {
+            Some(v)
+        } else {
+            None
+        };
+        if let hdl_ast::range_rules::BoundStep::Value(v) = hdl_ast::range_rules::bound_step(v1) {
+            return Some((v, None));
         }
         let u = self.const_eval_in_scope(e)?;
         let why = if want_ev && first.x_bits() != 0 && self.x_certified(e, &ConstWidths::new()) {

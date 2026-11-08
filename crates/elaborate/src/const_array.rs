@@ -81,9 +81,9 @@ impl Elaborator<'_> {
         let _ = w;
         ArrayConstMeta {
             count: self.const_array_elem_count(decl),
-            elem_lo: msb.min(lsb),
+            elem_lo: hdl_ast::range_rules::low(msb, lsb),
             elem_w,
-            elem_asc: msb < lsb,
+            elem_asc: hdl_ast::range_rules::ascending(msb, lsb),
             elem_signed: signed,
             packed_dims,
         }
@@ -257,21 +257,7 @@ impl Elaborator<'_> {
             return None;
         }
         let (left, right) = dims[(d - 1) as usize];
-        Some(match name {
-            "$left" => left,
-            "$right" => right,
-            "$low" => left.min(right),
-            "$high" => left.max(right),
-            "$size" => (left - right).abs() + 1,
-            "$increment" => {
-                if left >= right {
-                    1
-                } else {
-                    -1
-                }
-            }
-            _ => return None,
-        })
+        hdl_ast::range_rules::dim_query(name, left, right)
     }
 }
 
@@ -321,7 +307,8 @@ impl Elaborator<'_> {
             &crate::const_fn_width::ConstWidths::new(),
             0,
         )?;
-        let w = u32::try_from(a.abs_diff(b)).ok()?.checked_add(1)?;
+        // Q-VALRULES (d) lane variant StructMember: PRE's own spelling for a select span (two select indices, not the record) ; S1v unifies.
+        let w = hdl_ast::range_rules::Lane::StructMember.count_u32(a, b)?;
         Some((w, false))
     }
 }

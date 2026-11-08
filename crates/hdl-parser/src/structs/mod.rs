@@ -347,7 +347,7 @@ impl Parser<'_, '_> {
                 // `[X-1:0]` with an 8-bit `X = 0` is `[4294967295:0]` at the 32-bit
                 // self width: `abs_diff` fits a u32 and `+ 1` does not — a panic in
                 // debug and a 0-width member in release. Decline (→ loud) instead.
-                u32::try_from(msb.abs_diff(lsb)).ok()?.checked_add(1)
+                hdl_ast::range_rules::Lane::StructMember.count_u32(msb, lsb)
             }
         }
     }
@@ -415,9 +415,9 @@ impl Parser<'_, '_> {
             if w == 0 {
                 return None;
             }
-            stride = stride.checked_mul(w)?;
+            stride = hdl_ast::range_rules::dim_mul_u32(stride, w)?;
         }
-        let flat = base.checked_mul(stride)?;
+        let flat = hdl_ast::range_rules::dim_mul_u32(base, stride)?;
         Some((flat, stride))
     }
 

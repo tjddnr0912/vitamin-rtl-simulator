@@ -991,10 +991,10 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             // an ascending declaration, and the declared DIRECTION is exactly what
             // this domain does not carry — so it declines rather than read the range
             // backwards (the §4.5.363 rule, at the bit domain's own boundary).
-            if m < l || m >= w {
+            if hdl_ast::range_rules::ascending(m, l) || m >= w {
                 return None;
             }
-            let n = m - l + 1;
+            let n = hdl_ast::range_rules::span_u32(l, m);
             let mut out = bp_zero(n);
             for i in 0..n as usize {
                 let (v, u) = bp_get(&b, l as usize + i);

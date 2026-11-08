@@ -159,7 +159,7 @@ impl Elaborator<'_> {
                 })
             }
             std::cmp::Ordering::Less => {
-                let add_c = self.const_u32_expr(lo.unsigned_abs().min(u32::MAX as u64) as u32, 32);
+                let add_c = self.const_u32_expr(hdl_ast::range_rules::neg_lo_offset_u32(lo), 32);
                 self.push_expr(ir::Expr::Binary {
                     op: ir::BinOp::Add,
                     lhs: i_eid,
@@ -263,9 +263,8 @@ impl Elaborator<'_> {
                 (n >= 1).then_some((0, n - 1))
             }
             ast::Dim::Range(r) => {
-                let m = self.const_range_bound_fold(&r.msb)?;
-                let l = self.const_range_bound_fold(&r.lsb)?;
-                Some((m.min(l), m.max(l)))
+                let f = self.range_facts(r).ok()?;
+                Some((f.lo(), f.hi()))
             }
             _ => None,
         }
@@ -313,8 +312,8 @@ impl Elaborator<'_> {
                     self.check_const_range_bound(&r.lsb, lsb_v);
                     let msb = msb_v.unwrap_or(0);
                     let lsb = lsb_v.unwrap_or(0);
-                    let size = ((msb.abs_diff(lsb)) + 1).min(u32::MAX as u64) as u32;
-                    (msb.min(lsb), size.max(1))
+                    let size = hdl_ast::range_rules::Lane::ArrayFormal.width_u32(msb, lsb);
+                    (hdl_ast::range_rules::low(msb, lsb), size.max(1))
                 }
                 ast::Dim::Size(e) => {
                     let v = self.const_eval_in_scope(e);
@@ -356,9 +355,9 @@ impl Elaborator<'_> {
     /// [`Self::range_to_dims_opt`]. The ascending twin is [`Self::declared_asc_lsb`].
     pub(crate) fn declared_neg_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
         let r = range?;
-        let m = self.const_range_bound_fold(&r.msb)?;
-        let l = self.const_range_bound_fold(&r.lsb)?;
-        (l < 0 && m >= l).then_some(l)
+        let f = self.range_facts(r).ok()?;
+        let (m, l) = (f.msb, f.lsb);
+        hdl_ast::range_rules::neg_lsb_desc(m, l)
     }
 
     /// The DECLARED right bound of `range` when it is ASCENDING (`m < l`) with a
@@ -373,9 +372,9 @@ impl Elaborator<'_> {
     /// right about one.
     pub(crate) fn declared_asc_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
         let r = range?;
-        let m = self.const_range_bound_fold(&r.msb)?;
-        let l = self.const_range_bound_fold(&r.lsb)?;
-        (m < l && m < 0).then_some(l)
+        let f = self.range_facts(r).ok()?;
+        let (m, l) = (f.msb, f.lsb);
+        hdl_ast::range_rules::neg_lsb_asc(m, l)
     }
 
     /// The declared low bound this project has to REMEMBER, and which direction it
@@ -600,7 +599,8 @@ impl Elaborator<'_> {
                 if allow_neg_lsb {
                     if let (Some(m), Some(l)) = (msb_v, lsb_v) {
                         if m < 0 || l < 0 {
-                            let w64 = m.abs_diff(l) + 1;
+                            // Q-VALRULES (d) lane variant Wide64: PRE's own spelling, then the v1 net cap ; S1v unifies (the bound range rule).
+                            let w64 = hdl_ast::range_rules::Lane::Wide64.width_u64(m, l);
                             if w64 > MAX_NET_WIDTH {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -611,7 +611,7 @@ impl Elaborator<'_> {
                                 return (1, 0, 0, sgn);
                             }
                             let w = w64 as u32;
-                            return if m >= l {
+                            return if !hdl_ast::range_rules::ascending(m, l) {
                                 (w, w.saturating_sub(1), 0, sgn)
                             } else {
                                 (w, 0, w.saturating_sub(1), sgn)
@@ -637,7 +637,9 @@ impl Elaborator<'_> {
                     |v: Option<i64>| v.map_or(0u32, |v| u32::try_from(v).unwrap_or(u32::MAX));
                 let msb = clamp(msb_v);
                 let lsb = clamp(lsb_v);
-                let width64 = (msb.abs_diff(lsb) as u64) + 1;
+                // Q-VALRULES (d) lane variant Wide64: PRE's own spelling, over the router's PRE-valued pair narrowed to u32 just above (premise3 B-1 site) ; S1v unifies (the bound range rule).
+                let width64 =
+                    hdl_ast::range_rules::Lane::Wide64.width_u64(i64::from(msb), i64::from(lsb));
                 if width64 > MAX_NET_WIDTH {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -847,11 +849,8 @@ impl Elaborator<'_> {
         for u in unpacked {
             match u {
                 ast::Dim::Range(r) => {
-                    if let (Some(m), Some(l)) = (
-                        self.const_range_bound_fold(&r.msb),
-                        self.const_range_bound_fold(&r.lsb),
-                    ) {
-                        dims.push((m, l));
+                    if let Ok(f) = self.range_facts_pair(r) {
+                        dims.push((f.msb, f.lsb));
                     }
                 }
                 // `[N]` shorthand = `[0:N-1]` (IEEE 1800 §7.4.2).
@@ -865,11 +864,8 @@ impl Elaborator<'_> {
         }
         let unpacked_n = dims.len();
         for r in range.into_iter().chain(packed.iter()) {
-            if let (Some(m), Some(l)) = (
-                self.const_range_bound_fold(&r.msb),
-                self.const_range_bound_fold(&r.lsb),
-            ) {
-                dims.push((m, l));
+            if let Ok(f) = self.range_facts_pair(r) {
+                dims.push((f.msb, f.lsb));
             }
         }
         // Implicit packed dim for an integral atom with no explicit packed range.

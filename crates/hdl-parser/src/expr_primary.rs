@@ -935,13 +935,7 @@ impl Parser<'_, '_> {
 
     /// A decimal integer-literal expression with the given value.
     pub(crate) fn dec_lit(v: u32, span: Span) -> Expr {
-        Expr {
-            kind: ExprKind::IntLit {
-                kind: IntLitKind::Decimal,
-                raw: v.to_string(),
-            },
-            span,
-        }
+        hdl_ast::range_rules::dec_lit(v, span)
     }
 
     /// N3 SoA: a single-segment `Ident` expression from a (mangled) net name.

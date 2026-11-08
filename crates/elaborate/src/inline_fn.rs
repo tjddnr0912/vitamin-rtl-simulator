@@ -125,10 +125,9 @@ impl Elaborator<'_> {
             return None;
         }
         if let Some(r) = &f.dtype.range {
-            let hi = self.const_range_bound_fold(&r.msb)?;
-            let lo = self.const_range_bound_fold(&r.lsb)?;
+            let rf = self.range_facts(r).ok()?;
             return Some((
-                u32::try_from((hi - lo).unsigned_abs() + 1).ok()?,
+                hdl_ast::range_rules::Lane::FnReturn.count_u32(rf.msb, rf.lsb)?,
                 f.dtype.signed,
             ));
         }

@@ -36,7 +36,7 @@ impl Parser<'_, '_> {
                          constant-literal range in v1 (a `[E:0]` range over a header \
                          parameter is laid out per instance)",
                     );
-                    widths.push(Self::dec_lit(1, m.span));
+                    widths.push(hdl_ast::range_rules::sym_member_default_width(m.span));
                 }
             }
         }
@@ -132,19 +132,7 @@ impl Parser<'_, '_> {
         // lost a member — both oracles `bits=5` for the first draft's 3). The
         // sign of the comparison follows `E`'s own type, as the oracles evaluate
         // the range's direction.
-        let sp = r.msb.span;
-        let e = r.msb.clone();
-        let neg = mk_bin(BinOp::Lt, e.clone(), Self::dec_lit(0, sp));
-        let up = mk_bin(BinOp::Add, e.clone(), Self::dec_lit(1, sp));
-        let down = mk_bin(BinOp::Sub, Self::dec_lit(1, sp), e);
-        Some(Expr {
-            kind: ExprKind::Ternary {
-                cond: Box::new(neg),
-                then_e: Box::new(down),
-                else_e: Box::new(up),
-            },
-            span: sp,
-        })
+        Some(hdl_ast::range_rules::sym_member_width(&r.msb))
     }
 
     /// `Some(true)` when `e` is built from literals, foldable constants, `+ - * /
@@ -221,37 +209,13 @@ impl Parser<'_, '_> {
     /// `a + b + …` over `parts` — the literals folded into one leading literal
     /// (`packed_md`'s `add`), the empty sum `0`.
     pub(crate) fn sum_of(parts: &[Expr], span: Span) -> Expr {
-        let mut lit: u32 = 0;
-        let mut syms: Vec<&Expr> = Vec::new();
-        for p in parts {
-            match Self::lit_u32(p) {
-                Some(v) => lit = lit.saturating_add(v),
-                None => syms.push(p),
-            }
-        }
-        let mut acc = Self::dec_lit(lit, span);
-        for s in syms {
-            acc = Self::add(acc, s.clone(), span);
-        }
-        acc
+        hdl_ast::range_rules::sym_sum_of(Self::const_lit, parts, span)
     }
 
     /// `e - 1`, folded when `e` is a literal or ends in `+ <literal>` (so a member
     /// width `E + 1` gives the bound `E` back).
     pub(crate) fn sym_sub_one(e: Expr, span: Span) -> Expr {
-        if let ExprKind::Binary {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } = &e.kind
-        {
-            if let Some(k) = Self::lit_u32(rhs) {
-                if k >= 1 {
-                    return Self::add((**lhs).clone(), Self::dec_lit(k - 1, span), span);
-                }
-            }
-        }
-        Self::sub(e, Self::dec_lit(1, span), span)
+        hdl_ast::range_rules::sym_sub_one(Self::const_lit, e, span)
     }
 
     /// §3 ⑤ ⓒ: `T'(e)` for a 4-state symbolic-layout struct — the size cast to its

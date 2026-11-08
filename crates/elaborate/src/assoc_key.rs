@@ -74,10 +74,7 @@ impl Elaborator<'_> {
             None => {
                 let mut w: u64 = 1;
                 for r in kt.dtype.range.iter().chain(kt.dtype.packed_dims().iter()) {
-                    let (Some(m), Some(l)) = (
-                        self.const_range_bound_fold(&r.msb),
-                        self.const_range_bound_fold(&r.lsb),
-                    ) else {
+                    let Ok(f) = self.range_facts_pair(r) else {
                         self.error(
                             MsgCode::ElabUnsupported,
                             "an associative-array key type's bounds must be constant \
@@ -85,7 +82,9 @@ impl Elaborator<'_> {
                         );
                         return Err(());
                     };
-                    w = w.saturating_mul(m.abs_diff(l).saturating_add(1));
+                    w = w.saturating_mul(
+                        hdl_ast::range_rules::Lane::AssocKey.width_u64(f.msb, f.lsb),
+                    );
                 }
                 w
             }

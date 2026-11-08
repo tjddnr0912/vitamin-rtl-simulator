@@ -181,9 +181,7 @@ impl Elaborator<'_> {
         }
         self.deny_readonly_write(t_net, "assign to");
         let t_dims = self.net_dim_extents(t_net);
-        let n = t_dims
-            .iter()
-            .fold(1u64, |a, &(_, s)| a.saturating_mul(s as u64));
+        let n = hdl_ast::range_rules::dims_product_sat_u64(t_dims.iter().map(|&(_, s)| s as u64));
         if n > ARRAY_CONT_UNROLL_CAP {
             self.error(
                 MsgCode::ElabUnsupported,

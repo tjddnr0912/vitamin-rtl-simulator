@@ -535,12 +535,8 @@ impl Elaborator<'_> {
             ir::SelKind::Bit => 1,
             _ => self.exact_const(width?)?,
         };
-        match kind {
-            ir::SelKind::PartIdxDown => {
-                Some((o.checked_add(1)?.checked_sub(w)?, o.checked_add(1)?))
-            }
-            _ => Some((o, o.checked_add(w)?)),
-        }
+        // Q-VALRULES (d) (lens2 CD1): PRE's spelling, `range_rules::indexed_bits_u32`.
+        hdl_ast::range_rules::indexed_bits_u32(o, w, matches!(kind, ir::SelKind::PartIdxDown))
     }
 
     fn read_word(&self, word: Option<u32>) -> Word {

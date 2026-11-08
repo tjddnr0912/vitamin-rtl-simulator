@@ -286,10 +286,9 @@ impl Elaborator<'_> {
         }
         let (ext, dirs) = Self::packed_split(&dims);
         let offset = self.flatten_word_eids(&ext, idx_eids, &dirs, IndexDomain::PackedElem);
-        let elem_w: u64 = dims[idx_eids.len()..]
-            .iter()
-            .map(|&(_, w, _)| w as u64)
-            .product();
+        let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+            dims[idx_eids.len()..].iter().map(|&(_, w, _)| w as u64),
+        );
         let base = self.push_expr(ir::Expr::Signal { net, word: None });
         let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
         Some(self.push_expr(ir::Expr::Select {
@@ -409,10 +408,9 @@ impl Elaborator<'_> {
                     let (ext, dirs) = Self::packed_split(&pdims);
                     let offset =
                         self.flatten_word_eids(&ext, trailing, &dirs, IndexDomain::PackedElem);
-                    let elem_w: u64 = pdims[trailing.len()..]
-                        .iter()
-                        .map(|&(_, w, _)| w as u64)
-                        .product();
+                    let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+                        pdims[trailing.len()..].iter().map(|&(_, w, _)| w as u64),
+                    );
                     let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
                     return ir::LvalChunk {
                         net,
@@ -465,10 +463,9 @@ impl Elaborator<'_> {
             }
             let (ext, dirs) = Self::packed_split(&dims);
             let offset = self.flatten_word_eids(&ext, idx_eids, &dirs, IndexDomain::PackedElem);
-            let elem_w: u64 = dims[idx_eids.len()..]
-                .iter()
-                .map(|&(_, w, _)| w as u64)
-                .product();
+            let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+                dims[idx_eids.len()..].iter().map(|&(_, w, _)| w as u64),
+            );
             let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
             return ir::LvalChunk {
                 net,

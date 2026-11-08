@@ -1075,6 +1075,7 @@ pub(crate) fn vcd_var_reference_decl(
     }
     if let Some((dm, dl)) = decl {
         // Trusted only when span-consistent, the same rule the stored range gets below.
+        // Q-VALRULES (d): outside range_rules by rule (a D4 exception, F21): sim-engine has no hdl-ast edge, so this copies `Lane::PartSelectSub` verbatim ; owner Q-SIDETABLES.
         if (dm - dl).unsigned_abs() as u32 + 1 == width {
             return format!("{base} [{dm}:{dl}]");
         }
@@ -1087,6 +1088,7 @@ pub(crate) fn vcd_var_reference_decl(
     // inconsistent range (size ≠ span). Use the declared `[msb:lsb]` only when it
     // is span-consistent (every single packed-dim net, incl. ascending/non-zero
     // base); otherwise fall back to the flat range.
+    // Q-VALRULES (d): outside range_rules by rule (a D4 exception, F21): sim-engine has no hdl-ast edge, so this copies `Lane::PartSelectSub` verbatim ; owner Q-SIDETABLES.
     let span = (msb as i64 - lsb as i64).unsigned_abs() as u32 + 1;
     if span == width {
         format!("{base} [{msb}:{lsb}]")

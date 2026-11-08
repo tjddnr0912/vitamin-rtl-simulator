@@ -108,9 +108,13 @@ impl Elaborator<'_> {
                 (tw.max(ew), ts && es)
             }
             ast::ExprKind::BitSelect { .. } => (1, false),
+            // Q-VALRULES (d) lane variant PartSelectSub: PRE's own spelling over a second evaluator's part-select bounds (no `integer` limit) ; S1v unifies ; owner of the limit F12 cover-bins-width-past-integer.
             ast::ExprKind::PartSelect { msb, lsb, .. } => {
                 match (self.const_eval_in_scope(msb), self.const_eval_in_scope(lsb)) {
-                    (Some(m), Some(l)) => ((m - l).unsigned_abs() as u32 + 1, false),
+                    (Some(m), Some(l)) => (
+                        hdl_ast::range_rules::Lane::PartSelectSub.width_u32(m, l),
+                        false,
+                    ),
                     _ => DEFAULT,
                 }
             }
@@ -145,9 +149,10 @@ impl Elaborator<'_> {
                             self.const_eval_in_scope(&r.msb),
                             self.const_eval_in_scope(&r.lsb),
                         ) {
-                            (Some(m), Some(l)) => {
-                                ((m - l).unsigned_abs() as u32 + 1, f.dtype.signed)
-                            }
+                            (Some(m), Some(l)) => (
+                                hdl_ast::range_rules::Lane::PartSelectSub.width_u32(m, l),
+                                f.dtype.signed,
+                            ),
                             _ => DEFAULT,
                         },
                         None => match f.ret_type {

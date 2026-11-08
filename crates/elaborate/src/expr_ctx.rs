@@ -279,7 +279,8 @@ pub(crate) fn ast_expr_self_width(
         PartSelect { msb, lsb, .. } => {
             let m = ast_decimal_lit_i64(msb)?;
             let l = ast_decimal_lit_i64(lsb)?;
-            u32::try_from(m.abs_diff(l) + 1).ok()
+            // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling for literal select bounds (no router value) ; S1v unifies.
+            hdl_ast::range_rules::Lane::LiteralNet.count_u32(m, l)
         }
         IndexedPart { width, .. } => u32::try_from(ast_decimal_lit_i64(width)?).ok(),
         Binary { op, lhs, rhs } => {

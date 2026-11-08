@@ -254,11 +254,11 @@ impl Parser<'_, '_> {
         let w: u64 = l.fields.iter().map(|f| u64::from(f.2)).sum();
         let hi = self.const_bound(&r.msb)?;
         let lo = self.const_bound(&r.lsb)?;
-        if w == 0 || lo != 0 || !(0..=i64::from(i32::MAX)).contains(&hi) {
+        if w == 0 {
             return None;
         }
-        let count = hi as u64 + 1;
-        if count.checked_mul(w)? > MAX_FLAT_BITS {
+        let count = hdl_ast::range_rules::Lane::MemberArray.count_u64(hi, lo)?;
+        if hdl_ast::range_rules::dim_mul_u64(count, w)? > MAX_FLAT_BITS {
             return None;
         }
         let elem = TyRef {

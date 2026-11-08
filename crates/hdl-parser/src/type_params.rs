@@ -631,45 +631,7 @@ impl Parser<'_, '_> {
         } else {
             return None;
         }
-        let span = r.span;
-        if Self::lit_u32(&r.lsb) == Some(0) {
-            if let ExprKind::Binary {
-                op: BinOp::Sub,
-                lhs,
-                rhs,
-            } = &r.msb.kind
-            {
-                if Self::lit_u32(rhs) == Some(1) {
-                    return Some((**lhs).clone());
-                }
-            }
-        }
-        let bin = |op: BinOp, l: Expr, rr: Expr| Expr {
-            kind: ExprKind::Binary {
-                op,
-                lhs: Box::new(l),
-                rhs: Box::new(rr),
-            },
-            span,
-        };
-        let up = Self::add(
-            Self::sub(r.msb.clone(), r.lsb.clone(), span),
-            Self::dec_lit(1, span),
-            span,
-        );
-        let down = Self::add(
-            Self::sub(r.lsb.clone(), r.msb.clone(), span),
-            Self::dec_lit(1, span),
-            span,
-        );
-        Some(Expr {
-            kind: ExprKind::Ternary {
-                cond: Box::new(bin(BinOp::Ge, r.msb.clone(), r.lsb.clone())),
-                then_e: Box::new(up),
-                else_e: Box::new(down),
-            },
-            span,
-        })
+        Some(hdl_ast::range_rules::sym_typedef_width(Self::const_lit, r))
     }
 
     /// `$bits(<type>)` where the type is a type parameter (`T$w`) or an integral

@@ -57,7 +57,7 @@ impl StrArrayGeom {
     /// Total element count of the flat container. Cannot overflow — the element cap
     /// in `fixed_string_geom` is applied before a geometry is ever built.
     pub(crate) fn elem_count(&self) -> u64 {
-        self.extents.iter().map(|&(_, n)| u64::from(n)).product()
+        hdl_ast::range_rules::dims_product_u64(self.extents.iter().map(|&(_, n)| u64::from(n)))
     }
 }
 
@@ -105,15 +105,15 @@ impl Elaborator<'_> {
                 Some((0, u32::try_from(n).ok()?, false))
             }
             ast::Dim::Range(r) => {
-                let m = self.const_range_bound_fold(&r.msb)?;
-                let l = self.const_range_bound_fold(&r.lsb)?;
-                let (lo, hi) = if m <= l { (m, l) } else { (l, m) };
+                let f = self.range_facts(r).ok()?;
+                let (m, l) = (f.msb, f.lsb);
+                let (lo, hi) = hdl_ast::range_rules::ordered(m, l);
                 // CHECKED: `hi - lo` overflows i64 on a pathological declaration such as
                 // `[4611686018427387904:-4611686018427387905]`. The old negative-bound
                 // decline masked that (either endpoint negative → returned early); with
                 // negatives admitted, the span itself is what has to fail closed.
-                let size = u32::try_from(hi.checked_sub(lo)?.checked_add(1)?).ok()?;
-                Some((lo, size, m > l))
+                let size = hdl_ast::range_rules::span_u32_checked_steps(lo, hi)?;
+                Some((lo, size, hdl_ast::range_rules::descending(m, l)))
             }
             _ => None,
         }
@@ -140,7 +140,7 @@ impl Elaborator<'_> {
         let mut total: u64 = 1;
         for d in unpacked {
             let (lo, size, dn) = self.fixed_string_dim_extent(d)?;
-            total = total.checked_mul(u64::from(size))?;
+            total = hdl_ast::range_rules::dim_mul_u64(total, u64::from(size))?;
             if total > MAX_ROUTED_STR_ELEMS {
                 return None;
             }
@@ -353,17 +353,17 @@ impl Elaborator<'_> {
                     let n = self.const_eval_in_scope(e)?;
                     (n >= 1).then_some((0, n - 1))?
                 }
-                ast::Dim::Range(r) => (
-                    self.const_range_bound_fold(&r.msb)?,
-                    self.const_range_bound_fold(&r.lsb)?,
-                ),
+                ast::Dim::Range(r) => {
+                    let f = self.range_facts(r).ok()?;
+                    (f.msb, f.lsb)
+                }
                 _ => return None,
             };
             // Checked: a pathological pair of bounds (`[i64::MAX : i64::MIN]`) overflows
             // a bare subtraction and would PANIC where the decl used to emit a
             // diagnostic.
-            let count = usize::try_from(left.checked_sub(right)?.unsigned_abs()).ok()? + 1;
-            total = total.checked_mul(count)?;
+            let count = hdl_ast::range_rules::Lane::StringArrayChecked.count_usize(left, right)?;
+            total = hdl_ast::range_rules::dim_mul_usize(total, count)?;
             if total > FIXED_STR_ARRAY_INIT_CAP {
                 return None;
             }
@@ -418,12 +418,8 @@ impl Elaborator<'_> {
             // Row-major normalized position: `((i0-min0) * n1 + (i1-min1)) * n2 + …`.
             let mut pos: u64 = 0;
             for (k, &(left, right)) in bounds.iter().enumerate() {
-                let (min, max) = if left <= right {
-                    (left, right)
-                } else {
-                    (right, left)
-                };
-                let size = (max - min) as u64 + 1;
+                let (min, max) = hdl_ast::range_rules::ordered(left, right);
+                let size = hdl_ast::range_rules::span_u64_after(min, max);
                 pos = pos * size + (idxs[k] - min) as u64;
             }
             leaves.push((pos, idxs.clone()));
@@ -434,11 +430,11 @@ impl Elaborator<'_> {
             return None;
         };
         let (left, right) = bounds[depth];
-        let count = usize::try_from((left - right).unsigned_abs()).ok()? + 1;
+        let count = hdl_ast::range_rules::Lane::StringArrayPlain.count_usize(left, right)?;
         if elems.len() != count {
             return None;
         }
-        let step: i64 = if left <= right { 1 } else { -1 };
+        let step: i64 = hdl_ast::range_rules::step(left, right);
         for (k, e) in elems.iter().enumerate() {
             idxs.push(left + step * (k as i64));
             Self::walk_string_init_pattern(bounds, e, idxs, depth + 1, leaves, vals)?;

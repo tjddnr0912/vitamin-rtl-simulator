@@ -36,17 +36,15 @@ impl Elaborator<'_> {
                 return;
             }
         };
-        let (Some(left), Some(right)) = (
-            self.const_range_bound_fold(&range.msb),
-            self.const_range_bound_fold(&range.lsb),
-        ) else {
+        let Ok(f) = self.range_facts_pair(range) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!("instance array `{iname}` range is not a constant"),
             );
             return;
         };
-        let n64 = left.abs_diff(right) + 1;
+        let (left, right) = (f.msb, f.lsb);
+        let n64 = hdl_ast::range_rules::Lane::Wide64.width_u64(left, right);
         if n64 > INST_ARRAY_CAP {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -116,27 +114,23 @@ impl Elaborator<'_> {
         let mut widths_ok = true;
         for p in ports {
             let mut w: u64 = match &p.dtype.range {
-                Some(r) => {
-                    match (
-                        self.const_range_bound_fold(&r.msb),
-                        self.const_range_bound_fold(&r.lsb),
-                    ) {
-                        (Some(m), Some(l)) => m.abs_diff(l) + 1,
-                        _ => {
-                            widths_ok = false;
-                            0
-                        }
+                Some(r) => match self.range_facts_pair(r) {
+                    Ok(f) => hdl_ast::range_rules::Lane::Wide64.width_u64(f.msb, f.lsb),
+                    Err(_) => {
+                        widths_ok = false;
+                        0
                     }
-                }
+                },
                 None => 1,
             };
             for r in p.dtype.packed_dims() {
-                match (
-                    self.const_range_bound_fold(&r.msb),
-                    self.const_range_bound_fold(&r.lsb),
-                ) {
-                    (Some(m), Some(l)) => w = w.saturating_mul(m.abs_diff(l) + 1),
-                    _ => widths_ok = false,
+                match self.range_facts_pair(r) {
+                    Ok(f) => {
+                        w = w.saturating_mul(
+                            hdl_ast::range_rules::Lane::Wide64.width_u64(f.msb, f.lsb),
+                        )
+                    }
+                    Err(_) => widths_ok = false,
                 }
             }
             port_widths.push((p.name.name.clone(), w.min(u32::MAX as u64) as u32));
@@ -296,11 +290,7 @@ impl Elaborator<'_> {
             span,
         };
         for k in 0..n {
-            let idx = if left >= right {
-                left - k as i64
-            } else {
-                left + k as i64
-            };
+            let idx = hdl_ast::range_rules::instance_index(left, right, k as i64);
             let inst_conns: Vec<ast::PortConn> = conns
                 .iter()
                 .zip(&plans)
@@ -312,14 +302,9 @@ impl Elaborator<'_> {
                             let e = value.expect("Slice plan implies a conn expr");
                             // Chunk k (MSB-first): walk from the net's declared
                             // MSB end toward the LSB end, P bits at a time.
-                            let (hi, lo) = if msb >= lsb {
-                                let hi = msb - (k as i64) * (*p as i64);
-                                (hi, hi - (*p as i64 - 1))
-                            } else {
-                                // ascending [0:7]: the LEFT index is the MSB.
-                                let hi = msb + (k as i64) * (*p as i64);
-                                (hi, hi + (*p as i64 - 1))
-                            };
+                            let (hi, lo) = hdl_ast::range_rules::instance_chunk(
+                                *msb, *lsb, k as i64, *p as i64,
+                            );
                             Some(ast::Expr {
                                 kind: ast::ExprKind::PartSelect {
                                     base: Box::new((*e).clone()),

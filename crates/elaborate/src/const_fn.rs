@@ -1792,11 +1792,11 @@ impl Elaborator<'_> {
             return None;
         }
         let (a, b, _directed) = self.select_span(parts, env, envw, depth)?;
-        let (lo, hi) = (a.min(b), a.max(b));
+        let (lo, hi) = hdl_ast::range_rules::low_high(a, b);
         if lo < 0 || hi >= i64::from(vw) {
             return None;
         }
-        let w = (hi - lo + 1) as u32;
+        let w = hdl_ast::range_rules::span_u32_wrap(lo, hi);
         // §11.6.1: the RHS is assigned to the SELECT, so the select's width is
         // its context — not the target variable's.
         let v = self.eval_const_assign(rhs, env, envw, depth, Some((w, false)))?;

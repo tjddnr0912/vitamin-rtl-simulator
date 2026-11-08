@@ -571,7 +571,7 @@ impl Parser<'_, '_> {
     pub(crate) fn member_ascending(&self, range: &Option<Range>) -> bool {
         match range {
             Some(r) => match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
-                (Some(m), Some(l)) => m < l,
+                (Some(m), Some(l)) => hdl_ast::range_rules::ascending(m, l),
                 _ => false,
             },
             None => false,
@@ -597,7 +597,7 @@ impl Parser<'_, '_> {
     pub(crate) fn member_dbase(&self, range: &Option<Range>) -> i64 {
         match range {
             Some(r) => match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
-                (Some(m), Some(l)) => m.min(l),
+                (Some(m), Some(l)) => hdl_ast::range_rules::low(m, l),
                 _ => 0,
             },
             None => 0,

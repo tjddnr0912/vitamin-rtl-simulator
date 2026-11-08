@@ -198,8 +198,12 @@ impl Elaborator<'_> {
             // now, so the coordinate map handles it.
             let msb = msb_v.unwrap_or(0);
             let lsb = lsb_v.unwrap_or(0);
-            let w = ((msb.abs_diff(lsb)) + 1).min(u32::MAX as u64) as u32;
-            out.push((msb.min(lsb), w.max(1), msb < lsb));
+            let w = hdl_ast::range_rules::Lane::ArrayFormal.width_u32(msb, lsb);
+            out.push((
+                hdl_ast::range_rules::low(msb, lsb),
+                w.max(1),
+                hdl_ast::range_rules::ascending(msb, lsb),
+            ));
         }
         out
     }
@@ -1574,7 +1578,7 @@ impl Elaborator<'_> {
         if let Some(&neg) = self.net_decl_neg_lsb.get(&net) {
             // `raw + |lsb|`, i.e. `raw − lsb` with a negative lsb — the same
             // sealed signed subtraction as the other two arms.
-            let k = -(neg.unsigned_abs().min(i32::MAX as u64) as i64) as i32;
+            let k = hdl_ast::range_rules::neg_lsb_k(neg);
             return self.norm_sub_k(raw_off, k);
         }
         // The ASCENDING twin (`logic [-3:0]`, stored `[0:w-1]`): the declared RIGHT
@@ -1585,7 +1589,7 @@ impl Elaborator<'_> {
             let k = l.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
             return self.norm_k_sub(raw_off, k);
         }
-        if msb >= lsb {
+        if !hdl_ast::range_rules::ascending(msb, lsb) {
             if lsb == 0 {
                 // `[N:0]` — the raw index IS the internal one, so nothing has to be
                 // subtracted. What still has to happen is the SIGN: see
@@ -1834,7 +1838,7 @@ impl Elaborator<'_> {
     pub(crate) fn net_ascending(&self, net: u32) -> bool {
         self.nets
             .get(net as usize)
-            .map(|nv| nv.msb < nv.lsb)
+            .map(|nv| hdl_ast::range_rules::ascending(nv.msb, nv.lsb))
             .unwrap_or(false)
     }
 
@@ -1899,8 +1903,7 @@ impl Elaborator<'_> {
     /// never wider than a net may be, and a wrapped negative bound always lands far
     /// above it. The u64 arithmetic means the check itself cannot overflow.
     fn folded_part_width(hi: u32, lo: u32) -> Option<u32> {
-        let w = (hi as u64).checked_sub(lo as u64)?.checked_add(1)?;
-        (w <= MAX_NET_WIDTH).then_some(w as u32)
+        hdl_ast::range_rules::span_folded(hi, lo, MAX_NET_WIDTH)
     }
 
     pub(crate) fn width_from_msb_lsb_dir(
@@ -1915,7 +1918,7 @@ impl Elaborator<'_> {
         let folded = (self.const_bound_u32(msb_ast), self.const_bound_u32(lsb_ast));
         if let (Some(m), Some(l)) = folded {
             if ascending {
-                if m > l {
+                if hdl_ast::range_rules::descending(m, l) {
                     // A select in an `if` arm the run cannot enter (`dead_arm.rs`).
                     if let Some(w) = self.dead_reversed_select(dead_arm::DESCEND_ON_ASCENDING, l, m)
                     {
@@ -1926,7 +1929,7 @@ impl Elaborator<'_> {
                     // width = (l - m) + 1, folded; offset handled by norm_offset.
                     return self.const_u32_expr(w, 32);
                 }
-            } else if m < l {
+            } else if hdl_ast::range_rules::ascending(m, l) {
                 if let Some(w) = self.dead_reversed_select(dead_arm::ASCEND_ON_DESCENDING, m, l) {
                     return w;
                 }
@@ -2078,10 +2081,9 @@ impl Elaborator<'_> {
         };
         let (ext, dirs) = Self::packed_split(&dims);
         let offset = self.flatten_word(&ext, idxs, &dirs, domain);
-        let elem_w: u64 = dims[idxs.len()..]
-            .iter()
-            .map(|&(_, w, _)| w as u64)
-            .product();
+        let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+            dims[idxs.len()..].iter().map(|&(_, w, _)| w as u64),
+        );
         let base = self.push_expr(ir::Expr::Signal { net, word: None });
         let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
         let sel = self.push_expr(ir::Expr::Select {
@@ -2191,22 +2193,18 @@ impl Elaborator<'_> {
         // `const_eval_u32`'s wrapping_neg) used to overflow `c + w` in u32 — a
         // debug panic instead of the clean loud reject below (iverilog also
         // rejects; adversarial review).
-        let (lo64, hi64) = match dir {
-            ast::PartDir::PlusColon => (c as u64, c as u64 + w as u64 - 1),
-            ast::PartDir::MinusColon => {
-                if (c as u64) + 1 < w as u64 {
-                    // c-w+1 < 0 — below the lowest element index.
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "part-select range exceeds the declared bounds of the packed array",
-                    );
-                    return Err(());
-                }
-                // low index = c-w+1; add BEFORE subtract so the legal low-end case
-                // (c-w+1 == 0, e.g. `x[0-:1]`/`x[1-:2]`) does not underflow — the
-                // guard above already ensures `c + 1 >= w` (review M1).
-                (c as u64 + 1 - w as u64, c as u64)
-            }
+        // Q-VALRULES (d) (lens2 CD1): the index pair is `range_rules::indexed_pair_u64`, PRE's
+        // spelling verbatim. `[c-:w]` with c-w+1 < 0 is below the lowest element index
+        // (None); its low index c-w+1 adds BEFORE subtracting so the legal low-end case
+        // (c-w+1 == 0, e.g. `x[0-:1]`/`x[1-:2]`) does not underflow (review M1).
+        let plus = matches!(dir, ast::PartDir::PlusColon);
+        let Some((lo64, hi64)) = hdl_ast::range_rules::indexed_pair_u64(c as u64, w as u64, plus)
+        else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "part-select range exceeds the declared bounds of the packed array",
+            );
+            return Err(());
         };
         let (Ok(lo), Ok(hi)) = (u32::try_from(lo64), u32::try_from(hi64)) else {
             self.error(
@@ -2252,7 +2250,11 @@ impl Elaborator<'_> {
         // reversed select is "out of order" (iverilog rejects it at compile). Either
         // way the selected element index SET is `[min(a,b) ..= max(a,b)]`.
         let ascending = self.packed_dims[&net][0].2;
-        let dir_ok = if ascending { a <= b } else { a >= b };
+        let dir_ok = if ascending {
+            !hdl_ast::range_rules::descending(a, b)
+        } else {
+            !hdl_ast::range_rules::ascending(a, b)
+        };
         if !dir_ok {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -2261,7 +2263,8 @@ impl Elaborator<'_> {
             );
             return Some(Err(()));
         }
-        Some(self.packed_outer_range(net, a.min(b), a.max(b)))
+        let (lo, hi) = hdl_ast::range_rules::low_high(a, b);
+        Some(self.packed_outer_range(net, lo, hi))
     }
 
     /// Core of [`Self::packed_outer_part_select`]: an outer-dim element range
@@ -2299,8 +2302,9 @@ impl Elaborator<'_> {
         }
         // outer dim is dims[0]; an element is the product of the inner dims, which
         // is exactly the outer dim's stride in `flatten_word`.
-        let elem_w: u64 = dims[1..].iter().map(|&(_, w, _)| w as u64).product();
-        let count = (hi - lo + 1) as u64;
+        let elem_w: u64 =
+            hdl_ast::range_rules::dims_product_u64(dims[1..].iter().map(|&(_, w, _)| w as u64));
+        let count = hdl_ast::range_rules::span_u64_wrap(lo, hi);
         // flat-bit coord of the range's lowest-addressed element (its base), exactly
         // as `flatten_word`/`flatten_word_eids` map one outer index:
         //   descending net: idx → coord (idx − olo)  ⇒ lowest = lo
@@ -2330,7 +2334,7 @@ impl Elaborator<'_> {
     /// full array, so suffix-product strides within the residual equal the
     /// full array's strides); `desc[k]` flips dim `k`'s traversal.
     pub(crate) fn residual_word_offsets(dims: &[(i64, u32)], desc: &[bool]) -> Vec<u32> {
-        let n: u64 = dims.iter().map(|&(_, s)| s as u64).product();
+        let n: u64 = hdl_ast::range_rules::dims_product_u64(dims.iter().map(|&(_, s)| s as u64));
         let mut strides = vec![1u64; dims.len()];
         for k in (0..dims.len().saturating_sub(1)).rev() {
             strides[k] = strides[k + 1].saturating_mul(dims[k + 1].1 as u64);

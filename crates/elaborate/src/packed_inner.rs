@@ -114,8 +114,9 @@ impl Elaborator<'_> {
             );
             return Err(());
         }
-        let elem_w: u64 = dims[k + 1..].iter().map(|&(_, w, _)| w as u64).product();
-        let count = (hi - lo + 1) as u64;
+        let elem_w: u64 =
+            hdl_ast::range_rules::dims_product_u64(dims[k + 1..].iter().map(|&(_, w, _)| w as u64));
+        let count = hdl_ast::range_rules::span_u64_wrap(lo, hi);
         let coord = if ascending {
             (dhi - hi) as u64
         } else {
@@ -151,7 +152,11 @@ impl Elaborator<'_> {
     ) -> Option<Result<(u32, u32), ()>> {
         let (a, b) = (self.const_bound_u32(msb)?, self.const_bound_u32(lsb)?);
         let ascending = self.packed_dims[&net][k].2;
-        let dir_ok = if ascending { a <= b } else { a >= b };
+        let dir_ok = if ascending {
+            !hdl_ast::range_rules::descending(a, b)
+        } else {
+            !hdl_ast::range_rules::ascending(a, b)
+        };
         if !dir_ok {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -160,7 +165,8 @@ impl Elaborator<'_> {
             );
             return Some(Err(()));
         }
-        Some(self.packed_inner_range(net, k, prefix, a.min(b), a.max(b)))
+        let (lo, hi) = hdl_ast::range_rules::low_high(a, b);
+        Some(self.packed_inner_range(net, k, prefix, lo, hi))
     }
 
     /// `[c+:w]` / `[c-:w]` on dim `k` — constant offset and width, as on the outer dim.

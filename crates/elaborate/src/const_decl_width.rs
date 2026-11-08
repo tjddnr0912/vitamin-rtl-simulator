@@ -20,7 +20,7 @@
 //!
 //! For those four sites the layout decline throws away a width that is a declared fact.
 //! `DeclRange = (i64, u32, bool)` (`lib.rs`) is filled at one place,
-//! `params.rs::param_decl_range_opt`: `Some((lo, m.abs_diff(l) as u32 + 1, m < l))`. The
+//! `params.rs::param_decl_range_opt`: `Some(f.decl_range())` (the range record, `RangeFacts`). The
 //! width term is `|msb − lsb| + 1`, so `[35:0]`, `[0:35]`, `[39:4]` and `[4:39]` all
 //! record 36 — the width is direction- and offset-INDEPENDENT by construction, and the
 //! `lo != 0 || ascending` test answers a question about bit POSITIONS that a caller

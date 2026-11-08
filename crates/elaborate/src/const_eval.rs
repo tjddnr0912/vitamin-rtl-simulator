@@ -692,10 +692,7 @@ impl Elaborator<'_> {
         let zero_based_asc = decl.unpacked.len() == 1
             && match &decl.unpacked[0] {
                 ast::Dim::Size(_) => true,
-                ast::Dim::Range(r) => {
-                    self.const_range_bound_fold(&r.msb) == Some(0)
-                        && self.const_range_bound_fold(&r.lsb).is_some_and(|l| l >= 0)
-                }
+                ast::Dim::Range(r) => self.range_facts_if(r, |m| m == 0).is_ok_and(|f| f.lsb >= 0),
                 _ => false,
             };
         if !zero_based_asc {
@@ -720,9 +717,11 @@ impl Elaborator<'_> {
         let elem_w = if d.dtype.packed_dims().is_empty() {
             base_w
         } else {
-            self.packed_extents(d.dtype.range.as_ref(), d.dtype.packed_dims())
-                .iter()
-                .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)))
+            hdl_ast::range_rules::dims_width_sat(
+                self.packed_extents(d.dtype.range.as_ref(), d.dtype.packed_dims())
+                    .iter()
+                    .map(|&(_, w, _)| w),
+            )
         };
         (elem_w, elem_signed)
     }
@@ -730,9 +729,11 @@ impl Elaborator<'_> {
     /// The declared element COUNT of one array declarator (product of its unpacked
     /// extents).
     pub(crate) fn const_array_elem_count(&mut self, decl: &ast::DeclName) -> u32 {
-        self.array_dim_extents(&decl.unpacked)
-            .iter()
-            .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)))
+        hdl_ast::range_rules::dims_width_sat(
+            self.array_dim_extents(&decl.unpacked)
+                .iter()
+                .map(|&(_, n)| n),
+        )
     }
 
     /// §3 ⑤ ⓒ: an instance OVERRIDE expression folded as a whole ARRAY, in the

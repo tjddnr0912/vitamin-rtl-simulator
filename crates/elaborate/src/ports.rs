@@ -884,9 +884,8 @@ impl Elaborator<'_> {
                 // A packed multi-dim port (`input [1:0][7:0] m`) is a flat vector.
                 let packed_ext = self.packed_extents(p.dtype.range.as_ref(), p.dtype.packed_dims());
                 if !p.dtype.packed_dims().is_empty() {
-                    width = packed_ext
-                        .iter()
-                        .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)));
+                    width =
+                        hdl_ast::range_rules::dims_width_sat(packed_ext.iter().map(|&(_, w, _)| w));
                     msb = width.saturating_sub(1);
                 }
                 let dir = map_port_dir(p.dir);
@@ -895,9 +894,8 @@ impl Elaborator<'_> {
                 // same computation and same cap as `elaborate_netvar_decl`, because
                 // a port array IS a net array; only the declaration site differs.
                 let dim_extents = self.array_dim_extents(&p.unpacked);
-                let array_len = dim_extents
-                    .iter()
-                    .fold(1u32, |acc, &(_, n)| acc.saturating_mul(n.max(1)));
+                let array_len =
+                    hdl_ast::range_rules::dims_width_sat(dim_extents.iter().map(|&(_, n)| n));
                 if (array_len as u64) > MAX_ARRAY_LEN {
                     self.error(
                         MsgCode::ElabUnsupported,
@@ -977,11 +975,7 @@ impl Elaborator<'_> {
                     .unpacked
                     .iter()
                     .map(|d| match d {
-                        ast::Dim::Range(r) => {
-                            let msb = self.const_range_bound_fold(&r.msb);
-                            let lsb = self.const_range_bound_fold(&r.lsb);
-                            matches!((msb, lsb), (Some(m), Some(l)) if m > l)
-                        }
+                        ast::Dim::Range(r) => self.range_facts_pair(r).is_ok_and(|f| f.desc()),
                         _ => false,
                     })
                     .collect();

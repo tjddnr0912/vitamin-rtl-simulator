@@ -49,7 +49,8 @@ impl Elaborator<'_> {
         // `(lo - dim_lo) * stride`, the stride being the product of the inner sizes.
         let mut win_off: u64 = 0;
         if let Some(s) = &slice {
-            let stride: u64 = t_res[1..].iter().map(|&(_, n)| n as u64).product();
+            let stride: u64 =
+                hdl_ast::range_rules::dims_product_u64(t_res[1..].iter().map(|&(_, n)| n as u64));
             win_off = (s.lo - t_res[0].0) as u64 * stride;
             t_res[0] = (s.lo, s.size);
         }
@@ -280,7 +281,7 @@ impl Elaborator<'_> {
                     );
                     return None;
                 };
-                if m != l && (m > l) != desc {
+                if m != l && hdl_ast::range_rules::descending(m, l) != desc {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "an unpacked-array slice whose direction is opposite to the array's \
@@ -288,7 +289,7 @@ impl Elaborator<'_> {
                     );
                     return None;
                 }
-                (m.min(l), m.max(l))
+                hdl_ast::range_rules::low_high(m, l)
             }
             ast::Lvalue::IndexedPart {
                 offset, width, dir, ..
@@ -329,7 +330,7 @@ impl Elaborator<'_> {
         }
         Some(ArraySlice {
             lo,
-            size: (hi - lo + 1) as u32,
+            size: hdl_ast::range_rules::span_u32_wrap(lo, hi),
         })
     }
 }

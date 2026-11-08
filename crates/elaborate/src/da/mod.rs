@@ -789,7 +789,7 @@ fn const_bit_span_write(st: &ast::Stmt, name: &str) -> Option<(u32, u32)> {
         ast::Lvalue::PartSelect { base, msb, lsb, .. } if base_is_name(base) => {
             let (a, b) = (const_index(msb)?, const_index(lsb)?);
             let (a, b) = (u32::try_from(a).ok()?, u32::try_from(b).ok()?);
-            Some((a.min(b), a.max(b)))
+            Some(hdl_ast::range_rules::low_high(a, b))
         }
         ast::Lvalue::BitSelect { base, index, .. } if base_is_name(base) => {
             let i = u32::try_from(const_index(index)?).ok()?;
@@ -919,7 +919,9 @@ pub(crate) fn automatic_local_definitely_assigned(
             if let Some(ix) = const_elem_write(st, name) {
                 if (lo..=hi).contains(&ix) {
                     covered.insert(ix);
-                    if i64::try_from(covered.len()).is_ok_and(|n| n == hi - lo + 1) {
+                    if i64::try_from(covered.len())
+                        .is_ok_and(|n| n == hdl_ast::range_rules::span_i64(lo, hi))
+                    {
                         assigned = true;
                     }
                     continue;

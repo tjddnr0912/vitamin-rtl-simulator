@@ -994,9 +994,8 @@ impl Elaborator<'_> {
                     // absent) entry is the scalar case and behaves as before.
                     let dims = pd.unpacked.get(ni).map(Vec::as_slice).unwrap_or(&[]);
                     let dim_extents = self.array_dim_extents(dims);
-                    let array_len = dim_extents
-                        .iter()
-                        .fold(1u32, |acc, &(_, n)| acc.saturating_mul(n.max(1)));
+                    let array_len =
+                        hdl_ast::range_rules::dims_width_sat(dim_extents.iter().map(|&(_, n)| n));
                     if (array_len as u64) > MAX_ARRAY_LEN {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -1032,9 +1031,7 @@ impl Elaborator<'_> {
                                 .iter()
                                 .map(|d| match d {
                                     ast::Dim::Range(r) => {
-                                        let msb = self.const_range_bound_fold(&r.msb);
-                                        let lsb = self.const_range_bound_fold(&r.lsb);
-                                        matches!((msb, lsb), (Some(m), Some(l)) if m > l)
+                                        self.range_facts_pair(r).is_ok_and(|f| f.desc())
                                     }
                                     _ => false,
                                 })

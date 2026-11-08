@@ -311,10 +311,9 @@ impl Elaborator<'_> {
         };
         let (ext, dirs) = Self::packed_split(&dims);
         let offset = self.flatten_word(&ext, idxs, &dirs, domain);
-        let elem_w: u64 = dims[idxs.len()..]
-            .iter()
-            .map(|&(_, w, _)| w as u64)
-            .product();
+        let elem_w: u64 = hdl_ast::range_rules::dims_product_u64(
+            dims[idxs.len()..].iter().map(|&(_, w, _)| w as u64),
+        );
         let width = self.const_u32_expr(elem_w.min(u32::MAX as u64) as u32, 32);
         out.push(ir::LvalChunk {
             net,
@@ -384,7 +383,7 @@ impl Elaborator<'_> {
         let (Some(m), Some(l)) = (self.const_bound_u32(msb), self.const_bound_u32(lsb)) else {
             return None; // variable bounds → generic loud path
         };
-        if m < l || m >= leaf.1 {
+        if hdl_ast::range_rules::ascending(m, l) || m >= leaf.1 {
             self.error(
                 MsgCode::ElabUnsupported,
                 "part-select range exceeds the packed sub-element width",
@@ -410,7 +409,7 @@ impl Elaborator<'_> {
                 rhs: l_c,
             })
         };
-        let width = self.const_u32_expr(m - l + 1, 32);
+        let width = self.const_u32_expr(hdl_ast::range_rules::span_u32(l, m), 32);
         Some(ir::LvalChunk {
             net,
             word,

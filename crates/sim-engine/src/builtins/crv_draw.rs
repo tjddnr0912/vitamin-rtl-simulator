@@ -769,6 +769,7 @@ pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
     // A count cannot outlive itself — a wrong step now writes a wrong FILE,
     // which `writemem_on_tier_3_matches_iverilog`'s descending row catches in
     // milliseconds.
+    // Q-VALRULES (d) outside range_rules by rule (a D4 exception): a runtime `dist` / range draw's value range, not a declared or selected range, and sim-engine has no hdl-ast edge ; owner Q-EXECSEM.
     let count = start.abs_diff(finish) + 1;
     let mut body = String::from("// 0x00000000\n");
     let mut addr = start as i64;

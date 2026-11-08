@@ -21,7 +21,8 @@ pub(crate) fn ast_kind_range_width(
             Some(r) => {
                 let msb = ast_decimal_lit_i64(&r.msb)?;
                 let lsb = ast_decimal_lit_i64(&r.lsb)?;
-                u32::try_from(msb.abs_diff(lsb) + 1).ok()
+                // Q-VALRULES (d) lane variant LiteralNet: PRE's own spelling for a net whose bounds are literals the parser wrote (no router value, so not the record) ; S1v unifies.
+                hdl_ast::range_rules::Lane::LiteralNet.count_u32(msb, lsb)
             }
         },
     }
@@ -332,13 +333,9 @@ impl Elaborator<'_> {
     /// negative label to a large unsigned value (`A=-2` → 14).
     pub(crate) fn enum_base_width(&self, base: &Option<ast::Range>) -> Option<u32> {
         let r = base.as_ref()?;
-        match (
-            self.const_range_bound_fold(&r.msb),
-            self.const_range_bound_fold(&r.lsb),
-        ) {
-            (Some(m), Some(l)) => Some(m.abs_diff(l) as u32 + 1),
-            _ => None,
-        }
+        self.range_facts_pair(r)
+            .ok()
+            .map(|f| hdl_ast::range_rules::Lane::ParamRange.width_u32(f.msb, f.lsb))
     }
 
     /// §6.19: an enum label whose value does not fit its base type is an ERROR, and
@@ -491,13 +488,13 @@ impl Elaborator<'_> {
         let Some(r) = base.as_ref() else {
             return Some((0, 32, false));
         };
-        let m = self.const_range_bound_fold(&r.msb)?;
-        let l = self.const_range_bound_fold(&r.lsb)?;
+        let f = self.range_facts(r).ok()?;
+        let (m, l) = (f.msb, f.lsb);
         // Descending, zero-LSB, and no wider than the i64 constant domain can carry.
-        if m.min(l) != 0 || m < l {
+        if hdl_ast::range_rules::low(m, l) != 0 || hdl_ast::range_rules::ascending(m, l) {
             return None;
         }
-        let w = m.abs_diff(l) as u32 + 1;
+        let w = hdl_ast::range_rules::Lane::ParamRange.width_u32(m, l);
         if w == 0 || w > 64 {
             return None;
         }
@@ -762,11 +759,10 @@ impl Elaborator<'_> {
     /// one; the real net lowering later re-folds with full diagnostics.
     pub(crate) fn prescan_net_bits(&mut self, d: &ast::NetVarDecl) {
         let fold_range = |me: &Self, r: &ast::Range| -> Option<u64> {
-            match (
-                me.const_range_bound_fold(&r.msb),
-                me.const_range_bound_fold(&r.lsb),
-            ) {
-                (Some(m), Some(l)) if m >= 0 && l >= 0 => Some(m.abs_diff(l) + 1),
+            match me.range_facts_pair(r) {
+                Ok(f) if f.msb >= 0 && f.lsb >= 0 => {
+                    Some(hdl_ast::range_rules::Lane::Wide64.width_u64(f.msb, f.lsb))
+                }
                 _ => None,
             }
         };

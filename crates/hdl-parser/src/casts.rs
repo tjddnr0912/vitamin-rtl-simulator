@@ -194,7 +194,7 @@ impl Parser<'_, '_> {
         }
         let mut w = self.member_width_kind(info.kind, &info.range)?;
         for d in &info.packed {
-            w = w.checked_mul(self.member_width(&Some(d.clone()))?)?;
+            w = hdl_ast::range_rules::dim_mul_u32(w, self.member_width(&Some(d.clone()))?)?;
         }
         // §3 ⑤ⓕ: `$bits(a_t)` of an UNPACKED-array typedef is the element width
         // times every unpacked dim — both oracles say 32 for
@@ -213,7 +213,7 @@ impl Parser<'_, '_> {
                 Dim::Size(e) => u32::try_from(self.const_bound(e)?).ok()?,
                 Dim::Dyn | Dim::Queue(_) | Dim::Assoc(_) => return None,
             };
-            w = w.checked_mul(n)?;
+            w = hdl_ast::range_rules::dim_mul_u32(w, n)?;
         }
         Some(w)
     }
@@ -240,7 +240,7 @@ impl Parser<'_, '_> {
             let mut w = self.member_width_kind(kind, &range)?;
             while self.peek() == Some(TokenKind::LBracket) {
                 let d = self.opt_range()?;
-                w = w.checked_mul(self.member_width(&Some(d))?)?;
+                w = hdl_ast::range_rules::dim_mul_u32(w, self.member_width(&Some(d))?)?;
             }
             if self.peek() == Some(TokenKind::RParen) {
                 self.bump(); // )

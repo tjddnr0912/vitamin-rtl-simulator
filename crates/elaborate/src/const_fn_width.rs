@@ -618,9 +618,8 @@ impl Elaborator<'_> {
                     && !Self::ast_contains_call(&r.msb)
                     && !Self::ast_contains_call(&r.lsb) =>
             {
-                let hi = self.const_range_bound_fold(&r.msb)?;
-                let lo = self.const_range_bound_fold(&r.lsb)?;
-                u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?
+                let f = self.range_facts(r).ok()?;
+                hdl_ast::range_rules::Lane::FnWidth.count_u32(f.msb, f.lsb)?
             }
             _ => ast_kind_range_width(kind, range)?,
         };
@@ -638,10 +637,9 @@ impl Elaborator<'_> {
             if Self::ast_contains_call(&r.msb) || Self::ast_contains_call(&r.lsb) {
                 return None; // same recursion guard the first dimension takes
             }
-            let hi = self.const_range_bound_fold(&r.msb)?;
-            let lo = self.const_range_bound_fold(&r.lsb)?;
-            let d = u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?;
-            w = w.checked_mul(d)?;
+            let f = self.range_facts(r).ok()?;
+            let d = hdl_ast::range_rules::Lane::FnWidth.count_u32(f.msb, f.lsb)?;
+            w = hdl_ast::range_rules::dim_mul_u32(w, d)?;
         }
         // Every integral kind carries the signedness the DECLARATION resolved.
         // Hard-coding the atom keywords signed was wrong: the parser already applies

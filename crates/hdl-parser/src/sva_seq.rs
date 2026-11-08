@@ -244,7 +244,7 @@ impl Parser<'_, '_> {
                 TokenKind::RBracket,
                 "']' to close an SVA local-var packed range",
             );
-            msb.abs_diff(lsb) + 1
+            hdl_ast::range_rules::Lane::SvaLocal.width_small(msb, lsb)
         } else {
             atom_width
         };

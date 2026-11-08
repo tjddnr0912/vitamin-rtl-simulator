@@ -40,109 +40,46 @@ enum Sel {
 impl Parser<'_, '_> {
     /// A non-negative literal or `None`.
     pub(crate) fn lit_u32(e: &Expr) -> Option<u32> {
-        Self::const_lit(e).and_then(|v| u32::try_from(v).ok())
+        hdl_ast::range_rules::lit_u32(Self::const_lit, e)
     }
 
     fn lit(v: u32, span: Span) -> Expr {
         Self::dec_lit(v, span)
     }
 
-    fn bin(op: BinOp, l: Expr, r: Expr, span: Span) -> Expr {
-        Expr {
-            kind: ExprKind::Binary {
-                op,
-                lhs: Box::new(l),
-                rhs: Box::new(r),
-            },
-            span,
-        }
-    }
-
     /// `a - b`, folded when both are literals (and the result is non-negative);
     /// `a - 0` is `a`.
     pub(crate) fn sub(a: Expr, b: Expr, span: Span) -> Expr {
-        match (Self::lit_u32(&a), Self::lit_u32(&b)) {
-            (Some(x), Some(y)) if x >= y => Self::lit(x - y, span),
-            (_, Some(0)) => a,
-            _ => Self::bin(BinOp::Sub, a, b, span),
-        }
+        hdl_ast::range_rules::sub(Self::const_lit, a, b, span)
     }
 
     /// `a + b`, folded when both are literals; `0 + b` is `b`, `a + 0` is `a`.
     pub(crate) fn add(a: Expr, b: Expr, span: Span) -> Expr {
-        match (Self::lit_u32(&a), Self::lit_u32(&b)) {
-            (Some(x), Some(y)) => match x.checked_add(y) {
-                Some(s) => Self::lit(s, span),
-                None => Self::bin(BinOp::Add, a, b, span),
-            },
-            (Some(0), _) => b,
-            (_, Some(0)) => a,
-            _ => Self::bin(BinOp::Add, a, b, span),
-        }
+        hdl_ast::range_rules::add(Self::const_lit, a, b, span)
     }
 
     /// `a * b`, folded when both are literals; `a * 1` / `1 * b` collapse. A
     /// literal ZERO factor is NOT folded away (`0 * x` is `x` in 4-state — the
     /// flat twin must keep that arithmetic).
     pub(crate) fn mul(a: Expr, b: Expr, span: Span) -> Expr {
-        match (Self::lit_u32(&a), Self::lit_u32(&b)) {
-            (Some(x), Some(y)) => match x.checked_mul(y) {
-                Some(p) => Self::lit(p, span),
-                None => Self::bin(BinOp::Mul, a, b, span),
-            },
-            (Some(1), _) => b,
-            (_, Some(1)) => a,
-            _ => Self::bin(BinOp::Mul, a, b, span),
-        }
+        hdl_ast::range_rules::mul(Self::const_lit, a, b, span)
     }
 
     /// `(r.msb >= r.lsb) ? desc : asc`, or just one of them when the dimension's
     /// direction is known from literal bounds.
     fn by_dir(r: &Range, desc: Expr, asc: Expr, span: Span) -> Expr {
-        match (Self::lit_u32(&r.msb), Self::lit_u32(&r.lsb)) {
-            (Some(m), Some(l)) => {
-                if m >= l {
-                    desc
-                } else {
-                    asc
-                }
-            }
-            _ => Expr {
-                kind: ExprKind::Ternary {
-                    cond: Box::new(Self::bin(BinOp::Ge, r.msb.clone(), r.lsb.clone(), span)),
-                    then_e: Box::new(desc),
-                    else_e: Box::new(asc),
-                },
-                span,
-            },
-        }
-    }
-
-    /// The element count of one packed dimension: `|msb - lsb| + 1`.
-    pub(crate) fn packed_dim_width(r: &Range, span: Span) -> Expr {
-        let desc = Self::sub(r.msb.clone(), r.lsb.clone(), span);
-        let asc = Self::sub(r.lsb.clone(), r.msb.clone(), span);
-        Self::add(Self::by_dir(r, desc, asc, span), Self::lit(1, span), span)
+        hdl_ast::range_rules::md_by_dir(Self::const_lit, r, desc, asc, span)
     }
 
     /// The bit width of `dims[k..]` — the size of one element of `dims[k-1]`.
     fn packed_stride(dims: &[Range], k: usize, span: Span) -> Expr {
-        let mut w = Self::lit(1, span);
-        for r in &dims[k..] {
-            w = Self::mul(w, Self::packed_dim_width(r, span), span);
-        }
-        w
+        hdl_ast::range_rules::md_stride(Self::const_lit, dims, k, span)
     }
 
     /// The flat `[total-1:0]` range a multi-dimensional packed parameter is
     /// declared with.
     pub(crate) fn packed_md_flat_range(dims: &[Range], span: Span) -> Range {
-        let total = Self::packed_stride(dims, 0, span);
-        Range {
-            msb: Self::sub(total, Self::lit(1, span), span),
-            lsb: Self::lit(0, span),
-            span,
-        }
+        hdl_ast::range_rules::md_flat_range(Self::const_lit, dims, span)
     }
 
     /// Element offset (in elements from the lowest bits) of index `i` within
@@ -150,9 +87,7 @@ impl Parser<'_, '_> {
     /// bits either way, so `i - right` descending and `right - i` ascending
     /// (`Range::lsb` is the right bound, whichever is numerically smaller).
     fn packed_elem_off(r: &Range, i: &Expr, span: Span) -> Expr {
-        let desc = Self::sub(i.clone(), r.lsb.clone(), span);
-        let asc = Self::sub(r.lsb.clone(), i.clone(), span);
-        Self::by_dir(r, desc, asc, span)
+        hdl_ast::range_rules::md_elem_off(Self::const_lit, r, i, span)
     }
 
     /// Re-spell every bare name a package-level dimension expression uses
@@ -219,10 +154,10 @@ impl Parser<'_, '_> {
                 if p.segments.len() == 1 && self.const_locals.contains_key(&p.segments[0].name) =>
             {
                 let v = self.const_locals[&p.segments[0].name].v;
-                if v < 0 && v.unsigned_abs() <= u32::MAX as u64 {
+                if let Some(m) = hdl_ast::range_rules::neg_bound_magnitude(v) {
                     ExprKind::Unary {
                         op: UnOp::Minus,
-                        operand: Box::new(Self::dec_lit(v.unsigned_abs() as u32, span)),
+                        operand: Box::new(Self::dec_lit(m, span)),
                     }
                 } else if v <= u32::MAX as i64 {
                     return Self::dec_lit(v as u32, span);
@@ -400,14 +335,14 @@ impl Parser<'_, '_> {
                 // RUNTIME index (`P[i][4:1]`) must stay `+:`: a flat `[hi:lo]` with a
                 // runtime bound is a pre-existing silent 0 on any parameter.
                 if let (Some(av), Some(bv)) = (Self::const_lit(&a), Self::const_lit(&b)) {
-                    let desc = match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
-                        (Some(m), Some(l)) => Some(m >= l),
-                        (None, Some(_)) => Some(true),
-                        (Some(_), None) => Some(false),
-                        (None, None) => None,
-                    };
+                    let desc = hdl_ast::range_rules::md_select_desc(
+                        Self::const_lit(&r.msb),
+                        Self::const_lit(&r.lsb),
+                    );
                     if let Some(desc) = desc {
-                        if (desc && av < bv) || (!desc && av > bv) {
+                        if (desc && hdl_ast::range_rules::ascending(av, bv))
+                            || (!desc && hdl_ast::range_rules::descending(av, bv))
+                        {
                             self.error(
                                 "a range select in the dimension's own direction on a multi-dimensional packed parameter or formal (this select is out of order: `[a:b]` must descend on a `[hi:lo]` dimension and ascend on a `[lo:hi]` one)",
                             );
@@ -489,9 +424,9 @@ impl Parser<'_, '_> {
         if items.len() != Self::lit_dim_count(first)? as usize {
             return None;
         }
-        let w = rest
-            .iter()
-            .try_fold(1u32, |acc, r| acc.checked_mul(Self::lit_dim_count(r)?))?;
+        let w = rest.iter().try_fold(1u32, |acc, r| {
+            hdl_ast::range_rules::dim_mul_u32(acc, Self::lit_dim_count(r)?)
+        })?;
         let parts = items
             .iter()
             .map(|it| {
@@ -523,7 +458,7 @@ impl Parser<'_, '_> {
     /// The element count of a dimension whose bounds are both literals.
     fn lit_dim_count(r: &Range) -> Option<u32> {
         let (m, l) = (Self::lit_u32(&r.msb)?, Self::lit_u32(&r.lsb)?);
-        m.abs_diff(l).checked_add(1)
+        hdl_ast::range_rules::Lane::MdLiteral.count_small(m, l)
     }
 
     /// An item the rewrite carries: a LITERAL whose value the parameter fold reads as
@@ -667,7 +602,7 @@ impl Parser<'_, '_> {
             else {
                 return false;
             };
-            let inside = |v: i64| k == 0 || (a.min(b) <= v && v <= a.max(b));
+            let inside = |v: i64| k == 0 || hdl_ast::range_rules::within(a, b, v);
             let lit = |e: &Expr| Self::plain_dec(e).filter(|v| inside(*v));
             match s {
                 Sel::Bit(i) if k == 0 => Self::ctx_invariant(i),
@@ -675,7 +610,11 @@ impl Parser<'_, '_> {
                 // In the dimension's own direction: a reversed select would be a flat
                 // `+:` of width 0.
                 Sel::Part(hi, lo) => match (lit(hi), lit(lo)) {
-                    (Some(h), Some(l)) => (a >= b) == (h >= l) || h == l,
+                    (Some(h), Some(l)) => {
+                        hdl_ast::range_rules::ascending(a, b)
+                            == hdl_ast::range_rules::ascending(h, l)
+                            || h == l
+                    }
                     _ => false,
                 },
                 Sel::Idx(o, w, _) if k == 0 => {
@@ -683,10 +622,11 @@ impl Parser<'_, '_> {
                 }
                 Sel::Idx(o, w, dir) => match (lit(o), Self::plain_dec(w)) {
                     (Some(o), Some(w)) if w >= 1 => {
-                        let last = match dir {
-                            PartDir::PlusColon => o + w - 1,
-                            PartDir::MinusColon => o - w + 1,
-                        };
+                        let last = hdl_ast::range_rules::indexed_last(
+                            o,
+                            w,
+                            matches!(dir, PartDir::PlusColon),
+                        );
                         inside(last)
                     }
                     _ => false,
@@ -783,9 +723,10 @@ impl Parser<'_, '_> {
     /// this parser still knows the dimensions, so an elaborate-side query would read
     /// the FLAT range — `$size(P)` 8 for `logic [1:0][3:0] P`, where both oracles say 2
     /// (§3 ⑤ ⓔ census, the scalar control twin). The answer is built from the recorded
-    /// dimension the way a select's offset is: `packed_dim_width` for `$size`, the
-    /// bound expressions for `$left` / `$right`, `by_dir` for `$high` / `$low` /
-    /// `$increment`, literals for the dimension counts. A dimension index that is not
+    /// dimension the way a select's offset is, by `hdl_ast::range_rules::md_query`:
+    /// `md_dim_width` for `$size`, the bound expressions for `$left` / `$right`,
+    /// `md_by_dir` for `$high` / `$low` / `$increment`; literals for the dimension
+    /// counts. A dimension index that is not
     /// a literal, or names a dimension the parameter does not declare, is a parse
     /// error rather than a guess (the runtime prints `x` for the latter; a constant
     /// cannot). Every call on any other operand is returned untouched.
@@ -843,23 +784,6 @@ impl Parser<'_, '_> {
             return e;
         }
         let r = &dims[d as usize - 1];
-        match name.name.as_str() {
-            "$size" => Self::packed_dim_width(r, span),
-            "$left" => r.msb.clone(),
-            "$right" => r.lsb.clone(),
-            "$high" => Self::by_dir(r, r.msb.clone(), r.lsb.clone(), span),
-            "$low" => Self::by_dir(r, r.lsb.clone(), r.msb.clone(), span),
-            "$increment" => {
-                let neg = Expr {
-                    kind: ExprKind::Unary {
-                        op: UnOp::Minus,
-                        operand: Box::new(Self::lit(1, span)),
-                    },
-                    span,
-                };
-                Self::by_dir(r, Self::lit(1, span), neg, span)
-            }
-            _ => e,
-        }
+        hdl_ast::range_rules::md_query(Self::const_lit, name.name.as_str(), r, span).unwrap_or(e)
     }
 }

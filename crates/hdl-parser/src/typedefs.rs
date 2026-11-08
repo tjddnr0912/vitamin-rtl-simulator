@@ -42,7 +42,10 @@ impl Parser<'_, '_> {
         let lsb = self.const_bound(&range.lsb)?;
         // Direction-agnostic width (overflow-safe `abs_diff`, matching
         // `member_width`); the range direction does not affect the cast VALUE.
-        Some((msb.abs_diff(lsb) as i64 + 1, info.signed))
+        Some((
+            hdl_ast::range_rules::Lane::TypedefCast.width_i64(msb, lsb),
+            info.signed,
+        ))
     }
 
     /// If the current token names a known typedef, return its resolved underlying
@@ -411,10 +414,7 @@ impl Parser<'_, '_> {
         let base_w: Option<u32> = match &base {
             None => Some(32),
             Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
-                (Some(msb), Some(lsb)) => match msb.checked_sub(lsb) {
-                    Some(d) if d.unsigned_abs() < 64 => Some(d.unsigned_abs() as u32 + 1),
-                    _ => None,
-                },
+                (Some(msb), Some(lsb)) => hdl_ast::range_rules::Lane::EnumBase.count_u32(msb, lsb),
                 _ => None,
             },
         };

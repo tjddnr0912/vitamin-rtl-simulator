@@ -113,9 +113,8 @@ impl Elaborator<'_> {
             // addressing sidecars below) — a static-lifetime local for a
             // non-automatic task, so it persists across calls.
             let dim_extents = self.array_dim_extents(&decl.unpacked);
-            let array_len = dim_extents
-                .iter()
-                .fold(1u32, |acc, &(_, n)| acc.saturating_mul(n.max(1)));
+            let array_len =
+                hdl_ast::range_rules::dims_width_sat(dim_extents.iter().map(|&(_, n)| n));
             if (array_len as u64) > MAX_ARRAY_LEN {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -197,11 +196,7 @@ impl Elaborator<'_> {
                     .unpacked
                     .iter()
                     .map(|dm| match dm {
-                        ast::Dim::Range(r) => {
-                            let m = self.const_range_bound_fold(&r.msb);
-                            let l = self.const_range_bound_fold(&r.lsb);
-                            matches!((m, l), (Some(m), Some(l)) if m > l)
-                        }
+                        ast::Dim::Range(r) => self.range_facts_pair(r).is_ok_and(|f| f.desc()),
                         _ => false,
                     })
                     .collect();

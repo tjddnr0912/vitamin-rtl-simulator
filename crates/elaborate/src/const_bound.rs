@@ -620,7 +620,7 @@ impl Elaborator<'_> {
                     self.count_value_for_msg(lsb)?,
                 );
                 let w = base_width(base)?;
-                if m >= u128::from(w) || l > m {
+                if m >= u128::from(w) || hdl_ast::range_rules::ascending(m, l) {
                     return Some(format!(
                         "the part-select [{m}:{l}] is outside {}'s range [{}:0]",
                         Self::expr_brief(base),
