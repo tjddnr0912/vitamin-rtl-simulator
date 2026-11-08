@@ -111,6 +111,7 @@ mod lvalue;
 mod module_items;
 mod monomorph;
 mod packed_md;
+mod param_signing;
 mod params;
 mod pkg_type_param;
 mod port_typedefs;

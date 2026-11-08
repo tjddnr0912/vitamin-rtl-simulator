@@ -104,11 +104,8 @@ fn a_keyword_parameter_records_its_kind_and_the_signing_its_fold_read() {
          localparam longint L7 = 1; localparam time L8 = 1; localparam real L9 = 1.0;\n\
          localparam realtime L10 = 1.0; localparam string L11 = \"a\";\n\
          localparam int unsigned U0 = 1; localparam integer signed U1 = 1;\n\
-         localparam logic signed [3:0] U2 = 1; localparam unsigned int U3 = 1; localparam bit [3:0] U4 = 1;\n\
-         localparam signed string S2 = \"cd\";\n\
-         specparam signed SP = 4'hF; specparam [3:0] SR = 4'hF;\n\
-         parameter signed real R = 1.5; parameter signed time T2 = 7;\n\
-         parameter signed int unsigned D = 32'hFFFFFFFF; parameter unsigned integer signed E = -1;\n\
+         localparam logic signed [3:0] U2 = 1; localparam bit [3:0] U4 = 1;\n\
+         specparam [3:0] SR = 4'hF;\n\
          endmodule\n",
     );
     use NetVarKind as N;
@@ -132,20 +129,9 @@ fn a_keyword_parameter_records_its_kind_and_the_signing_its_fold_read() {
         ("U0", (k(N::Int), SU)),
         ("U1", (k(N::Integer), SS)),
         ("U2", (k(N::Logic), SS)),
-        ("U3", (k(N::Int), SU)),
         ("U4", (k(N::Bit), SI)),
-        // `string` is a kind, never Implicit, and keeps the keyword its fold read.
-        ("S2", (k(N::String), SS)),
         // `specparam` parses as a localparam.
-        ("SP", (KI, SS)),
         ("SR", (KI, SI)),
-        // Spellings outside IEEE that the parser accepts record the token the fold read:
-        // a signing keyword before `real` / `time`, and a keyword on both sides (the
-        // leading one wins).
-        ("R", (k(N::Real), SS)),
-        ("T2", (k(N::Time), SS)),
-        ("D", (k(N::Int), SS)),
-        ("E", (k(N::Integer), SU)),
     ] {
         assert_eq!(rec(&su, name), (want.0, Some(want.1)), "{name}");
     }
@@ -156,7 +142,7 @@ fn a_keyword_parameter_records_its_kind_and_the_signing_its_fold_read() {
 fn a_header_parameter_records_like_a_body_one() {
     let su = unit(
         "module m #(parameter unsigned A = 1, B = 2, parameter int C = 3, D = 4) (); endmodule\n\
-         module n #(signed P = 1, Q = 2) (); endmodule\n\
+         module n #(parameter signed P = 1, Q = 2) (); endmodule\n\
          module t #(parameter int AR [2] = '{1, 2}, parameter logic unsigned [3:0] BR [2] = '{1, 2}) ();\n\
          endmodule\n",
     );
@@ -167,6 +153,7 @@ fn a_header_parameter_records_like_a_body_one() {
         ("B", (KI, SU)),
         ("C", (k(N::Int), SI)),
         ("D", (k(N::Int), SI)),
+        // A continuation inherits a leading signing too.
         ("P", (KI, SS)),
         ("Q", (KI, SS)),
         // The header array twin records what the scalar would.
@@ -207,7 +194,7 @@ fn a_typedef_typed_parameter_records_the_family_of_its_type() {
          typedef logic [3:0] lv_t; localparam lv_t A1 = 1;\n\
          typedef int i_t; localparam i_t A2 = 1;\n\
          typedef lv_t lv2_t; localparam lv2_t A3 = 1;\n\
-         typedef string str_t; localparam str_t S = \"ab\"; localparam signed str_t S3 = \"ef\";\n\
+         typedef string str_t; localparam str_t S = \"ab\";\n\
          typedef enum bit [1:0] { EA, EB } e_t; localparam e_t E1 = EB;\n\
          typedef enum byte { BA, BB } eb_t; localparam eb_t E2 = BB;\n\
          typedef enum { NA, NB } en_t; localparam en_t E3 = NB;\n\
@@ -230,8 +217,6 @@ fn a_typedef_typed_parameter_records_the_family_of_its_type() {
         // A chained alias of a keyword type carries the base's record.
         ("A3", (k(N::Logic), SI)),
         ("S", (k(N::String), SI)),
-        // The keyword written on the parameter, not the typedef's.
-        ("S3", (k(N::String), SS)),
         // An enum (a vector base, an atom base, the default base, a chained alias), a
         // struct (exact, or a chained alias of one) and a union record no kind.
         ("E1", (KN, SI)),
@@ -286,21 +271,21 @@ fn a_composed_alias_parameter_records_logic_like_its_twin() {
 
 /// Spellings the first pins left out (lens S-F7), each asserting what the parser
 /// records today -- `(kind, signing, effective sign)`: a typedef-prefixed header array
-/// twin and its scalar sibling, a `signed` continuation that opens a new prefix,
-/// interface and program header parameters, and a package-scoped typedef.
+/// twin and its scalar sibling, interface and program header parameters, and a
+/// package-scoped typedef.  (A `signed` continuation opening a new prefix is a
+/// refusal now: `a_header_port_signing_without_the_keyword_is_refused_once`.)
 #[test]
 fn the_remaining_parameter_spellings_record_what_the_parser_kept() {
     let su = unit(
         "package pk; typedef logic signed [3:0] s_t; typedef int unsigned u_t; endpackage\n\
          module m import pk::*; #(parameter s_t AR [2] = '{4'hF, 4'h1}, parameter s_t S = 4'hF) ();\n\
          endmodule\n\
-         module w #(parameter W = 4, signed X = -1) (); endmodule\n\
          interface ih #(parameter int unsigned IH = 1, IC = 2) (); endinterface\n\
          program ph #(parameter bit signed PH = 1) (); endprogram\n\
          module top; localparam pk::u_t P = 32'hFFFFFFFF; localparam pk::s_t Q = 4'hF;\n\
          import pk::*; localparam s_t R = 4'hE; endmodule\n",
     );
-    let got: Vec<_> = ["AR", "S", "W", "X", "IH", "IC", "PH", "P", "Q", "R"]
+    let got: Vec<_> = ["AR", "S", "IH", "IC", "PH", "P", "Q", "R"]
         .into_iter()
         .map(|name| {
             let p = all_params(&su)
@@ -316,9 +301,6 @@ fn the_remaining_parameter_spellings_record_what_the_parser_kept() {
         // the typedef's kind, no keyword, the typedef's sign.
         ("AR", k(N::Logic), Some(SI), true),
         ("S", k(N::Logic), Some(SI), true),
-        ("W", KI, Some(SI), false),
-        // `signed X` after `W` opens a new prefix (the keyword is X's own).
-        ("X", KI, Some(SS), true),
         ("IH", k(N::Int), Some(SU), false),
         ("IC", k(N::Int), Some(SU), false),
         ("PH", k(N::Bit), Some(SS), true),
@@ -328,6 +310,132 @@ fn the_remaining_parameter_spellings_record_what_the_parser_kept() {
         ("R", k(N::Logic), Some(SI), true),
     ];
     assert_eq!(got, want);
+    assert_param_family(&su);
+}
+
+/// Parse `src`, which the leading-signing rule refuses (`param_signing.rs`): exactly one
+/// error per `(name, signing, text)`, in order -- no cascade -- each anchored at and
+/// naming the first `signing` keyword of `name`'s declaration, its text carrying
+/// `text`; every `ParamDecl` is still built.
+fn refused(src: &str, want: &[(&str, &str, &str)]) -> SourceUnit {
+    let (su, errs) = p(src);
+    assert_eq!(errs.len(), want.len(), "errors: {errs:?}");
+    let su = su.expect("the unit is still built");
+    let ps = all_params(&su);
+    for (e, &(name, signing, text)) in errs.iter().zip(want) {
+        let d = ps
+            .iter()
+            .find(|p| p.name.name == name)
+            .unwrap_or_else(|| panic!("no parameter `{name}`"));
+        let lo = d.span.lo as usize + src[d.span.lo as usize..].find(signing).unwrap();
+        assert_eq!(
+            (e.span.lo as usize, e.span.hi as usize),
+            (lo, lo + signing.len()),
+            "{name}: anchored at the signing token"
+        );
+        assert_eq!(e.found_span, e.span, "{name}: names the signing token");
+        assert_eq!(
+            e.found_desc(src),
+            Some(format!("keyword '{signing}'")),
+            "{name}"
+        );
+        assert!(e.expected.contains(text), "{name}: {}", e.expected);
+    }
+    su
+}
+
+const NONE_REAL: &str = "which takes none (IEEE 1800-2017 A.2.2.1 `data_type`)";
+const NONE_NAME: &str = "no signing before a type name, which takes none";
+const NONE_SPEC: &str = "no signing on a `specparam`";
+const NO_KW: &str = "`parameter` or `localparam` before a signing in a parameter port";
+
+/// The spellings `a_keyword_parameter_records_its_kind_and_the_signing_its_fold_read`
+/// pinned before the rule: a signing LEADING an integer type keyword, `string`,
+/// `real`, or written on a `specparam` (IEEE 1800-2017 A.2.2.1 / A.2.1.1).  Each is
+/// one error at its signing keyword, and the `ParamDecl` records the token the fold
+/// read, as before -- a keyword on both sides keeps the leading one.
+#[test]
+fn a_leading_signing_on_a_keyword_parameter_is_refused_at_the_signing() {
+    let su = refused(
+        "module m;\n\
+         localparam unsigned int U3 = 1;\n\
+         localparam signed string S2 = \"cd\";\n\
+         specparam signed SP = 4'hF;\n\
+         parameter signed real R = 1.5; parameter signed time T2 = 7;\n\
+         parameter signed int unsigned D = 32'hFFFFFFFF; parameter unsigned integer signed E = -1;\n\
+         endmodule\n",
+        &[
+            ("U3", "unsigned", "`int unsigned`"),
+            ("S2", "signed", "no signing before `string`"),
+            ("SP", "signed", NONE_SPEC),
+            ("R", "signed", "no signing before `real`"),
+            ("T2", "signed", "`time signed`"),
+            ("D", "signed", "one signing only, after the type keyword, where `int unsigned`"),
+            ("E", "unsigned", "where `integer signed` has one"),
+        ],
+    );
+    use NetVarKind as N;
+    for (name, want) in [
+        ("U3", (k(N::Int), SU)),
+        // `string` is a kind, never Implicit, and keeps the keyword its fold read.
+        ("S2", (k(N::String), SS)),
+        // `specparam` parses as a localparam.
+        ("SP", (KI, SS)),
+        ("R", (k(N::Real), SS)),
+        ("T2", (k(N::Time), SS)),
+        ("D", (k(N::Int), SS)),
+        ("E", (k(N::Integer), SU)),
+    ] {
+        assert_eq!(rec(&su, name), (want.0, Some(want.1)), "{name}");
+    }
+    assert_param_family(&su);
+    let (_, errs) = p("module m; localparam unsigned realtime RT = 1.0; endmodule\n");
+    assert!(
+        errs.len() == 1 && errs[0].expected.contains(NONE_REAL),
+        "{errs:?}"
+    );
+}
+
+/// A header port with a signing and no `parameter` / `localparam` keyword (IEEE
+/// 1800-2017 A.1.3): one error at the signing, the continuation inheriting the
+/// prefix as before.
+#[test]
+fn a_header_port_signing_without_the_keyword_is_refused_once() {
+    let su = refused(
+        "module n #(signed P = 1, Q = 2) (); endmodule\n",
+        &[("P", "signed", NO_KW)],
+    );
+    assert_eq!(rec(&su, "P"), (KI, Some(SS)));
+    assert_eq!(rec(&su, "Q"), (KI, Some(SS)));
+    // `signed X` after `W` opens a new prefix (the keyword is X's own), and it is X's
+    // only error.
+    let su = refused(
+        "module w #(parameter W = 4, signed X = -1) (); endmodule\n",
+        &[("X", "signed", NO_KW)],
+    );
+    let got: Vec<_> = ["W", "X"]
+        .into_iter()
+        .map(|name| {
+            let p = all_params(&su)
+                .into_iter()
+                .find(|p| p.name.name == name)
+                .unwrap();
+            (name, p.dtype.kind(), p.dtype.signing(), p.dtype.signed)
+        })
+        .collect();
+    assert_eq!(got, [("W", KI, Some(SI), false), ("X", KI, Some(SS), true)]);
+    assert_param_family(&su);
+}
+
+/// A signing before a type name (IEEE 1800-2017 A.2.2.1): one error at the signing;
+/// the `ParamDecl` records the keyword written on the parameter, not the typedef's.
+#[test]
+fn a_leading_signing_on_a_typedef_typed_parameter_is_refused_at_the_signing() {
+    let su = refused(
+        "module m; typedef string str_t; localparam signed str_t S3 = \"ef\"; endmodule\n",
+        &[("S3", "signed", NONE_NAME)],
+    );
+    assert_eq!(rec(&su, "S3"), (k(NetVarKind::String), Some(SS)));
     assert_param_family(&su);
 }
 

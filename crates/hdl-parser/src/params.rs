@@ -1,6 +1,7 @@
 //! parameter machinery — split out of the original `hdl-parser` lib.rs (mechanical move).
 
 use super::*;
+use crate::param_signing::LeadKeyword;
 
 /// `(ParamType, var_kind, forced_range, explicit_range, packed_dims, unpacked_dims)`
 /// — see `typedef_param_shape`.
@@ -196,17 +197,29 @@ impl Parser<'_, '_> {
         // constants there and references them from ordinary delay expressions
         // (`#(tPROBE*0.5)`) is a common pattern — the reporter had to rewrite the
         // KEYWORD to get a foundry EFUSE model through. Accepted as a localparam.
-        let kind = if self.eat_kw(Kw::Localparam) || self.eat_kw(Kw::Specparam) {
-            ParamKind::Localparam
+        let (kind, lead) = if self.eat_kw(Kw::Localparam) {
+            (ParamKind::Localparam, LeadKeyword::Param)
+        } else if self.eat_kw(Kw::Specparam) {
+            (ParamKind::Localparam, LeadKeyword::Specparam)
+        } else if self.eat_kw(Kw::Parameter) {
+            (ParamKind::Parameter, LeadKeyword::Param)
         } else {
-            self.eat_kw(Kw::Parameter);
-            ParamKind::Parameter
+            (ParamKind::Parameter, LeadKeyword::None)
         };
         // Track explicit-`signed` PRESENCE alongside the folded bool: the A2a
         // array desugar must mirror `signed_eff` (explicit wins, else the atom
         // default) — the folded bool alone conflates "absent" with `false`.
         // `param_dtype` records the same token as the `ParamDecl`'s signing keyword.
+        // A LEADING signing outside the grammar is refused at its own token, and the
+        // prefix reads on as before (`param_signing.rs`).
+        let sign_span = self.cur_span();
+        let sign_tok = self.peek();
         let expl0 = self.opt_signed();
+        if let Some(sgn) = expl0 {
+            if let Some(msg) = self.leading_signing_refusal(lead, sgn) {
+                self.error_on_token(sign_span, sign_tok, msg);
+            }
+        }
         let mut signed = expl0.unwrap_or(false);
         // SV typed parameter: a data-type KIND keyword may lead — `parameter int W`,
         // `parameter logic [3:0] X`, `byte`/`shortint`/`longint`. 2-state atoms imply
