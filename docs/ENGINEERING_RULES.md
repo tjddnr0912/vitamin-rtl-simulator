@@ -367,7 +367,8 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 
 | Rule | Prevents |
 |---|---|
-| Keep each core representation one record (decl type facts: `hdl_ast::DataType`, §4.5.635; value and width rules; engine side tables; executor semantics): new consumers read it, never re-deriving the fact; while it is missing a row waits behind the row building it, a forced local bypass naming that row's id at the site | One fact computed in many places, each fix leaving its siblings (rows 29, 33 parked) |
+| Keep each core repr one record (decl type facts: `hdl_ast::DataType`, §4.5.635; value and width rules, ranges: `RangeFacts`, `hdl-ast/src/range_rules.rs`, §4.5.636; engine side tables; executor semantics): consumers read it, never re-derive; while missing, a row waits behind the row building it, a forced local bypass naming that row's id at the site | One fact computed in many places, each fix leaving its siblings (rows 29, 33 parked) |
+| A record or funnel replacing per-site spellings keeps each site's evaluation order (thunks, or the order named per caller): a skipped half may be a recursion or cost guard; a neutral check compares rc, signal and wall too | Crash or slowdown where a site short-circuited (§4.5.636) |
 | Write a question or rule twins share once, both calling it: a question beside its twin in `sim-ir`, not at the consumer; a renderer's value-free rules in a crate the constant twin and runtime both reach | Second spellings converging one finding at a time |
 | A limitation whose reason is another stage's impl detail is that stage's defect | The naming and lookup paths diverging |
 | Fill a new table with the same producer as its twin, so one provenance rule covers both scopes | A second producer posing as the first rule |
@@ -378,7 +379,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 | Reduce a new shared input to one func, not one datum | Two reduction loops having to agree |
 | Write a node's children, order, evaluation conditions, no-hoist positions once for all walkers/hoisters; mark reads a transform cannot reach unrepairable | Diverging walkers |
 | Route every writer of parallel tables (minted ids; primary-map writers once keys rebind) through one funnel filling all, asserting per table, an explicit empty slot per rowless case, so raw-writer grep finds only it; no reader guard | Shifted ids; forgotten writers |
-| Split a predicate per resolver for a two-representation value; frame two unequal-strength impls as "where do they split" and extract that predicate once | Drifting copies |
+| Split a predicate per resolver for a two-repr value; frame two unequal-strength impls as "where do they split", extract that predicate once | Drifting copies |
 
 ### 5.2 A predicate that cannot under-detect
 

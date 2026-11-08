@@ -16,5 +16,7 @@
 * un-park: the four rows landed and the door census on the new PRE (PLAN §5 B0) shows 0 right→wrong reads (a new door is a new prerequisite)
 * expected then: 215 cells wrong→right, 61 loud→right, 0 new loud
 * PRE 9d60771d
+* note: Q-VALRULES fix (d) slice A (§4.5.636) moved the stand-in's width rule into `crates/hdl-ast/src/range_rules.rs` verbatim (`sym_typedef_width`, `:817`, its `[X-1:0] -> X` shortcut at `:819`, called from `hdl-parser/src/type_params.rs:634`), so the carrier keeps PRE's count spelling and stays a second count → range home (ER §5.1), this row's (W/qvalrulesd/plan2/PLAN.txt E3-b)
+* note: fix (d)'s round 1 measured a carrier built from the true count: tp4 PRE `A l=-1 o=1 w=10` (= iverilog = sv2v = verilator) became `A l=1 o=x w=0x`, tpd the same (W/qvalrulesd/RULINGS-r1lens.txt F2)
 * silent-wrong, pre-existing
 * source: r2 lens-sound F1 (k01–k12, r09–r14, f01–f06), lens-diff F1 (g1–g17); Q-TPCARRIER plan (W/qtpcarrier/PLAN.txt, 2026-10-29)

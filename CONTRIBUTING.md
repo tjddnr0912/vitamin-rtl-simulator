@@ -183,6 +183,11 @@ it rather than letting it grow:
 Types that derive `SchemaHash` are the exception and must stay where they are,
 for the reason above.
 
+One file is a named exception to the cap: `crates/hdl-ast/src/range_rules.rs`
+keeps every rule over a pair of bounds in one place, so it may pass 1000 lines
+(owner, 2026-11-06). It opens with its history note, and only a code review
+splits it.
+
 ## Diagnostics
 
 Every user-visible message has a code, and the code is defined in exactly one
@@ -320,6 +325,7 @@ pull request, and needs one approval. Force-pushing to `main` is not permitted.
 |---|---|
 | `crates/` | the 17-crate workspace: front end, elaborate, engine, artifacts, CLI |
 | `third_party/libm/` | the vendored pure-Rust math library; do not edit |
+| `crates/hdl-ast/src/range_rules.rs` | the range record `RangeFacts` and every rule over a pair of bounds (count, width, direction, offset, position), a declaration kind's difference a named `Lane`; `tests/range_rules_home.rs` fails on such a rule spelled elsewhere. Elaborate builds the record with `range_facts` or `range_facts_if` (the lsb folded only once the msb folded), or `range_facts_pair` (both folded first) only at the sites that test pins |
 | `examples/` | four runnable designs used by the manual |
 | `bench/` | the workload corpus and its runner; upstream RTL is cloned at a pinned commit, never redistributed |
 | [`docs/ENGINEERING_RULES.md`](docs/ENGINEERING_RULES.md) | the canonical method: the accuracy ladder, census and review procedure |

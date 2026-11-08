@@ -1,6 +1,5 @@
 (§5.2 Q-SYMMIX · rank ① · source Q-DECLTYPE plan round 2 (W/qdecltype/plan2/PLAN-r2.txt R7 F12)) (a symbolic struct over a signed and an unsigned parameter is laid out wrong):
-* slot: PARKED 2026-11-06 behind Q-VALRULES fix (d)
-* slot: the slot is kept while parked
+* slot: re-enters at C0 · L1, next, since Q-VALRULES fix (d) slice A landed (§4.5.636; owner's order 2026-11-06: fix (d), then this row's re-entry, then S1v, then batch 1)
 * slot: after Q-DECLTYPE's S12 lands, before Q-PARAM2STATE's value half S1v, which it blocks (owner, 2026-11-05)
 * slot: alone or in one batch with S1v, ahead of the first batch, the owner's call
 * symptom: a symbolic struct (`hdl-parser/src/sym_struct.rs`) whose member MSBs name a signed and an unsigned narrow parameter is laid out wrong at exit 0
@@ -39,5 +38,11 @@
 * first cells the premise3 cells above
 * then the 46 of 427 cells PLAN3's prototype F1z (W/qsymmix/plan3/bin/vita-f1z md5 1c616c6fb5ea0d2168b25d88558c0cdc) moves (41 wrong -> right, 0 descents, 0 outputs moved over 5572 sweep rows)
 * then sy9_mixgeom, sy7_noul, x1_ovr_sym_twin, c05_nested, c13_defparam, b07_neg, w03_selfwrap_total, then W/qsymmix/plan3/cells (s1_*, h1_*, q2_*) and W/qsymmix/plan3/chain
-* status: parked behind Q-VALRULES fix (d) (premise judge r3 2026-11-06, F1 F2 F3): silent-wrong, pre-existing (PRE 92805863)
+* re-entry: on 2026-11-08 fix (d) slice A gave the three parked spellings one home without moving a value: the member width `(E < 0) ? 1 - E : E + 1` is `range_rules.rs` `sym_member_width` (`crates/hdl-ast/src/range_rules.rs:857`, called from `hdl-parser/src/sym_struct.rs:135`)
+* re-entry: after slice A the offsets and the total sums are `sym_sum_of` (`range_rules.rs:882`, called from `sym_struct.rs:212`), and the 1-bit width an errored member is laid out with is `sym_member_default_width` (`:875`, `sym_struct.rs:39`)
+* re-entry: after slice A P3's `sym_range_width` is `sym_typedef_width` with its `[X-1:0] -> X` shortcut (`range_rules.rs:817`, `:819`, called from `hdl-parser/src/type_params.rs:634`) and P2's builders are the `md_*` functions (`range_rules.rs:729`-`:793`, called from `hdl-parser/src/packed_md.rs`)
+* outside the file by its rule, so the re-entry meets them where they were: F1's alias slot (`hdl-parser/src/typedefs.rs`, a table: `range_rules.rs` OUTSIDE list) and F2's `$bits` fold in elaborate (an evaluator, the same list)
+* the record's count carries no `integer` limit since R1c moved to S1v, so an exact struct total past 2^31-1 meets no limit on that path: the re-entry censuses such totals or keeps its lane's PRE cap (UNMEASURED, W/qvalrulesd/plan7/filings.txt N7-2)
+* evidence: slice A leaves the row's cells as PRE: c01_alias_bits_lp `A x=3 b=8`, e01_asc_lp `A bv=14 ba=10`, c20_twin_bogus `A bo=18 bz=12 bw=6` byte-equal to PRE, and the 56 rows of W/qsymmix/premise3 in the cells of record show no difference (W/qvalrulesd/plan8/PLAN.txt D5, prototype p7c ae4ce705, the build r4 = p7c on all cells)
+* status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic

@@ -18,3 +18,6 @@
 * note: 294 field references in 23 sim-engine files and 142 `self.<field>` in 46 elaborate files re-pointed, one `format_version` bump
 * note: the per-id records take 15 Sidecars fields to 3 and fold into the `SideTables` change
 * note: a refactor row is verified by unchanged output — the full gate, corpus and cells byte-identical to PRE — not by page cells
+* note: Q-VALRULES fix (d) slice A (§4.5.636) left the engine's range spellings over what sim-ir records to this row, named in `crates/hdl-ast/src/range_rules.rs`'s OUTSIDE list and its structure test's exceptions (W/qvalrulesd/plan5/filings.txt F21)
+* note: those spellings are `sim-engine/src/state/task_frames.rs:1078` and `:1091` (the VCD header's declared span, a copy of `Lane::PartSelectSub`: sim-engine has no hdl-ast edge) and `sim-engine/src/builtins/pattern.rs` (a runtime pattern's stride)
+* note: the same list also holds sim-ir `sel_written_bits` and `selfwidth.rs` `part_width`, and `sim-engine/src/state/changes.rs` and `state/frame_eval.rs` (a `[off -: w]` low index)

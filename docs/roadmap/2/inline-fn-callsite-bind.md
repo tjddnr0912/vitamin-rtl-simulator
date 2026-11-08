@@ -6,6 +6,10 @@
 * a block-local name read after its block (q3t_twin: `y=01100110`, all three `01101001`)
 * a local's range naming a module constant called under a generate block that redeclares it (q3v_twin: `w=ff`, all three `w=0f`) and the return range likewise (c53: `z=00000011`, all three `00001011`)
 * witness: and an imported package function's part-select read bound folds the importing module's constant (c48: `a[K+1:0]` `z=1111`, all three `0111`).
+* witness: a package function's local range folds the caller's constant of the same name: ds_body `package q; localparam logic Q = 1'b1; function automatic int h(input int a); logic [(4'd9 / Q):0] t; t = '1; return $bits(t) + a; endfunction endpackage` in `module top; localparam logic Q = 1'b0; int v; initial begin v = q::h(0); $display("A v=%0d", v); $finish; end endmodule`: PRE d59629fa `A v=1`, iverilog and verilator `A v=10` (W/qvalrulesd/lens2/sound/cells/ds_body)
+* the same for a formal's range and a return range (ds_formal `A v=1`, iverilog and verilator `A v=10`; ds_ret4 `A v=1`, both `A v=1023`) and through a constant call (ds2p_d, r07, k3x4) (W/qvalrulesd/RULINGS-lens2.txt N1, W/qvalrulesd/plan6/filings.txt F25)
+* note: elaborate's declaring-scope window (`decl_win`) is armed only for owned package routines (`elaborate/src/decl_scope.rs:142-150`), and IEEE 1800-2017 §23.9 (ieee1800-2017.txt:33529–33533) resolves the name in the declaring scope
+* note: Q-VALRULES fix (d) kept PRE's values here (§4.5.636), and a refusal S1v adds is raised only where the declaring scope is the fold's scope (§5.2 Q-PARAM2STATE)
 * evidence: §4.5.615's select-write merge does not widen it: a select-writing body is refused unless every name it or its declarations resolve is declared by the body and bound before it is read (`inline_ret_select.rs` `body_binding_hazard`, the literal return-range rule; row-25 lens r1 B1/B2)
 * oracles: 3 oracles
 * status: OPEN

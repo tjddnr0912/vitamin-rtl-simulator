@@ -10,7 +10,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 300 | 186 | 114 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 301 | 186 | 115 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
 | §3.b | loud → correct-support, small | 190 | 155 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 642 | 402 | 240 | | | |
+| total | | 643 | 402 | 241 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -415,6 +415,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - string-nul-byte — [a string literal's NUL byte is kept raw](roadmap/2/string-nul-byte.md) · OPEN
 - dumpfile-param-name — [`$dumpfile` of a parameter names the file after the parameter path](roadmap/2/dumpfile-param-name.md) · OPEN
 - shadowed-member-message — [a member read under a shadowing constant gives the generic E3010](roadmap/2/shadowed-member-message.md) · OPEN
+- velab-mtime-stamp — [a work-library `.velab` stores unit mtimes, so its bytes differ run to run](roadmap/2/velab-mtime-stamp.md) · RECORD
 
 ### Performance (open, recorded)
 > Correct but slow paths: repeated continuous-assign calls, per-bit coercion, triple tree walks, `==?` chains; recorded, one blocked
@@ -838,15 +839,14 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-06): Q-SYMMIX parked; next Q-VALRULES fix (d) in code, Q-SYMMIX, S1v, batch 1 (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-08): Q-VALRULES fix (d) slice A landed (§4.5.636); next Q-SYMMIX, S1v, batch 1 (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| Q-VALRULES | C0 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
-| Q-SYMMIX | C0 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
+| Q-SYMMIX | C0 · L1 | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
 | Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
@@ -888,6 +888,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-HANDLERET | 10 · any | [two routes into a class handle skip the handle check](roadmap/5.2/Q-HANDLERET.md) | ① |
 | Q-STRCATSEL | 10 · any | [a select on a string concatenation reads the packed vector](roadmap/5.2/Q-STRCATSEL.md) | ① |
 | Q-STRWAIT | 10 · any | [a `wait` on a string comparison never wakes](roadmap/5.2/Q-STRWAIT.md) | ① |
+| Q-VALRULES | 10 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
 | 74 | 10 · L1 | [ET: the expression-type funnel (string, real or integral, and width)](roadmap/5.2/74.md) | ① F |
 | Q-STRTERN | 10 · L1 | [a `?:` with a string arm is not typed as a string](roadmap/5.2/Q-STRTERN.md) | ② |
 | Q-STRCASTLIT | 10 · L1 | [`string'(<literal>)` lowers to a bare literal, not a string](roadmap/5.2/Q-STRCASTLIT.md) | ② |

@@ -6,5 +6,6 @@
   * verilator `%Error: t.sv:3:18: Value too wide for 32-bits expected in this context 33'h100000003`
 * note: a net of that width is loud (hz1n_wide33net, `declared net width 4294967296 exceeds the v1 cap (1048576)`)
 * only the typedef read by `$bits` passes
-* note: no Q-SYMMIX design changed it (P3 kept PRE's spelling), so it waits on Q-VALRULES fix (d)
+* note: no Q-SYMMIX design changed it (P3 kept PRE's spelling), so it waited on Q-VALRULES fix (d)
+* note: fix (d)'s slice A (§4.5.636) is structure only and keeps PRE's values, so it now waits on Q-PARAM2STATE's S1v (a bound past `integer`: the bound range rule and R1c)
 * source: W/qsymmix/plan/cells/hz2_wide33td, W/qsymmix/plan3/filings.txt section 3
