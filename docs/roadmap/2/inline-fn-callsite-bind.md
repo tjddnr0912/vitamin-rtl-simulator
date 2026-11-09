@@ -12,4 +12,10 @@
 * note: Q-VALRULES fix (d) kept PRE's values here (§4.5.636), and a refusal S1v adds is raised only where the declaring scope is the fold's scope (§5.2 Q-PARAM2STATE)
 * evidence: §4.5.615's select-write merge does not widen it: a select-writing body is refused unless every name it or its declarations resolve is declared by the body and bound before it is read (`inline_ret_select.rs` `body_binding_hazard`, the literal return-range rule; row-25 lens r1 B1/B2)
 * oracles: 3 oracles
+* witness (2026-11-09, W/s1v/plan2/filings.txt F-N8): the caller-scope fold also gives PRE false causes: f01_unit_lp_shadow (`$unit` `localparam int Q = 1; localparam logic [(8/Q):0] P = 0;`, module `localparam int Q = 0;`, `$bits(P)`)
+  * PRE ``t.sv:2:19: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `Q` is not allowed in a constant range bound [in top]``; iverilog `A bp=9`, sv2v `A bp=x`, verilator `A bp=9`
+* witness: f04_mod_fn_at_net (a module function with a local `logic [(8/Q):0] t`, called from generate block g with `Q = 0` in `logic [f()-1:0] w;`) PRE `t.sv:6:12: error[VITA-E3009] E-ELAB-UNSUPPORTED: a function call that does not fold to a constant is not allowed in a constant range bound (…) [in top.g]`; iverilog = sv2v = verilator `A bw=9`
+* witness: f05_unit_fn_at_net, f06_unit_fn_at_lp (a `$unit` function in a net's range and a localparam's) and f07_pkg_fn_at_net (`q::h()`) PRE the same text at t.sv:5:10, t.sv:5:21 and t.sv:4:10 `[in top]`; iverilog and verilator `A bw=9` / `A bp=9` / `A bw=9`, sv2v `x` on f05 and f06, `A bw=9` on f07
+* page cells (2026-11-09, row 46 plan F4): entropy_src keeps 2 E3009 from a package routine's locals, `prim_mubi_pkg.sv:114:12` `undefined name MuBi4Width` … `[in entropy_src.u_entropy_src_core.$func$prim_mubi_pkg::mubi4_and]` and `:88:12` the same for mubi4_or (W/row46/plan/PLAN.txt Q1)
+* note: so the 16 prim_mubi local hunks stay in the row-9 overlay until this lands (only entropy_src needs them)
 * status: OPEN

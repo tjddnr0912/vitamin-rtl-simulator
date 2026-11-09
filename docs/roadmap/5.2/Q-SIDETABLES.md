@@ -3,6 +3,7 @@
 * slot: beside Q-NETSHAPE, which goes first is the owner's call
 * slot: no row waits on it, and it spans elaborate, cli and sim-engine, so it runs at a batch boundary, with no row under way
 * slot: a `.velab` `format_version` bump, so it runs alone (D12)
+* slot: no waiter; alone at a batch boundary after the OpenTitan batch (R9), never together with BIND-1 (`elaborate/src/lib.rs`'s `Elaborator` fields); Q-NETSHAPE or Q-SIDETABLES first stays the owner's call (owner, 2026-11-09, the record-first order)
 * symptom: the engine side tables are declared 3–5 times and carried by hand: `elaborate/src/tables.rs:501`, `sim-engine/src/lib.rs:231`, `cli/src/lib.rs:433`, `sim-engine/src/state/mod.rs:247`, `elaborate/src/lib.rs:277`
 * evidence: `..opts.sim_opts()` at `cli/src/frontend.rs:810` and `cli/src/staged.rs:758`
 * evidence: 8 silent staged-drop format bumps (`vita-artifact/src/header.rs:15`), 02a9c3e0, cfe87bad

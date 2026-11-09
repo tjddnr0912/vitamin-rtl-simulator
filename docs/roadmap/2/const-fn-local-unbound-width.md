@@ -6,4 +6,5 @@
 * witness: j4r_pre_ctl_body_lp_after_hdr `module m #(parameter P = f()) ();` `localparam W = 9;` `function automatic integer f(); logic [W - 1 : 0] x; x = '1; return x; endfunction` `$display("A P=%0d", P);`: PRE vita-main 8c970e9b `A P=1` at exit 0
 * oracles: iverilog, sv2v → iverilog and verilator `A P=511` (W/qsymmix/park2/m/j4r_pre_ctl_body_lp_after_hdr/RES.txt, W/qsymmix/premise5/ORACLES6.txt)
 * note: found by Q-SYMMIX premise round 5 (W/qsymmix/RULINGS-premise5.txt CARRY), where the minted route moved PRE-right designs onto this default (j4c, j4j, §5.2 Q-SYMMIX)
+* note: in the record-first order (owner, 2026-11-09) this entry becomes a §5.2 value row at R7.3, on BIND-2 (the width-0 lane retired: an unfolded local range declines) and VAL-2 (Declined is no value), with its own order fix (`const_func_table` filled at `instance.rs:537-542` before `bind_params` `:656`)
 * status: OPEN

@@ -1,4 +1,5 @@
 (§5.2 Q-CONSTSELLSB · rank ① · source Q-AESINK review r1 (dC1); row 29 page half r3 lens-sound C1) (constant interpreter select writes ignore the declared LSB and direction):
+* slot: R7.1 · L1 (batch 7, after batch 6), on BIND-2: a local's `RangeFacts`, read by select writes and the read twin (owner, 2026-11-09, the record-first order; it was any · L2)
 * the constant interpreter's select write numbers from 0 whatever the declaration says: `ConstWidths` holds a width and a sign, no LSB or direction, so `exec_const_select_write` (`elaborate/src/const_fn.rs`) stores `t[i]` at storage bit `i`: k_off_b `bit [5:2] t; t[2] = 1; t[3] = 1;` `00001100`, verilator `00000011`, iverilog and sv2v `0000xx11`
 * k_asc_b `bit [0:3] t` `00001101`, all three `00001011`
 * a 4-state local is the same value under Q-AESINK's `numbered` flag: v1_loop0_w1 `11111111`, all three `x1111111`

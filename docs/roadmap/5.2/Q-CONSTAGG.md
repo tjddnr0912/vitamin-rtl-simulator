@@ -1,4 +1,5 @@
 (§5.2 Q-CONSTAGG · rank ① · source Q-AESINK review r1 (sN6, dN1)) (constant interpreter treats packed-dim and unpacked locals as one vector):
+* slot: R7.2 · L1, after Q-CONSTSELLSB (one frame record), on BIND-2: a local's packed and unpacked dims (owner, 2026-11-09, the record-first order; it was any · L2)
 * a packed-dimension or unpacked local acts as one vector in the constant interpreter: an element select writes one bit at the element's index: k_md_b `bit [1:0][3:0] t; t[0] = 4'd5; t[1] = 4'd6;` `00000001`, all three `01100101`
 * k_unp_b `bit [3:0] m [0:1]; m[0] = 4'd1; m[1] = 4'd2; f = {m[1], m[0]};` `00000001`, all three `00100001`
 * u3 `logic [1:0] m [2]`, each element 3, `{m[1], m[0]}` `0011`, all three `1111`

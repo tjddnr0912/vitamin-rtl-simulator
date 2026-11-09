@@ -1,0 +1,9 @@
+(§2 zero-width-gate-after-error · OPEN · in Diagnostics / artifacts) (an earlier error turns the zero-width line into a false cause):
+* symptom: an earlier error sets the error latch (`had_error`, `driver.rs:383`), so `zero_width_claim_is_sound` (`elaborate/src/edge_gate.rs:589`) answers false and its three consumers (params, `const_eval.rs:1054`, `generate.rs:495`) print a false cause or drop PRE's true zero-width line; rc 1 kept
+* witness: j5_zw_param_preerr2 `module m1; logic [Q : 0] y; endmodule` (Q undefined) beside `module m2; localparam logic [7:0] P = 8'hFF; localparam int N = 0; localparam int K = P[0 +: N]; …`: PRE vita-main 8c970e9b prints the `Q` line, then:
+  * ``t.sv:5:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `K` value is not a constant: the part-select `P[…]` has no constant-fold arm [in top.u2]``
+* witness: with m1 correct (j5_zw_param_inst_pre) PRE gives the true cause, ``parameter `K` value is not a constant: the width of this indexed part-select is zero; an indexed part-select width must be a positive constant (IEEE §11.5.1) [in top.u2]``
+* witness: j5_zw_bound_preerr2 (`logic [P[0 +: N] : 0] x;`) and j5_zw_gencase_preerr2 (`case (1) P[0 +: N]: …`): PRE prints only the `Q` line, the zero-width line (j5_zw_bound_pre `t.sv:5:17: error[VITA-E3009] E-ELAB-UNSUPPORTED: the width of this indexed part-select is zero; …`) dropped (W/s1v/premise2/cells)
+* oracles: iverilog `Indexed part select width must be an integral constants greater than zero.`, verilator `Width of bit extract must be positive` (W/s1v/RULINGS-premise2.txt); on j5_zw_param_preerr2 verilator stops at `%Error: t.sv:1:19: Can't find definition of variable: 'Q'`
+* note: found by S1v premise round 2 (B-2), where a C1 refusal set the same latch (F24 REFUSAL-AS-VALUE through the latch); VAL-2's named latch questions are its home (§5.2 VAL-2)
+* status: OPEN

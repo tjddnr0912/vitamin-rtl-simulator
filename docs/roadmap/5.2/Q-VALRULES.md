@@ -2,6 +2,8 @@
 * slot: fix (d) ran first, as a code row at C0 · L1 (owner, 2026-11-06), and its slice A landed (§4.5.636), so Q-SYMMIX's re-entry takes C0 · L1, then S1v, then batch 1
 * slot: just before row 74 (owner, 2026-11-05)
 * slot: 74 (the expression-type funnel) takes its design
+* slot: (b) becomes VAL-1, VAL-2 and VAL-3 (R3.1–R3.3 · L1, after SYS-1 and PARSE-1) and no longer waits on row 74 (owner, 2026-11-09, W/program/reorder2-2026-11-09/PLAN.txt), so "just before row 74" above holds for (a) and (c) only
+* slot: (a) and (c) stand as written: (a) joins 74-S, row 74's structure half after Q-NETSHAPE, and (c) is 74-S's design (owner decision O1, 2026-11-09)
 * scope: measure only, no code: a census of the value / width rules spelled several times, and a design
 * note: fix (d) alone is a code row (owner, 2026-11-06)
 * the census and the design (a)–(c) stay measure only
@@ -50,3 +52,21 @@
 * note: for (b): the same census names the evaluators a width tree reaches that are not keyed on `$clog2`: `const_int_selfdet` (`const_fn.rs:605`), `const_bound_u32` (`const_bound.rs:44`), `lower_expr` (`expr_main.rs:1133`)
 * scope: what is left is the census and the design (a)–(c), measure only, just before row 74, which takes the design
 * the lane variants' unification and the four refusals are S1v's (Q-PARAM2STATE), not this row's
+* note: the owner's condition (2026-11-09): one home is not forced; the homes are justified groups, cut only where the code's domain, result contract, phase or crate differs, each with its own home (W/program/reorder2-2026-11-09/PLAN.txt G1)
+* note: the groups: SYS, system-function facts (`sim-ir`, SYS-1); OPS, operator and literal kernels (PARSE-1); PARSE, the parse-time fold (hdl-parser, PARSE-1); VAL, the elaborate evaluator (VAL-1–3); BIND, the bound-constant record (BIND-1, BIND-2); TYPE, the expression type (74-S)
+* note: arithmetic in two homes (owner decision O2, 2026-11-09): hdl-ast 64-bit (hdl-parser and elaborate reach it) and `sim-ir` wide (elaborate and the engine reach it), since no crate is a direct dependency of both hdl-parser and sim-engine (main's check: sim-engine reaches hdl-ast only through elaborate)
+* note: (b)'s value rows after the homes (PLAN G6): R6.1 R1v + the bound lane + R1w + R1c (VAL-3's typed bound and BIND-1), R6.2 C1 + R1x (VAL-3's x evidence and VAL-2's latch questions), R6.3 and R6.4 the Lane track I (LiteralNet + StructMember, after the u64::MAX edge) and II
+* note: each a side diagnostic where the bound is declared, the declaring scope the fold scope, PRE's value going on; they left Q-PARAM2STATE's S1v for (b) (W/s1v/RULINGS-premise1.txt, RULINGS-premise2.txt)
+* evidence for R6.2 (W/s1v/plan2/filings.txt F-R1X): R1x's x evidence reads the parameter value channel, whose producers are lossy: r1x_dropuns `localparam unsigned U = 4'sd8; logic [8 / (U + 8'sd8) : 0] w;` PRE `A u=-8 bw=1`, the prototype pR2 rc 1 (a zero divisor), iverilog = verilator `A u=8 bw=1`, sv2v `A u=-8 bw=x`
+* r1x_f2cmp (F-2's `$bits` producer): PRE `A m=4294967291 bw=1`, pR2 rc 1, iverilog = verilator `A m=-5 bw=9`; r1x_errrec (a refused parameter's recovery value 0): PRE rc 1, pR2 adds a zero-divisor line, iverilog `A bw=1`
+* r1x_ovrx and r1x_ovrx_ceq (an override's x / z bits bound as 0 / 1, `packed_md.rs:471-473`): PRE `A bw=1`, pR2 rc 1; on _ceq iverilog = sv2v = verilator `A bw=9`, on r1x_ovrx verilator refuses (N is x) and iverilog `A bw=1`
+* note: exact on the measured unsigned 64-bit shapes (PRE = pR2 = iverilog = verilator): r1x_u64cmp, _l, u64lit, u64shr, u64div, u64mod, u64ge, pkgu64, ovru64
+* note for C1's text (F-TRUNC, not a defect): a sized literal with more digits than its size is truncated from the left (IEEE 1800-2017 §5.7.1): c1_trunc `logic [4'hx3 : 0] w;` PRE `A bw=4` = iverilog = sv2v, verilator `Too many digits for 4 bit number: '4'hx3'`; c1_trunc_b (`2'bx01`) `A bw=2` the same; pR2 gave a false C1 cause on both
+* note (F-XD1): the one repo file with a C1 shape is `crates/testdata/cells/T/s581__s2__cells__XD1.sv` (`logic a [4'bx : 0];`, a raw capture no test reads): iverilog `XD1 1`, verilator refuses, sv2v `XD1 x`, PRE `XD1 x` at rc 0; OpenTitan hw/ (2197 files), EH1 (47) and examples/ hold none
+* note (F-XMASK): 19 cells of W/s1v/plan's 316 print PRE `A b=1 l=x r=x` (x04 x05 x06 x07 x10 x11 x18 x24 x31 x33 over `8/Z` or `8 % Z`; y01 y02 y06 y07 y08 y15 y20 y21 y23 over x / z literal operands), where every bound is a legal constant once IEEE 11.4 masks the x (y01 = 1, x04 = 3)
+* that is the fold's x-masking value rule, (b)'s, and an R1x refusal there names a false cause (W/s1v/plan2/xpath.txt)
+* note: C1's 47 lines and the pRp2 prototype (7cfaf9af) are evidence for (b), not a patch, and N-1 (a macro lexeme is the expanded token, j1_mac_arg), N-3, N-4 and N-6 carry into (b)'s refusal design (W/s1v/RULINGS-premise2.txt)
+* note: (b) is also the home of row 46 (premise 1 B1: one constant folded by two evaluators, the parser's width-blind i64 and elaborate's width-aware) and row 24 (premise 1 F1, the lossy producers) (W/row46/RULINGS-premise1.txt, W/row24/RULINGS-premise1.txt)
+* evidence (row 46, PRE's own path of B1's class, a CLASS under D8): j1a3 `localparam int B = $bits(t);` over an untyped N (the parser's `$bits(T)` fold over `const_locals`, `casts.rs`) PRE b0 9870e7ba `A b=8 mb=8 pb=4 n=4`, iverilog all 8, verilator all 4 (no oracle)
+* evidence (row 46 plan F3): an `int unsigned` zero in a package typedef's `[W-1:0]` (h05b twin) PRE `A b=2` = verilator, iverilog = sv2v → iverilog `A b=0`, IEEE §11.8.1 2^32 bits (vita's cap): the parser's width-aware fold and elaborate's `p::W` fold disagree
+* evidence (row 24 plan5): EL2 `el2_ifu_mem_ctl.sv:1777` `pt.ICACHE_INDEX_HI-3:0` stays E3009: the bound evaluator `const_bound_u32` has no struct-parameter member arm (one evaluator, or Q-MEMBSRC's read half)

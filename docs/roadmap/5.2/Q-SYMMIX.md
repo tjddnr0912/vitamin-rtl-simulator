@@ -2,6 +2,7 @@
 * slot: PARKED 2026-11-09 behind Q-VALRULES (b) → row 74, to re-enter with spelling (C), keeping C0 · L1 while parked (owner decision O3, W/qsymmix/replan3/PLAN.txt OWNER DECISIONS)
 * slot: S1v (Q-PARAM2STATE's value half) runs next at C0 · L1 as batch 0 (owner, 2026-11-09)
 * slot: the two lines above supersede the slot lines below (the re-entry at C0 · L1 of 2026-11-08, the order of 2026-11-05 and 2026-11-06)
+* slot: it re-enters at R5.1 · L1 (batch 5), after batch 4 lands, on VAL-1–3, SYS-1 and PARSE-1, with a premise judge and a design review, in place of "Q-VALRULES (b) → row 74" (owner, 2026-11-09, the record-first order: (b) is VAL-1–3 and no longer waits on 74)
 * slot: re-enters at C0 · L1, next, since Q-VALRULES fix (d) slice A landed (§4.5.636; owner's order 2026-11-06: fix (d), then this row's re-entry, then S1v, then batch 1)
 * slot: after Q-DECLTYPE's S12 lands, before Q-PARAM2STATE's value half S1v, which it blocks (owner, 2026-11-05)
 * slot: alone or in one batch with S1v, ahead of the first batch, the owner's call
@@ -123,5 +124,7 @@
 * re-entry: the first cells for (C) are the minted route's counterexamples (h15h_unit_hdr, a1_genregion_out, a12_genregion_twoinst, a4_genregion_unused_str, c7_r_bare_str, b5_plain_collide_after, j4c, j4j, j4k, j4m, j4p, j5b)
 * then the 627 and Q6's 13 structs
 * note: S1v runs first now, so the cells needing both rows (t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec) stay wrong and are claimed on S1v's page (Q-PARAM2STATE)
+* note: (C) on the homes (W/program/reorder2-2026-11-09/PLAN.txt G3): the count node's arm once (VAL-1), folded through the one entry (VAL-2), its bounds through the router (VAL-3); the node's facts one SYS-1 entry if spelled as a reserved `$__vita_` name
+* note: and the parser emits the node where `range_rules` part 5's respell builders write today (PARSE-1): one arm in place of 11 + `names.rs:96`; (C) is not prototyped, and the 627 claims were measured on the minted route (U8)
 * status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic

@@ -21,7 +21,7 @@ Vocabulary:
 | census | An enumeration, from source, of every site able to reach a question, each cell measured, not argued |
 | cell | One design plus one measured output |
 | control twin | A cell identical but for the axis under test, attributing a result to it |
-| anchor | An expected value fixed independently of any implementation, so shared-code changes cannot move it |
+| anchor | An expected value fixed independently of any impl, so shared-code changes cannot move it |
 | hand-IEEE | An expected value read off the IEEE 1364/1800 text where no tool can arbitrate |
 | oracle | An independent tool or standard text deciding a cell. Live: `iverilog` + `vvp`, run by the differential harnesses; second opinion: `verilator`, by hand on 2-state arithmetic, width and sign |
 
@@ -233,7 +233,7 @@ No round budget: a row runs the rounds it needs, each a fresh agent with a delta
 | When three requests stop at one prereq, file one infra line and point the feature rows at it | The next request hitting the same wall |
 | A root class lenses found in 2+ rows is a plan-gate question: the plan lists each instance of the shape it builds and why the canonical alternative does not apply; the premise judge checks it. Classes: admission walker modelling the lowering → read its decision (§5.3) | Known root classes rebuilt |
 | A lesson or finding whose root class was seen before (often one fact computed in several places: §5.1) files a structural row in ROADMAP §5.2 or joins the open row building that record, never a checklist line or rule here | A structural defect absorbed as review cost; rules growing while the root stays |
-| Once a prerequisite lands, re-derive its reverted slice from the row and current code, never restoring the old patch and its compensations | Floors for a missing prereq surviving |
+| Once a prereq lands, re-derive its reverted slice from the row and current code, never restoring the old patch and its compensations | Floors for a missing prereq surviving |
 
 ### 3.7 Tiers, bundles and pipelines
 
@@ -243,7 +243,7 @@ ROADMAP §5.2 tags each row's tier (untagged: S at least); an F or structural-st
 |---|---|
 | C (corpus admission, no vita source change): one judge checks the evidence (study/03 rules 1–5, CI time), no lens | Unmeasured admissions |
 | L (fresh lane), only if measured: PRE refuses each affected input at parse or by one named elaborate refusal, no arm joins a shared fold, classifier, resolver or walker; one lens: §3.3 on each new cell, §3.4 on the new accept set | A lens re-measuring the sweep |
-| S (shared code edited or routed into, every lane measured): both lenses. F (an untargeted lane of shared code; binding, scope; scheduling, time 0; driver verdicts; cross-instance writes; representation, format; unsafe, FFI; loud→value through shared code): a design review first, both lenses in full, a mutation battery | Shared roots reviewed lightly |
+| S (shared code edited or routed into, every lane measured): both lenses. F (an untargeted lane of shared code; binding, scope; scheduling, time 0; driver verdicts; cross-instance writes; repr, format; unsafe, FFI; loud→value through shared code): a design review first, both lenses in full, a mutation battery | Shared roots reviewed lightly |
 | Escalate mechanically: a sweep moving a PRE-accepted source makes the row S at least, those sources leading the brief; a BLOCKING L finding re-reviews the fix at S; a design-changing fix gets a design review, any tier | Tiers argued down |
 | Before any code, a fresh judge checks only the premise table (§4.3) and plan-gate questions (§3.6): redoes each producer census, runs each counterexample cell on PRE; no run_all or battery; every row, batch verify included (a plan check, not a lens; at F before the design review); a failed premise returns to the plan's dispositions, not the builder | Premises only their author measured |
 | Before lenses, run the full gate and sweep frozen release PRE and POST over every cell, example, corpus design and preserved repro (`.vu`, `.velab`, waveform, stdout, stderr, exit) | Reviewing what a sweep measures |
@@ -367,7 +367,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 
 | Rule | Prevents |
 |---|---|
-| Keep each core repr one record (decl type facts: `hdl_ast::DataType`, §4.5.635; value and width rules, ranges: `RangeFacts`, `hdl-ast/src/range_rules.rs`, §4.5.636; engine side tables; executor semantics): consumers read it, never re-derive; while missing, a row waits behind the row building it, a forced local bypass naming that row's id at the site | One fact computed in many places, each fix leaving its siblings (rows 29, 33 parked) |
+| Keep each core repr one record (decl type facts: `hdl_ast::DataType`, §4.5.635; ranges: `RangeFacts`, `hdl-ast/src/range_rules.rs`, §4.5.636; value and width rules: the homes of §5.2 SYS-1, PARSE-1, VAL-1–3, BIND-1–2, 74-S; engine side tables; executor semantics): consumers read it, never re-derive; while missing, a row waits behind the row building it, a forced local bypass naming that row's id at the site | One fact computed in many places, each fix leaving its siblings (rows 29, 33 parked) |
 | A record or funnel replacing per-site spellings keeps each site's evaluation order (thunks, or the order named per caller): a skipped half may be a recursion or cost guard; a neutral check compares rc, signal and wall too | Crash or slowdown where a site short-circuited (§4.5.636) |
 | Write a question or rule twins share once, both calling it: a question beside its twin in `sim-ir`, not at the consumer; a renderer's value-free rules in a crate the constant twin and runtime both reach | Second spellings converging one finding at a time |
 | A limitation whose reason is another stage's impl detail is that stage's defect | The naming and lookup paths diverging |
@@ -385,7 +385,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 
 | Rule | Prevents |
 |---|---|
-| Walk exprs against an exhaustive allow-list of provably safe forms (a match compiler-checked for new variants, not a boolean, over every value sub-expression), failing closed on unknowns, flagging reads with no nameable root opaque (confirm cost is structurally narrow); never enumerate spellings/dangers; measure refusals and admissions | Quiet omissions; escaping names |
+| Walk exprs against an exhaustive allow-list of provably safe forms (a match compiler-checked for new variants, not a boolean, over every value sub-expr), failing closed on unknowns, flagging reads with no nameable root opaque (confirm cost is structurally narrow); never enumerate spellings/dangers; measure refusals and admissions | Quiet omissions; escaping names |
 | Extend a classifier, gate or fold arm auditing the path it newly reaches (each defect a missing-answer fallback masked is your regression), a shared one only with full consumer census or per-consumer enabling; take walker polarity from the gate (accept: conservative/exhaustive; reject: positive), reading a catch-all's false as "may reference anything", not "unknown" | Arms answering in refusing lanes; working designs refused; name-blind answers; defects surfacing one by one |
 | Close a syntactic walker's blind spot by opting into an exhaustive walker, one axis parameterised (all segments, not head, for callee reach), never a new one; before a new walker read existing filters: the arena is not a tree | Repeated omissions; back edges |
 | Census every binder (decls, imports, aliases, injected bodies, upward routine search, loop variables) before a name-keyed set admits; feed the augmented set only to same-polarity consumers; if the scope model misses a binder (contextual keyword), decline on any token-vector use of the name | Missed binders |
@@ -450,7 +450,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 | Judge resolution/classification from an AST-gathered pure-function set, not mutable elaboration state | Phase-only diagnostics |
 | Put a stand-down in the arm whose hazard it answers, keyed on the stmt; a statement-blind gate cannot decide per stmt | Disabled sibling arms |
 | Prove death by "written on every path", not "unread before first write", checking the reused predicate's exact success meaning | Stale copy-out |
-| Never unwrap a block to iterate stmts (drops decls); test declaration-initializer spelling and subroutine redeclaration too | Spellings disagreeing |
+| Never unwrap a block to iterate stmts (drops decls); test decl-initializer spelling and subroutine redeclaration too | Spellings disagreeing |
 | Write evaluators in target domain, not input limits (bounded leaves don't bound results); run the target evaluator on a rewrite's degenerate inputs before choosing its shape, picking one failing loudly | Out-of-domain results; inherited leniencies |
 | Replacing a predicate, count paths it kept from running, prove each old arm's obligation covered (not accuracy), restore a dropped arm by axis (its conditions' questions), not verbatim | Correct-to-wrong cells |
 | Check a runtime-predicting fold on domain, resolver, scope; prefer an identifier-free allow-list where order must not matter | Engine divergence |
@@ -463,7 +463,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 | Mark added classification items so they neither gain candidacy nor remove others' | Candidacy drift |
 | Before moving an evaluation answer how often, when, what it reads, with an inertness predicate over all the move passes over | Purity-only answers |
 | Capture, mutate, install where source may alias destination; document both cases | Lost values |
-| Guard and judge on the value, over lowered IR and every sub-expression, in the funnel seeing it, not on syntax or shape | Pierced shape guards |
+| Guard and judge on the value, over lowered IR and every sub-expr, in the funnel seeing it, not on syntax or shape | Pierced shape guards |
 | After widening a producer, enforce what consumer channels can carry where they meet | Wrong widths |
 | Grep a value's consumers before saying it decides one thing; split a sentinel not tolerated everywhere; if a fold feeds a value and a test, comment which "no value" the test reads, proving no arm swaps them | Double-duty values |
 | Decide relative vs absolute for a recorded string at the producer, spelled in the string, honoured, censused across renderers | Unrepairable relative values |
@@ -472,7 +472,7 @@ Slices open and close with a census (§1). Producer, routing, ordering, consumer
 | Make invariants unconditional (asserting tails too; fix unreachable arms leaning on side conditions in the same round) | Conditional properties |
 | Treat a non-invalidating memo as a no-change claim: grep every write site; narrow it to a prefix where invalidation is impossible | Stale cached answers |
 | Check a helper's documented preconditions at each new call site and build a sibling where they fail; never list its callers in its doc | Misuse past a precondition; stale caller lists |
-| Make a mutual recursion's termination structural (every departing call takes a proper sub-expression or one ungated entry), pinned with a mutant, not an audit of arms | A cycle through a catch-all arm |
+| Make a mutual recursion's termination structural (every departing call takes a proper sub-expr or one ungated entry), pinned with a mutant, not an audit of arms | A cycle through a catch-all arm |
 | Charge a recursion budget only where a position can re-enter the callee's decl (a default argument), not on nested arguments; gate a delegate restarting depth at 0 | Early louds; a depth-reset overflow |
 
 ### 5.5 Scope, ownership and order
@@ -590,7 +590,7 @@ A behaviour claim is settled only by probe, sweep or census; the probe is a clai
 
 Full local gate: CONTRIBUTING › The gate. Green in the commit moving them: `sim-ir` schema-hash, frozen-shape, no-float, body-reference suites; artifact header, round-trip; diagnostic-code bijection; parser depth, node-budget guards; live `iverilog` differential; backend equivalence; vendored-libm determinism pins.
 
-A test has teeth if a wrong implementation fails it: a mutation that must die, a control the fix must move, an anchor no shared code can shift; not coverage, green or byte-identity alone.
+A test has teeth if a wrong impl fails it: a mutation that must die, a control the fix must move, an anchor no shared code can shift; not coverage, green or byte-identity alone.
 
 ### 7.1 What gives a test teeth
 
@@ -756,7 +756,7 @@ A test has teeth if a wrong implementation fails it: a mutation that must die, a
 
 | Rule | Prevents |
 |---|---|
-| Ship the subset needing no prerequisite, proved, not asserted from a naming convention; retire a multi-call-site predicate in its own change, recorded with the measurement and the prescribed deletion | Blocked changes; wider blast radius |
+| Ship the subset needing no prereq, proved, not asserted from a naming convention; retire a multi-call-site predicate in its own change, recorded with the measurement and the prescribed deletion | Blocked changes; wider blast radius |
 | Pre-verify in simulation the expr a desugar will generate, pin every variant of a context-determined feature before implementing, give a large semantic space its own slice, record the plan durably | Generated code run differently |
 | Order work by risk (pure parser desugar on existing AST, routing to an existing mechanism, composing single-property primitives, new infra), cut slices where the oracle is, measure the corpus before planning the order | Riskiest first; gates running no corpus design |
 | Re-find a reproduced report's cause; price a loud-to-correct item in two-oracle cells per edit site before picking it from a multi-site row | Fixing what works; cheap cells first |

@@ -10,10 +10,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 305 | 190 | 115 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 313 | 197 | 116 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 190 | 155 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 191 | 156 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 647 | 406 | 241 | | | |
+| total | | 656 | 414 | 242 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -167,6 +167,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - 🆕 AK — [a non-ANSI `input signed` port redeclared as an unsigned net reads unsigned](roadmap/2/new-AK.md) · OPEN
 - respell-drops-const-type — [a package md parameter's use site reads an imported constant as a 32-bit integer](roadmap/2/respell-drops-const-type.md) · OPEN
 - body-typedef-sym-mix — [a function-body symbolic struct over mixed-sign parameters is laid out wrong](roadmap/2/body-typedef-sym-mix.md) · OPEN
+- specparam-data-type — [a `specparam` with a data type, or outside a module, is accepted](roadmap/2/specparam-data-type.md) · OPEN
+- typeparam-value-signing — [a type-parameter value with a second or misplaced signing is accepted](roadmap/2/typeparam-value-signing.md) · OPEN
 
 ### Constant domain (i64)
 > The i64 constant folder's limits: wraps, masked overflow, unset variables read as 0, replication counts; mostly open, a few held by design
@@ -293,6 +295,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - net-variable-select-assign — [a continuous assign to a net through a variable select runs, sticky](roadmap/2/net-variable-select-assign.md) · OPEN
 - md-select-index-context — [an md packed parameter's select index is evaluated in the offset's context](roadmap/2/md-select-index-context.md) · OPEN
 - xz-range-lsb — [an x / z or zero-divisor lsb of a declared range folds to 0](roadmap/2/xz-range-lsb.md) · OPEN
+- xz-decimal-bound — [a malformed decimal x / z literal in a range bound is accepted](roadmap/2/xz-decimal-bound.md) · OPEN
+- low-negative-formal — [`$low` of a function formal with a negative lsb reads 0](roadmap/2/low-negative-formal.md) · OPEN
 
 ### Class fields
 > Class property bounds, defaults and name binding inside a class body; open, one blocked on field-key normalisation
@@ -305,6 +309,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - inline-constraint-caller-scope — [a name in an inline constraint binds at the call, not in the class](roadmap/2/inline-constraint-caller-scope.md) · OPEN
 - md-class-property-select — [a packed multi-dimensional class property select reads the flat bit](roadmap/2/md-class-property-select.md) · OPEN
 - extends-other-module — [a class extending a class declared in another module is accepted](roadmap/2/extends-other-module.md) · OPEN
+- class-field-x-actual — [a class field's range over an x parameter actual is silent](roadmap/2/class-field-x-actual.md) · OPEN
 
 ### Scoping / imports / block-locals
 > Names bound in the wrong scope: type names, imports, package routines, inlined bodies, block-locals; the largest area, mostly open
@@ -420,6 +425,9 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - dumpfile-param-name — [`$dumpfile` of a parameter names the file after the parameter path](roadmap/2/dumpfile-param-name.md) · OPEN
 - shadowed-member-message — [a member read under a shadowing constant gives the generic E3010](roadmap/2/shadowed-member-message.md) · OPEN
 - velab-mtime-stamp — [a work-library `.velab` stores unit mtimes, so its bytes differ run to run](roadmap/2/velab-mtime-stamp.md) · RECORD
+- velab-cu-dedupe — [`velab -L` drops a second unit's diagnostic at the same offset](roadmap/2/velab-cu-dedupe.md) · OPEN
+- zero-width-gate-after-error — [an earlier error turns the zero-width line into a false cause](roadmap/2/zero-width-gate-after-error.md) · OPEN
+- stale-key-refused-spelling — [a prebuilt artifact passes a spelling the parser now refuses](roadmap/2/stale-key-refused-spelling.md) · RECORD
 
 ### Performance (open, recorded)
 > Correct but slow paths: repeated continuous-assign calls, per-bit coercion, triple tree walks, `==?` chains; recorded, one blocked
@@ -559,6 +567,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - pkg-scoped-task — [a package-scoped task call `pk::t()` as a statement is rejected](roadmap/3.b/pkg-scoped-task.md) · OPEN
 - time-signed-param — [`parameter time signed` is rejected by the parser](roadmap/3.b/time-signed-param.md) · OPEN
 - param-time-unsigned — [a signing keyword after `time` on a parameter is refused](roadmap/3.b/param-time-unsigned.md) · OPEN
+- begin-keywords-version — [a `begin_keywords` version does not narrow the keyword set](roadmap/3.b/begin-keywords-version.md) · OPEN
 - based-ws — [a space inside a based literal (`64'sh FFFF`) is a lexer error](roadmap/3.b/based-ws.md) · OPEN
 - tf-localparam — [`localparam` inside a task body is rejected](roadmap/3.b/tf-localparam.md) · OPEN
 - blk-automatic — [an `automatic` declaration in a block of a task body is rejected](roadmap/3.b/blk-automatic.md) · OPEN
@@ -843,30 +852,40 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-09, owner): Q-SYMMIX parked behind Q-VALRULES (b) → 74; next S1v (batch 0), batch 1; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-09, owner): S1v-Q landed (§4.5.637); record-first order, next SYS-1, PARSE-1, VAL-1–3, BIND-1–2; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| Q-PARAM2STATE | C0 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
-| Q-SYMMIX | C0 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
+| SYS-1 | R2.1 · L1 | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
+| PARSE-1 | R2.2 · L1 | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast](roadmap/5.2/PARSE-1.md) | — F |
+| VAL-1 | R3.1 · L1 | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
+| VAL-2 | R3.2 · L1 | [one entry and one result record for the elaborate constant evaluator](roadmap/5.2/VAL-2.md) | — F |
+| VAL-3 | R3.3 · L1 | [the range-bound router returns the exact typed bound](roadmap/5.2/VAL-3.md) | — F |
+| BIND-1 | R4.1 · L1 | [one bound-constant record per name, in place of the parameter maps](roadmap/5.2/BIND-1.md) | — F |
+| BIND-2 | R4.2 · L1 | [the constant-function frame as bound-constant records](roadmap/5.2/BIND-2.md) | — F |
+| Q-SYMMIX | R5.1 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
+| Q-PARAM2STATE | R5.2 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
+| Q-CONSTSELLSB | R7.1 · L1 | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① |
+| Q-CONSTAGG | R7.2 · L1 | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
+| Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
+| 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
+| 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
+| 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
+| 68 | R9.1 · L1 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
+| 23 | R9.1 · L1 | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
+| 46 | R9.3 · L1 (PARKED) | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
+| 39 | R9.4 · L1 | [package export declarations are refused at parse](roadmap/5.2/39.md) | ② F |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |
-| Q-MEMBSRC | C2 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
-| 29 | C3 · T3 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
-| 46 | C4 · L1 | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
-| 24 | C5 · L2 | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
-| 31 | C6 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
 | Q-SIDETABLES | C7 · L1 | [one engine side-table record, below sim-engine](roadmap/5.2/Q-SIDETABLES.md) | — F |
 | Q-NETSHAPE | C7 · L1 | [one net-shape record in elaborate, written only by add_net](roadmap/5.2/Q-NETSHAPE.md) | — F |
+| 74-S | C7 · L1 | [the expression-type rule in one home beside sim-ir's self width](roadmap/5.2/74-S.md) | — F |
 | Q-VARBASEWR | C8 · T3 | [a variable-base `+:` write into a multi-dimensional packed element](roadmap/5.2/Q-VARBASEWR.md) | ② F |
 | 35 | C9 · L1 | [a replication inside an assignment pattern is refused at parse](roadmap/5.2/35.md) | ② S |
-| 68 | C10 · L2 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
-| 23 | C10 · L2 | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
 | 37 | C11 · L1 | [unpacked-array port actuals: sub-arrays, patterns, one-element arrays](roadmap/5.2/37.md) | ② S |
 | 43 | C12 · L2 | [a package struct member width given by a constant function call](roadmap/5.2/43.md) | ② F |
-| 39 | C13 · L1 | [package export declarations are refused at parse](roadmap/5.2/39.md) | ② F |
 | 42 | C14 · L2 | [a struct with header-parameter member widths, beyond whole-member reads](roadmap/5.2/42.md) | ② F |
 | 38 | C15 · L2 | [a member select after a two-level index into a packed struct array](roadmap/5.2/38.md) | ② S |
 | 70 | C16 · L2 | [hierarchical element select of an md packed parameter reads the flat bit](roadmap/5.2/70.md) | ① F |
@@ -883,9 +902,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-CLSRET | 12 · L2 | [a class-typed function return is treated as one bit](roadmap/5.2/Q-CLSRET.md) | ① S |
 | Q-DLYCAT | 7 · L1 (PARKED) | [an intra-assignment delay on a string concatenation is refused](roadmap/5.2/Q-DLYCAT.md) | ② |
 | Q-RANGEMASK | any · L2 | [interpreter formals and locals with unfoldable ranges are not masked](roadmap/5.2/Q-RANGEMASK.md) | ① |
-| Q-CONSTSELLSB | any · L2 | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① |
 | Q-PKGBLKLEAK | any · L2 | [a package routine's block-local writes the enclosing name](roadmap/5.2/Q-PKGBLKLEAK.md) | ① |
-| Q-CONSTAGG | any · L2 | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-SCALARSEL | any · L2 | [a bit select of a scalar folds instead of being an error](roadmap/5.2/Q-SCALARSEL.md) | ① |
 | Q-IDXSIGNCTX | 9 · T3 | [an index is re-typed unsigned 32-bit by the flatten it is lowered into](roadmap/5.2/Q-IDXSIGNCTX.md) | ① |
 | Q-STRREPEVAL | 10 · any | [a string replication evaluates its operands once per copy](roadmap/5.2/Q-STRREPEVAL.md) | ① |
@@ -909,7 +926,6 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 26 | 16 · L1 | [`$sformatf` as a task argument and inside `?:` is refused](roadmap/5.2/26.md) | ② S |
 | Q-STRWIDTH | 18 · T3 | [the empty string literal folds as 1 bit instead of 8](roadmap/5.2/Q-STRWIDTH.md) | ① |
 | Q-2STINVSEL | 19 · L1 | [an invalid select of a 2-state variable reads x, not 0](roadmap/5.2/Q-2STINVSEL.md) | ① |
-| Q-OVRXPLANE | 20 · L2 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | 49 | 21 · T3 | [enum labels the 64-bit label fold cannot hold](roadmap/5.2/49.md) | ② F |
 | Q-NANCANON | 22 · L1 | [real NaN sign and payload differ by platform](roadmap/5.2/Q-NANCANON.md) | ① F |
 | 76 | 23 · L2 | [the constant interpreter's environment holds no x](roadmap/5.2/76.md) | ① F |
@@ -919,6 +935,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 34 | 28 · L1 | [`$bits` of an ANSI port in a `localparam` is refused](roadmap/5.2/34.md) | ② S |
 | Q-TPCARRIER | 29 · L2 (PARKED) | [type parameters are carried by parse-time stand-in names](roadmap/5.2/Q-TPCARRIER.md) | ① F |
 | Q-IDXVALUE | 30 · T3 | [a select offset's value is read four different ways](roadmap/5.2/Q-IDXVALUE.md) | ① |
+| Q-MEMBSRC | 32 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
 | Q-MEMBIDXNOT | 32 · L2 (parked) | [a `~` index on a non-zero-base struct member reads x](roadmap/5.2/Q-MEMBIDXNOT.md) | — |
 | Q-VMSELSHIFT | 33 · T3 | [debug build panics on a select read partly below the vector](roadmap/5.2/Q-VMSELSHIFT.md) | ① |
 | Q-MDCONSTOFF | 36 · T3 | [the multi-driver check skips selects with a constant offset](roadmap/5.2/Q-MDCONSTOFF.md) | ① |

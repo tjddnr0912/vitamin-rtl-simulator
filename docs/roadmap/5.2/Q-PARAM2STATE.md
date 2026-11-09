@@ -4,6 +4,9 @@
 * slot: its value half S1v (every binder obeys the record) runs at C0 · L1 after Q-SYMMIX, before the first batch (owner, 2026-11-05, it was 17 · L2, or inside row 70 if one re-pin)
 * slot: S1v runs after Q-VALRULES fix (d) and Q-SYMMIX's re-entry, before batch 1 (owner, 2026-11-06)
 * slot: S1v runs next at C0 · L1 as batch 0, since Q-SYMMIX parked behind Q-VALRULES (b) → row 74 (owner decision O3, 2026-11-09), and this supersedes the S1v slot lines above that put it after Q-SYMMIX
+* slot: S1v ends at S1v-Q (owner, 2026-11-09: batch 0 merges into batch 1, the Lane track goes to Q-VALRULES (b)), and S1v-Q landed as batch 1 (§4.5.637)
+* slot: S1v-V, the value half (rule (C), E7', F-2, F-1a), runs at R5.2 · L1 after Q-SYMMIX (C) (R5.1), reading BIND-1, VAL-1–3 and SYS-1 (owner, 2026-11-09, the record-first order), and this supersedes the C0 · L1 slot lines above
+* slot: so the row closes when S1v-V lands
 * slot: the row closes when S1v lands, not at S12
 * slot: before Q-OVRXPLANE, 76, Q-TPCARRIER and Q-MEMBSRC
 * slot: row 29's page half waits on it, PARKED 2026-11-04
@@ -87,5 +90,23 @@
 * blocks Q-OVRXPLANE (§2 start-order 15), Q-CONSTXIDX, Q-DECLSELBOUND's named arm, 76's x plane, Q-MEMBSRC and Q-TPCARRIER (its doors D1–D3: W/qtpcarrier/plan/c n01 n09 n19 n21, plan/k k06; the 2-state half has no oracle — verilator reads one `bit` parameter's invalid select x / 0 / 1: plan/q/q2s, k/k02, k/k06; iverilog x)
 * note: open IEEE point: an out-of-range PART-select reads x with no 2-state clause (ieee1800-2017.txt:12384–12386)
 * evidence: PRE 9d60771d
+* record: S1v-Q landed (§4.5.637, 34f1bec7): a signing keyword that leads a parameter's type where IEEE 1800-2017's grammar has none is E2002 at the signing token, each family with its own true prescription, and the prefix reads on and builds PRE's `ParamDecl`
+* record: its families: on a `specparam` (A.2.1.1 `specparam_declaration` takes no data type and no signing, ieee1800-2017.txt:52085-52086), before an integer type keyword (the signing goes after it, `int signed`), twice around one (`signed int unsigned`), before `real` / `realtime` / `string` or a type name, and in a header parameter port with no `parameter` / `localparam`
+* record: PRE's reading kept: a trailing signing, an implicit type's leading signing (`parameter signed [3:0] P`) and the five spellings the prefix accepts with no leading signing (W/s1v/a/filings.txt; §2 specparam-data-type, typeparam-value-signing)
+* pins: the refusal pins assert the span at the signing token and that the `ParamDecl` is still built, and `#(parameter signed P=1, Q=2)` re-pins the continuation inheriting `signed` (W/s1v/RULINGS-premise1.txt J2)
+* pins: 68217048 adds a pin for each gate half no pin named (lens-sound N5): a leading signing before `logic`, `reg`, `bit`, `byte`, `shortint` and `longint`, a composed alias (the `peek_alias_param` half), a header port's type name with no `parameter` keyword (the type-name arm before the lead-None arm), each killing its mutant
+* record: row verify (W/s1v/a/SUMMARY.txt, PRE 8c970e9b, S1v-Q 9870e7ba): nextest 9818 passed, 0 failed; real designs 51 / 51 byte-equal; EH1 `TEST_PASSED`, minstret 443, mcycle 1362 on both
+* record: both batch 1 lenses CLEAN, 0 BLOCKING (W/batch1/RULINGS-lenses-r1.txt): 0 of 86 changed cells refused where two oracles accept, legal, trailing and implicit spellings byte-equal to PRE at 17 sites, 0 leading signings in 3090 real-design files
+* record: batch 1 boundary verify (run_all, the narrow-first battery):
+  * record: run_all PASS at 68217048: nextest 11022 passed, 0 failed; sweep 26858 cells 0 moved; staged 429 and page cells 430, 18 moved each, all 18 predicted S1v-Q cells; corpus, oracle cells, real designs 51 / 51 and waves 46 / 46 unchanged; battery 37 of 37 behavioural mutants killed, both controls as wanted
+* note: S1v-Q's limits (the lenses' notes, PRE = POST): the integer arm's `time` text prescribes `time signed` / `time unsigned`, which vita then refuses (§3.b time-signed-param), and the header text for `signed enum` / `signed C#(2)` prescribes `parameter`, which leaves them illegal (s2i s2j; verilator names the same cause)
+* note: the type-name arm needs `<type> <ident>` adjacency (`typedefs.rs:112-123`), so x_td_packed `parameter signed t_t [1:0] P = 4'hF;` keeps PRE's false cause about an array `parameter` at rc 1 (all three refuse), and under `` `begin_keywords "1364-2001"`` s3a gains a first line (§3.b begin-keywords-version)
+* note: S1v-R left S1v for Q-VALRULES (b) (W/s1v/RULINGS-premise1.txt B-1): R1c, the bound lane and R1w join R1v because they read the router's folded bounds m, l, wrapped from an unsigned 64-bit value to i64 (r12 r13 r14 r15; r11 the PRE counterexample, §5.2 VAL-3)
+* note: C1 and R1x followed (W/s1v/RULINGS-premise2.txt B-2): R1x's x evidence reads the lossy parameter value channel, and a C1 refusal sets `had_error`, which flips the zero-width claim gate (§2 zero-width-gate-after-error); the Lane track went with them (owner, 2026-11-09)
+* note: so R1v, the bound range rule, R1w, R1x, C1, R1c and the Lane track above are Q-VALRULES (b)'s value rows R6.1–R6.4, on VAL-3 and BIND-1 (§5.2 Q-VALRULES), and S1v-V keeps rule (C), E7', F-2 and F-1a
+* note: for S1v-V's design (N-5): the production evidence path is a router edit, and the prototype's second fold cost ~15 % wall (e02 e03)
+* S1v-V census item N-2 (W/s1v/RULINGS-premise1.txt CARRY, W/s1v/plan2/filings.txt F-N2): a class `#()` value parameter drops its type and signing (`classes.rs:255-265`)
+* witness: j1_class_param `class C #(int unsigned P = -1); int v; function new(); v = (P > 0); endfunction endclass`: PRE vita-main 8c970e9b `A v=0`
+  * oracles: verilator `A v=1`, iverilog `t.sv:2: syntax error` (no parameterized class)
 * status: silent-wrong, pre-existing
 * source: row 29 page half PLAN3b F-UNS / O7 (x30_gtnegt), r3 lens-sound B1 (f01–f08)

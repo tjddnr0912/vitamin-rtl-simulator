@@ -2,6 +2,9 @@
 * slot: the carrier only — K1–K3, `member_remap.rs`, K8 and K10 of W/row24/membsrc/PLAN4.txt, no output change, a format bump
 * slot: the read half stays PARKED at 32 · L2 behind Q-PARAM2STATE, Q-OVRXPLANE, 76, Q-LETCAST and Q-UNSZXPAD
 * slot: Q-XFALLBACK landed §4.5.632
+* slot: the carrier left the page cut (W/membsrc-carrier/RULINGS-ground.txt, 2026-11-02, option C): no page reads its marks (0 packed members with a non-zero LSB or an ascending range on the 12 OT pages, EH1's 3 literal after preprocessing)
+* slot: so K1–K3, K8 and K10 stay at 32 · L2 with the read half (it was C2 · L2)
+* slot: that supersedes the carrier slot above, and row 24 carries its own `pv` (off, w) mark (§5.2 24)
 * T, row 24's producer axis — the parser carries a packed-struct member select's SOURCE bounds and member geometry to elaborate as data, so no consumer recovers them from the remapped spelling `k - dbase` / `(w-1) - (k - dbase)` (`hdl-parser/src/scope.rs:170` `remap_pv_idx`, whose synthesized Sub carries the source span)
 * row 24 parked on this axis after four review rounds (its line: S1, F-R3-1, F1, L1 and the routing finding F-D1)
 * planned 2026-10-27
