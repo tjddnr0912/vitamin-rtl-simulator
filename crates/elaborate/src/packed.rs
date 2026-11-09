@@ -605,8 +605,7 @@ impl Elaborator<'_> {
             return None;
         }
         let raw = c.bits.val.first().copied().unwrap_or(0);
-        let sh = 64 - w;
-        Some((((raw << sh) as i64) >> sh) as u32)
+        Some(ast::value_rules::wrap_i128(i128::from(raw), w, true)? as u32)
     }
 
     pub(crate) fn index_is_compile_time_constant(&mut self, eid: u32) -> bool {
@@ -717,18 +716,7 @@ impl Elaborator<'_> {
         }
         let raw = c.bits.val.first().copied().unwrap_or(0);
         let w = c.width.max(1);
-        let masked = if w >= 64 {
-            raw
-        } else {
-            raw & ((1u64 << w) - 1)
-        };
-        Some(if c.signed && w < 64 && (masked >> (w - 1)) & 1 == 1 {
-            (masked | (!0u64 << w)) as i64
-        } else if c.signed {
-            masked as i64
-        } else {
-            i64::try_from(masked).unwrap_or(i64::MAX)
-        })
+        Some(ast::value_rules::wrap_i128(i128::from(raw), w, c.signed).unwrap_or(i64::MAX))
     }
 
     /// Seal an index at its own self-determined width WITHOUT changing its

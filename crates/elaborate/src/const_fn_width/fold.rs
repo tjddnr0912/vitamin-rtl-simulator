@@ -285,7 +285,7 @@ impl Elaborator<'_> {
                                     _ => {}
                                 }
                             }
-                            Some(mask(const_binop(*op, a, b)?))
+                            Some(mask(ast::value_rules::const_binop(*op, a, b)?))
                         };
                         let ((va, xa), (vb, xb), (wa, wb)) = match (a, b) {
                             (No, _) | (_, No) => return No,
@@ -404,14 +404,14 @@ impl Elaborator<'_> {
                                         own: m,
                                     },
                                 ),
-                                Val(a) => const_pow(a, b, sg).map(mask).into(),
+                                Val(a) => ast::value_rules::const_pow(a, b, sg).map(mask).into(),
                                 // `X ** 0` and `X ** 1` are x too: §11.4.3's any-x rule
                                 // over Table 11-4. An absorbed base computes exactly.
                                 Four { v, x, why } => {
                                     if x & m != 0 {
                                         four(0, m, all_if_live(why))
                                     } else {
-                                        const_pow(v, b, sg)
+                                        ast::value_rules::const_pow(v, b, sg)
                                             .map_or(No, |r| four(r, 0, why.owning(0)))
                                     }
                                 }
@@ -464,7 +464,7 @@ impl Elaborator<'_> {
                                 };
                                 return Some(mask((r & wmask) as i64));
                             }
-                            Some(mask(const_binop(*op, a, b)?))
+                            Some(mask(ast::value_rules::const_binop(*op, a, b)?))
                         };
                         match a {
                             Val(a) => shifted(a).into(),
@@ -540,7 +540,7 @@ impl Elaborator<'_> {
                                     _ => {}
                                 }
                             }
-                            const_binop(*op, a, b)
+                            ast::value_rules::const_binop(*op, a, b)
                         })()
                         .into()
                     }

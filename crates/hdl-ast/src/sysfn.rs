@@ -68,7 +68,7 @@
 //!   introspection fold (`try_introspect_fold`, hand-off H1), the width / sign / kind
 //!   walkers (TYPE-1: `ctx_signed_impl`, `size_ctx_self_width`, `bits_of_selfdet`,
 //!   `expr_is_string_ast`), the §20.7 values (`range_rules.rs` `dim_query`, `md_query`) and
-//!   the parser's parse-time fold and gate (PARSE-1: `expr_primary.rs`,
+//!   the parser's parse-time fold and gate (PARSE-1: `const_fold.rs`, `expr_primary.rs`,
 //!   `rewrite_packed_md_dim_query`, `names_an_overridable`);
 //! * a DISPATCH KEY: a guard that selects the routine, fold or refusal written for that one
 //!   name (the literal and the routine or message are one unit) — among them elaborate

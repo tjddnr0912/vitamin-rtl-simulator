@@ -24,6 +24,7 @@ use vita_artifact_derive::SchemaHash;
 pub mod case_inside;
 pub mod range_rules;
 pub mod sysfn;
+pub mod value_rules;
 pub mod walk;
 
 /// System-task name the parser synthesizes for a `unique`/`priority` violation

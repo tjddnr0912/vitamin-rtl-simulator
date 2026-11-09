@@ -383,8 +383,10 @@ pub fn parse_int_literal(raw: &str, kind: IntLitKind) -> Option<ConstVal> {
             let explicit_width: Option<u32> = if size_part.is_empty() {
                 None
             } else {
-                let sd: String = size_part.chars().filter(|&c| c != '_').collect();
-                Some(sd.parse::<u32>().ok()?)
+                Some(
+                    hdl_ast::value_rules::decimal_i64(size_part)
+                        .and_then(|v| u32::try_from(v).ok())?,
+                )
             };
             if explicit_width == Some(0) {
                 return None;

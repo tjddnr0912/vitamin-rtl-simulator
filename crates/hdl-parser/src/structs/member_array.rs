@@ -19,6 +19,7 @@
 //! Neither arm folds a bound at the use: the numbers were fixed at the declaration.
 
 use super::*;
+use crate::const_fold::index_literal;
 
 /// A member, or a `typedef`, of this form that the rule does not open.
 const REFUSE_MEMBER: &str = "a packed array of a packed struct as a struct member: `elem_t \
@@ -64,22 +65,6 @@ struct ElementSelect {
     array: (u32, u32, u32),
     /// `(offset, width)` of the chain leaf inside the element; `None`: the whole element.
     leaf: Option<(u32, u32)>,
-}
-
-/// A decimal literal as written, and nothing that folds to one.
-fn decimal_literal(e: &Expr) -> Option<i64> {
-    match &e.kind {
-        ExprKind::IntLit {
-            kind: IntLitKind::Decimal,
-            ..
-        } => Parser::const_lit(e),
-        _ => None,
-    }
-}
-
-/// `decimal_literal`, within `int`.
-fn index_literal(e: &Expr) -> bool {
-    decimal_literal(e).is_some_and(|v| v <= i64::from(i32::MAX))
 }
 
 /// A one-segment name.
@@ -673,13 +658,6 @@ impl Parser<'_, '_> {
             array: (count, flat / count, off),
             leaf,
         })
-    }
-
-    /// An index the literal arm takes: a decimal in `[0, count)`.
-    fn literal_element(e: &Expr, count: u32) -> Option<u32> {
-        decimal_literal(e)
-            .filter(|v| (0..i64::from(count)).contains(v))
-            .map(|v| v as u32)
     }
 
     /// The run-time index `e` in the place the cursor stands, on variable `var`.

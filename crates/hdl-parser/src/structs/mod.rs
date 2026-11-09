@@ -320,20 +320,6 @@ impl Parser<'_, '_> {
         }
     }
 
-    /// §5.2 row 41: `e` is a decimal literal written in the source, its text its lexeme
-    /// (`source_literal`), and its value; no sign, no operator, no fold.
-    pub(crate) fn written_decimal(&self, e: &Expr) -> Option<i64> {
-        match &e.kind {
-            ExprKind::IntLit {
-                kind: IntLitKind::Decimal,
-                raw,
-            } if self.src.get(e.span.lo as usize..e.span.hi as usize) == Some(raw.as_str()) => {
-                Self::const_lit(e)
-            }
-            _ => None,
-        }
-    }
-
     /// Width of a struct member from its range. `None` ⇒ scalar (1). Constant
     /// bounds fold (`[7:0]`, `[8-1:0]`, and — §3 ⑤ ⓓ — `[W-1:0]` / `[p::W:0]` /
     /// `[$clog2(N)-1:0]` over a NON-overridable constant, see `const_locals`);

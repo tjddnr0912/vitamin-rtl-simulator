@@ -811,7 +811,7 @@ fn const_index(e: &ast::Expr) -> Option<i64> {
         ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Decimal,
             raw,
-        } => raw.replace('_', "").parse::<i64>().ok(),
+        } => ast::value_rules::decimal_i64(raw),
         _ => None,
     }
 }

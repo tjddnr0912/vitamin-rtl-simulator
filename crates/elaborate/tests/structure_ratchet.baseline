@@ -3,7 +3,7 @@
 # Never raise a value.
 a.expr_kind_matchers.elaborate = 159
 a.expr_kind_matchers.hdl-parser = 23
-b.const_option_fns = 102
+b.const_option_fns = 99
 c.calls.const_eval_in_scope = 98
 c.calls.const_eval_u32 = 10
 c.calls.const_self_width = 27

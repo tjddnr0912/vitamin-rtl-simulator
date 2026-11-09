@@ -28,8 +28,8 @@
 //! pair ([`RangeFacts::pair`]; `tests/range_rules_home.rs` PAIR_SITES pins those by function).
 //!
 //! OUTSIDE this file, by rule (each reads or feeds a rule here, none derives from a pair):
-//! * EVALUATORS, which fold one expression to a value: hdl-parser `const_bound`,
-//!   `const_lit` (passed in to the builders below as a [`LitFold`]); elaborate
+//! * EVALUATORS, which fold one expression to a value: hdl-parser `const_fold.rs`'s
+//!   `const_bound`, `const_lit` (passed in to the builders below as a [`LitFold`]); elaborate
 //!   `fold_self_at`, `const_eval_in_scope`, the `$bits` fold; the evaluators' comparison
 //!   arms (`a < b` over two operand values).
 //! * TABLES: hdl-parser `typedefs.rs`'s alias slot (Q-SYMMIX F1).

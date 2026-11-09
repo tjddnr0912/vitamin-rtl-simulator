@@ -38,11 +38,6 @@ enum Sel {
 }
 
 impl Parser<'_, '_> {
-    /// A non-negative literal or `None`.
-    pub(crate) fn lit_u32(e: &Expr) -> Option<u32> {
-        hdl_ast::range_rules::lit_u32(Self::const_lit, e)
-    }
-
     fn lit(v: u32, span: Span) -> Expr {
         Self::dec_lit(v, span)
     }
@@ -498,35 +493,6 @@ impl Parser<'_, '_> {
             _ => false,
         }
     }
-
-    /// An unsized decimal or unsized based literal below 2^31 with no `x`, `z` or `?`
-    /// digit; a fill (`'1`) is not one.
-    fn small_unsized_lit(kind: IntLitKind, raw: &str) -> bool {
-        let (radix, body) = match kind {
-            IntLitKind::Decimal => (10, raw),
-            IntLitKind::UnsizedBased => {
-                let Some(rest) = raw.trim().strip_prefix('\'') else {
-                    return false;
-                };
-                let rest = rest.strip_prefix(['s', 'S']).unwrap_or(rest);
-                let mut ch = rest.chars();
-                let radix = match ch.next() {
-                    Some('b' | 'B') => 2,
-                    Some('o' | 'O') => 8,
-                    Some('d' | 'D') => 10,
-                    Some('h' | 'H') => 16,
-                    _ => return false,
-                };
-                (radix, ch.as_str())
-            }
-            IntLitKind::Sized => return false,
-        };
-        let digits: String = body
-            .chars()
-            .filter(|c| *c != '_' && !c.is_whitespace())
-            .collect();
-        u64::from_str_radix(&digits, radix).is_ok_and(|v| v <= i32::MAX as u64)
-    }
 }
 
 /// §3 ⑤ⓖ: the refusal of a select or a dimension query on a return variable whose
@@ -557,18 +523,6 @@ impl Parser<'_, '_> {
             .all(|r| Self::plain_int(&r.msb).is_some() && Self::plain_int(&r.lsb).is_some());
         self.bind_packed_md_formal(name, dims);
         self.md_ret_var.replace((name.to_string(), literal))
-    }
-
-    /// A decimal literal or its negation (parentheses peeled).
-    fn plain_int(e: &Expr) -> Option<i64> {
-        match &e.kind {
-            ExprKind::Paren { inner } => Self::plain_int(inner),
-            ExprKind::Unary {
-                op: UnOp::Minus,
-                operand,
-            } => Self::plain_dec(operand)?.checked_neg(),
-            _ => Self::plain_dec(e),
-        }
     }
 
     /// `Some(folded)` when `base` is the marked return variable.
@@ -633,19 +587,6 @@ impl Parser<'_, '_> {
                 },
             }
         })
-    }
-
-    /// A bare decimal literal (parentheses peeled): the one spelling whose value is the
-    /// same self-determined and inside any wider offset arithmetic.
-    fn plain_dec(e: &Expr) -> Option<i64> {
-        match &e.kind {
-            ExprKind::Paren { inner } => Self::plain_dec(inner),
-            ExprKind::IntLit {
-                kind: IntLitKind::Decimal,
-                ..
-            } => Self::const_lit(e),
-            _ => None,
-        }
     }
 
     /// An index whose value does not depend on the width it is evaluated at: a sized,

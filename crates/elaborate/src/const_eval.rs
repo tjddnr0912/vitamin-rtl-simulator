@@ -38,21 +38,7 @@ pub(crate) fn min_signed_bits(v: i64) -> u32 {
 }
 
 pub(crate) fn coerce_i64_to_width(v: i64, w: u32, signed: bool) -> i64 {
-    if w == 0 || w >= 64 {
-        return v;
-    }
-    // Compute the low-`w`-bit mask in u64: at w == 63 the i64 form `(1i64 << 63) - 1`
-    // is `i64::MIN - 1`, which panics on subtract-overflow in a debug build (release
-    // wraps to the same i64::MAX). u64 has no such edge for w ≤ 63.
-    let mask = ((1u64 << w) - 1) as i64;
-    let trunc = v & mask;
-    if signed && (trunc & (1i64 << (w - 1))) != 0 {
-        // sign-extend: trunc − 2^w. `1i64 << w` is `i64::MIN` at w == 63, so subtract
-        // with wrapping — the two's-complement result is exact for any w in 1..=63.
-        trunc.wrapping_sub(1i64.wrapping_shl(w))
-    } else {
-        trunc
-    }
+    ast::value_rules::wrap_i128(i128::from(v), w, signed).unwrap_or(v)
 }
 
 /// IEEE 1800 §11.4.2 / §9.4.5: a `repeat`/replication count whose CONSTANT value
@@ -96,19 +82,7 @@ pub(crate) fn netvar_kind_is_int_const(kind: ast::NetVarKind) -> bool {
 /// coercion of a const-function return). `width >= 64` is the identity; a narrower
 /// width masks to the low bits and sign-extends when `signed` and the sign bit is set.
 pub(crate) fn coerce_int_width(v: i64, width: u32, signed: bool) -> i64 {
-    if width == 0 || width >= 64 {
-        return v;
-    }
-    // u64 shift: at width 63 the i64 form `(1i64 << 63) - 1` overflows (a debug
-    // panic, a wrap in release). The mask is a bit pattern, so build it unsigned
-    // and reinterpret — exact for every width in 1..=63.
-    let mask = ((1u64 << width) - 1) as i64;
-    let m = v & mask;
-    if signed && (m >> (width - 1)) & 1 == 1 {
-        m | !mask
-    } else {
-        m
-    }
+    ast::value_rules::wrap_i128(i128::from(v), width, signed).unwrap_or(v)
 }
 
 /// Const-fold a `#delay` value to integer ticks on the GLOBAL precision timeline.
@@ -474,7 +448,7 @@ pub(crate) fn ast_decimal_lit_i64(e: &ast::Expr) -> Option<i64> {
         ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Decimal,
             raw,
-        } => raw.trim().replace('_', "").parse::<i64>().ok(),
+        } => ast::value_rules::decimal_i64(raw.trim()),
         _ => None,
     }
 }
@@ -1953,5 +1927,49 @@ impl Elaborator<'_> {
         };
         let cid = self.intern_const(cv);
         self.push_expr(ir::Expr::Const { val: cid })
+    }
+}
+
+#[cfg(test)]
+mod value_rules_call_site_tests {
+    //! PARSE-1 B5 (x): `hdl-ast`'s PIN7 EQ6 holds `wrap_i128` against PRE's two coercions,
+    //! but it restates the call site's `.unwrap_or(v)` in its own closure, so the fall-through
+    //! these two functions own is pinned here, on the functions themselves: PRE (bea52457)
+    //! answered `v` unchanged at `w == 0` and at every `w >= 64`.
+    use super::*;
+
+    #[test]
+    fn out_of_domain_width_is_the_identity() {
+        let vals = [
+            0i64,
+            1,
+            -1,
+            5,
+            -6,
+            i64::MAX,
+            i64::MIN,
+            0x1234_5678_9abc_def0,
+        ];
+        for w in [0u32, 64, 65, 128, u32::MAX] {
+            for v in vals {
+                for signed in [false, true] {
+                    assert_eq!(
+                        coerce_i64_to_width(v, w, signed),
+                        v,
+                        "coerce_i64_to_width({v}, {w}, {signed})"
+                    );
+                    assert_eq!(
+                        coerce_int_width(v, w, signed),
+                        v,
+                        "coerce_int_width({v}, {w}, {signed})"
+                    );
+                }
+            }
+        }
+        // In-domain controls (PRE's mask / sign fill), so a constant answer cannot pass.
+        assert_eq!(coerce_i64_to_width(0x1ff, 8, false), 0xff);
+        assert_eq!(coerce_i64_to_width(0x80, 8, true), -128);
+        assert_eq!(coerce_int_width(-1, 63, false), i64::MAX);
+        assert_eq!(coerce_int_width(0x7, 3, true), -1);
     }
 }

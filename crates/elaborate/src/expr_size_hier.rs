@@ -743,18 +743,14 @@ impl Elaborator<'_> {
                 if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) && (a < 0 || b < 0) {
                     return None;
                 }
-                (const_binop(*op, a, b)?, true)
+                (ast::value_rules::const_binop(*op, a, b)?, true)
             }
             ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
                 let (a, _) = self.env_fold(&args[0], scope)?;
                 if a < 0 {
                     return None;
                 }
-                let v = if a <= 1 {
-                    0
-                } else {
-                    i64::from(64 - (a - 1).leading_zeros())
-                };
+                let v = i64::from(ast::value_rules::clog2_u64(a as u64));
                 (v, true)
             }
             _ => live(e)?,

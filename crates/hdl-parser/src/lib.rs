@@ -95,6 +95,7 @@ mod blocks_timing;
 mod casts;
 mod class_scope;
 mod classes;
+mod const_fold;
 mod cover;
 mod decl_key;
 mod decls;

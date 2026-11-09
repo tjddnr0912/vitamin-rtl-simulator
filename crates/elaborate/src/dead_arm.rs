@@ -54,12 +54,7 @@ pub(crate) struct DeadSelect {
 
 /// `v`'s low `w` bits (`1 ≤ w ≤ 64`) read as a two's-complement number.
 fn sext(v: u64, w: u32) -> i64 {
-    if w >= 64 {
-        v as i64
-    } else {
-        let sh = 64 - w;
-        ((v << sh) as i64) >> sh
-    }
+    ast::value_rules::wrap_i128(i128::from(v), w, true).unwrap_or(v as i64)
 }
 
 impl Elaborator<'_> {

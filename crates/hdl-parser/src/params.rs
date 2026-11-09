@@ -915,10 +915,10 @@ impl Parser<'_, '_> {
                             let x = if c.signed {
                                 c.v as i128
                             } else {
-                                (super::expr_primary::wrap_i128(c.v as i128, c.w, false)? as u64)
+                                (hdl_ast::value_rules::wrap_i128(c.v as i128, c.w, false)? as u64)
                                     as i128
                             };
-                            super::expr_primary::wrap_i128(x, w, signed)
+                            hdl_ast::value_rules::wrap_i128(x, w, signed)
                         });
                     let fitted = ctx_v.or_else(|| {
                         self.try_const_index(&p.value)
@@ -941,136 +941,6 @@ impl Parser<'_, '_> {
             // A2a: an array parameter arrives as the desugared const variable-array
             // decl — flows through every NetVar pass verbatim.
             ParamItem::ConstArrayVar(d) => ModuleItem::NetVar(d),
-        }
-    }
-
-    /// §3 ⑤ ⓓ: could the parameter's declared type hold `v` unchanged? Declines
-    /// only on a PROVABLE mismatch — a width this parser can fold that does not
-    /// hold `v` under the declared signedness (`localparam byte B = 200` is −56 in
-    /// elaborate, so folding 200 here would be a second evaluator disagreeing with
-    /// the first). An untyped parameter takes the value's own type (§6.20.2) — a
-    /// 32-bit signed integer for the decimal arithmetic `try_const_index` folds, so
-    /// `v` must fit `i32`; `int`/`integer` are 32-bit (signed, or `unsigned`
-    /// 0..2³²−1); `time` is 64-bit unsigned. A range whose bounds do not fold, and
-    /// every other type (`real`, `string`, …), keep the pre-§4.5.414 behaviour —
-    /// recorded as any `localparam` was (review B-2: declining those made two
-    /// PRE-correct designs loud).
-    pub(crate) fn const_param_fits(&self, p: &ParamDecl, v: i64) -> bool {
-        let fits_width = |w: u32, signed: bool| -> bool {
-            match (w, signed) {
-                (0, _) | (65.., _) => false,
-                (64, true) => true,
-                (64, false) => v >= 0,
-                (_, true) => {
-                    let half = 1i64 << (w - 1);
-                    v >= -half && v < half
-                }
-                (_, false) => v >= 0 && v < (1i64 << w),
-            }
-        };
-        match (&p.ty, &p.dtype.range) {
-            (ParamType::Implicit, None) => i32::try_from(v).is_ok(),
-            (ParamType::Integer, None) => {
-                if p.dtype.signed {
-                    i32::try_from(v).is_ok()
-                } else {
-                    u32::try_from(v).is_ok()
-                }
-            }
-            (ParamType::Time, None) => v >= 0,
-            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
-                    (Some(a), Some(b)) => {
-                        let w = hdl_ast::range_rules::Lane::ParamFits.width_u32(a, b);
-                        fits_width(w, p.dtype.signed)
-                    }
-                    _ => true,
-                }
-            }
-            _ => true,
-        }
-    }
-
-    /// §4.5.418: the value of a parameter whose initializer is ONE based literal
-    /// (`parameter int unsigned W = 32'd12`, `'hFF`, `16'sh8000`). `try_const_index`
-    /// deliberately does not fold based literals: inside an expression a literal
-    /// narrower than 32 bits sets the expression's width, and the parse-time fold
-    /// carries no width (ROADMAP §2: `[C+D:0]` over two 4-bit constants folds 17 where
-    /// both oracles say 1). Standing alone, the literal's exact value is the value the
-    /// declared type receives (`const_param_fits` then decides, as for a decimal).
-    /// The parameter's WIDTH must be 32 bits or more — the literal's own width for
-    /// an untyped parameter, the declared range or atom width otherwise — because
-    /// the table folds a consumer's `[C+D:0]` at i64 and a narrower parameter wraps
-    /// there (measured: `logic [3:0] C = 4'hf, D = 4'h1` → 17 where the oracles say
-    /// 1; the decimal spelling is the same pre-existing silent, ROADMAP §2, and this
-    /// spelling must not inherit it). A truncated (`4'd20`), x/z, or over-64-bit
-    /// literal declines in `based_lit_pattern`; an unsigned 64-bit pattern above
-    /// `i64::MAX` declines here (no i64 holds it).
-    fn based_lit_param_value(&self, p: &ParamDecl) -> Option<(i64, u32, bool)> {
-        let ExprKind::IntLit {
-            kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
-            raw,
-        } = &p.value.kind
-        else {
-            return None;
-        };
-        let sized = matches!(kind, IntLitKind::Sized);
-        let (pat, w) = Self::based_lit_pattern(raw, sized)?;
-        let tick = raw.find('\'')?;
-        let signed = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
-        let declared_w: u64 = match (&p.ty, &p.dtype.range) {
-            (ParamType::Implicit, None) => u64::from(w),
-            (ParamType::Integer, None) => 32,
-            (ParamType::Time, None) => 64,
-            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                let a = self.const_bound(&r.msb)?;
-                let b = self.const_bound(&r.lsb)?;
-                hdl_ast::range_rules::Lane::Wide64.width_u64(a, b)
-            }
-            _ => return None,
-        };
-        // (§4.5.418 declined a declaration narrower than 32 bits here because the
-        // table's readers folded at i64; §2 🆕 L (aa) made them width-aware, so the
-        // spelling is recorded like its decimal twin — `const_param_fits` still
-        // refuses a literal the declared type does not hold.)
-        let _ = declared_w;
-        let v = if w == 64 {
-            if signed || pat <= i64::MAX as u64 {
-                pat as i64
-            } else {
-                return None;
-            }
-        } else if signed && (pat >> (w - 1)) & 1 == 1 {
-            (pat | (!0u64 << w)) as i64
-        } else {
-            i64::try_from(pat).ok()?
-        };
-        Some((v, w, signed))
-    }
-
-    /// The WIDTH and sign the recorded constant's declaration gives it (IEEE §6.20 /
-    /// §11.6): an untyped parameter takes its initializer's — 32-bit signed for a
-    /// decimal, the literal's own for a lone based literal (`based`); `int` /
-    /// `integer` are 32, `time` 64 unsigned, a declared range its folded width.
-    /// `0` = unknown (the range did not fold): the width-aware twin declines there.
-    fn param_const_shape(&self, p: &ParamDecl, based: Option<(i64, u32, bool)>) -> (u32, bool) {
-        match (&p.ty, &p.dtype.range) {
-            (ParamType::Implicit, None) => match based {
-                Some((_, w, s)) => (w, s),
-                None => (32, true),
-            },
-            (ParamType::Integer, None) => (32, p.dtype.signed),
-            (ParamType::Time, None) => (64, false),
-            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
-                    (Some(a), Some(b)) => (
-                        hdl_ast::range_rules::Lane::ParamSigned.width_u32(a, b),
-                        p.dtype.signed,
-                    ),
-                    _ => (0, p.dtype.signed),
-                }
-            }
-            _ => (0, p.dtype.signed),
         }
     }
 

@@ -53,9 +53,9 @@ const EXCEPTIONS: &[(&str, &str, usize, &str)] = &[
     ("crates/hdl-ast/src/range_rules.rs", "dim_query", 6, "range_rules §20.7 value arms"),
     ("crates/hdl-ast/src/range_rules.rs", "md_query", 6, "range_rules §20.7 value arms"),
     // PARSE-1: the parse-time fold and its symbolic gate.
-    ("crates/hdl-parser/src/expr_primary.rs", "cw_eval", 1, "PARSE-1 parse-time fold"),
-    ("crates/hdl-parser/src/expr_primary.rs", "cw_shape", 1, "PARSE-1 parse-time fold"),
-    ("crates/hdl-parser/src/expr_primary.rs", "try_const_index", 1, "PARSE-1 parse-time fold"),
+    ("crates/hdl-parser/src/const_fold.rs", "cw_eval", 1, "PARSE-1 parse-time fold"),
+    ("crates/hdl-parser/src/const_fold.rs", "cw_shape", 1, "PARSE-1 parse-time fold"),
+    ("crates/hdl-parser/src/const_fold.rs", "try_const_index", 1, "PARSE-1 parse-time fold"),
     ("crates/hdl-parser/src/expr_primary.rs", "expr_primary", 1, "PARSE-1 parse-time fold"),
     ("crates/hdl-parser/src/packed_md.rs", "rewrite_packed_md_dim_query", 4, "PARSE-1 the parser's md value arms"),
     ("crates/hdl-parser/src/sym_struct.rs", "names_an_overridable", 1, "PARSE-1 symbolic gate"),

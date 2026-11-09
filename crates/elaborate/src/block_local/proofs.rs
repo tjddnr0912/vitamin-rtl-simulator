@@ -238,7 +238,7 @@ impl Elaborator<'_> {
             K::IntLit {
                 kind: ast::IntLitKind::Decimal,
                 raw,
-            } => raw.trim().replace('_', "").parse::<i32>().ok(),
+            } => ast::value_rules::decimal_i64(raw.trim()).and_then(|v| i32::try_from(v).ok()),
             K::Paren { inner } => Self::fold_i32(inner),
             K::Unary { op, operand } => {
                 let v = Self::fold_i32(operand)?;
