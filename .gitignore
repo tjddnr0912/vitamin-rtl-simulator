@@ -47,3 +47,5 @@ CLAUDE.md
 # local secrets (API keys)
 .env
 .env.*
+# Claude Code local state (settings, checkpoints, worktrees): never tracked
+.claude/
