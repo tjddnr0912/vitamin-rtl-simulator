@@ -904,7 +904,7 @@ impl Elaborator<'_> {
         regs: &mut SvaRegs,
     ) -> Option<String> {
         let sp = sig_expr.span;
-        let rise_fall = matches!(func, "$rose" | "$fell");
+        let rise_fall = ast::sysfn::sva_lsb_edge(func);
         let mut src = None;
         let held = match self.bare_ident_route(sig, sp) {
             BareIdentRoute::Real(_) => Some(Held::Real),

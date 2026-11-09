@@ -63,8 +63,8 @@ fn expr_call_may_write_ident(e: &ast::Expr, name: &str, out: Option<OutActualWri
         ),
         // A system FUNCTION writes only its WRITE-dest args (`$sscanf(.., name)`,
         // `$fgets(name, ..)` in expression position, the SEED of `$random(seed)` /
-        // `$dist_*(seed, …)`) — `syscall_writes_arg`, the write view of the table the
-        // statement-form arm below reads; a READ arg can still host a nested
+        // `$dist_*(seed, …)`) — `ast::sysfn::syscall_writes_arg`, the write view of the
+        // table the statement-form arm below reads; a READ arg can still host a nested
         // copy-back call, so every arg is scanned for one. This arm
         // used to count EVERY argument as a write, and the multidriver Rule A walk
         // reads that as "written by `always_comb`": `always_comb a = $signed(u8) * q8;`
@@ -73,7 +73,7 @@ fn expr_call_may_write_ident(e: &ast::Expr, name: &str, out: Option<OutActualWri
         // stamp-free `u8 * q8` beside it was fine. For the accept-gate consumers the
         // change only removes false "may-write" answers on pure-function arguments.
         K::SysCall { name: sn, args } => args.iter().enumerate().any(|(i, a)| {
-            (syscall_writes_arg(sn.name.as_str(), i) && expr_reads_ident(a, name))
+            (ast::sysfn::syscall_writes_arg(sn.name.as_str(), i) && expr_reads_ident(a, name))
                 || expr_call_may_write_ident(a, name, out)
         }),
         K::ClassNew { args } => arg_writes(args),
@@ -249,7 +249,7 @@ fn intra_event_call_may_write(
 /// covered), a task call that could pass `name` as an OUTPUT / INOUT actual
 /// (conservatively, ANY reference to `name` in a user-task or `randomize` actual), a
 /// system task's WRITE-dest arg (`$sscanf(.., name)`, `$fgets(name, ..)` — its pure
-/// READ args, isolated by `syscall_read_args`, do NOT count, so `$display(name)` of
+/// READ args, isolated by `ast::sysfn::syscall_read_args`, do NOT count, so `$display(name)` of
 /// the constant is not a write), a FUNCTION / METHOD / SYSTEM CALL that passes `name`
 /// as an argument at ANY expression position (rhs / condition / scrutinee / loop
 /// bound / return value / index / delay / intra-event / decl-init) — the callee may
@@ -591,13 +591,13 @@ fn stmt_may_write_or_observe(
         ),
         RandomizeWith { args, .. } => args.iter().any(|a| expr_reads_ident(a, name)),
         // A system task's WRITE-dest arg (`$sscanf(.., name)`) writes `name`; its READ
-        // args (isolated by `syscall_read_args`) do not — BUT a READ arg can still host
-        // a nested output/inout CALL (`$display(f(name))`), so scan every arg for a
+        // args (isolated by `ast::sysfn::syscall_read_args`) do not — BUT a READ arg can
+        // still host a nested output/inout CALL (`$display(f(name))`), so scan every arg for a
         // copy-back call too.
         SysTaskCall {
             name: task, args, ..
         } => args.iter().enumerate().any(|(i, a)| {
-            (syscall_writes_arg(task.name.as_str(), i) && expr_reads_ident(a, name))
+            (ast::sysfn::syscall_writes_arg(task.name.as_str(), i) && expr_reads_ident(a, name))
                 || expr_call_may_write_ident(a, name, out)
         }),
         // Deferred immediate assertion `assert #0 (c) [pass] else fail;` — the pass /

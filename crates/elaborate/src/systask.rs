@@ -2,51 +2,6 @@
 
 use super::*;
 
-/// The sub-slice of a system task/func's args that are READ inputs — the write
-/// DEST args of the string-building / scanf / file-read / `$cast` / `$value$plusargs`
-/// families are excluded (a string populated by e.g. `$sformat`/`$sscanf`/`$fgets`/
-/// `$cast`/`$value$plusargs` and never otherwise read is write-only, so must not trip
-/// the coalesce read-gate). Every other task reads all its args. This must cover EVERY
-/// sysfunc vita supports as a direct-rhs writer, else its write-only dest is misread.
-/// Does system function / task `name` WRITE its `i`-th argument back? The
-/// destination-taking family is the complement of [`syscall_read_args`] (one
-/// table, two views); on top of it `$random(seed)` and every `$dist_*(seed, …)`
-/// write their SEED back (IEEE §20.15.1 / §20.15.2 — the engine's
-/// `StmtEffect::SeededRandom` / `SeededDist`), and the seed is READ as well, which
-/// is why it is not a read-table entry. `$urandom(seed)` takes its seed as an input
-/// (§18.13.1) and writes nothing.
-///
-/// The consumer is the never-writes walk (`da/writes.rs`), whose `SysCall` arm used
-/// to count EVERY argument as a write: narrowing it to the read table alone let an
-/// `automatic integer sd = 7; a = $random(sd);` under a `fork` be proven
-/// "never reassigned" (`const_immune`) and flattened, so both activations drew
-/// from one seed — round-1 soundness, §4.5.498.
-pub(crate) fn syscall_writes_arg(name: &str, i: usize) -> bool {
-    match name {
-        "$sformat" | "$swrite" | "$swriteb" | "$swriteh" | "$swriteo" | "$fgets" | "$fread"
-        | "$cast" => i == 0,
-        "$sscanf" | "$fscanf" => i >= 2,
-        "$value$plusargs" => i == 1,
-        "$random" | "$dist_uniform" | "$dist_normal" | "$dist_exponential" | "$dist_poisson"
-        | "$dist_chi_square" | "$dist_t" | "$dist_erlang" => i == 0,
-        _ => false,
-    }
-}
-
-pub(crate) fn syscall_read_args<'a>(task: &str, args: &'a [ast::Expr]) -> &'a [ast::Expr] {
-    match task {
-        // dest is arg 0; the remaining args are read inputs (`$cast(dst, src)` writes
-        // dst=arg0, reads src=arg1)
-        "$sformat" | "$swrite" | "$swriteb" | "$swriteh" | "$swriteo" | "$fgets" | "$fread"
-        | "$cast" => args.get(1..).unwrap_or(&[]),
-        // source + fmt (args 0,1) are the only reads; trailing args are write dests
-        "$sscanf" | "$fscanf" => &args[..2.min(args.len())],
-        // `$value$plusargs(fmt, dest)`: the format (arg 0) is read, dest (arg 1) written
-        "$value$plusargs" => &args[..1.min(args.len())],
-        _ => args,
-    }
-}
-
 /// Count the ARG-CONSUMING conversion specifiers in a `$display`-family format
 /// literal (`$sformatf`-hoist gate, §4.5.127). Scans the raw literal (quotes +
 /// deferred escapes): a `\`-escape skips two bytes (so `\%`/`\"` never start a

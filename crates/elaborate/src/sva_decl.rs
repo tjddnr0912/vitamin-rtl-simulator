@@ -105,7 +105,7 @@ impl Elaborator<'_> {
     pub(crate) fn rewrite_sampled(&mut self, e: &ast::Expr, regs: &mut SvaRegs) -> ast::Expr {
         let sp = e.span;
         match &e.kind {
-            ast::ExprKind::SysCall { name, args } if is_sva_sampled_fn(&name.name) => {
+            ast::ExprKind::SysCall { name, args } if ast::sysfn::is_sva_sampled_fn(&name.name) => {
                 if args.len() != 1 {
                     self.error(
                         MsgCode::ElabUnsupported,

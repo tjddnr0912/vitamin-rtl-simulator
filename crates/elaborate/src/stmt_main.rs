@@ -459,30 +459,7 @@ impl Elaborator<'_> {
                 // assignment the user never wrote — measured, not inherited: this arm is
                 // what stops that net from being created in the first place.
                 if (!self.in_frame_body || self.frame_task_lowering)
-                    && matches!(
-                        name.name.as_str(),
-                        "$sscanf"
-                            | "$fscanf"
-                            | "$fgets"
-                            | "$fread"
-                            | "$value$plusargs"
-                            | "$fgetc"
-                            | "$ungetc"
-                            | "$random"
-                            // Of the `$dist_*` family only `$dist_uniform` is routed:
-                            // its integer LCG advance AND draw match iverilog exactly
-                            // for all inputs (the same verified `$random` LCG). The
-                            // NON-uniform siblings have a PRE-EXISTING vita-vs-iverilog
-                            // divergence — `$dist_chi_square`/`$dist_t` in the seed LCG
-                            // advance itself, `$dist_normal`/`$dist_exponential`/
-                            // `$dist_erlang` (and possibly `$dist_poisson`) in the draw
-                            // VALUE (vendored-libm rounding, off-by-one) — present in
-                            // the ASSIGNMENT form too. Routing them bare would turn
-                            // base's skip into a DIFFERENT wrong value; leave them
-                            // warn+skip (base==fix) until the algorithm is fixed
-                            // (a separate, deep follow-on).
-                            | "$dist_uniform"
-                    )
+                    && ast::sysfn::bare_call_routed(name.name.as_str())
                 {
                     let synth = ast::Expr {
                         kind: ast::ExprKind::SysCall {

@@ -1246,16 +1246,14 @@ impl Elaborator<'_> {
                 // read state (and some write ref/dest args), so they are
                 // direct-rhs-only special forms (the legal placements intercept in
                 // lower_stmt BEFORE lower_expr is reached). Reaching here = an
-                // illegal nested placement. This guard MUST stay in sync with
+                // illegal nested placement. This guard's set
+                // (`ast::sysfn::refused_nested_stream_read`) MUST stay in sync with
                 // `file_read_int_special`. Round-9 FIO: `$feof` is PURE (reads the
                 // EOF flag, no mutation) and is intentionally NOT in this list —
                 // it maps through `ir::sysfunc_id` like any pure value sysfunc, so
                 // `while (!$feof(fd))` and other expression/condition placements
                 // work (re-evaluation per iteration is exactly correct).
-                if matches!(
-                    name.name.as_str(),
-                    "$fgetc" | "$ungetc" | "$fgets" | "$fread" | "$fscanf" | "$sscanf"
-                ) {
+                if ast::sysfn::refused_nested_stream_read(name.name.as_str()) {
                     // ⚠️ This message used to state the pre-§4.5.374 rule — "supported
                     // only as the direct rhs of a blocking assignment (v9)" — which had
                     // been FALSE since the hoist opened NBA right-hand sides, `if`
@@ -1295,19 +1293,9 @@ impl Elaborator<'_> {
                 // writes the dst ref — both direct-rhs-only (the legal placements
                 // intercept in lower_stmt before lower_expr). Reaching here is an
                 // illegal nested placement — loud, never a silent unseeded draw /
-                // dropped cast. MUST stay in sync with dist_uniform_special /
-                // cast_special.
-                if matches!(
-                    name.name.as_str(),
-                    "$dist_uniform"
-                        | "$dist_normal"
-                        | "$dist_exponential"
-                        | "$dist_poisson"
-                        | "$dist_chi_square"
-                        | "$dist_t"
-                        | "$dist_erlang"
-                        | "$cast"
-                ) {
+                // dropped cast. The set (`ast::sysfn::refused_nested_seed_or_dest`) MUST
+                // stay in sync with dist_uniform_special / cast_special.
+                if ast::sysfn::refused_nested_seed_or_dest(name.name.as_str()) {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "$dist_* / $cast (function form) are supported only as \

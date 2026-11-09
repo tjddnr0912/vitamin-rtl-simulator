@@ -117,7 +117,7 @@ pub(crate) fn lval_root_name(lhs: &ast::Lvalue) -> Option<String> {
 
 /// Like [`expr_reads_ident`] but arg-direction-aware at a system-func boundary, for
 /// the block-local coalesce read-gate ONLY. A string-building / scanf / file-read
-/// sysfunc's write DEST args are NOT reads (see [`syscall_read_args`]) — e.g. the
+/// sysfunc's write DEST args are NOT reads (see [`ast::sysfn::syscall_read_args`]) — e.g. the
 /// idiomatic rvalue `n = $sscanf(src, fmt, s)` WRITES `s`. The shared
 /// `expr_reads_ident` cannot encode this: the scope-leak walker also uses it and
 /// must keep treating a dest as a reference. Gates the sysfunc boundary (and a
@@ -132,7 +132,7 @@ pub(crate) fn lval_root_name(lhs: &ast::Lvalue) -> Option<String> {
 pub(crate) fn rvalue_reads_ident(e: &ast::Expr, name: &str) -> bool {
     use ast::ExprKind as K;
     match &e.kind {
-        K::SysCall { name: task, args } => syscall_read_args(&task.name, args)
+        K::SysCall { name: task, args } => ast::sysfn::syscall_read_args(&task.name, args)
             .iter()
             .any(|a| rvalue_reads_ident(a, name)),
         K::ClassNew { args } => args.iter().any(|a| rvalue_reads_ident(a, name)),
@@ -345,7 +345,7 @@ pub(crate) fn stmt_refs_ident_outside(
 /// block-local initializer, a condition / scrutinee / loop bound, a `return` value, an
 /// lvalue-index sub-expr, a `#(s)` delay / `@(s)` event-control prefix, `new(s)` ctor
 /// args, or a task/sysfunc READ arg (a string-building / scanf sysfunc's write DEST
-/// arg is NOT a read, per [`syscall_read_args`]). A plain write `name = <expr>` does
+/// arg is NOT a read, per [`ast::sysfn::syscall_read_args`]). A plain write `name = <expr>` does
 /// NOT count. READ-GATES the module block-local dynamic-storage coalesce reject: a
 /// WRITE-ONLY string local coalesces harmlessly (its truncated write is discarded onto
 /// the sibling's scalar net), so only a READ of the wrong-kind coalesced net is
@@ -904,7 +904,7 @@ pub(crate) fn stmt_reads_ident(s: &ast::Stmt, name: &str) -> bool {
         }
         SysTaskCall {
             name: task, args, ..
-        } => syscall_read_args(task.name.as_str(), args)
+        } => ast::sysfn::syscall_read_args(task.name.as_str(), args)
             .iter()
             .any(|e| rvalue_reads_ident(e, name)),
         UserTaskCall { args, .. } | RandomizeWith { args, .. } => {

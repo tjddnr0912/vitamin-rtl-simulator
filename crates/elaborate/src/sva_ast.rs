@@ -180,14 +180,6 @@ pub(crate) fn sva_formal_map(
         .collect()
 }
 
-/// Is `name` (incl. the leading `$`) an SVA sampled-value function we desugar?
-pub(crate) fn is_sva_sampled_fn(name: &str) -> bool {
-    matches!(
-        name,
-        "$past" | "$rose" | "$fell" | "$stable" | "$changed" | "$sampled"
-    )
-}
-
 pub(crate) fn sva_ident_expr(name: &str, sp: ast::Span) -> ast::Expr {
     ast::Expr {
         kind: ast::ExprKind::Ident(ast::HierPath {

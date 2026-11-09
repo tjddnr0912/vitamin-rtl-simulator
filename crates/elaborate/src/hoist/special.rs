@@ -42,47 +42,6 @@ fn lvalue_index_seq(lv: &ast::Lvalue) -> Vec<&ast::Expr> {
     v
 }
 
-/// The direct-rhs-only file/plusargs system functions this module hoists — the v7/v9
-/// families whose result is an INT and whose statement form is already implemented in
-/// `sys_special.rs`. ONE spelling; it is a SUBSET of the names `expr_main.rs` loud-rejects,
-/// so a name dropped from here simply keeps the old diagnostic (never a silent miss).
-pub(crate) fn is_hoistable_rhs_only_sysfunc(name: &str) -> bool {
-    matches!(
-        name,
-        "$fgetc"
-            | "$ungetc"
-            | "$fgets"
-            | "$fread"
-            | "$fscanf"
-            | "$sscanf"
-            | "$value$plusargs"
-            | "$fopen"
-    )
-}
-
-/// The argument positions a hoistable form WRITES (its ref/destination actuals), as a
-/// half-open range over `args`. Hoisting moves that write earlier, so the caller refuses
-/// when one of these roots is also read elsewhere in the statement.
-///
-/// `$fgetc`/`$ungetc`/`$fopen` write no ARGUMENT — but "writes no argument" is not "has no
-/// effect": they all move fd state, and `$feof(fd)` READS it. See [`Reads::fd_observer`].
-///
-/// ⚠️ The destination is argument ZERO for `$fgets(str, fd)` (IEEE 1800 §21.3.4.3) and
-/// `$fread(mem, fd[, start[, count]])` (§21.3.4.5) — only `$value$plusargs(fmt, var)` writes
-/// argument one. Grouping the three together pointed the overlap gate at the `fd`, which no
-/// surviving expression ever holds, so the gate passed everything: measured
-/// `n = mem[0] + $fread(mem, fd);` at 73 against iverilog's 15, at exit 0. vita's own
-/// recognizers say which it is — `sys_special.rs` lowers `args[0]` and calls
-/// `deny_readonly_write(net, "$fgets into" / "$fread into")` on it.
-fn write_arg_range(name: &str, argc: usize) -> std::ops::Range<usize> {
-    match name {
-        "$fgets" | "$fread" => 0..1.min(argc),
-        "$value$plusargs" => 1.min(argc)..2.min(argc),
-        "$fscanf" | "$sscanf" => 2.min(argc)..argc,
-        _ => 0..0,
-    }
-}
-
 /// What a walk over an expression learned about the names it READS.
 ///
 /// `opaque` is the fail-closed half: a read this walker cannot attribute to a plain
@@ -122,13 +81,6 @@ struct Reads {
     fd_observer: bool,
 }
 
-/// Does `name` observe fd state (rather than an argument)? `$feof` is the whole list:
-/// `ir::sysfunc_id` has no `$ftell`/`$ferror`, and every other fd-touching form is either a
-/// task or a member of the hoisted family itself.
-fn observes_fd_state(name: &str) -> bool {
-    name == "$feof"
-}
-
 impl Elaborator<'_> {
     /// A fresh 32-bit SIGNED temp for a hoisted call's result.
     ///
@@ -166,7 +118,7 @@ impl Elaborator<'_> {
     /// Is `e` a hoistable direct-rhs-only system call?
     fn rhs_only_call<'a>(&self, e: &'a ast::Expr) -> Option<(&'a str, &'a [ast::Expr])> {
         if let ast::ExprKind::SysCall { name, args } = &e.kind {
-            if is_hoistable_rhs_only_sysfunc(&name.name) {
+            if ast::sysfn::is_hoistable_rhs_only_sysfunc(&name.name) {
                 return Some((name.name.as_str(), args));
             }
         }
@@ -236,7 +188,7 @@ impl Elaborator<'_> {
                 out.roots.insert(seg.name.clone());
             }
             ast::ExprKind::PkgScoped { .. } => out.opaque = true,
-            ast::ExprKind::SysCall { name, .. } if observes_fd_state(&name.name) => {
+            ast::ExprKind::SysCall { name, .. } if ast::sysfn::observes_fd_state(&name.name) => {
                 out.fd_observer = true;
             }
             _ => {}
@@ -272,7 +224,7 @@ impl Elaborator<'_> {
     /// disjointness test would wave through.
     fn written_roots(&self, e: &ast::Expr, out: &mut Reads) {
         if let Some((name, args)) = self.rhs_only_call(e) {
-            for a in &args[write_arg_range(name, args.len())] {
+            for a in &args[ast::sysfn::write_arg_range(name, args.len())] {
                 let before = out.roots.len();
                 self.read_roots(a, false, out);
                 if out.roots.len() == before {
