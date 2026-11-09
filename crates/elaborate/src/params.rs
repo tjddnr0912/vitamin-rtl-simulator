@@ -721,10 +721,11 @@ impl Elaborator<'_> {
                 // OVERRIDE's value, and this arm only ever answers for a declaration
                 // whose own initializer is the call. `const_eval_in_scope` must
                 // already fold it (the Call arm's rule, and row 30's "correct a value,
-                // never create one"), and `sys_fn_is_integer` is a NAMED list so a
+                // never create one"), and `ast::sysfn::folds_integer` is a NAMED list so a
                 // real-returning call cannot reach the integer width.
                 if let ast::ExprKind::SysCall { name, .. } = &p.value.kind {
-                    if sys_fn_is_integer(&name.name) && self.const_eval_in_scope(&p.value).is_some()
+                    if ast::sysfn::folds_integer(&name.name)
+                        && self.const_eval_in_scope(&p.value).is_some()
                     {
                         return Some((32, true));
                     }

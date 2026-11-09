@@ -5,7 +5,7 @@
 //! children ([`rebuild`], driven by [`shape_children`] so it cannot disagree with `shape`),
 //! flattening and rebuilding an lvalue's index expressions, and the name predicate that says
 //! which system tasks the hoister must leave alone. The system functions that do not evaluate
-//! their operand are `hdl_ast::walk::syscall_does_not_evaluate`, where the child walk reads them.
+//! their operand are `hdl_ast::sysfn::does_not_evaluate`, which the child walk reads.
 
 use super::*;
 

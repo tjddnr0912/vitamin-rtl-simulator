@@ -261,22 +261,6 @@ impl Elaborator<'_> {
     }
 }
 
-/// The names [`Elaborator::const_dim_query`] answers — shared with the diagnostic
-/// that explains a declined fold, so the two lists cannot drift.
-pub(crate) fn is_dim_query_name(name: &str) -> bool {
-    matches!(
-        name,
-        "$size"
-            | "$left"
-            | "$right"
-            | "$low"
-            | "$high"
-            | "$increment"
-            | "$dimensions"
-            | "$unpacked_dimensions"
-    )
-}
-
 impl Elaborator<'_> {
     /// The `(width, signed)` an UNTYPED parameter takes from a select initializer
     /// (§6.20.2 through §11.5.1): an element read of a constant array parameter is

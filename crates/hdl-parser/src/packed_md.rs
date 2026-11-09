@@ -699,23 +699,6 @@ impl Parser<'_, '_> {
     }
 }
 
-/// The §20.7 array query functions [`Parser::rewrite_packed_md_dim_query`] answers.
-/// Twin of `elaborate::const_array::is_dim_query_name` — the two crates cannot share
-/// a list, so a name added to one must be added to the other.
-fn is_dim_query_name(name: &str) -> bool {
-    matches!(
-        name,
-        "$size"
-            | "$left"
-            | "$right"
-            | "$low"
-            | "$high"
-            | "$increment"
-            | "$dimensions"
-            | "$unpacked_dimensions"
-    )
-}
-
 impl Parser<'_, '_> {
     /// `$size(P)` / `$left(P, d)` / … on a multi-dimensional packed PARAMETER.
     ///
@@ -734,7 +717,8 @@ impl Parser<'_, '_> {
         let ExprKind::SysCall { name, args } = &e.kind else {
             return e;
         };
-        if !is_dim_query_name(&name.name) || args.is_empty() || args.len() > 2 {
+        if !hdl_ast::sysfn::is_array_query_function(&name.name) || args.is_empty() || args.len() > 2
+        {
             return e;
         }
         let dims = match &args[0].kind {

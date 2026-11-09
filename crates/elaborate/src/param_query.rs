@@ -119,7 +119,7 @@ impl Elaborator<'_> {
                 ..
             } => cast_prim_wsign(*p).is_some(),
             ast::ExprKind::SysCall { name, args } => {
-                args.len() == 1 && matches!(name.name.as_str(), "$clog2" | "$rtoi")
+                args.len() == 1 && ast::sysfn::real_conversion(&name.name)
             }
             _ => false,
         };
@@ -556,13 +556,13 @@ impl Elaborator<'_> {
             // 26 correct cells unchanged, 9 loud cells stay loud (they fail the
             // VALUE half — `override_self_value` requires `const_eval_in_scope`).
             //
-            // ⚠️ NAMED list (`sys_fn_is_integer` = `$clog2 | $bits | $rtoi`), never
+            // ⚠️ NAMED list (`ast::sysfn::folds_integer` = `$clog2 | $bits | $rtoi`), never
             // a blanket `SysCall`: `const_self_width` (`const_fn_width.rs:262`) and
             // `const_signed_env` (`:368`) both answer 32 / signed for ANY `SysCall`,
             // so a real-returning call reaching them would be sized wrong. The
             // `$size`/`$high`/`$low`/`$left`/`$right`/`$increment` family is
             // deliberately outside the list and stays loud (its own row).
-            ast::ExprKind::SysCall { name, .. } if sys_fn_is_integer(&name.name)
+            ast::ExprKind::SysCall { name, .. } if ast::sysfn::folds_integer(&name.name)
         );
         // §2 "Index sealing" residue ⓐ: a NAME leaf whose DECLARED width this
         // scope can prove. Empty for a literal-only tree, which is every cell

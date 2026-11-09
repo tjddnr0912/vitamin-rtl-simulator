@@ -550,20 +550,7 @@ impl Elaborator<'_> {
                 // Every other sysfunc (`$clog2`, `$signed`, …) is runtime iff its
                 // arguments are, so recurse into those. (adversarial differential
                 // find: `$bits`/`$size`/… of a net were wrongly loud-rejected.)
-                let is_type_query = matches!(
-                    name.name.as_str(),
-                    "$bits"
-                        | "$size"
-                        | "$high"
-                        | "$low"
-                        | "$left"
-                        | "$right"
-                        | "$increment"
-                        | "$dimensions"
-                        | "$unpacked_dimensions"
-                        | "$isunbounded"
-                        | "$typename"
-                );
+                let is_type_query = ast::sysfn::type_query(&name.name);
                 // A TYPE query is a constant — except over a DYNAMIC-STORAGE handle,
                 // where `$size(da)` is the runtime element count (§4.5.500) and a
                 // replication count built from it folded to a silent 0 where both
@@ -577,7 +564,7 @@ impl Elaborator<'_> {
                 // verilator unsupported; vita folds the element width) and stays
                 // loud as a count.
                 if is_type_query {
-                    return matches!(name.name.as_str(), "$size" | "$high" | "$right" | "$bits")
+                    return ast::sysfn::type_query_runtime_size(&name.name)
                         && args
                             .first()
                             .and_then(|a| self.resolve_intro_net(a))

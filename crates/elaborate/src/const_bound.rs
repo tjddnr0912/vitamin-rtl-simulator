@@ -883,7 +883,7 @@ impl Elaborator<'_> {
         // for its argument (a variable, an element, an untyped parameter, an array the
         // element capture does not cover). Say that, not "no arm".
         if let K::SysCall { name, .. } = &e.kind {
-            if is_dim_query_name(&name.name) {
+            if ast::sysfn::is_array_query_function(&name.name) {
                 return Some(format!(
                     "{} folds only over a constant array parameter (0-based, single \
                      unpacked dimension, elements ≤ 64 bits) or a parameter with a \

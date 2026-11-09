@@ -434,7 +434,9 @@ impl Elaborator<'_> {
             // §20.7 array query functions (`$size(A)`, `$high(W)`, …) over a constant
             // array parameter or a parameter with a DECLARED range — §3 ⑤ ⓔ. Declines
             // (loud) for a variable, an element, or a value-inferred width.
-            ast::ExprKind::SysCall { name, args } if is_dim_query_name(&name.name) => {
+            ast::ExprKind::SysCall { name, args }
+                if ast::sysfn::is_array_query_function(&name.name) =>
+            {
                 self.const_dim_query(&name.name, args)
             }
             // A built-in string method with an integral result (`S.len()`), over a

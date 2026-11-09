@@ -123,7 +123,7 @@ struct Reads {
 }
 
 /// Does `name` observe fd state (rather than an argument)? `$feof` is the whole list:
-/// `map_sysfunc` has no `$ftell`/`$ferror`, and every other fd-touching form is either a
+/// `ir::sysfunc_id` has no `$ftell`/`$ferror`, and every other fd-touching form is either a
 /// task or a member of the hoisted family itself.
 fn observes_fd_state(name: &str) -> bool {
     name == "$feof"

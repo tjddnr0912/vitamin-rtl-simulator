@@ -45,26 +45,6 @@ pub(crate) fn pkg_envw_key(pkg: &str, name: &str) -> String {
     format!("{pkg}::{name}")
 }
 
-/// Does this system function return a 32-bit SIGNED INTEGER *and* fold in the
-/// constant domain?
-///
-/// An explicit list, never a blanket `SysCall`: the width rule below
-/// (`const_self_width`'s `Some(32)` and `const_signed_env`'s `true`) is a claim about
-/// INTEGER-returning calls only, and a real-returning one (`$itor`, `$bitstoreal`,
-/// `$realtime`) would be sized wrong by it the day the const domain learns to fold it.
-/// These three are exactly the ones `const_fn.rs` folds into this domain — `$clog2`
-/// (`:377`), `$rtoi` (`:387`), `$bits` (`:408`). The dimension-query family
-/// (`$size`/`$high`/…) is integer-returning too but is NOT in this list, so a
-/// consumer that also needs the family must spell `|| is_dim_query_name(..)` —
-/// `const_eval_in_scope` DOES fold the family (`const_fn.rs:393`), which is why
-/// `const_expr_signed` (`const_eval.rs`) asks both lists. Widening this list
-/// itself is a different (loud→value) move for the consumers that gate on it —
-/// `ctx_width_names_are_evident` and `param_decl_width_opt` — and belongs to its
-/// own row.
-pub(crate) fn sys_fn_is_integer(name: &str) -> bool {
-    matches!(name, "$clog2" | "$bits" | "$rtoi")
-}
-
 /// Does this operator's RESULT take the surrounding context width?
 ///
 /// The context-determined ones widen with their neighbours; the rest — the
@@ -521,11 +501,11 @@ impl Elaborator<'_> {
             // where both oracles say 32 / `fffffff6`, and `logic [(W[15:8])+8-1:0] v`
             // declared 1 bit where both declare 263.
             //
-            // ⚠️ NAMED list, not a blanket arm — see `sys_fn_is_integer` for why a
+            // ⚠️ NAMED list, not a blanket arm — see `ast::sysfn::folds_integer` for why a
             // real-returning call must not join it, and note that admitting a name
             // here cannot by itself manufacture a value: the consumers all require
             // `const_eval_in_scope` to fold the expression first.
-            K::SysCall { name, .. } if sys_fn_is_integer(&name.name) => true,
+            K::SysCall { name, .. } if ast::sysfn::folds_integer(&name.name) => true,
             // §2 "Index sealing" ⓒ: a `pkg::` leaf, admitted only when
             // `declared_override_widths` has already CERTIFIED it under the qualified
             // key (`pkg_const_narrow_bits` — the package twin of `narrow_param_bits`,

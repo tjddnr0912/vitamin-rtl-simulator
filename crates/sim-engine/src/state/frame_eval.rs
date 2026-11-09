@@ -1283,17 +1283,20 @@ impl<'a> SimState<'a> {
         }
         let which = match self.ir.exprs.get(rhs as usize) {
             Some(sim_ir::Expr::SysFunc { which, .. }) => match which {
-                sim_ir::SysFuncId::Fgets => "$fgets",
-                sim_ir::SysFuncId::Fread => "$fread",
-                sim_ir::SysFuncId::Fscanf => "$fscanf",
-                sim_ir::SysFuncId::Sscanf => "$sscanf",
-                sim_ir::SysFuncId::Fgetc => "$fgetc",
-                sim_ir::SysFuncId::Feof => "$feof",
-                sim_ir::SysFuncId::Ungetc => "$ungetc",
-                sim_ir::SysFuncId::Fopen => "$fopen",
-                sim_ir::SysFuncId::ValuePlusargs => "$value$plusargs",
+                // The `$name` the user typed, from the one id -> name home (sim-ir
+                // `names.rs`, ROADMAP §5.2 SYS-1a); the three phrases below are this
+                // diagnostic's own wording.
+                sim_ir::SysFuncId::Fgets
+                | sim_ir::SysFuncId::Fread
+                | sim_ir::SysFuncId::Fscanf
+                | sim_ir::SysFuncId::Sscanf
+                | sim_ir::SysFuncId::Fgetc
+                | sim_ir::SysFuncId::Feof
+                | sim_ir::SysFuncId::Ungetc
+                | sim_ir::SysFuncId::Fopen
+                | sim_ir::SysFuncId::ValuePlusargs
+                | sim_ir::SysFuncId::Cast => sim_ir::sysfunc_name(*which),
                 sim_ir::SysFuncId::Random => "a seeded `$random`",
-                sim_ir::SysFuncId::Cast => "$cast",
                 sim_ir::SysFuncId::QPopBack | sim_ir::SysFuncId::QPopFront => "a queue pop",
                 _ => "a seeded `$dist_*`",
             },

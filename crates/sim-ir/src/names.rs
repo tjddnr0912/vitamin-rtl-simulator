@@ -8,7 +8,19 @@
 //! variant, and the only way a second copy of that mapping stays honest is by
 //! not existing. `state/frame_eval.rs::fatal_frame_sysread` already carried a
 //! partial one (11 of 81 ids, everything else folded into `"a seeded $dist_*"`)
-//! and that copy is now this one's caller.
+//! and that copy is now this one's caller (ROADMAP §5.2 SYS-1a: its ten `$name` arms
+//! read [`sysfunc_name`]; its three phrases, a seeded `$random`, a queue pop and a
+//! seeded `$dist_*`, are its own wording).
+//!
+//! ## The inverse direction
+//!
+//! [`sysfunc_id`] is the other direction of the same fact for the `$name` value calls
+//! elaborate maps (40 names): the id a name lowers to. It sits here, beside
+//! [`sysfunc_name`], so the two directions are read together, and the unit test
+//! `sysfunc_id_round_trips` pins the round trip: every name `sysfunc_id` answers prints
+//! back as itself, and every other `$name` [`sysfunc_name`] prints belongs to an id a
+//! special form mints in elaborate (listed there with its site). The facts a `$name`
+//! alone decides (membership lists) live in hdl-ast `sysfn.rs`, which the parser reaches.
 //!
 //! ## Why the matches have no `_` arm
 //!
@@ -178,6 +190,74 @@ pub fn sysfunc_name(which: SysFuncId) -> &'static str {
     }
 }
 
+/// The [`SysFuncId`] a `$name` value call lowers to — the inverse of [`sysfunc_name`]
+/// over the names elaborate maps (moved verbatim from elaborate `systask.rs`
+/// `map_sysfunc`, ROADMAP §5.2 SYS-1a). `$time`→Time, `$realtime`→Realtime,
+/// `$signed`→Signed, `$unsigned`→Unsigned, `$clog2`→Clog2. `name` retains the leading
+/// `$` (verdict M6). Unknown → None, and each caller reads None its own way (elaborate
+/// `expr_main.rs`: the refusal path; `override_type.rs`: not real; `inline_body_ctx.rs`:
+/// unclassified), so adding or removing a name here moves a value: the ids a special form
+/// mints (`$fgets`, `$cast`, `$dist_*`, …) are never added (the round-trip test lists them).
+pub fn sysfunc_id(dollar_name: &str) -> Option<SysFuncId> {
+    match dollar_name {
+        "$time" => Some(SysFuncId::Time),
+        "$realtime" => Some(SysFuncId::Realtime),
+        "$signed" => Some(SysFuncId::Signed),
+        "$unsigned" => Some(SysFuncId::Unsigned),
+        "$clog2" => Some(SysFuncId::Clog2),
+        "$rtoi" => Some(SysFuncId::Rtoi),
+        "$itor" => Some(SysFuncId::Itor),
+        "$realtobits" => Some(SysFuncId::RealToBits),
+        "$bitstoreal" => Some(SysFuncId::BitsToReal),
+        // v7 bit-vector predicates ($bits never reaches here — const-folded).
+        "$countones" => Some(SysFuncId::CountOnes),
+        "$onehot" => Some(SysFuncId::OneHot),
+        "$onehot0" => Some(SysFuncId::OneHot0),
+        "$isunknown" => Some(SysFuncId::IsUnknown),
+        // v7 random + time + plusarg probe ($value$plusargs is a special
+        // form — it writes its ref var, never mapped here).
+        "$test$plusargs" => Some(SysFuncId::TestPlusargs),
+        "$random" => Some(SysFuncId::Random),
+        "$urandom" => Some(SysFuncId::Urandom),
+        "$urandom_range" => Some(SysFuncId::UrandomRange),
+        "$stime" => Some(SysFuncId::Stime),
+        // Round-9 FIO: $feof is the ONLY PURE file function — it reads the fd's
+        // EOF flag with no state mutation, so it is allowed in any expression /
+        // condition context (`while (!$feof(fd))`). The fd-ADVANCING reads
+        // ($fgetc/$fgets/$fread/$fscanf/$sscanf/$ungetc) are NOT mapped here — they
+        // stay direct-rhs-only (a second evaluation under unspecified expression
+        // order would double-advance the fd). The direct-rhs `e = $feof(fd)` form
+        // is still intercepted first by `file_read_int_special` (byte-identical),
+        // so this mapping is reached only for expression-context $feof.
+        "$feof" => Some(SysFuncId::Feof),
+        // v19: N6 real-math (IEEE §20.8.2) — pure value functions, lowered like
+        // any other SysFunc. The non-uniform $dist_* are NOT here — they advance
+        // the ref seed and route through `dist_seeded_special` (direct-rhs only).
+        "$ln" => Some(SysFuncId::Ln),
+        "$log10" => Some(SysFuncId::Log10),
+        "$exp" => Some(SysFuncId::Exp),
+        "$sqrt" => Some(SysFuncId::Sqrt),
+        "$pow" => Some(SysFuncId::Pow),
+        "$floor" => Some(SysFuncId::Floor),
+        "$ceil" => Some(SysFuncId::Ceil),
+        "$sin" => Some(SysFuncId::Sin),
+        "$cos" => Some(SysFuncId::Cos),
+        "$tan" => Some(SysFuncId::Tan),
+        "$asin" => Some(SysFuncId::Asin),
+        "$acos" => Some(SysFuncId::Acos),
+        "$atan" => Some(SysFuncId::Atan),
+        "$atan2" => Some(SysFuncId::Atan2),
+        "$hypot" => Some(SysFuncId::Hypot),
+        "$sinh" => Some(SysFuncId::Sinh),
+        "$cosh" => Some(SysFuncId::Cosh),
+        "$tanh" => Some(SysFuncId::Tanh),
+        "$asinh" => Some(SysFuncId::Asinh),
+        "$acosh" => Some(SysFuncId::Acosh),
+        "$atanh" => Some(SysFuncId::Atanh),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +287,110 @@ mod tests {
             sysfunc_name(SysFuncId::Cast),
             "both forms are `$cast` to the RTL author"
         );
+    }
+
+    /// A `$name` the way the IEEE spells one: `$` then `[a-z0-9_$]` (so `"$readmem
+    /// target"`, a label, and the `.method()` names are not names).
+    fn is_name_shape(t: &str) -> bool {
+        t.len() > 1
+            && t.starts_with('$')
+            && t[1..]
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'$')
+    }
+
+    /// The lines of `fn <name>`'s body in this file's source (the match arms).
+    fn body_of<'s>(src: &'s str, header: &str) -> Vec<&'s str> {
+        let start = src
+            .find(header)
+            .unwrap_or_else(|| panic!("no `{header}` in names.rs"));
+        src[start..]
+            .lines()
+            .skip(1)
+            .take_while(|l| *l != "}")
+            .collect()
+    }
+
+    /// The ids no `$name` maps to through [`sysfunc_id`]: each is minted by a special
+    /// form in elaborate (a guard plus the variant at its own site), never by the name
+    /// table (adding one to [`sysfunc_id`] would move a value: ROADMAP §5.2 SYS-1a F24).
+    const NOT_FROM_SYSFUNC_ID: [(&str, &str); 17] = [
+        ("Cast", "expr_cast.rs cast_special"),
+        ("Fgets", "sys_special.rs fgets_special"),
+        ("Fopen", "sys_special.rs fopen_special"),
+        ("Fread", "sys_special.rs fread_special"),
+        ("Sformatf", "sys_special.rs sformatf_special"),
+        ("ValuePlusargs", "sys_special.rs value_plusargs_special"),
+        ("DistUniform", "crv.rs dist_uniform_special"),
+        ("DistNormal", "crv.rs dist_uniform_special"),
+        ("DistExponential", "crv.rs dist_uniform_special"),
+        ("DistPoisson", "crv.rs dist_uniform_special"),
+        ("DistChiSquare", "crv.rs dist_uniform_special"),
+        ("DistT", "crv.rs dist_uniform_special"),
+        ("DistErlang", "crv.rs dist_uniform_special"),
+        ("Fgetc", "sys_special.rs file_read_int_special"),
+        ("Ungetc", "sys_special.rs file_read_int_special"),
+        ("Fscanf", "sys_special.rs scanf_special"),
+        ("Sscanf", "sys_special.rs scanf_special"),
+    ];
+
+    /// The round trip of the two directions (ROADMAP §5.2 SYS-1a, PINS 2): every name
+    /// [`sysfunc_id`] answers prints back as itself through [`sysfunc_name`], and every
+    /// `$name` [`sysfunc_name`] prints is either one of those (naming the same id) or an
+    /// id in [`NOT_FROM_SYSFUNC_ID`], exactly. The arms are read from this file's source,
+    /// so an arm added to either match is counted here.
+    #[test]
+    fn sysfunc_id_round_trips() {
+        let src = include_str!("names.rs");
+        // `F::Variant => "text",`
+        let name_arms: Vec<(&str, &str)> = body_of(src, "pub fn sysfunc_name(")
+            .into_iter()
+            .filter_map(|l| {
+                let (v, t) = l.trim().strip_prefix("F::")?.split_once(" => \"")?;
+                Some((v, t.strip_suffix("\",")?))
+            })
+            .collect();
+        // `"$name" => Some(SysFuncId::Variant),`
+        let id_arms: Vec<(&str, &str)> = body_of(src, "pub fn sysfunc_id(")
+            .into_iter()
+            .filter_map(|l| {
+                let (n, v) = l
+                    .trim()
+                    .strip_prefix('"')?
+                    .split_once("\" => Some(SysFuncId::")?;
+                Some((n, v.strip_suffix("),")?))
+            })
+            .collect();
+        assert_eq!(name_arms.len(), 86, "sysfunc_name's arms");
+        assert_eq!(id_arms.len(), 40, "sysfunc_id's domain");
+
+        for (n, v) in &id_arms {
+            let id =
+                sysfunc_id(n).unwrap_or_else(|| panic!("{n} read from the source, not mapped"));
+            assert_eq!(format!("{id:?}"), *v, "{n}");
+            assert_eq!(sysfunc_name(id), *n, "{n} does not print back as itself");
+        }
+
+        let (mut mapped, mut minted, mut other) = (0, Vec::new(), 0);
+        for (v, t) in &name_arms {
+            if !is_name_shape(t) {
+                other += 1;
+                continue;
+            }
+            match sysfunc_id(t) {
+                Some(id) => {
+                    assert_eq!(format!("{id:?}"), *v, "{t} maps to another id");
+                    mapped += 1;
+                }
+                None => minted.push(*v),
+            }
+        }
+        let listed: Vec<&str> = NOT_FROM_SYSFUNC_ID.iter().map(|(v, _)| *v).collect();
+        minted.sort_unstable();
+        let mut want = listed.clone();
+        want.sort_unstable();
+        assert_eq!(minted, want, "the `$name` ids sysfunc_id does not answer");
+        assert_eq!((mapped, minted.len(), other), (40, 17, 29));
+        assert!(!is_name_shape(sysfunc_name(SysFuncId::ReadmemAssocTarget)));
     }
 }

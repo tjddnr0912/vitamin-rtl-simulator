@@ -42,13 +42,13 @@
 //! ## The fix
 //!
 //! One arm on that `matches!` (renamed `sized_by_type`):
-//! `ast::ExprKind::SysCall { name, .. } if sys_fn_is_integer(&name.name)`. It is
+//! `ast::ExprKind::SysCall { name, .. } if ast::sysfn::folds_integer(&name.name)`. It is
 //! `param_decl_width_opt`'s arm (`params.rs`, the DECLARATION lane) one lane over;
 //! everything downstream was already ready — `ctx_width_names_are_evident` has the
 //! same named arm, `const_self_width` answers 32 and `const_signed_env` answers
 //! signed.
 //!
-//! `sys_fn_is_integer` is the NAMED list `$clog2 | $bits | $rtoi`, deliberately not
+//! `hdl_ast::sysfn::folds_integer` is the NAMED list `$clog2 | $bits | $rtoi`, deliberately not
 //! widened here: the `$size`/`$high`/`$low`/`$left`/`$right`/`$increment` family and
 //! a call whose VALUE the const domain cannot fold (`{$bits(x)}`) stay LOUD —
 //! their own loud→value row — which `i_*` pins. (`$bits(x[3])` was one of them
@@ -202,7 +202,7 @@ fn c_bare_clog2_over_a_variable_width_binds_32() {
     );
 }
 
-/// `$rtoi` — the third name in `sys_fn_is_integer`. Its argument is a REAL literal,
+/// `$rtoi` — the third name in `hdl_ast::sysfn::folds_integer`. Its argument is a REAL literal,
 /// so `override_self_value`'s re-fold at `(32, true)` is what must reproduce `2`
 /// (both oracles truncate 2.9 toward zero).
 #[test]
@@ -336,7 +336,7 @@ fn i_concat_around_the_call_stays_loud() {
 }
 
 /// CONTROL — the `$size` dimension-query family is deliberately outside
-/// `sys_fn_is_integer` and stays loud (its own loud→value row).
+/// `hdl_ast::sysfn::folds_integer` and stays loud (its own loud→value row).
 #[test]
 fn i_size_dimension_query_stays_loud() {
     loud_code(

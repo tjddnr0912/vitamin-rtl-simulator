@@ -41,7 +41,9 @@ fn expr_exact(e: &ast::Expr, scope: &ExactScope<'_>) -> bool {
             lhs,
             rhs,
         } => expr_exact(lhs, scope) && expr_exact(rhs, scope),
-        ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+        ast::ExprKind::SysCall { name, args }
+            if ast::sysfn::exact_i64(&name.name) && args.len() == 1 =>
+        {
             expr_exact(&args[0], scope)
         }
         _ => false,

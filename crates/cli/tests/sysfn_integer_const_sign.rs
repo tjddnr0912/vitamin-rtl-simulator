@@ -16,8 +16,8 @@
 //! here as `sign_stored_meta_leaf_was_already_signed`.
 //!
 //! ⚠️ **The admission is TWO NAMED lists, never a blanket `SysCall { .. } => true`**
-//! (the spelling at `const_fn_width.rs:257`/`:354`). `sys_fn_is_integer` is
-//! `$clog2 | $bits | $rtoi`; `is_dim_query_name` is the `$size`/`$high`/… family, which
+//! (the spelling at `const_fn_width.rs:257`/`:354`). `hdl_ast::sysfn::folds_integer` is
+//! `$clog2 | $bits | $rtoi`; `hdl_ast::sysfn::is_array_query_function` is the `$size`/`$high`/… family, which
 //! `const_eval_in_scope` ALSO folds (`const_fn.rs:393`) — without it `$size(W8) - 20`
 //! kept `4294967284` against both oracles' `-12`. Everything OUTSIDE both lists must
 //! stay as it is: `$unsigned` is unsigned by definition, and `$itor` / `$realtobits` /
@@ -84,7 +84,7 @@ fn top(body: &str) -> String {
     format!("module top;\n{body}\n  initial #1 $finish;\nendmodule\n")
 }
 
-// ===== A. the three `sys_fn_is_integer` leaves — PRE unsigned, both oracles signed ====
+// ===== A. the three `hdl_ast::sysfn::folds_integer` leaves — PRE unsigned, both oracles signed ====
 
 /// g1.A_CLOG — PRE `A_CLOG=4294967285` · iverilog/verilator `A_CLOG=-11`.
 #[test]
@@ -115,10 +115,10 @@ fn rtoi_minus_literal_is_signed() {
     );
 }
 
-// ===== B. the dim-query family — the half `sys_fn_is_integer` alone does NOT cover ====
+// ===== B. the dim-query family — the half `hdl_ast::sysfn::folds_integer` alone does NOT cover ====
 
 /// g2.B_SIZE — PRE `B_SIZE=4294967284` · both oracles `B_SIZE=-12`. This is the cell
-/// that makes `|| is_dim_query_name(..)` mandatory: `sys_fn_is_integer` excludes
+/// that makes `|| is_array_query_function(..)` mandatory: `hdl_ast::sysfn::folds_integer` excludes
 /// `$size`, but `const_fn.rs:393` folds it, so it reaches the untyped-param tail with a
 /// value and (without the second list) the wrong sign.
 #[test]

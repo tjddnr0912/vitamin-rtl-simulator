@@ -1249,7 +1249,7 @@ impl Elaborator<'_> {
                 // illegal nested placement. This guard MUST stay in sync with
                 // `file_read_int_special`. Round-9 FIO: `$feof` is PURE (reads the
                 // EOF flag, no mutation) and is intentionally NOT in this list —
-                // it maps through `map_sysfunc` like any pure value sysfunc, so
+                // it maps through `ir::sysfunc_id` like any pure value sysfunc, so
                 // `while (!$feof(fd))` and other expression/condition placements
                 // work (re-evaluation per iteration is exactly correct).
                 if matches!(
@@ -1330,7 +1330,7 @@ impl Elaborator<'_> {
                     return self.placeholder_expr();
                 }
                 let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
-                match map_sysfunc(&name.name) {
+                match ir::sysfunc_id(&name.name) {
                     Some(which) => {
                         // v7 bit-vector predicates are integral-only; a real
                         // argument would silently count IEEE-754 mantissa

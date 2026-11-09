@@ -113,32 +113,9 @@ impl Elaborator<'_> {
                 Self::expr_is_inert(count) && value.iter().all(Self::expr_is_inert)
             }
             // `$sformatf` itself renders and mutates nothing; a QUERY sysfunc is a pure
-            // read. Everything else — `$random`/`$urandom`/`$fgetc`/… and every USER
-            // call (which may carry an output formal) — is assumed to have an effect.
+            // read (`ast::sysfn::inert`). Everything else is assumed to have an effect.
             K::SysCall { name, args } => {
-                matches!(
-                    name.name.as_str(),
-                    "$sformatf"
-                        | "$time"
-                        | "$stime"
-                        | "$realtime"
-                        | "$bits"
-                        | "$clog2"
-                        | "$signed"
-                        | "$unsigned"
-                        | "$size"
-                        | "$left"
-                        | "$right"
-                        | "$high"
-                        | "$low"
-                        | "$dimensions"
-                        | "$increment"
-                        | "$typename"
-                        | "$countones"
-                        | "$onehot"
-                        | "$onehot0"
-                        | "$isunknown"
-                ) && args.iter().all(Self::expr_is_inert)
+                ast::sysfn::inert(&name.name) && args.iter().all(Self::expr_is_inert)
             }
             _ => false,
         }

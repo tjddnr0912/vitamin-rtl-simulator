@@ -18,7 +18,7 @@ pub use analysis::{
     rhs_frame_executor_cannot_perform, rhs_is_stmt_effect, sysfunc_frame_executor_cannot_perform,
     sysfunc_is_stmt_effect, systask_effect_is_eval_local, systask_net_write, NetWrite,
 };
-pub use names::{sysfunc_name, systask_name};
+pub use names::{sysfunc_id, sysfunc_name, systask_name};
 
 use serde::{Deserialize, Serialize};
 use vita_artifact_derive::SchemaHash;

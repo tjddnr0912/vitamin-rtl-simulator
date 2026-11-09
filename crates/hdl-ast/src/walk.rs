@@ -39,7 +39,7 @@ pub enum ChildPos {
     /// argument or constraint belong to the solver.
     NoHoist,
     /// Not evaluated at all: an operand of a system function that reports a property
-    /// of its operand's type ([`syscall_does_not_evaluate`]).
+    /// of its operand's type ([`crate::sysfn::does_not_evaluate`]).
     Unevaluated,
 }
 
@@ -73,29 +73,6 @@ impl Expr {
     pub fn regime(&self) -> Regime {
         children(self, &mut |_, _| {})
     }
-}
-
-/// A system FUNCTION that does not EVALUATE its operand: it reports a static property
-/// of the operand's type (IEEE 1800 §20.5 `$bits`, §20.6 array queries). Its arguments
-/// are [`ChildPos::Unevaluated`], so nothing in them is read at run time, and moving a
-/// side effect out of one would perform an effect the source never performs.
-///
-/// Measured: iverilog leaves the side effect unperformed for `$bits`; `$clog2` and
-/// `$isunknown` DO evaluate their operand and are deliberately absent.
-pub fn syscall_does_not_evaluate(name: &str) -> bool {
-    matches!(
-        name,
-        "$bits"
-            | "$size"
-            | "$high"
-            | "$low"
-            | "$left"
-            | "$right"
-            | "$increment"
-            | "$dimensions"
-            | "$unpacked_dimensions"
-            | "$typename"
-    )
 }
 
 /// The single exhaustive match. Visits `e`'s children through `f` and returns the
@@ -177,7 +154,7 @@ fn children<'a, F: FnMut(ChildPos, &'a Expr)>(e: &'a Expr, f: &mut F) -> Regime 
             Regime::Uncond
         }
         K::SysCall { name, args } => {
-            if syscall_does_not_evaluate(&name.name) {
+            if crate::sysfn::does_not_evaluate(&name.name) {
                 args.iter().for_each(|c| f(P::Unevaluated, c));
                 Regime::Unevaluated
             } else {

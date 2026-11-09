@@ -135,7 +135,7 @@ impl Elaborator<'_> {
             K::IndexedPart { base, .. } => self.rhs_has_real_domain(base),
             // §5.4.1: a concat / replicate is an unsigned bit vector.
             K::Concat { .. } | K::Replicate { .. } => false,
-            K::SysCall { name, args } => match systask::map_sysfunc(&name.name) {
+            K::SysCall { name, args } => match ir::sysfunc_id(&name.name) {
                 // transparent to the argument's domain (§4.5.317)
                 Some(ir::SysFuncId::Signed | ir::SysFuncId::Unsigned) => any(args),
                 Some(w) => {

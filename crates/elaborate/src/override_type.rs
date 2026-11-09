@@ -71,7 +71,7 @@ impl Elaborator<'_> {
                 target: ast::CastTarget::Prim(ast::CastPrim::Real),
                 ..
             } => true,
-            K::SysCall { name, .. } => match systask::map_sysfunc(&name.name) {
+            K::SysCall { name, .. } => match ir::sysfunc_id(&name.name) {
                 Some(w) => {
                     ir::realness::real_math_arity(w).is_some()
                         || matches!(

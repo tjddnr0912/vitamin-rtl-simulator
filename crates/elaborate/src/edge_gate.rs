@@ -630,7 +630,7 @@ impl Elaborator<'_> {
 
     fn is_other_sys_call(e: &ast::Expr) -> bool {
         if let ast::ExprKind::SysCall { name, .. } = &e.kind {
-            return !matches!(name.name.as_str(), "$clog2" | "$signed" | "$unsigned");
+            return !ast::sysfn::width_neutral(&name.name);
         }
         false
     }

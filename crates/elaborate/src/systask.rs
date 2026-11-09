@@ -179,7 +179,7 @@ pub(crate) fn arg_conv_specs(template: &str) -> Vec<char> {
 }
 
 /// `$display`→Display … `$dumpall`→DumpAll. `name` retains the leading `$`
-/// (parser keeps it, parallel to `map_sysfunc`). Unknown → None.
+/// (parser keeps it, parallel to `ir::sysfunc_id`). Unknown → None.
 /// `$monitoron`/`$monitoroff`/`$timeformat` etc. are DEFERRED.
 /// Severity-task name → [`SeverityKind`] (P1-1). These do NOT map to a frozen
 /// `SysTaskId`; they lower as `Display` + an out-of-band severity entry.
@@ -292,68 +292,6 @@ pub(crate) fn map_systask(dollar_name: &str) -> Option<ir::SysTaskId> {
         "$monitoron" => Some(ir::SysTaskId::MonitorOn),
         "$monitoroff" => Some(ir::SysTaskId::MonitorOff),
         "$cast" => Some(ir::SysTaskId::Cast),
-        _ => None,
-    }
-}
-
-/// `$time`→Time, `$realtime`→Realtime, `$signed`→Signed, `$unsigned`→Unsigned,
-/// `$clog2`→Clog2. `name` retains the leading `$` (verdict M6).
-pub(crate) fn map_sysfunc(dollar_name: &str) -> Option<ir::SysFuncId> {
-    match dollar_name {
-        "$time" => Some(ir::SysFuncId::Time),
-        "$realtime" => Some(ir::SysFuncId::Realtime),
-        "$signed" => Some(ir::SysFuncId::Signed),
-        "$unsigned" => Some(ir::SysFuncId::Unsigned),
-        "$clog2" => Some(ir::SysFuncId::Clog2),
-        "$rtoi" => Some(ir::SysFuncId::Rtoi),
-        "$itor" => Some(ir::SysFuncId::Itor),
-        "$realtobits" => Some(ir::SysFuncId::RealToBits),
-        "$bitstoreal" => Some(ir::SysFuncId::BitsToReal),
-        // v7 bit-vector predicates ($bits never reaches here — const-folded).
-        "$countones" => Some(ir::SysFuncId::CountOnes),
-        "$onehot" => Some(ir::SysFuncId::OneHot),
-        "$onehot0" => Some(ir::SysFuncId::OneHot0),
-        "$isunknown" => Some(ir::SysFuncId::IsUnknown),
-        // v7 random + time + plusarg probe ($value$plusargs is a special
-        // form — it writes its ref var, never mapped here).
-        "$test$plusargs" => Some(ir::SysFuncId::TestPlusargs),
-        "$random" => Some(ir::SysFuncId::Random),
-        "$urandom" => Some(ir::SysFuncId::Urandom),
-        "$urandom_range" => Some(ir::SysFuncId::UrandomRange),
-        "$stime" => Some(ir::SysFuncId::Stime),
-        // Round-9 FIO: $feof is the ONLY PURE file function — it reads the fd's
-        // EOF flag with no state mutation, so it is allowed in any expression /
-        // condition context (`while (!$feof(fd))`). The fd-ADVANCING reads
-        // ($fgetc/$fgets/$fread/$fscanf/$sscanf/$ungetc) are NOT mapped here — they
-        // stay direct-rhs-only (a second evaluation under unspecified expression
-        // order would double-advance the fd). The direct-rhs `e = $feof(fd)` form
-        // is still intercepted first by `file_read_int_special` (byte-identical),
-        // so this mapping is reached only for expression-context $feof.
-        "$feof" => Some(ir::SysFuncId::Feof),
-        // v19: N6 real-math (IEEE §20.8.2) — pure value functions, lowered like
-        // any other SysFunc. The non-uniform $dist_* are NOT here — they advance
-        // the ref seed and route through `dist_seeded_special` (direct-rhs only).
-        "$ln" => Some(ir::SysFuncId::Ln),
-        "$log10" => Some(ir::SysFuncId::Log10),
-        "$exp" => Some(ir::SysFuncId::Exp),
-        "$sqrt" => Some(ir::SysFuncId::Sqrt),
-        "$pow" => Some(ir::SysFuncId::Pow),
-        "$floor" => Some(ir::SysFuncId::Floor),
-        "$ceil" => Some(ir::SysFuncId::Ceil),
-        "$sin" => Some(ir::SysFuncId::Sin),
-        "$cos" => Some(ir::SysFuncId::Cos),
-        "$tan" => Some(ir::SysFuncId::Tan),
-        "$asin" => Some(ir::SysFuncId::Asin),
-        "$acos" => Some(ir::SysFuncId::Acos),
-        "$atan" => Some(ir::SysFuncId::Atan),
-        "$atan2" => Some(ir::SysFuncId::Atan2),
-        "$hypot" => Some(ir::SysFuncId::Hypot),
-        "$sinh" => Some(ir::SysFuncId::Sinh),
-        "$cosh" => Some(ir::SysFuncId::Cosh),
-        "$tanh" => Some(ir::SysFuncId::Tanh),
-        "$asinh" => Some(ir::SysFuncId::Asinh),
-        "$acosh" => Some(ir::SysFuncId::Acosh),
-        "$atanh" => Some(ir::SysFuncId::Atanh),
         _ => None,
     }
 }

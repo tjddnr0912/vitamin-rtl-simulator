@@ -580,12 +580,13 @@ impl Elaborator<'_> {
             // ⚠️ NAMED lists, never a blanket `SysCall { .. } => true` (the spelling at
             // `const_fn_width.rs:257`/`:354`): `$unsigned` must stay UNSIGNED, and
             // `$itor` / `$realtobits` / `$sformatf` are not in this domain at all.
-            // BOTH lists are required: `sys_fn_is_integer` is `$clog2 | $bits | $rtoi`,
+            // BOTH lists are required: `ast::sysfn::folds_integer` is `$clog2 | $bits | $rtoi`,
             // but `const_eval_in_scope` also folds the dim-query family
             // (`const_fn.rs:393`), so `$size(W8) - 20` reaches `params.rs:777` with a
-            // value and would keep the wrong sign without `is_dim_query_name`.
+            // value and would keep the wrong sign without `is_array_query_function`.
             ast::ExprKind::SysCall { name, .. }
-                if sys_fn_is_integer(&name.name) || is_dim_query_name(&name.name) =>
+                if ast::sysfn::folds_integer(&name.name)
+                    || ast::sysfn::is_array_query_function(&name.name) =>
             {
                 true
             }
