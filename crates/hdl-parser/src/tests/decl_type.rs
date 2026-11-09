@@ -439,6 +439,138 @@ fn a_leading_signing_on_a_typedef_typed_parameter_is_refused_at_the_signing() {
     assert_param_family(&su);
 }
 
+/// `refused` for one declaration, pinned as the CLI prints it: the whole E2002
+/// `expected` text, and the 1-based `line:col` of the signing token.  Each gate half of
+/// `leading_signing_refusal` gets its own pin below (lens-sound N5, ER §7.1): a mutant
+/// dropping one integer keyword, the alias half of the type-name arm, or swapping the
+/// type-name and lead-None arms fails exactly one of them.
+fn refused_as_printed(
+    src: &str,
+    name: &str,
+    signing: &str,
+    at: (usize, usize),
+    text: &str,
+) -> SourceUnit {
+    let su = refused(src, &[(name, signing, text)]);
+    let (_, errs) = p(src);
+    assert_eq!(errs[0].expected, text, "{name}: the whole text");
+    let lo = errs[0].span.lo as usize;
+    let line = src[..lo].matches('\n').count() + 1;
+    let col = lo - src[..lo].rfind('\n').map_or(0, |i| i + 1) + 1;
+    assert_eq!((line, col), at, "{name}: line:col of the signing token");
+    assert_param_family(&su);
+    su
+}
+
+/// The text a leading `signing` before integer keyword `kw` carries.
+fn after_kw(kw: &str, signing: &str) -> String {
+    format!(
+        "the signing after the type keyword, `{kw} {signing}` \
+         (IEEE 1800-2017 A.2.2.1 `data_type`)"
+    )
+}
+
+#[test]
+fn a_leading_signing_before_logic_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  parameter signed logic [3:0] A = 4'hF;\nendmodule\n",
+        "A",
+        "signed",
+        (2, 13),
+        &after_kw("logic", "signed"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Logic), Some(SS)));
+}
+
+#[test]
+fn a_leading_signing_before_reg_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  parameter signed reg [3:0] A = 4'hF;\nendmodule\n",
+        "A",
+        "signed",
+        (2, 13),
+        &after_kw("reg", "signed"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Reg), Some(SS)));
+}
+
+#[test]
+fn a_leading_signing_before_bit_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  localparam signed bit [3:0] A = 4'hF;\nendmodule\n",
+        "A",
+        "signed",
+        (2, 14),
+        &after_kw("bit", "signed"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Bit), Some(SS)));
+}
+
+#[test]
+fn a_leading_signing_before_byte_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  parameter unsigned byte A = -1;\nendmodule\n",
+        "A",
+        "unsigned",
+        (2, 13),
+        &after_kw("byte", "unsigned"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Byte), Some(SU)));
+}
+
+#[test]
+fn a_leading_signing_before_shortint_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  localparam unsigned shortint A = -1;\nendmodule\n",
+        "A",
+        "unsigned",
+        (2, 14),
+        &after_kw("shortint", "unsigned"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Shortint), Some(SU)));
+}
+
+#[test]
+fn a_leading_signing_before_longint_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "module m;\n  parameter unsigned longint A = -1;\nendmodule\n",
+        "A",
+        "unsigned",
+        (2, 13),
+        &after_kw("longint", "unsigned"),
+    );
+    assert_eq!(rec(&su, "A"), (k(NetVarKind::Longint), Some(SU)));
+}
+
+/// A composed alias (`typedef e_t [3:0] v_t`) is a type name the block-typedef peek
+/// does not see; the type-name arm's `peek_alias_param` half refuses its signing.
+#[test]
+fn a_leading_signing_before_a_composed_alias_is_refused_at_the_signing() {
+    let su = refused_as_printed(
+        "package q;\n  typedef struct packed { logic [1:0] a; } e_t;\n  \
+         typedef e_t [3:0] v_t;\n  parameter signed v_t D = '1;\nendpackage\n",
+        "D",
+        "signed",
+        (4, 13),
+        "no signing before a type name, which takes none (IEEE 1800-2017 A.2.2.1 `data_type`)",
+    );
+    assert_eq!(rec(&su, "D").1, Some(SS));
+}
+
+/// A header port with no keyword and a type name after the signing: the type-name arm
+/// answers before the lead-None arm, so the text names the type name, not the keyword.
+#[test]
+fn a_header_port_signing_before_a_type_name_names_the_type_name() {
+    let su = refused_as_printed(
+        "typedef int t_i;\nmodule c #(signed t_i P = 1) ();\nendmodule\n",
+        "P",
+        "signed",
+        (2, 12),
+        "no signing before a type name, which takes none (IEEE 1800-2017 A.2.2.1 `data_type`)",
+    );
+    assert_eq!(rec(&su, "P").1, Some(SS));
+}
+
 /// A port's or formal's kind reader refuses a record no port family can hold.
 #[test]
 #[should_panic(expected = "a port data type records its keyword")]
