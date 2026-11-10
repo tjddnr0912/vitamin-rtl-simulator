@@ -104,7 +104,7 @@ const HOME_COUNTS: &[(&str, usize, &str)] = &[
     ("T2b", 1, "fn clog2_u64"),
     ("T3", 1, "decimal_i64's parse::<i64>"),
     ("T4", 9, "the 8 kernel fns + enum OpSet, each once"),
-    ("T7", 2, "wrap_i128's `!0u128 <<` and ctx5_binop's `p - (1i128 << w)`"),
+    ("T7", 2, "wrap_i128's `!0u64 <<` and ctx5_binop's `p - (1i128 << w)`"),
     ("T7b", 1, "wrap_i128's mask"),
 ];
 

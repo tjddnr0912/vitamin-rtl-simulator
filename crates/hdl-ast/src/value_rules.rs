@@ -57,6 +57,9 @@
 //!   R6 arms keyed on a token or char that compute (50 census arms, none an operator fold).
 //!   R7 a kernel computed by a helper with another name, or through an op enum or re-export
 //!      the census does not list, or in one of the blind-spot spellings named above.
+//!   R8 a constant-table read T6 does not see: hdl-parser module_items.rs:872
+//!      `self.const_locals.iter()`, the package-export copy into `pkg_const_scoped` (the twin of
+//!      O7, imports.rs).
 
 // The kernels below moved from elaborate `const_fn.rs` with their text; `ast::` is this
 // crate, so each body reads as it did there.
