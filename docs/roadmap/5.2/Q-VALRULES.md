@@ -49,6 +49,7 @@
 * note: for (b): the 11 (W/qvalrulesd/GROUND.txt, `grep -rn '"\$clog2"'`, lines on fix (d)'s base) are 5 folds: `const_eval_in_scope` (`const_fn.rs:421`), `eval_const_env` (`:1027`), `fold_ctx` (`const_fn_width/fold.rs:652`), `env_fold` (`expr_size_hier.rs:748`), `fold_region` (`const_wide.rs:1053`)
 * 5 classifiers: `sys_fn_is_integer` (`const_fn_width.rs:65`), `is_other_sys_call` (`edge_gate.rs:633`), `real_conversion_is_folded` (`param_query.rs:122`), `expr_exact` (`expr_size_hier_exact.rs:44`), `expr_is_inert` (`hoist/sformatf.rs:126`)
 * and 1 runtime map, `map_sysfunc` (`systask.rs:307`), whose name is `sim-ir/src/names.rs:96`
+* note: SYS-1a (§4.5.638) moved these sets into the columns of `hdl-ast/src/sysfn.rs` and `map_sysfunc` into `sim-ir` `names.rs` as `sysfunc_id`; each classifier keeps its own logic at its site
 * note: for (b): the same census names the evaluators a width tree reaches that are not keyed on `$clog2`: `const_int_selfdet` (`const_fn.rs:605`), `const_bound_u32` (`const_bound.rs:44`), `lower_expr` (`expr_main.rs:1133`)
 * scope: what is left is the census and the design (a)–(c), measure only, just before row 74, which takes the design
 * the lane variants' unification and the four refusals are S1v's (Q-PARAM2STATE), not this row's

@@ -1,0 +1,7 @@
+(§2 sized-literal-separator-read · OPEN · in Diagnostics / artifacts) (a sized literal's size reader keeps a separator other readers strip):
+* symptom: two readers of a sized literal's size keep a separator the main reader strips (`literal.rs:363` despaces): the elaboration-task renderer's `elab_arg_shape` (`trim().parse::<u32>()`, no `_` removal) and the parser's struct member width
+* witness: et_size_us, module-level `$info("L v=%h", 1_6'hff);`: PRE 56c997be `t.sv:2:3: info[VITA-I3006] I-ELAB-USER-INFO: L v=000000ff [in top]` (the (32, signed) default); et_size (`16'hff`) and the run-time `$display` of `1_6'hff` (k8_size_us_rt) `00ff`
+* oracles: verilator `-Info: t.sv:2:3: L v=00ff`; iverilog `t.sv:2: sorry: Elaboration tasks currently only support a single string argument.`; IEEE 1800-2017 A.8.7 `size ::= non_zero_unsigned_number` (ieee1800-2017.txt:53664) admits `_` after the first digit, so 16 bits
+* witness (loud, lens-sound N5): c05_struct_space `typedef struct packed { logic [8 'd7:0] a; logic [4294967297'd1:0] b; logic c; } t_t;`: PRE = POST E2002 at `t.sv:2:27` (`expected struct member width must be a named integer type or a constant-literal range in v1`), rc 1; iverilog = verilator `L w=11`
+* note: PARSE-1's lanes L10 and L13 keep each reader apart (§5.2 PARSE-1); PARSE-1 premise E11, batch 2 lens-sound N5 (W/batch2/RULINGS-lens-sound-r1.txt); E11's oracles W/batch2/docs/probe/SUMMARY_r1.txt
+* status: OPEN

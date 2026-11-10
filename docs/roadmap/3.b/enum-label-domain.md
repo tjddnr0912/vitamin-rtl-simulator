@@ -3,4 +3,5 @@
 * cause: `package.rs:928–938`, `const_fn.rs:1255`, `instance.rs:131`
 * fix: expected fix per §5.2 row 48: labels take the parameters' 4-state wide lane at the base's width and sign
 * witness: row-9 R25, row-9 R28, row-9 X01
+* witness (2026-11-10, PARSE-1 lane L12): l12_enum64 `typedef enum logic [63:0] {A = 64'hFFFF_FFFF_FFFF_FFFF, B = 64'd0} e_t;` `$display("L e=%h", e);` with `e = A`: PRE 56c997be `t.sv:2:34: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected an enum label value that fits the enum base type, found identifier 'e_t'`; iverilog = verilator `L e=ffffffffffffffff`
 * status: OPEN (§5.2 row 49)

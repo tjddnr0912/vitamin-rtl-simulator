@@ -10,10 +10,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 313 | 197 | 116 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 322 | 203 | 119 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 191 | 156 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 192 | 157 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 656 | 414 | 242 | | | |
+| total | | 666 | 421 | 245 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -199,6 +199,10 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - x-compare-count-collapses — [a count over an x-holding signed compare collapses to 0](roadmap/2/x-compare-count-collapses.md) · OPEN
 - wrapped-zero-divisor — [a modulo by a divisor wrapped to zero binds the unlimited answer](roadmap/2/wrapped-zero-divisor.md) · OPEN
 - typed-localparam-unconverted — [a typed localparam whose range does not fold at parse time stays unconverted](roadmap/2/typed-localparam-unconverted.md) · OPEN
+- dev-overflow-release-wraps — [a dev build overflows where release wraps to the right constant](roadmap/2/dev-overflow-release-wraps.md) · RECORD
+- enum-base-overflow-silent — [an enum base wider than 2^64 bits runs with a wrapped width](roadmap/2/enum-base-overflow-silent.md) · OPEN
+- const-atoi-underscore — [a constant-folded `atoi` stops at an underscore](roadmap/2/const-atoi-underscore.md) · OPEN
+- bits-width-over-i32 — [`$bits` of a vector 2^32 bits wide prints -1](roadmap/2/bits-width-over-i32.md) · OPEN
 
 ### Index sealing
 > Parameter and index values bound at the wrong width or sign: unsealed indexes, override leaves, signed parameters; mostly open
@@ -235,6 +239,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - declined-decl-walk — [a declined declaration walk keeps the leaf width](roadmap/2/declined-decl-walk.md) · OPEN
 - local-stream-justify — [a local stream into a wider target right-justifies](roadmap/2/local-stream-justify.md) · OPEN
 - nested-inline-subst — [a nested inline callee sees the outer formal's `subst`](roadmap/2/nested-inline-subst.md) · OPEN
+- inline-sysfn-context-width — [a `$bits` term in a 64-bit function body loses the context width](roadmap/2/inline-sysfn-context-width.md) · OPEN
 
 ### Real
 > Real values in integral places: real constant functions, `$signed` of a real, imported real twins; mostly open
@@ -428,6 +433,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - velab-cu-dedupe — [`velab -L` drops a second unit's diagnostic at the same offset](roadmap/2/velab-cu-dedupe.md) · OPEN
 - zero-width-gate-after-error — [an earlier error turns the zero-width line into a false cause](roadmap/2/zero-width-gate-after-error.md) · OPEN
 - stale-key-refused-spelling — [a prebuilt artifact passes a spelling the parser now refuses](roadmap/2/stale-key-refused-spelling.md) · RECORD
+- sized-literal-separator-read — [a sized literal's size reader keeps a separator other readers strip](roadmap/2/sized-literal-separator-read.md) · OPEN
+- sysfn-zero-arg-panic — [`$clog2()` or `$signed()` with no argument panics at run time](roadmap/2/sysfn-zero-arg-panic.md) · OPEN
 
 ### Performance (open, recorded)
 > Correct but slow paths: repeated continuous-assign calls, per-bit coercion, triple tree walks, `==?` chains; recorded, one blocked
@@ -438,6 +445,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - size-cast-seal-wprog — [a size-cast seal falls out of `wprog` on three axes (no compile arm)](roadmap/2/size-cast-seal-wprog.md) · PERF
 - const-walk-three-times — [constant width and sign walk the tree three times](roadmap/2/const-walk-three-times.md) · PERF
 - wildcard-eq-chain-cost — [a left-leaning `==?` chain costs 2^depth](roadmap/2/wildcard-eq-chain-cost.md) · PERF
+- nterm-sum-localparam-cost — [an n-term `1+…+1` localparam costs superlinear time](roadmap/2/nterm-sum-localparam-cost.md) · PERF
 
 ### Oracle splits (recorded, not chased)
 > Cases where the oracles disagree or none exists, with the side vita takes; recorded, not chased
@@ -505,6 +513,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - held-assign-t0-read — [a time-0 read of a held continuous assign's output before release](roadmap/2/held-assign-t0-read.md)
 - overcap-typedef-bits — [`$bits` of a typedef wider than the v1 cap gives a value](roadmap/2/overcap-typedef-bits.md)
 - typed-signed-bound-oracle-split — [verilator and sv2v read a typed signed negative range bound as unsigned](roadmap/2/typed-signed-bound-oracle-split.md)
+- const-product-range-split — [a range bound over a product that overflows 64 bits](roadmap/2/const-product-range-split.md)
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 > Loud shapes that could become correct support: numbered items (3.a), small residues by area (3.b) and shapes kept loud on purpose (3.c).
@@ -652,6 +661,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - bits-ansi-port — [`$bits` of a whole ANSI port inside a `localparam`](roadmap/3.b/bits-ansi-port.md) · OPEN
 - zero-repl-concat — [a zero-count replication inside a constant concatenation](roadmap/3.b/zero-repl-concat.md) · OPEN
 - enum-label-domain — [enum labels that the 64-bit label fold cannot hold](roadmap/3.b/enum-label-domain.md) · OPEN
+- param-fits-w63 — [a 63-bit unsigned parameter fits no value in the parser's check](roadmap/3.b/param-fits-w63.md) · OPEN
 
 **Subroutine / frame**
 
@@ -852,15 +862,15 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-09, owner): S1v-Q landed (§4.5.637); record-first order, next SYS-1, PARSE-1, VAL-1–3, BIND-1–2; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-10): SYS-1 and PARSE-1 landed as batch 2 (§4.5.638); record-first order, next VAL-1–3, BIND-1–2; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
 
 | # | slot | item | rank |
 |---|---|---|---|
-| SYS-1 | R2.1 · L1 | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
-| PARSE-1 | R2.2 · L1 | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast](roadmap/5.2/PARSE-1.md) | — F |
+| SYS-1 | R2.1 · L1 (landed) | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
+| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast](roadmap/5.2/PARSE-1.md) | — F |
 | VAL-1 | R3.1 · L1 | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 | [one entry and one result record for the elaborate constant evaluator](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 | [the range-bound router returns the exact typed bound](roadmap/5.2/VAL-3.md) | — F |

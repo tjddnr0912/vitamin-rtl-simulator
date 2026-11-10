@@ -17,4 +17,8 @@
 * note: sibling domains not moved, one file each already: real (`const_real.rs`) and string (`const_str.rs`), whose twins elsewhere are not re-censused (U7)
 * note: it frees (C)'s arm once (§5.2 Q-SYMMIX) and Q-PRIMCAST's and Q-XCORE's arms once
 * note: the home rows' trip wires and their honest cost are written once, in §5.2 SYS-1
+* note: from SYS-1 (§4.5.638, H1): the grounding takes `try_introspect_fold` (`expr_special.rs:598-686`) as a lane beside `const_dim_query` (`const_array.rs:212-260`), both spelling the same query-shape sets (with_dim 6, no_dim 2) inside one crate; the per-core admission columns join `hdl-ast/src/sysfn.rs` (H2)
+* note: from PARSE-1 (§4.5.638): the grounding takes `fold_i32`'s 11 computing arms (O1: `const_binop` over its op set, then an i32 cutoff), L14 `const_eval_cast` (its w = 63 dev overflow, §2 dev-overflow-release-wraps), O9's cores, O14 `lowered_truth` and O15 `crv.rs`'s interval arms
+* note: E5 (PARSE-1): the note moved with K1–K3 says `3037000500 * 3037000500` is loud too, but f_inscope_ovf (`localparam int Q = 3037000500 * 3037000500;`) prints `L q=145474192` rc 0 on PRE 56c997be, iverilog and verilator alike (W/batch2/docs/probe): the width-aware path answers; this row measures the note
+* note: the cost set gains f_szlit, g_sgn and p_sized before this row opens (W/parse1/premise4/RULINGS-main.txt N1)
 * source: W/program/reorder2-2026-11-09/PLAN.txt G1 VAL, G2 VAL-1
