@@ -24,6 +24,7 @@
 //! width>)` and [`Elaborator::x_certified`] (G6) — never on `No`.
 
 use super::*;
+use crate::value::arms::{self, ArmLane};
 
 /// What made a region `x` (the only two origins this walk proves).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,9 +240,7 @@ impl Elaborator<'_> {
                 self.fold_ctx(operand, env, envw, depth, ctx_w, ctx_signed),
             ) {
                 (_, No) => No,
-                (ast::UnOp::Plus, Val(v)) => Val(mask(v)),
-                (ast::UnOp::Minus, Val(v)) => v.checked_neg().map(mask).into(),
-                (_, Val(v)) => Val(mask(!v)),
+                (_, Val(v)) => arms::unary_i64(*op, v).map(mask).into(),
                 (ast::UnOp::Plus, Four { v, x, why }) => four(v, x, why),
                 // Arithmetic: an x bit anywhere makes every bit x (§11.4.3); an absorbed
                 // operand negates exactly.
@@ -555,18 +554,8 @@ impl Elaborator<'_> {
                 // arms take the context, and only the taken one is evaluated. One
                 // carrying x/z bits is read for its truth in the wide domain (as the
                 // `!` arm does), unless it names a constant-function local.
-                let c = match self.eval_const_env_self(cond, env, envw, depth) {
-                    Some(v) => v != 0,
-                    None => {
-                        let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
-                        if ast_names_any(cond, &local) {
-                            return No;
-                        }
-                        let Some(t) = self.selfdet_truth(cond) else {
-                            return No;
-                        };
-                        t
-                    }
+                let Some(c) = self.selfdet_truth_arm(ArmLane::Ctx, cond, env, envw, depth) else {
+                    return No;
                 };
                 if c {
                     self.fold_ctx(then_e, env, envw, depth, ctx_w, ctx_signed)
@@ -582,19 +571,11 @@ impl Elaborator<'_> {
                 operand,
             } => {
                 let _ = op;
-                match self.eval_const_env_self(operand, env, envw, depth) {
-                    Some(v) => Val((v == 0) as i64),
-                    // An operand carrying x/z bits: its TRUTH, through the wide
-                    // domain, unless it names a constant-function local (whose
-                    // value lives only in `env`).
-                    None => {
-                        let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
-                        if ast_names_any(operand, &local) {
-                            return No;
-                        }
-                        self.selfdet_truth(operand).map(|t| !t as i64).into()
-                    }
-                }
+                // An operand carrying x/z bits: its TRUTH, through the wide domain,
+                // unless it names a constant-function local (the Ctx lane).
+                self.selfdet_truth_arm(ArmLane::Ctx, operand, env, envw, depth)
+                    .map(|t| !t as i64)
+                    .into()
             }
             // §11.4.14 REDUCTION — the arm this walk never had. It is what a declared
             // range bound holding a parameter SELECT reaches (`const_range_bound_fold`

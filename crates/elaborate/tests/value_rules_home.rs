@@ -113,7 +113,7 @@ const HOME_COUNTS: &[(&str, usize, &str)] = &[
 #[rustfmt::skip]
 const EXCEPTIONS: &[(&str, &str, &str, usize, &str)] = &[
     // T1: K1's arm spellings.
-    ("T1", "crates/elaborate/src/block_local/proofs.rs", "fold_i32", 3, "O1 the i32 proof fold: its 11 computing arms equal `const_binop(op, l as i64, r as i64).and_then(|v| i32::try_from(v).ok())` over its op set; home VAL-1"),
+    ("T1", "crates/elaborate/src/block_local/proofs.rs", "fold_i32", 3, "O1 the i32 proof fold: its 11 computing arms equal `const_binop(op, l as i64, r as i64).and_then(|v| i32::try_from(v).ok())` over its op set; home VAL-1 ; VAL-2 lane census"),
     ("T1", "crates/elaborate/src/const_wide.rs", "fold_region", 2, "O9 a VAL core: wide / 4-state"),
     ("T1", "crates/elaborate/src/read_set.rs", "go", 3, "O2 an unsigned fold after lowering: u64 over ir::BinOp"),
     // T2: bit-length identifiers.
@@ -149,14 +149,13 @@ const EXCEPTIONS: &[(&str, &str, &str, usize, &str)] = &[
     ("T6", "crates/hdl-parser/src/imports.rs", "parse_import_term", 1, "O7 the import's table copy"),
     ("T6", "crates/hdl-parser/src/packed_md.rs", "respell_pkg_expr", 1, "O7 the respell builder"),
     // T7: sign-extension tokens.
-    ("T7", "crates/elaborate/src/const_fn.rs", "const_eval_cast", 2, "L14 the cast's mask-and-fill (dev-profile w = 63 edge, E7)"),
     ("T7", "crates/elaborate/src/const_fn.rs", "const_eval_i64_lit", 1, "L12 the 64-bit bit-container read"),
     ("T7", "crates/elaborate/src/elab_task.rs", "elab_task_message", 1, "L13 the elaboration-task renderer's signed %d"),
+    ("T7", "crates/elaborate/src/value/arms.rs", "signing_over_size_cast", 1, "L14 the cast's mask-and-fill, one body since VAL-1 (dev-profile w = 63 edge, E7)"),
     ("T7", "crates/hdl-parser/src/const_fold.rs", "read_pattern", 1, "L12 the 64-bit bit-container read"),
     // T7b: bare masks -- an identity; its edge convention (O10), a type range (O11) or a lane.
     ("T7b", "crates/elaborate/src/const_eval.rs", "array_param_init_pattern", 1, "O10 bare mask, G64"),
     ("T7b", "crates/elaborate/src/const_eval.rs", "const_delay_u64", 1, "O10 bare mask, G64+"),
-    ("T7b", "crates/elaborate/src/const_fn.rs", "const_eval_cast", 2, "L14 the cast's mask"),
     ("T7b", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 1, "O10 bare mask, G64+"),
     ("T7b", "crates/elaborate/src/const_fn.rs", "const_seed", 1, "O10 bare mask, G0/64+"),
     ("T7b", "crates/elaborate/src/const_fn.rs", "const_unsigned_selfdet", 1, "O10 bare mask, R1-63"),
@@ -173,6 +172,7 @@ const EXCEPTIONS: &[(&str, &str, &str, usize, &str)] = &[
     ("T7b", "crates/elaborate/src/instance_array.rs", "resolve_range_end", 2, "O11 a type's range"),
     ("T7b", "crates/elaborate/src/literal.rs", "make_const_i64", 1, "O10 bare mask, G<64"),
     ("T7b", "crates/elaborate/src/net_util.rs", "check_enum_label_fits", 1, "O11 a type's range"),
+    ("T7b", "crates/elaborate/src/value/arms.rs", "signing_over_size_cast", 1, "L14 the cast's mask, one body since VAL-1"),
     ("T7b", "crates/elaborate/src/wildcard_eq.rs", "wildcard_cmp_ids", 1, "O10 bare mask, U"),
     ("T7b", "crates/hdl-parser/src/const_fold.rs", "based_lit_pattern", 1, "O10 bare mask, G64"),
     ("T7b", "crates/hdl-parser/src/const_fold.rs", "const_lit_enum", 1, "O10 bare mask, G64"),

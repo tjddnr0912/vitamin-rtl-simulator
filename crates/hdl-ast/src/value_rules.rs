@@ -25,7 +25,7 @@
 //!     crate: 11 keys, 13) ; T2b `clog2`-named fns (6) ; T3 the literal-read tokens (S3: 9 keys,
 //!     17) ; T4 one definition of each kernel, here ; T5 the 21 folds only in hdl-parser
 //!     const_fold.rs ; T6 constant-table reads only there (2 named) ; T7 the sign-extension
-//!     tokens (S3: 4 keys, 5) ; T7b bare masks (S3: 24 keys, 29, each with its edge convention).
+//!     tokens (S3: 4 keys, 4) ; T7b bare masks (S3: 24 keys, 28, each with its edge convention).
 //!   hdl-ast/tests/value_rules_equality.rs: each re-pointed spelling's PRE text against its
 //!     kernel call over the site's domain (EQ1-EQ7).
 //!   hdl-ast/tests/value_rules_lanes.rs: the op sets, ctx5_binop unmasked, the clog2_u64 /
@@ -101,8 +101,9 @@ pub fn const_pow(a: i64, b: i64, exp_signed: bool) -> Option<i64> {
     }
     // ⚠️⚠️ An "unsigned negative" exponent is a HUGE positive one, so the exact
     // result does not fit the i64 domain — DECLINE, the same discipline `+` and
-    // `*` keep here (`3037000500 * 3037000500` is loud too, where both oracles
-    // print 145474192).
+    // `*` keep here (this kernel declines `3037000500 * 3037000500` ; a parameter
+    // of that value still binds 145474192 through the width-aware path, as both
+    // oracles print).
     //
     // Folding it MODULARLY was tried and reverted. Square-and-multiply mod 2^64
     // gives the right answer at every context of 64 bits or fewer — and both

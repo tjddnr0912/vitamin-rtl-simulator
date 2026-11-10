@@ -1,6 +1,7 @@
 //! constant-function interpreter — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::value::arms::{self, ArmLane};
 
 pub(crate) fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
     let ast::ExprKind::IntLit { kind, raw } = &e.kind else {
@@ -175,10 +176,13 @@ impl Elaborator<'_> {
             ast::ExprKind::Unary {
                 op: ast::UnOp::LogNot,
                 operand,
-            } => match self.const_int_selfdet(operand) {
-                Some(v) => Some((v == 0) as i64),
-                None => Some(!self.selfdet_truth(operand)? as i64),
-            },
+            } => Some(!self.selfdet_truth_arm(
+                ArmLane::Unlimited,
+                operand,
+                &BTreeMap::new(),
+                &ConstWidths::new(),
+                0,
+            )? as i64),
             // §11.4.14 REDUCTION: one bit out of a SELF-DETERMINED operand. The value
             // domain folded these (§4.5.382) through `param_i64_at_declared`, which only
             // a declaration with a width reaches — so in every position that asks THIS
@@ -206,11 +210,7 @@ impl Elaborator<'_> {
                 operand,
             } => {
                 let v = self.const_eval_in_scope(operand)?;
-                match op {
-                    ast::UnOp::Plus => Some(v),
-                    ast::UnOp::Minus => v.checked_neg(),
-                    _ => Some(!v),
-                }
+                arms::unary_i64(*op, v)
             }
             // param/genvar reference: single-segment name bound in this scope OR
             // an ENCLOSING one. Walking outward lets a genvar bound at the
@@ -266,10 +266,13 @@ impl Elaborator<'_> {
                 // A condition carrying x/z bits is read for its TRUTH in the wide
                 // domain (`4'b110x ? a : b` takes `a` in both oracles; an ambiguous
                 // one declines).
-                let c = match self.const_int_selfdet(cond) {
-                    Some(v) => v != 0,
-                    None => self.selfdet_truth(cond)?,
-                };
+                let c = self.selfdet_truth_arm(
+                    ArmLane::Unlimited,
+                    cond,
+                    &BTreeMap::new(),
+                    &ConstWidths::new(),
+                    0,
+                )?;
                 if c {
                     self.const_eval_in_scope(then_e)
                 } else {
@@ -569,166 +572,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Fold a SIZE cast `N'(e)` / `W'(e)` — the ONE spelling the module-scope arm
-    /// (`const_eval_cast`) and the constant-function arm (`eval_const_env`) share.
-    ///
-    /// §6.24.1 / §11.8.1: the operand runs at `max(its self width, N)` with the
-    /// OPERAND's signedness and the result is delivered in N bits — which is exactly
-    /// what the assignment funnel computes for a target of `(N, sign)`, so no second
-    /// copy of the width rule exists.
-    ///
-    /// Declines outside the i64 constant domain, and both halves of that boundary were
-    /// measured the hard way:
-    ///
-    ///   * `N > 64` — the operand still evaluates at 64 bits, so a carry past bit 63 is
-    ///     lost. `65'(64'hFFFF_FFFF_FFFF_FFFF + 64'd1) >> 64` is 1 for iverilog AND
-    ///     verilator and 0 here, so answering at all is a silent wrong.
-    ///   * `N == 64` with an UNSIGNED result whose top bit is set — `coerce_int_width`
-    ///     is the identity at 64, so the value escapes as a NEGATIVE i64 and
-    ///     `(64'(64'hFFFF_FFFF_FFFF_FFFF) > 0)` answers 0 for iverilog's 1. This is the
-    ///     same fit rule `const_placement_env` applies, and the same pre-existing
-    ///     64-bit class ROADMAP §2 records for a bare literal — extending it through a
-    ///     new syntax is not licensed by its already existing.
-    fn const_size_cast(
-        &self,
-        target: &ast::CastTarget,
-        operand: &ast::Expr,
-        env: &BTreeMap<String, i64>,
-        envw: &ConstWidths,
-        depth: u32,
-    ) -> Option<i64> {
-        let n = u32::try_from(self.cast_size_bits(target)?).ok()?;
-        if !(1..=64).contains(&n) {
-            return None;
-        }
-        let sg = self.const_signed_env(operand, envw);
-        let v = self.eval_const_assign(operand, env, envw, depth, Some((n, sg)))?;
-        if n == 64 && !sg && v < 0 {
-            return None;
-        }
-        Some(v)
-    }
-
-    fn const_eval_cast(&self, target: &ast::CastTarget, operand: &ast::Expr) -> Option<i64> {
-        match target {
-            // `int'(e)`, `byte'(e)`, … — a fixed (width, signedness) target, so the
-            // runtime cast's resize-then-sign-stamp is exactly `coerce_int_width`.
-            // `real'` yields None from the shared table (no integral value here).
-            // ⚠️ Routing this through `const_size_cast` too was tried and measured
-            // EQUIVALENT — 13 discriminators (division, modulo and shift under a
-            // narrowing `byte'`/`shortint'`, a 64-bit operand, a wrapping sum) all
-            // agree, because the final coercion to a FIXED width already reduces
-            // whatever the wider evaluation produced. Left alone because a prim cast
-            // also changes the 4-state-ness and the domain (`real'` has no integral
-            // value at all), and unifying on the strength of "no cell separates them"
-            // would be a claim this domain has not earned.
-            ast::CastTarget::Prim(p) => {
-                let (w, s, _) = cast_prim_wsign(*p)?;
-                let v = match self.const_eval_in_scope(operand) {
-                    Some(v) => v,
-                    // `int'(<real>)` IS the conversion the source asked for, and this
-                    // cast node is the context boundary §6.24.1 names — so the operand
-                    // folds WHOLE in the real domain and only the rounded result
-                    // crosses into the integer one. The integer domain is asked first
-                    // and this is a FALLBACK, so a wholly integral operand keeps its
-                    // own width semantics (`int'(4'd15 + 4'd1)` stays the 4-bit 0).
-                    // `real'` never reaches here: `cast_prim_wsign` has no integral
-                    // (width, sign) for it and returned above.
-                    None => self.const_int_via_real(operand)?,
-                };
-                Some(coerce_int_width(v, w, s))
-            }
-            // `N'(e)`: the operand runs at `max(its self width, N)` and the result is
-            // delivered in N bits with the operand's signedness (IEEE §6.24.1 /
-            // §11.8.1 — §4.5.316 pinned that rule against iverilog). That is exactly
-            // what the assignment funnel computes for a target of `(N, sign)`, and it
-            // is the SAME routing `eval_const_env`'s Cast arm already uses, so the
-            // two spellings of one construct cannot answer differently.
-            //
-            // This used to fold the operand in the width-UNLIMITED domain and then
-            // truncate, which is unsound on top of an un-narrowed operand
-            // (`4'((4'd8+4'd8)/4'd3)` divided 16 by 3 and answered 5 where the 4-bit
-            // sum is 0, so SV — and iverilog — answer 0). It compensated by folding
-            // only where the signed and unsigned readings AGREE, i.e. a non-negative
-            // value with the target's sign bit clear, which declined every ordinary
-            // narrowing cast (`8'(255)`, `4'(9)`, `8'(P)`, `64'(-1)`, `1'(3)` — all
-            // values iverilog prints). Sizing the operand first removes both: the
-            // truncation is no longer an approximation, so the sign no longer has to
-            // be guessed away.
-            ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
-                self.const_size_cast(target, operand, &BTreeMap::new(), &ConstWidths::new(), 0)
-            }
-            // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
-            // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), so it
-            // stays loud — EXCEPT over a size cast, whose width the cast itself
-            // names (§3 ⑤ ⓓ: the parser spells a typedef cast `t'(e)` / `cap_t'(e)`
-            // as `signed'|unsigned'(W'(e))`, so `parameter cap_t ROOT_CAP_TX =
-            // cap_t'(ROOT_DECODED_CAP_TX)` is this shape). The inner cast delivers
-            // W bits with the operand's sign; the outer re-reads those W bits with
-            // the named sign. `const_expr_signed` already answers `signed` for it.
-            ast::CastTarget::Signing { signed } => match &operand.kind {
-                ast::ExprKind::Cast {
-                    target: inner @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
-                    expr: inner_e,
-                } => {
-                    let w = u32::try_from(self.cast_size_bits(inner)?).ok()?;
-                    if !(1..=63).contains(&w) {
-                        return None;
-                    }
-                    let v = self.const_size_cast(
-                        inner,
-                        inner_e,
-                        &BTreeMap::new(),
-                        &ConstWidths::new(),
-                        0,
-                    )?;
-                    let mask = (1i64 << w) - 1;
-                    let u = v & mask;
-                    Some(if *signed && (u >> (w - 1)) & 1 == 1 {
-                        u | !mask
-                    } else {
-                        u
-                    })
-                }
-                _ => None,
-            },
-            // §3 ⑤ⓕ: the per-instance twin of the arm above — `T'(e)` where `T` is
-            // an overridable `parameter type`, which the parser spells
-            // `signing_param'(T$w'(e))`. Same body with the sign folded from `T$s`
-            // instead of read off the node; `?` DECLINES the whole fold when `T$s`
-            // does not resolve here, which is where this domain was before.
-            ast::CastTarget::SigningParam { shape_param } => {
-                let signed = self.cast_shape_signed(shape_param)?;
-                match &operand.kind {
-                    ast::ExprKind::Cast {
-                        target: inner @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
-                        expr: inner_e,
-                    } => {
-                        let w = u32::try_from(self.cast_size_bits(inner)?).ok()?;
-                        if !(1..=63).contains(&w) {
-                            return None;
-                        }
-                        let v = self.const_size_cast(
-                            inner,
-                            inner_e,
-                            &BTreeMap::new(),
-                            &ConstWidths::new(),
-                            0,
-                        )?;
-                        let mask = (1i64 << w) - 1;
-                        let u = v & mask;
-                        Some(if signed && (u >> (w - 1)) & 1 == 1 {
-                            u | !mask
-                        } else {
-                            u
-                        })
-                    }
-                    _ => None,
-                }
-            }
-        }
-    }
-
     /// The bit width a SIZE cast names, for both spellings of one construct.
     ///
     /// The parser makes `4'(e)` a `Size` and `RPS'(e)` a `Named` — a bare identifier
@@ -808,7 +651,7 @@ impl Elaborator<'_> {
             ast::ExprKind::Unary {
                 op: ast::UnOp::LogNot,
                 operand,
-            } => Some((self.eval_const_env_self(operand, env, envw, depth)? == 0) as i64),
+            } => Some(!self.selfdet_truth_arm(ArmLane::Env, operand, env, envw, depth)? as i64),
             // A reduction is a self-determined NODE — the width-aware twin owns the
             // arm (see `eval_const_env_at`), like the non-context Binary arm below.
             ast::ExprKind::Unary {
@@ -826,11 +669,7 @@ impl Elaborator<'_> {
                 operand,
             } => {
                 let v = self.eval_const_env(operand, env, envw, depth)?;
-                match op {
-                    ast::UnOp::Plus => Some(v),
-                    ast::UnOp::Minus => v.checked_neg(),
-                    _ => Some(!v),
-                }
+                arms::unary_i64(*op, v)
             }
             // A non-context-determined operator is a self-determined NODE (the same
             // rule `const_eval_in_scope` and `eval_const_env_at` state); this plain
@@ -874,7 +713,7 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                if self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                if self.selfdet_truth_arm(ArmLane::Env, cond, env, envw, depth)? {
                     self.eval_const_env(then_e, env, envw, depth)
                 } else {
                     self.eval_const_env(else_e, env, envw, depth)

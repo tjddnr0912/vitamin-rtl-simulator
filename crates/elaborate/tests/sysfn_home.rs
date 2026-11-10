@@ -35,12 +35,12 @@ const U_SIZE: usize = 79;
 /// (file, enclosing fn, hits, reason). `-` = outside any fn.
 #[rustfmt::skip]
 const EXCEPTIONS: &[(&str, &str, usize, &str)] = &[
-    // VAL-1: a fold core or a G1 VAL arm computes the value (the name selects the arm).
-    ("crates/elaborate/src/const_fn.rs", "const_eval_in_scope", 3, "VAL-1 fold core arms ($clog2 $rtoi $bits)"),
-    ("crates/elaborate/src/const_fn.rs", "eval_const_env", 1, "VAL-1 fold core arm"),
-    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_ctx", 1, "VAL-1 fold core arm"),
-    ("crates/elaborate/src/const_wide.rs", "fold_region", 10, "VAL-1 fold core arms"),
-    ("crates/elaborate/src/expr_size_hier.rs", "env_fold", 1, "VAL-1 fold core arm"),
+    // VAL: a fold core's lane arm or a G1 VAL arm computes the value (the name selects the arm).
+    ("crates/elaborate/src/const_fn.rs", "const_eval_in_scope", 3, "VAL lane arm (the name selects the arm ; lanes in value/arms.rs): $clog2 $rtoi $bits"),
+    ("crates/elaborate/src/const_fn.rs", "eval_const_env", 1, "VAL lane arm (the name selects the arm ; lanes in value/arms.rs)"),
+    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_ctx", 1, "VAL lane arm (the name selects the arm ; lanes in value/arms.rs)"),
+    ("crates/elaborate/src/const_wide.rs", "fold_region", 10, "VAL lane arm (the name selects the arm ; lanes in value/arms.rs)"),
+    ("crates/elaborate/src/expr_size_hier.rs", "env_fold", 1, "VAL lane arm (the name selects the arm ; lanes in value/arms.rs)"),
     ("crates/elaborate/src/const_array.rs", "const_dim_query", 10, "VAL-1 G1 arm: the query-shape sets and per-query values (H1)"),
     // H1: the lowering's §20.7 introspection fold (no home row yet).
     ("crates/elaborate/src/expr_special.rs", "try_introspect_fold", 20, "H1 the lowering's introspection fold, a lane of const_dim_query"),

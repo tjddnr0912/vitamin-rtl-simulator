@@ -176,6 +176,7 @@ mod sys_special;
 mod systask;
 mod tables;
 mod toplevel;
+mod value;
 mod var_init;
 mod wide_param_range;
 mod wildcard_eq;
