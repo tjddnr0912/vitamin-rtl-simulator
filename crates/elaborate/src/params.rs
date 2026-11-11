@@ -1725,10 +1725,7 @@ impl Elaborator<'_> {
     pub(crate) fn check_param_decl_range(&mut self, p: &ast::ParamDecl) {
         if let Some(r) = &p.dtype.range {
             if !matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
-                let m = self.const_range_bound_fold(&r.msb);
-                let l = self.const_range_bound_fold(&r.lsb);
-                self.check_const_range_bound(&r.msb, m);
-                self.check_const_range_bound(&r.lsb, l);
+                self.range_bounds_checked(r);
             }
         }
     }

@@ -304,12 +304,9 @@ impl Elaborator<'_> {
         for d in dims {
             out.push(match d {
                 ast::Dim::Range(r) => {
-                    let msb_v = self.const_range_bound_fold(&r.msb);
-                    let lsb_v = self.const_range_bound_fold(&r.lsb);
                     // P0-NCW: net/hierarchical-referenced (non-constant) unpacked
                     // bound is loud, NOT a silent length-1 dim.
-                    self.check_const_range_bound(&r.msb, msb_v);
-                    self.check_const_range_bound(&r.lsb, lsb_v);
+                    let (msb_v, lsb_v) = self.range_bounds_checked(r);
                     let msb = msb_v.unwrap_or(0);
                     let lsb = lsb_v.unwrap_or(0);
                     let size = hdl_ast::range_rules::Lane::ArrayFormal.width_u32(msb, lsb);
@@ -578,12 +575,9 @@ impl Elaborator<'_> {
                 // bound is a SELF-DETERMINED position, which matters as soon as it
                 // can contain a narrow parameter select. Select-free bounds take the
                 // identical call.
-                let msb_v = self.const_range_bound_fold(&r.msb);
-                let lsb_v = self.const_range_bound_fold(&r.lsb);
                 // P0-NCW: a net/hierarchical-referenced (non-constant) bound is loud,
                 // NOT a silent width-1.
-                self.check_const_range_bound(&r.msb, msb_v);
-                self.check_const_range_bound(&r.lsb, lsb_v);
+                let (msb_v, lsb_v) = self.range_bounds_checked(r);
                 // A bound that folds NEGATIVE. IEEE §7.4.2 sizes the vector
                 // `|msb-lsb|+1` whatever the signs of the two bounds are, and both
                 // oracles do — the direction of the range is what decides which bound

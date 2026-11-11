@@ -125,6 +125,8 @@ pub type DeclRange = (i64, u32, bool);
 /// the record's bounds ([`Lane`]), so every PRE cap, decline and wrap is where it was. The
 /// `integer` limit on the count (R1c, IEEE 1800-2017 §20.6.2) is S1v's. msb / lsb are UNCHECKED
 /// i64; a consumer that narrows them is bound-past-integer, owned with R1v by S1v.
+/// msb / lsb are the router's WRAP lane (PRE's reading: a 64-bit unsigned bound >= 2^63 is
+/// negative here), named in elaborate's value/mod.rs head note (VAL-3).
 /// Lane [`Lane::Record`]: every elaborate consumer that reads `range_facts`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RangeFacts {

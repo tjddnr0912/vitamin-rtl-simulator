@@ -118,6 +118,9 @@ impl Elaborator<'_> {
     ///
     /// The evidence is the first step's `Four` with an x bit, certified, and is computed
     /// only when `want_ev` (the value route pays nothing new).
+    ///
+    /// Its paths (A-E), what each step drops (c1-c9), the WRAP lane its value is and the first
+    /// reader of anything more are written in value/mod.rs's head note (VAL-3).
     pub(crate) fn range_bound_fold_ev(
         &self,
         e: &ast::Expr,

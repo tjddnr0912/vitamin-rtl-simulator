@@ -185,11 +185,8 @@ impl Elaborator<'_> {
     ) -> Vec<(i64, u32, bool)> {
         let mut out = Vec::new();
         for r in range.into_iter().chain(packed.iter()) {
-            let msb_v = self.const_range_bound_fold(&r.msb);
-            let lsb_v = self.const_range_bound_fold(&r.lsb);
             // P0-NCW: net/hierarchical-referenced (non-constant) packed bound is loud.
-            self.check_const_range_bound(&r.msb, msb_v);
-            self.check_const_range_bound(&r.lsb, lsb_v);
+            let (msb_v, lsb_v) = self.range_bounds_checked(r);
             // `lo` is `i64` and the bounds are NOT clamped: a NEGATIVE inner packed bound
             // is legal (`logic [1:0][3:-2]`, IEEE §7.4.1) and clamping it to 0 made the
             // dim 4 bits instead of 6 — the whole vector came out 8 bits wide instead of

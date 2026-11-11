@@ -1,10 +1,11 @@
-//! The constant evaluator's entry set, its binder chain and its live-scope REG ask are each
-//! written once (ROADMAP §5.2 VAL-2, ER §5.1): `crates/elaborate/src/value/` -- `chains.rs`
-//! (`param_decl_fold`, the declaration chain the four binders take) and `lanes.rs`
-//! (`fold_self_wide`, REG asked in the live scope), with the lane table in `value/mod.rs`'s
-//! head note.
+//! The constant evaluator's entry set, its binder chain, its declared-range check and its
+//! live-scope REG ask are each written once (ROADMAP §5.2 VAL-2, VAL-3, ER §5.1):
+//! `crates/elaborate/src/value/` -- `chains.rs` (`param_decl_fold`, the declaration chain the four
+//! binders take ; `range_bounds_checked`, the range router's fold-then-check the four loud range
+//! sites take) and `lanes.rs` (`fold_self_wide`, REG asked in the live scope), with the lane table
+//! and the router's paths in `value/mod.rs`'s head note.
 //!
-//! This pin claims ONLY the exact token shapes below (E1-E6), counted per (file, enclosing fn)
+//! This pin claims ONLY the exact token shapes below (E1-E7), counted per (file, enclosing fn)
 //! over `crates/elaborate/src/**/*.rs`. What no shape sees (an entry reached through a fn value
 //! or a macro, a chain spelled with `match` / `if let`, a decline read after a `let`, the
 //! predicate readers, every chain not listed) is REVIEW-ONLY in `value/mod.rs`'s head note and
@@ -28,6 +29,13 @@
 //! - E4 a `fold_self_bits (` call whose argument tokens hold `wide_name_bits`.
 //! - E5 `had_error` tokens: each reader asks "any error so far" (head note).
 //! - E6 `unwrap_or ( ( 0 , false ) )` (a declined width read as width 0).
+//! - E7 (VAL-3) calls of the range router and its check (`const_range_bound_fold`,
+//!   `check_const_range_bound`, `range_bounds_checked`, `range_bound_fold_ev`, `bound_step`) per
+//!   (callee, file, fn) ; in `range_bounds_checked` exactly four calls, each its own statement
+//!   (eager: the tokens from the statement's start), in PRE's order and with PRE's arguments:
+//!   `let m = self . const_range_bound_fold ( & r . msb )`, `let l = self . const_range_bound_fold
+//!   ( & r . lsb )`, `self . check_const_range_bound ( & r . msb , m )`, `self .
+//!   check_const_range_bound ( & r . lsb , l )`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -38,8 +46,10 @@ use proc_macro2::{Delimiter, Spacing, TokenStream, TokenTree};
 const SRC: &str = "crates/elaborate/src";
 const CHAINS: &str = "crates/elaborate/src/value/chains.rs";
 const NEW_ROW: &str = "add its row to value/mod.rs's lane table and to this test";
+const E7_MSG: &str = "a declared bound is folded and checked in value/chains.rs ; say in value/mod.rs why this site is not";
 
-/// E1: the entry list (the VAL-2 grounding's 49 + the two VAL-2 fns), each in its file.
+/// E1: the entry list (the VAL-2 grounding's 49 + the two VAL-2 fns + VAL-3's check chain), each
+/// in its file.
 #[rustfmt::skip]
 const ENTRIES: &[(&str, &str)] = &[
     ("const_eval_in_scope", "crates/elaborate/src/const_fn.rs"),
@@ -93,6 +103,7 @@ const ENTRIES: &[(&str, &str)] = &[
     ("const_rtoi_via_real", "crates/elaborate/src/const_real.rs"),
     ("param_decl_fold", "crates/elaborate/src/value/chains.rs"),
     ("fold_self_wide", "crates/elaborate/src/value/lanes.rs"),
+    ("range_bounds_checked", "crates/elaborate/src/value/chains.rs"),
 ];
 
 /// E2's callees.
@@ -238,6 +249,44 @@ const E6: &[(&str, &str, usize)] = &[
     ("crates/elaborate/src/const_fn.rs", "bind_const_decl", 1),
     ("crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
     ("crates/elaborate/src/inline_fold.rs", "fold_straight_line", 1),
+];
+
+/// E7's callees: the range router, its check and its parts.
+const E7_CALLEES: [&str; 5] = [
+    "const_range_bound_fold",
+    "check_const_range_bound",
+    "range_bounds_checked",
+    "range_bound_fold_ev",
+    "bound_step",
+];
+
+/// E7: (callee, file, fn, calls, reason).
+#[rustfmt::skip]
+const E7: &[(&str, &str, &str, usize, &str)] = &[
+    ("bound_step", "crates/elaborate/src/const_fn_width/fold_x.rs", "range_bound_fold_ev", 1, "path B's value rule"),
+    ("check_const_range_bound", "crates/elaborate/src/array_geom.rs", "array_dim_extents", 1, "Dim::Size `[N]`: IN + check, outside the chain (head note item 5)"),
+    ("check_const_range_bound", "crates/elaborate/src/value/chains.rs", "range_bounds_checked", 2, "the chain"),
+    ("const_range_bound_fold", "crates/elaborate/src/array_geom.rs", "record_declared_bounds_for", 1, "msb only, no check (a .velab writer)"),
+    ("const_range_bound_fold", "crates/elaborate/src/const_select.rs", "range_facts_if", 2, "RangeFacts::lazy"),
+    ("const_range_bound_fold", "crates/elaborate/src/const_select.rs", "range_facts_pair", 2, "RangeFacts::pair"),
+    ("const_range_bound_fold", "crates/elaborate/src/expr_special.rs", "bits_of_selfdet", 3, "a part-select's bounds, no check"),
+    ("const_range_bound_fold", "crates/elaborate/src/netdecl.rs", "elaborate_netvar_decl_inner", 1, "msb only, no check (a .velab writer)"),
+    ("const_range_bound_fold", "crates/elaborate/src/value/chains.rs", "range_bounds_checked", 2, "the chain"),
+    ("range_bound_fold_ev", "crates/elaborate/src/const_fn_width/fold_x.rs", "bound_x_reason", 1, "route E: the evidence re-run"),
+    ("range_bound_fold_ev", "crates/elaborate/src/const_select.rs", "const_range_bound_fold_at", 1, "the value route"),
+    ("range_bounds_checked", "crates/elaborate/src/array_geom.rs", "array_dim_extents", 1, "S3 an unpacked `[m:l]`"),
+    ("range_bounds_checked", "crates/elaborate/src/array_geom.rs", "range_to_dims_opt", 1, "S4"),
+    ("range_bounds_checked", "crates/elaborate/src/packed.rs", "packed_extents", 1, "S1 each packed dim"),
+    ("range_bounds_checked", "crates/elaborate/src/params.rs", "check_param_decl_range", 1, "S2"),
+];
+
+/// E7: the body of `range_bounds_checked`, call by call: (callee, the statement's tokens before
+/// the callee, argument tokens).
+const E7_CHAIN: [(&str, &str, &str); 4] = [
+    ("const_range_bound_fold", "let m = self .", "& r . msb"),
+    ("const_range_bound_fold", "let l = self .", "& r . lsb"),
+    ("check_const_range_bound", "self .", "& r . msb , m"),
+    ("check_const_range_bound", "self .", "& r . lsb , l"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -473,7 +522,8 @@ fn enclosing_paren(t: &[Tok], i: usize) -> Option<usize> {
 /// One hit: (pin, callee or name, key) ; the file is added by the caller.
 type Hit = (&'static str, String, String);
 
-/// Every E1-E6 hit of one source, plus E3's order / laziness violations in `param_decl_fold`.
+/// Every E1-E7 hit of one source, plus E3's order / laziness violations in `param_decl_fold`
+/// and E7's order / argument violations in `range_bounds_checked`.
 fn hits(src: &str) -> (Vec<Hit>, Vec<String>) {
     let t = tokens(src);
     let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
@@ -482,6 +532,8 @@ fn hits(src: &str) -> (Vec<Hit>, Vec<String>) {
     // E3 positions inside param_decl_fold: (member index, token index).
     let mut chain: Vec<(usize, usize)> = Vec::new();
     let mut bad: Vec<String> = Vec::new();
+    // E7 calls inside range_bounds_checked: (callee, statement prefix, argument tokens).
+    let mut rbc: Vec<(String, String, String)> = Vec::new();
     for i in 0..t.len() {
         let v = tx(i);
         let key = t[i].key.clone();
@@ -512,6 +564,19 @@ fn hits(src: &str) -> (Vec<Hit>, Vec<String>) {
         if v == "had_error" {
             out.push(("E5", v.to_string(), key.clone()));
         }
+        if call && E7_CALLEES.contains(&v) {
+            out.push(("E7", v.to_string(), key.clone()));
+            if key == "range_bounds_checked" {
+                let end = after_parens(&t, i + 1);
+                let args: Vec<&str> = (i + 2..end.saturating_sub(1)).map(tx).collect();
+                let mut s0 = i;
+                while s0 > 0 && tx(s0 - 1) != ";" && tx(s0 - 1) != "{" {
+                    s0 -= 1;
+                }
+                let prefix: Vec<&str> = (s0..i).map(tx).collect();
+                rbc.push((v.to_string(), prefix.join(" "), args.join(" ")));
+            }
+        }
         let e6 = ["unwrap_or", "(", "(", "0", ",", "false", ")", ")"];
         if (0..e6.len()).all(|k| tx(i + k) == e6[k]) {
             out.push(("E6", v.to_string(), key.clone()));
@@ -541,6 +606,17 @@ fn hits(src: &str) -> (Vec<Hit>, Vec<String>) {
                     E3_MEMBERS[*m]
                 ));
             }
+        }
+    }
+    if !rbc.is_empty() {
+        let want: Vec<(String, String, String)> = E7_CHAIN
+            .iter()
+            .map(|(c, p, a)| (c.to_string(), p.to_string(), a.to_string()))
+            .collect();
+        if rbc != want {
+            bad.push(format!(
+                "range_bounds_checked is not PRE's fold msb, fold lsb, check msb, check lsb: {rbc:?}"
+            ));
         }
     }
     (out, bad)
@@ -580,6 +656,7 @@ fn value_entry_shapes_live_in_the_home() {
     let want_e4 = table(E4.iter().map(|(f, k, c)| ("fold_self_bits", *f, *k, *c)));
     let want_e5 = table(E5.iter().map(|(f, k, c, _)| ("had_error", *f, *k, *c)));
     let want_e6 = table(E6.iter().map(|(f, k, c)| ("unwrap_or", *f, *k, *c)));
+    let want_e7 = table(E7.iter().map(|(n, f, k, c, _)| (*n, *f, *k, *c)));
     assert_eq!(
         get("E1"),
         want_e1,
@@ -595,7 +672,7 @@ fn value_entry_shapes_live_in_the_home() {
         want_e3,
         "E3: the binder chain is spelled once, in {CHAINS}"
     );
-    assert!(bad.is_empty(), "E3: {bad:?}");
+    assert!(bad.is_empty(), "E3 / E7: {bad:?}");
     assert_eq!(
         get("E4"),
         want_e4,
@@ -611,6 +688,7 @@ fn value_entry_shapes_live_in_the_home() {
         want_e6,
         "E6: a new width-0 reading of a declined width: {NEW_ROW}"
     );
+    assert_eq!(get("E7"), want_e7, "E7: {E7_MSG}");
 }
 
 #[test]
@@ -702,6 +780,48 @@ fn walker_controls() {
         ),
         1
     );
+    // E7: a call counts per callee, `const_range_bound_fold_at` is not `const_range_bound_fold`, a
+    // definition does not count ; the home's body is clean ; a swap, a crossed value, a wrong
+    // bound, a dropped check and a doubled fold are each refused ; outside the home nothing is
+    // ordered (E7's table counts it) ; a lazy lsb fold is refused (PRE's eager pair).
+    assert_eq!(
+        count(
+            "E7",
+            "fn f(&self) { self.const_range_bound_fold(&r.msb); self.const_range_bound_fold_at(e); hdl_ast::range_rules::bound_step(v1); } fn const_range_bound_fold(&self) {}"
+        ),
+        2
+    );
+    let rbc = "fn range_bounds_checked(&mut self, r: &ast::Range) -> (Option<i64>, Option<i64>) { let m = self.const_range_bound_fold(&r.msb); let l = self.const_range_bound_fold(&r.lsb); self.check_const_range_bound(&r.msb, m); self.check_const_range_bound(&r.lsb, l); (m, l) }";
+    assert!(bad(rbc).is_empty(), "{:?}", bad(rbc));
+    assert_eq!(count("E7", rbc), 4);
+    let swapped = rbc.replace(
+        "self.check_const_range_bound(&r.msb, m); self.check_const_range_bound(&r.lsb, l);",
+        "self.check_const_range_bound(&r.lsb, l); self.check_const_range_bound(&r.msb, m);",
+    );
+    assert_eq!(bad(&swapped).len(), 1, "{:?}", bad(&swapped));
+    let crossed = rbc.replace(
+        "self.check_const_range_bound(&r.msb, m); self.check_const_range_bound(&r.lsb, l);",
+        "self.check_const_range_bound(&r.msb, l); self.check_const_range_bound(&r.lsb, m);",
+    );
+    assert_eq!(bad(&crossed).len(), 1, "{:?}", bad(&crossed));
+    let wrong_bound = rbc.replace(
+        "let l = self.const_range_bound_fold(&r.lsb);",
+        "let l = self.const_range_bound_fold(&r.msb);",
+    );
+    assert_eq!(bad(&wrong_bound).len(), 1, "{:?}", bad(&wrong_bound));
+    let dropped = rbc.replace(" self.check_const_range_bound(&r.lsb, l);", "");
+    assert_eq!(bad(&dropped).len(), 1, "{:?}", bad(&dropped));
+    let lazy = rbc.replace(
+        "let l = self.const_range_bound_fold(&r.lsb);",
+        "let l = m.and_then(|_| self.const_range_bound_fold(&r.lsb));",
+    );
+    assert_eq!(bad(&lazy).len(), 1, "{:?}", bad(&lazy));
+    let doubled = rbc.replace(
+        "let m = self.const_range_bound_fold(&r.msb);",
+        "let m = self.const_range_bound_fold(&r.msb); let _ = self.const_range_bound_fold(&r.msb);",
+    );
+    assert_eq!(bad(&doubled).len(), 1, "{:?}", bad(&doubled));
+    assert!(bad("fn packed_extents(&mut self) { let m = self.const_range_bound_fold(&r.lsb); self.check_const_range_bound(&r.msb, m); }").is_empty());
     // Keys: the innermost enclosing fn.
     let keys: Vec<Hit> = hits("fn outer() { fn inner(&self) { self.had_error; } }").0;
     assert_eq!(

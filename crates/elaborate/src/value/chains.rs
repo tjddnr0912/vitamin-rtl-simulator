@@ -50,4 +50,18 @@ impl Elaborator<'_> {
                 self.param_i64_at_declared(&p.value, dm)
             })
     }
+
+    /// A declared range's two bounds, folded by the range router (`const_range_bound_fold`)
+    /// then checked (`check_const_range_bound`), in PRE's order: both folds, then both checks,
+    /// msb first. The four sites that declare a range loudly take it: `packed_extents` (each
+    /// packed dim), `check_param_decl_range`, `array_dim_extents` (an unpacked `[m:l]`) and
+    /// `range_to_dims_opt`. The pair returned is the router's, unchanged (PRE's WRAP lane, see
+    /// value/mod.rs) ; each site keeps its own default and narrowing.
+    pub(crate) fn range_bounds_checked(&mut self, r: &ast::Range) -> (Option<i64>, Option<i64>) {
+        let m = self.const_range_bound_fold(&r.msb);
+        let l = self.const_range_bound_fold(&r.lsb);
+        self.check_const_range_bound(&r.msb, m);
+        self.check_const_range_bound(&r.lsb, l);
+        (m, l)
+    }
 }
