@@ -744,16 +744,7 @@ impl Elaborator<'_> {
                         // A module-BODY parameter/localparam is not on the
                         // instantiation override channel — the default binds.
                         let meta = self.param_decl_width_unoverridden(p);
-                        let folded = self
-                            .untyped_fill_init(p)
-                            .map(|(v, _)| v)
-                            .or_else(|| self.param_init_at_declared_width(p))
-                            .or_else(|| self.eval_param_init(&p.value, meta))
-                            .or_else(|| self.param_value_via_real(p, meta))
-                            .or_else(|| {
-                                let dm = self.param_decl_width_declared(p);
-                                self.param_i64_at_declared(&p.value, dm)
-                            });
+                        let folded = self.param_decl_fold(p, meta, true);
                         // Wider than the i64 domain — see `wide_param_bits`. Reached
                         // only when the numeric fold DECLINED, so a wide declaration
                         // whose value fits keeps its integer identity.

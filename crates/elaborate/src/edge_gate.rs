@@ -1420,7 +1420,7 @@ impl Elaborator<'_> {
     /// wildcard pattern (`==? 4'b1?00`) they are don't-cares. Diagnostic-only.
     fn wide_domain_has_unknown(&self, e: &ast::Expr) -> bool {
         let unknown = |r: Option<WideBits>| matches!(r, Some((b, w, _)) if bp_any_unknown(&b, w));
-        unknown(fold_self_bits(e, &|n, _| self.wide_name_bits(n)))
+        unknown(self.fold_self_wide(e))
             || Self::first_in(e, &mut |x| unknown(self.wide_name_bits(x)).then_some(())).is_some()
     }
 

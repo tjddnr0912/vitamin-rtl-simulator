@@ -1513,7 +1513,7 @@ impl Elaborator<'_> {
     /// unsigned outright, so there is no surrounding context whose width the operands
     /// should have taken instead. Only call it from a position the LRM says that about.
     pub(crate) fn selfdet_bits_unsigned(&self, e: &ast::Expr) -> Option<u64> {
-        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, _) = self.fold_self_wide(e)?;
         if bp_any_unknown(&b, w) {
             return None;
         }
@@ -1545,7 +1545,7 @@ impl Elaborator<'_> {
     /// naming the operator above it.
     pub(crate) fn wide_domain_folds(&self, e: &ast::Expr) -> bool {
         matches!(
-            fold_self_bits(e, &|n, _| self.wide_name_bits(n)),
+            self.fold_self_wide(e),
             Some((b, w, _)) if !bp_any_unknown(&b, w)
         )
     }
@@ -1553,7 +1553,7 @@ impl Elaborator<'_> {
     /// Is `e` a KNOWN zero in the wide bit domain? Diagnostic-only, and false
     /// whenever the answer is not certain (it declines, or it carries an x bit).
     pub(crate) fn wide_domain_is_zero(&self, e: &ast::Expr) -> bool {
-        match fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+        match self.fold_self_wide(e) {
             Some((b, w, _)) => !bp_any_unknown(&b, w) && !(0..w as usize).any(|i| bp_get(&b, i).0),
             None => false,
         }
@@ -1569,7 +1569,7 @@ impl Elaborator<'_> {
     /// which record a declared range or a declared type and nothing else — so the
     /// width it returns has the provenance the exclusion was protecting.
     pub(crate) fn wide_selfdet_width(&self, e: &ast::Expr) -> Option<u32> {
-        fold_self_bits(e, &|n, _| self.wide_name_bits(n)).map(|(_, w, _)| w)
+        self.fold_self_wide(e).map(|(_, w, _)| w)
     }
 
     /// `$clog2(e)` computed entirely in the wide bit domain — the finished ceiling,
@@ -1585,7 +1585,7 @@ impl Elaborator<'_> {
     /// No `wide_top_is_self_determined` gate, for the same reason the sibling
     /// documents: §20.8.1 makes a `$clog2` argument self-determined outright.
     pub(crate) fn selfdet_clog2_wide(&self, e: &ast::Expr) -> Option<i64> {
-        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, _) = self.fold_self_wide(e)?;
         // A ceiling is at most `MAX_NET_WIDTH` (2²⁰), so the i64 is never near an edge.
         wide_clog2(&b, w).map(|n| n as i64)
     }
@@ -1595,7 +1595,7 @@ impl Elaborator<'_> {
     /// walks cannot hold because it carries x/z bits (`4'b110x` is true, `4'b000x`
     /// is unknown and declines). See [`bp_truth`].
     pub(crate) fn selfdet_truth(&self, e: &ast::Expr) -> Option<bool> {
-        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, _) = self.fold_self_wide(e)?;
         bp_truth(&b, w)
     }
 
@@ -1603,7 +1603,7 @@ impl Elaborator<'_> {
         if !wide_top_is_self_determined(e) {
             return None;
         }
-        let (b, w, sg) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, sg) = self.fold_self_wide(e)?;
         if w > 64 || bp_any_unknown(&b, w) {
             return None;
         }

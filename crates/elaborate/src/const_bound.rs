@@ -571,7 +571,7 @@ impl Elaborator<'_> {
         if let Some(v) = self.const_eval_in_scope(e) {
             return u128::try_from(v).ok();
         }
-        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, _) = self.fold_self_wide(e)?;
         if bp_any_unknown(&b, w) || (128..w as usize).any(|i| bp_get(&b, i).0) {
             return None;
         }
@@ -592,9 +592,8 @@ impl Elaborator<'_> {
     fn select_or_count_reason(&self, e: &ast::Expr) -> Option<String> {
         use ast::ExprKind as K;
         // The base's width, from whichever domain can state it.
-        let base_width = |b: &ast::Expr| -> Option<u32> {
-            fold_self_bits(b, &|n, _| self.wide_name_bits(n)).map(|(_, w, _)| w)
-        };
+        let base_width =
+            |b: &ast::Expr| -> Option<u32> { self.fold_self_wide(b).map(|(_, w, _)| w) };
         let over_u32 = |i: &ast::Expr| -> Option<u128> {
             self.count_value_for_msg(i)
                 .filter(|v| *v > u128::from(u32::MAX))

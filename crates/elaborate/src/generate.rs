@@ -820,21 +820,7 @@ impl Elaborator<'_> {
                 // parameter whose initializer mentions a real converts at the
                 // declaration (§6.24.1). Without this the same text answered 6 at
                 // module scope and went loud one `generate` deeper.
-                match self
-                    .untyped_fill_init(p)
-                    .map(|(v, _)| v)
-                    .or_else(|| self.param_init_at_declared_width(p))
-                    // The same evaluator every other binder takes: a fill
-                    // inside a sized initializer folds at the declared width
-                    // (§4.5.420 review B BLOCKING-1 — this twin was left on
-                    // `const_eval_in_scope` and answered `00ffffffff` one
-                    // `generate` deeper than the module scope's `ffffffffff`).
-                    .or_else(|| self.eval_param_init(&p.value, meta))
-                    .or_else(|| self.param_value_via_real(p, meta))
-                    .or_else(|| {
-                        let dm = self.param_decl_width_declared(p);
-                        self.param_i64_at_declared(&p.value, dm)
-                    }) {
+                match self.param_decl_fold(p, meta, true) {
                     Some(v) => {
                         // A >64-bit declaration whose i64 fold DISAGREES with the wide
                         // one lost bits on the way (see `wide_disagreeing_value`); the

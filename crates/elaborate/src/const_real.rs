@@ -120,7 +120,7 @@ impl Elaborator<'_> {
     /// primitive cast's type (§6.24.1; `time'(-5) + 0.0` is 18446744073709551616.0 in
     /// iverilog, not -5.0).
     fn const_selfdet_real(&self, e: &ast::Expr) -> Option<f64> {
-        if let Some((b, w, sg)) = fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+        if let Some((b, w, sg)) = self.fold_self_wide(e) {
             if bp_any_unknown(&b, w) {
                 return None;
             }

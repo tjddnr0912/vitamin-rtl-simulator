@@ -2257,29 +2257,9 @@ impl Elaborator<'_> {
             let mut chosen_val: Option<i64> = ovr_fill_v
                 .or_else(|| self_meta_binds.then_some(ovr_self_val).flatten())
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
-                .or_else(|| {
-                    if default_binds {
-                        if let Some((v, _)) = self.untyped_fill_init(p) {
-                            return Some(v);
-                        }
-                    }
-                    self.param_init_at_declared_width(p)
-                        .or_else(|| self.eval_param_init(&p.value, meta))
-                })
-                // Branch parity with the module-body, generate and package twins: a
-                // declared-integral parameter whose initializer mentions a real
-                // converts at the declaration (§6.24.1). Without it the same text was
-                // `04` in a module body and E3009 in a header or an interface.
-                .or_else(|| self.param_value_via_real(p, meta))
-                // The WIDE bit domain, read back as an i64 because the declaration
-                // fits one. Last in the chain: it fires only where every integer arm
-                // declined, so a reduction (`^A`), a select (`A[7:4]`) or a wide
-                // comparison becomes a value instead of an error, and nothing that
-                // folded before changes route.
-                .or_else(|| {
-                    let dm = self.param_decl_width_declared(p);
-                    self.param_i64_at_declared(&p.value, dm)
-                });
+                // The declaration's own five steps (`value/chains.rs`), the untyped fill
+                // asked only when the default binds.
+                .or_else(|| self.param_decl_fold(p, meta, default_binds));
             // Wider than the i64 constant domain — see `wide_param_bits`. Reached
             // ONLY when the numeric fold above already declined, so a wide DECLARATION
             // whose value happens to fit (`localparam logic [255:0] K = 256'h1`) keeps

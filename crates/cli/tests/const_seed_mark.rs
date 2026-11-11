@@ -3262,3 +3262,79 @@ endmodule
         &[("f", "t")],
     );
 }
+
+/// The package functions S1-S4 call: `fx` falls off its end on `a != 1` (its return variable
+/// unwritten), `fy` returns a local no statement wrote.
+const VAL2_PKG: &str = r#"package p;
+  function automatic logic [3:0] fx(input int a); if (a == 1) fx = 4'd10; endfunction
+  function automatic logic [3:0] fy(input int a); logic [3:0] t; if (a == 1) t = 4'd1; return t; endfunction
+endpackage
+"#;
+
+/// VAL-2 S1 (§5.2 VAL-2, `value/chains.rs` `param_decl_fold`): seed-reading calls in a module
+/// BODY's typed and untyped parameter initializers, the binder chain C1 (`elaborate_instance`).
+/// A structure pin: the read set is PRE's (vita d5ac3b05's tree, measured before the merge) ;
+/// oracles not run.
+/// vita `V P=0000 Q=0`
+#[test]
+fn val2_s1_body_decl_chain() {
+    let src = format!(
+        "{VAL2_PKG}module top;
+  localparam logic [3:0] P = p::fx(2);
+  localparam Q = p::fy(3);
+  initial begin #1 $display(\"V P=%b Q=%0d\", P, Q); $finish; end
+endmodule
+"
+    );
+    check(&src, 0, "V P=0000 Q=0", &[("fx", "fx"), ("fy", "t")]);
+}
+
+/// VAL-2 S2: the same two initializers in a PACKAGE, the binder chain C2 (`elaborate_package`).
+/// vita `V P=0000 Q=0`
+#[test]
+fn val2_s2_package_decl_chain() {
+    let src = format!(
+        "{VAL2_PKG}package q;
+  localparam logic [3:0] P = p::fx(2);
+  localparam Q = p::fy(3);
+endpackage
+module top;
+  initial begin #1 $display(\"V P=%b Q=%0d\", q::P, q::Q); $finish; end
+endmodule
+"
+    );
+    check(&src, 0, "V P=0000 Q=0", &[("fx", "fx"), ("fy", "t")]);
+}
+
+/// VAL-2 S3: the same two initializers in a GENERATE scope, the binder chain C3
+/// (`lower_gen_module_item`).
+/// vita `V P=0000 Q=0`
+#[test]
+fn val2_s3_generate_decl_chain() {
+    let src = format!(
+        "{VAL2_PKG}module top;
+  if (1) begin : g
+    localparam logic [3:0] P = p::fx(2);
+    localparam Q = p::fy(3);
+    initial begin #1 $display(\"V P=%b Q=%0d\", P, Q); $finish; end
+  end
+endmodule
+"
+    );
+    check(&src, 0, "V P=0000 Q=0", &[("fx", "fx"), ("fy", "t")]);
+}
+
+/// VAL-2 S4: the same two initializers as HEADER defaults, no override, the binder chain C4
+/// (`bind_one_param`, after its three override channels).
+/// vita `V P=0000 Q=0`
+#[test]
+fn val2_s4_header_decl_chain() {
+    let src = format!(
+        "{VAL2_PKG}module m #(parameter logic [3:0] P = p::fx(2), parameter Q = p::fy(3)) ();
+  initial begin #1 $display(\"V P=%b Q=%0d\", P, Q); $finish; end
+endmodule
+module top; m u(); endmodule
+"
+    );
+    check(&src, 0, "V P=0000 Q=0", &[("fx", "fx"), ("fy", "t")]);
+}

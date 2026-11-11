@@ -823,19 +823,7 @@ impl Elaborator<'_> {
                     // recomputed a few lines below for `const_meta`; asking twice is
                     // cheaper than reordering a block whose restore list is positional.
                     let pmeta = self.param_decl_width_unoverridden(p);
-                    let folded = self
-                        .untyped_fill_init(p)
-                        .map(|(v, _)| v)
-                        .or_else(|| self.param_init_at_declared_width(p))
-                        // The same evaluator a module parameter takes: a fill
-                        // inside a sized initializer folds at the declared width
-                        // (§4.5.420), and a fill-free one is `const_eval_in_scope`.
-                        .or_else(|| self.eval_param_init(&p.value, pmeta))
-                        .or_else(|| self.param_value_via_real(p, pmeta))
-                        .or_else(|| {
-                            let dm = self.param_decl_width_declared(p);
-                            self.param_i64_at_declared(&p.value, dm)
-                        });
+                    let folded = self.param_decl_fold(p, pmeta, true);
                     // The FOURTH domain, and the one the package fold never grew: a
                     // value too wide for i64. Reached only after the numeric fold
                     // declined, exactly like the module-body twin, so a wide
