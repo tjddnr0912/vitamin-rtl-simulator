@@ -65,7 +65,7 @@ impl Elaborator<'_> {
                     return None;
                 }
                 if lane == ArmLane::Ctx {
-                    let local = |n: &str| fr.env().contains_key(n) || fr.widths().contains_key(n);
+                    let local = |n: &str| fr.is_local(n);
                     if ast_names_any(e, &local) {
                         return None;
                     }

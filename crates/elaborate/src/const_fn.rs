@@ -486,7 +486,7 @@ impl Elaborator<'_> {
             // shadow was measured on the `$rtoi` sibling and cost a loud →
             // silent-wrong. A real LOCAL is not modelled in this env anyway, so the
             // gate costs nothing it could otherwise have answered.
-            None if fr.env().is_empty() && fr.widths().is_empty() => {
+            None if fr.is_empty() => {
                 match self.const_int_via_real(arg) {
                     Some(v) if v >= 0 => v as u64,
                     // …and finally the WIDE bit domain, which is the only one that can read
@@ -602,12 +602,12 @@ impl Elaborator<'_> {
             // that names the local — a different object than the text says.
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                 let n = &path.segments[0].name;
-                match fr.env().get(n) {
+                match fr.value(n) {
                     Some(v) => {
                         self.const_seed_read(n);
                         Some(*v)
                     }
-                    None if fr.widths().contains_key(n) => None,
+                    None if fr.is_declared(n) => None,
                     // §2 🆕 L ⓦ: inside a PACKAGE function's body the package's own
                     // constants are already in `env`; a name it does not declare must
                     // not fall to the calling module's scope (a same-named module
@@ -796,17 +796,12 @@ impl Elaborator<'_> {
                 // collapsed a 52-bit width bound to 1. A pinned test caught it;
                 // reasoning did not.
                 self.const_param_select_env(e, fr, depth).or_else(|| {
-                    (fr.env().is_empty()
-                        && fr.widths().is_empty()
-                        && (depth == 0 || !Self::ast_contains_call(e)))
-                    .then(|| self.const_eval_in_scope(e))
-                    .flatten()
+                    (fr.is_empty() && (depth == 0 || !Self::ast_contains_call(e)))
+                        .then(|| self.const_eval_in_scope(e))
+                        .flatten()
                 })
             }
-            _ if fr.env().is_empty()
-                && fr.widths().is_empty()
-                && (depth == 0 || !Self::ast_contains_call(e)) =>
-            {
+            _ if fr.is_empty() && (depth == 0 || !Self::ast_contains_call(e)) => {
                 self.const_eval_in_scope(e)
             }
             _ => None,
@@ -871,9 +866,7 @@ impl Elaborator<'_> {
                 // `function f(input logic [7:0] A); f = {A[7:4], A[7:4]};` — folded
                 // the MODULE parameter (`cc`) while vita's own runtime call answered
                 // `ff` with both oracles. Review round 1, BLOCKING.
-                if Self::select_root_name(n)
-                    .is_some_and(|r| fr.widths().contains_key(r) || fr.env().contains_key(r))
-                {
+                if Self::select_root_name(n).is_some_and(|r| fr.is_local_w(r)) {
                     // Neither the shifted arm nor `wide_name_bits` may answer: both
                     // resolve the root through MODULE scope. Declining hands the
                     // select to the structural arm, which folds the base through
@@ -895,13 +888,12 @@ impl Elaborator<'_> {
             // stop the walk here rather than fall through to the module parameter
             // below, which would answer for a different object than the reference
             // names. Both were measured as blocking defects in §4.5.371.
-            if is_count && (fr.widths().contains_key(&seg.name) || fr.env().contains_key(&seg.name))
-            {
+            if is_count && fr.is_local_w(&seg.name) {
                 return None;
             }
-            let (v, w, s) = match fr.widths().get(&seg.name).copied() {
+            let (v, w, s) = match fr.shape(&seg.name) {
                 Some((w, s)) if (1..=64).contains(&w) => {
-                    let v = *fr.env().get(&seg.name)?;
+                    let v = *fr.value(&seg.name)?;
                     self.const_seed_read(&seg.name);
                     (v, w, s)
                 }
@@ -1345,7 +1337,7 @@ impl Elaborator<'_> {
             }
             // The function-name return variable is itself a declared target.
             fr.bind_shape(name.to_string(), Some((rw, rs)));
-            if !fr.env().contains_key(name) && !f.ret_two_state {
+            if !fr.has_value(name) && !f.ret_two_state {
                 let numbered =
                     f.ret_packed.is_empty() && const_range_numbered(f.dtype.range.as_ref());
                 self.const_seed(name, rw, f.name.span, numbered);
@@ -1361,7 +1353,7 @@ impl Elaborator<'_> {
             )? {
                 ConstFlow::Return(Some(v)) => v,
                 ConstFlow::Return(None) | ConstFlow::Normal => {
-                    let v = *fr.env().get(name)?;
+                    let v = *fr.value(name)?;
                     self.const_seed_read(name);
                     v
                 }
@@ -1426,7 +1418,7 @@ impl Elaborator<'_> {
             return None;
         }
         let name = &path.segments[0].name;
-        let &(vw, _vsigned) = fr.widths().get(name)?;
+        let (vw, _vsigned) = fr.shape(name)?;
         if vw == 0 || vw > 64 {
             return None;
         }
@@ -1441,7 +1433,7 @@ impl Elaborator<'_> {
         let v = self.eval_const_assign(rhs, fr, depth, Some((w, false)))?;
         let field = if w >= 64 { u64::MAX } else { (1u64 << w) - 1 };
         let mask = field << lo;
-        let cur = fr.env().get(name).copied().unwrap_or(0) as u64;
+        let cur = fr.value(name).copied().unwrap_or(0) as u64;
         let out = (cur & !mask) | (((v as u64) & field) << lo);
         fr.bind_value(name.clone(), out as i64);
         if self.const_unwritten_live.get() != 0 {
@@ -1512,7 +1504,7 @@ impl Elaborator<'_> {
                 // §11.6: the RHS runs at max(its self width, the TARGET's width)
                 // and is then assigned — this is where `bit [3:0] t = 4'd15+4'd15`
                 // becomes 14 instead of 30.
-                let tw = fr.widths().get(&path.segments[0].name).copied();
+                let tw = fr.shape(&path.segments[0].name);
                 let v = self.eval_const_assign(rhs, fr, depth, tw)?;
                 fr.bind_value(path.segments[0].name.clone(), v);
                 self.const_written(&path.segments[0].name);

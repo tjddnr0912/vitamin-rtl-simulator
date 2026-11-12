@@ -40,6 +40,13 @@
 //!   signatures ; F4 no signature takes the value map beside `ConstWidths`, and the
 //!   width-only fns are a listed table. REVIEW-ONLY: a frame moved by value or swapped
 //!   (`mem::swap` / `replace`), a writer reached through a fn pointer, a macro body.
+//! - F5 the frame's read lanes (BIND-2b): F5r inside `frame.rs` each lane is its map
+//!   verbs on its fields in its sites' `||` / `&&` order ; outside it F5a no `.env()` and
+//!   F5b no method on `.widths()`'s result (a raw read verb), except the listed left sites
+//!   (`F5_LEFT`, none) ; F5c `fr.<lane>(` per (file, fn), the 17 read sites ; F5d
+//!   `.widths()` per (file, fn), the hand-offs to the width-only fns. REVIEW-ONLY: a lane
+//!   or a store reached through a receiver not spelled `fr` (a local bound to
+//!   `fr.widths()`, a frame named otherwise), a fn pointer, a macro body.
 //!
 //! What no shape sees is REVIEW-ONLY in `bound/mod.rs`'s head note: a write through a
 //! reference bound earlier, a macro body, `mem::swap` / `replace` of two fields reached
@@ -963,7 +970,7 @@ const F2_NAMES: [&str; 14] = [
     "const_written",
     "eval_const_assign",
     "bind_const_decl",
-    "contains_key",
+    "has_value",
     "exec_const_stmt",
 ];
 #[rustfmt::skip]
@@ -975,7 +982,7 @@ const F2_ORDER: &[(&str, &[&str])] = &[
     ]),
     ("eval_const_call_at", &[
         "const_decl_wsign", "eval_const_assign", "eval_const_assign", "bind_shape", "bind_value",
-        "seed_value", "bind_const_decl", "bind_shape", "contains_key", "const_seed",
+        "seed_value", "bind_const_decl", "bind_shape", "has_value", "const_seed",
         "seed_value", "exec_const_stmt", "decl_enter", "decl_exit",
     ]),
 ];
@@ -1373,6 +1380,242 @@ fn walker_controls_f() {
         count_f(
             "F3new",
             "#[cfg(test)]\nmod t { fn f() { g(&ConstFrame::new()); } }\nfn h() {}",
+            false
+        ),
+        0
+    );
+}
+
+// ---- BIND-2b: the frame's read lanes (`bound/frame.rs`) ----
+
+/// The frame's read lanes (`fr.<lane>(` outside `bound/frame.rs`).
+const FRAME_LANES: [&str; 7] = [
+    "is_empty",
+    "is_local",
+    "is_local_w",
+    "is_declared",
+    "has_value",
+    "value",
+    "shape",
+];
+
+/// F5r: inside `bound/frame.rs`, each lane's body as its `self.<field>.<verb>` reads in
+/// source order (the `||` / `&&` order is the site's PRE order: `is_local` env first,
+/// `is_local_w` envw first).
+#[rustfmt::skip]
+const F5R_BODIES: &[(&str, &[&str])] = &[
+    ("has_value", &["env.contains_key"]),
+    ("is_declared", &["envw.contains_key"]),
+    ("is_empty", &["env.is_empty", "envw.is_empty"]),
+    ("is_local", &["env.contains_key", "envw.contains_key"]),
+    ("is_local_w", &["envw.contains_key", "env.contains_key"]),
+    ("shape", &["envw.get"]),
+    ("value", &["env.get"]),
+];
+
+/// F5c: (lane, file, fn, calls) outside `bound/frame.rs`, receiver `fr` (the 17 read
+/// sites of the BIND-2 plan's table 3 ; a closure is keyed to its fn).
+#[rustfmt::skip]
+const F5C_CALLS: &[(&str, &str, &str, usize)] = &[
+    ("has_value", "crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
+    ("is_declared", "crates/elaborate/src/const_fn.rs", "eval_const_env", 1),
+    ("is_empty", "crates/elaborate/src/const_fn.rs", "const_clog2_selfdet", 1),
+    ("is_empty", "crates/elaborate/src/const_fn.rs", "eval_const_env", 2),
+    ("is_empty", "crates/elaborate/src/const_fn_width/fold.rs", "fold_ctx", 1),
+    ("is_local", "crates/elaborate/src/const_fn_width/fold.rs", "fold_ctx", 1),
+    ("is_local", "crates/elaborate/src/value/arms.rs", "selfdet_truth_arm", 1),
+    ("is_local_w", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 2),
+    ("shape", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 1),
+    ("shape", "crates/elaborate/src/const_fn.rs", "exec_const_select_write", 1),
+    ("shape", "crates/elaborate/src/const_fn.rs", "exec_const_stmt", 1),
+    ("value", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 1),
+    ("value", "crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
+    ("value", "crates/elaborate/src/const_fn.rs", "eval_const_env", 1),
+    ("value", "crates/elaborate/src/const_fn.rs", "exec_const_select_write", 1),
+];
+
+/// F5a / F5b: the sites left at PRE's raw verb (file, fn, count, reason) -- none: every
+/// read site re-pointed with its host fn's release asm equal to BIND-2a's
+/// (W/bind2/build_b/asm/cmp3.txt). A row here names a site that kept `fr.env()` /
+/// `fr.widths().<verb>` and why.
+const F5_LEFT: &[(&str, &str, usize, &str)] = &[];
+
+/// F5d: `.widths()` per (file, fn) outside `bound/frame.rs`: each hands `envw` to one of
+/// the 8 width-only fns (F4b) and reads nothing itself.
+#[rustfmt::skip]
+const F5D_WIDTHS: &[(&str, &str, usize)] = &[
+    ("crates/elaborate/src/const_fn.rs", "const_pow_exponent_selfdet", 1),
+    ("crates/elaborate/src/const_fn.rs", "const_unsigned_selfdet", 1),
+    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_assign", 2),
+    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_ctx", 7),
+    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_self", 2),
+    ("crates/elaborate/src/const_fn_width/fold.rs", "fold_shift_count", 3),
+    ("crates/elaborate/src/value/arms.rs", "const_size_cast", 1),
+];
+
+/// F5 (rule, key) hits of one source: in the frame file `F5r:<fn>` one per
+/// `self . <field> . <verb> (` read, key `<field>.<verb>` ; outside it `F5a` a
+/// `. env ( )`, `F5b` a `. widths ( ) . <id> (` (a raw verb on the width map), `F5c:<lane>`
+/// a `fr . <lane> (`, `F5d` a `. widths ( )`.
+fn hits_f5(src: &str, frame_file: bool) -> Vec<(String, String)> {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (i, tok) in t.iter().enumerate() {
+        let key = tok.key.clone();
+        let v = tx(i);
+        if frame_file {
+            if v == "self"
+                && tx(i + 1) == "."
+                && matches!(tx(i + 2), "env" | "envw")
+                && tx(i + 3) == "."
+                && t.get(i + 4).is_some_and(|x| x.kind == Kind::Id)
+                && tx(i + 5) == "("
+                && FRAME_LANES.contains(&key.as_str())
+            {
+                out.push((format!("F5r:{key}"), format!("{}.{}", tx(i + 2), tx(i + 4))));
+            }
+            continue;
+        }
+        if v == "." && tx(i + 1) == "env" && tx(i + 2) == "(" && tx(i + 3) == ")" {
+            out.push(("F5a".into(), key.clone()));
+        }
+        if v == "." && tx(i + 1) == "widths" && tx(i + 2) == "(" && tx(i + 3) == ")" {
+            out.push(("F5d".into(), key.clone()));
+            if tx(i + 4) == "."
+                && t.get(i + 5).is_some_and(|x| x.kind == Kind::Id)
+                && tx(i + 6) == "("
+            {
+                out.push(("F5b".into(), key.clone()));
+            }
+        }
+        if v == "fr" && tx(i + 1) == "." && FRAME_LANES.contains(&tx(i + 2)) && tx(i + 3) == "(" {
+            out.push((format!("F5c:{}", tx(i + 2)), key.clone()));
+        }
+    }
+    out
+}
+
+#[test]
+fn the_const_frame_reads_through_its_lanes() {
+    let root = workspace_root();
+    let mut f5r: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut f5ab: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut f5c: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    let mut f5d: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for (rel, src) in src_files(&root) {
+        let ff = rel == FRAME;
+        for (rule, key) in hits_f5(&src, ff) {
+            if let Some(k) = rule.strip_prefix("F5r:") {
+                f5r.entry(k.to_string()).or_default().push(key);
+            } else if rule == "F5a" || rule == "F5b" {
+                *f5ab.entry((rel.clone(), key)).or_insert(0) += 1;
+            } else if let Some(l) = rule.strip_prefix("F5c:") {
+                *f5c.entry((l.to_string(), rel.clone(), key)).or_insert(0) += 1;
+            } else if rule == "F5d" {
+                *f5d.entry((rel.clone(), key)).or_insert(0) += 1;
+            }
+        }
+    }
+    let want_r: BTreeMap<String, Vec<String>> = F5R_BODIES
+        .iter()
+        .map(|(k, b)| (k.to_string(), b.iter().map(|s| s.to_string()).collect()))
+        .collect();
+    assert_eq!(
+        f5r, want_r,
+        "F5r: in {FRAME} a read lane is not its one map verb in its sites' order"
+    );
+    let want_ab: BTreeMap<(String, String), usize> = F5_LEFT
+        .iter()
+        .map(|(f, k, n, _)| ((f.to_string(), k.to_string()), *n))
+        .collect();
+    assert_eq!(
+        f5ab, want_ab,
+        "F5a / F5b: a raw read verb on the frame's stores outside {FRAME} (`.env()` or `.widths().<verb>(`) that is not a listed left site"
+    );
+    let want_c: BTreeMap<(String, String, String), usize> = F5C_CALLS
+        .iter()
+        .map(|(l, f, k, n)| ((l.to_string(), f.to_string(), k.to_string()), *n))
+        .collect();
+    assert_eq!(
+        f5c, want_c,
+        "F5c: a read lane is called from a new (file, fn) or a different number of times (a new read site is a row)"
+    );
+    assert_eq!(f5c.values().sum::<usize>(), 17, "F5c: 17 read sites");
+    let want_d: BTreeMap<(String, String), usize> = F5D_WIDTHS
+        .iter()
+        .map(|(f, k, n)| ((f.to_string(), k.to_string()), *n))
+        .collect();
+    assert_eq!(
+        f5d, want_d,
+        "F5d: `.widths()` per (file, fn) moved (it only hands `envw` to a width-only fn)"
+    );
+}
+
+fn count_f5(rule: &str, src: &str, frame_file: bool) -> usize {
+    hits_f5(src, frame_file)
+        .iter()
+        .filter(|(r, _)| r == rule)
+        .count()
+}
+
+#[test]
+fn walker_controls_f5() {
+    // F5r: a lane's field reads in order, multi-line ; not a writer, not another fn's
+    // read, not a field of another receiver.
+    let body = |src: &str, k: &str| -> Vec<String> {
+        hits_f5(src, true)
+            .into_iter()
+            .filter(|(r, _)| r == &format!("F5r:{k}"))
+            .map(|(_, v)| v)
+            .collect()
+    };
+    let pre = "impl F { fn is_local(&self, n: &str) -> bool { self.env.contains_key(n) || self\n .envw\n .contains_key(n) } fn other(&self) { self.env.get(n); } fn bind_value(&mut self) { self.env.insert(n, v); x.env.get(n); } }";
+    assert_eq!(
+        body(pre, "is_local"),
+        vec!["env.contains_key", "envw.contains_key"]
+    );
+    let swapped = "impl F { fn is_local(&self, n: &str) -> bool { self.envw.contains_key(n) || self.env.contains_key(n) } }";
+    assert_ne!(body(swapped, "is_local"), body(pre, "is_local"));
+    assert_eq!(count_f5("F5r:other", pre, true), 0);
+    assert_eq!(count_f5("F5r:bind_value", pre, true), 0);
+    // F5a: `.env()` on any receiver, multi-line ; not a field, not `env(` as a free fn,
+    // not a longer name.
+    assert_eq!(
+        count_f5(
+            "F5a",
+            "fn f() { fr.env().get(n); caller\n .env\n ()\n .is_empty(); env(); fr.envs(); fr.env.get(n); }",
+            false
+        ),
+        2
+    );
+    // F5b: a method on `widths()`'s result ; the hand-off to a width-only fn is F5d only.
+    let src = "fn f() { fr.widths().contains_key(n); fr\n .widths()\n .get(n); self.const_self_width(e, fr.widths()); }";
+    assert_eq!(count_f5("F5b", src, false), 2);
+    assert_eq!(count_f5("F5d", src, false), 3);
+    // F5c: the receiver `fr` and a lane name ; not another receiver, not a longer name,
+    // not the definition.
+    assert_eq!(
+        count_f5(
+            "F5c:value",
+            "fn f() { fr.value(n); fr\n .value(\n n); x.value(n); fr.values(n); } fn value(&self) {}",
+            false
+        ),
+        2
+    );
+    assert_eq!(
+        count_f5(
+            "F5c:is_local_w",
+            "fn f() { fr.is_local_w(r); fr.is_local(r); }",
+            false
+        ),
+        1
+    );
+    // `#[cfg(test)]` items are skipped.
+    assert_eq!(
+        count_f5(
+            "F5a",
+            "#[cfg(test)]\nmod t { fn f() { fr.env().get(n); } }\nfn h() {}",
             false
         ),
         0

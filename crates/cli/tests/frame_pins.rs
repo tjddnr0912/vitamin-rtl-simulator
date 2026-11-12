@@ -2,10 +2,12 @@
 //! show what a constant-function local is (ROADMAP §5.2 BIND-2a: the frame `ConstFrame`, `bound/frame.rs`,
 //! its writers `bind_shape` / `bind_value` / `unbind_value` / `seed_value`, and the presence lanes L2-L8 of
 //! the BIND-2 plan: a name declared and unbound, bound and undeclared, width 0 = unknown, one slot per name,
-//! the empty frame, the `[N:0]` numbering, the range folding outside the frame). Every expected text was
-//! measured on the PRE binary (BIND-1b's POST, 7672b198, `vita` md5 ddcbd1df ; the same text on 6bcd57fa,
-//! H/pre/bind2_lane) with `t.sv` as the argument. The oracle text in each doc is iverilog 13.0 and
-//! verilator 5.054 verbatim (S/build_a/lane/ORACLE.txt) ; where vita's value differs from an oracle's, the
+//! the empty frame, the `[N:0]` numbering, the range folding outside the frame) and, BIND-2b, the read
+//! lanes no other pin tells apart from a neighbour lane (k9 `is_local_w`, k10 `shape`'s width 0). Every
+//! expected text was measured on a PRE binary with `t.sv` as the argument: BIND-1b's POST (7672b198,
+//! `vita` md5 ddcbd1df) for the BIND-2a pins, BIND-2a's POST (c5c131a0, `vita` md5 74dab3ae) for all 28 ;
+//! the same text on 6bcd57fa (H/pre/bind2_lane). The oracle text in each doc is iverilog 13.0 and
+//! verilator 5.054 verbatim (S/build_a/lane/ORACLE.txt, S/build_b/lane/oracle) ; where vita's value differs from an oracle's, the
 //! pin holds vita's value as PRE prints it and names the §2 filing (structure only: no fix here). A named
 //! mutant killer here is a claim until its mutant runs.
 use std::process::Command;
@@ -684,6 +686,61 @@ endmodule
         r##""##,
         r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
 t.sv:7:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// L2 declared, unbound (lane cell `k9_concat_sel_unbound_local`) -- a select of a declared, unbound local (`logic [g(8)-1:0] A = 5;`, width did not fold: W5) as a concat operand beside a module localparam `A` with a non-zero lsb: `const_placement_wide`'s select-root test `is_local_w` (envw first) sees the local and declines, so the module parameter is not read.
+/// Owner line: R13, the named killer of BIND-2b's N3 (`is_local_w` without its envw half: the mutant reads the module `A`, `A P=c1`) ; PRE E3009 rc 1 (loud where iverilog folds 01: JOINS §2 const-fn-local-unbound-width, structure only)
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=01` / `t.sv:9: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
+#[test]
+fn k9() {
+    check(
+        "k9",
+        r##"module top;
+  localparam logic [11:4] A = 8'h3C;
+  function automatic int g(input int n); g = n; endfunction
+  function automatic logic [7:0] f(input int a);
+    logic [g(8)-1:0] A = 5;
+    f = {A[7:4], 4'h1};
+  endfunction
+  localparam logic [7:0] P = f(0);
+  initial begin #1 $display("A P=%h", P); $finish; end
+endmodule
+"##,
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:8:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// L4 width 0 = unknown (lane cell `k10_concat_w0_local_beside_param`) -- a local of unknown width (`logic [g(4)-1:0] t;`, bound by `t = a`) as a concat operand beside a module localparam `t`: `const_placement_wide` reads its `shape` (0, false) and declines instead of falling to the module's `t`.
+/// Owner line: R13, the named killer of BIND-2b's N7 (`shape` reading width 0 as undeclared: the mutant reads the module `t`, `A P=51`) ; PRE E3009 rc 1 (loud where iverilog folds 21: JOINS §2 const-fn-local-unbound-width, structure only)
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=21` / `t.sv:10: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHTRUNC: t.sv:6:7: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.`.
+#[test]
+fn k10() {
+    check(
+        "k10",
+        r##"module top;
+  localparam logic [3:0] t = 4'h5;
+  function automatic int g(input int n); g = n; endfunction
+  function automatic logic [7:0] f(input int a);
+    logic [g(4)-1:0] t;
+    t = a;
+    f = {t, 4'h1};
+  endfunction
+  localparam logic [7:0] P = f(2);
+  initial begin #1 $display("A P=%h", P); $finish; end
+endmodule
+"##,
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:9:30: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]
 errors=1 warnings=1 notes=0
 "##,
         1,

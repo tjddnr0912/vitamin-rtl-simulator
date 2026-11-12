@@ -491,7 +491,7 @@ impl Elaborator<'_> {
                             // ⚠️ Only the SPECIAL cases delegate, never the whole node: a
                             // plain `(4'd15 + 4'd1) > 0` must keep this walk's width-honest
                             // 0 and not the unlimited domain's 1.
-                            if fr.env().is_empty() && fr.widths().is_empty() {
+                            if fr.is_empty() {
                                 if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
                                     return Some(v);
                                 }
@@ -598,7 +598,7 @@ impl Elaborator<'_> {
                     | ast::UnOp::RedXnor),
                 operand,
             } => (|| -> Option<i64> {
-                let local = |n: &str| fr.env().contains_key(n) || fr.widths().contains_key(n);
+                let local = |n: &str| fr.is_local(n);
                 if !ast_names_any(operand, &local) {
                     return self.selfdet_bits_i64(e);
                 }
