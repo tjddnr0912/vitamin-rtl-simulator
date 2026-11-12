@@ -530,7 +530,7 @@ impl Elaborator<'_> {
             let key = self.fq(cname);
             saved_p.push((key.clone(), self.bind_param_value(key.clone(), v)));
             if let Some(&m) = metas.get(cname) {
-                saved_m.push((key.clone(), self.param_meta.insert(key, m)));
+                saved_m.push((key.clone(), self.set_meta(key, m)));
             }
         }
         // The wide side map gets the same scoped registration. `wide_param_bits` is
@@ -547,7 +547,7 @@ impl Elaborator<'_> {
                 continue;
             }
             let key = self.fq(&cname);
-            self.wide_param_bits.insert(key, cv);
+            self.set_wide_raw(key, cv);
         }
         (saved_p, saved_m)
     }
@@ -801,7 +801,7 @@ impl Elaborator<'_> {
                         // Live for the rest of THIS package's fold, so a sibling
                         // `parameter real R2 = R*2.0;` resolves; restored below with the
                         // integer and meta entries so nothing leaks into module scope.
-                        saved_real.push((key.clone(), self.real_param_val.insert(key.clone(), rv)));
+                        saved_real.push((key.clone(), self.set_real(key.clone(), rv)));
                         real_vals.insert(p.name.name.clone(), rv);
                         if let Some(i) = exact {
                             saved.push((key.clone(), self.bind_param_value(key.clone(), i)));
@@ -810,10 +810,7 @@ impl Elaborator<'_> {
                         continue;
                     }
                     if let Some(raw) = self.param_str_or_folded(p, false) {
-                        saved_str.push((
-                            key.clone(),
-                            self.str_param_raw.insert(key.clone(), raw.clone()),
-                        ));
+                        saved_str.push((key.clone(), self.set_str(key.clone(), raw.clone())));
                         str_vals.insert(p.name.name.clone(), raw);
                         continue;
                     }
@@ -831,17 +828,15 @@ impl Elaborator<'_> {
                     // identity and stays usable as a width and a bound.
                     {
                         if let Some(cv) = self.wide_disagreeing_value(&p.value, pmeta, folded) {
-                            saved_wide.push((
-                                key.clone(),
-                                self.wide_param_bits.insert(key.clone(), cv.clone()),
-                            ));
+                            saved_wide
+                                .push((key.clone(), self.set_wide_raw(key.clone(), cv.clone())));
                             wide_vals.insert(p.name.name.clone(), cv);
                             if let Some(r) = self.param_decl_range_opt(p, true) {
                                 const_range.insert(p.name.name.clone(), r);
                             }
                             if let Some(m) = pmeta {
                                 const_meta.insert(p.name.name.clone(), m);
-                                saved_meta.push((key.clone(), self.param_meta.insert(key, m)));
+                                saved_meta.push((key.clone(), self.set_meta(key, m)));
                             }
                             continue;
                         }
@@ -874,12 +869,12 @@ impl Elaborator<'_> {
                     // A package constant has no override channel.
                     if let Some(r) = self.param_decl_range_opt(p, true) {
                         const_range.insert(p.name.name.clone(), r);
-                        saved_range.push((key.clone(), self.param_range.insert(key.clone(), r)));
+                        saved_range.push((key.clone(), self.set_range_raw(key.clone(), r)));
                     } else {
                         // Set-or-CLEAR, the same discipline `param_meta` follows two
                         // lines down: a stale same-name entry from another scope must
                         // not answer for this declaration.
-                        saved_range.push((key.clone(), self.param_range.remove(&key)));
+                        saved_range.push((key.clone(), self.clear_range_raw(&key)));
                     }
                     if let Some(m) = self.param_decl_width_unoverridden(p) {
                         const_meta.insert(p.name.name.clone(), m);
@@ -887,9 +882,9 @@ impl Elaborator<'_> {
                         // alias/expression (the ident/`const_expr_signed` arms read
                         // `param_meta`). Set-or-CLEAR so a stale same-name entry from
                         // another scope can't leak in on the no-meta path.
-                        saved_meta.push((key.clone(), self.param_meta.insert(key, m)));
+                        saved_meta.push((key.clone(), self.set_meta(key, m)));
                     } else {
-                        saved_meta.push((key.clone(), self.param_meta.remove(&key)));
+                        saved_meta.push((key.clone(), self.clear_meta(&key)));
                     }
                 }
                 ast::ModuleItem::Typedef(td) => {
@@ -999,10 +994,8 @@ impl Elaborator<'_> {
                                 // `0003`, losing the high label, where both oracles give
                                 // `fe03`. Save/restore like every other entry here, so
                                 // nothing leaks past the package.
-                                saved_meta.push((
-                                    key.clone(),
-                                    self.param_meta.insert(key.clone(), (w, *signed)),
-                                ));
+                                saved_meta
+                                    .push((key.clone(), self.set_meta(key.clone(), (w, *signed))));
                             }
                             saved.push((key, prev));
                             if let Some(r) = base_range {
@@ -1144,60 +1137,25 @@ impl Elaborator<'_> {
         // set-or-REMOVE, so a package param can never outlive its package under a bare
         // key that a module-scope read would walk into.
         for (k, prev) in saved_real.into_iter().rev() {
-            match prev {
-                Some(v) => {
-                    self.real_param_val.insert(k, v);
-                }
-                None => {
-                    self.real_param_val.remove(&k);
-                }
-            }
+            self.put_back_real(k, prev);
         }
         for (k, prev) in saved_str.into_iter().rev() {
-            match prev {
-                Some(v) => {
-                    self.str_param_raw.insert(k, v);
-                }
-                None => {
-                    self.str_param_raw.remove(&k);
-                }
-            }
+            self.put_back_str(k, prev);
         }
         // Restore param_meta — the package's params were made live only for
         // intra-package alias resolution above; module-scope reads use
         // `pkg_const_meta` (persisted below), so these entries must not linger.
         for (k, prev) in saved_meta.into_iter().rev() {
-            match prev {
-                Some(m) => {
-                    self.param_meta.insert(k, m);
-                }
-                None => {
-                    self.param_meta.remove(&k);
-                }
-            }
+            self.put_back_meta(k, prev);
         }
         for (k, prev) in saved_range.into_iter().rev() {
-            match prev {
-                Some(r) => {
-                    self.param_range.insert(k, r);
-                }
-                None => {
-                    self.param_range.remove(&k);
-                }
-            }
+            self.put_back_range_raw(k, prev);
         }
         // The wide entries were made live for intra-package siblings (`localparam
         // [127:0] M = ~K;`) exactly as the string and real ones are; module-scope
         // reads go through `pkg_wide_bits`, so these must not linger either.
         for (k, prev) in saved_wide.into_iter().rev() {
-            match prev {
-                Some(cv) => {
-                    self.wide_param_bits.insert(k, cv);
-                }
-                None => {
-                    self.wide_param_bits.remove(&k);
-                }
-            }
+            self.put_back_wide(k, prev);
         }
         self.cur_prefix = saved_prefix;
         self.decl_keep_restore(kept);
@@ -1460,7 +1418,7 @@ impl Elaborator<'_> {
                                 self.symbols.remove(&key);
                             }
                             if adjacent {
-                                self.wide_param_bits.remove(&key);
+                                self.clear_wide_raw(&key);
                             }
                             wc_origin.insert(key, (String::new(), scope_seg));
                         }
@@ -1469,7 +1427,7 @@ impl Elaborator<'_> {
                         WildcardPrior::Fresh => {
                             saved_params.push((key.clone(), self.bind_param_value(key.clone(), v)));
                             if let Some(m) = meta {
-                                self.param_meta.insert(key.clone(), m);
+                                self.set_meta(key.clone(), m);
                             }
                             // The DECLARED range travels with the value, so a select
                             // of the bare-imported name normalizes against the
@@ -1512,7 +1470,7 @@ impl Elaborator<'_> {
                         // localparam int A = P; import pb::*;`) the first package's
                         // `P` is the binding every oracle answers (`rp A=3 P=3`).
                         WildcardPrior::Other { adjacent } => {
-                            self.wide_param_bits.remove(&key);
+                            self.clear_wide_raw(&key);
                             if adjacent {
                                 let prev_val = self.unbind_param(&key);
                                 saved_params.push((key.clone(), prev_val));
@@ -1524,14 +1482,14 @@ impl Elaborator<'_> {
                         }
                         WildcardPrior::SamePackage => {}
                         WildcardPrior::Fresh => {
-                            self.wide_param_bits.insert(key.clone(), cv);
+                            self.set_wide_raw(key.clone(), cv);
                             if let Some(m) = self
                                 .pkg_const_meta
                                 .get(pkg)
                                 .and_then(|mm| mm.get(&name))
                                 .copied()
                             {
-                                self.param_meta.insert(key.clone(), m);
+                                self.set_meta(key.clone(), m);
                             }
                             wc_origin.insert(key, (pkg.to_string(), scope_seg));
                         }
@@ -1565,7 +1523,7 @@ impl Elaborator<'_> {
                                 self.symbols.remove(&key);
                             }
                             if adjacent {
-                                self.wide_param_bits.remove(&key);
+                                self.clear_wide_raw(&key);
                             }
                             wc_origin.insert(key, (String::new(), scope_seg));
                         }
@@ -1705,9 +1663,9 @@ impl Elaborator<'_> {
                         .and_then(|mm| mm.get(&sym.name))
                         .copied()
                     {
-                        self.param_meta.insert(key.clone(), m);
+                        self.set_meta(key.clone(), m);
                     }
-                    self.wide_param_bits.insert(key, cv);
+                    self.set_wide_raw(key, cv);
                 } else if let Some(&v) = consts.get(&sym.name) {
                     explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
                     // A2b-prereq S4 (symmetric): an explicit CONST import wins
@@ -1724,7 +1682,7 @@ impl Elaborator<'_> {
                         .and_then(|mm| mm.get(&sym.name))
                         .copied()
                     {
-                        self.param_meta.insert(key.clone(), m);
+                        self.set_meta(key.clone(), m);
                     }
                     // Same pairing as the wildcard arm: the declared range binds with
                     // the value it describes, or the key is cleared.
@@ -1771,7 +1729,7 @@ impl Elaborator<'_> {
                             let prev = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev));
                             self.pkg_var_aliases.remove(&key);
-                            self.wide_param_bits.remove(&key);
+                            self.clear_wide_raw(&key);
                         }
                         explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
                         self.symbols.insert(key.clone(), net);

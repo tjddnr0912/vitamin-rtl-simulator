@@ -308,13 +308,13 @@ impl Elaborator<'_> {
                 // NON-negative 32-bit value the signed and unsigned readings are the
                 // same bits, so only an expression whose intermediate goes negative
                 // can move at all.
-                let saved_meta = self.param_meta.insert(gv_key.clone(), (32, true));
+                let saved_meta = self.set_meta(gv_key.clone(), (32, true));
                 // …and a genvar HIDES an outer REAL constant of its name, which shares
                 // this key: the name walk (`bare_ident_route`) and the real fold read the
                 // real map before `params`, so `localparam real N = 2.5; for (genvar N =
                 // 0; …) sub #(.P(N))` bound the outer 2.5 where both oracles bind the
                 // genvar. Suspended for the loop and restored with the rest.
-                let saved_real = self.real_param_val.remove(&gv_key);
+                let saved_real = self.clear_real(&gv_key);
 
                 let mut idx_count: u32 = 0;
                 loop {
@@ -423,16 +423,9 @@ impl Elaborator<'_> {
                     }
                 }
                 if let Some(r) = saved_real {
-                    self.real_param_val.insert(gv_key.clone(), r);
+                    self.set_real(gv_key.clone(), r);
                 }
-                match saved_meta {
-                    Some(m) => {
-                        self.param_meta.insert(gv_key, m);
-                    }
-                    None => {
-                        self.param_meta.remove(&gv_key);
-                    }
-                }
+                self.put_back_meta(gv_key, saved_meta);
             }
 
             // ── generate-if: const-eval cond, take ONE branch ────────
@@ -797,9 +790,9 @@ impl Elaborator<'_> {
                 // Idempotent across generate phases, like the integer arm.
                 if let Some((rv, exact)) = self.param_real_value(p) {
                     let key = self.fq(&p.name.name);
-                    self.real_param_val.insert(key.clone(), rv);
+                    self.set_real(key.clone(), rv);
                     if let Some(i) = exact {
-                        self.hier_params.insert(key.clone(), i);
+                        self.publish_hier(key.clone(), i);
                         self.bind_param_value(key, i);
                     }
                     return;
@@ -809,7 +802,7 @@ impl Elaborator<'_> {
                 // inside a generate block is loud on its own declared default.
                 if let Some(raw) = self.param_str_or_folded(p, false) {
                     let key = self.fq(&p.name.name);
-                    self.str_param_raw.insert(key, raw);
+                    self.set_str(key, raw);
                     return;
                 }
                 // A generate-scope parameter has no override channel, so its
@@ -834,29 +827,28 @@ impl Elaborator<'_> {
                         // this scope has no override channel, so `meta` is authoritative.
                         let v = self.coerce_param_value_with(v, meta);
                         let key = self.fq(&p.name.name);
-                        self.hier_params.insert(key.clone(), v);
-                        // ⚠️ The declared width/sign and range were NOT recorded here,
-                        // while both the module-body and header paths record them. So a
+                        // DECL-ORDER (`bound/write.rs`), as the module-body and header
+                        // paths. ⚠️ The declared width/sign and range were once NOT
+                        // recorded here, while both those paths record them. So a
                         // generate-scope `localparam logic [1:0] M = 2'b01;` read back
                         // as 32 bits — `$display("%b", M)` printed thirty leading zeros
                         // where iverilog prints `01`, and the same width feeds concats
                         // and comparisons. Value right, width silently wrong.
-                        if let Some(m) = meta {
-                            self.param_meta.insert(key.clone(), m);
-                        }
-                        // This scope has NO override channel, so the declared default is
-                        // always what binds — see `param_decl_range_opt`.
-                        let r = self.param_decl_range_opt(p, true);
-                        self.bind_param_value(key.clone(), v);
-                        self.bind_param_range(&key, r);
-                        // untyped only: a TYPED derived constant carries a declared
-                        // type, which both oracles honour whatever its value was
-                        // folded from.
-                        if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
-                            && self.ast_reads_guessed_param(&p.value)
-                        {
-                            self.param_type_guessed.insert(key.clone());
-                        }
+                        self.bind_decl(
+                            &key,
+                            v,
+                            meta,
+                            // This scope has NO override channel, so the declared default
+                            // is always what binds — see `param_decl_range_opt`.
+                            |me| me.param_decl_range_opt(p, true),
+                            // untyped only: a TYPED derived constant carries a declared
+                            // type, which both oracles honour whatever its value was
+                            // folded from.
+                            |me| {
+                                matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
+                                    && me.ast_reads_guessed_param(&p.value)
+                            },
+                        );
                     }
                     None => {
                         // Wider than the i64 domain — see `wide_param_bits`. Reached

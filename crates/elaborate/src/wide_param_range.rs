@@ -39,23 +39,6 @@ impl Elaborator<'_> {
         (r.1 == width).then_some(r)
     }
 
-    /// Install a >64-bit parameter value at `key` and set — or CLEAR — its
-    /// hierarchical select range. Descending ranges only: the hierarchical select
-    /// refuses an ascending declaration (`build_hier_param_select`), so recording one
-    /// would turn `u.A[12]` on `logic [12:83] A` from its pre-existing positional
-    /// reading into an error (ROADMAP §2).
-    pub(crate) fn bind_wide_param(&mut self, key: String, cv: ir::ConstVal, r: Option<DeclRange>) {
-        match r {
-            Some(r) if !r.2 => {
-                self.hier_param_range.insert(key.clone(), r);
-            }
-            _ => {
-                self.hier_param_range.remove(&key);
-            }
-        }
-        self.wide_param_bits.insert(key, cv);
-    }
-
     /// [`Self::bind_wide_param`] for a declaration: the range from
     /// [`Self::wide_param_decl_range`].
     pub(crate) fn bind_wide_param_decl(

@@ -44,6 +44,8 @@ use sim_ir as ir;
 /// locals, and `Stmt` is frozen). This caps the unroll so a `repeat(1_000_000)`
 // ---- split modules (mechanical refactor; see the module-size policy note in the crate docs) ----
 mod api;
+mod bound;
+use bound::Bound;
 mod array_formal;
 mod array_geom;
 mod arrays;
@@ -800,7 +802,7 @@ struct Elaborator<'s> {
     repl_zero_ok: bool,
     // FQ param-name → const value, visible while lowering an instance scope.
     // Re-points the v1 free `const_eval_u32` SLOT so `[W-1:0]` folds to a width.
-    params: BTreeMap<String, i64>,
+    params: Bound<BTreeMap<String, i64>>,
     /// V33-3 (DIAGNOSTIC ONLY): scoped key of every name bound as an enum LABEL →
     /// the NAME of the enum type that declared it. The subset of `params` that came
     /// from a `typedef enum {…}` rather than a `parameter`/`localparam`, plus the one
@@ -842,34 +844,36 @@ struct Elaborator<'s> {
     // `localparam logic [63:0] P = '1` is a 64-bit all-ones const, not `ffffffff`
     // (IEEE §6.20.2). Parallel-keyed to `params`; absent ⇒ value-inference.
     // elaborate-LOCAL (golden-neutral — only changes a typed param's const width).
-    param_meta: BTreeMap<String, (u32, bool)>,
+    param_meta: Bound<BTreeMap<String, (u32, bool)>>,
     // FQ param-name → its DECLARED packed range `(lo, width, ascending)` — for a
     // NON-zero-LSB param (`localparam [15:8] P`), so a bit/part-select `P[15:12]`
     // normalizes its offset against the declared LSB like a net (the param twin of
-    // the struct/interface `dbase`). Only NON-zero-LSB params are inserted — an
-    // absent entry means the classic `[N:0]`/zero-LSB raw offset (byte-identical).
+    // the struct/interface `dbase`). `bind_param_range` inserts ANY declared range
+    // (a zero-LSB one too) and clears it for an undeclared one, so an absent entry
+    // means the classic `[N:0]`/zero-LSB raw offset OR a width that is not a declared
+    // fact (RANGE-ABSENT, two meanings: `bound/mod.rs`). Written only in `bound/`.
     // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
     // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
-    param_range: BTreeMap<String, DeclRange>,
+    param_range: Bound<BTreeMap<String, DeclRange>>,
     // §2 🆕 M ⓒ: the PERSISTENT twin of `param_range` for a HIERARCHICAL select
     // (`u.N[7:4]` on `parameter [11:4] N`), written and cleared exactly where
     // `param_range` is (`bind_param_range` / `bind_param_value`) but never restored
     // out at an instance boundary — the same reason `param_meta` persists. Keyed
     // like `hier_params`; resolved by `hier_resolve`. elaborate-LOCAL.
-    hier_param_range: BTreeMap<String, DeclRange>,
+    hier_param_range: Bound<BTreeMap<String, DeclRange>>,
     // N5: FQ param-name → RAW string literal for a `string`-typed / string-valued
     // parameter (`localparam string S = "abc"` and the untyped `localparam S = "abc"`).
     // A string param has NO i64 value, so it is kept out of `self.params` and stored
     // here; an Ident that resolves to such a param re-emits the SAME `StrUtf8` const
     // `parse_str_literal(raw)` would (so `S == "abc"` is byte-identical). elaborate-LOCAL.
-    str_param_raw: BTreeMap<String, String>,
+    str_param_raw: Bound<BTreeMap<String, String>>,
     /// r19: a REAL-valued parameter/localparam, keyed FQ, holding the FOLDED f64.
     /// Mirrors `str_param_raw`'s side-map design: a real has no i64 value, so it is
     /// kept out of `params` and resolved before the numeric param path. Stores the
     /// VALUE, not the raw text — building raw text by concatenation manufactured
     /// non-grammar strings (`-(-1.25)` became `"--1.25"`), which `parse_real_literal`
     /// silently turns into 0.0.
-    real_param_val: BTreeMap<String, f64>,
+    real_param_val: Bound<BTreeMap<String, f64>>,
     /// FQ keys of nets created by the v1 procedural block-local FLATTEN
     /// (`hoist_block_local_nets`) → the SOURCE SPAN of each declaring block.
     ///
@@ -973,7 +977,7 @@ struct Elaborator<'s> {
     // PERSISTENT FQ param-name → value, NEVER restored (unlike `params`). Lets a
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).
-    hier_params: BTreeMap<String, i64>,
+    hier_params: Bound<BTreeMap<String, i64>>,
     // Family D (r17): PERSISTENT FULLY-QUALIFIED `<instance-path>.<fname>` → per-instance
     // FuncId, NEVER restored. Only HIER-CALLABLE framed functions (input-only scalar
     // formals, non-string return) are registered — a call resolving to anything else
@@ -1170,7 +1174,7 @@ struct Elaborator<'s> {
     // folded. Deliberately NOT registered in `params`: a >64-bit name used as a width,
     // a bound or a generate condition must stay LOUD rather than silently truncate to
     // its low 64 bits, so only the expression reader consults this.
-    wide_param_bits: BTreeMap<String, ir::ConstVal>,
+    wide_param_bits: Bound<BTreeMap<String, ir::ConstVal>>,
     // R19-X1: the scope prefix in force when `func_table`/`task_table` were collected —
     // i.e. the scope in which every function/task in them is DECLARED. Saved/restored
     // with those tables. Read only by `default_binding_matches_decl_scope`: a filled
@@ -1608,7 +1612,7 @@ struct Elaborator<'s> {
     // parameter / localparam whose initializer reads one. The size-cast classifier
     // answers `None` for these (the pre-slice route); everything else that reads
     // `param_meta` is unchanged. Cleared by `bind_param_value` like `param_range`.
-    param_type_guessed: BTreeSet<String>,
+    param_type_guessed: Bound<BTreeSet<String>>,
     // Output/inout task formal NAME → caller NetId. Consulted in BOTH `lower_expr`
     // (read) and `collect_lval_chunks` (write) so a formal resolves to the caller's
     // net in either position. Symmetric Vec stack with `subst`.

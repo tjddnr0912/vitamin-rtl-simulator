@@ -567,7 +567,7 @@ impl Elaborator<'_> {
                         if self.param_real_value(pp).is_some() {
                             let key = self.fq(&pp.name.name);
                             if let Some(&i) = self.params.get(&key) {
-                                self.hier_params.insert(key, i);
+                                self.publish_hier(key, i);
                             }
                         }
                     }

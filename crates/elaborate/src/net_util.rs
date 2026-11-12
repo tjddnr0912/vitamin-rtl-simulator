@@ -608,10 +608,7 @@ impl Elaborator<'_> {
                     self.enum_label_types
                         .insert(key.clone(), td.name.name.clone());
                     if let Some(w) = base_w {
-                        saved_meta.push((
-                            key.clone(),
-                            self.param_meta.insert(key.clone(), (w, *signed)),
-                        ));
+                        saved_meta.push((key.clone(), self.set_meta(key.clone(), (w, *signed))));
                     }
                     let prev = self.bind_param_value(key.clone(), v);
                     self.bind_param_range(&key, base_range);

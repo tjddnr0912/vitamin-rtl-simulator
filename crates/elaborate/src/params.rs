@@ -870,69 +870,6 @@ impl Elaborator<'_> {
         Some(f.decl_range())
     }
 
-    /// Bind a constant VALUE at `key`, and CLEAR any declared range recorded for the
-    /// binding it replaces. **Every binder of `self.params` goes through here** — the
-    /// header, body, generate, enum-label, genvar, real-twin, package and import
-    /// binders alike — so the side map cannot be left describing a declaration that is
-    /// no longer bound. A binder that HAS a range calls [`Self::bind_param_range`]
-    /// immediately after; the debug assert there is what keeps that order.
-    ///
-    /// ⚠️ The class this closes was created by this slice and measured by the review.
-    /// `param_range` is keyed exactly like `params`, and before imports bound a range
-    /// no OTHER writer could rebind a ranged key — the FQ key made every scope
-    /// disjoint. A wildcard `import pk::*` breaks that: it binds a package
-    /// declaration at the module's OWN key, and then a local enum label, a genvar, a
-    /// real parameter's integer twin or a body parameter rebinds the same key one
-    /// phase later. Two of those were live correct→silent-wrong:
-    /// `import pk::*` over `parameter [39:8] W` plus a local
-    /// `enum { W = 32'hDEADBEEF }` answered `W[15:8]` = 239 where all three tools had
-    /// said 190, and the genvar spelling answered 8 where all three had said 0.
-    /// Clearing at 3 of ~13 binders was the wrong shape: the fix is that there is only
-    /// one binder.
-    pub(crate) fn bind_param_value(&mut self, key: String, v: i64) -> Option<i64> {
-        self.param_range.remove(&key);
-        self.hier_param_range.remove(&key);
-        self.param_type_guessed.remove(&key);
-        self.params.insert(key, v)
-    }
-
-    /// Unbind `key` — the value and the range together, for the same reason.
-    pub(crate) fn unbind_param(&mut self, key: &str) -> Option<i64> {
-        self.param_range.remove(key);
-        self.params.remove(key)
-    }
-
-    /// Bind (or CLEAR) the declared range of the param now bound at `key`.
-    ///
-    /// ⚠️ The clear is the point. `param_range` answers *"is this param's width a
-    /// declared fact?"*, and that question is about the declaration currently bound
-    /// at the key — so every writer of `self.params` that could REBIND a key another
-    /// writer already ranged has to say which it is. Imports made that reachable: a
-    /// wildcard `import pk::*` binds `pk`'s `parameter [31:0] W` at `top.W`, and a
-    /// module-body `localparam W = ~8'hCB;` then rebinds the VALUE two phases later
-    /// (3a.5 imports, 3b body params). Leaving the package's range behind would let
-    /// `W[15:8]` extract bits of a 32-bit declaration out of an 8-bit value — the
-    /// §4.5.363 "263-bit net" regression, arriving through the import door.
-    pub(crate) fn bind_param_range(&mut self, key: &str, r: Option<DeclRange>) {
-        // The range describes the binding that is THERE. Writing it before the value
-        // would be silently undone by `bind_param_value`'s clear, so the order is part
-        // of the contract and this is what enforces it across every call site.
-        debug_assert!(
-            self.params.contains_key(key),
-            "bind_param_range({key}) before the value was bound"
-        );
-        match r {
-            Some(r) => {
-                self.param_range.insert(key.to_string(), r);
-                self.hier_param_range.insert(key.to_string(), r);
-            }
-            None => {
-                self.param_range.remove(key);
-                self.hier_param_range.remove(key);
-            }
-        }
-    }
-
     /// If `base` is a bare param/localparam Ident with a recorded non-zero-LSB
     /// declared range, return `(lo, width, ascending)` — resolved by the SAME
     /// `walk_scopes` as the param's value (`lookup_scoped`) and meta (`param_meta`),
@@ -1761,7 +1698,7 @@ impl Elaborator<'_> {
         ov: i64,
         saved: &mut Vec<(String, Option<i64>)>,
     ) -> i64 {
-        self.real_param_val.insert(key.clone(), rv);
+        self.set_real(key.clone(), rv);
         let view = if rv == crate::const_real::i64_to_real(ov) {
             Some(ov)
         } else {
@@ -1938,7 +1875,7 @@ impl Elaborator<'_> {
             };
             if let Some(raw) = str_val {
                 let key = self.fq(&p.name.name);
-                self.str_param_raw.insert(key, raw);
+                self.set_str(key, raw);
                 return;
             }
             // r19: a REAL-valued header parameter (`#(parameter real R = 1.5)`) has no
@@ -1985,7 +1922,7 @@ impl Elaborator<'_> {
                 {
                     let key = self.fq(&p.name.name);
                     let hier = self.bind_real_override(key.clone(), rv, ov, saved);
-                    self.hier_params.insert(key, hier);
+                    self.publish_hier(key, hier);
                     return;
                 }
             }
@@ -1998,7 +1935,7 @@ impl Elaborator<'_> {
                     .get(p.name.name.as_str())
                     .and_then(|t| crate::const_wide::str_raw_real(t))
                 {
-                    self.real_param_val.insert(key.clone(), rv);
+                    self.set_real(key.clone(), rv);
                     return;
                 }
                 // A FILL override is one unsigned bit in this self-determined position
@@ -2010,8 +1947,7 @@ impl Elaborator<'_> {
                     .get(p.name.name.as_str())
                     .and_then(|(k, raw)| fill_to_i64(*k, raw, 1))
                 {
-                    self.real_param_val
-                        .insert(key.clone(), crate::const_real::i64_to_real(fv));
+                    self.set_real(key.clone(), crate::const_real::i64_to_real(fv));
                     saved.push((key.clone(), self.bind_param_value(key, fv)));
                     return;
                 }
@@ -2075,7 +2011,7 @@ impl Elaborator<'_> {
                 // Bind the declared default anyway: on the error paths the run already
                 // fails, and leaving the name unbound raised a second, misleading
                 // "undeclared net/variable" at every downstream read.
-                self.real_param_val.insert(key.clone(), v);
+                self.set_real(key.clone(), v);
                 if let Some(i) = exact {
                     // Twin of the override arm above: the LOCAL integer view, with the
                     // same measured caveat. Nothing here is published for a hierarchical
@@ -2452,136 +2388,104 @@ impl Elaborator<'_> {
             let key = self.fq(&p.name.name);
             // Persistent copy for hierarchical reads (`dut.WIDTH`) — `self.params`
             // is restored after the instance, so the read side needs this.
-            self.hier_params.insert(key.clone(), v);
-            if let Some(m) = meta {
-                self.param_meta.insert(key.clone(), m);
-            }
-            // `default_binds` is the same flag `meta` was computed with a few lines up:
-            // an overridden header parameter's initializer no longer supplies its width.
-            // An OVERRIDE supplies one instead — that is what §6.20.2 says the range of
-            // an untyped parameter is, and the wide channel is the only one carrying it.
-            //
-            // …and the wide channel is NOT the only channel carrying one. An operator
-            // top (`#(.Q(~8'h5A))`) arrives through `ovr_self_meta` and a fill through
-            // the fill arm; neither writes `ovr.bits`. While the literal arm of
-            // `param_decl_width_opt` still answered on this lane those two were
-            // covered by accident — the default literal's width happened to equal the
-            // override's — and gating that arm off would have left them with NO range
-            // at all, which is the same `narrow_param_bits` decline in the other
-            // direction (measured: `mid #(parameter Q = 8'd1)` + `#(.Q(~8'h5A))`
-            // forwarding `#(.P(~Q))`, correct at 8 today, would have dropped to 32).
-            // `meta` is the one place every override channel has already agreed on a
-            // width, so the range records exactly it — which is also the agreement
-            // `narrow_param_bits` tests. Scoped to the untyped, unranged, overridden
-            // lane: a declared range or type answers in `param_decl_range_opt` above,
-            // and an UNFOLDABLE declared bound must keep declining rather than take a
-            // width from the override.
-            let range = self
-                .param_decl_range_opt(p, default_binds)
-                .or_else(|| {
-                    (!default_binds)
-                        .then(|| ovr.bits.get(p.name.name.as_str()))
-                        .flatten()
-                        .map(|c| (0, c.width, false))
-                })
-                .or_else(|| {
-                    if default_binds
-                        || !matches!(p.ty, ast::ParamType::Implicit)
-                        || p.dtype.range.is_some()
-                    {
-                        return None;
-                    }
-                    meta.map(|(w, _)| (0, w, false))
-                });
-            let prev = self.bind_param_value(key.clone(), v);
-            self.bind_param_range(&key, range);
-            // An override reached an UNTYPED declaration and no override channel typed
-            // it: the meta recorded above is the default literal's, not the override's
-            // (§6.20.2) — mark the type a guess so a consumer that must not extend by a
-            // guessed sign declines. An override the WIDE channel (`ovr_bits`, the
-            // self-determined width) or the OPERATOR channel (`override_self_meta`,
-            // Table 11-21, with its value re-folded at that type) typed is not a guess:
-            // marking it one sent `64'(-P)` over `#(.P(32'hF0F0F0F0))` onto an untyped
-            // `parameter P = 5` down the pre-slice route, which computes at 32 bits and
-            // zero-extends (`000000000f0f0f10`, both oracles `ffffffff0f0f0f10`).
-            //
-            // ⚠️ Except a SIGNED override onto a declaration with no `signed` keyword.
-            // `p.dtype.signed` is false both for "no keyword" (the override's sign binds) and
-            // for the `unsigned` keyword (§12.2.1: the keyword survives the override),
-            // and the AST cannot tell them apart (ROADMAP §2 records the missing field),
-            // so the recorded sign may be wrong there. Un-guessing that combination
-            // fixed `64'(~(P + 32'd1))` over `#(.P(-3))` (`0000000000000001`, both
-            // oracles `ffffffff00000001`) and, on `parameter unsigned P = 1` +
-            // `#(.P(-8'sd91))`, turned the right `64'(P >> 1)` = `0000000000000052`
-            // into `7fffffffffffffd2` — trading one silent-wrong for another. It stays
-            // a guess until the declaration's own keyword is visible here.
-            // …and a header-list SIBLING that is untyped and derives from a guessed one
-            // (`#(parameter P = 5, parameter Q = P + 1)`) inherits the guess: its
-            // value was folded from the guessed binding and its meta inferred from
-            // that value. Typed declarations carry a declared type and are facts.
-            // A FILL types the override too — one unsigned bit, the fill arm of the meta
-            // chain above — so it is not a guess: the size-cast classifier then reads that
-            // bit instead of taking the pre-slice route, which read `64'(-P)` over
-            // `#(.P('1))` as `0000000000000001` where both oracles give all ones. Not onto
-            // a `signed` keyword, whose fill the chain above still records unsigned (both
-            // oracles bind the signed −1): that record is not a fact, so it stays a guess.
-            let fill_types = matches!(p.ty, ast::ParamType::Implicit)
-                && p.dtype.range.is_none()
-                && !p.dtype.signed
-                && ovr_fill.contains_key(p.name.name.as_str());
-            let typed_sign = if fill_types {
-                Some(false)
-            } else if ovr_bits_binds {
-                ovr_bits.map(|c| c.signed)
-            } else if self_meta_binds && ovr_self_val.is_some() {
-                ovr_self_meta.map(|(_, s)| s)
-            } else {
-                None
-            };
-            let override_typed = typed_sign.is_some_and(|s| !s || p.dtype.signed);
-            let guessed = if default_binds {
-                self.ast_reads_guessed_param(&p.value)
-            } else {
-                !override_typed
-            };
-            if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time) && guessed {
-                self.param_type_guessed.insert(key.clone());
-            }
+            // DECL-ORDER (`bound/write.rs`): the hier copy, the meta, the range, the
+            // value, the range bound, the guessed mark.
+            let prev = self.bind_decl(
+                &key,
+                v,
+                meta,
+                // `default_binds` is the same flag `meta` was computed with a few lines up:
+                // an overridden header parameter's initializer no longer supplies its width.
+                // An OVERRIDE supplies one instead — that is what §6.20.2 says the range of
+                // an untyped parameter is, and the wide channel is the only one carrying it.
+                //
+                // …and the wide channel is NOT the only channel carrying one. An operator
+                // top (`#(.Q(~8'h5A))`) arrives through `ovr_self_meta` and a fill through
+                // the fill arm; neither writes `ovr.bits`. While the literal arm of
+                // `param_decl_width_opt` still answered on this lane those two were
+                // covered by accident — the default literal's width happened to equal the
+                // override's — and gating that arm off would have left them with NO range
+                // at all, which is the same `narrow_param_bits` decline in the other
+                // direction (measured: `mid #(parameter Q = 8'd1)` + `#(.Q(~8'h5A))`
+                // forwarding `#(.P(~Q))`, correct at 8 today, would have dropped to 32).
+                // `meta` is the one place every override channel has already agreed on a
+                // width, so the range records exactly it — which is also the agreement
+                // `narrow_param_bits` tests. Scoped to the untyped, unranged, overridden
+                // lane: a declared range or type answers in `param_decl_range_opt` above,
+                // and an UNFOLDABLE declared bound must keep declining rather than take a
+                // width from the override.
+                |me| {
+                    me.param_decl_range_opt(p, default_binds)
+                        .or_else(|| {
+                            (!default_binds)
+                                .then(|| ovr.bits.get(p.name.name.as_str()))
+                                .flatten()
+                                .map(|c| (0, c.width, false))
+                        })
+                        .or_else(|| {
+                            if default_binds
+                                || !matches!(p.ty, ast::ParamType::Implicit)
+                                || p.dtype.range.is_some()
+                            {
+                                return None;
+                            }
+                            meta.map(|(w, _)| (0, w, false))
+                        })
+                },
+                // An override reached an UNTYPED declaration and no override channel typed
+                // it: the meta recorded above is the default literal's, not the override's
+                // (§6.20.2) — mark the type a guess so a consumer that must not extend by a
+                // guessed sign declines. An override the WIDE channel (`ovr_bits`, the
+                // self-determined width) or the OPERATOR channel (`override_self_meta`,
+                // Table 11-21, with its value re-folded at that type) typed is not a guess:
+                // marking it one sent `64'(-P)` over `#(.P(32'hF0F0F0F0))` onto an untyped
+                // `parameter P = 5` down the pre-slice route, which computes at 32 bits and
+                // zero-extends (`000000000f0f0f10`, both oracles `ffffffff0f0f0f10`).
+                //
+                // ⚠️ Except a SIGNED override onto a declaration with no `signed` keyword.
+                // `p.dtype.signed` is false both for "no keyword" (the override's sign binds) and
+                // for the `unsigned` keyword (§12.2.1: the keyword survives the override),
+                // and the AST cannot tell them apart (ROADMAP §2 records the missing field),
+                // so the recorded sign may be wrong there. Un-guessing that combination
+                // fixed `64'(~(P + 32'd1))` over `#(.P(-3))` (`0000000000000001`, both
+                // oracles `ffffffff00000001`) and, on `parameter unsigned P = 1` +
+                // `#(.P(-8'sd91))`, turned the right `64'(P >> 1)` = `0000000000000052`
+                // into `7fffffffffffffd2` — trading one silent-wrong for another. It stays
+                // a guess until the declaration's own keyword is visible here.
+                // …and a header-list SIBLING that is untyped and derives from a guessed one
+                // (`#(parameter P = 5, parameter Q = P + 1)`) inherits the guess: its
+                // value was folded from the guessed binding and its meta inferred from
+                // that value. Typed declarations carry a declared type and are facts.
+                // A FILL types the override too — one unsigned bit, the fill arm of the meta
+                // chain above — so it is not a guess: the size-cast classifier then reads that
+                // bit instead of taking the pre-slice route, which read `64'(-P)` over
+                // `#(.P('1))` as `0000000000000001` where both oracles give all ones. Not onto
+                // a `signed` keyword, whose fill the chain above still records unsigned (both
+                // oracles bind the signed −1): that record is not a fact, so it stays a guess.
+                |me| {
+                    let fill_types = matches!(p.ty, ast::ParamType::Implicit)
+                        && p.dtype.range.is_none()
+                        && !p.dtype.signed
+                        && ovr_fill.contains_key(p.name.name.as_str());
+                    let typed_sign = if fill_types {
+                        Some(false)
+                    } else if ovr_bits_binds {
+                        ovr_bits.map(|c| c.signed)
+                    } else if self_meta_binds && ovr_self_val.is_some() {
+                        ovr_self_meta.map(|(_, s)| s)
+                    } else {
+                        None
+                    };
+                    let override_typed = typed_sign.is_some_and(|s| !s || p.dtype.signed);
+                    let guessed = if default_binds {
+                        me.ast_reads_guessed_param(&p.value)
+                    } else {
+                        !override_typed
+                    };
+                    matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time) && guessed
+                },
+            );
             saved.push((key, prev));
-        }
-    }
-
-    /// Restore the param map to the snapshot taken before this instance bound its
-    /// params (so sibling instances of the same module re-bind cleanly).
-    pub(crate) fn restore_params(&mut self, saved: Vec<(String, Option<i64>)>) {
-        for (k, prev) in saved.into_iter().rev() {
-            // Through the funnel in both directions: the scope being unwound is dead,
-            // and a range left behind for one of its keys would outlive the value it
-            // describes.
-            match prev {
-                Some(v) => {
-                    self.bind_param_value(k, v);
-                }
-                None => {
-                    self.unbind_param(&k);
-                }
-            }
-        }
-    }
-
-    /// §4.5.158: twin of `restore_params` for the `param_meta` side-map — unwinds a
-    /// scoped body-local enum-label width/sign registration so it does not pollute
-    /// later scopes (`param_meta` is otherwise persistent).
-    pub(crate) fn restore_param_meta(&mut self, saved: Vec<(String, Option<(u32, bool)>)>) {
-        for (k, prev) in saved.into_iter().rev() {
-            match prev {
-                Some(v) => {
-                    self.param_meta.insert(k, v);
-                }
-                None => {
-                    self.param_meta.remove(&k);
-                }
-            }
         }
     }
 }

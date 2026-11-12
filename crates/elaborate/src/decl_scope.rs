@@ -106,13 +106,13 @@ pub(crate) enum DeclPhase {
 /// the six tables a bare constant walk reads, at one `$pkg$<pkg>.<name>` key, as the
 /// package's own fold left them.
 pub(crate) struct DeclKept {
-    key: String,
-    value: Option<i64>,
-    meta: Option<(u32, bool)>,
-    real: Option<f64>,
-    string: Option<String>,
-    wide: Option<ir::ConstVal>,
-    range: Option<DeclRange>,
+    pub(crate) key: String,
+    pub(crate) value: Option<i64>,
+    pub(crate) meta: Option<(u32, bool)>,
+    pub(crate) real: Option<f64>,
+    pub(crate) string: Option<String>,
+    pub(crate) wide: Option<ir::ConstVal>,
+    pub(crate) range: Option<DeclRange>,
 }
 
 /// What `decl_enter` displaced, for `decl_exit`. `prev: None` = the arming was
@@ -389,33 +389,6 @@ impl Elaborator<'_> {
                 range: self.param_range.get(k).copied(),
             })
             .collect()
-    }
-
-    /// Re-install the kept bindings after the unwind. Only `decl_probe_key` reads
-    /// them: a module or generate prefix never starts with `$pkg$`, the outward walk
-    /// stops at an instance boundary, and the one whole-map use of these tables (the
-    /// instance-array prepass's clone and restore) puts them back verbatim.
-    pub(crate) fn decl_keep_restore(&mut self, kept: Vec<DeclKept>) {
-        for k in kept {
-            if let Some(v) = k.value {
-                self.params.insert(k.key.clone(), v);
-            }
-            if let Some(m) = k.meta {
-                self.param_meta.insert(k.key.clone(), m);
-            }
-            if let Some(r) = k.real {
-                self.real_param_val.insert(k.key.clone(), r);
-            }
-            if let Some(s) = k.string {
-                self.str_param_raw.insert(k.key.clone(), s);
-            }
-            if let Some(w) = k.wide {
-                self.wide_param_bits.insert(k.key.clone(), w);
-            }
-            if let Some(r) = k.range {
-                self.param_range.insert(k.key, r);
-            }
-        }
     }
 
     /// A call's declared return `(width, signed)`, its return range folded as the

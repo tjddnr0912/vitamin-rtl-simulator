@@ -503,6 +503,14 @@ fn string_keyed(t: &syn::Type) -> bool {
     let Some(last) = p.path.segments.last() else {
         return false;
     };
+    // BIND-1a: a guarded map (`Bound<BTreeMap<String, _>>`, `bound/mod.rs`) is still a
+    // string-keyed field: look through the wrapper, by its exact name, one level.
+    if last.ident == "Bound" {
+        let syn::PathArguments::AngleBracketed(a) = &last.arguments else {
+            return false;
+        };
+        return matches!(a.args.first(), Some(syn::GenericArgument::Type(inner)) if string_keyed(inner));
+    }
     if !["BTreeMap", "HashMap", "BTreeSet", "HashSet"].contains(&last.ident.to_string().as_str()) {
         return false;
     }
@@ -857,11 +865,22 @@ fn self_test_other_counters() {
             c: BTreeMap<u32, String>,
             d: Vec<BTreeMap<String, u32>>,
             e: HashMap<String, (u32, u32)>,
+            f: Bound<BTreeMap<String, i64>>,
+            g: Bound<BTreeSet<String>>,
+            h: Bound<BTreeMap<u32, String>>,
+            i: Bounded<BTreeMap<String, i64>>,
+            j: Bound<Vec<BTreeMap<String, u32>>>,
         }
     "#;
     assert_eq!(
         scan_elaborator_fields(lib),
-        Some(vec!["a".into(), "b".into(), "e".into()])
+        Some(vec![
+            "a".into(),
+            "b".into(),
+            "e".into(),
+            "f".into(),
+            "g".into()
+        ])
     );
 
     let reexp = r#"

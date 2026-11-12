@@ -442,14 +442,7 @@ impl Elaborator<'_> {
             // Round-9 PKG2: unwind the injected package consts (meta first, then
             // params — reverse of injection). Empty for module frames.
             for (k, prev) in saved_pkg_m.into_iter().rev() {
-                match prev {
-                    Some(m) => {
-                        s.param_meta.insert(k, m);
-                    }
-                    None => {
-                        s.param_meta.remove(&k);
-                    }
-                }
+                s.put_back_meta(k, prev);
             }
             s.restore_params(saved_pkg_p);
             out
@@ -614,10 +607,7 @@ impl Elaborator<'_> {
             s.restore_params(saved_labels);
             s.restore_param_meta(saved_meta);
             for (k, prev) in saved_pkg_m.into_iter().rev() {
-                match prev {
-                    Some(v) => s.param_meta.insert(k, v),
-                    None => s.param_meta.remove(&k),
-                };
+                s.put_back_meta(k, prev);
             }
             s.restore_params(saved_pkg_p);
             out

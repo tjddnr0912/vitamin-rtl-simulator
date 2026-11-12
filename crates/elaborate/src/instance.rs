@@ -175,7 +175,7 @@ impl Elaborator<'_> {
                 self.enum_label_types
                     .insert(key.clone(), td.name.name.clone());
                 if let Some(w) = base_w {
-                    self.param_meta.insert(key.clone(), (w, *signed));
+                    self.set_meta(key.clone(), (w, *signed));
                 }
                 // ⭐ RECORD (pass 1) / VERIFY (pass 2). See the header: two bindings
                 // are sound only if they agree, and the gate above removes only the
@@ -716,7 +716,7 @@ impl Elaborator<'_> {
                     // only matches from the declaring prefix) and skip the numeric fold.
                     if let Some(raw) = self.param_str_or_folded(p, false) {
                         let key = self.fq(&p.name.name);
-                        self.str_param_raw.insert(key, raw);
+                        self.set_str(key, raw);
                     } else if let Some((v, exact)) = self.param_real_value(p) {
                         // r19: a REAL-valued parameter has no i64 value — same shape as
                         // the string case above, so it rides the same side map and skips
@@ -725,7 +725,7 @@ impl Elaborator<'_> {
                         // representations agree, so `R/2` divides in the real domain and
                         // `logic [R-1:0]` keeps working in the integer domain.
                         let key = self.fq(&p.name.name);
-                        self.real_param_val.insert(key.clone(), v);
+                        self.set_real(key.clone(), v);
                         if let Some(i) = exact {
                             // The LOCAL integer view only — an exact-integer real stays
                             // usable as a width and a bound inside this scope. It is
@@ -762,25 +762,25 @@ impl Elaborator<'_> {
                         // that no override reached this body parameter.
                         let v = self.coerce_param_value_with(v, meta);
                         let key = self.fq(&p.name.name);
-                        // persistent copy for a hierarchical read (`dut.LP`) of a body
-                        // parameter/localparam (mirrors the header path in bind_params).
-                        self.hier_params.insert(key.clone(), v);
-                        if let Some(m) = meta {
-                            self.param_meta.insert(key.clone(), m);
-                        }
-                        // This scope has NO override channel, so the declared default is
-                        // always what binds — see `param_decl_range_opt`.
-                        let r = self.param_decl_range_opt(p, true);
-                        let prev = self.bind_param_value(key.clone(), v);
-                        self.bind_param_range(&key, r);
-                        // untyped only: a TYPED derived constant carries a declared
-                        // type, which both oracles honour whatever its value was
-                        // folded from.
-                        if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
-                            && self.ast_reads_guessed_param(&p.value)
-                        {
-                            self.param_type_guessed.insert(key.clone());
-                        }
+                        // DECL-ORDER (`bound/write.rs`): a persistent copy for a
+                        // hierarchical read (`dut.LP`) of a body parameter/localparam
+                        // (mirrors the header path in bind_params), the meta, the range,
+                        // the value, the range bound, the guessed mark.
+                        let prev = self.bind_decl(
+                            &key,
+                            v,
+                            meta,
+                            // This scope has NO override channel, so the declared default
+                            // is always what binds — see `param_decl_range_opt`.
+                            |me| me.param_decl_range_opt(p, true),
+                            // untyped only: a TYPED derived constant carries a declared
+                            // type, which both oracles honour whatever its value was
+                            // folded from.
+                            |me| {
+                                matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
+                                    && me.ast_reads_guessed_param(&p.value)
+                            },
+                        );
                         saved_params.push((key, prev));
                     }
                 }

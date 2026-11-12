@@ -1125,7 +1125,7 @@ impl Elaborator<'_> {
             .iter()
             .map(|(k, v)| {
                 let old = self.params.get(k).copied();
-                let old_meta = self.param_meta.insert(k.clone(), (32, true));
+                let old_meta = self.set_meta(k.clone(), (32, true));
                 self.bind_param_value(k.clone(), *v);
                 (k.clone(), old, old_meta)
             })
@@ -1137,17 +1137,10 @@ impl Elaborator<'_> {
                     self.bind_param_value(k.clone(), v);
                 }
                 None => {
-                    self.params.remove(&k);
+                    self.drop_value_raw(&k);
                 }
             }
-            match old_meta {
-                Some(m) => {
-                    self.param_meta.insert(k, m);
-                }
-                None => {
-                    self.param_meta.remove(&k);
-                }
-            }
+            self.put_back_meta(k, old_meta);
         }
         self.cur_prefix = saved;
         r
