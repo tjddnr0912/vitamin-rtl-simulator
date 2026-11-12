@@ -377,14 +377,12 @@ impl Elaborator<'_> {
     pub(crate) fn eval_const_env_at(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
         ctx_w: u32,
         ctx_signed: bool,
     ) -> Option<i64> {
-        self.fold_ctx(e, env, envw, depth, ctx_w, ctx_signed)
-            .legacy()
+        self.fold_ctx(e, fr, depth, ctx_w, ctx_signed).legacy()
     }
 
     /// Evaluate `e` in a SELF-determined position — a shift count, a ternary
@@ -393,11 +391,10 @@ impl Elaborator<'_> {
     pub(crate) fn eval_const_env_self(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
-        self.fold_self(e, env, envw, depth).legacy()
+        self.fold_self(e, fr, depth).legacy()
     }
 
     /// A shift's COUNT — self-determined, and §11.4.10 adds that it "shall be treated
@@ -429,11 +426,10 @@ impl Elaborator<'_> {
     pub(crate) fn eval_const_shift_count(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
-        self.fold_shift_count(e, env, envw, depth)
+        self.fold_shift_count(e, fr, depth)
     }
 
     /// Is every NAME in this expression one whose width `envw` records — i.e. is the
@@ -564,12 +560,11 @@ impl Elaborator<'_> {
     pub(crate) fn eval_const_assign(
         &self,
         rhs: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
         target: Option<(u32, bool)>,
     ) -> Option<i64> {
-        self.fold_assign(rhs, env, envw, depth, target).legacy()
+        self.fold_assign(rhs, fr, depth, target).legacy()
     }
 
     /// The declared `(width, signed)` of a body declaration / formal, or None when

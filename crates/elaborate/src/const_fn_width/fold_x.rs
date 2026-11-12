@@ -129,12 +129,7 @@ impl Elaborator<'_> {
         if self.ast_has_param_select(e) {
             return self.const_int_selfdet(e).map(|v| (v, None));
         }
-        let first = self.fold_self(
-            e,
-            &std::collections::BTreeMap::new(),
-            &ConstWidths::new(),
-            0,
-        );
+        let first = self.fold_self(e, &ConstFrame::new(), 0);
         // Q-VALRULES (d) slice A: the bound value rule (F1a) lives in `hdl_ast::range_rules`.
         let v1 = if let CFold::Val(v) = first {
             Some(v)

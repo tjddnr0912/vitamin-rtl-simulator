@@ -589,11 +589,7 @@ impl Elaborator<'_> {
                             _ => return None,
                         }
                     }
-                    if let Some((_, w, _)) = self.const_placement_wide(
-                        cat,
-                        &std::collections::BTreeMap::new(),
-                        &ConstWidths::new(),
-                    ) {
+                    if let Some((_, w, _)) = self.const_placement_wide(cat, &ConstFrame::new()) {
                         if w > 0 {
                             return Some((w, false));
                         }
@@ -1051,7 +1047,7 @@ impl Elaborator<'_> {
                 && (crate::param_query::ast_contains_fill(e) || self.param_init_width_aware_ok(e))
                 && self.const_ctx_within_i64(e)
             {
-                match self.fold_assign(e, &BTreeMap::new(), &ConstWidths::new(), 0, Some((w, s))) {
+                match self.fold_assign(e, &ConstFrame::new(), 0, Some((w, s))) {
                     crate::CFold::Val(v) => return Ok(Some(v)),
                     f => ev = (f, w),
                 }

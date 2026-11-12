@@ -28,7 +28,9 @@
 //!   inside an `or_else ( | |` (lazy), and no `then_some` there.
 //! - E4 a `fold_self_bits (` call whose argument tokens hold `wide_name_bits`.
 //! - E5 `had_error` tokens: each reader asks "any error so far" (head note).
-//! - E6 `unwrap_or ( ( 0 , false ) )` (a declined width read as width 0).
+//! - E6 `unwrap_or ( ( 0 , false ) )` (a declined width read as width 0) ; a
+//!   constant-function local's reading moved into its writer `ConstFrame::bind_shape`
+//!   (BIND-2a).
 //! - E7 (VAL-3) calls of the range router and its check (`const_range_bound_fold`,
 //!   `check_const_range_bound`, `range_bounds_checked`, `range_bound_fold_ev`, `bound_step`) per
 //!   (callee, file, fn) ; in `range_bounds_checked` exactly four calls, each its own statement
@@ -243,11 +245,13 @@ const E5: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/var_init.rs", "assert_block_local_inits_drained", 1, "read: any error so far"),
 ];
 
-/// E6: (file, fn, hits).
+/// E6: (file, fn, hits). BIND-2a: a constant-function local's declined width is read as
+/// width 0 in one place, the frame's writer `ConstFrame::bind_shape` (`bound/frame.rs`) ;
+/// `bind_const_decl` and `eval_const_call_at` (`const_fn.rs`) hand it the `Option` and no
+/// longer spell the reading.
 #[rustfmt::skip]
 const E6: &[(&str, &str, usize)] = &[
-    ("crates/elaborate/src/const_fn.rs", "bind_const_decl", 1),
-    ("crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
+    ("crates/elaborate/src/bound/frame.rs", "bind_shape", 1),
     ("crates/elaborate/src/inline_fold.rs", "fold_straight_line", 1),
 ];
 

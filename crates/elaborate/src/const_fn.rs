@@ -144,7 +144,7 @@ impl Elaborator<'_> {
             // Found by elaborating PicoRV32, whose trace-mask localparams are written
             // `localparam [35:0] TRACE_BRANCH = {4'b 0001, 32'b 0};`.
             ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. } => {
-                self.const_placement_env(e, &BTreeMap::new(), &ConstWidths::new())
+                self.const_placement_env(e, &ConstFrame::new())
             }
             // G11: a time literal folds to the CURRENT module's time unit. Final ticks =
             // value × 10^(unit_exp − global_prec_exp); the delay path × cur_time_mult, so
@@ -176,13 +176,9 @@ impl Elaborator<'_> {
             ast::ExprKind::Unary {
                 op: ast::UnOp::LogNot,
                 operand,
-            } => Some(!self.selfdet_truth_arm(
-                ArmLane::Unlimited,
-                operand,
-                &BTreeMap::new(),
-                &ConstWidths::new(),
-                0,
-            )? as i64),
+            } => Some(
+                !self.selfdet_truth_arm(ArmLane::Unlimited, operand, &ConstFrame::new(), 0)? as i64,
+            ),
             // §11.4.14 REDUCTION: one bit out of a SELF-DETERMINED operand. The value
             // domain folded these (§4.5.382) through `param_i64_at_declared`, which only
             // a declaration with a width reaches — so in every position that asks THIS
@@ -266,13 +262,7 @@ impl Elaborator<'_> {
                 // A condition carrying x/z bits is read for its TRUTH in the wide
                 // domain (`4'b110x ? a : b` takes `a` in both oracles; an ambiguous
                 // one declines).
-                let c = self.selfdet_truth_arm(
-                    ArmLane::Unlimited,
-                    cond,
-                    &BTreeMap::new(),
-                    &ConstWidths::new(),
-                    0,
-                )?;
+                let c = self.selfdet_truth_arm(ArmLane::Unlimited, cond, &ConstFrame::new(), 0)?;
                 if c {
                     self.const_eval_in_scope(then_e)
                 } else {
@@ -283,7 +273,7 @@ impl Elaborator<'_> {
                 // Self-determined, treated-as-unsigned argument — the unlimited
                 // fold here answered 4 for `$clog2(4'd15 + 4'd1)` while the
                 // constant-function interpreter answered 0 for the same text.
-                self.const_clog2_selfdet(&args[0], &BTreeMap::new(), &ConstWidths::new(), 0)
+                self.const_clog2_selfdet(&args[0], &ConstFrame::new(), 0)
             }
             // §20.10 `$rtoi` TRUNCATES toward zero where a cast rounds, so it gets its
             // own spelling rather than sharing the cast's: `$rtoi(2.9)` is 2 and
@@ -365,12 +355,7 @@ impl Elaborator<'_> {
                 // `8'd1 << (4'd15 + 4'd1)` folded 65536 alone and 1 under a `>`.
                 // Both oracles say 1 — the 4-bit count wraps to 0.
                 if matches!(op, ast::BinOp::Pow) {
-                    let (b, sg) = self.const_pow_exponent_selfdet(
-                        rhs,
-                        &std::collections::BTreeMap::new(),
-                        &ConstWidths::new(),
-                        0,
-                    )?;
+                    let (b, sg) = self.const_pow_exponent_selfdet(rhs, &ConstFrame::new(), 0)?;
                     return ast::value_rules::const_pow(a, b, sg);
                 }
                 let b = match op {
@@ -379,13 +364,9 @@ impl Elaborator<'_> {
                     // (a ternary condition, a select index) where the operand's own
                     // signedness IS the rule, so the count gets its own entry point.
                     // The width-aware twin at `const_fn_width.rs` calls the same one.
-                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => self
-                        .eval_const_shift_count(
-                            rhs,
-                            &std::collections::BTreeMap::new(),
-                            &ConstWidths::new(),
-                            0,
-                        )?,
+                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
+                        self.eval_const_shift_count(rhs, &ConstFrame::new(), 0)?
+                    }
                     _ => self.const_eval_in_scope(rhs)?,
                 };
                 ast::value_rules::const_binop(*op, a, b)
@@ -403,13 +384,13 @@ impl Elaborator<'_> {
                 if name.segments.len() == 2
                     && self.pkg_funcs.contains_key(&name.segments[0].name) =>
             {
-                self.eval_const_call(name, args, &BTreeMap::new(), &ConstWidths::new(), 0)
+                self.eval_const_call(name, args, &ConstFrame::new(), 0)
             }
             ast::ExprKind::Call { name, .. } if name.segments.len() == 2 => {
                 self.const_string_method(e)
             }
             ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
-                self.eval_const_call(name, args, &BTreeMap::new(), &ConstWidths::new(), 0)
+                self.eval_const_call(name, args, &ConstFrame::new(), 0)
             }
             _ => None,
         }
@@ -443,13 +424,12 @@ impl Elaborator<'_> {
     pub(crate) fn const_pow_exponent_selfdet(
         &self,
         rhs: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<(i64, bool)> {
         Some((
-            self.eval_const_env_self(rhs, env, envw, depth)?,
-            self.const_signed_env(rhs, envw),
+            self.eval_const_env_self(rhs, fr, depth)?,
+            self.const_signed_env(rhs, fr.widths()),
         ))
     }
 
@@ -466,12 +446,7 @@ impl Elaborator<'_> {
     /// unknown the walk keeps the unlimited behavior rather than refusing (the
     /// §4.5.339 measurement — a refusal is only as loud as its CALLER).
     pub(crate) fn const_int_selfdet(&self, e: &ast::Expr) -> Option<i64> {
-        self.eval_const_env_self(
-            e,
-            &std::collections::BTreeMap::new(),
-            &ConstWidths::new(),
-            0,
-        )
+        self.eval_const_env_self(e, &ConstFrame::new(), 0)
     }
 
     /// `$clog2(arg)` in a const domain — one spelling for all three fold arms
@@ -493,11 +468,10 @@ impl Elaborator<'_> {
     pub(crate) fn const_clog2_selfdet(
         &self,
         arg: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
-        let n = match self.const_unsigned_selfdet(arg, env, envw, depth) {
+        let n = match self.const_unsigned_selfdet(arg, fr, depth) {
             Some(n) => n,
             // §20.8.1 reads the argument's BIT PATTERN at its own width — and a real
             // has no width to read one out of. What both oracles do instead is the
@@ -512,25 +486,27 @@ impl Elaborator<'_> {
             // shadow was measured on the `$rtoi` sibling and cost a loud →
             // silent-wrong. A real LOCAL is not modelled in this env anyway, so the
             // gate costs nothing it could otherwise have answered.
-            None if env.is_empty() && envw.is_empty() => match self.const_int_via_real(arg) {
-                Some(v) if v >= 0 => v as u64,
-                // …and finally the WIDE bit domain, which is the only one that can read
-                // a slice of a >64-bit parameter: `$clog2(M_ISSUE[n*32 +: 32]+1)` is how
-                // `axi_crossbar` sizes one port's in-flight counter, and the value lives
-                // in `wide_param_bits` where the integer walk cannot see it.
-                //
-                // ⚠️ `selfdet_bits_unsigned` reads the folded bits back as a u64, so it
-                // declines the moment the argument's MAGNITUDE passes 64 bits — and
-                // `localparam int AW = $clog2(MAX);` over a 128-bit `MAX` is exactly
-                // that shape, the standard width idiom over a crypto constant. The
-                // ceiling itself is a BIT INDEX, so the bit domain can answer it
-                // without ever forming the value: fall through to `selfdet_clog2_wide`,
-                // which returns the finished `$clog2` rather than its argument.
-                _ => match self.selfdet_bits_unsigned(arg) {
-                    Some(n) => n,
-                    None => return self.selfdet_clog2_wide(arg),
-                },
-            },
+            None if fr.env().is_empty() && fr.widths().is_empty() => {
+                match self.const_int_via_real(arg) {
+                    Some(v) if v >= 0 => v as u64,
+                    // …and finally the WIDE bit domain, which is the only one that can read
+                    // a slice of a >64-bit parameter: `$clog2(M_ISSUE[n*32 +: 32]+1)` is how
+                    // `axi_crossbar` sizes one port's in-flight counter, and the value lives
+                    // in `wide_param_bits` where the integer walk cannot see it.
+                    //
+                    // ⚠️ `selfdet_bits_unsigned` reads the folded bits back as a u64, so it
+                    // declines the moment the argument's MAGNITUDE passes 64 bits — and
+                    // `localparam int AW = $clog2(MAX);` over a 128-bit `MAX` is exactly
+                    // that shape, the standard width idiom over a crypto constant. The
+                    // ceiling itself is a BIT INDEX, so the bit domain can answer it
+                    // without ever forming the value: fall through to `selfdet_clog2_wide`,
+                    // which returns the finished `$clog2` rather than its argument.
+                    _ => match self.selfdet_bits_unsigned(arg) {
+                        Some(n) => n,
+                        None => return self.selfdet_clog2_wide(arg),
+                    },
+                }
+            }
             None => return None,
         };
         Some(i64::from(ast::value_rules::clog2_u64(n)))
@@ -555,12 +531,11 @@ impl Elaborator<'_> {
     pub(crate) fn const_unsigned_selfdet(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<u64> {
-        let v = self.eval_const_env_self(e, env, envw, depth)?;
-        match self.const_self_width(e, envw).unwrap_or(0) {
+        let v = self.eval_const_env_self(e, fr, depth)?;
+        match self.const_self_width(e, fr.widths()).unwrap_or(0) {
             w @ 1..=63 => Some((v as u64) & ((1u64 << w) - 1)),
             64 => Some(v as u64),
             _ => {
@@ -615,16 +590,10 @@ impl Elaborator<'_> {
     /// shadows a same-named param. Every other form mirrors `const_eval_in_scope`
     /// (sharing `const_binop`). A form not modeled in a const-function body (a
     /// part-select, index, real, string, unmodeled `$call`) returns None → LOUD.
-    pub(crate) fn eval_const_env(
-        &self,
-        e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
-        depth: u32,
-    ) -> Option<i64> {
+    pub(crate) fn eval_const_env(&self, e: &ast::Expr, fr: &ConstFrame, depth: u32) -> Option<i64> {
         match &e.kind {
             ast::ExprKind::IntLit { .. } => const_eval_i64_lit(e),
-            ast::ExprKind::Paren { inner } => self.eval_const_env(inner, env, envw, depth),
+            ast::ExprKind::Paren { inner } => self.eval_const_env(inner, fr, depth),
             // A single-segment name is this body's own local/formal when it is
             // DECLARED here (`envw` holds every declared name), and only then may
             // it shadow a module param. A name declared but NOT bound is one whose
@@ -633,12 +602,12 @@ impl Elaborator<'_> {
             // that names the local — a different object than the text says.
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                 let n = &path.segments[0].name;
-                match env.get(n) {
+                match fr.env().get(n) {
                     Some(v) => {
                         self.const_seed_read(n);
                         Some(*v)
                     }
-                    None if envw.contains_key(n) => None,
+                    None if fr.widths().contains_key(n) => None,
                     // §2 🆕 L ⓦ: inside a PACKAGE function's body the package's own
                     // constants are already in `env`; a name it does not declare must
                     // not fall to the calling module's scope (a same-named module
@@ -651,7 +620,7 @@ impl Elaborator<'_> {
             ast::ExprKind::Unary {
                 op: ast::UnOp::LogNot,
                 operand,
-            } => Some(!self.selfdet_truth_arm(ArmLane::Env, operand, env, envw, depth)? as i64),
+            } => Some(!self.selfdet_truth_arm(ArmLane::Env, operand, fr, depth)? as i64),
             // A reduction is a self-determined NODE — the width-aware twin owns the
             // arm (see `eval_const_env_at`), like the non-context Binary arm below.
             ast::ExprKind::Unary {
@@ -663,12 +632,12 @@ impl Elaborator<'_> {
                     | ast::UnOp::RedNor
                     | ast::UnOp::RedXnor,
                 ..
-            } => self.eval_const_env_self(e, env, envw, depth),
+            } => self.eval_const_env_self(e, fr, depth),
             ast::ExprKind::Unary {
                 op: op @ (ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot),
                 operand,
             } => {
-                let v = self.eval_const_env(operand, env, envw, depth)?;
+                let v = self.eval_const_env(operand, fr, depth)?;
                 arms::unary_i64(*op, v)
             }
             // A non-context-determined operator is a self-determined NODE (the same
@@ -678,10 +647,10 @@ impl Elaborator<'_> {
             // `eval_const_assign`'s unknown-target path, so this is a consistency
             // guard rather than a measured defect.
             ast::ExprKind::Binary { op, .. } if !binop_result_is_context_determined(*op) => {
-                self.eval_const_env_self(e, env, envw, depth)
+                self.eval_const_env_self(e, fr, depth)
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {
-                let a = self.eval_const_env(lhs, env, envw, depth)?;
+                let a = self.eval_const_env(lhs, fr, depth)?;
                 // `**`'s exponent is SELF-determined — same rule as the
                 // width-aware twin's Pow arm (`eval_const_env_at`); this plain
                 // walk otherwise widens it. Reachable on its own only through
@@ -689,7 +658,7 @@ impl Elaborator<'_> {
                 // target), but a second spelling of the rule diverging there
                 // would be silent, so it goes through the one shared helper.
                 if matches!(op, ast::BinOp::Pow) {
-                    let (b, sg) = self.const_pow_exponent_selfdet(rhs, env, envw, depth)?;
+                    let (b, sg) = self.const_pow_exponent_selfdet(rhs, fr, depth)?;
                     return ast::value_rules::const_pow(a, b, sg);
                 }
                 // §11.4.10 — the shift COUNT is self-determined and unsigned, through the
@@ -702,9 +671,9 @@ impl Elaborator<'_> {
                 // unknown-target arm), so this is defence in depth, not a measured fix.
                 let b = match op {
                     ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
-                        self.eval_const_shift_count(rhs, env, envw, depth)?
+                        self.eval_const_shift_count(rhs, fr, depth)?
                     }
-                    _ => self.eval_const_env(rhs, env, envw, depth)?,
+                    _ => self.eval_const_env(rhs, fr, depth)?,
                 };
                 ast::value_rules::const_binop(*op, a, b)
             }
@@ -713,17 +682,17 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                if self.selfdet_truth_arm(ArmLane::Env, cond, env, envw, depth)? {
-                    self.eval_const_env(then_e, env, envw, depth)
+                if self.selfdet_truth_arm(ArmLane::Env, cond, fr, depth)? {
+                    self.eval_const_env(then_e, fr, depth)
                 } else {
-                    self.eval_const_env(else_e, env, envw, depth)
+                    self.eval_const_env(else_e, fr, depth)
                 }
             }
             ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
                 // Self-determined argument — same rule as the width-aware twin's
                 // arm; this plain walk otherwise widens it (the `**` exponent
                 // comment above tells the same story for the same reason).
-                self.const_clog2_selfdet(&args[0], env, envw, depth)
+                self.const_clog2_selfdet(&args[0], fr, depth)
             }
             // ⚠️ NO `$rtoi` arm here, deliberately — mirroring the module-scope one
             // was tried and it was a MEASURED silent-wrong: `const_rtoi_via_real`
@@ -744,7 +713,7 @@ impl Elaborator<'_> {
                     || (name.segments.len() == 2
                         && self.pkg_funcs.contains_key(&name.segments[0].name)) =>
             {
-                self.eval_const_call(name, args, env, envw, depth)
+                self.eval_const_call(name, args, fr, depth)
             }
             // §11.4.12 concatenation / §11.4.12.1 replication: SELF-determined bit
             // PLACEMENTS whose value depends on every operand's WIDTH, which an i64
@@ -755,7 +724,7 @@ impl Elaborator<'_> {
             // `int x = {4'hA,4'hB}` had no value at all and the declaration bound a
             // silent 0.
             ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. } => {
-                self.const_placement_env(e, env, envw)
+                self.const_placement_env(e, fr)
             }
             // §6.24.1 SIZE cast (`8'(e)`, `RPS'(e)`): §4.5.316 pinned its rule to
             // `max(operand self width, N)` with the operand's sign propagated, and
@@ -770,7 +739,7 @@ impl Elaborator<'_> {
             ast::ExprKind::Cast {
                 target: target @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
                 expr,
-            } => self.const_size_cast(target, expr, env, envw, depth),
+            } => self.const_size_cast(target, expr, fr, depth),
             // A form this env twin does not model itself (`pkg::X`, a const-array
             // element read, `$bits`, a prim/signing cast, …). With NO local
             // bindings there is nothing a module-scope resolution could shadow,
@@ -826,17 +795,16 @@ impl Elaborator<'_> {
                 // module-scope delegate answered exactly those, so returning here
                 // collapsed a 52-bit width bound to 1. A pinned test caught it;
                 // reasoning did not.
-                self.const_param_select_env(e, env, envw, depth)
-                    .or_else(|| {
-                        (env.is_empty()
-                            && envw.is_empty()
-                            && (depth == 0 || !Self::ast_contains_call(e)))
-                        .then(|| self.const_eval_in_scope(e))
-                        .flatten()
-                    })
+                self.const_param_select_env(e, fr, depth).or_else(|| {
+                    (fr.env().is_empty()
+                        && fr.widths().is_empty()
+                        && (depth == 0 || !Self::ast_contains_call(e)))
+                    .then(|| self.const_eval_in_scope(e))
+                    .flatten()
+                })
             }
-            _ if env.is_empty()
-                && envw.is_empty()
+            _ if fr.env().is_empty()
+                && fr.widths().is_empty()
                 && (depth == 0 || !Self::ast_contains_call(e)) =>
             {
                 self.const_eval_in_scope(e)
@@ -873,13 +841,11 @@ impl Elaborator<'_> {
     pub(crate) fn const_placement_wide(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
     ) -> Option<(ir::BitPacked, u32, bool)> {
         // The COUNT-position environment: empty, because a count may not read this
         // interpreter's locals (the rule spelled out in the resolver below).
-        let empty_env = std::collections::BTreeMap::new();
-        let empty_envw = ConstWidths::new();
+        let empty = ConstFrame::new();
         let resolve = |n: &ast::Expr, is_count: bool| -> Option<WideBits> {
             // This resolver answers BARE names itself. A `pkg::name` — and, §3 ⑤ ⓔ, an
             // element `A[i]` of a constant array parameter — is handed to the wide
@@ -906,7 +872,7 @@ impl Elaborator<'_> {
                 // the MODULE parameter (`cc`) while vita's own runtime call answered
                 // `ff` with both oracles. Review round 1, BLOCKING.
                 if Self::select_root_name(n)
-                    .is_some_and(|r| envw.contains_key(r) || env.contains_key(r))
+                    .is_some_and(|r| fr.widths().contains_key(r) || fr.env().contains_key(r))
                 {
                     // Neither the shifted arm nor `wide_name_bits` may answer: both
                     // resolve the root through MODULE scope. Declining hands the
@@ -914,12 +880,8 @@ impl Elaborator<'_> {
                     // this same resolver — whose Ident arm reads the local.
                     return None;
                 }
-                let (senv, senvw) = if is_count {
-                    (&empty_env, &empty_envw)
-                } else {
-                    (env, envw)
-                };
-                if let Some(r) = self.const_param_select_shifted_bits(n, senv, senvw) {
+                let sfr = if is_count { &empty } else { fr };
+                if let Some(r) = self.const_param_select_shifted_bits(n, sfr) {
                     return Some(r);
                 }
                 return self.wide_name_bits(n);
@@ -933,12 +895,13 @@ impl Elaborator<'_> {
             // stop the walk here rather than fall through to the module parameter
             // below, which would answer for a different object than the reference
             // names. Both were measured as blocking defects in §4.5.371.
-            if is_count && (envw.contains_key(&seg.name) || env.contains_key(&seg.name)) {
+            if is_count && (fr.widths().contains_key(&seg.name) || fr.env().contains_key(&seg.name))
+            {
                 return None;
             }
-            let (v, w, s) = match envw.get(&seg.name).copied() {
+            let (v, w, s) = match fr.widths().get(&seg.name).copied() {
                 Some((w, s)) if (1..=64).contains(&w) => {
-                    let v = *env.get(&seg.name)?;
+                    let v = *fr.env().get(&seg.name)?;
                     self.const_seed_read(&seg.name);
                     (v, w, s)
                 }
@@ -974,13 +937,8 @@ impl Elaborator<'_> {
     /// also inherits every operand shape the carry-free folder refuses, notably
     /// `+`/`-`/`*`/`/`, so `{4'd2, (4'd1 + 4'd1)}` stays loud rather than growing a
     /// second, subtly different, arithmetic here.
-    pub(crate) fn const_placement_env(
-        &self,
-        e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
-    ) -> Option<i64> {
-        let (b, w, sg) = self.const_placement_wide(e, env, envw)?;
+    pub(crate) fn const_placement_env(&self, e: &ast::Expr, fr: &ConstFrame) -> Option<i64> {
+        let (b, w, sg) = self.const_placement_wide(e, fr)?;
         if w > 64 || b.unk.iter().any(|&u| u != 0) {
             return None;
         }
@@ -1145,13 +1103,7 @@ impl Elaborator<'_> {
     /// `g` re-enters the same ast node, and folding it at the caller's depth never
     /// advanced the cap: it recursed until the stack overflowed. This is the same
     /// position, and the same charge, as a formal's DEFAULT.
-    fn bind_const_decl(
-        &self,
-        d: &ast::NetVarDecl,
-        env: &mut std::collections::BTreeMap<String, i64>,
-        envw: &mut ConstWidths,
-        depth: u32,
-    ) -> Option<()> {
+    fn bind_const_decl(&self, d: &ast::NetVarDecl, fr: &mut ConstFrame, depth: u32) -> Option<()> {
         if !netvar_kind_is_int_const(d.dtype.net()) {
             return None; // real/string/array local → loud
         }
@@ -1174,10 +1126,10 @@ impl Elaborator<'_> {
         };
         for n in &d.names {
             self.const_redeclared(&n.name.name, n.name.span);
-            envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
+            fr.bind_shape(n.name.name.clone(), m);
             match &n.init {
                 None => {
-                    env.insert(n.name.name.clone(), 0);
+                    fr.bind_value(n.name.name.clone(), 0);
                     // A 2-state 0 is IEEE's own (§6.8).
                     if !net_kind_is_two_state(kind) {
                         self.const_seed(&n.name.name, width, n.name.span, numbered(n));
@@ -1190,20 +1142,20 @@ impl Elaborator<'_> {
                 // be conditional on the width being known". It used to hold only because
                 // the initializers that reach such a declaration did not fold either;
                 // widening the placement folder made the width the load-bearing half.
-                Some(e) if m.is_some() => match self.eval_const_assign(e, env, envw, depth, m) {
+                Some(e) if m.is_some() => match self.eval_const_assign(e, fr, depth, m) {
                     Some(v) => {
-                        env.insert(n.name.name.clone(), v);
+                        fr.bind_value(n.name.name.clone(), v);
                         self.const_written(&n.name.name);
                     }
                     // Unbound, so a read is loud, but a select write merges into
                     // `unwrap_or(0)`: every bit is fabricated, any kind (a41).
                     None => {
-                        env.remove(&n.name.name);
+                        fr.unbind_value(&n.name.name);
                         self.const_seed(&n.name.name, width, n.name.span, numbered(n));
                     }
                 },
                 Some(_) => {
-                    env.remove(&n.name.name);
+                    fr.unbind_value(&n.name.name);
                 }
             }
         }
@@ -1271,8 +1223,7 @@ impl Elaborator<'_> {
         &self,
         name: &ast::HierPath,
         args: &[ast::Expr],
-        caller_env: &std::collections::BTreeMap<String, i64>,
-        caller_w: &ConstWidths,
+        caller: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
         // §4.5.589 body lane: a constant call in an owned package routine's BODY being
@@ -1281,20 +1232,18 @@ impl Elaborator<'_> {
         // (`decl_scope.rs`).
         if let Some(win) = self.decl_body_win() {
             let armed = self.decl_enter(&Some(win), false);
-            let r = self
-                .decl_split(|| self.eval_const_call_at(name, args, caller_env, caller_w, depth));
+            let r = self.decl_split(|| self.eval_const_call_at(name, args, caller, depth));
             self.decl_exit(armed);
             return r;
         }
-        self.eval_const_call_at(name, args, caller_env, caller_w, depth)
+        self.eval_const_call_at(name, args, caller, depth)
     }
 
     fn eval_const_call_at(
         &self,
         name: &ast::HierPath,
         args: &[ast::Expr],
-        caller_env: &std::collections::BTreeMap<String, i64>,
-        caller_w: &ConstWidths,
+        caller: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
         const MAX_DEPTH: u32 = 64;
@@ -1312,8 +1261,7 @@ impl Elaborator<'_> {
         if args.len() > f.ports.len() {
             return None; // too many args
         }
-        let mut env: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
-        let mut envw: ConstWidths = ConstWidths::new();
+        let mut fr = ConstFrame::new();
         for (i, p) in f.ports.iter().enumerate() {
             if p.dir != ast::PortDir::Input || !p.unpacked.is_empty() {
                 return None; // output/inout/ref or unpacked-array formal → loud
@@ -1353,10 +1301,10 @@ impl Elaborator<'_> {
             // module-scope delegation below). One level per default makes the
             // depth cap bound it — E3009, not a crash. iverilog aborts on both.
             let av = if let Some(a) = args.get(i) {
-                self.eval_const_assign(a, caller_env, caller_w, depth, tw)?
+                self.eval_const_assign(a, caller, depth, tw)?
             } else if let Some(d) = &p.default {
                 self.with_decl_hdr(&win, |s| {
-                    s.decl_split(|| s.eval_const_assign(d, &env, &envw, depth + 1, tw))
+                    s.decl_split(|| s.eval_const_assign(d, &fr, depth + 1, tw))
                 })??
             } else {
                 return None; // too few args, no default
@@ -1364,8 +1312,8 @@ impl Elaborator<'_> {
             // Record the shape — or UNKNOWN (width 0) when it could not be
             // determined, so a later reader propagates "no masking" instead of
             // falling back to a guessed 32-bit unsigned.
-            envw.insert(p.name.name.clone(), tw.unwrap_or((0, false)));
-            env.insert(p.name.name.clone(), av);
+            fr.bind_shape(p.name.name.clone(), tw);
+            fr.bind_value(p.name.name.clone(), av);
         }
         // §2 🆕 L ⓦ: a PACKAGE function's body folds in the package's constant scope
         // — its constants seed the environment (a formal of the same name is bound
@@ -1376,7 +1324,7 @@ impl Elaborator<'_> {
         if let Some(p) = &pkg {
             if let Some(consts) = self.pkg_consts.get(p) {
                 for (k, v) in consts {
-                    env.entry(k.clone()).or_insert(*v);
+                    fr.seed_value(k.clone(), *v);
                 }
             }
         }
@@ -1393,28 +1341,27 @@ impl Elaborator<'_> {
             // the body itself gets below, and the reason a self-referential
             // initializer terminates. See `bind_const_decl`.
             for d in &f.body_decls {
-                self.bind_const_decl(d, &mut env, &mut envw, depth + 1)?;
+                self.bind_const_decl(d, &mut fr, depth + 1)?;
             }
             // The function-name return variable is itself a declared target.
-            envw.insert(name.to_string(), (rw, rs));
-            if !env.contains_key(name) && !f.ret_two_state {
+            fr.bind_shape(name.to_string(), Some((rw, rs)));
+            if !fr.env().contains_key(name) && !f.ret_two_state {
                 let numbered =
                     f.ret_packed.is_empty() && const_range_numbered(f.dtype.range.as_ref());
                 self.const_seed(name, rw, f.name.span, numbered);
             }
-            env.entry(name.to_string()).or_insert(0);
+            fr.seed_value(name.to_string(), 0);
             let mut steps: u64 = 0;
             let ret = match self.exec_const_stmt(
                 &f.body,
-                &mut env,
-                &mut envw,
+                &mut fr,
                 Some((rw, rs)),
                 depth + 1,
                 &mut steps,
             )? {
                 ConstFlow::Return(Some(v)) => v,
                 ConstFlow::Return(None) | ConstFlow::Normal => {
-                    let v = *env.get(name)?;
+                    let v = *fr.env().get(name)?;
                     self.const_seed_read(name);
                     v
                 }
@@ -1471,8 +1418,7 @@ impl Elaborator<'_> {
         &self,
         lhs: &ast::Lvalue,
         rhs: &ast::Expr,
-        env: &mut std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &mut ConstFrame,
         depth: u32,
     ) -> Option<ConstFlow> {
         let (path, parts) = Self::lvalue_sel_parts(lhs)?;
@@ -1480,11 +1426,11 @@ impl Elaborator<'_> {
             return None;
         }
         let name = &path.segments[0].name;
-        let &(vw, _vsigned) = envw.get(name)?;
+        let &(vw, _vsigned) = fr.widths().get(name)?;
         if vw == 0 || vw > 64 {
             return None;
         }
-        let (a, b, _directed) = self.select_span(parts, env, envw, depth)?;
+        let (a, b, _directed) = self.select_span(parts, fr, depth)?;
         let (lo, hi) = hdl_ast::range_rules::low_high(a, b);
         if lo < 0 || hi >= i64::from(vw) {
             return None;
@@ -1492,12 +1438,12 @@ impl Elaborator<'_> {
         let w = hdl_ast::range_rules::span_u32_wrap(lo, hi);
         // §11.6.1: the RHS is assigned to the SELECT, so the select's width is
         // its context — not the target variable's.
-        let v = self.eval_const_assign(rhs, env, envw, depth, Some((w, false)))?;
+        let v = self.eval_const_assign(rhs, fr, depth, Some((w, false)))?;
         let field = if w >= 64 { u64::MAX } else { (1u64 << w) - 1 };
         let mask = field << lo;
-        let cur = env.get(name).copied().unwrap_or(0) as u64;
+        let cur = fr.env().get(name).copied().unwrap_or(0) as u64;
         let out = (cur & !mask) | (((v as u64) & field) << lo);
-        env.insert(name.clone(), out as i64);
+        fr.bind_value(name.clone(), out as i64);
         if self.const_unwritten_live.get() != 0 {
             if let Some(r) = self.const_record(&mut self.const_unwritten.borrow_mut(), name) {
                 if r.numbered && !r.shadowed {
@@ -1511,8 +1457,7 @@ impl Elaborator<'_> {
     pub(crate) fn exec_const_stmt(
         &self,
         s: &ast::Stmt,
-        env: &mut std::collections::BTreeMap<String, i64>,
-        envw: &mut ConstWidths,
+        fr: &mut ConstFrame,
         ret: Option<(u32, bool)>,
         depth: u32,
         steps: &mut u64,
@@ -1533,10 +1478,10 @@ impl Elaborator<'_> {
                 // charged the call), so it is the same value the function-level
                 // declarations get.
                 for d in decls {
-                    self.bind_const_decl(d, env, envw, depth)?;
+                    self.bind_const_decl(d, fr, depth)?;
                 }
                 for st in stmts {
-                    match self.exec_const_stmt(st, env, envw, ret, depth, steps)? {
+                    match self.exec_const_stmt(st, fr, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
@@ -1559,7 +1504,7 @@ impl Elaborator<'_> {
                     // `calcBaseAddrs` — builds its whole return value that way,
                     // and this arm's absence is what made the crossbar's four
                     // `M_BASE_ADDR_INT` parameters loud.
-                    return self.exec_const_select_write(lhs, rhs, env, envw, depth);
+                    return self.exec_const_select_write(lhs, rhs, fr, depth);
                 };
                 if path.segments.len() != 1 {
                     return None;
@@ -1567,9 +1512,9 @@ impl Elaborator<'_> {
                 // §11.6: the RHS runs at max(its self width, the TARGET's width)
                 // and is then assigned — this is where `bit [3:0] t = 4'd15+4'd15`
                 // becomes 14 instead of 30.
-                let tw = envw.get(&path.segments[0].name).copied();
-                let v = self.eval_const_assign(rhs, env, envw, depth, tw)?;
-                env.insert(path.segments[0].name.clone(), v);
+                let tw = fr.widths().get(&path.segments[0].name).copied();
+                let v = self.eval_const_assign(rhs, fr, depth, tw)?;
+                fr.bind_value(path.segments[0].name.clone(), v);
                 self.const_written(&path.segments[0].name);
                 Some(ConstFlow::Normal)
             }
@@ -1579,10 +1524,10 @@ impl Elaborator<'_> {
                 else_s,
                 ..
             } => {
-                if self.eval_const_env_self(cond, env, envw, depth)? != 0 {
-                    self.exec_const_stmt(then_s, env, envw, ret, depth, steps)
+                if self.eval_const_env_self(cond, fr, depth)? != 0 {
+                    self.exec_const_stmt(then_s, fr, ret, depth, steps)
                 } else if let Some(e) = else_s {
-                    self.exec_const_stmt(e, env, envw, ret, depth, steps)
+                    self.exec_const_stmt(e, fr, ret, depth, steps)
                 } else {
                     Some(ConstFlow::Normal)
                 }
@@ -1595,14 +1540,14 @@ impl Elaborator<'_> {
                     // takes the same context width as `f = e` — without this the two
                     // spellings of one expression disagreed (`return (4'd15+4'd15)>>1`
                     // gave 15 where the assignment form gave iverilog's 7).
-                    Some(e) => Some(self.eval_const_assign(e, env, envw, depth, ret)?),
+                    Some(e) => Some(self.eval_const_assign(e, fr, depth, ret)?),
                     None => None,
                 };
                 Some(ConstFlow::Return(v))
             }
             ast::Stmt::While { cond, body, .. } => {
-                while self.eval_const_env_self(cond, env, envw, depth)? != 0 {
-                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
+                while self.eval_const_env_self(cond, fr, depth)? != 0 {
+                    match self.exec_const_stmt(body, fr, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
@@ -1616,23 +1561,23 @@ impl Elaborator<'_> {
                 body,
                 ..
             } => {
-                self.exec_const_stmt(init, env, envw, ret, depth, steps)?;
-                while self.eval_const_env_self(cond, env, envw, depth)? != 0 {
-                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
+                self.exec_const_stmt(init, fr, ret, depth, steps)?;
+                while self.eval_const_env_self(cond, fr, depth)? != 0 {
+                    match self.exec_const_stmt(body, fr, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }
-                    self.exec_const_stmt(step, env, envw, ret, depth, steps)?;
+                    self.exec_const_stmt(step, fr, ret, depth, steps)?;
                 }
                 Some(ConstFlow::Normal)
             }
             ast::Stmt::Repeat { count, body, .. } => {
-                let n = self.eval_const_env_self(count, env, envw, depth)?;
+                let n = self.eval_const_env_self(count, fr, depth)?;
                 if n < 0 {
                     return None;
                 }
                 for _ in 0..n {
-                    match self.exec_const_stmt(body, env, envw, ret, depth, steps)? {
+                    match self.exec_const_stmt(body, fr, ret, depth, steps)? {
                         ConstFlow::Normal => {}
                         other => return Some(other),
                     }

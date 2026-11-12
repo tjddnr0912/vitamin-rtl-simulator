@@ -45,7 +45,7 @@ use sim_ir as ir;
 // ---- split modules (mechanical refactor; see the module-size policy note in the crate docs) ----
 mod api;
 mod bound;
-use bound::Bound;
+use bound::{Bound, ConstFrame};
 mod array_formal;
 mod array_geom;
 mod arrays;

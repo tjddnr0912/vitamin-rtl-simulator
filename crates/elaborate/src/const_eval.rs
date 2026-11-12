@@ -1323,24 +1323,14 @@ impl Elaborator<'_> {
             // ticks in all three tools), and `fold_ca_delay` keeps a zero RISE as
             // `None` — so those stay byte-identical rather than becoming `#0`.
             if e < 0 {
-                let x = match self.const_unsigned_selfdet(
-                    num,
-                    &std::collections::BTreeMap::new(),
-                    &ConstWidths::new(),
-                    0,
-                ) {
+                let x = match self.const_unsigned_selfdet(num, &ConstFrame::new(), 0) {
                     Some(v) => crate::const_real::u64_to_real(v),
                     None => self.const_eval_real_in_scope(num)?,
                 };
                 let units = subprec_unit_ticks(x, e, mult, pmult);
                 return Some(real_delay_ticks(units, mult, pmult));
             }
-            let Some(val) = self.const_unsigned_selfdet(
-                num,
-                &std::collections::BTreeMap::new(),
-                &ConstWidths::new(),
-                0,
-            ) else {
+            let Some(val) = self.const_unsigned_selfdet(num, &ConstFrame::new(), 0) else {
                 // A REAL time literal — `#(2.5ns)`, and `#(3.0ns)` too: the integer
                 // lane has no value for either, and a bare `?` here handed the caller
                 // its SILENT no-delay (both oracles 3 ns and 3 ns; vita fired at once,
@@ -1411,13 +1401,8 @@ impl Elaborator<'_> {
                 return Some(real_delay_ticks(x, mult, pmult));
             }
         }
-        self.const_unsigned_selfdet(
-            pick,
-            &std::collections::BTreeMap::new(),
-            &ConstWidths::new(),
-            0,
-        )
-        .and_then(ticks)
+        self.const_unsigned_selfdet(pick, &ConstFrame::new(), 0)
+            .and_then(ticks)
     }
 
     /// Does `e` contain a `TimeLit` anywhere the delay walk below can reach?
@@ -1475,12 +1460,7 @@ impl Elaborator<'_> {
         match &e.kind {
             K::TimeLit { num, unit_exp } => {
                 let ex = *unit_exp as i32 - self.global_prec_exp as i32;
-                let v = match self.const_unsigned_selfdet(
-                    num,
-                    &std::collections::BTreeMap::new(),
-                    &ConstWidths::new(),
-                    0,
-                ) {
+                let v = match self.const_unsigned_selfdet(num, &ConstFrame::new(), 0) {
                     Some(v) => crate::const_real::u64_to_real(v),
                     None => self.const_eval_real_in_scope(num)?,
                 };
@@ -1569,13 +1549,8 @@ impl Elaborator<'_> {
                 return Some(x);
             }
         }
-        self.const_unsigned_selfdet(
-            e,
-            &std::collections::BTreeMap::new(),
-            &ConstWidths::new(),
-            0,
-        )
-        .map(crate::const_real::u64_to_real)
+        self.const_unsigned_selfdet(e, &ConstFrame::new(), 0)
+            .map(crate::const_real::u64_to_real)
     }
 
     /// One delay value → ticks: the scope-free fold, then the scope-resolved one.

@@ -776,13 +776,7 @@ impl Elaborator<'_> {
             let raw = b.val.first().copied().unwrap_or(0);
             return Some(crate::const_eval::coerce_i64_to_width(raw as i64, w, sg));
         }
-        self.eval_const_assign(
-            e,
-            &std::collections::BTreeMap::new(),
-            &ConstWidths::new(),
-            0,
-            Some(meta),
-        )
+        self.eval_const_assign(e, &ConstFrame::new(), 0, Some(meta))
     }
 
     /// Is every node this domain descends into within the i64 lane's 64 bits?

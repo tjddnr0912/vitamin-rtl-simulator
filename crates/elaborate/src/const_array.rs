@@ -285,12 +285,7 @@ impl Elaborator<'_> {
             } => SelParts::Indexed(offset, width, *dir),
             _ => return None,
         };
-        let (a, b, _) = self.select_span(
-            parts,
-            &std::collections::BTreeMap::new(),
-            &crate::const_fn_width::ConstWidths::new(),
-            0,
-        )?;
+        let (a, b, _) = self.select_span(parts, &ConstFrame::new(), 0)?;
         // Q-VALRULES (d) lane variant StructMember: PRE's own spelling for a select span (two select indices, not the record) ; S1v unifies.
         let w = hdl_ast::range_rules::Lane::StructMember.count_u32(a, b)?;
         Some((w, false))

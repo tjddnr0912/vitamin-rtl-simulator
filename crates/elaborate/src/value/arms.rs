@@ -55,18 +55,17 @@ impl Elaborator<'_> {
         &self,
         lane: ArmLane,
         e: &ast::Expr,
-        env: &BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<bool> {
-        match self.eval_const_env_self(e, env, envw, depth) {
+        match self.eval_const_env_self(e, fr, depth) {
             Some(v) => Some(v != 0),
             None => {
                 if lane == ArmLane::Env {
                     return None;
                 }
                 if lane == ArmLane::Ctx {
-                    let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
+                    let local = |n: &str| fr.env().contains_key(n) || fr.widths().contains_key(n);
                     if ast_names_any(e, &local) {
                         return None;
                     }
@@ -100,16 +99,15 @@ impl Elaborator<'_> {
         &self,
         target: &ast::CastTarget,
         operand: &ast::Expr,
-        env: &BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
         let n = u32::try_from(self.cast_size_bits(target)?).ok()?;
         if !(1..=64).contains(&n) {
             return None;
         }
-        let sg = self.const_signed_env(operand, envw);
-        let v = self.eval_const_assign(operand, env, envw, depth, Some((n, sg)))?;
+        let sg = self.const_signed_env(operand, fr.widths());
+        let v = self.eval_const_assign(operand, fr, depth, Some((n, sg)))?;
         if n == 64 && !sg && v < 0 {
             return None;
         }
@@ -167,7 +165,7 @@ impl Elaborator<'_> {
             // truncation is no longer an approximation, so the sign no longer has to
             // be guessed away.
             ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
-                self.const_size_cast(target, operand, &BTreeMap::new(), &ConstWidths::new(), 0)
+                self.const_size_cast(target, operand, &ConstFrame::new(), 0)
             }
             // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
             // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), so it
@@ -203,8 +201,7 @@ impl Elaborator<'_> {
                 if !(1..=63).contains(&w) {
                     return None;
                 }
-                let v =
-                    self.const_size_cast(inner, inner_e, &BTreeMap::new(), &ConstWidths::new(), 0)?;
+                let v = self.const_size_cast(inner, inner_e, &ConstFrame::new(), 0)?;
                 let mask = (1i64 << w) - 1;
                 let u = v & mask;
                 Some(if signed && (u >> (w - 1)) & 1 == 1 {
@@ -325,8 +322,7 @@ mod tests {
                 if !(1..=63).contains(&w) {
                     return None;
                 }
-                let v =
-                    el.const_size_cast(inner, inner_e, &BTreeMap::new(), &ConstWidths::new(), 0)?;
+                let v = el.const_size_cast(inner, inner_e, &ConstFrame::new(), 0)?;
                 let mask = (1i64 << w) - 1;
                 let u = v & mask;
                 Some(if signed && (u >> (w - 1)) & 1 == 1 {

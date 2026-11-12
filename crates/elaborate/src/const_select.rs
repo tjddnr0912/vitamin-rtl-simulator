@@ -91,25 +91,24 @@ impl Elaborator<'_> {
     pub(crate) fn select_span(
         &self,
         p: SelParts<'_>,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<(i64, i64, bool)> {
         match p {
             SelParts::Bit(index) => {
-                let i = self.eval_const_env_self(index, env, envw, depth)?;
+                let i = self.eval_const_env_self(index, fr, depth)?;
                 Some((i, i, false))
             }
             SelParts::Range(msb, lsb) => Some((
-                self.eval_const_env_self(msb, env, envw, depth)?,
-                self.eval_const_env_self(lsb, env, envw, depth)?,
+                self.eval_const_env_self(msb, fr, depth)?,
+                self.eval_const_env_self(lsb, fr, depth)?,
                 true,
             )),
             // `b +: w` / `b -: w` (§11.5.1): the WIDTH is a positive constant and
             // the span runs numerically up or down from the offset.
             SelParts::Indexed(offset, width, dir) => {
-                let o = self.eval_const_env_self(offset, env, envw, depth)?;
-                let w = self.eval_const_env_self(width, env, envw, depth)?;
+                let o = self.eval_const_env_self(offset, fr, depth)?;
+                let w = self.eval_const_env_self(width, fr, depth)?;
                 if w <= 0 {
                     return None;
                 }
@@ -155,12 +154,7 @@ impl Elaborator<'_> {
     /// (§11.5.1) whatever the base's signedness, and its width is the number of
     /// bits selected.
     pub(crate) fn const_param_select(&self, e: &ast::Expr) -> Option<i64> {
-        self.const_param_select_env(
-            e,
-            &std::collections::BTreeMap::new(),
-            &crate::const_fn_width::ConstWidths::new(),
-            0,
-        )
+        self.const_param_select_env(e, &ConstFrame::new(), 0)
     }
 
     /// [`Self::const_param_select`] with a const-function ENVIRONMENT, so an index
@@ -172,12 +166,10 @@ impl Elaborator<'_> {
     pub(crate) fn const_param_select_env(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
-        let (val, lo_n, hi_n, dlo, dwidth, asc) =
-            self.const_select_resolved(e, env, envw, depth)?;
+        let (val, lo_n, hi_n, dlo, dwidth, asc) = self.const_select_resolved(e, fr, depth)?;
         let n = hdl_ast::range_rules::span_u32_wrap(lo_n, hi_n);
         if n > 63 {
             // 64 unsigned magnitude bits do not fit the i64 const domain — the same
@@ -245,11 +237,9 @@ impl Elaborator<'_> {
     pub(crate) fn const_param_select_shifted_bits(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
     ) -> Option<WideBits> {
-        let (val, lo_n, hi_n, dlo, dwidth, asc) =
-            self.const_select_resolved_raw(e, env, envw, 0)?;
+        let (val, lo_n, hi_n, dlo, dwidth, asc) = self.const_select_resolved_raw(e, fr, 0)?;
         if dlo == 0 && !asc {
             return None;
         }
@@ -328,11 +318,7 @@ impl Elaborator<'_> {
     /// — the module-scope spelling every wide-domain resolver but the const-function
     /// interpreter's needs.
     pub(crate) fn shifted_select_bits(&self, e: &ast::Expr) -> Option<WideBits> {
-        self.const_param_select_shifted_bits(
-            e,
-            &std::collections::BTreeMap::new(),
-            &crate::const_fn_width::ConstWidths::new(),
-        )
+        self.const_param_select_shifted_bits(e, &ConstFrame::new())
     }
 
     /// One declared-domain index → its internal bit position, UNCLAMPED (it may lie
@@ -369,11 +355,10 @@ impl Elaborator<'_> {
     fn const_select_resolved(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<(SelBase, i64, i64, i64, u32, bool)> {
-        let r = self.const_select_resolved_raw(e, env, envw, depth)?;
+        let r = self.const_select_resolved_raw(e, fr, depth)?;
         let (lo_n, hi_n, dlo, dwidth) = (r.1, r.2, r.3, r.4);
         if !Self::select_idx_in_declared_range(lo_n, dlo, dwidth)
             || !Self::select_idx_in_declared_range(hi_n, dlo, dwidth)
@@ -391,11 +376,10 @@ impl Elaborator<'_> {
     fn const_select_resolved_raw(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<(SelBase, i64, i64, i64, u32, bool)> {
-        let (base, a, b, directed) = self.const_select_bounds(e, env, envw, depth)?;
+        let (base, a, b, directed) = self.const_select_bounds(e, fr, depth)?;
         let (val, dlo, dwidth, asc) = self.const_select_base(base)?;
         // ⚠️ `[m:l]` is written LEFT:RIGHT in the base's own declared direction, so
         // "which endpoint is numerically larger" is decided by the BASE, not by the
@@ -441,8 +425,7 @@ impl Elaborator<'_> {
     fn const_select_bounds<'a>(
         &self,
         e: &'a ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &crate::const_fn_width::ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<(&'a ast::Expr, i64, i64, bool)> {
         let (base, parts) = match &e.kind {
@@ -456,7 +439,7 @@ impl Elaborator<'_> {
             } => (base, SelParts::Indexed(offset, width, *dir)),
             _ => return None,
         };
-        let (a, b, directed) = self.select_span(parts, env, envw, depth)?;
+        let (a, b, directed) = self.select_span(parts, fr, depth)?;
         Some((base, a, b, directed))
     }
 
@@ -761,12 +744,7 @@ impl Elaborator<'_> {
     /// has no recorded width here — it stays the §4.5.344 width-unknown leaf, which
     /// degrades to the unlimited domain exactly as before.
     pub(crate) fn const_select_self_width(&self, e: &ast::Expr) -> Option<u32> {
-        let (_, lo_n, hi_n, ..) = self.const_select_resolved(
-            e,
-            &std::collections::BTreeMap::new(),
-            &crate::const_fn_width::ConstWidths::new(),
-            0,
-        )?;
+        let (_, lo_n, hi_n, ..) = self.const_select_resolved(e, &ConstFrame::new(), 0)?;
         hdl_ast::range_rules::span_u32_checked(lo_n, hi_n)
     }
 }

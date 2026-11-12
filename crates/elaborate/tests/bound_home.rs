@@ -31,6 +31,16 @@
 //!   a closure opened after another token than `( , = { ; => :`, `move`, `return` ;
 //!   a map read through a local reference or a helper fn.
 //!
+//! - F0-F4 the constant-function frame (BIND-2a, `bound/frame.rs`, `ConstFrame`): its two
+//!   maps are private fields, so a raw write outside `frame.rs` does not compile ; F0 each
+//!   writer method is one map verb on its own field and nothing else in `frame.rs` writes
+//!   a field or hands out `&mut` to one ; F1 the writers' calls per (file, fn) ; F2 their
+//!   place among the binding calls of `bind_const_decl` / `eval_const_call_at` (PRE's
+//!   order) ; F3 `ConstFrame::new(` per (file, fn) (26) and `&mut ConstFrame` in three
+//!   signatures ; F4 no signature takes the value map beside `ConstWidths`, and the
+//!   width-only fns are a listed table. REVIEW-ONLY: a frame moved by value or swapped
+//!   (`mem::swap` / `replace`), a writer reached through a fn pointer, a macro body.
+//!
 //! What no shape sees is REVIEW-ONLY in `bound/mod.rs`'s head note: a write through a
 //! reference bound earlier, a macro body, `mem::swap` / `replace` of two fields reached
 //! through locals of a destructured `Elaborator`, a receiver spelled through a call.
@@ -899,6 +909,471 @@ fn walker_controls_w5() {
         count_w5(
             "W5c",
             "fn f() { self.walk_scopes_key(n, |k| self.hit_value(k)).is_some_and(|k| self.params.contains_key(&k)); self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); }"
+        ),
+        0
+    );
+}
+
+// ---- BIND-2a: the constant-function frame (`bound/frame.rs`) ----
+
+/// The frame's home file.
+const FRAME: &str = "crates/elaborate/src/bound/frame.rs";
+/// The frame's four writer methods.
+const FRAME_WRITERS: [&str; 4] = ["bind_shape", "bind_value", "unbind_value", "seed_value"];
+
+/// F0: inside `bound/frame.rs`, (fn, field, write verb, count): each writer is one map
+/// verb on its own field, and nothing else in the file writes a field.
+#[rustfmt::skip]
+const F0_WRITES: &[(&str, &str, &str, usize)] = &[
+    ("bind_shape", "envw", "insert", 1),
+    ("bind_value", "env", "insert", 1),
+    ("seed_value", "env", "entry", 1),
+    ("unbind_value", "env", "remove", 1),
+];
+
+/// F1: (writer, file, fn, calls) outside `bound/frame.rs` (W1-W12 of the plan's site
+/// table ; `eval_const_call_at`'s `body` closure is keyed to its fn).
+#[rustfmt::skip]
+const F1_CALLS: &[(&str, &str, &str, usize)] = &[
+    ("bind_shape", "crates/elaborate/src/const_fn.rs", "bind_const_decl", 1),
+    ("bind_shape", "crates/elaborate/src/const_fn.rs", "eval_const_call_at", 2),
+    ("bind_value", "crates/elaborate/src/const_fn.rs", "bind_const_decl", 2),
+    ("bind_value", "crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
+    ("bind_value", "crates/elaborate/src/const_fn.rs", "exec_const_select_write", 1),
+    ("bind_value", "crates/elaborate/src/const_fn.rs", "exec_const_stmt", 1),
+    ("seed_value", "crates/elaborate/src/const_fn.rs", "eval_const_call_at", 2),
+    ("unbind_value", "crates/elaborate/src/const_fn.rs", "bind_const_decl", 2),
+];
+
+/// F2: the calls of these names inside the two binding fns, in source order (PRE's
+/// order: a declaration's shape is recorded after `const_redeclared` and before its
+/// initializer folds ; a formal's shape, then its value ; the package seed after the
+/// formals ; the return variable's shape after the body's declarations, then the
+/// "already bound" test, then its seed).
+const F2_NAMES: [&str; 14] = [
+    "decl_enter",
+    "const_decl_wsign",
+    "decl_exit",
+    "const_redeclared",
+    "bind_shape",
+    "bind_value",
+    "unbind_value",
+    "seed_value",
+    "const_seed",
+    "const_written",
+    "eval_const_assign",
+    "bind_const_decl",
+    "contains_key",
+    "exec_const_stmt",
+];
+#[rustfmt::skip]
+const F2_ORDER: &[(&str, &[&str])] = &[
+    ("bind_const_decl", &[
+        "decl_enter", "const_decl_wsign", "decl_exit", "const_redeclared", "bind_shape",
+        "bind_value", "const_seed", "eval_const_assign", "bind_value", "const_written",
+        "unbind_value", "const_seed", "unbind_value",
+    ]),
+    ("eval_const_call_at", &[
+        "const_decl_wsign", "eval_const_assign", "eval_const_assign", "bind_shape", "bind_value",
+        "seed_value", "bind_const_decl", "bind_shape", "contains_key", "const_seed",
+        "seed_value", "exec_const_stmt", "decl_enter", "decl_exit",
+    ]),
+];
+
+/// F3: `ConstFrame::new(` per (file, fn) outside `#[cfg(test)]` (26: 24 empty frames
+/// where PRE passed `&BTreeMap::new(), &ConstWidths::new()`, the count position's one
+/// `empty` frame in `const_placement_wide`, and the callee's frame in
+/// `eval_const_call_at`).
+#[rustfmt::skip]
+const F3_NEW: &[(&str, &str, usize)] = &[
+    ("crates/elaborate/src/const_array.rs", "select_init_meta", 1),
+    ("crates/elaborate/src/const_eval.rs", "delay_plain_units", 1),
+    ("crates/elaborate/src/const_eval.rs", "delay_ticks_in_scope", 3),
+    ("crates/elaborate/src/const_eval.rs", "delay_units_in_scope", 1),
+    ("crates/elaborate/src/const_fn.rs", "const_eval_in_scope", 8),
+    ("crates/elaborate/src/const_fn.rs", "const_int_selfdet", 1),
+    ("crates/elaborate/src/const_fn.rs", "const_placement_wide", 1),
+    ("crates/elaborate/src/const_fn.rs", "eval_const_call_at", 1),
+    ("crates/elaborate/src/const_fn_width/fold_x.rs", "range_bound_fold_ev", 1),
+    ("crates/elaborate/src/const_select.rs", "const_param_select", 1),
+    ("crates/elaborate/src/const_select.rs", "const_select_self_width", 1),
+    ("crates/elaborate/src/const_select.rs", "shifted_select_bits", 1),
+    ("crates/elaborate/src/param_query.rs", "override_self_value", 1),
+    ("crates/elaborate/src/params.rs", "param_decl_width_opt", 1),
+    ("crates/elaborate/src/params.rs", "param_init_x", 1),
+    ("crates/elaborate/src/value/arms.rs", "const_eval_cast", 1),
+    ("crates/elaborate/src/value/arms.rs", "signing_over_size_cast", 1),
+];
+
+/// F3: the three fns whose signature takes `&mut ConstFrame` (they write the frame).
+const F3_MUT: [&str; 3] = [
+    "bind_const_decl",
+    "exec_const_select_write",
+    "exec_const_stmt",
+];
+
+/// F4b: the fns whose signature names `ConstWidths` (they read widths alone ; fed
+/// `fr.widths()` by the frame fns, and the certified producers' maps elsewhere).
+#[rustfmt::skip]
+const F4_WIDTHS: &[(&str, &str)] = &[
+    ("crates/elaborate/src/const_fn_width.rs", "const_self_width"),
+    ("crates/elaborate/src/const_fn_width.rs", "const_signed_env"),
+    ("crates/elaborate/src/const_fn_width.rs", "ctx_width_names_are_evident"),
+    ("crates/elaborate/src/const_fn_width.rs", "select_base_is_certified"),
+    ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding"),
+    ("crates/elaborate/src/const_fn_width/fold_x.rs", "x_certified"),
+    ("crates/elaborate/src/params.rs", "concat_width_is_declared"),
+    ("crates/elaborate/src/params.rs", "declared_env_signed"),
+];
+
+/// Each `fn <name>`'s parameter list (the tokens of its first `( .. )` group): (name,
+/// texts, key of the `fn` token).
+fn signatures(t: &[Tok]) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    for i in 0..t.len() {
+        if t[i].text != "fn" || t.get(i + 1).is_none_or(|x| x.kind != Kind::Id) {
+            continue;
+        }
+        let mut j = i + 2;
+        let mut d = 0i32;
+        while j < t.len() {
+            match t[j].text.as_str() {
+                "<" => d += 1,
+                ">" => d -= 1,
+                "(" if d == 0 => break,
+                "{" | ";" => break,
+                _ => {}
+            }
+            j += 1;
+        }
+        if t.get(j).is_none_or(|x| x.text != "(") {
+            continue;
+        }
+        let close = close_of(t, j);
+        let texts = t[j + 1..close.min(t.len())]
+            .iter()
+            .map(|x| x.text.clone())
+            .collect();
+        out.push((t[i + 1].text.clone(), texts));
+    }
+    out
+}
+
+/// `BTreeMap < String , i64 >` at `k` in `s` (any path prefix before `BTreeMap`).
+fn value_map_at(s: &[String], k: usize) -> bool {
+    let w = ["BTreeMap", "<", "String", ",", "i64", ">"];
+    k + w.len() <= s.len() && w.iter().enumerate().all(|(o, x)| s[k + o] == *x)
+}
+
+/// F (rule, key) hits of one source: `F0:<fn>:<field>:<verb>` a field write inside the
+/// frame file, `F0amut` `& mut self . <field>`, `F0ret` `-> & mut` ; `F1:<writer>` a
+/// writer call ; `F2:<fn>` one hit per named call, key `<i>:<name>` ; `F3new` a
+/// `ConstFrame :: new (` ; `F3mut:<fn>` a signature with `& mut ConstFrame` ; `F4a:<fn>`
+/// a signature naming both maps' types ; `F4b:<fn>` a signature naming `ConstWidths`.
+fn hits_f(src: &str, frame_file: bool) -> Vec<(String, String)> {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut f2n: BTreeMap<String, usize> = BTreeMap::new();
+    for (i, tok) in t.iter().enumerate() {
+        let key = tok.key.clone();
+        let v = tx(i);
+        if frame_file {
+            if v == "self"
+                && tx(i + 1) == "."
+                && matches!(tx(i + 2), "env" | "envw")
+                && tx(i + 3) == "."
+                && WRITE_VERBS.contains(&tx(i + 4))
+                && tx(i + 5) == "("
+            {
+                out.push((format!("F0:{key}:{}:{}", tx(i + 2), tx(i + 4)), key.clone()));
+            }
+            if v == "&"
+                && tx(i + 1) == "mut"
+                && tx(i + 2) == "self"
+                && tx(i + 3) == "."
+                && matches!(tx(i + 4), "env" | "envw")
+            {
+                out.push(("F0amut".into(), key.clone()));
+            }
+            if v == "-" && tx(i + 1) == ">" && tx(i + 2) == "&" && tx(i + 3) == "mut" {
+                out.push(("F0ret".into(), key.clone()));
+            }
+            continue;
+        }
+        let call = tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn");
+        if call && i >= 1 && tx(i - 1) == "." && FRAME_WRITERS.contains(&v) {
+            out.push((format!("F1:{v}"), key.clone()));
+        }
+        if call && F2_NAMES.contains(&v) && F2_ORDER.iter().any(|(k, _)| *k == key) {
+            let n = f2n.entry(key.clone()).or_insert(0);
+            out.push((format!("F2:{key}"), format!("{n}:{v}")));
+            *n += 1;
+        }
+        if v == "ConstFrame" && tx(i + 1) == "::" && tx(i + 2) == "new" && tx(i + 3) == "(" {
+            out.push(("F3new".into(), key.clone()));
+        }
+    }
+    for (name, s) in signatures(&t) {
+        if (0..s.len()).any(|k| {
+            s[k] == "&"
+                && s.get(k + 1).is_some_and(|x| x == "mut")
+                && s.get(k + 2).is_some_and(|x| x == "ConstFrame")
+        }) {
+            out.push((format!("F3mut:{name}"), name.clone()));
+        }
+        let cw = s.iter().any(|x| x == "ConstWidths");
+        let vm = (0..s.len()).any(|k| value_map_at(&s, k));
+        if cw && vm {
+            out.push((format!("F4a:{name}"), name.clone()));
+        }
+        if cw {
+            out.push((format!("F4b:{name}"), name.clone()));
+        }
+    }
+    out
+}
+
+#[test]
+fn the_const_frame_has_one_writer_set() {
+    let root = workspace_root();
+    let mut f0: BTreeMap<String, usize> = BTreeMap::new();
+    let mut f1: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    let mut f2: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut f3: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut f3m: Vec<String> = Vec::new();
+    let mut f4a: Vec<String> = Vec::new();
+    let mut f4b: Vec<(String, String)> = Vec::new();
+    let mut seen_frame = false;
+    for (rel, src) in src_files(&root) {
+        let ff = rel == FRAME;
+        seen_frame |= ff;
+        for (rule, key) in hits_f(&src, ff) {
+            if ff {
+                *f0.entry(rule).or_insert(0) += 1;
+            } else if let Some(w) = rule.strip_prefix("F1:") {
+                *f1.entry((w.to_string(), rel.clone(), key)).or_insert(0) += 1;
+            } else if let Some(k) = rule.strip_prefix("F2:") {
+                f2.entry(k.to_string()).or_default().push(key);
+            } else if rule == "F3new" {
+                *f3.entry((rel.clone(), key)).or_insert(0) += 1;
+            } else if rule.starts_with("F3mut:") {
+                f3m.push(key);
+            } else if rule.starts_with("F4a:") {
+                f4a.push(format!("{rel} {key}"));
+            } else if rule.starts_with("F4b:") {
+                f4b.push((rel.clone(), key));
+            }
+        }
+    }
+    assert!(seen_frame, "no {FRAME}");
+    let want0: BTreeMap<String, usize> = F0_WRITES
+        .iter()
+        .map(|(k, f, v, n)| (format!("F0:{k}:{f}:{v}"), *n))
+        .collect();
+    assert_eq!(
+        f0, want0,
+        "F0: in {FRAME} each writer is one map verb on its own field, nothing else writes a field, no `&mut` to a field is taken or returned"
+    );
+    let want1: BTreeMap<(String, String, String), usize> = F1_CALLS
+        .iter()
+        .map(|(w, f, k, n)| ((w.to_string(), f.to_string(), k.to_string()), *n))
+        .collect();
+    assert_eq!(
+        f1, want1,
+        "F1: a frame writer is called from a new (file, fn) or a different number of times (a new writer site is a row)"
+    );
+    let want2: BTreeMap<String, Vec<String>> = F2_ORDER
+        .iter()
+        .map(|(k, names)| {
+            (
+                k.to_string(),
+                names
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("{i}:{s}"))
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        f2, want2,
+        "F2: a frame write left PRE's place in bind_const_decl / eval_const_call_at"
+    );
+    let want3: BTreeMap<(String, String), usize> = F3_NEW
+        .iter()
+        .map(|(f, k, n)| ((f.to_string(), k.to_string()), *n))
+        .collect();
+    assert_eq!(
+        f3, want3,
+        "F3: `ConstFrame::new(` per (file, fn) moved (an empty frame or a new frame is a row)"
+    );
+    assert_eq!(
+        f3.values().sum::<usize>(),
+        26,
+        "F3: 26 `ConstFrame::new(` outside #[cfg(test)]"
+    );
+    f3m.sort();
+    assert_eq!(
+        f3m, F3_MUT,
+        "F3: a signature took `&mut ConstFrame` (only the three writers' hosts write the frame)"
+    );
+    assert!(
+        f4a.is_empty(),
+        "F4a: a fn takes `BTreeMap<String, i64>` beside `ConstWidths` (the two maps travel as one `ConstFrame`): {f4a:?}"
+    );
+    f4b.sort();
+    let want4b: Vec<(String, String)> = F4_WIDTHS
+        .iter()
+        .map(|(f, k)| (f.to_string(), k.to_string()))
+        .collect();
+    assert_eq!(
+        f4b, want4b,
+        "F4b: the fns that take `ConstWidths` alone moved (a frame fn takes `&ConstFrame`)"
+    );
+}
+
+fn count_f(rule: &str, src: &str, frame_file: bool) -> usize {
+    hits_f(src, frame_file)
+        .iter()
+        .filter(|(r, _)| r == rule)
+        .count()
+}
+
+#[test]
+fn walker_controls_f() {
+    // F0: a field write verb on each field (multi-line) ; not a read, not another
+    // receiver's field, not a local named `env`.
+    assert_eq!(
+        count_f(
+            "F0:bind_value:env:insert",
+            "impl F { fn bind_value(&mut self) { self.env.insert(n, v); self\n .env\n .insert(m, w); self.env.get(n); env.insert(n, v); x.env.insert(n, v); } }",
+            true
+        ),
+        2
+    );
+    assert_eq!(
+        count_f(
+            "F0:seed_value:envw:entry",
+            "impl F { fn seed_value(&mut self) { self.envw.entry(k).or_insert(0); } }",
+            true
+        ),
+        1
+    );
+    assert_eq!(
+        count_f(
+            "F0amut",
+            "impl F { fn a(&mut self) -> &mut BTreeMap<String, i64> { &mut self.env } fn b(&self) -> &ConstWidths { &self.envw } }",
+            true
+        ),
+        1
+    );
+    assert_eq!(
+        count_f(
+            "F0ret",
+            "impl F { fn a(&mut self) -> &mut BTreeMap<String, i64> { &mut self.env } fn b(&self) -> &ConstWidths { &self.envw } }",
+            true
+        ),
+        1
+    );
+    // F1: a method call on any receiver, multi-line ; not the definition, not a free fn,
+    // not a longer name.
+    assert_eq!(
+        count_f(
+            "F1:bind_value",
+            "fn f() { fr.bind_value(n, 0); self.fr\n .bind_value(\n n, v); }",
+            false
+        ),
+        2
+    );
+    assert_eq!(
+        count_f(
+            "F1:bind_value",
+            "fn bind_value(&mut self) {} fn g() { bind_value(n); fr.bind_values(n); }",
+            false
+        ),
+        0
+    );
+    // F2: the order is read from the body ; a swapped body reads swapped ; another fn
+    // is not read.
+    let order = |src: &str| -> Vec<String> {
+        hits_f(src, false)
+            .into_iter()
+            .filter(|(r, _)| r == "F2:bind_const_decl")
+            .map(|(_, k)| k)
+            .collect()
+    };
+    let pre = "fn bind_const_decl() { self.const_redeclared(n); fr.bind_shape(n, m); match i { Some(e) => match self.eval_const_assign(e, fr) { Some(v) => { fr.bind_value(n, v); } None => {} }, _ => {} } } fn g() { fr.bind_value(n, 1); }";
+    assert_eq!(
+        order(pre),
+        vec![
+            "0:const_redeclared",
+            "1:bind_shape",
+            "2:eval_const_assign",
+            "3:bind_value"
+        ]
+    );
+    let m2 = "fn bind_const_decl() { self.const_redeclared(n); match i { Some(e) => match self.eval_const_assign(e, fr) { Some(v) => { fr.bind_shape(n, m); fr.bind_value(n, v); } None => {} }, _ => {} } }";
+    assert_ne!(order(m2), order(pre));
+    // F3: the constructor on each spelling ; not `ConstFrame {`, not another type's new.
+    assert_eq!(
+        count_f(
+            "F3new",
+            "fn f() { g(&ConstFrame::new()); let mut fr = ConstFrame :: new (); let x = ConstWidths::new(); }",
+            false
+        ),
+        2
+    );
+    assert_eq!(
+        count_f(
+            "F3new",
+            "fn new() -> Self { ConstFrame { env: BTreeMap::new(), envw: BTreeMap::new() } }",
+            false
+        ),
+        0
+    );
+    // F3 / F4: a signature's parameter list only (not its return type, not a body) ;
+    // generics before the list ; a path prefix on `BTreeMap`.
+    assert_eq!(
+        count_f(
+            "F3mut:w",
+            "fn w<'a>(&self, fr: &mut ConstFrame, d: u32) -> &mut ConstFrame { x } fn r(fr: &ConstFrame) { let y: &mut ConstFrame = z; }",
+            false
+        ),
+        1
+    );
+    assert_eq!(
+        count_f(
+            "F4a:two",
+            "fn two(e: &Expr, env: &std::collections::BTreeMap<String, i64>,\n envw: &ConstWidths) {} fn one(envw: &ConstWidths) -> BTreeMap<String, i64> { x }",
+            false
+        ),
+        1
+    );
+    assert_eq!(
+        hits_f(
+            "fn one(envw: &ConstWidths) -> BTreeMap<String, i64> { x } fn v(env: &BTreeMap<String, u32>, w: &ConstWidths) {}",
+            false
+        )
+        .iter()
+        .filter(|(r, _)| r.starts_with("F4a:"))
+        .count(),
+        0
+    );
+    assert_eq!(
+        count_f(
+            "F4b:one",
+            "fn one(envw: &ConstWidths) -> BTreeMap<String, i64> { x } fn r(fr: &ConstFrame) -> &ConstWidths { y }",
+            false
+        ),
+        1
+    );
+    // `#[cfg(test)]` items are skipped.
+    assert_eq!(
+        count_f(
+            "F3new",
+            "#[cfg(test)]\nmod t { fn f() { g(&ConstFrame::new()); } }\nfn h() {}",
+            false
         ),
         0
     );

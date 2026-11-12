@@ -167,8 +167,7 @@ impl Elaborator<'_> {
     pub(crate) fn fold_ctx(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
         ctx_w: u32,
         ctx_signed: bool,
@@ -219,7 +218,7 @@ impl Elaborator<'_> {
             matches!(a, No) || (matches!(a, Four { .. }) && Self::subtree_has_call(sib))
         };
         match &e.kind {
-            K::Paren { inner } => self.fold_ctx(inner, env, envw, depth, ctx_w, ctx_signed),
+            K::Paren { inner } => self.fold_ctx(inner, fr, depth, ctx_w, ctx_signed),
             // §5.7.1: a fill is the fill bit replicated to the CONTEXT width — `ctx_w`
             // here is the region width the parent computed as `max(ctx, every
             // self-determined sibling)`, so `4'd8 - '1` sees a 4-bit all-ones (both
@@ -235,10 +234,7 @@ impl Elaborator<'_> {
             K::Unary {
                 op: op @ (ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot),
                 operand,
-            } => match (
-                op,
-                self.fold_ctx(operand, env, envw, depth, ctx_w, ctx_signed),
-            ) {
+            } => match (op, self.fold_ctx(operand, fr, depth, ctx_w, ctx_signed)) {
                 (_, No) => No,
                 (_, Val(v)) => arms::unary_i64(*op, v).map(mask).into(),
                 (ast::UnOp::Plus, Four { v, x, why }) => four(v, x, why),
@@ -266,11 +262,11 @@ impl Elaborator<'_> {
                     | B::BitOr
                     | B::BitXor
                     | B::BitXnor => {
-                        let a = self.fold_ctx(lhs, env, envw, depth, ctx_w, ctx_signed);
+                        let a = self.fold_ctx(lhs, fr, depth, ctx_w, ctx_signed);
                         if unevaluable_after(a, rhs) {
                             return No;
                         }
-                        let b = self.fold_ctx(rhs, env, envw, depth, ctx_w, ctx_signed);
+                        let b = self.fold_ctx(rhs, fr, depth, ctx_w, ctx_signed);
                         // ⚠️ `/` and `%` are the two SIGN-sensitive members of this arm
                         // (the rest are bit-pattern ops), so at 64+ unsigned bits they
                         // divide in u64: both oracles fold
@@ -375,7 +371,7 @@ impl Elaborator<'_> {
                     // self-determined (`(8'd200+8'd100) >> 2` is 11 at 8 bits and
                     // 75 at 32 — the count itself is 2 either way).
                     B::Shl | B::Shr | B::AShl | B::AShr | B::Pow => {
-                        let a = self.fold_ctx(lhs, env, envw, depth, ctx_w, ctx_signed);
+                        let a = self.fold_ctx(lhs, fr, depth, ctx_w, ctx_signed);
                         if unevaluable_after(a, rhs) {
                             return No;
                         }
@@ -384,8 +380,7 @@ impl Elaborator<'_> {
                         // that is what decides whether the IEEE negative-exponent
                         // table applies at all. A shift count needs no such thing.
                         if matches!(op, B::Pow) {
-                            let Some((b, sg)) =
-                                self.const_pow_exponent_selfdet(rhs, env, envw, depth)
+                            let Some((b, sg)) = self.const_pow_exponent_selfdet(rhs, fr, depth)
                             else {
                                 return No;
                             };
@@ -417,7 +412,7 @@ impl Elaborator<'_> {
                                 No => No,
                             };
                         }
-                        let Some(b) = self.eval_const_shift_count(rhs, env, envw, depth) else {
+                        let Some(b) = self.eval_const_shift_count(rhs, fr, depth) else {
                             return No;
                         };
                         // With a KNOWN context width a shift is exact on the bit
@@ -496,7 +491,7 @@ impl Elaborator<'_> {
                             // ⚠️ Only the SPECIAL cases delegate, never the whole node: a
                             // plain `(4'd15 + 4'd1) > 0` must keep this walk's width-honest
                             // 0 and not the unlimited domain's 1.
-                            if env.is_empty() && envw.is_empty() {
+                            if fr.env().is_empty() && fr.widths().is_empty() {
                                 if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
                                     return Some(v);
                                 }
@@ -514,18 +509,18 @@ impl Elaborator<'_> {
                             // An UNKNOWN operand width means the pair cannot be sized,
                             // so nothing is masked (`w = 0`) rather than guessing 32.
                             let w = match (
-                                self.const_self_width(lhs, envw),
-                                self.const_self_width(rhs, envw),
+                                self.const_self_width(lhs, fr.widths()),
+                                self.const_self_width(rhs, fr.widths()),
                             ) {
                                 (Some(a), Some(b)) => a.max(b),
                                 _ => 0,
                             };
                             // The operands form their OWN context — they unify width
                             // AND sign with each other, not with the enclosing one.
-                            let cs = self.const_signed_env(lhs, envw)
-                                && self.const_signed_env(rhs, envw);
-                            let a = self.eval_const_env_at(lhs, env, envw, depth, w, cs)?;
-                            let b = self.eval_const_env_at(rhs, env, envw, depth, w, cs)?;
+                            let cs = self.const_signed_env(lhs, fr.widths())
+                                && self.const_signed_env(rhs, fr.widths());
+                            let a = self.eval_const_env_at(lhs, fr, depth, w, cs)?;
+                            let b = self.eval_const_env_at(rhs, fr, depth, w, cs)?;
                             // ⚠️ ORDERING at 64+ unsigned bits must read u64. `const_binop`
                             // compares signed i64, which is right for every width masking
                             // can normalize and wrong for the one it cannot.
@@ -554,13 +549,13 @@ impl Elaborator<'_> {
                 // arms take the context, and only the taken one is evaluated. One
                 // carrying x/z bits is read for its truth in the wide domain (as the
                 // `!` arm does), unless it names a constant-function local.
-                let Some(c) = self.selfdet_truth_arm(ArmLane::Ctx, cond, env, envw, depth) else {
+                let Some(c) = self.selfdet_truth_arm(ArmLane::Ctx, cond, fr, depth) else {
                     return No;
                 };
                 if c {
-                    self.fold_ctx(then_e, env, envw, depth, ctx_w, ctx_signed)
+                    self.fold_ctx(then_e, fr, depth, ctx_w, ctx_signed)
                 } else {
-                    self.fold_ctx(else_e, env, envw, depth, ctx_w, ctx_signed)
+                    self.fold_ctx(else_e, fr, depth, ctx_w, ctx_signed)
                 }
             }
             // `!x` (and the reductions) yield a 1-BIT result from a
@@ -573,7 +568,7 @@ impl Elaborator<'_> {
                 let _ = op;
                 // An operand carrying x/z bits: its TRUTH, through the wide domain,
                 // unless it names a constant-function local (the Ctx lane).
-                self.selfdet_truth_arm(ArmLane::Ctx, operand, env, envw, depth)
+                self.selfdet_truth_arm(ArmLane::Ctx, operand, fr, depth)
                     .map(|t| !t as i64)
                     .into()
             }
@@ -603,15 +598,15 @@ impl Elaborator<'_> {
                     | ast::UnOp::RedXnor),
                 operand,
             } => (|| -> Option<i64> {
-                let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
+                let local = |n: &str| fr.env().contains_key(n) || fr.widths().contains_key(n);
                 if !ast_names_any(operand, &local) {
                     return self.selfdet_bits_i64(e);
                 }
-                let w = self.const_self_width(operand, envw)?;
+                let w = self.const_self_width(operand, fr.widths())?;
                 if w == 0 || w > 64 {
                     return None;
                 }
-                let v = self.eval_const_env_self(operand, env, envw, depth)?;
+                let v = self.eval_const_env_self(operand, fr, depth)?;
                 let all = if w == 64 { u64::MAX } else { (1u64 << w) - 1 };
                 let bits = (v as u64) & all;
                 let r = match op {
@@ -631,7 +626,7 @@ impl Elaborator<'_> {
             // `$clog2(4'd15 + 4'd15)` is `$clog2(14)` = 4, not `$clog2(30)` = 5,
             // whatever the assignment target is. A BOUNDARY.
             K::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                self.const_clog2_selfdet(&args[0], env, envw, depth).into()
+                self.const_clog2_selfdet(&args[0], fr, depth).into()
             }
             // A leaf enters the context at ITS OWN declared width: §11.6.1 extends
             // an operand to the context size, sign-extending only when the operand
@@ -642,7 +637,7 @@ impl Elaborator<'_> {
             // 1 where iverilog and vita's own runtime answer 0. A BOUNDARY (casts,
             // calls, concatenations, replications, selects and system calls are leaves).
             _ => (|| -> Option<i64> {
-                let v = self.eval_const_env(e, env, envw, depth)?;
+                let v = self.eval_const_env(e, fr, depth)?;
                 // ⚠️ An exactly-64-bit UNSIGNED context normalizes its leaves too, even
                 // though `masking` is off there. Without this the walk never establishes
                 // the invariant the unsigned reading asserts: a NARROW SIGNED leaf
@@ -656,10 +651,10 @@ impl Elaborator<'_> {
                 if !masking && !const_i64_is_unsigned_at(ctx_w, ctx_signed) {
                     return Some(v);
                 }
-                let Some(lw) = self.const_self_width(e, envw) else {
+                let Some(lw) = self.const_self_width(e, fr.widths()) else {
                     return Some(v); // unknown leaf width ⇒ do not reinterpret
                 };
-                let ls = self.const_signed_env(e, envw);
+                let ls = self.const_signed_env(e, fr.widths());
                 Some(Self::leaf_into_ctx(v, lw, ls, ctx_signed))
             })()
             .into(),
@@ -690,24 +685,18 @@ impl Elaborator<'_> {
     }
 
     /// The body of [`Self::eval_const_env_self`]: [`Self::fold_ctx`] at `e`'s own width.
-    pub(crate) fn fold_self(
-        &self,
-        e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
-        depth: u32,
-    ) -> CFold {
+    pub(crate) fn fold_self(&self, e: &ast::Expr, fr: &ConstFrame, depth: u32) -> CFold {
         // `Some(0)` is a region made ONLY of unsized fills (`'1 + '1`): §5.7.1 gives
         // each fill its context, and with no sibling and no context that is one bit —
         // both oracles fold `{('1 + '1){8'hA5}}` to a zero count and reject it. `None`
         // is an UNKNOWN width and keeps the unlimited walk (ctx 0), as before.
-        let w = match self.const_self_width(e, envw) {
+        let w = match self.const_self_width(e, fr.widths()) {
             Some(0) => 1,
             Some(w) => w,
             None => 0,
         };
-        let sg = self.const_signed_env(e, envw);
-        self.fold_ctx(e, env, envw, depth, w, sg)
+        let sg = self.const_signed_env(e, fr.widths());
+        self.fold_ctx(e, fr, depth, w, sg)
     }
 
     /// The body of [`Self::eval_const_shift_count`] (moved, unchanged: a shift count is a
@@ -715,11 +704,10 @@ impl Elaborator<'_> {
     pub(crate) fn fold_shift_count(
         &self,
         e: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
     ) -> Option<i64> {
-        let v = match self.eval_const_env_self(e, env, envw, depth) {
+        let v = match self.eval_const_env_self(e, fr, depth) {
             Some(v) => v,
             // A count the i64 lane cannot hold — a >64-bit literal tree (`32'd1 <<
             // 128'd70`, both oracles 0; `8'd1 << 128'h1_0000_0000_0000_0000`, both 0).
@@ -727,7 +715,8 @@ impl Elaborator<'_> {
             // bit out, which a saturated count expresses. Literal trees only (the
             // evident-width rule below), and only what the wide domain folds.
             None => {
-                if !Self::ctx_width_names_are_evident(e, envw) || !self.wide_domain_folds(e) {
+                if !Self::ctx_width_names_are_evident(e, fr.widths()) || !self.wide_domain_folds(e)
+                {
                     return None;
                 }
                 return Some(
@@ -757,12 +746,12 @@ impl Elaborator<'_> {
         // ⚠️ This is [[a-default-is-not-a-fact]] again, and it is the third slice on
         // this axis to meet it. Widening past `envw` needs the declared-vs-inferred
         // provenance §2 row 14 stopped at — not a guess about which map is fresher.
-        if !Self::ctx_width_names_are_evident(e, envw) {
+        if !Self::ctx_width_names_are_evident(e, fr.widths()) {
             return Some(v);
         }
         // An unknown or >=64-bit self width leaves the value alone: `const_mask` is the
         // identity there, and inventing a width is what this domain must never do.
-        match self.const_self_width(e, envw) {
+        match self.const_self_width(e, fr.widths()) {
             Some(w) if w > 0 => Some(Self::const_mask(v, w, false)),
             _ => Some(v),
         }
@@ -774,14 +763,13 @@ impl Elaborator<'_> {
     pub(crate) fn fold_assign(
         &self,
         rhs: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
+        fr: &ConstFrame,
         depth: u32,
         target: Option<(u32, bool)>,
     ) -> CFold {
         let Some((tw, ts)) = target else {
             // An unknown target shape keeps the previous unlimited behavior.
-            return self.eval_const_env(rhs, env, envw, depth).into();
+            return self.eval_const_env(rhs, fr, depth).into();
         };
         // ⚠️ A RECORDED width of 0 (UNKNOWN) must still flow into `ctx` below, where
         // `max(self, 0)` leaves the RHS at its OWN self width. Degrading it to the
@@ -793,15 +781,15 @@ impl Elaborator<'_> {
         // is where that is fixed.
         // Unknown self-width ⇒ ctx 0 ⇒ no masking at all (the pre-slice behavior).
         // The final coercion to the target still applies: that width IS known.
-        let ctx = match self.const_self_width(rhs, envw) {
+        let ctx = match self.const_self_width(rhs, fr.widths()) {
             Some(w) => w.max(tw).min(64),
             None => 0,
         };
         // The evaluation context's sign comes from the OPERANDS (§11.8.1); the
         // TARGET's sign applies only to the final store, which is why
         // `bit signed [3:0] t = 4'd7 + 4'd1` computes 8 unsigned and stores −8.
-        let cs = self.const_signed_env(rhs, envw);
-        match self.fold_ctx(rhs, env, envw, depth, ctx, cs) {
+        let cs = self.const_signed_env(rhs, fr.widths());
+        match self.fold_ctx(rhs, fr, depth, ctx, cs) {
             CFold::Val(v) => CFold::Val(Self::const_mask(v, tw, ts)),
             // The origin's own bits are truncated with the x bits: an origin whose x lies
             // only above the target no longer owns one (C-W1's truncation spelling).

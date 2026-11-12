@@ -98,9 +98,12 @@
 //! the (`params`, `param_range`) pair as one value, one snapshot type, an accessor per
 //! reader (the direct reads in their own combined orders stay at their sites).
 
+mod frame;
 mod read;
 mod undo;
 mod write;
+
+pub(crate) use frame::ConstFrame;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
