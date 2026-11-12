@@ -348,7 +348,7 @@ impl Elaborator<'_> {
             // A parameter's DECLARED width when it has a determinate one; absent ⇒
             // value-inferred, which `param_decl_width` never puts below 32.
             K::Ident(p) if p.segments.len() == 1 => self
-                .walk_scopes(&p.segments[0].name, &self.param_meta)
+                .name_meta(&p.segments[0].name)
                 .is_none_or(|(w, _)| w >= 32),
             // `pkg::X` — the package twin of the arm above, reading the same
             // declared `(width, signed)` the package fold recorded. Keyed by the
@@ -727,14 +727,7 @@ impl Elaborator<'_> {
             if let ast::ExprKind::Ident(p) = &e.kind {
                 if p.segments.len() == 1 && !self.cond_names_ok(e) {
                     let n = &p.segments[0].name;
-                    let param = self
-                        .walk_scopes_key(n, |k| {
-                            self.str_param_raw.contains_key(k)
-                                || self.real_param_val.contains_key(k)
-                                || self.params.contains_key(k)
-                                || self.wide_param_bits.contains_key(k)
-                        })
-                        .is_some();
+                    let param = self.walk_scopes_key(n, |k| self.hit_any_const(k)).is_some();
                     let carrier = self
                         .cond_census
                         .get(&self.cur_module)

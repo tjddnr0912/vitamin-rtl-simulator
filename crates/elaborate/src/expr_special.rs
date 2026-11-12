@@ -848,9 +848,7 @@ impl Elaborator<'_> {
                     // also uses — is the object `$bits` names; the value read already
                     // prefers it (`bare_ident_route`'s shadow test, mirrored here).
                     let local_shadows = me
-                        .walk_scopes_key(name, |k| {
-                            me.params.contains_key(k) || me.symbols.contains_key(k)
-                        })
+                        .walk_scopes_key(name, |k| me.hit_value_or_net(k))
                         .is_some_and(|key| {
                             me.symbols.contains_key(&key)
                                 && (me.block_local_declared_at(&key, e.span)
@@ -862,7 +860,7 @@ impl Elaborator<'_> {
                         // [11:0] P` ⇒ 12); `$bits` must report THAT, not the
                         // value-inferred 32. An untyped param / genvar (no recorded
                         // width) stays 32 (the width-less i64 domain).
-                        if let Some((w, _)) = me.walk_scopes(name, &me.param_meta) {
+                        if let Some((w, _)) = me.name_meta(name) {
                             return Some(w);
                         }
                         // §2 🆕 L ⓐ: a `real` / `realtime` parameter is 64 bits
@@ -881,7 +879,7 @@ impl Elaborator<'_> {
                         // names, exactly as the value read does. `shortreal` never
                         // arrives — the parser refuses that keyword — so no 32-bit
                         // real is folded to 64 here.
-                        if me.walk_scopes(name, &me.real_param_val).is_some() {
+                        if me.name_real(name).is_some() {
                             return Some(64);
                         }
                         return Some(32);

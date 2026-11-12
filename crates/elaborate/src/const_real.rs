@@ -202,7 +202,7 @@ impl Elaborator<'_> {
             K::Ident(p) if p.segments.len() == 1 => {
                 let n = &p.segments[0].name;
                 if self.real_param_lowers_real(n) {
-                    self.walk_scopes(n, &self.real_param_val)
+                    self.name_real(n)
                 } else {
                     self.lookup_scoped(n).map(i64_to_real)
                 }

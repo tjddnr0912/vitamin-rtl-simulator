@@ -945,9 +945,7 @@ impl Elaborator<'_> {
                 Some(_) => return None, // declared here, shape unknown or too wide
                 None => {
                     let v = self.lookup_scoped(&seg.name)?;
-                    let (w, s) = self
-                        .walk_scopes(&seg.name, &self.param_meta)
-                        .unwrap_or((32, false));
+                    let (w, s) = self.name_meta(&seg.name).unwrap_or((32, false));
                     if !(1..=64).contains(&w) {
                         return None;
                     }

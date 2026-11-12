@@ -73,7 +73,15 @@
 //! VALUE-ABSENT, META-ABSENT, META-STALE, RANGE-ABSENT (two meanings), HIER-IMMORTAL,
 //! REAL-TWIN-NO-HIER (body, header) vs REAL-TWIN-HIER (generate), STR-KEEPS-VALUE,
 //! GUESSED. The meta walk (`walk_scopes` over `param_meta` alone) can take a name's
-//! value and its type from different keys (cell p16): BIND-1b's `name_meta` names it.
+//! value and its type from different keys (cell p16): `name_meta` names it.
+//!
+//! # R: the read lanes (read.rs, BIND-1b)
+//!
+//! `name_meta` (META-WALK) and `name_real` (REAL-WALK) are the two one-map walks ;
+//! seven `hit_*` rules are the scope walk's hit tests, one per map set, each in the
+//! `||` order its sites spelled (`read.rs`'s head note tables the rules, their map
+//! sets and their sites, and the sites left with their reason). They read ; they write
+//! nothing and change no presence lane. `bound_home.rs` W5 pins them.
 //!
 //! # What the pins see, and what they do not (REVIEW-ONLY)
 //!
@@ -87,9 +95,10 @@
 //! bound earlier, a macro body, and a receiver spelled another way are review-only.
 //!
 //! Not built here (said plainly): one storage record per name (first reader S1v-V),
-//! the (`params`, `param_range`) pair as one value, one snapshot type, the read lanes
-//! (BIND-1b).
+//! the (`params`, `param_range`) pair as one value, one snapshot type, an accessor per
+//! reader (the direct reads in their own combined orders stay at their sites).
 
+mod read;
 mod undo;
 mod write;
 

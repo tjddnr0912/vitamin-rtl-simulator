@@ -61,11 +61,7 @@ impl Elaborator<'_> {
     /// would match an OUTER real param even when an inner net / numeric param shadows
     /// it, resolving one name two different ways.
     pub(crate) fn real_param_is_non_integral(&self, name: &str) -> bool {
-        let Some(key) = self.walk_scopes_key(name, |k| {
-            self.real_param_val.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
-        }) else {
+        let Some(key) = self.walk_scopes_key(name, |k| self.hit_real_value_or_net(k)) else {
             return false;
         };
         self.real_param_val.contains_key(&key) && !self.params.contains_key(&key)

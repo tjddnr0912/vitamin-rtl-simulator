@@ -169,7 +169,7 @@ impl Elaborator<'_> {
                 Some((w, _)) => Some(w),
                 None => Some(
                     self.pkg_fn_const_meta(&p.segments[0].name)
-                        .or_else(|| self.walk_scopes(&p.segments[0].name, &self.param_meta))
+                        .or_else(|| self.name_meta(&p.segments[0].name))
                         .map_or(32, |(w, _)| w),
                 ),
             },
@@ -311,7 +311,7 @@ impl Elaborator<'_> {
                 .get(&p.segments[0].name)
                 .copied()
                 .or_else(|| self.pkg_fn_const_meta(&p.segments[0].name))
-                .or_else(|| self.walk_scopes(&p.segments[0].name, &self.param_meta))
+                .or_else(|| self.name_meta(&p.segments[0].name))
                 .is_some_and(|(_, s)| s),
             K::PkgScoped { .. } => self.const_expr_signed(e),
             K::Unary {

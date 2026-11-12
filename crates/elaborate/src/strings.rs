@@ -317,7 +317,7 @@ impl Elaborator<'_> {
                 if shadow_correct {
                     self.real_param_lowers_real(n)
                 } else {
-                    self.walk_scopes(n, &self.real_param_val).is_some()
+                    self.name_real(n).is_some()
                 }
             }
             // ⭐ `pkg::R` was missing, and the gap was invisible from inside: a package

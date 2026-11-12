@@ -442,7 +442,7 @@ impl Elaborator<'_> {
     /// pre-carrier behaviour, so a lookup that fails is never a silent re-shape.
     fn shape_bits(&self, shape_param: &Option<ast::Ident>) -> Option<i64> {
         let sp = shape_param.as_ref()?;
-        let key = self.walk_scopes_key(&sp.name, |k| self.params.contains_key(k))?;
+        let key = self.walk_scopes_key(&sp.name, |k| self.hit_value(k))?;
         self.params.get(&key).copied()
     }
 

@@ -476,7 +476,7 @@ impl Elaborator<'_> {
             // `generate for (g…) localparam L = g - 20;` fold 4294967276 and
             // `generate if (1) localparam K = S8 >>> 1;` fold 255.
             ast::ExprKind::Ident(pth) if pth.segments.len() == 1 => self
-                .walk_scopes(&pth.segments[0].name, &self.param_meta)
+                .name_meta(&pth.segments[0].name)
                 .is_some_and(|(_, s)| s),
             // a `pkg::X` reference inherits the package constant's signedness.
             ast::ExprKind::PkgScoped { pkg, name } => self
@@ -1061,7 +1061,7 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Ident(p) = &e.kind {
             if let [seg] = p.segments.as_slice() {
                 if self
-                    .walk_scopes_key(&seg.name, |k| self.wide_param_bits.contains_key(k))
+                    .walk_scopes_key(&seg.name, |k| self.hit_wide(k))
                     .is_some()
                 {
                     return Some(seg.name.clone());

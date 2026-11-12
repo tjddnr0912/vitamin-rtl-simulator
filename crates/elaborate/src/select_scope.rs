@@ -379,7 +379,7 @@ impl Elaborator<'_> {
             return false;
         }
         if self.lookup_scoped(root).is_some() {
-            return self.walk_scopes(root, &self.real_param_val).is_none();
+            return self.name_real(root).is_none();
         }
         if let Some(p) = self.bits_prescan.get(root) {
             return !p.3;

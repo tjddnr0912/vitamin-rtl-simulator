@@ -935,9 +935,7 @@ impl Elaborator<'_> {
         // (`param_range` is a SUBSET of `params`, populated only for non-zero-LSB params
         // at a couple of decl sites) and drift outward to an OUTER param, normalizing
         // the offset against the wrong LSB while the value came from the inner binding.
-        let key = self.walk_scopes_key(seg, |k| {
-            self.params.contains_key(k) || self.symbols.contains_key(k)
-        })?;
+        let key = self.walk_scopes_key(seg, |k| self.hit_value_or_net(k))?;
         self.param_range.get(&key).copied()
     }
 

@@ -20,6 +20,16 @@
 //! - W4 DECL-ORDER: `bind_decl (` called by the three tails, one per (file, fn), and its
 //!   body's calls in PRE's order: `publish_hier`, `set_meta`, `range ( self )`,
 //!   `bind_param_value`, `bind_param_range`, `guessed ( self )`, `mark_guessed`.
+//! - W5 the read lanes (BIND-1b, `bound/read.rs`), outside the home: W5a no
+//!   `walk_scopes(.., &<recv>.<map>)` over a guarded map but the value walk
+//!   `lookup_scoped` (the meta and real walks are `name_meta` / `name_real`) ; W5b no
+//!   closure whose body names two or more of the nine maps ; W5c no `walk_scopes_key(..)`
+//!   whose arguments spell a `<recv>.<map>.contains_key(` arm (the hit is a `hit_*`
+//!   rule). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
+//!   `W5C_EXCEPT`). What the token shapes do not see is REVIEW-ONLY: a closure bound
+//!   to a name and passed later is seen where it is written, not where it is walked ;
+//!   a closure opened after another token than `( , = { ; => :`, `move`, `return` ;
+//!   a map read through a local reference or a helper fn.
 //!
 //! What no shape sees is REVIEW-ONLY in `bound/mod.rs`'s head note: a write through a
 //! reference bound earlier, a macro body, `mem::swap` / `replace` of two fields reached
@@ -123,6 +133,36 @@ const W4_ORDER: [&str; 7] = [
     "bind_param_range",
     "guessed",
     "mark_guessed",
+];
+
+/// W5a: a `walk_scopes(.., &<recv>.<guarded map>)` outside the home, (file, fn, map,
+/// count, reason). `name_meta` / `name_real` (`bound/read.rs`) are the meta and real
+/// walks ; the value walk is `lookup_scoped`.
+#[rustfmt::skip]
+const W5A_EXCEPT: &[(&str, &str, &str, usize, &str)] = &[
+    ("crates/elaborate/src/scope.rs", "lookup_scoped", "params", 1, "the value walk, already one fn"),
+];
+/// W5b: a closure outside the home whose body names two or more of the nine maps,
+/// (file, fn, count, reason).
+#[rustfmt::skip]
+const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
+    ("crates/elaborate/src/decl_scope.rs", "decl_keep_snapshot", 1, "U4's `DeclKept` builder: six `get`s, not a membership test"),
+    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key"),
+    ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols), not the rule's"),
+    ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
+    ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
+];
+/// W5c: a `walk_scopes_key(..)` call outside the home whose arguments spell a
+/// `<recv>.<guarded map>.contains_key(` arm instead of a `hit_*` rule, (file, fn,
+/// count, reason).
+#[rustfmt::skip]
+const W5C_EXCEPT: &[(&str, &str, usize, &str)] = &[
+    ("crates/elaborate/src/const_array.rs", "const_array_ref_of_base", 1, "array_const_vals || params || symbols: not a rule's set"),
+    ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols)"),
+    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "left by R7: params || other_kind(k), any_const_or_net in another order"),
+    ("crates/elaborate/src/hier_defer/write.rs", "every_name_resolves", 1, "left by R7: symbols || params, value_or_net in the other order"),
+    ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
+    ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -415,8 +455,162 @@ fn hits(src: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The index of the token that closes the group opened at `open` (`(`, `{` or `[`).
+fn close_of(t: &[Tok], open: usize) -> usize {
+    let mut d = 0usize;
+    for (j, x) in t.iter().enumerate().skip(open) {
+        if x.kind != Kind::P {
+            continue;
+        }
+        match x.text.as_str() {
+            "(" | "{" | "[" => d += 1,
+            ")" | "}" | "]" => {
+                d -= 1;
+                if d == 0 {
+                    return j;
+                }
+            }
+            _ => {}
+        }
+    }
+    t.len()
+}
+
+/// The body span `[lo, hi)` of the closure whose parameter list opens with the `|` at
+/// `i`, or `None` when that `|` is an operator. A closure opens after `( , = { ; => :`,
+/// `move` or `return` ; its parameters end at the next `|` (`||` = none) ; a `-> T`
+/// return type runs to the `{` ; a braced body is its group, any other body runs to
+/// the `,` / `;` at its depth or the bracket that closes the enclosing group.
+fn closure_body(t: &[Tok], i: usize) -> Option<(usize, usize)> {
+    if t[i].kind != Kind::P || t[i].text != "|" {
+        return None;
+    }
+    let prev = if i == 0 { "(" } else { t[i - 1].text.as_str() };
+    if !matches!(
+        prev,
+        "(" | "," | "=" | "{" | ";" | "=>" | ":" | "move" | "return"
+    ) {
+        return None;
+    }
+    let mut end = i + 1;
+    if !(t[i].joint && t.get(i + 1).is_some_and(|x| x.text == "|")) {
+        while end < t.len() && t[end].text != "|" {
+            end += 1;
+        }
+    }
+    let mut b = end + 1;
+    if t.get(b).is_some_and(|x| x.text == "-") && t.get(b + 1).is_some_and(|x| x.text == ">") {
+        while b < t.len() && t[b].text != "{" {
+            b += 1;
+        }
+    }
+    if t.get(b).is_some_and(|x| x.text == "{") {
+        return Some((b, close_of(t, b)));
+    }
+    let mut d = 0i32;
+    let mut j = b;
+    while j < t.len() {
+        if t[j].kind == Kind::P {
+            match t[j].text.as_str() {
+                "(" | "{" | "[" => d += 1,
+                ")" | "}" | "]" => {
+                    d -= 1;
+                    if d < 0 {
+                        break;
+                    }
+                }
+                "," | ";" if d == 0 => break,
+                _ => {}
+            }
+        }
+        j += 1;
+    }
+    Some((b, j))
+}
+
+/// W5 (rule, key) hits of one source: `W5a:<map>` a `walk_scopes(.., &<recv>.<map>)` ;
+/// `W5b` a closure naming two or more of the nine maps ; `W5c` a `walk_scopes_key(..)`
+/// whose arguments spell `<recv>.<map>.contains_key(`.
+fn hits_w5(src: &str) -> Vec<(String, String)> {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut out: Vec<(String, String)> = Vec::new();
+    for i in 0..t.len() {
+        let key = t[i].key.clone();
+        if tx(i) == "."
+            && tx(i + 2) == "("
+            && matches!(tx(i + 1), "walk_scopes" | "walk_scopes_key")
+        {
+            let close = close_of(&t, i + 2);
+            if tx(i + 1) == "walk_scopes" {
+                let mut d = 0i32;
+                for j in i + 2..close {
+                    match tx(j) {
+                        "(" | "{" | "[" => d += 1,
+                        ")" | "}" | "]" => d -= 1,
+                        "," if d == 1 => {
+                            if tx(j + 1) == "&"
+                                && tx(j + 3) == "."
+                                && field_at(&t, j + 4, &NINE)
+                                && j + 5 == close
+                            {
+                                out.push((format!("W5a:{}", tx(j + 4)), key.clone()));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            } else if (i + 3..close)
+                .any(|j| field_at(&t, j, &NINE) && tx(j + 1) == "." && tx(j + 2) == "contains_key")
+            {
+                out.push(("W5c".into(), key.clone()));
+            }
+        }
+        if let Some((lo, hi)) = closure_body(&t, i) {
+            let mut named: Vec<&str> = (lo..hi.min(t.len()))
+                .filter(|&j| field_at(&t, j, &NINE))
+                .map(|j| t[j].text.as_str())
+                .collect();
+            named.sort_unstable();
+            named.dedup();
+            if named.len() >= 2 {
+                out.push(("W5b".into(), key.clone()));
+            }
+        }
+    }
+    out
+}
+
 fn in_home(rel: &str) -> bool {
     rel.starts_with(HOME)
+}
+
+#[test]
+fn the_read_lanes_are_named() {
+    let root = workspace_root();
+    let mut got: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    for (rel, src) in src_files(&root) {
+        if in_home(&rel) {
+            continue;
+        }
+        for (rule, key) in hits_w5(&src) {
+            *got.entry((rule, rel.clone(), key)).or_insert(0) += 1;
+        }
+    }
+    let mut want: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    for (f, k, m, n, _) in W5A_EXCEPT {
+        want.insert((format!("W5a:{m}"), f.to_string(), k.to_string()), *n);
+    }
+    for (f, k, n, _) in W5B_EXCEPT {
+        want.insert(("W5b".into(), f.to_string(), k.to_string()), *n);
+    }
+    for (f, k, n, _) in W5C_EXCEPT {
+        want.insert(("W5c".into(), f.to_string(), k.to_string()), *n);
+    }
+    assert_eq!(
+        got, want,
+        "W5 outside {HOME}: a meta / real walk, a multi-map closure or a scope-walk hit spelled at its site instead of `bound/read.rs` (a new exception is a row with its reason)"
+    );
 }
 
 #[test]
@@ -637,6 +831,74 @@ fn walker_controls() {
         count(
             "W2F2",
             "#[cfg(test)]\nmod t { fn f() { self.params = x; } }\nfn g() {}"
+        ),
+        0
+    );
+}
+
+fn count_w5(rule: &str, src: &str) -> usize {
+    hits_w5(src).iter().filter(|(r, _)| r == rule).count()
+}
+
+#[test]
+fn walker_controls_w5() {
+    // W5a: the meta / real walk on each receiver, multi-line ; not the lane, not
+    // another table, not a map that is the walk's first argument.
+    assert_eq!(
+        count_w5(
+            "W5a:param_meta",
+            "fn f() { self.walk_scopes(&p.segments[0].name, &self.param_meta); me\n .walk_scopes(n,\n &me.param_meta); }"
+        ),
+        2
+    );
+    assert_eq!(
+        count_w5(
+            "W5a:real_param_val",
+            "fn f() { self.walk_scopes(n, &self.real_param_val).is_some(); }"
+        ),
+        1
+    );
+    assert_eq!(
+        hits_w5("fn f() { self.name_meta(n); self.walk_scopes(n, &self.symbols); self.walk_scopes(&self.params, t); self.walk_scopes(n, &self.param_meta.x); }").len(),
+        0
+    );
+    // W5b: a closure (typed, `move`, a return type, a braced body, a struct literal)
+    // naming two maps ; not one map, not a logical `||` between two maps, not a rule.
+    assert_eq!(
+        count_w5(
+            "W5b",
+            "fn f() { let o = |k: &str| self.params.contains_key(k) || self.wide_param_bits.contains_key(k); g(move |me: &Self| -> bool { me.params.len() > me.param_meta.len() }); h(|k| D { a: self.str_param_raw.get(k), b: self.real_param_val.get(k) }); }"
+        ),
+        3
+    );
+    assert_eq!(
+        count_w5(
+            "W5b",
+            "fn f() { let o = |k: &str| self.params.contains_key(k) || self.symbols.contains_key(k); if self.params.contains_key(k) || self.wide_param_bits.contains_key(k) {} g(|k| self.hit_any_const(k)); x.or_else(|| self.name_meta(n)); }"
+        ),
+        0
+    );
+    // a closure that ends at its argument's `,` does not take the next argument's maps
+    assert_eq!(
+        count_w5(
+            "W5b",
+            "fn f() { g(|k| self.params.contains_key(k), self.wide_param_bits.len()); }"
+        ),
+        0
+    );
+    // W5c: an arm spelled in the walk's argument (one map is enough) ; not a rule, not
+    // `symbols` alone, not a `contains_key` outside the call.
+    assert_eq!(
+        count_w5(
+            "W5c",
+            "fn f() { self.walk_scopes_key(n, |k| self.params.contains_key(k)); self\n .walk_scopes_key(&seg.name, |k| { self.symbols.contains_key(k) || self.params.contains_key(k) }); }"
+        ),
+        2
+    );
+    assert_eq!(
+        count_w5(
+            "W5c",
+            "fn f() { self.walk_scopes_key(n, |k| self.hit_value(k)).is_some_and(|k| self.params.contains_key(&k)); self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); }"
         ),
         0
     );

@@ -645,7 +645,7 @@ impl Elaborator<'_> {
     /// generate block's own only when `at` lies in that block; anything else — a
     /// routine's own local, or a name `params` does not bind here — never.
     fn binding_encloses(&self, name: &str, at: ast::Span) -> bool {
-        let Some(key) = self.walk_scopes_key(name, |k| self.params.contains_key(k)) else {
+        let Some(key) = self.walk_scopes_key(name, |k| self.hit_value(k)) else {
             return false;
         };
         let other_kind = |k: &str| {
@@ -1437,9 +1437,7 @@ impl Elaborator<'_> {
             let n = &seg.name;
             // the classification `nonconst_bound_reason` makes for a declaration bound
             let constant = self.lookup_scoped(n).is_some()
-                || self
-                    .walk_scopes_key(n, |k| self.wide_param_bits.contains_key(k))
-                    .is_some();
+                || self.walk_scopes_key(n, |k| self.hit_wide(k)).is_some();
             // a scalar net only: an unpacked array here may be a constant array
             // parameter, which this classification cannot tell from a variable
             let scalar_net = self
@@ -1477,7 +1475,7 @@ impl Elaborator<'_> {
             if let ast::ExprKind::Ident(p) = &x.kind {
                 if let [seg] = p.segments.as_slice() {
                     if self
-                        .walk_scopes_key(&seg.name, |k| self.wide_param_bits.contains_key(k))
+                        .walk_scopes_key(&seg.name, |k| self.hit_wide(k))
                         .is_some()
                     {
                         return Some(format!("`{}`", seg.name));
@@ -1513,11 +1511,7 @@ impl Elaborator<'_> {
     }
 
     fn wide_lsb_range_of(&self, n: &str) -> Option<String> {
-        let key = self.walk_scopes_key(n, |k| {
-            self.wide_param_bits.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
-        })?;
+        let key = self.walk_scopes_key(n, |k| self.hit_wide_value_or_net(k))?;
         let text = |(lo, w, asc): DeclRange| {
             let hi = lo + i64::from(w) - 1;
             if asc {

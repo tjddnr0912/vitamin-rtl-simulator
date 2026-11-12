@@ -189,9 +189,7 @@ impl Elaborator<'_> {
     fn elab_arg_shape(&self, a: &ast::Expr) -> Option<(u32, bool)> {
         match &a.kind {
             ast::ExprKind::Paren { inner } => self.elab_arg_shape(inner),
-            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.walk_scopes(&p.segments[0].name, &self.param_meta)
-            }
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => self.name_meta(&p.segments[0].name),
             ast::ExprKind::IntLit {
                 kind: ast::IntLitKind::Sized,
                 raw,

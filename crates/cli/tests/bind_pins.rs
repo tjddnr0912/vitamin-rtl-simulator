@@ -3,7 +3,9 @@
 //! DECL-ORDER `bind_decl`, the value funnel's clears, and the undo lanes U3, U5, U6, U8 of
 //! `bound/undo.rs`). Every expected text was measured on the PRE binary (6bcd57fa, `vita-post` md5
 //! 09768204 ; W/bind1/build_a/gen) with `t.sv` as the argument (`g08_dash_g_overrides`: the `-G`
-//! arguments first). A named mutant killer here is a claim until its mutant runs.
+//! arguments first). A named mutant killer here is a claim until its mutant runs. p19-p22 (BIND-1b
+//! delta 1) pin the read lanes of `bound/read.rs` the narrow battery left unkilled (R2, R4, R5, W2),
+//! measured on the same PRE binary, each mutant built and run on its source (W/bind1/build_b/delta1).
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -523,6 +525,104 @@ endmodule
             r#"-GK=100'h5_0000_0000_0000_0000_0001"#,
         ],
         r##"A -16 8 c 0 gs 3.000000 0000500000000000000000001 -15 32
+simulation ended (Finish) at time 1
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// BIND-1b `hit_value_or_net`'s `symbols` arm (`expr_special.rs` `bits_of_view`'s shadow test): a generate-scope net shadows an outer typed localparam of its name, so `$bits(N)` names the net. Delta 1: R2 (the arm dropped) built and run on this source answers `A 4` with exit code 0 (W/bind1/build_b/delta1/probe/r2a) ; PRE `A 16`. iverilog 13.0 `A 16`, verilator 5.054 `A 16`.
+#[test]
+fn p19_gen_net_shadow_bits() {
+    check(
+        "p19_gen_net_shadow_bits",
+        r##"module top;
+  localparam logic [3:0] N = 4'd7;
+  if (1) begin : g
+    logic [15:0] N;
+    initial $display("A %0d", $bits(N));
+  end
+  initial #1 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 16
+simulation ended (Finish) at time 1
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// BIND-1b `hit_wide_value_or_net`'s `wide_param_bits` arm (`const_wide.rs` `wide_name_bits`): a generate-scope >64-bit localparam (in `wide_param_bits` alone) shadows an outer narrow one of its name, so `J = K` folds the inner `K`. Delta 1: R4 (the arm dropped) built and run on this source answers `A 0000000010000000000000005 0000000000000000000000005` with exit code 0 (W/bind1/build_b/delta1/probe/r4b ; the unshadowed `J = K + 1` of probe r4a goes to E3009 "`K` is wider than 64 bits" with exit code 1) ; PRE `A 0000000010000000000000005 0000000010000000000000005`. iverilog 13.0 and verilator 5.054 both `A 0000000010000000000000005 0000000010000000000000005`.
+#[test]
+fn p20_gen_wide_shadow_narrow() {
+    check(
+        "p20_gen_wide_shadow_narrow",
+        r##"module top;
+  localparam logic [7:0] K = 8'd5;
+  if (1) begin : g
+    localparam logic [99:0] K = {36'h1, 64'h5};
+    localparam logic [99:0] J = K;
+    initial $display("A %h %h", K, J);
+  end
+  initial #1 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 0000000010000000000000005 0000000010000000000000005
+simulation ended (Finish) at time 1
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// BIND-1b `hit_real_value_or_net`'s `real_param_val` arm (`param_query.rs` `real_param_is_non_integral`, read by `const_bound.rs`'s range-bound guard): a non-integral real localparam (no `params` twin) in a range bound is named as a real parameter. Delta 1: R5 (the arm dropped) built and run on this source answers E3009 "undefined name `R` is not allowed in a constant range bound" with exit code 1 (W/bind1/build_b/delta1/probe/r5a) ; PRE the real-parameter E3009 below. iverilog 13.0 accepts it and prints `A 4` ; verilator 5.054 `%Error: t.sv:3:10: Value too wide for 32-bits expected in this context 2.5` ; vita's text is the record, not an oracle's.
+#[test]
+fn p21_real_bound_nonintegral() {
+    check(
+        "p21_real_bound_nonintegral",
+        r##"module top;
+  localparam real R = 2.5;
+  logic [R:0] w;
+  initial $display("A %0d", $bits(w));
+  initial #1 $finish;
+endmodule
+"##,
+        &[],
+        "",
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a real parameter is not an integral constant and cannot be used in a width / range bound (assign it to an integer localparam first) [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// BIND-1b REAL-WALK `name_real`'s outward step (`const_real.rs` `const_eval_real_in_scope`): a generate-scope real localparam folds an outer real one. Delta 1: W2 (the walk stopped at the current scope) built and run on this source answers E3009 "generate-scope parameter `S` value is not a constant: `R` is a real, which has no integral constant value here" and E3010 "undeclared net/variable `top.g[0].S`" with exit code 1 (W/bind1/build_b/delta1/probe/w2b) ; PRE `A 5.000000`. iverilog 13.0 `A 5.000000`, verilator 5.054 `A 5.000000`.
+#[test]
+fn p22_real_outer_gen_fold() {
+    check(
+        "p22_real_outer_gen_fold",
+        r##"module top;
+  localparam real R = 2.5;
+  if (1) begin : g
+    localparam real S = R * 2;
+    initial $display("A %f", S);
+  end
+  initial #1 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 5.000000
 simulation ended (Finish) at time 1
 "##,
         r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base

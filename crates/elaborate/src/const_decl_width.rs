@@ -72,9 +72,7 @@ impl Elaborator<'_> {
         if self.subst_lookup(n).is_some() || self.out_subst_lookup(n).is_some() {
             return None;
         }
-        let key = self.walk_scopes_key(n, |k| {
-            self.params.contains_key(k) || self.symbols.contains_key(k)
-        })?;
+        let key = self.walk_scopes_key(n, |k| self.hit_value_or_net(k))?;
         let (_lo, w, _ascending) = self.param_range.get(&key).copied()?;
         // The VALUE must be bound at the same key. `narrow_param_bits` reads it to
         // build the bits; this resolver does not return it, but a name with a declared

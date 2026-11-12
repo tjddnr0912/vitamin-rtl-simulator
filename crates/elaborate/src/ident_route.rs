@@ -96,13 +96,7 @@ impl Elaborator<'_> {
             return BareIdentRoute::Other;
         }
         let mut local_shadows_param = false;
-        if let Some(key) = self.walk_scopes_key(seg, |k| {
-            self.str_param_raw.contains_key(k)
-                || self.wide_param_bits.contains_key(k)
-                || self.real_param_val.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
-        }) {
+        if let Some(key) = self.walk_scopes_key(seg, |k| self.hit_any_const_or_net(k)) {
             if let Some(raw) = self.str_param_raw.get(&key) {
                 return BareIdentRoute::Str(raw.clone());
             }
@@ -123,9 +117,9 @@ impl Elaborator<'_> {
         }
         if !local_shadows_param {
             if let Some(v) = self.lookup_scoped(seg) {
-                let meta = self.walk_scopes(seg, &self.param_meta);
+                let meta = self.name_meta(seg);
                 let guessed = self
-                    .walk_scopes_key(seg, |k| self.params.contains_key(k))
+                    .walk_scopes_key(seg, |k| self.hit_value(k))
                     .is_some_and(|k| self.param_type_guessed.contains(&k));
                 return BareIdentRoute::Param { v, meta, guessed };
             }
@@ -403,7 +397,7 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Ident(p) = &e.kind {
             if let [seg] = p.segments.as_slice() {
                 return self
-                    .walk_scopes_key(&seg.name, |k| self.params.contains_key(k))
+                    .walk_scopes_key(&seg.name, |k| self.hit_value(k))
                     .is_some_and(|k| self.param_type_guessed.contains(&k));
             }
         }
