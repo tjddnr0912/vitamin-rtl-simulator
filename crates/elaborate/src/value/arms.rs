@@ -4,8 +4,13 @@
 //! Members: `selfdet_truth_arm` (`!` and the `?:` condition: IN, ENV, CTX), [`unary_i64`] (`+ - ~` on a folded operand: IN,
 //! ENV, CTX), the size / prim / signing cast (`const_eval_cast`, `const_size_cast`: IN, ENV ; the signing-over-size-cast
 //! body, spelled twice in `const_eval_cast` before, is one `signing_over_size_cast`).
-//! Members by reference (already one fn, in const_fn.rs / const_wide.rs until VAL-2): `const_clog2_selfdet`,
-//! `const_placement_env`, `selfdet_bits_i64` (reductions), `const_pow_exponent_selfdet`, `eval_const_shift_count`.
+//! Members by reference (already one fn each, in const_fn.rs / const_wide.rs ; VAL-2 P-a did not move them, the move is
+//! deferred to P-d, W/val2/plan/PLAN.txt:104): `const_clog2_selfdet`, `const_placement_env`, `selfdet_bits_i64` (reductions),
+//! `const_pow_exponent_selfdet`, `eval_const_shift_count`.
+//! Ratchet blind spot: structure_ratchet.rs key b (`const_option_fns`) counts the Option fns of top-level
+//! `elaborate/src/const_*.rs` only, so the Option fns of value/ (here `selfdet_truth_arm`, `const_size_cast`,
+//! `const_eval_cast` ; chains.rs `param_decl_fold`, lanes.rs `fold_self_wide`) are outside its count, and a counted fn
+//! moved from a const_*.rs file into value/ lowers b with no structural gain (b's re-aim is deferred with the move, P-d).
 //! Lanes that stay at their core (PRE differences, measured: docs/roadmap/5.2/VAL-1.md): REG's truth, unary, cast, ternary
 //! (both arms folded), `$clog2` and system-call set ; HIER's `$clog2` (a value, negative declines) and `+ -` only ; ENV's
 //! missing arms (prim and signing cast, `$bits`, `$rtoi`), which reach IN only from an empty frame. Each core still folds
@@ -20,7 +25,8 @@
 //! evaluators (const_real.rs `const_eval_real_in_scope` and `const_truth_in_scope`, const_str.rs `const_str_at`'s ternary,
 //! strings.rs `real_literal_value`'s unary minus, const_eval.rs `delay_units_in_scope`, block_local/proofs.rs `fold_i32`,
 //! `const_eval_u32`, dead_arm.rs `lowered_truth`, hdl-parser const_fold.rs's unary minus in `try_const_index`, `const_lit`,
-//! `const_lit_enum`, `plain_int`, `cw_shape`, `cw_eval`) ; exec_const_stmt's three loop / branch conditions ; the IN / ENV
+//! `const_lit_enum`, `plain_int`, `cw_shape`, `cw_eval`, read_set.rs `exact_const`'s `go`, an IR u64 fold whose `?:` reads
+//! its condition `go(..)? != 0`) ; exec_const_stmt's three loop / branch conditions ; the IN / ENV
 //! Binary and Call twins ; every REG and HIER arm.
 
 use crate::*;
@@ -378,6 +384,11 @@ mod tests {
         assert_eq!(el.signing_over_size_cast(&bare, true), None);
     }
 
+    /// Compiled only without debug assertions, and the gate never builds it: ci.yml and
+    /// CONTRIBUTING run `cargo nextest run --workspace` in the dev profile and nothing runs the
+    /// tests with `--release`, so this test cannot fail there (a compile error in it would pass
+    /// too). What holds w = 63 is the release lane cells k_sg_s63, k_sg_u63 and k_sp_s63
+    /// (W/homes lanes val1_lane).
     #[cfg(not(debug_assertions))]
     #[test]
     fn signing_over_size_cast_is_pre_text_w63() {

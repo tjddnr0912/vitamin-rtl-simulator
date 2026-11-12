@@ -460,9 +460,11 @@ fn pre_const_pow(a: i64, b: i64, exp_signed: bool) -> Option<i64> {
     }
     // ⚠️⚠️ An "unsigned negative" exponent is a HUGE positive one, so the exact
     // result does not fit the i64 domain — DECLINE, the same discipline `+` and
-    // `*` keep here (this kernel declines `3037000500 * 3037000500` ; a parameter
-    // of that value still binds 145474192 through the width-aware path, as both
-    // oracles print).
+    // `*` keep here (this kernel declines `3037000500 * 3037000500` ; a typed
+    // `parameter int` of that value still binds 145474192 through the width-aware
+    // path, as both oracles print ; an untyped `localparam P` of it does not agree:
+    // vita `p=145474192 bp=33`, iverilog `p=9223372037000250000 bp=65`, verilator
+    // `p=145474192 bp=32`, filed as untyped-param-product-width).
     //
     // Folding it MODULARLY was tried and reverted. Square-and-multiply mod 2^64
     // gives the right answer at every context of 64 bits or fewer — and both

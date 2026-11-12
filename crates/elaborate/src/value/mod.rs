@@ -47,7 +47,9 @@
 //! "No" is not one thing: None is declined AND refused ; these readers take a decline as a value (their owners in VAL-2.md): const_fn.rs
 //!   bind_const_decl and the formal binder (width 0), inline_fold.rs dims, const_decl_wsign's `.ok()?` x2, const_fn_ret_wsign,
 //!   param_decl_width_opt, eval_param_init's `.ok().flatten()`.
-//! `had_error` is read 6 times, each "any error so far" ; no fold entry can set it (`&self`).
+//! `had_error` is read 6 times, each "any error so far" ; one entry sets it: `range_bounds_checked` (`&mut self`, the one
+//!   `&mut self` entry of E1's list) latches it through `check_const_range_bound` -> `error_at` -> `error` -> `count_error_capped`
+//!   (driver.rs) ; no other fold entry can (`&self`).
 //! ENFORCED by test (elaborate/tests/value_entry_home.rs, token shapes per (file, fn), `#[cfg(test)]` skipped): E1 one `fn` each of the
 //!   entry list ; E2 the call sites of the non-IN cores and frame entries ; E3 the binder chain's five members, in order, here only,
 //!   steps 2-5 each inside an `or_else ( | |` and step 1 inside `fill . then ( | |` (lazy ; `then_some (` is refused) ; E4

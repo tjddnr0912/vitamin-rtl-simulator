@@ -3273,9 +3273,11 @@ endpackage
 
 /// VAL-2 S1 (§5.2 VAL-2, `value/chains.rs` `param_decl_fold`): seed-reading calls in a module
 /// BODY's typed and untyped parameter initializers, the binder chain C1 (`elaborate_instance`).
-/// A structure pin: the read set is PRE's (vita d5ac3b05's tree, measured before the merge) ;
-/// oracles not run.
-/// vita `V P=0000 Q=0`
+/// A structure pin: the read set is PRE's (vita d5ac3b05's tree, measured before the merge).
+/// iverilog `t.sv:6: error: Unable to evaluate parameter P value: p.fx(32'sd2)`
+/// sv2v `sv.v:7: error: Unable to evaluate parameter P value: top.p_fx(32'sd2)`
+/// verilator 5.054 `V P=xxxx Q=x`
+/// vita `V P=0000 Q=0` (the fabricated 0 this file's head files: §5.2 Q-AESINK)
 #[test]
 fn val2_s1_body_decl_chain() {
     let src = format!(
@@ -3290,7 +3292,10 @@ endmodule
 }
 
 /// VAL-2 S2: the same two initializers in a PACKAGE, the binder chain C2 (`elaborate_package`).
-/// vita `V P=0000 Q=0`
+/// iverilog `t.sv:6: error: Unable to evaluate parameter P value: p.fx(32'sd2)`
+/// sv2v `sv.v:7: error: Unable to evaluate parameter q_P value: top.p_fx(32'sd2)`
+/// verilator 5.054 `V P=xxxx Q=x`
+/// vita `V P=0000 Q=0` (§5.2 Q-AESINK)
 #[test]
 fn val2_s2_package_decl_chain() {
     let src = format!(
@@ -3308,7 +3313,10 @@ endmodule
 
 /// VAL-2 S3: the same two initializers in a GENERATE scope, the binder chain C3
 /// (`lower_gen_module_item`).
-/// vita `V P=0000 Q=0`
+/// iverilog `t.sv:7: error: Unable to evaluate parameter P value: p.fx(32'sd2)`
+/// sv2v `sv.v:18: error: Unable to evaluate parameter P value: top.p_fx(32'sd2)`
+/// verilator 5.054 `V P=xxxx Q=x`
+/// vita `V P=0000 Q=0` (§5.2 Q-AESINK)
 #[test]
 fn val2_s3_generate_decl_chain() {
     let src = format!(
@@ -3326,7 +3334,10 @@ endmodule
 
 /// VAL-2 S4: the same two initializers as HEADER defaults, no override, the binder chain C4
 /// (`bind_one_param`, after its three override channels).
-/// vita `V P=0000 Q=0`
+/// iverilog `t.sv:5: error: Unable to evaluate parameter P value: p.fx(32'sd2)`
+/// sv2v `sv.v:7: error: Unable to evaluate parameter P value: top.u.p_fx(32'sd2)`
+/// verilator 5.054 `V P=xxxx Q=x`
+/// vita `V P=0000 Q=0` (§5.2 Q-AESINK)
 #[test]
 fn val2_s4_header_decl_chain() {
     let src = format!(

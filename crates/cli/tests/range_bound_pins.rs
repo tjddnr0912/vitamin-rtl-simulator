@@ -173,6 +173,11 @@ errors=0 warnings=1 notes=0
 }
 
 /// path C over a constant function call above i32::MAX (the call is folded twice, F-a).
+/// The pinned `bw=1` is PRE's, which the oracles contradict: iverilog 13 + vvp
+/// `A bw=4 l=3 r=0`, verilator 5.052 `%Error: t.sv:3:10: Value too wide for 32-bits expected in
+/// this context 64'h100000003` (and `t.sv:3:20: ... 64'h100000000`). Owner: the bound range
+/// rule for a bound past `integer`, docs/roadmap/5.2/Q-PARAM2STATE.md:35 (Q-VALRULES (b) R6.x) ;
+/// that fix turns this pin red on purpose.
 #[test]
 fn g_cfn_big() {
     check(
