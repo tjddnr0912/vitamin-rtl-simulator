@@ -1,4 +1,5 @@
-(§5.2 VAL-2 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-2) (one entry and one result record for the elaborate constant evaluator):
+(§5.2 VAL-2 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-2) (the parameter declaration chain and the live-scope wide ask, written once):
+* slot: piece P-a landed 2026-11-11 as batch 3 with VAL-1 and VAL-3 (§4.5.639), 39508ac8, at the narrowed scope the owner chose (O1 = (b): (a) plus the P0-b measurement); the entry and the result record go to their first readers, below; the table keeps the row for this record
 * slot: R3.2 · L1, after VAL-1 (owner, 2026-11-09)
 * scope: structure only: every output equals PRE (values, diagnostics, exit code, `.vu` and `.velab` bytes, termination, cost), PRE's differences kept as named lanes (owner, 2026-11-09)
 * fix: one canonical entry `fold(e, scope, ctx) -> Folded`: the typed value (`WideBits` as a struct) or Declined carrying only what PRE already tells apart (`CFold` Four / No, `XWhy`), the five cores its lanes
@@ -9,6 +10,26 @@
 * pins: no fold entry outside `value/` (the delegate list pinned); ratchet c unchanged, b re-aimed at the home, not lowered by a rename
 * note: risk high: EVALUATION-ORDER (depth guards `MAX_DEPTH` 64 at `const_fn.rs:1607`, 8 at `const_bound.rs:410`) and Four vs No stickiness; size the 6 entry heads + `value/mod.rs`, 22 refs in 13 files named
 * note: TW-LATCH: a named latch question answering unlike `had_error` on any cell is BLOCKING
-* note: it frees F24 and S1v's B-2 out of the value channel (§2 zero-width-gate-after-error), the Q-EXECSEM census (after VAL-2) and row 29 r1's `const_eval_u32` literal lane (R7.5)
+* note: as landed it does not free F24 or S1v's B-2 out of the value channel (§2 zero-width-gate-after-error) (P-e, P-f): F24's readers are fed by `range_facts` (VAL-3) and the frame (BIND-2), and B-2 is a value change
+* note: the Q-EXECSEM census (after VAL-2) and row 29 r1's `const_eval_u32` literal lane (R7.5) read the head note's lane table
 * note: the home rows' trip wires and their honest cost are written once, in §5.2 SYS-1
+* fix: as built (owner O1 = (b), W/val2/plan/PLAN.txt split table): piece P-a only, the chains consumers spell and the wide core asked in the live scope, each one body; the entry (P-b), the result record (P-c) and the move of the cores into `value/` (P-d) are not built, each with its reason below
+* record: P-a landed (§4.5.639, 39508ac8): `elaborate/src/value/chains.rs` holds `param_decl_fold(p, meta, fill)`, PRE's five steps as lazy `or_else` closures in PRE's order (the untyped fill, the declared-width read-back, `eval_param_init`, the real conversion, the wide read at the declared width)
+* record: the four binder chains call it: the module body (`instance.rs`), the package (`package.rs`) and the generate scope (`generate.rs`) pass `fill = true`, the header (`params.rs`) passes `default_binds` after its three override channels; each keeps its own `meta`, its wide bind and its own E3009 text
+* record: `elaborate/src/value/lanes.rs` holds `fold_self_wide`, REG asked in the live scope; the 11 adapters that spelled `fold_self_bits(e, &|n, _| self.wide_name_bits(n))` call it
+* record: `value/mod.rs`'s head note is the lane table: the five cores, their scope, context and "no" kinds, the chains that stay at their consumer, the decline readers and the `had_error` reads; the entry and the record are named there with their contract
+* pins: `elaborate/tests/value_entry_home.rs` per (file, fn), `#[cfg(test)]` skipped: E1 the 51 entry definitions, E2 the callers of the non-IN cores, E3 the chain's five members in order, E4 `wide_name_bits` handed to `fold_self_bits` only in `fold_self_wide`, E5 the `had_error` reads, E6 the width-0 readings
+* pins: 33 cli pins (`value_entry_pins.rs`) hold PRE's text of each binder's step witnesses (s1e_*, w2, s3_call, r4, s5f_*, b8_*_ut, c4_ovr_*), four seed pins the read set of a call in each binder; 17 mutants killed, 2 controls agree
+* record: lanes byte-equal to PRE (W/val2/build/ROW_SUMMARY.txt, RULINGS-build1 R5): `val2_lane` 85 cells and the 4 new cost_val2 cells, with the 8341 record cells, lanes 175 / 148 / 123 / 265 and 51 real designs; the cost flags cleared on re-measures alone of 6 alternating runs
+* record: the cost (R4): `fold_self_wide` is inlined at all 11 sites (no symbol, each adapter's size unchanged); `param_decl_fold` is out of line, 572 B, one call per declaration; per use y_bind_inst +29.6 instructions (+0.04 %), y_bind_gen −348, y_truth_x −1.68, y_red_wide −0.71
+* note: the entry (P-b) is not built: no site would read `Folded` (all 372 callers convert straight back to PRE's type) and it would sit between every recursion level of the interpreter, where 1 % is about 4.8 instructions per use
+* note: so the one entry goes to the first row that writes one rule for cores of different types, Q-SYMMIX (C), as `fold_in(lane, e) -> Folded` in `value/lanes.rs`, called by arms only (§5.2 Q-SYMMIX)
+* note: P0-b measured the delegate form on a scratch tree (W/val2/p0b, mA and mB SUMMARY): a runtime-match entry +6.25 % instructions on the constant-function loops, about +30 per entry call, 25 cost30 trips: FAIL
+* note: P0-b's second form, a generic `fold<L: FoldLane>` over lane bodies: −0.045..+0.046 % on those loops, 0 trips after a re-measure alone: PASS; both patches are kept as evidence and nothing landed
+* note: the result record (P-c, `value/folded.rs`) is not built: nothing reads it yet, and a type nothing constructs fails `clippy -D warnings`; VAL-3 named its first reader, R6.1's typed bound (`BoundFold`, §5.2 VAL-3)
+* note: ratchet key b's re-aim goes with P-d: b counts only top-level `elaborate/src/const_*.rs`, so the five `pub(crate)` Option fns in `value/` are outside it; a row that moves a counted fn into `value/` without the re-aim lowers b by a rename (lens-sound N3)
+* note: measured at landing (F5): `had_error` has 9 code references (1 declaration, 2 writes, 6 reads, each "any error so far") in place of the 22 above; of the 8 readers above, 6 are fed by `range_facts`; `MAX_DEPTH` 64 sits at `const_fn.rs:1302`
+* note: `range_bounds_checked` (VAL-3) is the one `&mut self` entry, so its check can set the latch; `value/mod.rs` said no fold entry can (lens-sound N2, fixed in 4f68630b)
+* note: the decline readers (P-f): R1 R2 R3 R5 R6 to BIND-2, R7 R8 to VAL-3, R4 and N1–N12 REVIEW-ONLY; TW-LATCH is replaced by E5 failing, since no named latch question is built
+* note: filed (W/val2/plan/PLAN.txt F1–F4): F1 w0_local joins §2 const-fn-local-unbound-width; F2 §2 pkg-param-no-cause; F3 §2 override-recovery-reread; F4 s5_body joins §2 🆕 H
 * source: W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-2

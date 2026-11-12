@@ -126,5 +126,6 @@
 * note: S1v runs first now, so the cells needing both rows (t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec) stay wrong and are claimed on S1v's page (Q-PARAM2STATE)
 * note: (C) on the homes (W/program/reorder2-2026-11-09/PLAN.txt G3): the count node's arm once (VAL-1), folded through the one entry (VAL-2), its bounds through the router (VAL-3); the node's facts one SYS-1 entry if spelled as a reserved `$__vita_` name
 * note: and the parser emits the node where `range_rules` part 5's respell builders write today (PARSE-1): one arm in place of 11 + `names.rs:96`; (C) is not prototyped, and the 627 claims were measured on the minted route (U8)
+* note: VAL-2 landed without the one entry (§4.5.639): (C)'s count node is the first rule written for cores of different types, so (C) builds it, `fold_in(lane, e) -> Folded` in `value/lanes.rs`, called by arms only; P0-b measured a runtime-match entry +6.25 % instructions (FAIL) and a generic `fold<L: FoldLane>` −0.045..+0.046 % (PASS) (§5.2 VAL-2)
 * status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic

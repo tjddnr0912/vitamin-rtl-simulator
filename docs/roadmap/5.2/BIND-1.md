@@ -15,4 +15,5 @@
 * note: D12 never together with Q-SIDETABLES (`elaborate/src/lib.rs`'s `Elaborator` fields): VAL × BIND 22 shared files, TYPE × BIND 13
 * note: it frees S1v-V, Q-OVRXPLANE, §2 gen-scope-alias-width (its table half) and row 24's F4
 * note: the home rows' trip wires and their honest cost are written once, in §5.2 SYS-1
+* note: from VAL-3 (§4.5.639): `check_param_decl_range` folds and checks its bounds through `range_bounds_checked`; the typed bound R6.1 builds reads a name leaf's (width, sign) from the binder, wrong today for a dropped `unsigned` (p5_uns_kw_s PRE `A bw=1 u=-8 gt=0`, iverilog `A bw=2 u=8 gt=1`), so BIND-1 and S1v-V land before R6.1 reads it
 * source: W/program/reorder2-2026-11-09/PLAN.txt G1 BIND, G2 BIND-1, G7 O3

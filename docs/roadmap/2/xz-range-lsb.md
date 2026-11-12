@@ -8,4 +8,5 @@
 * note: the w lane (`N - 5'd8`, folded as i64 -5, `bw=15`) has no two oracles that agree: iverilog `bw=-13`, sv2v → iverilog `bw=4294967283`, verilator stops at the four errors
 * note: the same class as Q-PARAM2STATE's both_xz (`logic [4'bx : 4'bz] y;` `A b=1`), whose refusals are S1v's R1x and C1 (§5.2 Q-PARAM2STATE)
 * note: found by the Q-SYMMIX re-entry plan (W/qsymmix/replan/PLAN.txt F-3), outside Q-SYMMIX: its gate admits only an lsb that folds to 0 at parse
+* witness (VAL-1 F1): an msb whose `?:` condition is ambiguous, `logic [(4'b0x00 ? 5 : 6):0] w;`, PRE d5ac3b05 `bw=1` rc 0, no diagnostic: the fold declines and the range takes its default; R6.2's refusal reads it (W/val1/ground/probe/cells/p22_ternary_x)
 * status: OPEN

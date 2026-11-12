@@ -1,8 +1,9 @@
-(§5.2 VAL-3 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-3) (the range-bound router returns the exact typed bound):
+(§5.2 VAL-3 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-3) (a declared range's bounds folded, then checked, in one body):
+* slot: landed 2026-11-11 as batch 3 with VAL-1 and VAL-2 piece P-a (§4.5.639), 30adf073, at the narrowed scope the owner chose (O1 = (a), W/val3/plan/PLAN.txt): the chain, the router's notes and pins; the typed bound goes to R6.1; the table keeps the row for this record
 * slot: R3.3 · L1, after VAL-2 (owner, 2026-11-09)
 * scope: structure only: every output equals PRE (values, diagnostics, exit code, `.vu` and `.velab` bytes, termination, cost), PRE's differences kept as named lanes (owner, 2026-11-09)
-* fix: the router (`const_range_bound_fold`, 17 calls → `range_bound_fold_ev`, `fold_x.rs:121`) returns the exact typed bound from its one fold: the value before the u64 → i64 wrap, the width, the sign, the x evidence
-* fix: PRE's wrap is a named lane read by `range_facts` / `_if` / `_pair` (`const_select.rs:685` `:694` `:710`), `bound_step` (`range_rules.rs:214`) and the `Lane` variants; `RangeFacts` gains the typed bounds, read by no consumer (as its `u128` count)
+* fix: re-aimed at landing (plan F-e): the exact typed bound from the router's one fold (`const_range_bound_fold`, 17 calls → `range_bound_fold_ev`, `fold_x.rs:121`), the value before the u64 → i64 wrap, the width, the sign, the x evidence, is built by R6.1 (R1v) as its first commit, the shape below
+* fix: PRE's wrap is a named lane read by `range_facts` / `_if` / `_pair` (`const_select.rs:685` `:694` `:710`), `bound_step` (`range_rules.rs:214`) and the `Lane` variants; `RangeFacts` stays as it is: no reader of typed bounds on it is named (PR17), where typed bounds would sit unread like its `u128` count
 * note: `RangeFacts::lazy` / `::pair` and `PAIR_SITES` unchanged, no second fold; callers untouched; size `fold_x.rs`, `const_select.rs`, `range_rules.rs` parts 1–2
 * pins: `range_rules_home.rs` extended; the lane edge at 2^63 (r12 r13 r15 PRE values)
 * evidence: why typed: S1v-R read the folded bounds m, l, which the router wraps from an unsigned 64-bit value to i64, so a legal design PRE gets right turned loud with a false value (W/s1v/RULINGS-premise1.txt B-1, D7 W/main_d7/2026-11-09/s1v-p1)
@@ -11,6 +12,21 @@
 * witness: r11_r1w_wide_count `logic [64'hFFFF_FFFF_FFFF_FFFF : 0] w;` `$display("A bw=%0d l=%0d", $bits(w), $left(w))`: PRE rc 0 `A bw=2 l=-1` (W/s1v/plan2/filings.txt F-r11)
 * oracles: iverilog `A bw=0 l=-1`, sv2v → iverilog `A bw=18446744073709551616 l=18446744073709551615`, verilator `%Error: t.sv:2:10: Value too wide for 32-bits expected in this context 64'hffffffffffffffff`
 * note: risk high (fix (d)'s ground: 7 re-plans there)
-* note: it frees Q-VALRULES (b)'s value rows: R1v, the bound lane, R1w and R1c (R6.1), C1 and R1x's evidence (R6.2) and the Lane track (R6.3, R6.4)
+* note: as landed it gives Q-VALRULES (b)'s value rows one chain and the lane: R1v, the bound lane, R1w and R1c (R6.1), C1 and R1x's evidence (R6.2) and the Lane track (R6.3, R6.4); R6.2 still waits on the latch questions VAL-2 did not build
 * note: the home rows' trip wires and their honest cost are written once, in §5.2 SYS-1
+* record: VAL-3 landed (§4.5.639, 30adf073): `elaborate/src/value/chains.rs` holds `range_bounds_checked(r)`, PRE's order (fold msb, fold lsb through the router, then check msb, check lsb through `check_const_range_bound`), returning the router's pair unchanged
+* record: its four sites call it in place of their own four lines, each keeping its default and narrowing: S1 `packed_extents`, S2 `check_param_decl_range`, S3 `array_dim_extents` (an unpacked `[m:l]`), S4 `range_to_dims_opt`; `Dim::Size` is the one check outside it
+* record: the router (`const_select.rs`, `fold_x.rs`) is not edited; `value/mod.rs`'s head note writes it down: paths A–E, what each step drops (c1–c9), the WRAP lane, the first reader of anything more (R6.1, `BoundFold`) and the decline readers R7 and R8
+* record: the WRAP lane: the router's Option<i64> is PRE's reading, a 64-bit unsigned bound at or above 2^63 reads negative and path C returns IN's value; the note also says the first checker of a declaration speaks and the span dedup goes in call order
+* pins: `value_entry_home.rs` E7 per (file, fn): the call sites of `const_range_bound_fold`, `check_const_range_bound`, `range_bounds_checked`, `range_bound_fold_ev` and `bound_step`, and inside `range_bounds_checked` the four calls each its own statement in PRE's order
+* pins: 22 cli pins (`range_bound_pins.rs`) hold PRE's whole output for the WRAP lane (r11–r15), path C (g_negu8, g_w32u, g_cfn_big, x04), the first checker per declaration kind, the msb-first order, m_selfdet, m7_dir and half_net; 11 mutants killed, 1 equivalent, 2 controls agree
+* record: lanes byte-equal to PRE (W/val3/build/ROW_SUMMARY.txt): `val3_lane` 107 cells and 5 new cost_val3 cells, with the 8341 record cells, lanes 175 / 148 / 123 / 265 / 85 and 51 real designs
+* record: the cost: `range_bounds_checked` has no symbol in release (inlined; `packed_extents`, `check_param_decl_range` and `array_dim_extents` unchanged in size, `range_to_dims_opt` 908 → 912 B); no instruction count over 1 G instructions past 1 % upward
+* note: the typed producer is not built, its two premises broken (W/val3/plan/PLAN.txt PR16, PR17): the router's fold does not hold a name leaf's type today (PR16), and no `RangeFacts` reader of a typed bound is named (PR17)
+* witness: PR16 p5_uns_kw_s `localparam unsigned U = 4'sd8; logic [(U > 0):0] w;` PRE `A bw=1 u=-8 gt=0`, iverilog `A bw=2 u=8 gt=1`: the (width, sign) of a name leaf is the binder's, which BIND-1 and S1v-V change before R6.1 reads it
+* witness: PR17: S1v-R's prototype raised its diagnostics beside the check at the four sites and never read `RangeFacts.count` (0 readers since)
+* note: on path C two readers need two values: g_negu8 (`localparam logic [7:0] U = 0; logic [U-1:0] w;`, PRE `A bw=2 l=-1 r=0`): the self-determined `first` 4294967295 at 32-bit unsigned, IN's u −1; x04: `first` Four{v:3}, u None
+* note: the shape handed to R6.1 (R1v) as its first commit (W/val3/plan/PLAN.txt section 2): `fold_self_typed(..) -> (CFold, u32, bool)` split out of `fold_self` with no second width walk, and an elaborate-private `struct BoundFold { v: Option<i64>, first: CFold, w: u32, sg: bool }`
+* note: `BoundFold::v` is the WRAP lane, `first`, `w` and `sg` the fold PRE computes and drops; its reader is the side check inside `range_bounds_checked`; `RangeFacts` unchanged
+* note: filed (W/val3/plan/PLAN.txt F-a–F-d): F-a §2 bound-over-i32-folds-twice; F-b §2 param-range-net-name-text; F-c and F-d's g_wide65 and g_real_lit join R6.1 / R6.2's witnesses (§5.2 Q-VALRULES); p5, L24 L25 L27 and j4r are filed already
 * source: W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-3; W/s1v/RULINGS-premise1.txt
