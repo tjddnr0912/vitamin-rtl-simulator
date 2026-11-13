@@ -10,10 +10,10 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 330 | 209 | 121 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 336 | 214 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 200 | 165 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 209 | 174 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 682 | 435 | 247 | | | |
+| total | | 697 | 449 | 248 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -203,6 +203,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - enum-base-overflow-silent — [an enum base wider than 2^64 bits runs with a wrapped width](roadmap/2/enum-base-overflow-silent.md) · OPEN
 - const-atoi-underscore — [a constant-folded `atoi` stops at an underscore](roadmap/2/const-atoi-underscore.md) · OPEN
 - bits-width-over-i32 — [`$bits` of a vector 2^32 bits wide prints -1](roadmap/2/bits-width-over-i32.md) · OPEN
+- const-fn-signed-return-unsigned-context — [a signed constant-function return in an unsigned context keeps its sign](roadmap/2/const-fn-signed-return-unsigned-context.md) · OPEN
+- const-fn-redecl-init-reads-prior — [a constant-function local's initializer that names the local itself](roadmap/2/const-fn-redecl-init-reads-prior.md) · OPEN
 
 ### Index sealing
 > Parameter and index values bound at the wrong width or sign: unsealed indexes, override leaves, signed parameters; mostly open
@@ -386,6 +388,9 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - generate-param-overridable — [a generate-block parameter is treated as overridable](roadmap/2/generate-param-overridable.md) · RECORD
 - const-fn-local-unbound-width — [a header default's constant function sizes a local by an unbound body localparam](roadmap/2/const-fn-local-unbound-width.md) · OPEN
 - generated-name-collision — [a generated name a user identifier can spell collides with it](roadmap/2/generated-name-collision.md) · OPEN
+- gen-param-self-ref-refold — [a generate parameter naming an outer one of its name reads its own value](roadmap/2/gen-param-self-ref-refold.md) · OPEN
+- const-fn-range-formal-shadow — [a local's range naming a formal or local reads the module parameter](roadmap/2/const-fn-range-formal-shadow.md) · OPEN
+- duplicate-value-name-accepted — [32 measured same-name pairs holding an enum label or a `typedef` are accepted](roadmap/2/duplicate-value-name-accepted.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -453,6 +458,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - wildcard-eq-chain-cost — [a left-leaning `==?` chain costs 2^depth](roadmap/2/wildcard-eq-chain-cost.md) · PERF
 - nterm-sum-localparam-cost — [an n-term `1+…+1` localparam costs superlinear time](roadmap/2/nterm-sum-localparam-cost.md) · PERF
 - bound-over-i32-folds-twice — [a declared bound above `i32::MAX` runs its constant function twice](roadmap/2/bound-over-i32-folds-twice.md) · PERF
+- instarr-prepass-map-clone — [the instance-array prepass clones eight whole parameter maps per array](roadmap/2/instarr-prepass-map-clone.md) · PERF
 
 ### Oracle splits (recorded, not chased)
 > Cases where the oracles disagree or none exists, with the side vita takes; recorded, not chased
@@ -612,6 +618,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - member-width-genvar — [a struct member width over a genvar in a generate-block typedef](roadmap/3.b/member-width-genvar.md) · OPEN
 - anon-enum-member — [an anonymous `enum` as a struct member is rejected](roadmap/3.b/anon-enum-member.md) · OPEN
 - sym-member-user-cast — [a cast in a symbolic struct member's range is refused](roadmap/3.b/sym-member-user-cast.md) · OPEN
+- empty-positional-argument — [an empty positional argument `f(1, , 3)` is a parse error](roadmap/3.b/empty-positional-argument.md) · OPEN
 
 **Constants / parameters**
 
@@ -678,6 +685,14 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - itor-const-fold — [`$itor` in a constant expression has no fold](roadmap/3.b/itor-const-fold.md) · OPEN
 - ctx-guard-wide-param — [a wide parameter beside a function local declines the truth fold](roadmap/3.b/ctx-guard-wide-param.md) · OPEN
 - bits-negative-msb-net — [`$bits` of a net with a negative msb in a localparam](roadmap/3.b/bits-negative-msb-net.md) · OPEN
+- interface-port-parameter-const — [an interface parameter read through an interface port in a constant](roadmap/3.b/interface-port-parameter-const.md) · OPEN
+- const-fn-part-select-write — [a constant `[m:l]` part-select write to a function local declines](roadmap/3.b/const-fn-part-select-write.md) · OPEN
+- const-fn-local-select-read — [a select read of a constant-function local declines](roadmap/3.b/const-fn-local-select-read.md) · OPEN
+- const-fn-bits-of-local — [`$bits` of a constant-function local declines](roadmap/3.b/const-fn-bits-of-local.md) · OPEN
+- const-fn-break-continue — [`break` or `continue` in a constant function declines](roadmap/3.b/const-fn-break-continue.md) · OPEN
+- const-fn-wide-local-return — [a constant function's local or return over 64 bits declines](roadmap/3.b/const-fn-wide-local-return.md) · OPEN
+- const-fn-init-div-zero — [a loop local initialised by a division by zero declines](roadmap/3.b/const-fn-init-div-zero.md) · OPEN
+- const-fn-first-init-bits — [a zero-formal constant function's first `$bits` initializer declines](roadmap/3.b/const-fn-first-init-bits.md) · OPEN
 
 **Subroutine / frame**
 
@@ -878,7 +893,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-11): VAL-1, VAL-2 piece P-a and VAL-3 landed as batch 3 (§4.5.639); record-first order, next BIND-1–2; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-13): BIND-1 and BIND-2 landed as batch 4 (§4.5.640); record-first order, next Q-SYMMIX (C) and S1v-V; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -890,8 +905,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | VAL-1 | R3.1 · L1 (landed) | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 (landed) | [the parameter declaration chain and the live-scope wide ask, written once](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 (landed) | [a declared range's bounds folded, then checked, in one body](roadmap/5.2/VAL-3.md) | — F |
-| BIND-1 | R4.1 · L1 | [one bound-constant record per name, in place of the parameter maps](roadmap/5.2/BIND-1.md) | — F |
-| BIND-2 | R4.2 · L1 | [the constant-function frame as bound-constant records](roadmap/5.2/BIND-2.md) | — F |
+| BIND-1 | R4.1 · L1 (landed) | [the nine parameter maps written in one home, read through named lanes](roadmap/5.2/BIND-1.md) | — F |
+| BIND-2 | R4.2 · L1 (landed) | [the constant-function frame as one type, its writers and read lanes](roadmap/5.2/BIND-2.md) | — F |
 | Q-SYMMIX | R5.1 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | R5.2 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
 | Q-CONSTSELLSB | R7.1 · L1 | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① |
@@ -902,6 +917,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
 | 68 | R9.1 · L1 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
 | 23 | R9.1 · L1 | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
+| Q-RTNTEXT | R9.2 · L1 | [one answer for the scope a package routine's text binds in](roadmap/5.2/Q-RTNTEXT.md) | — F |
 | 46 | R9.3 · L1 (PARKED) | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
 | 39 | R9.4 · L1 | [package export declarations are refused at parse](roadmap/5.2/39.md) | ② F |
 | 33 | C1 · L1 (PARKED) | [`'{default: v}` onto a function-local unpacked array is refused](roadmap/5.2/33.md) | ② S |

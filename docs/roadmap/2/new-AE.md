@@ -11,4 +11,6 @@
 * holds 🆕 U's wide→narrow half (§4.5.591: Gw_cae, Iwn_kae, Gw_kae), 🆕 V's moved decisions (§4.5.592: Z1g) and 🆕 AI's newly sized regions (§4.5.594: C1, Nq_launder, Apg), and through 🆕 AI 🆕 W
 * re-entry: `unique-const-fn`'s fix path (§4.5.587)
 * 2 oracles (locals), verilator + hand-IEEE (return variable)
+* witness (batch 4 lens-diff S5): c02_4state_unbound_read `logic [7:0] t; if (a > 100) t = 1; return t;`, `f(3)`: PRE = POST `A P=00000000` rc 0; iverilog, sv2v → iverilog and verilator `A P=xxxxxxxx` (W/batch4/lens-diff/oracle/c02_4state_unbound_read)
+* witness (BIND-2 plan F7): g4 `begin logic [3:0] t; t[0] = 1'b1; if (i == 1) t = 4'd4; s = s + t; end` three times: PRE `A P=6`, iverilog `A P=0`, verilator not run
 * status: BLOCKED (§2 row 15's 2-state identity; a 4-state result channel from the interpreter to module-scope folds; the `repeat` cut: the "Size cast" enum lines; row 48 adds: no call arm in `fold_region`, no x plane in the ≤64-bit parameter and label stores, which refuse; order: Q-AESINK landed (§4.5.633), then row 76)

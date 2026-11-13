@@ -7,4 +7,5 @@
 * a `unique` / `priority case` miss then reaches the synthesized default (`unique-const-fn`)
 * closes §2 🆕 AC's case-form cells
 * oracles: 2 oracles
+* witness (batch 4 lens-diff): f16_case `case (a) 0: r = 10; 3: r = 20; default: r = 5; endcase return r;`, `f(3)`: PRE = POST rc 1 ``parameter `P` value is not a constant: `f(…)` has no constant-fold arm [in top]``; iverilog, sv2v → iverilog and verilator `A P=20` (W/batch4/lens-diff/oracle/f16_case/RES.txt)
 * status: BLOCKED (§2 🆕 AF, AG, AH, the "Scoping" import line)

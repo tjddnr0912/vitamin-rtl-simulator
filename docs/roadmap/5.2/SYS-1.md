@@ -18,6 +18,7 @@
 * note: trip wires every home row names before build (ER §3.6; PLAN G6): TW-BYTE, one moved byte on the cells of record or the 26,858 sweep rows, is BLOCKING; a second on one class goes to a fresh opus-plan, a third parks the row with the rows stacked on it (D8)
 * note: TW-BYTE's cells of record: fix (d)'s 2,877 + 49, row 46's 70 + 112, row 24's 113, S1v's 133 / 430, Q-SYMMIX's counterexamples and row 29's page cells
 * note: TW-ORDER, EVALUATION-ORDER (per-site order re-derived): a new stack overflow or signal, more than 2x wall on a cell whose PRE wall is at least 0.5 s (median of 3), or past ±3 % / ER §8.1 instructions on the 27 cost cells
+* note: from BIND-2 (§4.5.640, W/bind2/RULINGS-plan.txt R17): cost30's r_lsb_self_ok and r_msb_self recurse to the stack overflow, so their totals follow the frame size: a frame-size change moves them with no change in cost per use (816 → 800 B per level gave +2.00 % levels)
 * note: TW-REFUSE: any new diagnostic, refusal, or decline turned value in a home row is BLOCKING; TW-REACH: a member the home cannot reach is named OUTSIDE, and if that leaves a rule spelled twice in one crate the row re-plans
 * note: TW-RATCHET: a `structure_ratchet` key rises (a 159/23, b 102, c 98/10/27, d 85, e 24), so the move is respelled; TW-LATCH (VAL-2): a named latch question answering unlike `had_error` on any cell is BLOCKING
 * note: the home rows take none of the parked rows' cells as acceptance, only byte-equality (three blockers on one axis: Q-SYMMIX 5 rounds, row 24 three parks, row 29's page half three lens rounds)

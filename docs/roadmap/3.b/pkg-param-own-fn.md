@@ -4,4 +4,6 @@
 * cause: `elaborate/src/package.rs:674` (the package fold's call lookup, not traced)
 * witness: corpus witness row-9 R26 (`package parameter DecLcStateWidth value is not a foldable constant`, six OpenTitan pages), whose imported twin is the §2 "Scoping" import line's
 * oracles: 2 oracles
+* witness (batch 4 lens-diff): a40_pkg_func_param_init `localparam int B = 3; function automatic int f(input int a); return a + B; endfunction localparam int Q = f(4);` in `p`, `R = f(Q)` in `top`; d12_ctx_pkg_param, a body local, `Q = f(41)` and `logic [f(3):0] V`: PRE = POST rc 1 ``package parameter `Q` value is not a foldable constant [in p]``
+* a40, d12: iverilog, sv2v → iverilog and verilator `A 7 10` (a40), `A 42 5` (d12) (W/batch4/lens-diff/oracle/)
 * status: OPEN (§5.2 row 45)

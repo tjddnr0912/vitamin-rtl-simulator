@@ -6,3 +6,4 @@
 * silent at exit 0
 * Q-AESINK marks the 4-state spellings, not the 2-state ones
 * fix: an element select on such a local declines (E3009), or the env models elements
+* note: from BIND-2 (§4.5.640): a local's packed and unpacked dims become a private field of `ConstFrame`, filled by `bind_shape` at its three call sites (W1 W6 W9), with no signature, forward or empty-frame site changed (W/bind2/plan/PLAN.txt (f), (w))

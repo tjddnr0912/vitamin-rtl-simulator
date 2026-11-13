@@ -10,4 +10,5 @@
 * a 2-state body local: sh_pkg_body_int (b_int) `function automatic logic [3:0] g(input int a); int g; endfunction` `00000000`, iverilog `Unable to evaluate parameter P value: <select=q.g(32'sd1)[(0)+:8] expr_type=logic>`, sv2v the same over `top.q_g`, verilator `Non-ANSI I/O declaration of signal conflicts with type declaration: 'g'`.
 * §4.5.633's set is empty on all five
 * renamed, h2_ren_narrow marks `f.f` and b_int_tw marks `g.g`
+* witness (BIND-2 plan F5): g2b `function automatic int f(input int a); begin logic [3:0] f; f = a; end endfunction`, `f(300)`: PRE `A P=12`; iverilog `error: Unable to evaluate parameter P value: top.f(32'sd300)`; verilator lint accepts, its value not run
 * OPEN

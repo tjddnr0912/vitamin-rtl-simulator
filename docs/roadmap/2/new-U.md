@@ -17,3 +17,5 @@
 * R4, two wildcards with a read between: nr_wwi (`import q::*; parameter int Y = X; import r::*; parameter int Z = X;`) `R Y=6 Z=7 B=16`, all three `R Y=6 Z=6 B=8` (the package half of §2 "Import ambiguity follows adjacency")
 * R5, R1 inside a package read through `q::U`: nr_chl (q's own label X, `import r::*;` below, `U = X`) `R Z=7 B=4`, all three `R Z=5 B=4`
 * on main every one runs at exit 0 (row 33, parked, would only have kept its own function loud on these shapes)
+* iwqw (pins-judge genP/P__Iw_L8__qw__y1, a 98-bit wildcard `X` over p's 8-bit label `X`): q's `localparam logic [99:2] X = 98'h3_0000_0000_0000_0000_0075;`, in p `import q::*;` then `typedef enum logic [7:0] {X = 8'h35, X_n1} e_1_t;` and `localparam int Y = $bits({X, 4'h0});`, top's `localparam logic [31:0] X = 32'h0135;`, `$display("A %0d %0d", p::Y, p::X)`: PRE = POST rc 0 `A 102 53`
+* iwqw: iverilog vvp `A 12 53`; verilator --binary run `A 12 53`, lint rc 0, no warning (W/batch4/pins/r2/o/iwqw)

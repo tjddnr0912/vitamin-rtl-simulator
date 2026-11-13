@@ -9,3 +9,4 @@
 * fix: the classifier types a `?:` with a string arm as string and makes its literal / parameter arms string values (C7, which also closes Q-XNONINT's residue: `c ? P : LQ` at x `[PP] 2`, hand `[] 0`), and refuses a known-integral arm opposite a string arm (P-5)
 * classifier gaps (concatenation, replication, hierarchical, parameter, class member, package call) are missed climbs, not refusals
 * row 26's elaborate half (F1, S2)
+* witness (batch 4 lens-diff, a candidate): b17_str_mentions_real `localparam string S = (R > 1.0) ? "big" : "small";` over `localparam real R = 1.5`: PRE = POST E3009 ``parameter `S` value is not a constant: `R` is a real, which has no integral constant value here``; sv2v → iverilog `A   big two`, verilator `A big two`, iverilog ``cannot be implicitly cast to the target type``

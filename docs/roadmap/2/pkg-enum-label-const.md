@@ -1,2 +1,5 @@
 (§2 pkg-enum-label-const · in Oracle splits (recorded, not chased)) (a package-body enum label named like a constant):
 * package-body enum label named like a constant — split
+* witness (batch 4 pins, `bind_pins.rs` n14_pkg_import_label_range's input q2b2): q's `localparam logic [19:5] A = 15'h0035;`, in p `import q::*;` then `typedef enum logic [11:4] {A = 'h35, B} e_t;` and `function automatic logic [A[8:5]:0] f(input int x);`, top's `localparam logic [31:0] A = 32'h35;`, `$display("A %0d %0d", $bits(p::f(1)), p::A)`: PRE = POST rc 0 `A 6 53`
+* q2b2: iverilog vvp `A 1 53`; verilator --binary run `A 11 53`, lint rc 0 `%Warning-WIDTHTRUNC: t.sv:7:55: Operator ASSIGN expects 11 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.` (W/batch4/pins/r2/o/q2b2/orc); vita 6, iverilog 1, verilator 11: no oracle agreement
+* q2b2 variations (W/batch4/pins/r3/var, PRE = POST): q's `[19:4]` gives `A 11 53`, p's label `'h3f` gives `A 16 63`, q's value `15'h001f` and top's `A` (`32'h1E0`, `int 7`) leave `A 6 53`

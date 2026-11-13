@@ -105,6 +105,7 @@
 * note: C1 and R1x followed (W/s1v/RULINGS-premise2.txt B-2): R1x's x evidence reads the lossy parameter value channel, and a C1 refusal sets `had_error`, which flips the zero-width claim gate (§2 zero-width-gate-after-error); the Lane track went with them (owner, 2026-11-09)
 * note: so R1v, the bound range rule, R1w, R1x, C1, R1c and the Lane track above are Q-VALRULES (b)'s value rows R6.1–R6.4, on VAL-3 and BIND-1 (§5.2 Q-VALRULES), and S1v-V keeps rule (C), E7', F-2 and F-1a
 * note: VAL-3 landed without the typed bound (§4.5.639, owner O1 = (a)), so R6.1 (R1v, the bound range rule, R1w, R1c) builds `fold_self_typed` and `BoundFold` as its first commit (W/val3/plan/PLAN.txt section 2), read by the side check in `range_bounds_checked`; S1v-V's items stay as above (§5.2 VAL-3)
+* note: BIND-1 landed without `BoundConst` (§4.5.640, owner O1 = (a)), so S1v-V builds it as its first commit, a tenth map written by `bind_decl` (DECL-ORDER), and reads a name's (width, sign) through `name_meta` (META-WALK, p16's lane) in one fn (§5.2 BIND-1)
 * note: for S1v-V's design (N-5): the production evidence path is a router edit, and the prototype's second fold cost ~15 % wall (e02 e03)
 * S1v-V census item N-2 (W/s1v/RULINGS-premise1.txt CARRY, W/s1v/plan2/filings.txt F-N2): a class `#()` value parameter drops its type and signing (`classes.rs:255-265`)
 * witness: j1_class_param `class C #(int unsigned P = -1); int v; function new(); v = (P > 0); endfunction endclass`: PRE vita-main 8c970e9b `A v=0`
