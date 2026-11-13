@@ -43,6 +43,7 @@ fn check(id: &str, src: &str, want_stdout: &str, want_stderr: &str, want_rc: i32
 
 /// L2 declared, unbound (lane cell `c29_init_reads_self_redecl`) -- a block declaration's initializer reads its own name before it is bound: `envw` only, the read is loud.
 /// Owner line: the plan's L2 (the leaf's declared-unbound arm) ; PRE E3009 rc 1
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=15` (soundness lens N-S4b).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=15` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn c29() {
@@ -69,6 +70,7 @@ errors=1 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `c33_unknown_width_init`) -- an initializer of a local whose width did not fold (`w(4)-1`): the local stays unbound (W5, `unbind_value`), the read is loud.
 /// Owner line: the plan's L2 ; "the loud must not be conditional on the width being known" (bind_const_decl) ; PRE E3009 rc 1
+/// IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=5` / `t.sv:5: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:3:66: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 't' generates 4 bits.`.
 #[test]
 fn c33() {
@@ -171,6 +173,7 @@ errors=0 warnings=1 notes=0
 
 /// L4 width 0 = unknown (lane cell `c01_j4r`) -- a local whose range names a body localparam that is not bound: `bind_shape(.., None)` records width 0 and `x = '1` folds at 1 bit.
 /// Owner line: the plan's L4 (`bind_shape`'s None arm, the one width-0 reading) ; the mutant M1 (None -> (32, false)) killer claim (R13) ; PRE `A P=1`
+/// PRE `A P=1` where iverilog vvp prints `A P=511` ; gap entry: §2 const-fn-local-unbound-width (docs/roadmap/2/const-fn-local-unbound-width.md, witness j4r ; soundness lens N-S4a).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=511` / `t.sv:6: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:3:64: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 9 bits.`.
 #[test]
 fn c01_j4r() {
@@ -223,6 +226,7 @@ errors=0 warnings=1 notes=0
 
 /// L4 width 0 = unknown (lane cell `c03_w0_formal`) -- a formal whose range holds a call: W6 `bind_shape(.., None)`, width 0.
 /// Owner line: the plan's L4 ; PRE `A p=300`
+/// PRE `A p=300` where iverilog vvp prints `A p=12` ; gap entry: §2 const-fn-local-unbound-width (docs/roadmap/2/const-fn-local-unbound-width.md, "the formal twin w0_formal the same" ; soundness lens N-S4a). IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A p=12` / `t.sv:7: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:4:7: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 4 bits.` / `%Warning-WIDTHTRUNC: t.sv:6:22: Operator FUNCREF 'f' expects 4 bits on the Function Argument, but Function Argument's CONST '?32?sh12c' generates 32 or 9 bits.`.
 #[test]
 fn c03() {
@@ -273,6 +277,7 @@ errors=0 warnings=1 notes=0
 
 /// L4 width 0 = unknown (lane cell `c23_w0_select_write`) -- a select write on a width-0 local declines (`vw == 0`).
 /// Owner line: the plan's L4 ; PRE E3009 rc 1, iverilog `A P=2`: a loud, not a wrong value
+/// IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=2` / `t.sv:5: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:3:82: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 't' generates 4 bits.`.
 #[test]
 fn c23() {
@@ -484,6 +489,7 @@ errors=0 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `k1_shape_before_init`) -- a block local whose initializer reads its own name beside a module localparam of that name: W1 `bind_shape` runs BEFORE the initializer, so the read finds the declared, unbound local and is loud (PRE E3009).
 /// Owner line: R13, the named killer of M2 (W1 moved after the initializer: the read falls to the module `t` and folds `A P=8`) ; a loud where iverilog prints a value: pre-existing, structure only
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=1` (soundness lens N-S4b).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=1` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn k1() {
@@ -510,6 +516,7 @@ errors=1 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `k2_redecl_init_unfolds`) -- a loop-body declaration re-run per iteration whose initializer stops folding on the 2nd pass (`10 / (1 - 1)`): W4 `unbind_value` drops the 1st pass value, the read is loud.
 /// Owner line: R13, the named killer of M3 (W4 dropped: the stale 10 is read, `A P=20`) ; pre-existing loud, structure only
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=10` (soundness lens N-S4b).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=10` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn k2() {
@@ -536,6 +543,7 @@ errors=1 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `k3_unbound_local_beside_param`) -- a local initialised `4'bx` (does not fold) beside a module localparam of its name: the leaf finds the declared, unbound local and does not fall to the parameter.
 /// Owner line: R13 (premise judge C3), the named killer of M9 (the leaf's declared-unbound arm dropped: the module `t` = 5 is read, `A P=5`) ; pre-existing loud, structure only
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=0` (soundness lens N-S4b).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=0` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:5:14: Operator ADD expects 32 bits on the LHS, but LHS's VARREF 't' generates 4 bits.`.
 #[test]
 fn k3() {
@@ -562,6 +570,7 @@ errors=1 warnings=1 notes=0
 
 /// L4 width 0 = unknown (lane cell `k4_redecl_width_unknown`) -- a loop-body declaration of a width-unknown local (`[w(4)-1:0]`) with an initializer: W5 `unbind_value` leaves it unbound every pass, the read is loud.
 /// Owner line: R13, the named killer of M4 (W5 arm emptied: the last pass value 9 is read, `A P=9`) ; pre-existing loud, structure only
+/// IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=5` / `t.sv:9: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:5:77: Operator ASSIGN expects 32 bits on the Assign RHS, but Assign RHS's VARREF 't' generates 4 bits.`.
 #[test]
 fn k4() {
@@ -589,6 +598,7 @@ errors=1 warnings=1 notes=0
 
 /// L3 bound, undeclared (lane cell `k5_formal_named_fn`) -- a formal named like its function: W7 binds the formal 1, W10 `seed_value(0)` for the return variable keeps it, the body is empty and the return reads 1.
 /// Owner line: R13, the named killer of M6 (W10 as `bind_value`: the return variable overwrites the formal, `A P=00000000`)
+/// PRE `A P=00000001` where both oracles refuse the text (rc 1) ; gap entry: §2 block-local-named-function (docs/roadmap/2/block-local-named-function.md, witness h2_formal ; soundness lens N-S4a).
 /// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:2: error: Function p.f port f is not an input port.` / `t.sv:2:      : Function arguments must be input ports.` / `1 error(s) during elaboration.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:2:46: Duplicate declaration of signal: 'f'` / `%Error: Exiting due to 1 error(s)`.
 #[test]
 fn k5() {
@@ -642,6 +652,7 @@ errors=0 warnings=1 notes=0
 
 /// L6 empty frame (lane cell `k7_first_init_empty_env`) -- a zero-formal function whose first local's initializer is `$bits(Q)`: it runs on a frame with no width yet, the default arm declines and the call is loud.
 /// Owner line: R13 (premise judge C3), the named killer of M7 (the `&& fr.widths().is_empty()` guard dropped: `A P=32`) ; M7 is NOT equivalent ; pre-existing loud, structure only
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=32` (soundness lens N-S4b). IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14635-14636): "It shall be legal to call any system function that is allowed in a constant_expression (see 11.2.1). This includes $bits and the array query functions."
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=32` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn k7() {
@@ -668,6 +679,7 @@ errors=1 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `k8_reduce_unbound_local`) -- a reduction `|t` of a declared, unbound local (initialised `4'bx`) beside a module localparam of its name: the local closure in fold.rs sees the local's shape and declines.
 /// Owner line: R13, the named killer of M8 (the closure drops `envw`: the module `t` is reduced, `A P=1`) ; pre-existing loud, structure only
+/// PRE E3009 rc 1 where iverilog vvp prints `A P=0` (soundness lens N-S4b).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=0` / `t.sv:8: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn k8() {
@@ -694,6 +706,7 @@ errors=1 warnings=1 notes=0
 
 /// L2 declared, unbound (lane cell `k9_concat_sel_unbound_local`) -- a select of a declared, unbound local (`logic [g(8)-1:0] A = 5;`, width did not fold: W5) as a concat operand beside a module localparam `A` with a non-zero lsb: `const_placement_wide`'s select-root test `is_local_w` (envw first) sees the local and declines, so the module parameter is not read.
 /// Owner line: R13, the named killer of BIND-2b's N3 (`is_local_w` without its envw half: the mutant reads the module `A`, `A P=c1`) ; PRE E3009 rc 1 (loud where iverilog folds 01: JOINS §2 const-fn-local-unbound-width, structure only)
+/// IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=01` / `t.sv:9: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
 #[test]
 fn k9() {
@@ -721,6 +734,7 @@ errors=1 warnings=1 notes=0
 
 /// L4 width 0 = unknown (lane cell `k10_concat_w0_local_beside_param`) -- a local of unknown width (`logic [g(4)-1:0] t;`, bound by `t = a`) as a concat operand beside a module localparam `t`: `const_placement_wide` reads its `shape` (0, false) and declines instead of falling to the module's `t`.
 /// Owner line: R13, the named killer of BIND-2b's N7 (`shape` reading width 0 as undeclared: the mutant reads the module `t`, `A P=51`) ; PRE E3009 rc 1 (loud where iverilog folds 21: JOINS §2 const-fn-local-unbound-width, structure only)
+/// IEEE 1800-2017 §13.4.3 (ieee1800-2017.txt:14647-14648): "Constant functions shall not themselves use constant functions in any context requiring a constant expression" (soundness lens N-S4c).
 /// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A P=21` / `t.sv:10: $finish called at 1 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHTRUNC: t.sv:6:7: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.`.
 #[test]
 fn k10() {

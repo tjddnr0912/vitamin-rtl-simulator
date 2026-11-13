@@ -48,7 +48,10 @@
 //!     positions.
 //!   - PKG-ORDER (`elaborate_package`): value, RANGE FOLD, range raw set-or-clear, meta
 //!     set-or-clear, each pushed on its own saved list. No hier copy, no guessed mark.
-//!     It stays at its site on primitives (one caller, three out-lists).
+//!     It stays at its site on primitives (one caller, three out-lists). The callers of
+//!     `set_range_raw`, `clear_range_raw` and `drop_value_raw` are counted per (file, fn)
+//!     by `bound_home.rs` W6 (one call each: the first two in `elaborate_package`,
+//!     `drop_value_raw` in frames_reserve.rs `with_rtn_decl_scope`, the U6 replay).
 //!
 //! # U: the undo lanes (undo.rs ; map set per path, none merged)
 //!
@@ -81,7 +84,9 @@
 //! seven `hit_*` rules are the scope walk's hit tests, one per map set, each in the
 //! `||` order its sites spelled (`read.rs`'s head note tables the rules, their map
 //! sets and their sites, and the sites left with their reason). They read ; they write
-//! nothing and change no presence lane. `bound_home.rs` W5 pins them.
+//! nothing and change no presence lane. `bound_home.rs` W5 pins them: W5a-W5c the walks
+//! and closures spelled at a site, W5d each lane's calls per (file, fn) (a lane call
+//! replaced by a bare-key read is a direct read, which W5a does not see).
 //!
 //! # What the pins see, and what they do not (REVIEW-ONLY)
 //!
@@ -93,6 +98,13 @@
 //! forms it can see (`&mut <recv>.<field>`, `<recv>.<field> =`, a tuple left-hand side
 //! naming a field, a `Self {` / `Elaborator {` literal) ; a write through a reference
 //! bound earlier, a macro body, and a receiver spelled another way are review-only.
+//! Four spellings of a whole-map replacement compile outside this module and no W rule
+//! counts them (REVIEW-ONLY, batch 4 soundness lens N-S3a): `&mut (self.params)`
+//! (parenthesised: F1 wants `&mut <recv>.`), `[self.params] = [..]` or another
+//! struct's destructuring assignment (F3 wants `( .. ) =`), `*self.params.borrow_mut()
+//! = ..` (the blanket `BorrowMut`), and W1's constructor spelled `Bound::<_>::new_empty(`
+//! (W1 wants `Bound :: new_empty (`). Inside this module the tuple field `.0` is
+//! reachable as well, and W0 counts `.w()` calls only (N-S3b).
 //!
 //! Not built here (said plainly): one storage record per name (first reader S1v-V),
 //! the (`params`, `param_range`) pair as one value, one snapshot type, an accessor per

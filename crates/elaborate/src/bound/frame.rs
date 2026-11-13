@@ -18,7 +18,10 @@
 //!      seeded per call ; W12 to a seeded name (c18 `A P=13`) ; its width comes from the
 //!      package meta, not from here (`const_placement_wide` falls to `lookup_scoped`: g3b).
 //!   L4 width 0 = unknown: `bind_shape(_, None)`, the one place that reading is spelled
-//!      (W1 W6 ; j4r, c02, c03, g1b, c30-c34) ; readers propagate "no masking".
+//!      (W1 W6 ; j4r, c02, c03, g1b, c30-c34). The cells (frame_pins.rs, PRE = POST): c02
+//!      `A p=300`, c03 `A p=300` and g1b `A P=300` where iverilog prints 12 ; c23 E3009
+//!      rc 1 where iverilog prints `A P=2` ; j4r (`x = '1`) `A P=1` where iverilog prints
+//!      511 (§2 const-fn-local-unbound-width ; soundness lens N-S5c).
 //!   L5 flat: one slot per name, a block declaration overwrites (g2b g4 g5).
 //!   L6 empty frame = a module-scope ask (26 `ConstFrame::new()`, F3) ; a FIRST formal's
 //!      default runs on an empty frame inside a call (g6a folds, g6b is E3009).
@@ -79,12 +82,19 @@
 //! (W/bind2/build_a/DELTA1_SUMMARY.txt). UNMEASURED: what a merged per-local record
 //! {value, width, sign} would cost or save -- P0-c's same-key pair counts (2.0 per
 //! iteration on 16 cells, W/bind2/p0/count/P0C.txt) are a loose upper bound, not a saving.
+//! Cost-UNMEASURED hosts (BIND-2a, no cost cell reaches them ; W/bind2/build_a/ROW_SUMMARY.txt
+//! D10_UNMEASURED): `delay_ticks_in_scope`, `delay_units_in_scope`, `const_rtoi_via_real`,
+//! `const_str_method_value`.
 //!
 //! NOT BUILT: the merged per-local record (BIND-2 plan (r): the width half is a type the
 //! certified producers share, and both halves are one-sided, L2 and L3) ; its first reader
 //! is Q-CONSTSELLSB (a local's lsb and direction). REVIEW-ONLY (no token rule sees it): a
 //! frame moved by value or swapped (`mem::swap` / `replace`), a writer or lane reached
-//! through a fn pointer, a macro body.
+//! through a fn pointer, a macro body ; and inside this file, the writes F0 does not
+//! count (batch 4 soundness lens N-S3b): a whole field assigned (`self.env = ..`), a
+//! verb outside its `WRITE_VERBS` (`iter_mut`, `values_mut`, `pop_first`, `split_off`,
+//! `first_entry`), a destructuring `let Self { env, .. } = self`, and a method returning
+//! `Option<&mut ..>` (F0 counts `-> &mut` only).
 
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -107,7 +117,7 @@ impl ConstFrame {
 
     /// A declared local's, a formal's or the return variable's shape (W1 W6 W9) ; a width
     /// that did not fold is recorded as width 0 = unknown (the one place that reading is
-    /// spelled for a frame), so a reader propagates "no masking" instead of guessing.
+    /// spelled for a frame) ; the width-0 cells: L4 in the head note (soundness lens N-S5c).
     #[inline]
     pub(crate) fn bind_shape(&mut self, name: String, shape: Option<(u32, bool)>) {
         self.envw.insert(name, shape.unwrap_or((0, false)));

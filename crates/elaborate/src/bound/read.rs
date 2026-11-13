@@ -53,7 +53,8 @@
 //!   also asked alone of the value walk's key) ; decl_scope.rs `decl_keep_snapshot`
 //!   (six `get`s into `DeclKept`, not a membership test).
 //! - A closure whose map set is a rule's in another `||` order (re-pointing it would
-//!   change its host function's code ; measured on a build that did, BIND-1b B2):
+//!   change its host function's code ; measured on a build that did, BIND-1b B2:
+//!   W/bind1/build_b/asm/B2_SUMMARY.txt, `cmp_post_extra`):
 //!   hier_defer/write.rs `every_name_resolves` (`symbols || params`), const_str.rs
 //!   `const_str_at` (`str || real || params || wide || symbols`), edge_gate.rs
 //!   `binding_encloses`'s innermost walk (`params || other_kind(k)`).
@@ -61,13 +62,22 @@
 //!   re-pointed (the hit became an out-of-line `bool` fn: `tbz w0, #0` became
 //!   `cbz w0`, same instruction count) and that no cost cell reaches, so its cost is
 //!   UNMEASURED: fold_x.rs `names_real_binding`, param_query.rs
-//!   `real_param_lowers_real` (`real_value_or_net`). The sites of
-//!   `hit_wide_value_or_net` and `real_param_is_non_integral` moved the same way and
-//!   are re-pointed on a counted cost cell (instructions inside +1 %).
-//! - `bound_home.rs` W5 lists each of these with its reason.
+//!   `real_param_lowers_real` (`real_value_or_net`).
+//! - Re-pointed, evidence = the disassembly (BIND-1 rulings R16, R17): the host fns of
+//!   `real_param_is_non_integral`, `wide_name_bits` and `wide_lsb_range_of` have the same
+//!   instruction count, with the one `tbz w0, #0` -> `cbz w0` encoding above
+//!   (W/bind1/build_b/asm/). The cost cells counted beside it (instructions, PRE vs POST,
+//!   W/bind1/build_b/ab.SUMMARY.txt): g_sgn -0.11 % (`wide_lsb_range_of`), k_fnret
+//!   +0.00 % (`real_param_is_non_integral`, one use: it measures nothing per use),
+//!   y_bind_gen +0.13 %, y_import_inst -0.08 %, y_red_wide -0.00 % (`wide_name_bits`).
+//! - `bound_home.rs` W5 lists each of these with its reason, and W5d counts each lane's
+//!   calls per (file, fn).
 //! - `lookup_scoped` (the value walk, already one fn), `hier_resolve`'s callers, the
-//!   `symbols`-only walks, and the 183 direct reads of the maps in their own combined
-//!   orders.
+//!   `symbols`-only walks, and the direct reads of the maps in their own combined
+//!   orders: 81 lines at f17a0ff6 by a line census (`git grep -P
+//!   '\.<one of the nine>\b(?!\s*\()'` over crates/elaborate/src outside `bound/`, `//`
+//!   lines out ; it also counts other structs' `.params` and cannot see a read through a
+//!   local or a helper fn).
 //!
 //! # Presence lanes (unchanged)
 //!

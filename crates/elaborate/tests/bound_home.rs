@@ -29,7 +29,25 @@
 //!   `W5C_EXCEPT`). What the token shapes do not see is REVIEW-ONLY: a closure bound
 //!   to a name and passed later is seen where it is written, not where it is walked ;
 //!   a closure opened after another token than `( , = { ; => :`, `move`, `return` ;
-//!   a map read through a local reference or a helper fn.
+//!   a map read through a local reference or a helper fn. W5a sees a walk re-spelled at
+//!   its site and nothing else: a lane call replaced by a bare-key read
+//!   (`self.param_meta.get(n)`, `self.real_param_val.get(n)`) is a direct read, allowed
+//!   outside the home, so W5a cannot see it (of the 12 battery mutants that name W5a,
+//!   k17-k28, it kills k27 and k28 and not k17-k26: W/batch4/battery/SUMMARY.txt:807-829 ;
+//!   W5d kills k17-k26: W/batch4/pins/out2/SUMMARY.txt:45-54). W5d closes that: each read
+//!   lane's calls `. <lane> (` per (lane, file, fn) outside
+//!   the home are a table (`W5D_CALLS`), so a lane call dropped, added or swapped for a
+//!   neighbouring rule moves a count (battery k01-k28 ; batch 4 pins r1). What W5d does
+//!   not see is REVIEW-ONLY (batch 4 pins-judge r1): two lane calls swapped inside one
+//!   (file, fn) (ident_route.rs:99 / :122 in `bare_ident_route`), a UFCS spelling
+//!   `Self::hit_value(self, k)`, a changed argument, a move between closures of one fn.
+//!   Also REVIEW-ONLY (batch 4 pins-judge r2, W/batch4/pins-judge2/REPORT.txt:12): two fns
+//!   of one name in one file share one key (0 of the 24 fns in `W5D_CALLS` share their name
+//!   with another fn of their file at f17a0ff6, `fn <name>` counted per file).
+//! - W6 the raw primitives' callers (soundness lens N-S3c): `set_range_raw`,
+//!   `clear_range_raw` and `drop_value_raw` per (file, fn) outside the home (`W6_CALLS`:
+//!   `elaborate_package` for the package lane, the U6 replay for the raw value remove) ;
+//!   `bound/mod.rs`'s "one caller" is this table.
 //!
 //! - F0-F4 the constant-function frame (BIND-2a, `bound/frame.rs`, `ConstFrame`): its two
 //!   maps are private fields, so a raw write outside `frame.rs` does not compile ; F0 each
@@ -630,6 +648,163 @@ fn the_read_lanes_are_named() {
     );
 }
 
+/// The read lanes of `bound/read.rs` (W5d).
+const READ_LANES: [&str; 9] = [
+    "name_meta",
+    "name_real",
+    "hit_value",
+    "hit_value_or_net",
+    "hit_wide",
+    "hit_wide_value_or_net",
+    "hit_real_value_or_net",
+    "hit_any_const",
+    "hit_any_const_or_net",
+];
+
+/// W5d: (lane, file, fn, calls) outside the home, any receiver (`self`, `me`), a closure
+/// keyed to its fn: the sites of `bound/read.rs`'s head note. REVIEW-ONLY (the head note's
+/// W5d line): two calls swapped inside one (file, fn), a UFCS spelling, a changed
+/// argument, a move between closures of one fn ; two fns of one name in one file.
+#[rustfmt::skip]
+const W5D_CALLS: &[(&str, &str, &str, usize)] = &[
+    ("hit_any_const", "crates/elaborate/src/const_bound.rs", "unfoldable_reason_in", 1),
+    ("hit_any_const_or_net", "crates/elaborate/src/ident_route.rs", "bare_ident_route", 1),
+    ("hit_real_value_or_net", "crates/elaborate/src/param_query.rs", "real_param_is_non_integral", 1),
+    ("hit_value", "crates/elaborate/src/array_geom.rs", "shape_bits", 1),
+    ("hit_value", "crates/elaborate/src/edge_gate.rs", "binding_encloses", 1),
+    ("hit_value", "crates/elaborate/src/ident_route.rs", "ast_reads_guessed_param", 1),
+    ("hit_value", "crates/elaborate/src/ident_route.rs", "bare_ident_route", 1),
+    ("hit_value_or_net", "crates/elaborate/src/const_decl_width.rs", "narrow_param_decl_width", 1),
+    ("hit_value_or_net", "crates/elaborate/src/const_wide.rs", "narrow_param_bits", 1),
+    ("hit_value_or_net", "crates/elaborate/src/expr_special.rs", "bits_of_view", 1),
+    ("hit_value_or_net", "crates/elaborate/src/params.rs", "param_sel_range", 1),
+    ("hit_wide", "crates/elaborate/src/const_eval.rs", "wide_param_name_in", 1),
+    ("hit_wide", "crates/elaborate/src/edge_gate.rs", "variable_named_in", 1),
+    ("hit_wide", "crates/elaborate/src/edge_gate.rs", "wide_param_named_in", 1),
+    ("hit_wide_value_or_net", "crates/elaborate/src/const_wide.rs", "wide_name_bits", 1),
+    ("hit_wide_value_or_net", "crates/elaborate/src/edge_gate.rs", "wide_lsb_range_of", 1),
+    ("name_meta", "crates/elaborate/src/const_bound.rs", "ast_const_leaves_min32", 1),
+    ("name_meta", "crates/elaborate/src/const_eval.rs", "const_expr_signed", 1),
+    ("name_meta", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 1),
+    ("name_meta", "crates/elaborate/src/const_fn_width.rs", "const_self_width", 1),
+    ("name_meta", "crates/elaborate/src/const_fn_width.rs", "const_signed_env", 1),
+    ("name_meta", "crates/elaborate/src/elab_task.rs", "elab_arg_shape", 1),
+    ("name_meta", "crates/elaborate/src/expr_special.rs", "bits_of_view", 1),
+    ("name_meta", "crates/elaborate/src/ident_route.rs", "bare_ident_route", 1),
+    ("name_real", "crates/elaborate/src/const_real.rs", "const_eval_real_in_scope", 1),
+    ("name_real", "crates/elaborate/src/expr_special.rs", "bits_of_view", 1),
+    ("name_real", "crates/elaborate/src/select_scope.rs", "signing_operand_admitted", 1),
+    ("name_real", "crates/elaborate/src/strings.rs", "expr_mentions_real_opt", 1),
+];
+
+/// The raw primitives whose callers are counted (W6).
+const RAW_PRIMS: [&str; 3] = ["set_range_raw", "clear_range_raw", "drop_value_raw"];
+
+/// W6: (primitive, file, fn, calls) outside the home.
+#[rustfmt::skip]
+const W6_CALLS: &[(&str, &str, &str, usize)] = &[
+    ("clear_range_raw", "crates/elaborate/src/package.rs", "elaborate_package", 1),
+    ("drop_value_raw", "crates/elaborate/src/frames_reserve.rs", "with_rtn_decl_scope", 1),
+    ("set_range_raw", "crates/elaborate/src/package.rs", "elaborate_package", 1),
+];
+
+/// W5d / W6 hits of one source: `W5d:<lane>` / `W6:<prim>` a `. <name> (` call (the
+/// definition `fn <name> (` is not one).
+fn hits_calls(src: &str) -> Vec<(String, String)> {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (i, tok) in t.iter().enumerate() {
+        if tok.text != "." || tx(i + 2) != "(" {
+            continue;
+        }
+        let name = tx(i + 1);
+        if READ_LANES.contains(&name) {
+            out.push((format!("W5d:{name}"), tok.key.clone()));
+        } else if RAW_PRIMS.contains(&name) {
+            out.push((format!("W6:{name}"), tok.key.clone()));
+        }
+    }
+    out
+}
+
+fn calls_table(prefix: &str) -> BTreeMap<(String, String, String), usize> {
+    let root = workspace_root();
+    let mut got: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    for (rel, src) in src_files(&root) {
+        if in_home(&rel) {
+            continue;
+        }
+        for (rule, key) in hits_calls(&src) {
+            if let Some(n) = rule.strip_prefix(prefix) {
+                *got.entry((n.to_string(), rel.clone(), key)).or_insert(0) += 1;
+            }
+        }
+    }
+    got
+}
+
+fn want_table(rows: &[(&str, &str, &str, usize)]) -> BTreeMap<(String, String, String), usize> {
+    rows.iter()
+        .map(|(l, f, k, n)| ((l.to_string(), f.to_string(), k.to_string()), *n))
+        .collect()
+}
+
+#[test]
+fn the_read_lane_calls_are_counted() {
+    assert_eq!(
+        calls_table("W5d:"),
+        want_table(W5D_CALLS),
+        "W5d outside {HOME}: a read lane's calls per (lane, file, fn) moved -- a lane call dropped, added, replaced by a bare-key read or by a neighbouring rule (a new site is a row)"
+    );
+}
+
+#[test]
+fn the_raw_primitives_have_their_callers() {
+    assert_eq!(
+        calls_table("W6:"),
+        want_table(W6_CALLS),
+        "W6 outside {HOME}: a caller of `set_range_raw` / `clear_range_raw` / `drop_value_raw` was added or moved (each lane has its listed callers)"
+    );
+}
+
+#[test]
+fn walker_controls_calls() {
+    let n = |rule: &str, src: &str| hits_calls(src).iter().filter(|(r, _)| r == rule).count();
+    // W5d: any receiver, multi-line ; not the definition, not a longer name, not a field.
+    let src = "fn f() { self.name_meta(n); me\n .name_meta\n (n); self.name_metas(n); self.name_meta; } fn name_meta(&self) {}";
+    assert_eq!(n("W5d:name_meta", src), 2);
+    // a lane replaced by a bare-key read is a lost call ; a swapped rule moves two counts.
+    assert_eq!(
+        n(
+            "W5d:name_real",
+            "fn f() { self.real_param_val.get(n).copied(); }"
+        ),
+        0
+    );
+    let sw = "fn f() { self.walk_scopes_key(s, |k| self.hit_value_or_net(k)); }";
+    assert_eq!(n("W5d:hit_value_or_net", sw), 1);
+    assert_eq!(n("W5d:hit_value", sw), 0);
+    // keyed to the enclosing fn, a closure included.
+    assert_eq!(
+        hits_calls("fn g() { let c = |k: &str| self.hit_wide(k); }"),
+        vec![("W5d:hit_wide".to_string(), "g".to_string())]
+    );
+    // W6: the three primitives ; not a put-back, not the definition.
+    let src = "fn p() { self.set_range_raw(k, r); self.clear_range_raw(&k); self.put_back_range_raw(k, None); } fn drop_value_raw() {} fn q() { s.drop_value_raw(&k); }";
+    assert_eq!(n("W6:set_range_raw", src), 1);
+    assert_eq!(n("W6:clear_range_raw", src), 1);
+    assert_eq!(n("W6:drop_value_raw", src), 1);
+    // `#[cfg(test)]` items are skipped.
+    assert_eq!(
+        n(
+            "W5d:hit_value",
+            "#[cfg(test)]\nmod t { fn f() { self.hit_value(k); } }\nfn h() {}"
+        ),
+        0
+    );
+}
+
 #[test]
 fn the_nine_maps_are_written_in_the_home() {
     let root = workspace_root();
@@ -929,7 +1104,12 @@ const FRAME: &str = "crates/elaborate/src/bound/frame.rs";
 const FRAME_WRITERS: [&str; 4] = ["bind_shape", "bind_value", "unbind_value", "seed_value"];
 
 /// F0: inside `bound/frame.rs`, (fn, field, write verb, count): each writer is one map
-/// verb on its own field, and nothing else in the file writes a field.
+/// verb on its own field, and nothing else in the file writes a field. REVIEW-ONLY (F0
+/// does not see them, batch 4 soundness lens N-S3b): `self.env = ..` (a whole field
+/// assigned), a verb outside `WRITE_VERBS` (`iter_mut`, `values_mut`, `pop_first`,
+/// `split_off`, `first_entry`), `let Self { env, .. } = self`, a method returning
+/// `Option<&mut ..>` (`F0ret` counts `-> & mut` only) ; in `bound/mod.rs` the tuple field
+/// `.0` beside `w()` (W0 counts `.w()` only).
 #[rustfmt::skip]
 const F0_WRITES: &[(&str, &str, &str, usize)] = &[
     ("bind_shape", "envw", "insert", 1),

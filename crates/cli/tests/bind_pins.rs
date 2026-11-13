@@ -631,3 +631,727 @@ errors=0 warnings=1 notes=0
         0,
     );
 }
+
+// ---- batch 4 boundary, pins r1: killers of the battery's survivors (W/batch4/battery/SUMMARY.txt), each
+// input measured on PRE 6bcd57fa and POST f17a0ff6 (the same stdout, stderr and exit code).
+
+/// Batch 4 boundary (pins r1): a genvar loop over `P` (block `g`), then an ascending net `logic [0:7] P = 8'hA5` and five selects of it. Kills mutant a05 (`unbind_param` keeps `param_range`): E3009 x2, rc 1.
+/// Owner line: the value funnel's clears (`bound/write.rs` `unbind_param`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A a 5 5 0 1` / `t.sv:8: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-ASCRANGE: t.sv:5:9: Ascending bit range vector: left < right of bit range: [0:7]`.
+#[test]
+fn n01_gv_dead_range() {
+    check(
+        "n01",
+        r##"module top;
+  for (genvar P = 0; P < 2; P++) begin : g
+    localparam int L = P;
+  end
+  logic [0:7] P = 8'hA5;
+  int k = 1;
+  initial #1 $display("A %h %h %h %b %h", P[0:3], P[4+:4], P[4:7], P[k], P[k+:2]);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A a 5 5 0 1
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): `top` declares `localparam int P = 2` and `localparam int W = 3`, an instance array `c u [1:0]` whose header declares `int P = 6` and `logic [99:0] W`, then `c2 #(.Q(P), .R(W)) w()`. Kills mutants b01 (`restore_params`' `Some` arm dropped: `Q 6 R 3`) and b14 (SIDE8 leaves `wide_param_bits`: `Q 2 R 5`).
+/// Owner line: the undo lanes U1 / U3 (`bound/undo.rs`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `Q 2 R 3` / `t.sv:12: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
+#[test]
+fn n02_prepass_putback() {
+    check(
+        "n02",
+        r##"module c #(parameter int P = 6, parameter logic [99:0] W = 100'h1_0000_0000_0000_0000_0005) (input a);
+endmodule
+module c2 #(parameter int Q = 0, parameter int R = 0) ();
+  initial #1 $display("Q %0d R %0d", Q, R);
+endmodule
+module top;
+  localparam int P = 2;
+  localparam int W = 3;
+  logic a;
+  c u [1:0] (.a(a));
+  c2 #(.Q(P), .R(W)) w();
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"Q 2 R 3
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): `top` declares no `P` ; an instance array `c u [1:0]` whose header declares `int P = 6`, then `c2 #(.Q(P)) w()`. Kills mutant b02 (`restore_params`' `None` arm dropped: `Q 6` at rc 0).
+/// Owner line: the undo lane U1 (`bound/undo.rs` `restore_params`) ; PRE 6bcd57fa and POST f17a0ff6 print the same (W3056 + E3009, rc 1).
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:9: error: Unable to bind parameter `P' in `top'` / `1 error(s) during elaboration.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Warning-IMPLICIT: t.sv:9:11: Signal definition not found, creating implicitly: 'P'` / `%Error: t.sv:9:11: Expecting expression to be constant, but variable isn't const: 'P'` / `%Error: t.sv:9:9: Can't convert defparam value to constant: Param 'Q' of 'w'`.
+#[test]
+fn n03_prepass_unbind() {
+    check(
+        "n03",
+        r##"module c #(parameter int P = 6) (input a);
+endmodule
+module c2 #(parameter int Q = 0) ();
+  initial #1 $display("Q %0d", Q);
+endmodule
+module top;
+  logic a;
+  c u [1:0] (.a(a));
+  c2 #(.Q(P)) w();
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:6:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: override of parameter `Q` is not a constant; default kept [in top]
+t.sv:9:15: error[VITA-E3009] E-ELAB-UNSUPPORTED: the override of parameter `Q` is not a constant, so the declared default would be used instead — that is a different design, not a smaller one [in top.w]
+errors=1 warnings=2 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r1): module localparams `logic [8:15] V` and `logic [15:8] U`, and in generate block `g` nets `logic [7:0] V` and `logic [0:7] U`, and two part-selects of each. Kills mutant k10 (params.rs:934 in `param_sel_range` asks `hit_value` for `hit_value_or_net`): E3009 x4, rc 1.
+/// Owner line: BIND-1b's read lanes (`bound/read.rs` `hit_value_or_net`, site params.rs `param_sel_range`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A c 3 c 3` / `t.sv:9: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-ASCRANGE: t.sv:6:11: Ascending bit range vector: left < right of bit range: [0:7]`.
+#[test]
+fn n04_net_dir_shadow() {
+    check(
+        "n04",
+        r##"module top;
+  localparam logic [8:15] V = 8'h5a;
+  localparam logic [15:8] U = 8'h5a;
+  if (1) begin : g
+    logic [7:0] V = 8'hc3;
+    logic [0:7] U = 8'hc3;
+    initial #1 $display("A %h %h %h %h", V[7:4], V[3:0], U[0:3], U[4:7]);
+  end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A c 3 c 3
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): a module net `logic [15:8] V = 8'h5a`, then a genvar loop over `V` whose block holds a function returning `a + V`. Kills mutant a27 (`drop_value_raw` a no-op): E3009, rc 1.
+/// Owner line: the raw value remove of lane RTN-RAW-REMOVE (`bound/write.rs` `drop_value_raw`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `G 1` / `G 2` / `A 5a a` / `t.sv:11: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
+#[test]
+fn n05_replay_genvar() {
+    check(
+        "n05",
+        r##"module top;
+  logic [15:8] V = 8'h5a;
+  for (genvar V = 0; V < 2; V++) begin : g
+    function automatic int f(input int a);
+      return a + V;
+    endfunction
+    int r;
+    initial begin r = f(1); $display("G %0d", r); end
+  end
+  initial #1 $display("A %h %h", V, V[11:8]);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"G 1
+G 2
+A 5a a
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): `top` declares `localparam logic [15:8] P = 8'h5a` and `localparam S = "QR"`, instance arrays of `cs` (header `P = "XY"`) and `cr` (header `real S = 4.5`), then `c2 #(.Q(P), .R(S)) w()`. Kills mutants b17 (SIDE8 leaves `str_param_raw`: `Q 22617 R 20818`) and b18 (SIDE8 leaves `real_param_val`: E3009, rc 1).
+/// Owner line: the undo lane U3 (`bound/undo.rs` `side_snapshot` / `side_restore`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `Q 90 R 20818` / `t.sv:15: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:5:27: Operator VAR 'Q' expects 32 bits on the Initial value, but Initial value's CONST '8'h5a' generates 8 bits.`.
+#[test]
+fn n06_side_str_real() {
+    check(
+        "n06",
+        r##"module cs #(parameter P = "XY") (input a);
+endmodule
+module cr #(parameter real S = 4.5) (input a);
+endmodule
+module c2 #(parameter int Q = 0, parameter int R = 0) ();
+  initial #1 $display("Q %0d R %0d", Q, R);
+endmodule
+module top;
+  localparam logic [15:8] P = 8'h5a;
+  localparam S = "QR";
+  logic a;
+  cs u [1:0] (.a(a));
+  cr v [1:0] (.a(a));
+  c2 #(.Q(P), .R(S)) w();
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"Q 90 R 20818
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): an instance `c v` and an instance array `c u [1:0]` of `c` (header `logic [23:16] P = 8'hc3`), and the hierarchical references `v.P`, `v.P[23:20]`, `u[0].P[19:16]`. Kills mutants b22 (`side_restore` swaps `param_range` and `hier_param_range`) and b23 (`side_snapshot` swaps them): `A c3 x 3`.
+/// Owner line: the undo lane U3 (`bound/undo.rs`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A c3 c 3` / `t.sv:8: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:7:59: Can't find definition of 'u'`.
+#[test]
+fn n07_side_range_hier() {
+    check(
+        "n07",
+        r##"module c #(parameter logic [23:16] P = 8'hc3) (input a);
+endmodule
+module top;
+  logic a;
+  c v (.a(a));
+  c u [1:0] (.a(a));
+  initial #1 $display("A %h %h %h", v.P, v.P[23:20], u[0].P[19:16]);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A c3 c 3
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): module localparams `int V = 9`, `logic [99:0] U` and `logic [99:0] X`, and in generate block `g` nets `logic [7:0] V`, `logic [7:0] U`, a localparam `int X = 3` and `A = $bits(V)`, `B = $bits(U)`, `C = $bits(X)`. Kills mutants k07 (const_wide.rs:1256 in `narrow_param_bits` asks `hit_value` for `hit_value_or_net`: `D 32 8 32`), k08 (const_wide.rs:1375 in `wide_name_bits` asks `hit_wide` for `hit_wide_value_or_net`: `D 8 100 100`), r02 (`hit_wide_value_or_net` without its `params` arm: `D 8 8 100`) and r03 (without its `symbols` arm: `D 8 100 32`).
+/// Owner line: BIND-1b's read lanes (`bound/read.rs`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `D 8 8 32` / `t.sv:14: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, no %Error or %Warning line (lint only: its value was not run).
+#[test]
+fn n08_net_shadows_bits() {
+    check(
+        "n08",
+        r##"module top;
+  localparam int V = 9;
+  localparam logic [99:0] U = 100'hF_0000_0000_0000_0000_00a5;
+  localparam logic [99:0] X = 100'hF_0000_0000_0000_0000_00a5;
+  if (1) begin : g
+    logic [7:0] V = 8'hc3;
+    logic [7:0] U = 8'hc3;
+    localparam int X = 3;
+    localparam int A = $bits(V);
+    localparam int B = $bits(U);
+    localparam int C = $bits(X);
+    initial #1 $display("D %0d %0d %0d", A, B, C);
+  end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"D 8 8 32
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r1): module localparams `real V = 2.5` and `real U = 2.5` ; generate block `g` declares `localparam logic [7:0] V` and `S = V[11:4]`, block `h` a net `logic [7:0] U` and `T = U[11:4]`. Kills mutants r04 (`hit_real_value_or_net` without its `params` arm: `g`'s reason becomes "the part-select `V[…]` is a real") and r05 (without its `symbols` arm: `h`'s reason becomes "`U` is a real"). Both oracles refuse this text (rc 1) ; the expected text is PRE's.
+/// Owner line: BIND-1b's read lanes (`bound/read.rs`) ; PRE 6bcd57fa and POST f17a0ff6 print the same (E3009 x2, rc 1).
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:10: error: A reference to a net or variable (`U['sd11:'sd4]') is not allowed in a constant expression.` / `1 error(s) during elaboration.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Warning-SELRANGE: t.sv:6:33: Selection index out of range: 11:4 outside 7:0` / `%Warning-SELRANGE: t.sv:10:33: Selection index out of range: 11:4 outside 7:0` / `%Error: t.sv:10:32: Expecting expression to be constant, but variable isn't const: 'U'`.
+#[test]
+fn n09_real_shadow_reason() {
+    check(
+        "n09",
+        r##"module top;
+  localparam real V = 2.5;
+  localparam real U = 2.5;
+  if (1) begin : g
+    localparam logic [7:0] V = 8'hc3;
+    localparam logic [7:0] S = V[11:4];
+  end
+  if (1) begin : h
+    logic [7:0] U = 8'hc3;
+    localparam logic [7:0] T = U[11:4];
+  end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:6:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `S` value is not a constant: the part-select [11:4] is outside `V`'s range [7:0] [in top.g]
+t.sv:10:32: error[VITA-E3009] E-ELAB-UNSUPPORTED: generate-scope parameter `T` value is not a constant: a reference to net/variable `U` is not a constant [in top.h]
+errors=2 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r1): a variable `logic [3:0] n` as the width of `v[n +: n]`. Kills mutant k02 (edge_gate.rs:1440 in `variable_named_in` asks `hit_wide_value_or_net` for `hit_wide`: the reason becomes "a reference to net/variable `n` is not a constant"). Both oracles refuse this text (iverilog rc 2, verilator rc 1) ; the expected text is PRE's.
+/// Owner line: BIND-1b's read lanes (`bound/read.rs`) ; PRE 6bcd57fa and POST f17a0ff6 print the same (E3009, rc 1). Found on lens-diff cell e17_cast_width_net_and_sel_net.
+/// Oracles: iverilog 13.0 -g2012: compile rc=2, `t.sv:4: error: A reference to a net or variable (`n') is not allowed in a constant expression.` / `t.sv:4: error: Indexed part select width must be an integral constants greater than zero.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:4:41: Expecting expression to be constant, but variable isn't const: 'n'` / `%Error: t.sv:4:41: Width of :+ or :- bit slice range isn't a constant`.
+#[test]
+fn n10_var_width_reason() {
+    check(
+        "n10",
+        r##"module top;
+  logic [3:0] n = 2;
+  logic [15:0] v = 16'h1234;
+  initial begin $display("A %h", v[n +: n]); end
+  initial #1 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:4:41: error[VITA-E3009] E-ELAB-UNSUPPORTED: the width of this indexed part-select does not fold to a constant: it reads `n`, a variable, where a constant expression is required [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r1): `localparam real R = 4` and `localparam int B = $bits($signed(R))`. Kills mutant k20 (select_scope.rs:382 in `signing_operand_admitted`: the lane call replaced by `real_param_val.get(R)`, `A 64` rc 0) ; bound_home W5d kills it as well (W/batch4/pins/out2/SUMMARY.txt). iverilog prints `A 1` and verilator refuses (rc 1) ; the expected text is PRE's.
+/// Owner line: BIND-1b's read lanes (`bound/read.rs` `name_real`) ; PRE 6bcd57fa and POST f17a0ff6 print the same (E3009, rc 1).
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A 1` / `t.sv:5: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:3:36: Expected integral input to SIGNED`.
+#[test]
+fn n11_bits_signed_real() {
+    check(
+        "n11",
+        r##"module top;
+  localparam real R = 4;
+  localparam int B = $bits($signed(R));
+  initial #1 $display("A %0d", B);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:3:22: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `B` value is not a constant: `$signed(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r1): `localparam real R = 2.0` and an untyped `localparam W = 100'h1_0000_0000_0000_0000_4142`, each in a generate-if condition `(<name> == "AB")` (blocks `g`, `h`). Kills mutants r06 (`hit_any_const` without its `real_param_val` arm: `g`'s reason becomes "undefined name `R` is not a constant") and r08 (without its `wide_param_bits` arm: `h`'s reason becomes "undefined name `W` is not a constant"). PRE prints two E3010 (rc 1) where both oracles run at rc 0 ; the expected text is PRE's.
+/// Owner line: BIND-1b's read lanes (`bound/read.rs` `hit_any_const`) ; PRE 6bcd57fa and POST f17a0ff6 print the same (E3010 x2, rc 1).
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `t.sv:10: $finish called at 2 (1s)` (no other line) ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:7:9: Operator EQ expects 100 bits on the RHS, but RHS's CONST '16'h4142' generates 16 bits.`.
+#[test]
+fn n12_cond_str_reason() {
+    check(
+        "n12",
+        r##"module top;
+  localparam real R = 2.0;
+  localparam W = 100'h1_0000_0000_0000_0000_4142;
+  if (R == "AB") begin : g
+    initial $display("Y");
+  end
+  if (W == "AB") begin : h
+    initial $display("Z");
+  end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:4:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: a condition that holds a string literal reads only a parameter declared once in the module, outside every `generate` region and block, as an `int`, an `integer` or a type with a packed range; it does not read `R` [in top]
+t.sv:7:7: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: generate-if condition is not a constant: a condition that holds a string literal reads only a parameter declared once in the module, outside every `generate` region and block, as an `int`, an `integer` or a type with a packed range; it does not read `W` [in top]
+errors=2 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r1): package `p` declares `localparam logic [7:4] L = 4'ha`, `localparam real R = 3.0` and the functions `fl` (return range `[$high(L):0]`) and `fr` (`[$rtoi(R):0]`) ; `top` declares `localparam int L = 1` and `localparam int R = 1` and prints `$bits(p::fl(1))`, `$bits(p::fr(1))`: `A 8 4`. Kills mutants b09 (the kept `real_param_val` entry not put back: `A 8 2`), b12 (the kept `param_range` entry not put back: `A 32 4`) and b13 (the kept range put into `hier_param_range`: `A 32 4`).
+/// Measured (W/batch4/pins-judge3/var/RESULTS.txt, PRE = POST): p's `L` changed to `logic [9:4] L = 6'h2a` moves the output to `A 10 4` and p's `R` changed to 5.0 moves it to `A 8 6`, while top's `R` changed to 5 and top's `L` declared `logic [11:4] L = 1` leave `A 8 4`.
+/// Owner line: the undo lane U4 (`bound/undo.rs` `decl_keep_restore`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A 4 4` / `t.sv:11: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHTRUNC: t.sv:4:58: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.` / `%Warning-WIDTHTRUNC: t.sv:5:58: Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.` (8 and 4, as vita).
+#[test]
+fn n13_pkg_window_kept() {
+    check(
+        "n13",
+        r##"package p;
+  localparam logic [7:4] L = 4'ha;
+  localparam real R = 3.0;
+  function automatic logic [$high(L):0] fl(input int a); return a; endfunction
+  function automatic logic [$rtoi(R):0] fr(input int a); return a; endfunction
+endpackage
+module top;
+  localparam int L = 1;
+  localparam int R = 1;
+  initial #1 $display("A %0d %0d", $bits(p::fl(1)), $bits(p::fr(1)));
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 8 4
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+// ---- batch 4 boundary, pins r2: killers of the survivors the pins-judge r1 found witnesses for
+// (W/batch4/pins-judge/REPORT.txt), each input measured on PRE 6bcd57fa and POST f17a0ff6 (the same stdout,
+// stderr and exit code) and on each mutant's release binary (W/batch4/pins/r2/o).
+
+/// Batch 4 boundary (pins r2): package `q` declares `localparam logic [19:5] A = 15'h0035` ; package `p` imports `q::*`, then declares `typedef enum logic [11:4] {A = 'h35, B}` and `f` with the return range `[A[8:5]:0]` ; `top` declares `localparam logic [31:0] A = 32'h35` and prints `$bits(p::f(1))`, `p::A`: `A 6 53`.
+/// Measured (W/batch4/pins/r3/var, PRE = POST): p's label `A = 'h3f` gives `A 16 63` and q's range `[19:4]` gives `A 11 53`, while q's value `15'h001f` and top's `A` (`32'h1E0`, `int 7`) leave `A 6 53`.
+/// Kills mutants b29 (the Some arm dropped: `A 2 53`) and b34 (the range put back into `hier_param_range`: `A 2 53`) ; both then follow top's `A` (`32'h1E0`: `A 16 53`, `int 7`: `A 1 53`).
+/// Owner line: the undo lane U7 (`bound/undo.rs` `put_back_range_raw`) ; PRE 6bcd57fa and POST f17a0ff6 print the same. No oracle agreement: vita 6, iverilog 1, verilator 11 (W/batch4/pins/DOCS_FINDINGS.txt b) ; the expected text is PRE's.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A 1 53` / `t.sv:12: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHTRUNC: t.sv:7:55: Operator ASSIGN expects 11 bits on the Assign RHS, but Assign RHS's VARREF 'x' generates 32 bits.` ; verilator --binary run `A 11 53`.
+#[test]
+fn n14_pkg_import_label_range() {
+    check(
+        "n14",
+        r##"package q;
+  localparam logic [19:5] A = 15'h0035;
+endpackage
+package p;
+  import q::*;
+  typedef enum logic [11:4] {A = 'h35, B} e_t;
+  function automatic logic [A[8:5]:0] f(input int x); return x; endfunction
+endpackage
+module top;
+  localparam logic [31:0] A = 32'h35;
+  initial #1 $display("A %0d %0d", $bits(p::f(1)), p::A);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 6 53
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): package `p` declares the enum label `X` twice (an `int`-based enum, then a `[11:4]`-based one) and `f` with the return range `[X[8:5]:0]` ; `top` declares `localparam logic [31:0] X = 32'h0135` and prints `$bits(p::f(1))`, `p::X`: `A 10 53`.
+/// Measured (W/batch4/pins/r3/var, PRE = POST): top's `X = 32'h0035` gives `A 2 53` and `32'h01E0` gives `A 16 53`, while p's labels `'h0f5` / `8'hf0` leave the width at 10.
+/// Kills mutant b24 (the None arm dropped: `A 2 53` for each of top's three `X` values ; its width follows p's second label instead, `8'hf0` gives `A 8 240`).
+/// Invalid text vita accepts at rc 0: both oracles refuse the duplicate (gap entry duplicate-value-name-accepted, W/batch4/pins/DOCS_FINDINGS.txt a).
+/// Gap entry: Q-RTNTEXT (§5.2).
+/// Owner line: the undo lane U7 (`bound/undo.rs` `put_back_range_raw`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:3: error: 'X' has already been declared in this scope.` / `t.sv:2:      : It was declared here as an enum type or value.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:3:30: Duplicate declaration of enum value: X`.
+#[test]
+fn n15_pkg_dup_label_label() {
+    check(
+        "n15",
+        r##"package p;
+  typedef enum {X = 'h1b5, X_n3} e_0_t;
+  typedef enum logic [11:4] {X = 8'h35, X_n2} e_1_t;
+  function automatic logic [X[8:5]:0] f(input int a); return a; endfunction
+endpackage
+module top;
+  localparam logic [31:0] X = 32'h0135;
+  initial #1 $display("A %0d %0d", $bits(p::f(1)), p::X);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 10 53
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): package `p` declares `localparam logic [19:5] X = 15'h0136`, then the enum label `X` on a `[11:4]` base, and `f` with the return range `[X[8:5]:0]` ; `top` declares `localparam logic [31:0] X = 32'h0135` and prints `$bits(p::f(1))`, `p::X`: `A 10 53`.
+/// Measured (W/batch4/pins/r3/var, PRE = POST): top's `X = 32'h0035` gives `A 2 53` and `32'h01E0` gives `A 16 53`, while p's `15'h01ff` and label `8'hf0` leave the width at 10.
+/// Kills mutant b24 (the None arm dropped: `A 6 53` for each of top's three `X` values ; its width follows p's label instead, `8'hf0` gives `A 1 240`).
+/// Invalid text vita accepts at rc 0: both oracles refuse the duplicate (gap entry duplicate-value-name-accepted, W/batch4/pins/DOCS_FINDINGS.txt a).
+/// Gap entry: Q-RTNTEXT (§5.2).
+/// Owner line: the undo lane U7 (`bound/undo.rs` `put_back_range_raw`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:3: error: 'X' has already been declared in this scope.` / `t.sv:2:      : It was declared here as a parameter.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:3:30: Duplicate declaration of enum value: X`.
+#[test]
+fn n16_pkg_dup_param_label() {
+    check(
+        "n16",
+        r##"package p;
+  localparam logic [19:5] X = 15'h0136;
+  typedef enum logic [11:4] {X = 8'h35, X_n2} e_1_t;
+  function automatic logic [X[8:5]:0] f(input int a); return a; endfunction
+endpackage
+module top;
+  localparam logic [31:0] X = 32'h0135;
+  initial #1 $display("A %0d %0d", $bits(p::f(1)), p::X);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 10 53
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): package `p` declares the enum label `X` on a `logic [7:0]` base, then `localparam real X = NOPE;`, then `typedef enum logic [3:0] {E = $bits(X)}` and `localparam int Y = $bits({X, 4'h0})`: PRE prints two E3009, `package parameter `X` value is not a foldable constant` and `enum label `E` = 32 does not fit its 4-bit base type`.
+/// Measured (W/batch4/pins/r3/var, PRE = POST): `E` = 32 also with the label on a 6-bit base and with no label at all.
+/// Kills mutant a17 (`clear_meta` a no-op: one E3009, errors=1, with this label and with the label on a 6-bit base ; with no label a17 prints PRE's two E3009 ; with `E`'s base `[2:0]` a17 prints `enum label `E` = 8 does not fit its 3-bit base type`).
+/// Invalid text on an error path: a duplicate name vita accepts and an undefined `NOPE` (gap entry duplicate-value-name-accepted, W/batch4/pins/DOCS_FINDINGS.txt a).
+/// Owner line: the value funnel's clears (`bound/write.rs` `clear_meta`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:3: error: 'X' has already been declared in this scope.` / `t.sv:2:      : It was declared here as an enum type or value.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:3:19: Unsupported in C: Variable has same name as ENUMITEM 'X': 'X'` / `%Error: t.sv:3:23: Can't find definition of variable: 'NOPE'`.
+#[test]
+fn n17_pkg_dup_meta_clear() {
+    check(
+        "n17",
+        r##"package p;
+  typedef enum logic [7:0] {X = 8'h35, XX} e_t;
+  localparam real X = NOPE;
+  typedef enum logic [3:0] {E = $bits(X)} t2_t;
+  localparam int Y = $bits({X, 4'h0});
+endpackage
+module top;
+  initial #1 $display("A %0d", p::Y);
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `X` value is not a foldable constant [in p]
+error[VITA-E3009] E-ELAB-UNSUPPORTED: enum label `E` = 32 does not fit its 4-bit base type (§6.19); no reading of a 4-bit value reaches it (the widest range is [-8, 15]) [in p]
+errors=2 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r2): module `c`'s untyped header `P = 5` is overridden `#(.P(-3))` ; its static function `f` declares the enum label `P = 8'd3` in its body. Kills mutant a02 (`bind_param_value` keeps the guessed mark: `A 00000000fffffffb 0000000000000001 0000000000000003`) ; n19's mutant b04 fails it as well.
+/// Owner line: the value funnel (`bound/write.rs` `bind_param_value`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A ffffffff00000001 ffffffff00000001 0000000000000003` / `t.sv:11: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0 (four WIDTHEXPAND warnings) ; verilator --binary run `A fffffffffffffffb ffffffff00000001 0000000000000003` (as vita).
+#[test]
+fn n18_fn_label_guessed() {
+    check(
+        "n18",
+        r##"module c #(parameter P = 5) ();
+  function logic [63:0] f(input logic [63:0] a);
+    typedef enum logic [7:0] {P = 8'd3, PX} e_t;
+    f = a + 64'(~(P + 32'd1));
+  endfunction
+  logic [63:0] r;
+  initial begin r = f(64'd0); #1 $display("A %h %h %h", r, 64'(~(P + 32'd1)), 64'(-P)); end
+endmodule
+module top;
+  c #(.P(-3)) u();
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A fffffffffffffffb ffffffff00000001 0000000000000003
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): `top` declares `localparam logic [3:0] L = 4'hA` ; its static function `f`'s body declares `typedef enum logic signed [7:0] {L = -8'sd3, LX}` and returns `a + L` ; `top` and generate block `g` print `{L, L}`, `$bits(L)` and `B = $bits(L)`. Kills mutant b04 (`restore_param_meta`'s Some arm dropped: `A 000000fe 0a0a 0000000a 8 16` / `G 8 0a0a`).
+/// Owner line: the undo lane U2 (`bound/undo.rs` `restore_param_meta`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `G 4 aa` / `A 0000000b aa 0000000a 4 8` / `t.sv:13: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:5:11: Operator ADD expects 32 bits on the RHS, but RHS's ENUMITEMREF 'L' generates 8 bits.` / `%Warning-WIDTHEXPAND: t.sv:8:78: Operator ADD expects 32 bits on the LHS, but LHS's VARREF 'L' generates 4 bits.` ; verilator --binary run `A 000000fe aa 0000000a 4 8` / `G 4 aa` (as vita).
+#[test]
+fn n19_fn_label_meta_putback() {
+    check(
+        "n19",
+        r##"module top;
+  localparam logic [3:0] L = 4'hA;
+  function logic [31:0] f(input logic [31:0] a);
+    typedef enum logic signed [7:0] {L = -8'sd3, LX} e_t;
+    f = a + L;
+  endfunction
+  logic [31:0] r;
+  initial begin r = f(32'd1); #1 $display("A %h %h %h %0d %0d", r, {L, L}, L + 32'sd0, $bits(L), $bits({L, L})); end
+  if (1) begin : g
+    localparam int B = $bits(L);
+    initial #1 $display("G %0d %h", B, {L, L});
+  end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 000000fe aa 0000000a 4 8
+G 4 aa
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): `top` declares `localparam logic [15:8] P = 8'h5a`, an instance array `c u [1:0]` whose header declares `int P = 6`, then `c2 #(.Q(P[11:8]), .R(P[15:12])) w()`: `Q 10 R 5`. Kills mutant b15 (SIDE8 leaves `param_range`: W3056 x2 + E3009 x2, rc 1).
+/// Owner line: the undo lane U3 (SIDE8, `bound/undo.rs` `side_restore`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `Q 10 R 5` / `t.sv:11: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0 (two WIDTHEXPAND warnings) ; verilator --binary run `Q 10 R 5` (all three agree).
+#[test]
+fn n20_prepass_range_putback() {
+    check(
+        "n20",
+        r##"module c #(parameter int P = 6) (input a);
+endmodule
+module c2 #(parameter int Q = 0, parameter int R = 0) ();
+  initial #1 $display("Q %0d R %0d", Q, R);
+endmodule
+module top;
+  localparam logic [15:8] P = 8'h5a;
+  logic a;
+  c u [1:0] (.a(a));
+  c2 #(.Q(P[11:8]), .R(P[15:12])) w();
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"Q 10 R 5
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+/// Batch 4 boundary (pins r2): `top`'s static function `f1` declares the enum label `L` (signed 8-bit) in its body ; then an instance array `c u [1:0]` whose header declares `parameter L = cf(2)` and the port `[$bits(L)-1:0] a`, connected to `logic [63:0] x`. PRE prints one E3009 (`parameter `L` value is not a constant: `cf(…)` has no constant-fold arm`, rc 1). Kills mutant b05 (`restore_param_meta`'s None arm dropped: a second E3009 `port `a` width 8 expects a connection of width 8 or 16, got 64`, errors=2). PRE is loud where verilator runs (`C 32`) and iverilog refuses (rc 2) ; the expected text is PRE's.
+/// Owner line: the undo lane U2 (`bound/undo.rs` `restore_param_meta`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=2, `t.sv:8: error: Unable to bind wire/reg/memory `L' in `top.f1'` / `t.sv:8: error: Unable to elaborate statement in function f1.` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHEXPAND: t.sv:8:12: Operator ADD expects 32 bits on the RHS, but RHS's ENUMITEMREF 'L' generates 8 bits.` ; verilator --binary run `A 000000fe` / `C 32` / `C 32`.
+#[test]
+fn n21_prepass_meta_unbind() {
+    check(
+        "n21",
+        r##"module c #(parameter L = cf(2)) (input [$bits(L)-1:0] a);
+  function automatic int cf(input int k); return k + 3; endfunction
+  initial #1 $display("C %0d", $bits(a));
+endmodule
+module top;
+  function logic [31:0] f1(input logic [31:0] a);
+    typedef enum logic signed [7:0] {L = -8'sd3, LX} e_t;
+    f1 = a + L;
+  endfunction
+  logic [31:0] r1;
+  initial begin r1 = f1(32'd1); #1 $display("A %h", r1); end
+  logic [63:0] x;
+  c u [1:0] (.a(x));
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##""##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:1:26: error[VITA-E3009] E-ELAB-UNSUPPORTED: parameter `L` value is not a constant: `cf(…)` has no constant-fold arm [in top]
+errors=1 warnings=1 notes=0
+"##,
+        1,
+    );
+}
+
+/// Batch 4 boundary (pins r2): `top` declares `localparam logic [3:0] L = 4'hA` ; its static function `f`'s body declares the enum label `L` twice (`8'h81` on an 8-bit base, then `-16'sd2` on a signed 16-bit base) and returns `a + L`: `A 0000ffff aa 0000000a 10`.
+/// Measured (W/batch4/pins/r3/var, PRE = POST): the module's `L = 4'h5` moves `{L, L}`, `L + 32'sd0` and `L` to `55 00000005 5` ; the second label `-16'sd3` moves `r` to `0000fffe` ; the first label `8'h7f` leaves PRE's line unchanged.
+/// Kills mutants b03 (`restore_params` forward: `A 0000ffff 11 00000001 1` ; with the first label `8'h7f`, `A 0000ffff ff 0000000f 15`) and b06 (`restore_param_meta` forward: `A 0000ffff 0a0a 0000000a 10`) ; n19's mutant b04 fails it as well.
+/// Invalid text vita accepts at rc 0: both oracles refuse the duplicate label (gap entry duplicate-value-name-accepted, its routine-body cells, W/batch4/pins/DOCS_FINDINGS.txt a).
+/// Owner line: the undo lanes U1 / U2 (`bound/undo.rs` `restore_params`, `restore_param_meta`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=1, `t.sv:5: error: 'L' has already been declared in this scope.` / `t.sv:4:      : It was declared here as an enum type or value.` ; verilator 5.054 --lint-only -Wno-fatal: rc=1, `%Error: t.sv:5:39: Duplicate declaration of enum value: L`.
+#[test]
+fn n22_fn_dup_label_order() {
+    check(
+        "n22",
+        r##"module top;
+  localparam logic [3:0] L = 4'hA;
+  function logic [31:0] f(input logic [31:0] a);
+    typedef enum logic [7:0] {L = 8'h81, LX} e_t;
+    typedef enum logic signed [15:0] {L = -16'sd2, LY} e2_t;
+    f = a + L;
+  endfunction
+  logic [31:0] r;
+  initial begin r = f(32'd1); #1 $display("A %h %h %h %0d", r, {L, L}, L + 32'sd0, L); end
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 0000ffff aa 0000000a 10
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
+
+// ---- batch 4 boundary, pins r4: the killer of b10 (W/batch4/pins-judge3/REPORT.txt:12-13), measured on PRE
+// 6bcd57fa, POST f17a0ff6 and the mutant's release binary (W/batch4/pins/r4/n23, W/batch4/pins/r4/u).
+
+/// Batch 4 boundary (pins r4): package `p` declares `localparam S = "AB"` and `fs` with the return range `[((S == "AB") ? 7 : 3):0]` ; `top` declares `localparam S = "CD"` (no import) and prints `$bits(p::fs(1))`: `A 8`. Kills mutant b10 (`decl_keep_restore`: the kept `str_param_raw` entry not put back, bound/undo.rs:71-72): `A 4`.
+/// Measured (PRE = POST): p's `S` changed to "CD" moves the output to `A 4` (W/batch4/pins-judge3/var4/RESULTS.txt q_s2_topCD_pCD), while top's `S` changed to "AB" leaves `A 8` (W/batch4/pins-judge3/var2/RESULTS.txt q_s2_topAB) ; with the condition `(S == "CD")` PRE prints `A 4` and b10 `A 8` (W/batch4/pins/r4/u/RESULTS.txt f_str_t).
+/// Owner line: the undo lane U4 (`bound/undo.rs` `decl_keep_restore`) ; PRE 6bcd57fa and POST f17a0ff6 print the same.
+/// Oracles: iverilog 13.0 -g2012: compile rc=0 ; vvp `A 8` / `t.sv:8: $finish called at 2 (1s)` ; verilator 5.054 --lint-only -Wno-fatal: rc=0, `%Warning-WIDTHTRUNC: t.sv:3:71: Operator ASSIGN expects 8 bits on the Assign RHS, but Assign RHS's VARREF 'a' generates 32 bits.` ; verilator --binary run `A 8`.
+#[test]
+fn n23_pkg_str_window_kept() {
+    check(
+        "n23",
+        r##"package p;
+  localparam S = "AB";
+  function automatic logic [((S == "AB") ? 7 : 3):0] fs(input int a); return a; endfunction
+endpackage
+module top;
+  localparam S = "CD";
+  initial #1 $display("A %0d", $bits(p::fs(1)));
+  initial #2 $finish;
+endmodule
+"##,
+        &[],
+        r##"A 8
+simulation ended (Finish) at time 2
+"##,
+        r##"warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+errors=0 warnings=1 notes=0
+"##,
+        0,
+    );
+}
