@@ -1,0 +1,9 @@
+(§2 wide-name-concat-cause · OPEN · in Diagnostics / artifacts) (a wide name inside a concatenation in a range bound is called undefined):
+* symptom: a header parameter wider than 64 bits written inside a concatenation in a range bound is refused as ``undefined name `N` ``, where the same name written alone is refused as wider than 64 bits
+* witness: v16_wide_concat `module top #(parameter N = 65'h1_0000_0000_0000_000F);` `logic [{N} - 1 : 0] a;` `$display("A ba=%0d", $bits(a));`: PRE 4d1d84bb rc 1 ``t.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: undefined name `N` is not allowed in a constant range bound [in top]``
+* witness: v17_wide_plain, the same with `logic [N - 1 : 0] a;`: PRE rc 1 ``t.sv:2:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: `N` is wider than 64 bits, so it has no integral constant value for a width / range bound (select the bits you need, or declare a narrower localparam) [in top]``
+* oracles: iverilog ``warning: verinum::as_long() truncated 65 bits to 63, returns 14`` then `A ba=15` on both, verilator ``%Error: t.sv:2:14: Value too wide for 32-bits expected in this context 65'h1000000000000000e`` (v16; v17 at `t.sv:2:12`) (W/qsymmix5/ground/run_var9/SUMMARY.txt)
+* note: `const_fold_descends` (`elaborate/src/const_bound.rs:288`) lists `K::Paren` to `K::Cast` and no `K::Concat` (`:292-302`); its doc says the kinds "are exactly the `ExprKind`s that [`Self::const_eval_in_scope`] has a fold arm for" (`:272-273`), and that fn has a `Concat` arm (`elaborate/src/const_fn.rs:146`)
+* note: on Q-SYMMIX's P0 (three edits, one of them `| K::Concat { .. }` in that list; W/qsymmix5/p0) v16 prints v17's line at rc 1; which edit moves it is REVIEW-ONLY
+* note: Q-SYMMIX (C) grounding K2 (W/qsymmix5/ground/REPORT.txt G5) and its plan's filing F2 (W/qsymmix5/plan/PLAN.txt Q4); the class line is in §5.2 Q-VALRULES
+* status: OPEN

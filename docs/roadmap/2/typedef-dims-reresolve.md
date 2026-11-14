@@ -8,4 +8,8 @@
 * 2 oracles
 * witness (2026-11-09, row 46 plan F1): a package typedef's unpacked named dim read in a package routine, h12 `typedef logic [7:0] a_t [W];` with a local `a_t m;`: PRE `A f=808` (silent), iverilog = sv2v → iverilog = verilator `A f=324`; row 46's page set keeps it PRE (no page form)
 * witness (row 46 premise 1, j2e): `$unit` `localparam W = 4; typedef logic [W-1:0] ut; function automatic int ug(ut x); return $bits(x); endfunction` read in a module with `localparam W = 2; ut v;`: PRE `A u=2 v=3` = sv2v, iverilog = verilator `A u=4 v=15` (seen before: Q-VALRULES premise 5 u1–u4, row 68)
+* witness (Q-SYMMIX third park F1, W/qsymmix5/ground/var/v2_h15h_nomix): a `$unit` `typedef struct packed { logic [L3 - 5'd1 : 0] a; logic [1:0] b; } s_t;` after `module m #(parameter L3 = 4'd15) ();`, used as `s_t v;` in `module top #(parameter L3 = 4'd7);`: PRE 4d1d84bb rc 0 `A bv=9 ba=7`
+  * oracles: iverilog ``t.sv:4: error: Unable to bind parameter `L3' in `$unit'``, verilator ``%Error: t.sv:4:32: Can't find definition of variable: 'L3'`` (W/qsymmix5/ground/run_var/SUMMARY.txt)
+  * with module m removed from before the typedef (v5_unit_noleak) PRE rc 1 at the typedef, ``error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constant-literal range in v1 ...``
+  * note: `self.overridable_params.clear();` is in `parse_module_like` (`hdl-parser/src/module_items.rs:412`, `:383`) and `names_an_overridable` reads the set (`hdl-parser/src/sym_struct.rs:146`); that m's names reach the typedef through it is REVIEW-ONLY (not measured)
 * status: OPEN (§5.2 rows 68, 71, 46)

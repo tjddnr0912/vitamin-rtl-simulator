@@ -62,6 +62,7 @@
 * Q-SYMMIX owns the layout composition (member widths, offsets, totals, the alias slot, the `$bits` of a symbolic struct), S1v the parameter value rule (the dropped `unsigned` keyword, R1v, the four refusals)
 * note: a cell that needs both rows (t4_symbolic, x1_ovr_sym_kw, x2_ovr_sym_unrec and any like them) stays wrong, must not turn right → wrong or wrong → loud with a false cause, is named, and is claimed on S1v's page
 * note: Q-SYMMIX parked 2026-11-09 behind Q-VALRULES (b) → row 74, so those cells stay wrong through S1v, and the P1, P2 and P3 cells above keep PRE's layout until Q-SYMMIX re-enters with (C)
+* note: Q-SYMMIX parked a third time 2026-11-14 with nothing landed (its `{W}` P0, §5.2 Q-SYMMIX), so the P1, P2 and P3 cells above keep PRE's layout; its page rewrites the re-entry condition, and the order is the owner's
 * S1v item F-2 (W/qsymmix/replan/PLAN.txt F-2): an untyped parameter over `$bits` of a symbolic typedef or type parameter is typed unsigned, where `$bits` returns an integer (IEEE 1800-2017 §20.6.2)
 * witness: hand/bitsneg `parameter L3 = 4'd15;` `typedef logic [L3 - 5'sd13 : 0] t_t;` `localparam M = $bits(t_t) - 8;` `localparam W = (M < 0) ? 1 - M : M + 1;` `logic [$bits(t_t) - 8 : 0] n;` PRE vita-main 8c970e9b `A m=4294967291 w=4294967292 bn=6`
   * oracles: iverilog = verilator `A m=-5 w=6 bn=6`, sv2v → iverilog `A m=34359738363 w=34359738364 bn=4294967292` (W/qsymmix/park2/m/bitsneg/RES.txt)
