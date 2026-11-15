@@ -16,6 +16,10 @@
 * a 72-bit binder (b9 `logic [71:0] W = X + 1`: …02, iverilog and verilator all x, sv2v …02)
 * a shifted-out x the fallback keeps (review N-5 d3_shl16shr16 `((X16 << 16) >> 16)` into 16 bits: 1, all three 0)
 * a definite result over an x that declines, right → loud (review N-4: `X16 && 1'b0`, `X16 \|\| 1'b1`, `X16 === X16`, `X16 !== 16'd1`, `X16 ? 16'd3 : 16'd3` are E3009 "… has no constant-fold arm", all three 0 / 1 / 1 / 1 / 3 — d3_land0 d3_lor1 d3_ceq d3_cne1 d3_tern_xc_eq; `$bits(X16)` E3009, all three 16 — d3_bits, c5_bits_lit_div0; an indexed part-select width and a typedef / package-typedef bound over `(X16 & 16'h0) + 16'd3`, E3009 / E3010 where all three give 5 / 4 / 4 — b_partsel_w_abs, b_typedef_abs, b_pkgtd_abs)
+* witness (Q-PARAM2STATE plan pass 1, W/param2state/plan/m1/cells; PRE 4d1d84bb; X = `16'd1 % ('1 + 1'b1)`): a23_reduction `localparam logic CV = |((X & 16'h0000) | 16'h0001);` PRE rc 1 ``parameter `CV` value is not a constant: a reduction of an operand whose width the constant domain cannot read: a parameter sized from its value (no range, type or sized literal), or one declared ascending `[0:N]` / with a non-zero low bound `[H:L]` [in top]``
+  * oracles: iverilog and verilator `V c=1`
+* witness: at `logic [15:0]`, a24_logical `(X && 1'b0) | 16'h0001` PRE rc 1 ``parameter `CV` value is not a constant: the `&&` operation has no constant-fold arm [in top]`` and a25_tern_same `(X != 0) ? 16'h0001 : 16'h0001` PRE rc 1 ``parameter `CV` value is not a constant: the `!=` operation has no constant-fold arm [in top]``
+  * oracles: iverilog and verilator `V c=0000000000000001` on both
 * must not move: q9_ctrl `(Z != 0) ? (16'd100 % Z) : 16'd5` and `(Z != 0) ? 16'd7 : 16'd5` (`0005`), `((16'd1 % ('1 + 1'b1)) & 32'd0) + 5` and `(… << 32) + 5` (5), §4.5.562's round-1 cell (8), §4.5.562's round-2 / round-3 hazards (an equality answered x at the comparison site, a signed x-MSB widen, the work cap, the interpreter's concatenation folding a body with the caller's bindings), 🆕 H ⓕ's right-by-default cells, the 999 agreeing parity cells, the 3,059 cells
 * pre-existing
 * source: R2-F5

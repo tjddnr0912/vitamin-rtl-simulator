@@ -181,10 +181,10 @@
 * re-entry: what the grounding names as needing code outside the struct lane: K1 (the parser reader `names_an_overridable`), K2 (the cause list `const_fold_descends`), K3 (a 64-bit consumer through the alias `$bits`, g8a and g8d above) (ground REPORT.txt G5)
 * re-entry: its cells of record are PLAN.txt Q3's CELLS OF RECORD with this park's 23 trip cells and the 56 sweep rows without `struct` (W/qsymmix5/p0/out/CLASS.tsv)
 * waits on it (pointers; the order is the owner's, batch 5's next rows are not decided):
-  * Q-PARAM2STATE S1v-V: "runs at R5.2 · L1 after Q-SYMMIX (C) (R5.1)" (Q-PARAM2STATE.md:8), "S1v may land only lanes no symbolic struct, md packed parameter or symbolic typedef / type parameter reaches" (:34)
+  * Q-PARAM2STATE S1v-V: "runs at R5.2 · L1 after Q-SYMMIX (C) (R5.1)" (Q-PARAM2STATE.md:8), "S1v may land only lanes no symbolic struct, md packed parameter or symbolic typedef / type parameter reaches" (:36)
   * R6.1: "so BIND-1 and S1v-V land before R6.1 reads it" (BIND-1.md:19)
   * R7.4 Q-OVRXPLANE: "R7.4 · L1, after S1v-V (R5.2), on BIND-1" (Q-OVRXPLANE.md:3)
-  * row 29's page half (R8.2), its r3 signing: "after S1v-V, Q-OVRXPLANE and the `const_eval_u32` literal lane's retirement (R5.2, R7.4, R7.5)" (29.md:6), "no binder reads it until S1v-V" (29.md:53)
+  * row 29's page half (R8.2), its r3 signing: "after S1v-V, Q-OVRXPLANE and the `const_eval_u32` literal lane's retirement (R5.2, R7.4, R7.5)" (29.md:6), "no binder reads it until S1v-V" (29.md:54)
   * EH1's row 31 (R8.3): "after row 24 and 29's page half re-enter (R8.1, R8.2)" (31.md:4)
 * status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic

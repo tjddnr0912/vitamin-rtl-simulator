@@ -10,6 +10,8 @@
 * slot: the row closes when S1v lands, not at S12
 * slot: before Q-OVRXPLANE, 76, Q-TPCARRIER and Q-MEMBSRC
 * slot: row 29's page half waits on it, PARKED 2026-11-04
+* slot: held 2026-11-15, keeping R5.2 · L1: S1v-V waits on Q-SYMMIX's re-entry and nothing of it was built (owner O1 (A), 2026-11-15: rule (C) keeps waiting on Q-SYMMIX; W/param2state/plan/PLAN.txt S-B; the plan record below)
+* slot: Q-VALRULES (b)'s R6.1 and row 29's page half no longer wait on S1v-V, and Q-OVRXPLANE waits on it for its untyped-keyword targets only (owner O2, 2026-11-15; §5.2 Q-VALRULES, 29, Q-OVRXPLANE)
 * a parameter's declared type is not recorded whole: its 2-state identity (`hdl-parser/src/params.rs:521-541` parses `var_kind` and drops it; `ParamType` {Implicit, Integer, Real, Realtime, Time}), so an invalid select of a `bit` parameter (IEEE 1800-2017 §11.5.1, ieee1800-2017.txt:12351–12353: 0) cannot be told from a `logic` one's (x): `localparam bit [15:8] VB = 8'hA5; logic [VB[C + 3'd1]:0] d;` (C = 3'd7) IEEE n=1 = PRE, the same over `logic` VP IEEE illegal, PRE n=1 silent
 * witness: `localparam LB = VB[C + 3'd1];` PRE E3009 (iverilog x, verilator 1)
 * note: PRE keeps the one-bit default for such a bound (Q-DECLSELBOUND parked): its anchor `localparam logic [15:8] VP = 8'hA5;` `logic [VP[C + 3'd1]:0] d;` and the all-x part-select `va[C3+3'd2 : C3+3'd1]` (n=1)
@@ -74,6 +76,7 @@
   * oracles: verilator `%Error: t.sv:2:23: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)`, iverilog `A bp=1`, sv2v → iverilog `A bp=x` (W/qsymmix/park2/m/xrange/RES.txt)
 * witness: hand/wrange `parameter [32:0] PW = 33'h1_0000_0003;` `localparam logic [PW : 0] P = 0;` `$display("A bp=%0d", $bits(P));` PRE vita-main 8c970e9b `A bp=4` (the width truncated to 32 bits)
   * oracles: iverilog `A bp=4`, sv2v → iverilog `A bp=4294967300`, verilator `%Error: t.sv:3:21: Value too wide for 32-bits expected in this context 33'h100000003` (W/qsymmix/park2/m/wrange/RES.txt)
+* note (2026-11-15, W/param2state/plan/PLAN.txt §4): F-1a leaves S1v-V by :63's attribution, each cell to the row whose rule produces it: wrange to R6.1 (R1c, the bound range rule), xrange to R6.2 (R1x) (§5.2 Q-VALRULES)
 * note: for S1v's design (Q-SYMMIX premise round 4 J4, W/qsymmix/RULINGS-premise4.txt D1): a refusal raised at fold time over an eagerly bound name adds refusals on an unused struct
 * witness: c10_unused_x (`m #(.N(4'b1x11)) u();`, N read only by an unused symbolic struct's member bound) PRE rc 0 `A N=11`
   * oracles: iverilog = sv2v → iverilog `A N=X`, verilator `%Error: t.sv:2:36: left side of bit range isn't a two-state constant (IEEE 1800-2023 6.9.1)` (W/qsymmix/premise4/cells/c10_unused_x)
@@ -107,9 +110,38 @@
 * note: so R1v, the bound range rule, R1w, R1x, C1, R1c and the Lane track above are Q-VALRULES (b)'s value rows R6.1–R6.4, on VAL-3 and BIND-1 (§5.2 Q-VALRULES), and S1v-V keeps rule (C), E7', F-2 and F-1a
 * note: VAL-3 landed without the typed bound (§4.5.639, owner O1 = (a)), so R6.1 (R1v, the bound range rule, R1w, R1c) builds `fold_self_typed` and `BoundFold` as its first commit (W/val3/plan/PLAN.txt section 2), read by the side check in `range_bounds_checked`; S1v-V's items stay as above (§5.2 VAL-3)
 * note: BIND-1 landed without `BoundConst` (§4.5.640, owner O1 = (a)), so S1v-V builds it as its first commit, a tenth map written by `bind_decl` (DECL-ORDER), and reads a name's (width, sign) through `name_meta` (META-WALK, p16's lane) in one fn (§5.2 BIND-1)
+* note (2026-11-15, PLAN.txt A3): re-aimed: `BoundConst` is not S1v-V's first commit: rule (C) reads the `ParamDecl` its sites hold, and a tenth string-keyed map raises `d.elaborator_string_keyed = 85` (`elaborate/tests/structure_ratchet.baseline:10`; its :3 `# Never raise a value.`)
+* its first reader by name, the invalid select of a `bit` parameter (:15), has no two-oracle agreement: b03_bit_lp, :16's `localparam LB = VB[C + 3'd1];`, PRE rc 1 ``parameter `LB` value is not a constant: the select `VB[…]` has no constant-fold arm [in top]``, iverilog `A lb=x`, verilator `A lb=1` (W/param2state/ground/cells.tsv)
+* the shape kept for the day a reader exists: `param_meta`'s value widened (`elaborate/src/lib.rs:847` `param_meta: Bound<BTreeMap<String, (u32, bool)>>,`) in place of a tenth map, the package store a second writer either way (`bound_home.rs` `PKG_STORE`); size and cost NOT_MEASURED (PLAN.txt A3)
 * note: for S1v-V's design (N-5): the production evidence path is a router edit, and the prototype's second fold cost ~15 % wall (e02 e03)
 * S1v-V census item N-2 (W/s1v/RULINGS-premise1.txt CARRY, W/s1v/plan2/filings.txt F-N2): a class `#()` value parameter drops its type and signing (`classes.rs:255-265`)
 * witness: j1_class_param `class C #(int unsigned P = -1); int v; function new(); v = (P > 0); endfunction endclass`: PRE vita-main 8c970e9b `A v=0`
   * oracles: verilator `A v=1`, iverilog `t.sv:2: syntax error` (no parameterized class)
+* record (2026-11-15, plan pass 1, W/param2state/plan/PLAN.txt §1, §4; grounding W/param2state/ground/REPORT.txt; PRE 4d1d84bb): S1v-V's items wait on Q-SYMMIX or belong to R6: rule (C) (:8, :36), F-2, whose site `sym_typedef_width` (`hdl-ast/src/range_rules.rs:819`) is the symbolic-typedef lane :36 excludes, and F-1a (:74, its rules R6.1 / R6.2)
+* E7': no measured need: the rule (C) prototype pA (bb99f548) moved p18, p18c and e2–e4 with no env-fold edit (W/s1v/plan/PLAN.txt:49), to re-measure at re-entry
+* rule (C)'s lanes are one funnel, `param_decl_width_opt` (`elaborate/src/params.rs:292`) and the override arms (`:2128`–`:2250`), and a sign it binds crosses an override into a symbolic layout, so its non-symbolic lanes do not land apart (PLAN.txt A1, REVIEW-ONLY)
+* witness: x1_ovr_sym_kw, `parameter signed NS2 = 4'hF;` `m #(.P(NS2)) u();` into `module m #(parameter P = 4'd0, parameter Q = 4'd15)` whose `s_t` holds `logic [Q - 5'sd14 : 0] a; logic [P + 5'sd2 : 0] b;`: PRE `A bv=20 ba=2 bb=18 p=15`, pA `ba` 2 → 18 (W/s1v/plan/fields_main_pA.txt)
+  * oracles: iverilog and verilator `A bv=4 ba=2 bb=2 p=-1` (W/param2state/ground/cells.tsv)
+* witness: rule (C)'s hand contexts, each PRE rc 0 where iverilog = verilator (ground cells.tsv): s01 generate, s02 package, s05 interface, s06 `$unit`, s07 defparam `R 5` (both `R a`); s03 a range bound `A ba=1 bb=1` (both `A ba=2 bb=2`); s04 a constant function's `int` formal `A k=15` (both `A k=-1`)
+* witness: s08 a negative literal `A pu=-3 ps=4294967293 pug=0 psg=1` (both `A pu=4294967293 ps=-3 pug=1 psg=0`); p5_uns_kw_s `A bw=1 u=-8 gt=0` (both `A bw=2 u=8 gt=1`)
+* the 2-state half (:15–:18, :30–:32) has three owners (PLAN.txt §3, §4; main, 2026-11-15):
+  * the 4-state refusal at the declaration lane is slice S1v-X, filed, not started: the middle test of `binder_x_refusal` (`elaborate/src/const_fn_width/fold_x.rs:82`), `if (u as u64) & f.x_bits() & ones(w) == 0 {` (:93), the 2-state rule its doc names (:74), skipped for a `logic` target
+  * the x value is 76's (76.md:11, an x plane carried to each binder)
+  * the 2-state conversion has no slice (below)
+* S1v-X's lanes call `param_decl_fold` (`elaborate/src/value/chains.rs:36`): the module body (`instance.rs:747`), generate (`generate.rs:816`), package (`package.rs:823`), a header default (`params.rs:2189`); the override arms (Q-OVRXPLANE), range bounds (R6.2), constant-function frames (76) and > 64-bit values are not its lanes
+* its target kind is `ParamDecl.dtype.kind`, from the keyword arm (`hdl-parser/src/params.rs:311`), a typedef's `TypeInfo.decl_kind` (`:331`) or the integer / real / time / string arm (`:386`); of the 10 `TypeInfo` constructors (grep `TypeInfo {` at 5bbf3923), 8 write `NotRecorded` and `typedefs.rs:544` the alias's keyword
+* the tenth, not in the grounding's census (ground REPORT.txt G3), writes `logic` for a composed package alias (`peek_alias_param`): `decl_kind: TypeKind::Kind(NetVarKind::Logic),` (`hdl-parser/src/structs/member_array.rs:450`), on its comment's claim that every composed alias the parser admits has `logic` members (:448-449); S1v-X's premise judge takes a cell for it (PLAN.txt P1)
+* S1v-X's positive set is D8's token `logic` (:31): XPAIR_L, the 51 pair cells (:31), wrong 51 on PRE 4d1d84bb (ground cells.tsv `x_*`)
+* and plan m1's a15 typedef alias, a16 package, a17 generate, a18 header default and a26, each PRE rc 0 all zeros where iverilog and verilator print all x (W/param2state/plan/m1/SUMMARY.txt)
+* witness: a16_pkg_0u `package q; localparam logic [15:0] CV = ((16'd1 % ('1 + 1'b1)) ^ (16'd1 % ('1 + 1'b1))); endpackage` read as `q::CV`: PRE rc 0 `V c=0000000000000000`
+  * oracles: iverilog and verilator `V c=xxxxxxxxxxxxxxxx`
+* note: row 48's D4 (Q-OVRXPLANE.md:7, 76.md:11 "refuses it (≤64-bit 4-state)") names a consequence, not a defect: a28_unused_0u, `localparam logic [15:0] U` holding a certified x no output reads, PRE rc 0 `V c=0000000000000111` as iverilog and verilator, which S1v-X would refuse (PLAN.txt §3, REVIEW-ONLY: no build)
+* its 1-under twin a08_unused_1u is refused on PRE already, rc 1 ``parameter `U` value is `x`: the divisor of the `%` (the `+` operation) is 0 in its 16-bit context``, where iverilog and verilator print `V ok`
+* the generate lane keeps PRE in S1v-X until its second line has a row or S1v-X's P0 shows it absent: a06_gen_1u prints a second error after the refusal (§5.2 Q-REFTXT) (PLAN.txt P5); S1v-X's first step is that P0 (PLAN.txt §3)
+* the 2-state conversion: XPAIR_B, the 51 pairs at `bit [`, split 44 (PRE 0 = iverilog 0, verilator x) and wrong 7; XPAIR_I, 11 at `int`, split 10 and wrong 1 (ground cells.tsv `xb_*`, `xi_*`)
+* the 7 + 1 wrong are `('1 + 1'b1) ** (-1)` and `(16'hFFFF + 16'd1) ** (-1)` (xb_pz, xb_pz16, xi_pz): PRE 0 where iverilog and verilator print x at a `bit` or `int` target, and IEEE 1800-2017 §6.11 converts x to 0 (:30)
+* the invalid select of a `bit` parameter (:15) stays with Q-DECLSELBOUND's arm and Q-CONSTXIDX, with no two-oracle agreement (b03_bit_lp above)
+* real designs (ground REPORT.txt G5, a lexer census of the 51 runs' files, 1021 of 1025 read): 8511 parameter keywords; 0 untyped with a signing keyword (rule (C)'s input); 3465 2-state keyword-typed
+* and 0 with an x / z literal initializer, 0 typed by a 2-state typedef, 2 typed class value parameters (one source, two copies) (G5)
 * status: silent-wrong, pre-existing
 * source: row 29 page half PLAN3b F-UNS / O7 (x30_gtnegt), r3 lens-sound B1 (f01–f08)
