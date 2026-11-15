@@ -4,4 +4,8 @@
 * `alias a = b;` and `assign p::v = …;` are E2002 too, run by verilator only (iverilog and sv2v syntax errors)
 * the typedef spellings `wire s_t w`, `wire q::ps_t w`, `wire T w` are E2002 too (the row-18 matrix's net lane, 12 cells, all three oracles run them; no census page)
 * oracles: 3 oracles
+* witness (Q-CONSTSELLSB park, W/constsellsb/plan4/m1): c3_var_module, `var logic [3:0] t;` at module scope and `t = 4'd5;`: PRE rc 1 ``t.sv:2:7: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected identifier, found keyword 'logic'`` and three more E2002 lines
+  * oracles: iverilog and verilator `V t=0101`
+* witness: in a function body, c3_var_zero `var logic [3:0] t;` and c3_var_shift `var logic [5:2] t;` in a constant function, c3_var_runtime and c3_var_first called at run time: PRE rc 1 ``expected '=' or '<=' after lvalue, found keyword 'logic'`` on each
+  * oracles: iverilog and verilator `V P=00000101` (c3_var_zero), `V P=00000011` (c3_var_shift), `V r=00000101` (c3_var_runtime, c3_var_first)
 * status: OPEN

@@ -5,4 +5,9 @@
 * sh_narrow_formal
 * sh_b4w_nz_w_in `00000101`, all three `00001001`
 * no seed read in any, so Q-AESINK's mark says nothing
+* witness (Q-CONSTSELLSB park, W/constsellsb/plan4/m1/cells/c2_pkg_shadow): in `package q`, `logic [3:0] t;` `t = 4'd1;` `begin logic [3:0] t; t = 4'hF; end` `f = t;`, `q::f(2)`: PRE rc 0 `V P=00001111`
+  * oracles: iverilog and verilator `V P=00000001`
+* its module twin c2_mod_shadow is refused, PRE rc 1 ``block-local `t` is referenced outside its `begin…end` block; vita cannot resolve this to the outer `t` yet (it would silently read the block-local)``; the control c2_pkg_noshadow_ctrl (the inner named `u`) prints `V P=00000001`, as both oracles
+* why the block-local gate does not run in a package function body: not measured (W/constsellsb/plan4/PLAN4.txt U6)
+* note: Q-CONSTSELLSB's prototype record outlived such a block, where PRE prints both oracles' line (premise judge 2 F2, 9 cells; §5.2 Q-CONSTSELLSB, the park)
 * fix: the gate runs on package routine text, or the env takes block scopes

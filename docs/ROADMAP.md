@@ -894,7 +894,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-14): batch 4 landed (§4.5.640); Q-SYMMIX parked a third time (§4.5.641); batch 5's next rows are the owner's; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-15): Q-CONSTSELLSB and Q-CONSTAGG parked (§4.5.642); batch 5's next row is Q-PARAM2STATE (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -910,8 +910,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | BIND-2 | R4.2 · L1 (landed) | [the constant-function frame as one type, its writers and read lanes](roadmap/5.2/BIND-2.md) | — F |
 | Q-SYMMIX | R5.1 · L1 (PARKED) | [a symbolic struct over a signed and an unsigned parameter is laid out wrong](roadmap/5.2/Q-SYMMIX.md) | ① |
 | Q-PARAM2STATE | R5.2 · L1 | [a parameter's declared 2-state type is not recorded](roadmap/5.2/Q-PARAM2STATE.md) | ① |
-| Q-CONSTSELLSB | R7.1 · L1 | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① |
-| Q-CONSTAGG | R7.2 · L1 | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
+| Q-CONSTSELLSB | R7.1 · L1 (PARKED) | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① S |
+| Q-CONSTAGG | R7.2 · L1 (PARKED) | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
