@@ -12,4 +12,10 @@
   * oracles: iverilog ``t.sv:4: error: Unable to bind parameter `L3' in `$unit'``, verilator ``%Error: t.sv:4:32: Can't find definition of variable: 'L3'`` (W/qsymmix5/ground/run_var/SUMMARY.txt)
   * with module m removed from before the typedef (v5_unit_noleak) PRE rc 1 at the typedef, ``error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or a constant-literal range in v1 ...``
   * note: `self.overridable_params.clear();` is in `parse_module_like` (`hdl-parser/src/module_items.rs:412`, `:383`) and `names_an_overridable` reads the set (`hdl-parser/src/sym_struct.rs:146`); that m's names reach the typedef through it is REVIEW-ONLY (not measured)
+* witness (rows 68 + 23 grounding, W/r68/ground/cells/wv_c1_twin_mod_px_decoy): package p's `typedef logic [M:L] o_t;` over q's `localparam logic [(1 ? 3 : 2):0] L = (16 | 0);`, which has no parse-time value, read in a module with `localparam int L = 7;`: PRE 4d1d84bb rc 0 `V x=0000000000000 b=13 lo=7 hi=19`
+  * oracles: iverilog and verilator `V x=00000000000000001100 b=20 lo=0 hi=19`
+  * the package twin leaves such a name as written (`hdl-parser/src/packed_md.rs:146-147`, "A name with no parser-time value stays as written."), so it binds in the importer
+  * c_pkg_twin_decoy_dec (W/r68/plan2/m1, the importer's L from `import r::*;`): PRE `A b=16`, iverilog and verilator `A b=18`; with no L in the importer (W/r68/plan/m1/cells/pkx_twin) PRE rc 1 ``undefined name `L` is not allowed in a constant range bound``, both oracles run
+* witness (row 23's premise judge 2, W/r68/premise2/b1/cells/j8_pkg_bits_ctl): a `$unit` `typedef logic [N-1:0] t_t;` (N = 4) read as `localparam int Y = $bits(t_t);` in package p, whose own N is 16: PRE 4d1d84bb rc 0 `A b=16 y=16`
+  * oracles: iverilog and verilator `A b=4 y=4` (the `$bits` twin of x1_ucval's cast above)
 * status: OPEN (§5.2 rows 68, 71, 46)

@@ -10,7 +10,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 337 | 215 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 338 | 216 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
 | §3.b | loud → correct-support, small | 209 | 174 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 698 | 450 | 248 | | | |
+| total | | 699 | 451 | 248 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -391,6 +391,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - gen-param-self-ref-refold — [a generate parameter naming an outer one of its name reads its own value](roadmap/2/gen-param-self-ref-refold.md) · OPEN
 - const-fn-range-formal-shadow — [a local's range naming a formal or local reads the module parameter](roadmap/2/const-fn-range-formal-shadow.md) · OPEN
 - duplicate-value-name-accepted — [32 measured same-name pairs holding an enum label or a `typedef` are accepted](roadmap/2/duplicate-value-name-accepted.md) · OPEN
+- loop-var-const-shadow — [a loop variable does not shadow a parse-time constant in a range](roadmap/2/loop-var-const-shadow.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -894,7 +895,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-15): Q-PARAM2STATE held behind Q-SYMMIX (§4.5.643); the next row is 68 + 23 (owner); iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-16): row 23 parked, row 68 held for a re-plan, Q-TLPCONV filed (§4.5.644); batch 5 has landed no code; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -916,8 +917,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
-| 68 | R9.1 · L1 | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
-| 23 | R9.1 · L1 | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
+| 68 | R9.1 · L1 (held) | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
+| 23 | R9.1 · L1 (PARKED) | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
 | Q-RTNTEXT | R9.2 · L1 | [one answer for the scope a package routine's text binds in](roadmap/5.2/Q-RTNTEXT.md) | — F |
 | 46 | R9.3 · L1 (PARKED) | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
 | 39 | R9.4 · L1 | [package export declarations are refused at parse](roadmap/5.2/39.md) | ② F |
@@ -977,6 +978,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | 50 | 27 · T3 | [a string-valued header parameter is not read by a generate condition](roadmap/5.2/50.md) | ② F |
 | 34 | 28 · L1 | [`$bits` of an ANSI port in a `localparam` is refused](roadmap/5.2/34.md) | ② S |
 | Q-TPCARRIER | 29 · L2 (PARKED) | [type parameters are carried by parse-time stand-in names](roadmap/5.2/Q-TPCARRIER.md) | ① F |
+| Q-TLPCONV | 29 · L2 | [the parser stores a typed localparam of unfolded width unconverted](roadmap/5.2/Q-TLPCONV.md) | ① |
 | Q-IDXVALUE | 30 · T3 | [a select offset's value is read four different ways](roadmap/5.2/Q-IDXVALUE.md) | ① |
 | Q-MEMBSRC | 32 · L2 (PARKED (part)) | [carry a struct member select's source bounds from parser to elaborate](roadmap/5.2/Q-MEMBSRC.md) | ① F |
 | Q-MEMBIDXNOT | 32 · L2 (parked) | [a `~` index on a non-zero-base struct member reads x](roadmap/5.2/Q-MEMBIDXNOT.md) | — |

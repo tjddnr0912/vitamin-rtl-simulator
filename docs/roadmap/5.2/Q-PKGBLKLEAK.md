@@ -10,4 +10,5 @@
 * its module twin c2_mod_shadow is refused, PRE rc 1 ``block-local `t` is referenced outside its `begin…end` block; vita cannot resolve this to the outer `t` yet (it would silently read the block-local)``; the control c2_pkg_noshadow_ctrl (the inner named `u`) prints `V P=00000001`, as both oracles
 * why the block-local gate does not run in a package function body: not measured (W/constsellsb/plan4/PLAN4.txt U6)
 * note: Q-CONSTSELLSB's prototype record outlived such a block, where PRE prints both oracles' line (premise judge 2 F2, 9 cells; §5.2 Q-CONSTSELLSB, the park)
+* note (structure review 2, 2026-11-16, W/review/structure-2026-11-16/REPORT.txt Q6 item 2): the frame-lifetime class with Q-CONSTSELLSB's F2, `bound/frame.rs:25` "L5 flat: one slot per name, a block declaration overwrites"; home BIND-2's per-local record (`frame.rs:89`), first reader Q-CONSTSELLSB
 * fix: the gate runs on package routine text, or the env takes block scopes

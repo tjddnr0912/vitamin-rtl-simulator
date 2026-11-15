@@ -8,4 +8,7 @@
 * note: its sidecar projection (`api.rs:187` net_decl_ranges, `:203` two_state_nets ; `cli/src/staged.rs:706` / `:709`) is the seam Q-SIDETABLES restructures: one census serves both
 * note: filling a hole (§0 11's h1 h2 h4 bounds) moves values and is not this row
 * note: a net declaration's `dtype.kind` `TypeKind::Kind(k)` (Q-DECLTYPE's S12, §4.5.635) is PRE's lossy kind and, under a type parameter, `shape_param`'s default kind, so the first reader of it as the declared kind measures that first (S12 soundness lens S-F8)
+* note (structure review 2, 2026-11-16, W/review/structure-2026-11-16/REPORT.txt Q3 C): its declaration-side first commit carries `DataType.range`'s origin (in place, a named typedef with its declaring scope, or parser-folded)
+  * size: 6 `DataType::new_*` fns (`hdl-ast/src/lib.rs:1019-1104`), 40 call lines in 17 files, 6 carry sites (line grep, REVIEW-ONLY); an hdl-ast SchemaHash re-pin; cost UNMEASURED
+* note (REPORT.txt Q6 item 3): beside `DataType`, not in it: `ParamDecl.ty` (`hdl-ast/src/lib.rs:697`), `FunctionDef`'s `ret_type`, `ret_two_state`, `ret_string` and `ret_packed` (`:2381-2393`), `shape_param` ×4, `integral_typedef` ×2, `pattern_members` ×2, `class_type`; elaborate reads `dtype.signed` on 51 lines, `.signing()` on 1 (the review's grep)
 * source: W/qdecltype/plan/PLAN.txt P1 S3, W/qdecltype/GROUND.txt G2

@@ -6,4 +6,6 @@
 * witness: s_pkg_spec_legal `package p; specparam [3:0] X = 4'hF; endpackage`, s_ifc_spec_legal (an interface) and s_gen_spec_legal (an if-generate): PRE = S1v-Q rc 0 `A x=15` (W/batch1/lens-diff/REPORT.txt N1)
 * oracles: iverilog `t.sv:1: syntax error` / `t.sv:1: error: specparam declarations are not allowed in interfaces.` / `t.sv:2: error: specparam declaration is not allowed in generate block.`, sv2v a parse error on each, verilator `%Error: t.sv:1:12: syntax error, unexpected specparam` on each
 * note: with a leading signing S1v-Q refuses all of them at the signing token (§5.2 Q-PARAM2STATE, k7_specparam, sp_gen_R5, sp_ifc_R5, p_spec_pkg); `docs/manual/003_language-reference.md:141` says only that a specparam is not restricted to a `specify` block
+* witness (row 23's premise judge 2, W/r68/premise2/b1/cells/j3_specparam_pkg_dec): `package p; specparam int N = 4; typedef struct packed { logic [N-1:0] a; } t_t; endpackage` read as `p::t_t v;`: PRE 4d1d84bb rc 0 `A b=4`
+  * oracles: iverilog `t.sv:2: syntax error`, verilator `%Error: t.sv:2:3: syntax error, unexpected specparam`
 * status: OPEN

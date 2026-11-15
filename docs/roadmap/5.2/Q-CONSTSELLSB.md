@@ -37,6 +37,7 @@
   * lt_inner_noread_after_bitw, lt_inner_whole_then_outer_rewrite, lt_formal_shadow, lt_formal_shadow_rewrite (b2), lt_if_branch_decl, lt_nested_inner_twice, lt4_inner_whole_outer_rewrite, lt4_formal_shadow_rewrite, lt4_return_shadow (b3)
 * witness (F2, premise2/b2): lt_formal_shadow, in `package q`, `function automatic logic [7:0] f(input bit [3:0] a);` `begin bit [5:2] a; end` `a[1] = 1'b1;` `f = a;`, `P = q::f(4'd0)`: PRE `V P=00000010`, p0b2 `V P=00000000`
   * oracles: iverilog and verilator `V P=00000010`
+* note (structure review 2, 2026-11-16, W/review/structure-2026-11-16/REPORT.txt Q1, Q6 item 2): F2 is not the merged-field class but the frame's lifetime, `//!   L5 flat: one slot per name, a block declaration overwrites (g2b g4 g5).` (`elaborate/src/bound/frame.rs:25`); its home is BIND-2's per-local record, NOT BUILT (`frame.rs:89`); §5.2 Q-PKGBLKLEAK
 * plan pass 4 (W/constsellsb/plan4/PLAN4.txt §1, cells plan4/m1): F1's input is wrong on PRE at module scope with no constant function, §2 typed-localparam-unconverted, filed before this row:
   * c1_tp_mod, `localparam logic [W-1:0] L = 16;` `localparam type T = logic [L+3:L];` `T x;` with bits 2 and 3 written: PRE `V x=0000 L=0 lo=16 hi=19`, iverilog and verilator `V x=1100 L=0 lo=0 hi=3`
   * c1_tp_width, the type `logic [L+3:0]`: PRE `V b=20 x=11111111111111111111 L=0`, iverilog and verilator `V b=4 x=1111 L=0`
@@ -52,11 +53,14 @@
   * a select write: z_sel_write_off +0.484 %, +120.4 per write (800,000 writes)
   * no record: y_env +0.688 %, +38.4 per `bind_shape` use (2,399,782 uses); q3a +0.482 %, +70.2 per W1 bind; q3e +0.401 %, +260.3 per call (800,000 each)
 * re-entry (PLAN4.txt §3 PARK RECORD), re-derived from the row and the code of that day (ER §3.6 last row):
-  * RE-1: §2 typed-localparam-unconverted converted at its producer (c1_tp_mod, c1_tp_width and c1_twin_mod print both oracles' lines), or the record declines on a fact the parser records
+  * RE-1: §2 typed-localparam-unconverted converted at its producer, by §5.2 Q-TLPCONV after Q-TPCARRIER (owner O-1, 2026-11-15; c1_tp_mod, c1_tp_width and c1_twin_mod print both oracles' lines), or the record declines on a fact the parser records
   * RE-2: one record per declaration, from the fold that gives the width, no text classifier; a function with no shifted declaration at most +1.00 % (y_env and its twins e0–e6, q3a, q3e); W1, W6, W9 and e5 re-measured per unit
   * RE-3: the record lives as long as the binding: premise judge 2's lt cells (b2, b3) and PLAN3's b1–b11 at 0 right → wrong
   * RE-4: a P0 over the acceptance set, premise judge 2's 21 cells each printing PRE's line or both oracles', with right → wrong 0, rc change 0 and kept refusals byte-equal, before any build
   * the conversion's row: typed-localparam-unconverted names §5.2 row 68 or row 48 (its line 3); which one converts the table is not determined (PLAN4.txt U4)
+  * decided 2026-11-15 (owner O-1, W/r68/plan/PLAN.txt §6 O-1): neither row 68 nor row 48; the conversion is §5.2 Q-TLPCONV
+  * RE-1's decline half: row 68's plan found no mark crossing `folded_bound` / `respell_pkg_expr` into `dtype.range` (PLAN.txt §5.5); PARSE-1's provenance piece is that mark (§5.2 PARSE-1), a design claim, not run
 * kept (W/constsellsb): the page's cells (ground/cells.tsv) and plan/PLAN.txt's lane table; plan3/mx–mx5 (84 cells) and plan3/sweep; premise2/b1, b1b, b2, b3, b4 (102 cells, the 21 the acceptance set); plan4/m1, m2 (28 cells); the named-cost cells (p0L, premise/q3); build/moved_pins.txt
 * kept: `decl_range_pins.rs` as expected values only (park/T_final.patch); c1.patch and c2_wip.patch are records, not bases (ER §3.6)
 * note: Q-CONSTAGG parks with it (Q-CONSTAGG.md:10, the same frame record)
+* note: the class's five falls across rows (fall 2 is this row's c2 and premise judge 2) are recorded once in §5.2 PARSE-1 (structure review 2, 2026-11-16)

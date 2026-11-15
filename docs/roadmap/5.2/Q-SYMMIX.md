@@ -186,5 +186,6 @@
   * R7.4 Q-OVRXPLANE: "R7.4 · L1, after S1v-V (R5.2), on BIND-1" (Q-OVRXPLANE.md:3)
   * row 29's page half (R8.2), its r3 signing: "after S1v-V, Q-OVRXPLANE and the `const_eval_u32` literal lane's retirement (R5.2, R7.4, R7.5)" (29.md:6), "no binder reads it until S1v-V" (29.md:54)
   * EH1's row 31 (R8.3): "after row 24 and 29's page half re-enter (R8.1, R8.2)" (31.md:4)
+* note: its P0 `{W}` is fall 1 of the class's five falls across rows, recorded once in §5.2 PARSE-1 (structure review 2, 2026-11-16)
 * status: silent-wrong, pre-existing (PRE 92805863)
 * source: W/qdecltype/plan2/cells/sy1_param_based … sy9_mixgeom, x1_ovr_sym_twin, x1_ovr_sym_kw, x2_ovr_sym_unrec, t4_symbolic
