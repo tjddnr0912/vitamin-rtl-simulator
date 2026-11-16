@@ -403,11 +403,14 @@ impl Elaborator<'_> {
             base_off
         } else {
             let l_c = self.const_u32_expr(l, 32);
-            self.push_expr(ir::Expr::Binary {
+            let off = self.push_expr(ir::Expr::Binary {
                 op: ir::BinOp::Add,
                 lhs: base_off,
                 rhs: l_c,
-            })
+            });
+            // §5.2 Q-WREXT C2: the geometry constant through `+ l` (`wext.rs`).
+            self.carry_geom(off, base_off, l);
+            off
         };
         let width = self.const_u32_expr(hdl_ast::range_rules::span_u32(l, m), 32);
         Some(ir::LvalChunk {

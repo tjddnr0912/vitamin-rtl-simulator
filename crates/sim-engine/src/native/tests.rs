@@ -3839,3 +3839,239 @@ fn const_chunk_written_bits_is_what_the_stores_write() {
         "site count moved — re-pin deliberately"
     );
 }
+
+/// §5.2 Q-WREXT C2: the write-extent view's GEOMETRY constant (`elaborate/src/wext.rs`:
+/// the value `flatten_word`'s offset tree has when every index is a constant leaf) IS
+/// what both stores write — end to end from SV source, the twin of
+/// `const_chunk_written_bits_is_what_the_stores_write` for the trees that kernel does not
+/// read. A grid of packed shapes (descending, ascending, a non-zero and a negative low
+/// bound, three dimensions, mixed directions, an ascending leaf, an array of a packed
+/// struct) and constant selects (one index up to full depth over every value from one
+/// below to one above each dimension, a part-select of a descending leaf, an element
+/// range of an inner dimension, a struct member), each `assign <net><select> = v;` on its
+/// own net. Per site, by what the source says: every index in range -> the view decides
+/// `Bits { by: Geometry }` and both stores write exactly those bits of an all-x net ; an
+/// index out of range -> `Undecided` and neither store writes a bit ; a negative literal
+/// index (a unary minus, not a leaf) -> `Undecided` (not compared: reach).
+#[test]
+fn geometry_constant_is_what_the_stores_write() {
+    use diag::LogEvent;
+    use elaborate::wext::{By, Extent, Writer};
+    use sim_ir::{LvalChunk, Lvalue, SelKind};
+    use std::cell::Cell;
+
+    struct ErrCount(Cell<u32>);
+    impl diag::LogSink for ErrCount {
+        fn emit(&self, ev: LogEvent) {
+            if let LogEvent::Diagnostic(d) = ev {
+                if matches!(d.severity, diag::Severity::Error | diag::Severity::Fatal) {
+                    self.0.set(self.0.get() + 1);
+                }
+            }
+        }
+    }
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    enum Want {
+        In,
+        Oob,
+        Neg,
+    }
+    // (declared type, packed dims as written `[l:r]`, outermost first)
+    const SHAPES: [(&str, &[(i64, i64)]); 7] = [
+        ("logic [3:0][7:0]", &[(3, 0), (7, 0)]),
+        ("logic [0:3][7:0]", &[(0, 3), (7, 0)]),
+        ("logic [5:2][7:0]", &[(5, 2), (7, 0)]),
+        ("logic [1:-2][3:0]", &[(1, -2), (3, 0)]),
+        ("logic [1:0][2:0][3:0]", &[(1, 0), (2, 0), (3, 0)]),
+        ("logic [0:2][1:0][3:0]", &[(0, 2), (1, 0), (3, 0)]),
+        ("logic [2:5][0:3]", &[(2, 5), (0, 3)]),
+    ];
+    let span = |(l, r): (i64, i64)| (l.min(r), l.max(r));
+    let mut decls = String::new();
+    let mut want: Vec<(String, Want)> = Vec::new();
+    let mut site = |decls: &mut String, ty: &str, sel: String, w: Want| {
+        let n = want.len();
+        decls.push_str(&format!("{ty} n{n};\nassign n{n}{sel} = v;\n"));
+        want.push((format!("{ty} n{n}{sel}"), w));
+    };
+    for (ty, dims) in SHAPES {
+        // every index tuple of length 1 ..= dims.len(), each value lo-1 ..= hi+1
+        let mut tuples: Vec<Vec<i64>> = vec![Vec::new()];
+        for &d in dims {
+            let (lo, hi) = span(d);
+            let next: Vec<Vec<i64>> = tuples
+                .iter()
+                .flat_map(|t| {
+                    (lo - 1..=hi + 1).map(move |v| {
+                        let mut t = t.clone();
+                        t.push(v);
+                        t
+                    })
+                })
+                .collect();
+            for t in &next {
+                let neg = t.iter().any(|&v| v < 0);
+                let inr = t.iter().zip(dims).all(|(&v, &d)| {
+                    let (lo, hi) = span(d);
+                    lo <= v && v <= hi
+                });
+                let sel: String = t.iter().fold(String::new(), |mut s, v| {
+                    s.push_str(&format!("[{v}]"));
+                    s
+                });
+                let w = if neg {
+                    Want::Neg
+                } else if inr {
+                    Want::In
+                } else {
+                    Want::Oob
+                };
+                site(&mut decls, ty, sel, w);
+            }
+            tuples = next;
+        }
+        // a part-select of a descending zero-based leaf, under every in-range prefix
+        let leaf = dims[dims.len() - 1];
+        if leaf.0 > leaf.1 && leaf.1 == 0 && dims.len() == 2 {
+            let (lo, hi) = span(dims[0]);
+            for i in lo.max(0)..=hi + 1 {
+                for (m, l) in [(leaf.0, 0), (leaf.0 - 1, 1), (1, 1)] {
+                    let w = if i <= hi { Want::In } else { Want::Oob };
+                    site(&mut decls, ty, format!("[{i}][{m}:{l}]"), w);
+                }
+            }
+        }
+    }
+    // an element range of the middle dimension (`[i][1:0]` on `[1:0][2:0][3:0]`)
+    for i in 0..=2 {
+        let w = if i <= 1 { Want::In } else { Want::Oob };
+        site(
+            &mut decls,
+            "logic [1:0][2:0][3:0]",
+            format!("[{i}][1:0]"),
+            w,
+        );
+    }
+    // an array of a packed struct: element and member
+    for i in 0..=3 {
+        let w = if i <= 2 { Want::In } else { Want::Oob };
+        for m in ["", ".a", ".b", ".c"] {
+            site(&mut decls, "s_t [2:0]", format!("[{i}]{m}"), w);
+        }
+    }
+    let src = format!(
+        "typedef struct packed {{ logic [3:0] a; logic [2:0] b; logic c; }} s_t;\n\
+         module t;\nreg [127:0] v;\n{decls}endmodule\n"
+    );
+    let (toks, le) = hdl_lexer::lex(&src);
+    assert!(le.is_empty(), "lex errors: {le:?}");
+    let (su, pe) = hdl_parser::parse(&toks, &src);
+    assert!(pe.is_empty(), "parse errors: {pe:?}");
+    let errs = ErrCount(Cell::new(0));
+    let (_, sc) = elaborate::elaborate_with_timescale(
+        &su.expect("source unit"),
+        &errs,
+        &std::collections::BTreeMap::new(),
+        -9,
+    );
+    assert_eq!(errs.0.get(), 0, "the grid elaborates without an error");
+    let view = sc.write_view;
+    let (ir, opts) = build_with_opts(&src);
+    assert_eq!(ir.cont_assigns.len(), want.len(), "one row per site");
+    assert_eq!(view.writes.len(), want.len(), "one view write per site");
+
+    let sink = NullSink;
+    let mut arena = NetArena::build(&ir, &opts).expect("arena");
+    let mut st = fresh_state(&ir, &sink);
+    st.build_plain_scalar();
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let (mut geo, mut oob, mut neg) = (0usize, 0usize, 0usize);
+    for (i, w) in view.writes.iter().enumerate() {
+        let Writer::Cont { row, .. } = w.writer else {
+            panic!("site {i}: not a continuous row");
+        };
+        assert_eq!(row as usize, i, "site {i}: rows in site order");
+        let (at, class) = &want[i];
+        let c: &LvalChunk = &ir.cont_assigns[i].lhs.chunks[w.chunk as usize];
+        let net_w = ir.nets[c.net as usize].width;
+        let expect: Vec<u32> = match (class, w.extent) {
+            (Want::In, Extent::Bits { lo, hi, by }) => {
+                assert_eq!(by, By::Geometry, "{at}: decided by the geometry");
+                geo += 1;
+                (lo..hi).collect()
+            }
+            (Want::Oob, Extent::Undecided) => {
+                oob += 1;
+                Vec::new()
+            }
+            (Want::Neg, Extent::Undecided) => {
+                neg += 1;
+                continue;
+            }
+            (cl, e) => panic!("{at}: {cl:?} site, view {e:?}"),
+        };
+        let reset = Lvalue {
+            chunks: vec![LvalChunk {
+                net: c.net,
+                word: None,
+                offset: None,
+                width: None,
+                kind: SelKind::Bit,
+            }],
+        };
+        let o0 = crate::exec::Offsets::Heap(vec![(0, 0)]);
+        let xs = crate::value::Value::xs(net_w, false);
+        arena.write_lvalue(&ir, &reset, xs.clone(), &o0, &[]);
+        st.write_lvalue(&reset, xs, &o0);
+        let lv = Lvalue {
+            chunks: vec![c.clone()],
+        };
+        let rng_a = crate::state::RngCells::default();
+        let ctx_e = EvalCtx {
+            ir: &ir,
+            nets: &st,
+            now: 0,
+            wt: &wt,
+            time_mult: 1,
+            rng: &rng_a,
+            plusargs: &[],
+        };
+        let off_e = crate::eval::resolve_offsets(&ctx_e, &lv);
+        let rng_b = crate::state::RngCells::default();
+        let ctx_n = EvalCtx {
+            ir: &ir,
+            nets: &arena,
+            now: 0,
+            wt: &wt,
+            time_mult: 1,
+            rng: &rng_b,
+            plusargs: &[],
+        };
+        let off_n = crate::eval::resolve_offsets(&ctx_n, &lv);
+        let cw = arena.chunk_width(&ir, c);
+        let mut ones = crate::value::Value::zeros(cw.max(1), false);
+        for b in 0..cw {
+            ones.set_vu(b, 1, 0);
+        }
+        arena.write_lvalue(&ir, &lv, ones.clone(), &off_n, &[]);
+        st.write_lvalue(&lv, ones, &off_e);
+        let written = |v: &crate::value::Value| -> Vec<u32> {
+            (0..net_w).filter(|&b| v.get_vu(b) == (1, 0)).collect()
+        };
+        assert_eq!(
+            written(&arena.read_net(c.net, None)),
+            expect,
+            "native store: {at}"
+        );
+        assert_eq!(
+            written(&st.read_net(c.net, None)),
+            expect,
+            "engine store: {at}"
+        );
+    }
+    assert_eq!(
+        (geo, oob, neg),
+        (259, 179, 206),
+        "site classes moved — re-pin deliberately"
+    );
+}

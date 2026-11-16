@@ -857,7 +857,9 @@ impl Elaborator<'_> {
     }
 
     // ── PASS 1a: ANSI ports → nets ─────────────────────────────────
-    pub(crate) fn elaborate_ports(&mut self, ports: &ast::PortList) {
+    /// `scope`: `Module` for a module instance's header, `Iface` for an interface's (the
+    /// declaration fact, `wext.rs` A1, is recorded for a module's ports only).
+    pub(crate) fn elaborate_ports(&mut self, ports: &ast::PortList, scope: wext::DeclScope) {
         if let ast::PortList::Ansi(list) = ports {
             // Each port's type text, `[start, name)`. A continuation port (`output logic
             // [1:0] a, b`) inherits its range from the port that wrote it.
@@ -906,6 +908,7 @@ impl Elaborator<'_> {
                     );
                     continue;
                 }
+                let net = self.nets.len() as u32;
                 self.add_net(
                     &p.name.name,
                     ir::NetVar {
@@ -918,6 +921,15 @@ impl Elaborator<'_> {
                         dir,
                         init,
                     },
+                );
+                // §5.2 Q-WREXT C2 (A1): what this port declaration knew (`wext.rs`).
+                // Q-NETSHAPE: the declared shape is that row's record; kept here until it is.
+                self.record_decl_fact(
+                    net,
+                    (scope == wext::DeclScope::Module).then_some(wext::DeclSite::AnsiPort),
+                    kind,
+                    dir,
+                    p.shape_param.is_some(),
                 );
                 self.record_declared_bounds(&p.name.name, p.dtype.range.as_ref());
                 // §3.a ⑤ⓚ: an ANSI struct port other than `inout` (`struct_arm.rs`).

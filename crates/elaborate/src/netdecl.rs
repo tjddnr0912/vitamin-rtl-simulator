@@ -96,10 +96,13 @@ impl Elaborator<'_> {
         // scopes (block-local, interface, generate) the init is not collected, so
         // it stays a LOUD reject here rather than a silently-dropped initializer.
         allow_string_init: bool,
+        // §5.2 Q-WREXT C2: the scope the caller lowers this declaration in, for the
+        // declaration fact (`wext.rs`, A1).
+        scope: wext::DeclScope,
     ) {
         // §4.5.249: anchor this declaration's diagnostics at the declaration.
         let saved_span = self.cur_span.replace(d.span);
-        self.elaborate_netvar_decl_inner(d, ports, body, allow_string_init);
+        self.elaborate_netvar_decl_inner(d, ports, body, allow_string_init, scope);
         self.cur_span = saved_span;
     }
 
@@ -109,6 +112,7 @@ impl Elaborator<'_> {
         ports: &ast::PortList,
         body: &[ast::ModuleItem],
         allow_string_init: bool,
+        scope: wext::DeclScope,
     ) {
         // ⓑ-breadth (§25.9): a `virtual INTERFACE vif;` handle is NOT a net — it is
         // a STATIC ALIAS resolved in the post-instance pass (`resolve_virtual_ifaces`),
@@ -692,6 +696,7 @@ impl Elaborator<'_> {
             // always rides the pre-sweep, which the engine runs before arming anything, so
             // it still produces no event and still lands before every user process.
             let init = default_init(self.shape_kind(d.dtype.net(), &d.shape_param), width);
+            let net = self.nets.len() as u32;
             self.add_net(
                 &decl.name.name,
                 ir::NetVar {
@@ -704,6 +709,15 @@ impl Elaborator<'_> {
                     dir,
                     init,
                 },
+            );
+            // §5.2 Q-WREXT C2 (A1): what this declaration knew (`wext.rs`). Q-NETSHAPE: the
+            // declared shape is that row's record; this fact is kept here until it is.
+            self.record_decl_fact(
+                net,
+                scope.body_site(),
+                self.shape_kind(d.dtype.net(), &d.shape_param),
+                dir,
+                d.shape_param.is_some(),
             );
             if matches!(d.dtype.net(), ast::NetVarKind::Event) {
                 let key = self.fq(&decl.name.name);

@@ -232,18 +232,31 @@ pub fn const_chunk_written_bits(
 ) -> Option<(u32, u32)> {
     match (chunk.offset, chunk.width) {
         (None, None) => sel_written_bits(SelKind::Bit, 0, net_w, net_w),
-        (Some(off_e), w_e) => {
+        (Some(off_e), _) => {
             let off = selfwidth::offset_value(ctx, off_e).ok()?;
-            let w = match chunk.kind {
-                SelKind::Bit => 1,
-                _ => w_e
-                    .and_then(|we| selfwidth::const_u32_of_expr_ctx(ctx, we))
-                    .unwrap_or(net_w),
-            };
-            sel_written_bits(chunk.kind, off, w, net_w)
+            chunk_written_bits_at(ctx, chunk, off, net_w)
         }
         (None, Some(_)) => None, // not produced by `collect_lval_chunks`
     }
+}
+
+/// [`const_chunk_written_bits`] for a chunk whose offset VALUE `off` a caller already
+/// holds (the write-extent view's geometry constant, `elaborate/src/wext.rs`): the same
+/// width as the stores take it and the same [`sel_written_bits`], no arithmetic of its own.
+pub fn chunk_written_bits_at(
+    ctx: selfwidth::ExprCtx,
+    chunk: &LvalChunk,
+    off: i128,
+    net_w: u32,
+) -> Option<(u32, u32)> {
+    let w = match chunk.kind {
+        SelKind::Bit => 1,
+        _ => chunk
+            .width
+            .and_then(|we| selfwidth::const_u32_of_expr_ctx(ctx, we))
+            .unwrap_or(net_w),
+    };
+    sel_written_bits(chunk.kind, off, w, net_w)
 }
 
 /// System-function id (§1).

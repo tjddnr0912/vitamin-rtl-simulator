@@ -32,10 +32,29 @@
 //!   `=>`, an alternative `|`, an `if let` / `let .. else` `=` or a `matches !` reads them)
 //!   and `stmt_lvalue (` calls, per (file, fn) — `other_writers` is the listed bypass that
 //!   decides writers without the view (its re-point is Q-WREXT's filed line).
+//! - H2:at `chunk_written_bits_at (` (the kernel's width and select step at an offset the
+//!   caller supplies, Q-WREXT C2) is called by `chunk_extent` only: a geometry extent is
+//!   the kernel's step on the recorded constant, not a second extent rule.
+//! - H7 (C2) the geometry constant: `record_geom (` in the two `flatten_word` twins,
+//!   `carry_geom (` at the two lowerings that add a constant to a flat offset, and the raw
+//!   store `. wext_rec` inside wext.rs's writers and `build_write_view` only.
+//! - H8 (C2) the declaration fact: `record_decl_fact (` in its three writer fns, the
+//!   `DeclScope :: <V>` each `elaborate_netvar_decl` / `elaborate_ports` caller passes and
+//!   the `DeclSite :: <V>` each writer names, per (file, fn) ; and (R8) no `intro_kind` /
+//!   `net_names` token in a writer's host fn or in wext.rs but the listed two.
+//! - H9 (C2) the `via` intervals: `record_via (` at the inline decision and around the
+//!   deferred action, and each `Via :: <V>` spelling.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
 //!   checks the extent rule (`chunk_extent`) still says what it writes.
+//!
+//! REVIEW-ONLY for C2: that a writer's argument is the RIGHT value (a site passed as
+//! another variant of the same enum moves a count only where the spelling moves ; the
+//! cli pins `wext_view.rs` w12-w14 and the lane's view record hold the values), that the
+//! `via` interval brackets exactly the call's statements (the pins), and that
+//! `GeomAcc` matches `flatten_word`'s arithmetic (sim-engine's
+//! `geometry_constant_is_what_the_stores_write`).
 //!
 //! REVIEW-ONLY (no token shape here sees it): an array reached through a local bound to
 //! it before (`let s = &mut self.stmts;` IS seen ; `let e = self; e.stmts.push(..)` is seen
@@ -435,11 +454,32 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "build_view" => out.push(("H3:build_view".into(), k.clone())),
                 "build_write_view" => out.push(("H3:build_write_view".into(), k.clone())),
                 "stmt_lvalue" => out.push(("H5:stmt_lvalue".into(), k.clone())),
+                "chunk_written_bits_at" => out.push(("H2:at".into(), k.clone())),
+                "record_geom" | "carry_geom" => out.push((format!("H7:{}", tx(i)), k.clone())),
+                "record_decl_fact" => out.push(("H8:record_decl_fact".into(), k.clone())),
+                "record_via" => out.push(("H9:record_via".into(), k.clone())),
                 _ => {}
             }
         }
         if tx(i) == "." && tx(i + 1) == "wext" && tx(i + 2) != "(" {
             out.push(("H3:wext".into(), k.clone()));
+        }
+        // H7 the C2 records' raw store: `. wext_rec` (a field read or write, not a call)
+        if tx(i) == "." && tx(i + 1) == "wext_rec" && tx(i + 2) != "(" {
+            out.push(("H7:wext_rec".into(), k.clone()));
+        }
+        // H8 / H9 the site and via values: `DeclScope :: <V>`, `DeclSite :: <V>`, `Via :: <V>`
+        if id
+            && matches!(tx(i), "DeclScope" | "DeclSite" | "Via")
+            && tx(i + 1) == "::"
+            && t.get(i + 2).is_some_and(|x| x.kind == Kind::Id)
+        {
+            let r = if tx(i) == "Via" { "H9" } else { "H8" };
+            out.push((format!("{r}:{}::{}", tx(i), tx(i + 2)), k.clone()));
+        }
+        // H8 the declaration fact reads no introduction kind and no net name
+        if id && (tx(i) == "intro_kind" || tx(i) == "net_names") {
+            out.push((format!("R8:{}", tx(i)), k.clone()));
         }
         if id && tx(i) == "write_view" {
             out.push(("H3:write_view".into(), k.clone()));
@@ -538,6 +578,40 @@ fn h1b_the_in_place_writers() {
 }
 
 #[test]
+fn h7_the_geometry_constant_home() {
+    check("H7", H7);
+}
+
+#[test]
+fn h8_the_declaration_fact_home() {
+    check("H8", H8);
+    // what the fact's host fns and wext.rs spell of `intro_kind` / `net_names`
+    let tab = census();
+    let hosts: Vec<(String, String)> = tab
+        .keys()
+        .filter(|(r, _, _)| r == "H8:record_decl_fact")
+        .map(|(_, f, k)| (f.clone(), k.clone()))
+        .collect();
+    let got: Table = rows_of(&tab, "R8")
+        .into_iter()
+        .filter(|((_, f, k), _)| f == "wext.rs" || hosts.contains(&(f.clone(), k.clone())))
+        .collect();
+    let want = want(H8R);
+    if got != want {
+        let mut s = String::new();
+        for ((r, f, k), n) in &got {
+            s.push_str(&format!("    (\"{r}\", \"{f}\", \"{k}\", {n}, \"\"),\n"));
+        }
+        panic!("R8: the census moved.\n--- got ---\n{s}--- want ---\n{want:?}");
+    }
+}
+
+#[test]
+fn h9_the_via_interval_home() {
+    check("H9", H9);
+}
+
+#[test]
 fn h2_the_kernel_callers() {
     check("H2", H2);
 }
@@ -554,8 +628,13 @@ fn h3_built_once_read_by_nothing() {
         if name == "elaborate" || !p.join("src").is_dir() {
             continue;
         }
-        for (rel, src) in files_in(&root, &format!("crates/{name}/src")) {
-            for (r, k) in hits(&src) {
+        let files = files_in(&root, &format!("crates/{name}/src"));
+        let test_only = cfg_test_module_files(&files);
+        for (rel, src) in &files {
+            if test_only.contains(rel) {
+                continue;
+            }
+            for (r, k) in hits(src) {
                 if r == "H3:write_view" {
                     other.push(format!("{rel} {k}"));
                 }
@@ -566,6 +645,43 @@ fn h3_built_once_read_by_nothing() {
         other.is_empty(),
         "`write_view` read outside elaborate: {other:?}"
     );
+}
+
+/// The files a `#[cfg(test)] mod <name>;` declaration (other attributes may sit between,
+/// none may carry `#[path]`) brings in — test code, as the walker skips an inline
+/// `#[cfg(test)]` item: `<dir>/<name>.rs` beside a `mod.rs` / `lib.rs` / `main.rs`, else
+/// `<file stem>/<name>.rs`.
+fn cfg_test_module_files(files: &[(String, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (rel, src) in files {
+        let mut rest = src.as_str();
+        while let Some(at) = rest.find("#[cfg(test)]") {
+            rest = &rest[at + "#[cfg(test)]".len()..];
+            let mut tail = rest.trim_start();
+            let mut has_path = false;
+            while tail.starts_with("#[") {
+                let end = tail.find(']').map_or(tail.len(), |e| e + 1);
+                has_path |= tail[..end].starts_with("#[path");
+                tail = tail[end..].trim_start();
+            }
+            let Some(m) = tail.strip_prefix("mod ") else {
+                continue;
+            };
+            let Some(semi) = m.find(';') else { continue };
+            let name = m[..semi].trim();
+            if has_path || name.contains(|c: char| !(c.is_alphanumeric() || c == '_')) {
+                continue;
+            }
+            let (dir, file) = rel.rsplit_once('/').expect("a path under crates/");
+            let base = if matches!(file, "mod.rs" | "lib.rs" | "main.rs") {
+                dir.to_string()
+            } else {
+                format!("{dir}/{}", file.trim_end_matches(".rs"))
+            };
+            out.push(format!("{base}/{name}.rs"));
+        }
+    }
+    out
 }
 
 #[test]
@@ -599,6 +715,25 @@ fn h6_the_write_shape_producers() {
 /// not on a comment, a `#[cfg(test)]` item or the neighbouring shape it must not count.
 #[test]
 fn walker_controls() {
+    // the cross-crate `write_view` scan skips a `#[cfg(test)] mod x;` file, not a plain `mod x;`
+    let fs = vec![
+        (
+            "crates/c/src/a/mod.rs".to_string(),
+            "#[cfg(test)]\nmod t;\nmod p;\n#[cfg(test)]\n#[path = \"../q.rs\"]\nmod q;".to_string(),
+        ),
+        (
+            "crates/c/src/b.rs".to_string(),
+            "#[cfg(test)]\n#[allow(x)]\nmod u;".to_string(),
+        ),
+    ];
+    assert_eq!(
+        cfg_test_module_files(&fs),
+        vec![
+            "crates/c/src/a/t.rs".to_string(),
+            "crates/c/src/b/u.rs".to_string()
+        ],
+        "cfg(test) module files"
+    );
     // H1
     let h1 = "impl E { fn f(&mut self) { self.stmts.push(s); self.cont_assigns.push(c); x.processes.push(p); } }";
     assert_eq!(count("H1", h1), 3, "H1 planted");
@@ -783,6 +918,68 @@ fn walker_controls() {
         1,
         "H6 ContAssign"
     );
+    // H2:at
+    assert_eq!(
+        count(
+            "H2",
+            "fn f() { let e = ir::chunk_written_bits_at(ctx, c, off, w); }"
+        ),
+        1,
+        "H2:at planted"
+    );
+    // H7
+    let h7 = "fn f(&mut self) { self.record_geom(off, &geo); self.carry_geom(o, b, 3); self.wext_rec.geom.insert(1, 2); }";
+    assert_eq!(count("H7", h7), 3, "H7 planted");
+    assert_eq!(
+        count(
+            "H7",
+            "fn record_geom(&mut self) {} fn g(&self) { self.wext_rec(); }"
+        ),
+        0,
+        "H7 definition / a call"
+    );
+    let back = hits("impl E { fn g(&mut self) { self.record_geom(off, &geo); off } }");
+    assert_eq!(
+        back,
+        vec![("H7:record_geom".to_string(), "g".to_string())],
+        "H7 real site (array_geom.rs flatten_word) spelled back"
+    );
+    // H8
+    let h8 = "fn f(&mut self) { self.elaborate_netvar_decl(d, a, wext::DeclScope::Module); \
+              self.record_decl_fact(n, Some(DeclSite::NonAnsiPort), k, dr, false); }";
+    assert_eq!(count("H8", h8), 3, "H8 planted: scope, site, writer");
+    assert_eq!(
+        count(
+            "R8",
+            "fn f(&self) { self.intro_kind.get(&n); let _ = &sc.net_names; }"
+        ),
+        2,
+        "R8 planted reads"
+    );
+    assert_eq!(
+        count("H8", "// self.record_decl_fact(n, s, k, d, t);\nfn f() {}"),
+        0,
+        "H8 comment"
+    );
+    let back = hits(
+        "impl E { fn g(&mut self) { self.elaborate_netvar_decl(d, i, false, true, wext::DeclScope::BlockLocal); } }",
+    );
+    assert_eq!(
+        back,
+        vec![("H8:DeclScope::BlockLocal".to_string(), "g".to_string())],
+        "H8 real site (block_local/hoist.rs) spelled back"
+    );
+    // H9
+    let h9 = "fn f(&mut self) { let v0 = self.stmts.len(); self.record_via(wext::Via::TaskInline, v0); }";
+    assert_eq!(count("H9", h9), 2, "H9 planted: writer, value");
+    assert_eq!(
+        count(
+            "H9",
+            "#[cfg(test)]\nfn t(&mut self) { self.record_via(Via::DeferAction, 0); }"
+        ),
+        0,
+        "H9 cfg(test)"
+    );
 }
 
 /// H1: (rule, file, fn, count, why) — the append points.
@@ -830,6 +1027,7 @@ const H1B: &[(&str, &str, &str, usize, &str)] = &[
 const H2: &[(&str, &str, &str, usize, &str)] = &[
     ("H2", "netdecl.rs", "check_whole_net_multidriver", 1, "the continuous-row checker (E3001)"),
     ("H2", "wext.rs", "chunk_extent", 1, "the view's Bits"),
+    ("H2:at", "wext.rs", "chunk_extent", 1, "the geometry constant's extent: the kernel's width and select step at a recorded offset"),
 ];
 
 /// H3: built once, handed to `Sidecars`, read by nothing.
@@ -952,4 +1150,63 @@ const H6: &[(&str, &str, &str, usize, &str)] = &[
     ("H6:LvalChunk", "packed_lval.rs", "try_packed_part_select_lval", 2, ""),
     ("H6:LvalChunk", "ports.rs", "wire_array_port", 1, ""),
     ("H6:LvalChunk", "static_array_method.rs", "lower_static_array_order", 1, ""),
+];
+
+/// H7: the geometry constant's writers and the C2 records' raw store.
+#[rustfmt::skip]
+const H7: &[(&str, &str, &str, usize, &str)] = &[
+    ("H7:carry_geom", "packed_inner.rs", "packed_inner_range", 1, "`prefix + rel`: an element range of an inner dimension"),
+    ("H7:carry_geom", "packed_lval.rs", "try_nested_packed_part_lval", 1, "`base_off + l`: a part-select under an element (a struct member)"),
+    ("H7:record_geom", "array_geom.rs", "flatten_word", 1, "the flat-offset tree's constant"),
+    ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
+    ("H7:wext_rec", "wext.rs", "build_write_view", 1, "taken once into the view"),
+    ("H7:wext_rec", "wext.rs", "carry_geom", 2, "the geometry writer (read base, insert)"),
+    ("H7:wext_rec", "wext.rs", "record_decl_fact", 1, "the declaration-fact writer"),
+    ("H7:wext_rec", "wext.rs", "record_geom", 1, "the geometry writer"),
+    ("H7:wext_rec", "wext.rs", "record_via", 1, "the via writer"),
+];
+
+/// H8: the declaration fact's writer, the sites and scopes passed to it, and what it reads.
+#[rustfmt::skip]
+const H8: &[(&str, &str, &str, usize, &str)] = &[
+    ("H8:DeclScope::BlockLocal", "block_local/hoist.rs", "hoist_one_block_local", 2, "a block local: no fact"),
+    ("H8:DeclScope::BlockLocal", "wext.rs", "body_site", 1, "-> None"),
+    ("H8:DeclScope::Generate", "generate.rs", "lower_gen_module_item", 1, "a generate-scope declaration"),
+    ("H8:DeclScope::Generate", "wext.rs", "body_site", 1, "-> Generate"),
+    ("H8:DeclScope::Iface", "iface_inst.rs", "elaborate_iface_instances", 2, "an interface member and an interface port: no fact"),
+    ("H8:DeclScope::Iface", "wext.rs", "body_site", 1, "-> None"),
+    ("H8:DeclScope::Module", "instance.rs", "elaborate_instance", 2, "a module body declaration and a module's ANSI ports"),
+    ("H8:DeclScope::Module", "ports.rs", "elaborate_ports", 1, "a module's ANSI port -> AnsiPort"),
+    ("H8:DeclScope::Module", "wext.rs", "body_site", 1, "-> Module"),
+    ("H8:DeclScope::Package", "package.rs", "elaborate_pkg_netvar", 1, "a package member: no fact"),
+    ("H8:DeclScope::Package", "wext.rs", "body_site", 1, "-> None"),
+    ("H8:DeclSite::AnsiPort", "ports.rs", "elaborate_ports", 1, "the ANSI port writer"),
+    ("H8:DeclSite::Generate", "wext.rs", "body_site", 1, "the body writer's generate site"),
+    ("H8:DeclSite::Module", "wext.rs", "body_site", 1, "the body writer's module site"),
+    ("H8:DeclSite::NonAnsiPort", "instance.rs", "elaborate_instance", 1, "the non-ANSI port writer"),
+    ("H8:record_decl_fact", "instance.rs", "elaborate_instance", 1, "writer 3: a non-ANSI port net made from its port declaration"),
+    ("H8:record_decl_fact", "netdecl.rs", "elaborate_netvar_decl_inner", 1, "writer 1: a body declaration (site from DeclScope)"),
+    ("H8:record_decl_fact", "ports.rs", "elaborate_ports", 1, "writer 2: an ANSI port"),
+];
+
+/// H8 (reads): `intro_kind` / `net_names` in the fact's host fns and in wext.rs.
+#[rustfmt::skip]
+const H8R: &[(&str, &str, &str, usize, &str)] = &[
+    ("R8:intro_kind", "instance.rs", "elaborate_instance", 1, "a WRITE (`intro_kind.insert`) after the fact, for two_state_nets: not read by it"),
+    ("R8:net_names", "wext.rs", "render", 1, "the dump's net names: not the fact"),
+];
+
+/// H9: the `via` intervals' writer and the values passed to it.
+#[rustfmt::skip]
+const H9: &[(&str, &str, &str, usize, &str)] = &[
+    ("H9:Via::DeferAction", "stmt_main.rs", "lower_stmt_inner", 1, "the deferred assertion's action arms"),
+    ("H9:Via::DeferAction", "wext.rs", "build_view", 1, "laid over task intervals"),
+    ("H9:Via::DeferAction", "wext.rs", "render", 1, "`defer`"),
+    ("H9:Via::Direct", "wext.rs", "build_view", 2, "the default of a procedural statement"),
+    ("H9:Via::Direct", "wext.rs", "render", 1, "`direct`"),
+    ("H9:Via::TaskInline", "inline_task.rs", "inline_task", 1, "the inline decision"),
+    ("H9:Via::TaskInline", "wext.rs", "build_view", 1, "laid first"),
+    ("H9:Via::TaskInline", "wext.rs", "render", 1, "`task`"),
+    ("H9:record_via", "inline_task.rs", "inline_task", 1, "around inline_static_task"),
+    ("H9:record_via", "stmt_main.rs", "lower_stmt_inner", 1, "around the action arms"),
 ];

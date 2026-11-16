@@ -1269,7 +1269,13 @@ impl Elaborator<'_> {
         // sidecars exactly like a module-body variable; PortList::None + empty
         // body ⇒ every name is `Internal`. A non-foldable init defaults inside
         // and is collected below for the package pre-sweep (module parity).
-        self.elaborate_netvar_decl(d, &ast::PortList::None, &[], false);
+        self.elaborate_netvar_decl(
+            d,
+            &ast::PortList::None,
+            &[],
+            false,
+            wext::DeclScope::Package,
+        );
         self.collect_var_init_drivers(d);
         for decl in &d.names {
             if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {

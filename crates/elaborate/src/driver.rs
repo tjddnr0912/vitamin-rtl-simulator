@@ -292,6 +292,7 @@ impl<'s> Elaborator<'s> {
             ca_idents: Vec::new(),
             pending_proc_ident: None,
             wext: wext::WriteView::default(),
+            wext_rec: wext::WextRecords::default(),
             pending_var_inits: Vec::new(),
             pending_scoped_presize: BTreeMap::new(),
             pending_block_local_inits: BTreeMap::new(),

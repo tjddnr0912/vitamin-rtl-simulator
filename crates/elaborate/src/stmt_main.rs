@@ -767,6 +767,8 @@ impl Elaborator<'_> {
                 });
                 let n_before = self.defer_acts.len();
                 self.cur_defer = Some((marker, dr));
+                // §5.2 Q-WREXT C2 (A2): the action arms' statements (`wext.rs`).
+                let via0 = self.stmts.len();
                 // ENG-2: the pass / fail arms are action blocks (`read_set.rs`).
                 self.with_read_mark(read_set::MARK_ACTION, |s| {
                     b.start_block(then_bb);
@@ -775,6 +777,7 @@ impl Elaborator<'_> {
                     b.start_block(else_bb);
                     s.lower_stmt(b, else_s);
                 });
+                self.record_via(wext::Via::DeferAction, via0);
                 b.goto(merge);
                 self.cur_defer = outer;
                 let ran_inline = self.prune_deferred_actions(marker);

@@ -702,7 +702,13 @@ impl Elaborator<'_> {
                 // Those two pushes are keyed by the declaring scope now
                 // (`pending_scoped_presize` / `pending_scoped_bl_strings`) and drained at
                 // this scope's own flush, which is what the flag was standing in for.
-                self.elaborate_netvar_decl(d, &ast::PortList::None, &[], true);
+                self.elaborate_netvar_decl(
+                    d,
+                    &ast::PortList::None,
+                    &[],
+                    true,
+                    wext::DeclScope::Generate,
+                );
             }
             // NETS phase: procedural block-local declarations (`initial begin int k; …`).
             // v1 flattens a block-local to a module-scope net, created in the Nets phase so

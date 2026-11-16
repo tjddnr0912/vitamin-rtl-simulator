@@ -323,6 +323,22 @@ impl Elaborator<'_> {
             );
             return;
         }
+        // §5.2 Q-WREXT C2 (A2): reaching here is the INLINE decision, so every statement
+        // pushed from here to the return is this inline's (`wext.rs`).
+        let via0 = self.stmts.len();
+        self.inline_static_task(b, task, tname, args);
+        self.record_via(wext::Via::TaskInline, via0);
+    }
+
+    /// The INLINE half of [`Self::inline_task`]: a static task's call lowered into the
+    /// calling process (copy-in, body, copy-out).
+    fn inline_static_task(
+        &mut self,
+        b: &mut ProcessBuilder,
+        task: ast::TaskDef,
+        tname: String,
+        args: &[ast::Expr],
+    ) {
         // R2 intermediate: the frame branch above recorded itself inside
         // `emit_frame_task_call`; reaching here is the INLINE decision. Placed after
         // the recursion guard so a loud reject is not filed as a lowered call site.

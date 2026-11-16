@@ -949,10 +949,16 @@ impl Elaborator<'_> {
 
         // (4) this instance's nets: ANSI ports, then body NetVarDecls (decl order).
         //     add_net now keys through `fq`, so names become inst_path-prefixed.
-        self.elaborate_ports(&module.ports);
+        self.elaborate_ports(&module.ports, wext::DeclScope::Module);
         for item in &module.body {
             if let ast::ModuleItem::NetVar(d) = item {
-                self.elaborate_netvar_decl(d, &module.ports, &module.body, true);
+                self.elaborate_netvar_decl(
+                    d,
+                    &module.ports,
+                    &module.body,
+                    true,
+                    wext::DeclScope::Module,
+                );
                 // §3.a ⑤ⓚ: a module-body scalar struct variable (`struct_arm.rs`).
                 if !d.pattern_members.is_empty() && !d.const_param {
                     for n in d.names.iter().filter(|n| n.unpacked.is_empty()) {
@@ -998,6 +1004,7 @@ impl Elaborator<'_> {
                         );
                         continue;
                     }
+                    let net = self.nets.len() as u32;
                     self.add_net(
                         &name.name,
                         ir::NetVar {
@@ -1010,6 +1017,15 @@ impl Elaborator<'_> {
                             dir,
                             init: init.clone(),
                         },
+                    );
+                    // §5.2 Q-WREXT C2 (A1): what this port declaration knew (`wext.rs`).
+                    // Q-NETSHAPE: the declared shape is that row's record; kept here until it is.
+                    self.record_decl_fact(
+                        net,
+                        Some(wext::DeclSite::NonAnsiPort),
+                        kind,
+                        dir,
+                        pd.shape_param.is_some(),
                     );
                     if !dims.is_empty() {
                         if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {

@@ -191,6 +191,8 @@ impl Elaborator<'_> {
         let guard_dims = d >= 2;
         let mut valid: Option<u32> = None;
         let mut acc: Option<u32> = None;
+        // §5.2 Q-WREXT C2: the same arithmetic over constant leaves (`wext.rs`).
+        let mut geo = wext::GeomAcc::new(d, domain == IndexDomain::ArrayWord);
         for (k, &i_eid) in idx_eids.iter().enumerate() {
             let (lo, size) = extents[k];
             // SEAL — see `seal_index_unsigned`. This funnel serves the
@@ -200,6 +202,7 @@ impl Elaborator<'_> {
             // right, hierarchical wrong — which the soundness review measured.
             let i_eid = self.seal_index_unsigned(i_eid, domain.at(k));
             let asc = ascending.get(k).copied().unwrap_or(false);
+            geo.index(self.const_index_value(i_eid), lo, size, asc, strides[k]);
             // A negative-`lo` dim guards on the coordinate, so it must be built first;
             // for every other dim the guard comes first, exactly as before (push order
             // is the golden IR).
@@ -240,17 +243,19 @@ impl Elaborator<'_> {
             });
         }
         let flat = acc.unwrap_or_else(|| self.const_u32_expr(0, 32));
-        match valid {
+        let off = match valid {
             None => flat,
             Some(cond) => {
-                let oob = self.const_u32_expr(0x8000_0000, 32);
+                let oob = self.const_u32_expr(wext::GEOM_OOB, 32);
                 self.push_expr(ir::Expr::Ternary {
                     cond,
                     then_e: flat,
                     else_e: oob,
                 })
             }
-        }
+        };
+        self.record_geom(off, &geo);
+        off
     }
 
     /// N6: (min, max) index bounds of a SINGLE FIXED unpacked dim (`[N]` → (0, N-1);
@@ -735,6 +740,8 @@ impl Elaborator<'_> {
         let guard_dims = d >= 2;
         let mut valid: Option<u32> = None;
         let mut acc: Option<u32> = None;
+        // §5.2 Q-WREXT C2: the same arithmetic over constant leaves (`wext.rs`).
+        let mut geo = wext::GeomAcc::new(d, domain == IndexDomain::ArrayWord);
         for (k, idx) in word_idxs.iter().enumerate() {
             let (lo, size) = extents[k];
             // r19/S2: the array WORD index and the multi-dim-packed trailing
@@ -746,6 +753,7 @@ impl Elaborator<'_> {
             // of one geometry disagree about `mem[~i]`.
             let i_eid = self.seal_index_unsigned(i_eid, domain.at(k));
             let asc = ascending.get(k).copied().unwrap_or(false);
+            geo.index(self.const_index_value(i_eid), lo, size, asc, strides[k]);
             // `idx >= lo && idx <= hi` on the RAW index. A negative or wrapped index
             // always fails one side in either signedness reading (bounds < 2^24 «
             // 2^31); an X index X-poisons the conjunction and the final ternary merge
@@ -793,7 +801,7 @@ impl Elaborator<'_> {
             });
         }
         let flat = acc.unwrap_or_else(|| self.const_u32_expr(0, 32));
-        match valid {
+        let off = match valid {
             None => flat,
             Some(cond) => {
                 // OOB sentinel 0x8000_0000: far above MAX_ARRAY_LEN (2^24) and
@@ -802,14 +810,16 @@ impl Elaborator<'_> {
                 // condition ternary-merges flat-vs-sentinel into an unknown-
                 // contaminated word, which the engine already treats as
                 // invalid (read X / write no-op).
-                let oob = self.const_u32_expr(0x8000_0000, 32);
+                let oob = self.const_u32_expr(wext::GEOM_OOB, 32);
                 self.push_expr(ir::Expr::Ternary {
                     cond,
                     then_e: flat,
                     else_e: oob,
                 })
             }
-        }
+        };
+        self.record_geom(off, &geo);
+        off
     }
 
     /// Fixed-size unpacked array stored in the flat word store (dyn/queue/assoc

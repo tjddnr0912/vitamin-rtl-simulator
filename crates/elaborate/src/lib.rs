@@ -1807,6 +1807,10 @@ struct Elaborator<'s> {
     // (`build_write_view`, before the whole-net multidriver check) and handed to
     // `Sidecars::write_view`; no production reader yet (first reader: Q-MDRVMIX).
     wext: wext::WriteView,
+    // §5.2 Q-WREXT C2 (`wext.rs`): the geometry constant, the declaration facts and the
+    // statement-id intervals the lowering records for the view, each through its one
+    // writer fn there; taken by `build_write_view`.
+    wext_rec: wext::WextRecords,
     // §6.8: a VARIABLE declaration initializer whose value is NON-constant
     // (`logic [7:0] b = a;`) is a one-time assignment at time 0, equivalent to
     // `initial b = a;`. A constant init folds into the net's `init` field; a

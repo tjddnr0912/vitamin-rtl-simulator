@@ -129,11 +129,14 @@ impl Elaborator<'_> {
             }
             _ => {
                 let c = self.const_u32_expr(rel, 32);
-                self.push_expr(ir::Expr::Binary {
+                let off = self.push_expr(ir::Expr::Binary {
                     op: ir::BinOp::Add,
                     lhs: prefix,
                     rhs: c,
-                })
+                });
+                // §5.2 Q-WREXT C2: the geometry constant through `+ rel` (`wext.rs`).
+                self.carry_geom(off, prefix, rel);
+                off
             }
         };
         let width = self.const_u32_expr((count * elem_w).min(u32::MAX as u64) as u32, 32);

@@ -573,7 +573,7 @@ impl Elaborator<'_> {
                     }
                 }
                 // ANSI header ports → nets (the iface body + `i.<port>` see them).
-                self.elaborate_ports(&decl.ports);
+                self.elaborate_ports(&decl.ports, wext::DeclScope::Iface);
                 // nets first (declaration order), then logic — mirroring the
                 // module body passes (4)/(7).
                 // §4.5.265: the net-decl loop runs INSIDE the instance's rank scope too,
@@ -601,7 +601,13 @@ impl Elaborator<'_> {
                             // declaration's decl-time writes landing in the MODULE-scope
                             // pending list, where the bare-name lvalue resolved outside this
                             // instance's prefix. Those are keyed by the declaring scope now.
-                            sc.elaborate_netvar_decl(d, &decl.ports, &decl.body, true);
+                            sc.elaborate_netvar_decl(
+                                d,
+                                &decl.ports,
+                                &decl.body,
+                                true,
+                                wext::DeclScope::Iface,
+                            );
                         }
                     }
                     // §6.8 pre-sweep for the interface body (mirrors the module-body

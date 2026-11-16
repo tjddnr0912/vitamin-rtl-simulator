@@ -302,7 +302,7 @@ impl Elaborator<'_> {
                 // `scoped_init_key(None)` inside the scope is the same key
                 // `scoped_init_key(Some(seg))` produced outside it.
                 self.with_scope(&seg, |s| {
-                    s.elaborate_netvar_decl(d, ports, body, true);
+                    s.elaborate_netvar_decl(d, ports, body, true, wext::DeclScope::BlockLocal);
                     s.mark_automatic_local_nets(d);
                     s.collect_block_local_decl_inits(d, span, None);
                 });
@@ -711,7 +711,7 @@ impl Elaborator<'_> {
                 }
             }
         }
-        self.elaborate_netvar_decl(d, ports, body, true);
+        self.elaborate_netvar_decl(d, ports, body, true, wext::DeclScope::BlockLocal);
         self.mark_automatic_local_nets(d);
         // Record the FLATTENED key. This net belongs to ONE process, but
         // the v1 flatten publishes it under the enclosing prefix's bare
