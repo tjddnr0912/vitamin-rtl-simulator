@@ -291,6 +291,7 @@ impl<'s> Elaborator<'s> {
             proc_idents: Vec::new(),
             ca_idents: Vec::new(),
             pending_proc_ident: None,
+            wext: wext::WriteView::default(),
             pending_var_inits: Vec::new(),
             pending_scoped_presize: BTreeMap::new(),
             pending_block_local_inits: BTreeMap::new(),
@@ -1026,6 +1027,10 @@ impl<'s> Elaborator<'s> {
         // and the lane's routing flag is not none. Must run BEFORE the check,
         // which is the predicate it protects.
         self.demote_runtime_delay_on_resolved_nets();
+        // §5.2 Q-WREXT: every writer's chunk is final here (the deferred hierarchical
+        // writes are patched, nothing appends after this phase), so the write-extent
+        // view is built once, over the arrays the checks below read (`wext.rs`).
+        self.build_write_view();
         // whole-net multidriver check over the WHOLE flat IR (instance-agnostic).
         self.check_whole_net_multidriver();
         // A whole-array `assign`, and an `assign` to a variable that is not `logic`, are

@@ -561,6 +561,9 @@ pub struct Sidecars {
     /// `cont_assigns`. A continuous assign is a schedulable body too — the
     /// settle fixpoint re-evaluates it per delta — so the profile counts it.
     pub ca_idents: Vec<ProcIdent>,
+    /// §5.2 Q-WREXT: which writer writes which statically decided bits of which net
+    /// (`wext.rs`), as the end phase built it. Not serialized; no production reader yet.
+    pub write_view: crate::wext::WriteView,
     /// StmtIds of Force/Release stmts that are procedural assign/deassign.
     pub assign_ranks: AssignRankTable,
     /// Bounded-queue bounds (v6 ③): handle NetId → N.

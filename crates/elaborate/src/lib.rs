@@ -181,6 +181,7 @@ mod tables;
 mod toplevel;
 mod value;
 mod var_init;
+pub mod wext;
 mod wide_param_range;
 mod wildcard_eq;
 pub use api::*;
@@ -1802,6 +1803,10 @@ struct Elaborator<'s> {
     proc_idents: Vec<ProcIdent>,
     ca_idents: Vec<ProcIdent>,
     pending_proc_ident: Option<ProcIdent>,
+    // §5.2 Q-WREXT (`wext.rs`): the write-extent view, built once in the end phase
+    // (`build_write_view`, before the whole-net multidriver check) and handed to
+    // `Sidecars::write_view`; no production reader yet (first reader: Q-MDRVMIX).
+    wext: wext::WriteView,
     // §6.8: a VARIABLE declaration initializer whose value is NON-constant
     // (`logic [7:0] b = a;`) is a one-time assignment at time 0, equivalent to
     // `initial b = a;`. A constant init folds into the net's `init` field; a

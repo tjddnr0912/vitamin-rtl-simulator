@@ -181,6 +181,7 @@ pub fn elaborate_located_params(
         proc_inst_scopes: std::mem::take(&mut el.proc_inst_scopes),
         proc_idents: std::mem::take(&mut el.proc_idents),
         ca_idents: std::mem::take(&mut el.ca_idents),
+        write_view: std::mem::take(&mut el.wext),
         assign_ranks: std::mem::take(&mut el.assign_ranks),
         queue_bounds: std::mem::take(&mut el.queue_bounds),
         net_dims: el.array_dims.clone(), // the sparse decl map IS the table
