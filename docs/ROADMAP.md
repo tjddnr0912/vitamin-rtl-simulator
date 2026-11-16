@@ -10,7 +10,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
 |---|---|---:|---:|---:|---|---|---|
 | §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 338 | 216 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
+| §2 | recorded defects by mechanism | 339 | 217 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
 | §3.b | loud → correct-support, small | 209 | 174 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 699 | 451 | 248 | | | |
+| total | | 700 | 452 | 248 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -392,6 +392,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - const-fn-range-formal-shadow — [a local's range naming a formal or local reads the module parameter](roadmap/2/const-fn-range-formal-shadow.md) · OPEN
 - duplicate-value-name-accepted — [32 measured same-name pairs holding an enum label or a `typedef` are accepted](roadmap/2/duplicate-value-name-accepted.md) · OPEN
 - loop-var-const-shadow — [a loop variable does not shadow a parse-time constant in a range](roadmap/2/loop-var-const-shadow.md) · OPEN
+- bind-actual-lexical-layout — [a `bind` actual's struct member takes the bind scope's layout, not the target's](roadmap/2/bind-actual-lexical-layout.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -895,7 +896,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-16): row 23 parked again after its re-entry plan (§4.5.646); batch 5 holds PARSE-1's provenance piece only (§4.5.645) and has landed no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-16): Q-WREXT built on batch 5 (§4.5.647); row 24 waits behind it and Q-MDRVMIX; no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -914,6 +915,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-CONSTSELLSB | R7.1 · L1 (PARKED) | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① S |
 | Q-CONSTAGG | R7.2 · L1 (PARKED) | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
+| Q-WREXT | R8.1 · L1 (built) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
+| Q-MDRVMIX | R8.1 · L1 (planned) | [overlapping partial and mixed writes of a packed variable are not refused](roadmap/5.2/Q-MDRVMIX.md) | ① F |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |

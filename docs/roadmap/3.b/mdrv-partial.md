@@ -2,4 +2,7 @@
 * the multidriver check ignores partial writes (`stmt_writes_whole_ident`)
 * Rule D too: `assign y = {a, a}; always @* y[0] = b;` runs `y=11` (iverilog "Cannot perform procedural assignment to bit select", verilator MULTIDRIVEN), two `assign y[0]` on an unpacked element run `y0=5` (iverilog multiple drivers, verilator MULTIDRIVEN)
 * xcelium unmeasured
+* note (2026-11-16): the partial and mixed pairs on a packed variable are §5.2 Q-MDRVMIX's (planned), reading §5.2 Q-WREXT's view; the `always_ff` / `always_latch` pairs, unpacked words and continuous × continuous stay out there (Q-MDRVMIX.md)
+* witness (2026-11-16, the other direction, Q-MDRVMIX's matrix, FALSE-LOUD, W/mdrv/ground/cells/m/m_i_dinit_acomb_wp): `logic [7:0] v = 8'h5A; always_comb v[3:0] = ~s[3:0];`: PRE rc 1 `t.sv:4:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `v` has a declaration initializer AND is written by `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) — drop the initializer or the `always_comb` write [in t]`: Rule A counts a partial `always_comb` write against an initializer
+  * oracles: iverilog, verilator 5.054 and sv2v → iverilog run `A v=01011010` `B v=01010011`, verilator `--lint-only -Wall` no line; the matrix's IEEE label "unspecified" (§9.2.2.2 restricts writes by another process; an initializer is not a process)
 * status: RECORD

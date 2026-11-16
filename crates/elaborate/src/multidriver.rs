@@ -35,6 +35,16 @@
 //! the one tool that was actually run and stays silent, and this row is the first place
 //! to re-measure when an xcelium run is available.
 //!
+//! The last row and the paragraph above are verilator 5.052's. Re-measured on
+//! 2026-11-16 with verilator 5.054 (`--lint-only -Wall` and `--binary`; §5.2
+//! Q-MDRVMIX's grounding C4, W/mdrv/ground/cells/m), it is not silent where one side of
+//! a partial pair is an `always_comb`: on `always_comb v[5:2] = s[3:0];` beside
+//! `always_comb v[3:0] = ~s[3:0];` (m_a_acomb_acomb_ppo) it prints
+//! `%Warning-MULTIDRIVEN: t.sv:4:15: Bits [3:2] of signal 't.v' have multiple
+//! combinational drivers. This can cause performance degradation.` and runs the
+//! design; on two `always_ff` writing overlapping parts (m_a_aff_aff_ppo) it still
+//! prints no driver line. Rules A–D are unchanged by it (§5.2 Q-MDRVMIX).
+//!
 //! The severity is the OWNER's split, not the clause's: IEEE §9.2.2.3 words the
 //! `always_latch` rule exactly as §9.2.2.2 and §9.2.2.4 word theirs, and verilator
 //! still accepts every `always_latch` pair measured. Where the two tools disagree

@@ -8,4 +8,6 @@
   * oracles: iverilog and verilator `V t=0101`
 * witness: in a function body, c3_var_zero `var logic [3:0] t;` and c3_var_shift `var logic [5:2] t;` in a constant function, c3_var_runtime and c3_var_first called at run time: PRE rc 1 ``expected '=' or '<=' after lvalue, found keyword 'logic'`` on each
   * oracles: iverilog and verilator `V P=00000101` (c3_var_zero), `V P=00000011` (c3_var_shift), `V r=00000101` (c3_var_runtime, c3_var_first)
+* witness (2026-11-16, §5.2 Q-MDRVMIX's grounding C3, W/mdrv/ground/cells/m/m_p_invar_acomb_part): `module mi (input var logic [7:0] v, input logic [7:0] s, input logic clk);`: PRE rc 1 `t.sv:2:22: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')', found keyword 'logic'` and six more E2002 lines (errors=7); the matrix's 8 m_p_invar_* cells stop here, before any driver rule
+  * oracles (the cell also writes the input with `always_comb v[3:0] = ~s[3:0];`, illegal for that reason): iverilog runs `A v=00001010` `B v=00000011`; verilator `%Error-ASSIGNIN: t.sv:3:15: Assigning to input/const variable: 'v'`; sv2v → iverilog `s2v.v:13: error: 'v['sd3:'sd0]' is not a valid l-value for a procedural assignment.`
 * status: OPEN

@@ -1,4 +1,5 @@
 (§3.b nested-lval-select · OPEN · in Nets / timing) (a refused nested lvalue leaves a chunk that fakes a second writer):
 * symptom: a nested lvalue the funnel refuses (`elaborate/src/lvalue.rs:577` `nested lvalue select (v1: single-level)`) leaves an unresolved chunk that `cont_array.rs:369` `other_writers` counts (`c.net >= nets.len()`), a false E3018 on another module's `output reg` (EH1 `ahb_sif.sv:216`, all three `r=1 q=0018005`; row-9 O18)
+* note (2026-11-16, re-measured at 3bc88674, W/mdrv/ground/REPORT.txt Q3 and Q8 C1): the refusal is `lvalue.rs:551` (in `lval_base_net` :545), which returns `POISON_NET` (`limits.rs:49`); its chunk sets `other_writers`' design-wide `unknown` (`cont_array.rs:367`, `:450`, `c.net as usize >= self.nets.len()`), and `cont_var.rs:202` then refuses every recorded variable `assign` in the design (`Refusal::Unresolved`): EH1's six false E3018 (ahb_sif.sv:216 / :219 / :220, imem and lmem) are this entry's, not §5.2 Q-MDRVMIX's
 * one funnel with `md-packed-write`
 * status: OPEN (§5.2 row 29)
