@@ -895,7 +895,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-16): PARSE-1's provenance piece built on the batch 5 branch (§4.5.645); batch 5 has landed no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-16): row 23 parked again after its re-entry plan (§4.5.646); batch 5 holds PARSE-1's provenance piece only (§4.5.645) and has landed no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))

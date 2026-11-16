@@ -23,4 +23,10 @@
 * source: V after L is accepted (pk_L_V rc 0 `A 7`): :1257's set `param_names` holds no label (its 1 insert site is the Param arm's package.rs:780 `param_names.insert(p.name.name.clone());`)
 * pins: `bind_pins.rs` n15_pkg_dup_label_label, n16_pkg_dup_param_label, n17_pkg_dup_meta_clear, n22_fn_dup_label_order hold PRE's text (f77e7989)
 * source: W/batch4/pins/DOCS_FINDINGS.txt a); W/batch4/pins/r3/matrix/TABLE.txt, SUMMARY.txt
+* prerequisite of §5.2 23's RE-e, joined here 2026-11-16 (§4.5.646), not opened as a row (owner, 2026-11-16): row 23's re-entry plan (W/r23/plan/PLAN.txt §0 m2, §1) named this entry's package-body pairs a new row ahead of row 23 at R9.1 (working name Q-PKGDUPNAME); the class is this entry's, so it is filed here
+  * home: elaborate's pair gate, `decl_collide.rs:245-247` at bf891ed8 (the line quoted above, unchanged); `DeclKind` already has `Typedef` and `EnumLabel` (`elaborate/src/decl_collide.rs:161`, `:163`) and `DeclClass` `Type` and `EnumItem` (`:214`, `:215`), so the record exists and no parser field is needed
+  * the plan's fix: explicit arms of `collides` for the pairs the matrix measured accepted, no catch-all, one report per defect kept for the pairs `package.rs` and `param_dup.rs` already refuse; the 18 pk cells and j2_redecl_enum_lit, j2_redecl_enum_after_lit and j2_redecl_typedef_lit rc 0 → rc 1, n15, n16 and n17 re-pinned, n22, the fn and tk cells and Q-TDREDECL's 3 unchanged
+  * size UNMEASURED: the plan's "1 gate site and the arms of `collides`" is its estimate
+  * NOT measured (PLAN.txt §1, the fix's own grounding): whether the package walk sees an EnumLabel or Typedef DeclSite for every spelling (an anonymous enum in a variable, a label in a struct member's enum, a parser-minted name such as `T$w` in a package), the new refusal against the corpus and the 51 real designs, and the kinds outside the matrix's 8
+  * row 23's RE-e waits on this fix: the parser records no second declaration of a package name (§5.2 23, the 2026-11-16 re-entry)
 * status: OPEN

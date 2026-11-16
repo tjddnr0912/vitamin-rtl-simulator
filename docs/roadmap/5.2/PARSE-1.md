@@ -129,6 +129,7 @@
   * the symbolic member bound: `hdl-parser/src/sym_struct.rs:135` into `sym_member_width`'s `let e = msb.clone();` (`hdl-ast/src/range_rules.rs:862`), and `hdl-parser/src/struct_sel.rs:66`
   * a class value parameter's actual (`monomorph.rs`), an SVA actual (elaborate `ast_query.rs` `subst_expr`), the package respell's `other => other,` (`hdl-parser/src/packed_md.rs:195`) and a macro body's token
   * `__LINE__`: the preprocessor computes the number (`hdl-preprocess/src/scan.rs:167`) and the lexer reads it, so it is `Source`
+  * the first consumer attempt (row 23's re-entry, 2026-11-16, §5.2 23) found `Source` leaves carried across scopes by the md dim query hook (`hdl-parser/src/expr_primary.rs:140`): q3_md_td_carry_add, a `$unit` typedef's `X+3` read inside package p, an instance of "never trust on `Source` alone"
   * so the field is a one-way mark for declining: no reader may trust a value because its leaves are `Source`
 * narrowed against the 2026-11-16 note and structure review 2's B (PLAN2.txt §0, §2, §8):
   * three variants by the constructing code, not a Desugar / lookup tag: premise judge 1 J3 found the tag's truth readable per site only (plan 1's 59 Desugar sites: 22 survive a strict re-read, 37 were wrong or in doubt), so the field says which code built the node and the home test checks it by path

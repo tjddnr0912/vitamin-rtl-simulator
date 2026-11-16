@@ -18,4 +18,8 @@
   * c_pkg_twin_decoy_dec (W/r68/plan2/m1, the importer's L from `import r::*;`): PRE `A b=16`, iverilog and verilator `A b=18`; with no L in the importer (W/r68/plan/m1/cells/pkx_twin) PRE rc 1 ``undefined name `L` is not allowed in a constant range bound``, both oracles run
 * witness (row 23's premise judge 2, W/r68/premise2/b1/cells/j8_pkg_bits_ctl): a `$unit` `typedef logic [N-1:0] t_t;` (N = 4) read as `localparam int Y = $bits(t_t);` in package p, whose own N is 16: PRE 4d1d84bb rc 0 `A b=16 y=16`
   * oracles: iverilog and verilator `A b=4 y=4` (the `$bits` twin of x1_ucval's cast above)
+* candidate, one oracle, no direction claimed (row 23's re-entry grounding, W/r23/ground/cells/q3b/q3_md_td_carry_mul): a `$unit` `localparam X = 4;` and `typedef logic [X+3:0][1:0] m_t;`, and in package p `localparam int X = 2;`, `localparam m_t P = '0;`, `localparam int N = $left(P) * 1;` and a member `logic [N:0] a;`, `$display("A b=%0d n=%0d", $bits(v), p::N)`: PRE cdf0c457 rc 0 `A b=6 n=5`
+  * oracles: verilator `A b=8 n=7`; iverilog rc 134 `t.sv:5: assert: netmisc.cc:1860: failed assertion packed_dims.size() == 1`
+  * the md dim query hook (`hdl-parser/src/expr_primary.rs:140`) answers `$left(P)` with the `$unit` typedef's bound `X+3`, which then binds p's X (W/r23/ground/REPORT.txt Q7, measured on this one path)
+  * q3_md_td_carry_add beside it (`$left(P) ** 1`): PRE rc 1 E2002 at `t.sv:7:27`, the same two oracle lines (§5.2 23, the 2026-11-16 re-entry)
 * status: OPEN (§5.2 rows 68, 71, 46)
