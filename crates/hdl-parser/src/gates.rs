@@ -111,6 +111,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Sized,
                 raw: "1'bz".to_string(),
+                origin: LitOrigin::Parser,
             },
         };
         match gate {

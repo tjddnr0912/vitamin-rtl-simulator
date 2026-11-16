@@ -51,7 +51,11 @@ pub(crate) fn coerce_i64_to_width(v: i64, w: u32, signed: bool) -> i64 {
 /// treats it as 0 iterations.)
 pub(crate) fn count_lit_is_xz(e: &ast::Expr) -> bool {
     match &e.kind {
-        ast::ExprKind::IntLit { kind, raw } => parse_int_literal(raw, *kind)
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => parse_int_literal(raw, *kind)
             .map(|cv| cv.bits.unk.iter().any(|&w| w != 0))
             .unwrap_or(false),
         ast::ExprKind::Paren { inner } => count_lit_is_xz(inner),
@@ -182,7 +186,11 @@ fn subprec_unit_ticks(x: f64, e: i32, mult: u64, prec_mult: u64) -> f64 {
 /// wrong for every such delay.
 fn const_delay_u64(e: &ast::Expr) -> Option<u64> {
     match &e.kind {
-        ast::ExprKind::IntLit { kind, raw } => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => {
             let cv = literal::parse_int_literal(raw, *kind)?;
             // x/z in a delay is not a constant — same rule as `const_eval_u32`.
             if cv.bits.unk.iter().any(|&w| w != 0) {
@@ -208,7 +216,12 @@ fn const_delay_u64(e: &ast::Expr) -> Option<u64> {
             while let ast::ExprKind::Paren { inner: i } = &inner.kind {
                 inner = i;
             }
-            let ast::ExprKind::IntLit { kind, raw } = &inner.kind else {
+            let ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } = &inner.kind
+            else {
                 return const_eval_u32(e).map(|v| v as u64);
             };
             // A literal this lane cannot read (an unsized fill `'1`, a malformed
@@ -244,9 +257,11 @@ fn const_delay_u64(e: &ast::Expr) -> Option<u64> {
 /// size it to the context width. `None` for any other expression.
 pub(crate) fn fill_literal_ast(e: &ast::Expr) -> Option<(&str, ast::IntLitKind)> {
     match &e.kind {
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
-            Some((raw.as_str(), *kind))
-        }
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } if literal::is_fill_literal(raw, *kind) => Some((raw.as_str(), *kind)),
         ast::ExprKind::Paren { inner } => fill_literal_ast(inner),
         _ => None,
     }
@@ -275,9 +290,11 @@ pub(crate) fn fill_to_i64(kind: ast::IntLitKind, raw: &str, width: u32) -> Optio
 pub(crate) fn expr_as_fill(e: &ast::Expr) -> Option<(ast::IntLitKind, &str)> {
     match &e.kind {
         ast::ExprKind::Paren { inner } => expr_as_fill(inner),
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
-            Some((*kind, raw.as_str()))
-        }
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } if literal::is_fill_literal(raw, *kind) => Some((*kind, raw.as_str())),
         _ => None,
     }
 }
@@ -448,6 +465,7 @@ pub(crate) fn ast_decimal_lit_i64(e: &ast::Expr) -> Option<i64> {
         ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Decimal,
             raw,
+            origin: _,
         } => ast::value_rules::decimal_i64(raw.trim()),
         _ => None,
     }
@@ -465,9 +483,11 @@ impl Elaborator<'_> {
     pub(crate) fn const_expr_signed(&self, e: &ast::Expr) -> bool {
         match &e.kind {
             ast::ExprKind::Paren { inner } => self.const_expr_signed(inner),
-            ast::ExprKind::IntLit { kind, raw } => {
-                literal::int_literal_shape(raw, *kind).is_some_and(|(_, s)| s)
-            }
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => literal::int_literal_shape(raw, *kind).is_some_and(|(_, s)| s),
             // Resolve with the OUTWARD scope walk (`walk_scopes`), not `fq` — the same
             // resolver the env twin `const_signed_env` (`const_fn_width.rs`) already
             // uses. `fq` keys only the CURRENT prefix, so inside a generate block a
@@ -843,6 +863,7 @@ impl Elaborator<'_> {
                 kind: ast::ExprKind::IntLit {
                     kind: ast::IntLitKind::Sized,
                     raw: format!("{elem_w}'h{:x}", (v as u64) & mask),
+                    origin: LitOrigin::Elab,
                 },
                 span,
             })

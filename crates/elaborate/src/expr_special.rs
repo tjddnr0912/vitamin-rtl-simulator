@@ -718,12 +718,16 @@ impl Elaborator<'_> {
             ast::ExprKind::Paren { inner } => self.bits_of_selfdet(inner),
             // §5.7.1: a fill in a self-determined position is ONE bit — `$bits('1)` is
             // 1 in both oracles; the literal parser's 32 is the i64 container (🆕 C).
-            ast::ExprKind::IntLit { kind, raw } if crate::literal::is_fill_literal(raw, *kind) => {
-                Some(1)
-            }
-            ast::ExprKind::IntLit { kind, raw } => {
-                crate::literal::int_literal_shape(raw, *kind).map(|(w, _)| w)
-            }
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } if crate::literal::is_fill_literal(raw, *kind) => Some(1),
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => crate::literal::int_literal_shape(raw, *kind).map(|(w, _)| w),
             ast::ExprKind::Concat { parts } => parts
                 .iter()
                 .try_fold(0u32, |acc, p| acc.checked_add(self.bits_of_selfdet(p)?)),

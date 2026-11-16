@@ -1038,6 +1038,7 @@ impl Elaborator<'_> {
                 kind: ast::ExprKind::IntLit {
                     kind: ast::IntLitKind::Decimal,
                     raw: "0".to_string(),
+                    origin: LitOrigin::Elab,
                 },
                 span: ast::Span { lo: 0, hi: 0 },
             });
@@ -1111,6 +1112,7 @@ impl Elaborator<'_> {
                     ast::ExprKind::IntLit {
                         kind: ast::IntLitKind::Decimal,
                         raw,
+                        origin: LitOrigin::Elab,
                     }
                 };
                 let amount = self.lower_expr(&ast::Expr {

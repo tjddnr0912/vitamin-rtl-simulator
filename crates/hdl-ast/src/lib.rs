@@ -1808,6 +1808,10 @@ pub enum ExprKind {
     IntLit {
         kind: IntLitKind,
         raw: String,
+        /// Which code constructed this node (`LitOrigin`). Appended LAST: postcard is
+        /// positional. Never read in production; compared by no `==` (`LitOrigin`'s
+        /// `PartialEq` is always true).
+        origin: LitOrigin,
     },
     RealLit {
         kind: RealLitKind,
@@ -2156,6 +2160,49 @@ pub enum IntLitKind {
     Decimal,
     Sized,
     UnsizedBased,
+}
+
+/// Which code constructed an `ExprKind::IntLit` (§5.2 PARSE-1, the provenance piece). A
+/// property of WHERE the node is constructed, checkable by reading one fn or one path
+/// (`hdl-ast/tests/lit_origin_home.rs` enforces it by path):
+/// - `Source`: constructed by `Parser::lit_int` (`hdl-parser/src/expr_primary.rs`), whose
+///   `raw` is one lexer token's text, verbatim.
+/// - `Parser`: constructed by any other code that runs at parse time: a file under
+///   `crates/hdl-parser/src`, or `hdl-ast`'s `range_rules::dec_lit` (part 5, called only
+///   from the parser).
+/// - `Elab`: constructed by a file under `crates/elaborate/src`.
+///
+/// Nothing else is claimed: which fold, table, keyword or count stood behind a `Parser`
+/// number is not recorded, and no tag's truth beyond the constructing fn is claimed.
+///
+/// What a consumer may conclude: `Parser` / `Elab` => vita computed this number; a reader
+/// that cannot vouch for that computation declines. `Source` => the digits are a lexer
+/// token of the preprocessed text. NOT "written at this position", NOT "in this scope",
+/// NOT "in this declaration": a clone carries a `Source` literal to a place where the user
+/// wrote a NAME. Examples, not a census: a typedef's range cloned into a declaration
+/// (`decls.rs`, `functask.rs`, `params.rs`, `type_params.rs`, `structs/member_array.rs`,
+/// `typedefs.rs`); a class value parameter's actual (`monomorph.rs`); an SVA actual
+/// (elaborate `ast_query.rs` `subst_expr`); the package respell's `other => other`
+/// (`packed_md.rs`); the symbolic member bound (`sym_struct.rs` -> `range_rules.rs`
+/// `sym_*`, `struct_sel.rs`); a macro body's token; `__LINE__` (computed by the
+/// preprocessor, lexed as a token). So the field is a one-way mark for DECLINING: no
+/// reader may trust a value because its leaves are `Source`.
+///
+/// `PartialEq` is written by hand and always true, so every `==` over an `IntLit`, an
+/// `Expr` or any holder compares exactly the fields it compared before the field existed.
+/// No `Default`, `Hash`, `PartialOrd` or `Ord`.
+#[derive(Debug, Clone, Copy, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum LitOrigin {
+    Source,
+    Parser,
+    Elab,
+}
+
+/// Always true: the tag is provenance, not identity (see `LitOrigin`).
+impl PartialEq for LitOrigin {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum RealLitKind {
@@ -2582,5 +2629,143 @@ mod tests {
         let bytes = postcard::to_stdvec(&neg).expect("serialize");
         let decoded: Expr = postcard::from_bytes(&bytes).expect("deserialize");
         assert_eq!(neg, decoded);
+    }
+
+    /// §5.2 PARSE-1: `IntLit.origin` rides postcard. The compare above cannot see it
+    /// (`LitOrigin`'s `PartialEq` is always true), so each decoded tag is read by pattern,
+    /// with a wrong-variant control on each.
+    #[test]
+    fn lit_origin_rides_postcard() {
+        let span = Span::new(0, 1);
+        let rt = |kind: ExprKind| {
+            let bytes = postcard::to_stdvec(&Expr { kind, span }).expect("serialize");
+            postcard::from_bytes::<Expr>(&bytes)
+                .expect("deserialize")
+                .kind
+        };
+        let s = rt(ExprKind::IntLit {
+            kind: IntLitKind::Decimal,
+            raw: "1".into(),
+            origin: LitOrigin::Source,
+        });
+        let p = rt(ExprKind::IntLit {
+            kind: IntLitKind::Decimal,
+            raw: "1".into(),
+            origin: LitOrigin::Parser,
+        });
+        let e = rt(ExprKind::IntLit {
+            kind: IntLitKind::Decimal,
+            raw: "1".into(),
+            origin: LitOrigin::Elab,
+        });
+        assert!(matches!(
+            s,
+            ExprKind::IntLit {
+                origin: LitOrigin::Source,
+                ..
+            }
+        ));
+        assert!(matches!(
+            p,
+            ExprKind::IntLit {
+                origin: LitOrigin::Parser,
+                ..
+            }
+        ));
+        assert!(matches!(
+            e,
+            ExprKind::IntLit {
+                origin: LitOrigin::Elab,
+                ..
+            }
+        ));
+        assert!(!matches!(
+            s,
+            ExprKind::IntLit {
+                origin: LitOrigin::Parser,
+                ..
+            }
+        ));
+        assert!(!matches!(
+            p,
+            ExprKind::IntLit {
+                origin: LitOrigin::Elab,
+                ..
+            }
+        ));
+        assert!(!matches!(
+            e,
+            ExprKind::IntLit {
+                origin: LitOrigin::Source,
+                ..
+            }
+        ));
+    }
+
+    /// The tag is not identity: two literals equal but for `origin` compare equal, so
+    /// every `==` over an `Expr` compares what it compared before the field (the field's
+    /// own compare is always true) ; a different raw still differs.
+    #[test]
+    fn origin_is_not_identity() {
+        let span = Span::new(0, 1);
+        let s = Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: "7".into(),
+                origin: LitOrigin::Source,
+            },
+            span,
+        };
+        let p = Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: "7".into(),
+                origin: LitOrigin::Parser,
+            },
+            span,
+        };
+        let e = Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: "7".into(),
+                origin: LitOrigin::Elab,
+            },
+            span,
+        };
+        let p8 = Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw: "8".into(),
+                origin: LitOrigin::Parser,
+            },
+            span,
+        };
+        assert_eq!(s, p);
+        assert_eq!(p, e);
+        assert_ne!(p, p8);
+    }
+
+    /// Part 5's literal (`range_rules::dec_lit`, called only from the parser) is `Parser`,
+    /// and a clone keeps it.
+    #[test]
+    fn range_rules_dec_lit_is_parser() {
+        let d = range_rules::dec_lit(3, Span::new(0, 1));
+        assert!(
+            matches!(&d.kind, ExprKind::IntLit { raw, origin: LitOrigin::Parser, .. } if raw == "3")
+        );
+        assert!(!matches!(
+            d.kind,
+            ExprKind::IntLit {
+                origin: LitOrigin::Elab,
+                ..
+            }
+        ));
+        assert!(matches!(
+            d.clone().kind,
+            ExprKind::IntLit {
+                origin: LitOrigin::Parser,
+                ..
+            }
+        ));
     }
 }

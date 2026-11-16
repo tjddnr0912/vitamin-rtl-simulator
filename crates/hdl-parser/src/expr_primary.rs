@@ -347,7 +347,11 @@ impl Parser<'_, '_> {
         let raw = self.cur_text().to_string();
         self.bump();
         Expr {
-            kind: ExprKind::IntLit { kind, raw },
+            kind: ExprKind::IntLit {
+                kind,
+                raw,
+                origin: LitOrigin::Source,
+            },
             span: start,
         }
     }
@@ -491,6 +495,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw: v.unsigned_abs().to_string(),
+                origin: LitOrigin::Parser,
             },
             span,
         };

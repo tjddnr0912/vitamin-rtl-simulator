@@ -950,6 +950,66 @@ fn s1_vu_round_trip_keeps_inside() {
     let _ = std::fs::remove_file(&vu);
 }
 
+/// S1b (§5.2 PARSE-1, the provenance piece): the `.vu` keeps each literal's
+/// `IntLit.origin`. S1's `assert_eq!` cannot see it (`LitOrigin`'s `PartialEq` is always
+/// true), so the decoded tags are read by pattern: the lexed `8'd5` is `Source`, the
+/// folded `$bits(t_t)` is `Parser`. No oracle: the field is which code built the node.
+#[test]
+fn s1b_vu_round_trip_keeps_each_origin() {
+    use hdl_ast::LitOrigin;
+    let src = tmp("sv");
+    std::fs::write(
+        &src,
+        "module top;\n  typedef logic [5:0] t_t;\n  logic [7:0] x;\n  assign x = 8'd5 + $bits(t_t);\nendmodule\n",
+    )
+    .unwrap();
+    let vu = tmp("vu");
+    assert_eq!(
+        cli::run_vcmp(&[s(&src)], Some(&*s(&vu)), &cli::VitaOpts::default()),
+        cli::EXIT_OK
+    );
+    let bytes = std::fs::read(&vu).unwrap();
+    let (_h, body) = vita_artifact::read_vu(&bytes).expect("read_vu");
+    let decoded: hdl_ast::SourceUnit = postcard::from_bytes(body).expect("decode SourceUnit");
+    let rhs = decoded
+        .items
+        .iter()
+        .find_map(|t| match t {
+            hdl_ast::TopItem::Module(m) => m.body.iter().find_map(|i| match i {
+                hdl_ast::ModuleItem::ContAssign(ca) => Some(ca.assigns[0].1.clone()),
+                _ => None,
+            }),
+            _ => None,
+        })
+        .expect("the assign");
+    let hdl_ast::ExprKind::Binary { lhs, rhs, .. } = rhs.kind else {
+        panic!("{:?}", rhs.kind);
+    };
+    assert!(matches!(
+        lhs.kind,
+        hdl_ast::ExprKind::IntLit {
+            origin: LitOrigin::Source,
+            ..
+        }
+    ));
+    assert!(matches!(
+        rhs.kind,
+        hdl_ast::ExprKind::IntLit {
+            origin: LitOrigin::Parser,
+            ..
+        }
+    ));
+    assert!(!matches!(
+        lhs.kind,
+        hdl_ast::ExprKind::IntLit {
+            origin: LitOrigin::Parser,
+            ..
+        }
+    ));
+    let _ = std::fs::remove_file(&src);
+    let _ = std::fs::remove_file(&vu);
+}
+
 /// S2: vcmp → velab → vrun prints what the one-shot run prints, for a plain and a
 /// `unique` case inside.
 #[test]

@@ -103,6 +103,7 @@ fn table() -> Vec<Row> {
             K::IntLit {
                 kind: IntLitKind::Sized,
                 raw: "4'b1010".into(),
+                origin: LitOrigin::Source,
             },
             &[],
             u,

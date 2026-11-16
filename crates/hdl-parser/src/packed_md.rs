@@ -481,13 +481,17 @@ impl Parser<'_, '_> {
                 kind: IntLitKind::Sized,
                 ..
             } => true,
-            ExprKind::IntLit { kind, raw } => Self::small_unsized_lit(*kind, raw),
+            ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => Self::small_unsized_lit(*kind, raw),
             ExprKind::Unary {
                 op: UnOp::Minus,
                 operand,
             } => matches!(
                 &operand.kind,
-                ExprKind::IntLit { kind: IntLitKind::Decimal, raw }
+                ExprKind::IntLit { kind: IntLitKind::Decimal, raw, origin: _ }
                     if Self::small_unsized_lit(IntLitKind::Decimal, raw)
             ),
             _ => false,
@@ -597,7 +601,11 @@ impl Parser<'_, '_> {
     fn ctx_invariant(e: &Expr) -> bool {
         match &e.kind {
             ExprKind::Paren { inner } => Self::ctx_invariant(inner),
-            ExprKind::IntLit { kind, raw } => !Self::is_fill_literal(*kind, raw),
+            ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => !Self::is_fill_literal(*kind, raw),
             ExprKind::Ident(_)
             | ExprKind::PkgScoped { .. }
             | ExprKind::BitSelect { .. }

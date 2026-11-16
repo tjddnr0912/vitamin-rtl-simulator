@@ -19,7 +19,7 @@ const PKG: &str = "package p;\n\
   parameter vec_t D = '0;\n\
   endpackage\n";
 
-fn top(body: &str) -> String {
+pub(super) fn top(body: &str) -> String {
     format!(
         "{PKG}module top(input p::r_t pi, input p::vec_t pv, output logic o);\n\
          import p::*;\nr_t s; s_t t; w_t u; int k; byte b; logic [3:0] d; logic x;\n\
@@ -35,16 +35,51 @@ fn errors(src: &str) -> Vec<String> {
         .collect()
 }
 
-/// `Span { lo: 1, hi: 2 }` erased from a `Debug` print.
-fn no_spans(s: &str) -> String {
+/// `Span { lo: 1, hi: 2 }` erased from a `Debug` print, and `IntLit`'s last field (§5.2
+/// PARSE-1: `, origin: <Source|Parser|Elab> }` -> ` }`, outside the print's quoted
+/// strings), which no `==` compares: so two texts compare what they compared before the
+/// field existed.
+pub(super) fn no_spans(s: &str) -> String {
     const OPEN: &str = "Span {";
-    let (mut out, mut rest) = (String::new(), s);
+    let s = &no_origin(s);
+    let (mut out, mut rest) = (String::new(), s.as_str());
     while let Some(i) = rest.find(OPEN) {
         out.push_str(&rest[..i]);
         let tail = &rest[i..];
         rest = &tail[tail.find('}').expect("a span closes") + 1..];
     }
     out + rest
+}
+
+/// `, origin: <Source|Parser|Elab> }` -> ` }` in a `{:?}` print, never inside a quoted
+/// string (a `StrLit`'s raw may hold the same characters).
+fn no_origin(s: &str) -> String {
+    const TAGS: [&str; 3] = [
+        ", origin: Source }",
+        ", origin: Parser }",
+        ", origin: Elab }",
+    ];
+    let (mut out, mut i) = (String::with_capacity(s.len()), 0);
+    let (mut quoted, mut escaped) = (false, false);
+    while let Some(c) = s[i..].chars().next() {
+        if !quoted {
+            if let Some(t) = TAGS.iter().find(|t| s[i..].starts_with(**t)) {
+                out.push_str(" }");
+                i += t.len();
+                continue;
+            }
+        }
+        if escaped {
+            escaped = false;
+        } else if quoted && c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            quoted = !quoted;
+        }
+        out.push(c);
+        i += c.len_utf8();
+    }
+    out
 }
 
 fn module_ast(body: &str) -> String {
@@ -58,7 +93,7 @@ fn module_ast(body: &str) -> String {
 /// The natural text and the hand form are one tree. A `for` stands at one offset on
 /// both sides, so its renamed variable is one name.
 #[track_caller]
-fn same(natural: &str, hand: &str) {
+pub(super) fn same(natural: &str, hand: &str) {
     assert_eq!(module_ast(natural), module_ast(hand), "{natural}");
 }
 

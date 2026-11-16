@@ -697,7 +697,11 @@ impl Elaborator<'_> {
             }
         };
         let (v, wide) = match &e.kind {
-            ast::ExprKind::IntLit { kind, raw } => {
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => {
                 let v = const_eval_i64_lit(e)?;
                 let wide = match kind {
                     ast::IntLitKind::Decimal => true,

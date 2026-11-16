@@ -206,7 +206,12 @@ impl Elaborator<'_> {
         // fall through to None (loud). An x/z-free pattern is NOT intercepted —
         // it folds via the `WildEq`/`WildNe` collapse arm below.
         if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
-            if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
+            if let ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } = &rhs.kind
+            {
                 // Only a SIZED pattern is safe: bits ABOVE its declared width
                 // zero-extend, so the masked compare's "the LHS high bits must
                 // be 0" is correct. An UNSIZED x/z literal (`'hx`) x-FILLS to the

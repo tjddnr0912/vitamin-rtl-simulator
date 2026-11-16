@@ -12,6 +12,7 @@ mod core_t;
 mod functask_ft;
 mod gen_ge;
 mod inst_v3;
+mod lit_origin;
 mod proc_v2;
 
 // ── a collecting LogSink (interior mutability: emit takes &self) ──
@@ -49,6 +50,7 @@ fn lit(raw: &str, kind: ast::IntLitKind) -> ast::Expr {
     ex(ast::ExprKind::IntLit {
         kind,
         raw: raw.to_string(),
+        origin: LitOrigin::Source,
     })
 }
 fn dec(n: &str) -> ast::Expr {

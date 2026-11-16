@@ -26,7 +26,11 @@ enum ExactScope<'a> {
 
 fn expr_exact(e: &ast::Expr, scope: &ExactScope<'_>) -> bool {
     match &e.kind {
-        ast::ExprKind::IntLit { kind, raw } => match kind {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => match kind {
             ast::IntLitKind::Decimal => true,
             _ => parse_int_literal(raw, *kind).is_some_and(|cv| !cv.signed && cv.width >= 32),
         },

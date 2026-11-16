@@ -193,6 +193,7 @@ impl Elaborator<'_> {
             ast::ExprKind::IntLit {
                 kind: ast::IntLitKind::Sized,
                 raw,
+                origin: _,
             } => {
                 let (w, _) = raw.split_once('\'')?;
                 let w: u32 = w.trim().parse().ok()?;

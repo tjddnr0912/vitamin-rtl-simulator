@@ -54,6 +54,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Sized,
                 raw: "1'b0".to_string(),
+                origin: LitOrigin::Parser,
             },
             span,
         });

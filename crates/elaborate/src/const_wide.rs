@@ -530,14 +530,22 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
         // 128 ones (ROADMAP §2 🆕 E). A self-determined operand position (a
         // comparison's operand, a logical operand, a ternary's condition, `**`'s
         // exponent) sizes its fill through `fold_selfdet_operand` instead.
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } if literal::is_fill_literal(raw, *kind) => {
             if ctx == 0 {
                 return None;
             }
             let cv = literal::fill_literal_const(raw, *kind, ctx)?;
             Some((cv.bits, ctx, false))
         }
-        ast::ExprKind::IntLit { kind, raw } => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => {
             let cv = parse_int_literal(raw, *kind)?;
             Some((cv.bits, cv.width, cv.signed))
         }
@@ -1196,11 +1204,19 @@ pub(crate) fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
     match &e.kind {
         // A fill literal is context-determined: replicate the fill bit across the
         // full target `width` (§5.7.1), not the self-determined 32-bit default.
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } if literal::is_fill_literal(raw, *kind) => {
             let cv = literal::fill_literal_const(raw, *kind, width)?;
             Some(cv.bits)
         }
-        ast::ExprKind::IntLit { kind, raw } => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => {
             let cv = parse_int_literal(raw, *kind)?;
             Some(extend_bits(&cv.bits, cv.width, width, cv.signed))
         }

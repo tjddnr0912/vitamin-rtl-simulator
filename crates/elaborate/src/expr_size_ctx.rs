@@ -167,7 +167,11 @@ impl Elaborator<'_> {
                 SelChain::Elem { signed, .. } => signed,
                 SelChain::NotAValue | SelChain::Unknown => None,
             },
-            ast::ExprKind::IntLit { kind, raw } => {
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => {
                 if literal::is_fill_literal(raw, *kind) {
                     return Some(false);
                 }
@@ -578,7 +582,11 @@ impl Elaborator<'_> {
                 hdl_ast::range_rules::Lane::LiteralNet.count_u32(m, l)
             }
             K::IndexedPart { width, .. } => u32::try_from(self.const_eval_in_scope(width)?).ok(),
-            K::IntLit { kind, raw } => {
+            K::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => {
                 if literal::is_fill_literal(raw, *kind) {
                     // no self width: it takes the context's (§11.6). Zero so it
                     // never widens the maximum.

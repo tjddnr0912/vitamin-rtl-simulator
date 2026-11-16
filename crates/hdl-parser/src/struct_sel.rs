@@ -298,6 +298,7 @@ impl Parser<'_, '_> {
                     kind: ExprKind::IntLit {
                         kind: IntLitKind::Decimal,
                         raw: v.to_string(),
+                        origin: LitOrigin::Parser,
                     },
                     span,
                 };

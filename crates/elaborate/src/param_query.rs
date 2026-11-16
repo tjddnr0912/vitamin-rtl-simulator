@@ -397,7 +397,11 @@ pub(crate) fn ast_contains_fill(e: &ast::Expr) -> bool {
 /// arms (`const_fn_width.rs`).
 pub(crate) fn ast_holds_unknown_literal(e: &ast::Expr) -> bool {
     ast_any(e, &|x| match &x.kind {
-        ast::ExprKind::IntLit { kind, raw } => literal::parse_int_literal(raw, *kind)
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => literal::parse_int_literal(raw, *kind)
             .is_some_and(|cv| cv.bits.unk.iter().any(|&u| u != 0)),
         _ => false,
     })

@@ -39,6 +39,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw,
+                origin: _,
             } => hdl_ast::value_rules::decimal_i64(raw),
             ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.const_locals.get(&p.segments[0].name).map(|c| c.v)
@@ -139,6 +140,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw,
+                origin: _,
             } => {
                 let v = hdl_ast::value_rules::decimal_i64(raw)?;
                 i32::try_from(v).ok()?;
@@ -147,6 +149,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
                 raw,
+                origin: _,
             } => {
                 let sized = matches!(kind, IntLitKind::Sized);
                 let (_, w) = Self::based_lit_pattern(raw, sized)?;
@@ -208,6 +211,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw,
+                origin: _,
             } => {
                 let v = hdl_ast::value_rules::decimal_i64(raw)?;
                 leaf(v, 32, true)
@@ -215,6 +219,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
                 raw,
+                origin: _,
             } => {
                 let sized = matches!(kind, IntLitKind::Sized);
                 let (pat, lw) = Self::based_lit_pattern(raw, sized)?;
@@ -275,6 +280,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw,
+                origin: _,
             } => hdl_ast::value_rules::decimal_i64(raw),
             ExprKind::Unary {
                 op: UnOp::Minus,
@@ -321,6 +327,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
                 raw,
+                origin: _,
             } => {
                 let (pat, w) = Self::based_lit_pattern(raw, matches!(kind, IntLitKind::Sized))?;
                 Self::read_pattern(pat, w, base_signed)
@@ -334,6 +341,7 @@ impl Parser<'_, '_> {
                 ExprKind::IntLit {
                     kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
                     raw,
+                    origin: _,
                 } => {
                     let (pat, w) = Self::based_lit_pattern(raw, matches!(kind, IntLitKind::Sized))?;
                     let mask = if w == 64 { !0u64 } else { (1u64 << w) - 1 };
@@ -502,6 +510,7 @@ impl Parser<'_, '_> {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw,
+                origin: _,
             } if self.src.get(e.span.lo as usize..e.span.hi as usize) == Some(raw.as_str()) => {
                 Self::const_lit(e)
             }
@@ -575,6 +584,7 @@ impl Parser<'_, '_> {
         let ExprKind::IntLit {
             kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
             raw,
+            origin: _,
         } = &p.value.kind
         else {
             return None;

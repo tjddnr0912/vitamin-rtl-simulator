@@ -327,9 +327,15 @@ use vita_schema::schema_hash;
 /// one `dtype: DataType` (new `DataType`, `TypeKind`, `Signing`), and a parameter
 /// records its signing keyword and declared kind there (no reader yet). hdl-ast only:
 /// no sim-ir change, format_version stays 38. All `.vu` artifacts are stale.
+/// Re-pinned 2026-11-16 (§5.2 PARSE-1, the provenance piece) `ExprKind::IntLit.origin:
+/// LitOrigin` (new `LitOrigin { Source, Parser, Elab }`): which code constructed the
+/// literal, by path (`Parser::lit_int` / other parse-time code / elaborate). APPENDED
+/// LAST, so every existing field keeps its postcard position. Nothing reads it in
+/// production and its `PartialEq` is always true. hdl-ast only: no sim-ir change,
+/// format_version stays 38. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    70, 46, 70, 21, 26, 247, 142, 95, 131, 69, 91, 110, 6, 192, 30, 39, 211, 231, 235, 233, 123,
-    157, 18, 203, 37, 151, 48, 181, 232, 189, 173, 245,
+    142, 157, 208, 148, 239, 218, 176, 224, 110, 203, 222, 174, 101, 210, 39, 21, 90, 68, 226, 205,
+    12, 42, 205, 98, 100, 158, 13, 159, 203, 113, 96, 23,
 ];
 
 #[test]

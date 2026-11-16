@@ -82,6 +82,7 @@ impl Elaborator<'_> {
             kind: ast::ExprKind::IntLit {
                 kind: ast::IntLitKind::Decimal,
                 raw: x.to_string(),
+                origin: LitOrigin::Elab,
             },
             span,
         };

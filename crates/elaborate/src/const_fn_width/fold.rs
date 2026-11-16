@@ -228,7 +228,11 @@ impl Elaborator<'_> {
             // lane's hard 32 (ROADMAP §2 🆕 C). An x/z fill declines (no unknown
             // plane here), which is the loud the callers already had — an x LITERAL is
             // not one of this walk's x origins.
-            K::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+            K::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } if literal::is_fill_literal(raw, *kind) => {
                 crate::const_eval::fill_to_i64(*kind, raw, ctx_w.max(1)).into()
             }
             K::Unary {

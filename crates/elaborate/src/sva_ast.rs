@@ -26,6 +26,7 @@ pub(crate) fn sva_one(sp: ast::Span) -> ast::Expr {
         kind: ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Sized,
             raw: "1'b1".to_string(),
+            origin: LitOrigin::Elab,
         },
         span: sp,
     }
@@ -55,6 +56,7 @@ pub(crate) fn sva_zero(sp: ast::Span) -> ast::Expr {
         kind: ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Sized,
             raw: "1'b0".to_string(),
+            origin: LitOrigin::Elab,
         },
         span: sp,
     }
@@ -259,6 +261,7 @@ pub(crate) fn sva_bit0(e: ast::Expr, sp: ast::Span) -> ast::Expr {
                 kind: ast::ExprKind::IntLit {
                     kind: ast::IntLitKind::Decimal,
                     raw: "0".to_string(),
+                    origin: LitOrigin::Elab,
                 },
                 span: sp,
             }),

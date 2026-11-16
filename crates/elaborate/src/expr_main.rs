@@ -36,7 +36,11 @@ impl Elaborator<'_> {
     pub(crate) fn lower_expr_ungated(&mut self, e: &ast::Expr) -> u32 {
         match &e.kind {
             // ── leaves ──────────────────────────────────────────────
-            ast::ExprKind::IntLit { kind, raw } => {
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => {
                 // §5.7.1/§11.6: a fill literal reaching here is in a SELF-determined
                 // position (a bare `$display` arg, a `$signed`/`$unsigned` arg, a
                 // select index, …) → 1 bit, minimal. Context-determined positions

@@ -194,7 +194,7 @@ fn is_negative_literal(e: &ast::Expr) -> bool {
 fn is_plain_literal(e: &ast::Expr) -> bool {
     matches!(
         &Elaborator::peel_parens(e).kind,
-        ast::ExprKind::IntLit { kind, raw } if !literal::is_fill_literal(raw, *kind)
+        ast::ExprKind::IntLit { kind, raw, origin: _ } if !literal::is_fill_literal(raw, *kind)
     )
 }
 

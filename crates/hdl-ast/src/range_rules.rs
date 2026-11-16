@@ -103,7 +103,7 @@
 //!    widths, the symbolic struct layout, package-constant respells), with the literal
 //!    helpers they fold through.
 
-use crate::{BinOp, Expr, ExprKind, IntLitKind, Range, Span, UnOp};
+use crate::{BinOp, Expr, ExprKind, IntLitKind, LitOrigin, Range, Span, UnOp};
 
 /// The literal fold the parser's builders read an operand through: the parser's evaluator
 /// (`hdl-parser` `Parser::const_lit`), passed in, because an evaluator stays where its
@@ -663,6 +663,7 @@ pub fn dec_lit(v: u32, span: Span) -> Expr {
         kind: ExprKind::IntLit {
             kind: IntLitKind::Decimal,
             raw: v.to_string(),
+            origin: LitOrigin::Parser,
         },
         span,
     }

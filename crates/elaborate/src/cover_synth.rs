@@ -17,6 +17,7 @@ pub(crate) fn cov_int_lit_pos(v: i128, sp: ast::Span) -> ast::Expr {
         kind: ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Decimal,
             raw: v.to_string(),
+            origin: LitOrigin::Elab,
         },
         span: sp,
     }
@@ -42,6 +43,7 @@ pub(crate) fn cov_auto_sample_stmt(
         kind: ast::ExprKind::IntLit {
             kind: ast::IntLitKind::Sized,
             raw: "64'd1".to_string(),
+            origin: LitOrigin::Elab,
         },
         span: sp,
     };

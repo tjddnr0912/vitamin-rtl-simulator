@@ -370,7 +370,12 @@ impl Elaborator<'_> {
                     _ => break,
                 }
             }
-            if let ast::ExprKind::IntLit { kind, raw } = &e.kind {
+            if let ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } = &e.kind
+            {
                 // ⚠️ DECLARED PROVENANCE ON THE OVERRIDDEN LANE (§6.20.2). Reaching
                 // this tail already means the declaration is `Implicit` with no range
                 // — the `Integer` and `Time` arms above are declared TYPES and the

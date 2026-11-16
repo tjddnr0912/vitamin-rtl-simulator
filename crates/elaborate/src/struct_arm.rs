@@ -250,7 +250,11 @@ fn pattern_concat(pat: &ast::Expr, members: &[ast::PatternMember]) -> Option<ast
         return None;
     }
     let lit = |raw: String, kind: ast::IntLitKind| ast::Expr {
-        kind: ast::ExprKind::IntLit { kind, raw },
+        kind: ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: LitOrigin::Elab,
+        },
         span,
     };
     let mut parts = Vec::with_capacity(elems.len());

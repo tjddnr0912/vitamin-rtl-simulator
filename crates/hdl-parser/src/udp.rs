@@ -433,6 +433,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Sized,
                 raw: raw.to_string(),
+                origin: LitOrigin::Parser,
             },
         };
         let mk_ident = |id: &Ident| Expr {
@@ -461,6 +462,7 @@ impl Parser<'_, '_> {
                     kind: ExprKind::IntLit {
                         kind: IntLitKind::Sized,
                         raw: raw.to_string(),
+                        origin: LitOrigin::Parser,
                     },
                 }),
             },

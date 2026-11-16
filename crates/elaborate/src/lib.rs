@@ -33,6 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use diag::{Diagnostic, LogEvent, LogSink, MsgCode, Severity};
 use hdl_ast as ast;
+use hdl_ast::LitOrigin;
 use literal::{
     int_literal_shape, make_const_i64, make_const_real, make_const_u32, parse_int_literal,
     parse_real_f64, parse_real_literal, parse_str_literal, parse_str_literal_text,

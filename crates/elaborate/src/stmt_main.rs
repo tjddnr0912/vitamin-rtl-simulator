@@ -1577,6 +1577,7 @@ impl Elaborator<'_> {
                                 kind: ast::ExprKind::IntLit {
                                     kind: ast::IntLitKind::Decimal,
                                     raw: "1".to_string(),
+                                    origin: LitOrigin::Elab,
                                 },
                                 span: name.span,
                             };

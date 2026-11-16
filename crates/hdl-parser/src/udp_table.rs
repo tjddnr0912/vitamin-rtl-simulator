@@ -23,6 +23,7 @@ impl Parser<'_, '_> {
                     kind: ExprKind::IntLit {
                         kind: IntLitKind::Sized,
                         raw: raw.to_string(),
+                        origin: LitOrigin::Parser,
                     },
                 }),
             },
@@ -74,6 +75,7 @@ impl Parser<'_, '_> {
                     kind: ExprKind::IntLit {
                         kind: IntLitKind::Sized,
                         raw: "1'b1".to_string(),
+                        origin: LitOrigin::Parser,
                     },
                 })
         };
@@ -109,6 +111,7 @@ impl Parser<'_, '_> {
                 kind: ExprKind::IntLit {
                     kind: IntLitKind::Sized,
                     raw: raw.to_string(),
+                    origin: LitOrigin::Parser,
                 },
             },
             span,

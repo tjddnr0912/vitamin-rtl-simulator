@@ -4,6 +4,7 @@ mod composed_member;
 mod decl_type;
 mod expr_t;
 mod inst_gen;
+mod lit_origin;
 mod misc_forms;
 mod stmt_s;
 mod sva_ca;

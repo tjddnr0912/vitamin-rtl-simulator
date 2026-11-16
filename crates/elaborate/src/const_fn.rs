@@ -4,7 +4,12 @@ use super::*;
 use crate::value::arms::{self, ArmLane};
 
 pub(crate) fn const_eval_i64_lit(e: &ast::Expr) -> Option<i64> {
-    let ast::ExprKind::IntLit { kind, raw } = &e.kind else {
+    let ast::ExprKind::IntLit {
+        kind,
+        raw,
+        origin: _,
+    } = &e.kind
+    else {
         return None;
     };
     let cv = parse_int_literal(raw, *kind)?;
@@ -59,7 +64,7 @@ pub(crate) struct ConstUnwritten {
 fn const_range_numbered(range: Option<&ast::Range>) -> bool {
     range.is_none_or(|r| {
         matches!(r.msb.kind, ast::ExprKind::IntLit { kind: ast::IntLitKind::Decimal, .. })
-            && matches!(&r.lsb.kind, ast::ExprKind::IntLit { kind: ast::IntLitKind::Decimal, raw } if raw == "0")
+            && matches!(&r.lsb.kind, ast::ExprKind::IntLit { kind: ast::IntLitKind::Decimal, raw, origin: _ } if raw == "0")
     })
 }
 
@@ -77,7 +82,11 @@ pub(crate) enum ConstFlow {
 /// get a `&params` table here when parameter elaboration lands.
 pub(crate) fn const_eval_u32(e: &ast::Expr) -> Option<u32> {
     match &e.kind {
-        ast::ExprKind::IntLit { kind, raw } => {
+        ast::ExprKind::IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => {
             let cv = parse_int_literal(raw, *kind)?;
             // Reject x/z: a literal with any unknown bit (e.g. `4'dx`) is not a
             // valid constant index/bound/delay — return None so the caller

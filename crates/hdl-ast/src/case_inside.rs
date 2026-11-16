@@ -98,13 +98,14 @@ pub fn inside_label(e: &Expr) -> Option<InsideLabel<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::IntLitKind;
+    use crate::{IntLitKind, LitOrigin};
 
     fn lit(raw: &str, lo: u32) -> Expr {
         Expr {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Sized,
                 raw: raw.to_string(),
+                origin: LitOrigin::Source,
             },
             span: Span::new(lo, lo + raw.len() as u32),
         }

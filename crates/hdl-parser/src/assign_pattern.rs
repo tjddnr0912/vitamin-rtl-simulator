@@ -544,6 +544,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Sized,
                 raw: format!("{w}'b{body}"),
+                origin: LitOrigin::Parser,
             },
             span: e.span,
         })

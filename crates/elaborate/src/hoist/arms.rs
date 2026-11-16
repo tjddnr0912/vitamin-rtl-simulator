@@ -59,7 +59,11 @@ impl Elaborator<'_> {
                 let f = self.lookup_func(&seg.name)?;
                 Some((f.dtype.signed, ast_func_return_width(f)?))
             }
-            IntLit { kind, raw } => {
+            IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => {
                 // A fill literal (`'0`/`'1`) is unsigned and context-filled — it never
                 // widens the context (self-width 0), so it can only make the gate loud
                 // via a sign mismatch (which is correct: `signed ? '0` is §11.8.1 unsigned).

@@ -205,6 +205,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw: "1".to_string(),
+                origin: LitOrigin::Parser,
             },
         });
         let lhs_expr = Expr {

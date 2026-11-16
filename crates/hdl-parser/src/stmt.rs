@@ -51,6 +51,7 @@ impl Parser<'_, '_> {
                 kind: ExprKind::IntLit {
                     kind: IntLitKind::Decimal,
                     raw: "1".to_string(),
+                    origin: LitOrigin::Parser,
                 },
             }
         } else {
@@ -90,6 +91,7 @@ impl Parser<'_, '_> {
             kind: ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
                 raw: "1".to_string(),
+                origin: LitOrigin::Parser,
             },
         };
         let rhs = Expr {

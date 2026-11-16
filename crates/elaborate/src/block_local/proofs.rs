@@ -27,6 +27,7 @@ fn subst_ident_zero(e: &ast::Expr, var: &str) -> ast::Expr {
         K::Ident(p) if p.segments.len() == 1 && p.segments[0].name == var => K::IntLit {
             kind: ast::IntLitKind::Decimal,
             raw: "0".to_string(),
+            origin: LitOrigin::Elab,
         },
         K::Paren { inner } => K::Paren { inner: sub(inner) },
         K::Unary { op, operand } => K::Unary {
@@ -238,6 +239,7 @@ impl Elaborator<'_> {
             K::IntLit {
                 kind: ast::IntLitKind::Decimal,
                 raw,
+                origin: _,
             } => ast::value_rules::decimal_i64(raw.trim()).and_then(|v| i32::try_from(v).ok()),
             K::Paren { inner } => Self::fold_i32(inner),
             K::Unary { op, operand } => {

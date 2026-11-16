@@ -292,7 +292,11 @@ mod tests {
 
     fn lit(kind: ast::IntLitKind, raw: String) -> ast::Expr {
         ast::Expr {
-            kind: ast::ExprKind::IntLit { kind, raw },
+            kind: ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: LitOrigin::Source,
+            },
             span: SP,
         }
     }

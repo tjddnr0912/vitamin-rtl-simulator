@@ -360,9 +360,11 @@ impl Elaborator<'_> {
     pub(crate) fn override_is_wide_literal(e: &ast::Expr) -> bool {
         match &e.kind {
             ast::ExprKind::Paren { inner } => Self::override_is_wide_literal(inner),
-            ast::ExprKind::IntLit { kind, raw } => {
-                crate::literal::int_literal_shape(raw, *kind).is_some_and(|(w, _)| w > 64)
-            }
+            ast::ExprKind::IntLit {
+                kind,
+                raw,
+                origin: _,
+            } => crate::literal::int_literal_shape(raw, *kind).is_some_and(|(w, _)| w > 64),
             _ => false,
         }
     }

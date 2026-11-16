@@ -274,7 +274,11 @@ pub(crate) fn ast_expr_self_width(
             [seg] => func_widths.get(&seg.name).copied(),
             _ => None,
         },
-        IntLit { kind, raw } => literal::int_literal_shape(raw, *kind).map(|(w, _)| w),
+        IntLit {
+            kind,
+            raw,
+            origin: _,
+        } => literal::int_literal_shape(raw, *kind).map(|(w, _)| w),
         BitSelect { .. } => Some(1),
         PartSelect { msb, lsb, .. } => {
             let m = ast_decimal_lit_i64(msb)?;
@@ -799,7 +803,11 @@ impl Elaborator<'_> {
             // all-ones / all-zeros fill is spelled for the run to size (`~1'b0` is
             // all ones at any context width, a one-bit zero zero-extends), and an
             // `'x` / `'z` fill records the width it was sized at.
-            IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+            IntLit {
+                kind,
+                raw,
+                origin: _,
+            } if literal::is_fill_literal(raw, *kind) => {
                 let id = match f2 {
                     Some(_) if !literal::fill_is_unknown(raw, *kind) => {
                         let zcid = self.intern_const(make_const_u32(0, 1));
