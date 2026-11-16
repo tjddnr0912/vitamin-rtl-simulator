@@ -1,4 +1,4 @@
-(§5.2 PARSE-1 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G1 PARSE, OPS) (the parser's constant fold in one file, its 64-bit kernels in hdl-ast):
+(§5.2 PARSE-1 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G1 PARSE, OPS) (the parser's constant fold in one file, its 64-bit kernels in hdl-ast, which code made each literal and entry):
 * slot: landed 2026-11-10 as batch 2's third row (§4.5.638, a392795c), one row with OPS, no split and no owner decision; the table keeps the row for this record and its lists, which the head note of `value_rules.rs` cites (lens-sound N4)
 * slot: R2.2 · L1, after SYS-1 (owner, 2026-11-09), with OPS, the operator and literal kernels
 * slot: hdl-parser `params.rs` is in batch 1's diff, so it builds after batch 1 lands (D12)
@@ -47,13 +47,20 @@
 * note: out O8, the folds' readers (`member_width`, `member_ascending`, `sym_struct`'s gates, `default_value_shape_free`, the enum loop of `typedefs.rs`, `const_index_string`, `literal_leaf`, `bind_md_return`, `ret_var_selects_carried`, the scaled and composed readers): each decides what a fold's no means at its site (F24)
 * note (structure review 2, 2026-11-16, W/review/structure-2026-11-16/REPORT.txt Q3 B): outs O7 and O8 take the record that review names first, where a parse-time number came from, recorded where it is made; it joins this row (ER §3.6), no new row
   * `IntLit` gains an origin (Source, or Parser and where from), set in the two funnels `dec_lit` (`hdl-ast/src/range_rules.rs:661`) and `i64_lit` (`hdl-parser/src/expr_primary.rs:489`) and in the direct `IntLitKind::Decimal` constructions outside them; the lexer's `lit_int` (`:69-73`) writes Source
+  * narrowed when built (2026-11-16, the record below): three variants by the constructing code, `Source | Parser | Elab`, not where from (premise judge 1 J3: a Desugar / lookup tag's truth is readable only per site); `Parser` is written in every other hdl-parser construction and inside `dec_lit` itself, `Elab` in elaborate's 18
   * `ConstVal` (`hdl-parser/src/lib.rs:316`) gains `exact` (Written, Converted, Unconverted, Derived) and its declaring scope at its one writer, `.insert(p.name.name.clone(), ConstVal { v, w, signed });` (`hdl-parser/src/params.rs:929-930`); the copy sites copy it whole, the 6 read sites in `const_fold.rs` (T6) stay the only readers
+  * narrowed when built: `ConstVal` stays the fold's value type and the table stores a new `ConstEntry { v, w, signed, lane }`; `lane` names which of W1's paths recorded the entry, in place of `exact`; the initializer's shape (Written / Derived) goes to 68 (b)'s re-plan, and the declaring scope is left out of the row (W1 has no generate-block identity: the consumer's prerequisite, not filed)
   * structure only: no reader reads the mark in this piece, so every output is PRE's; it is a format change, the `IntLit` field an hdl-ast SchemaHash re-pin (70.md:5's wording), one format / SchemaHash row at a time (70.md:2)
+  * as built: the `IntLit` field is the format change, PLAN2's named differences 1–7 (the record below); `ConstEntry` moves no format (`PkgBindings` is not serialized)
   * counts (the review's census/c1.py, a line grep; multi-line calls, macros, closures REVIEW-ONLY): `dec_lit` 90, `dec_range` 20, `i64_lit` 12 call lines with their definitions; direct `Decimal` constructions at most 9
   * and `IntLit {` over the hdl-ast, hdl-parser, elaborate and sim-ir sources: 143 lines (50 with `..`, 39 closed without, 54 multi-line), so at most 93 pattern sites
+  * replaced when built by the home test's token walker, per (file, fn): 37 production constructions (`Source` 1, `Parser` 18, `Elab` 18) and 50 closed patterns (hdl-parser 13, elaborate 37), each spelling `origin: _`
   * cost: UNMEASURED (one tag per `IntLit` and `ConstVal`; whether `Expr`'s size moves is not measured; the parse-heavy cell is cost_parse)
+  * measured when built: `size_of` Expr 80, ExprKind 72, Stmt 440, ModuleItem 480 on PRE and POST (release), and the row-end cost cells (the record below)
   * it closes premise judge 2's J6 and J8 for row 23 (a decline on any Parser-origin leaf in the rest of a bound) and Q-CONSTSELLSB RE-1's decline half: a design claim, not run (REPORT.txt NOT MEASURED)
+  * still a design claim, not run, when built: the piece has no reader, and each decline is its consumer's, under the consumer rule below (§5.2 23 RE-a / RE-f, Q-CONSTSELLSB RE-1)
   * slot: proposed first on the parser side (structure review 2, 2026-11-16, REPORT.txt Q4 item 1); the order is the owner's
+  * built 2026-11-16 on the batch 5 integration branch (§4.5.645, the record below)
 * record (structure review 2, REPORT.txt Q1): one class, "the decision reads a merged field; the premise was checked on the source text", fell five times; by the field each decision read (rows 23, 68, Q-SYMMIX, Q-CONSTSELLSB and Q-PARAM2STATE point here):
   * 1 Q-SYMMIX P0 `{W}` (dfa5c625): the symbolic struct's composed width tree, `TypeInfo.range` (`hdl-parser/src/sym_struct.rs:82-86`) carried into each `dtype.range`; premise measured on hand-spelled `{W}` localparams, trips on parser-composed trees
   * 2 Q-CONSTSELLSB c2, premise judge 2 F1 (5bbf3923): a function local's `DataType.range`: own text, a typedef's carried range, or a parse-time fold written as a decimal literal; the premise classified the declaration's text
@@ -90,4 +97,71 @@
 * note: E3: `try_const_index`'s comment, moved verbatim (it runs on every binary expression), is broader than its 3 callers; E5: the note moved with K1–K3 that `3037000500 * 3037000500` is loud too is false (f_inscope_ovf, §5.2 VAL-1)
 * note: PRE-EXISTING, filed (W/parse1/build/NOTES.txt D5, oracles W/batch2/docs/probe): E1 E7 E8 §2 dev-overflow-release-wraps, E2 enum-base-overflow-silent, E4 §5.2 42, E6 const-product-range-split, E9 §3.b param-fits-w63, E10 const-atoi-underscore, E11 sized-literal-separator-read
 * note: batch 2's boundary verify and lenses: §5.2 SYS-1
+* record (2026-11-16, §4.5.645): the provenance piece, structure review 2's B (the note above), built on the batch 5 integration branch in two commits, each structure only (every stdout, stderr and exit code PRE's); it lands on main with batch 5
+  * plan and premise: W/parse1b/plan2/PLAN2.txt with RULINGS-plan2.txt A1–A4, premise2/LINES.txt, premise3/REPORT.txt L1–L9 (VERDICT PASS); build: W/parse1b/build/NOTES.txt, COMMIT_MSG.c1, COMMIT_MSG.c2
+  * C1 1080fe92: `ExprKind::IntLit` gains a last field `origin: LitOrigin` (`Source | Parser | Elab`, `hdl-ast/src/lib.rs`), defined by which code built the node
+  * `Source` only in `Parser::lit_int` (1), `Parser` for the other hdl-parser constructions and inside hdl-ast's `range_rules::dec_lit`, which keeps its PRE signature `dec_lit(v, span)` (18), `Elab` for elaborate's 18
+  * `LitOrigin`'s `PartialEq` is written by hand and always true, so every `==` over an `Expr` compares what it compared before the field; no `Default`, `Hash` or `Ord`
+  * no production reader: the 50 closed `IntLit` patterns spell `origin: _`
+  * C2 675862f5: the parser's constant table (`const_locals`, `pkg_const_scoped`, a package's `PkgBindings::consts`) stores `ConstEntry { v, w, signed, lane }` (`hdl-parser/src/lib.rs`) where it stored `ConstVal`
+  * one construction, at W1 (`param_item_to_module_item`, `hdl-parser/src/params.rs:940`); `.val()` where PRE compared, `prev.val() != v.val()` (the wildcard-import ambiguity compare in `imports.rs`)
+  * `lane: EntryLane` is set from W1's locals in this order (`params.rs:924-932`): `!typed` NoTypeNoRange, `w == 0` WidthUnknown, `ctx_v.is_some()` Converted, else Fallback
+  * `lane` has no production reader: `#[allow(dead_code)] // first reader: 68 (b) / Q-TLPCONV`
+  * the two lane merges: two equal-valued wildcard imports keep the first package's entry and its lane (the lane belongs to the entry, not to the name), and `localparam signed X = ..` is NoTypeNoRange (W1's `(ParamType::Implicit, None)`, `params.rs:910`)
+  * NoTypeNoRange's four producers (premise judge 2 line 11): no keyword and a signing keyword only (`params.rs:228`, `:384`), the `string` keyword (`:379-382`), a string typedef (`:524`)
+  * home test `hdl-ast/tests/lit_origin_home.rs`: H0–H5 (the definition, `Source` only in `lit_int`, each production construction's tag by its path per (file, fn) in 33 rows, the part-5 funnel, the positive set of `LitOrigin` tokens, no read, no construction outside hdl-ast, hdl-parser and elaborate)
+  * and C-a–C-c (one production `ConstEntry {` construction, no `. lane` read in hdl-parser's production code, both types' derive lists and the one `.val()` compare), each rule with planted controls; what its token walker does not see is REVIEW-ONLY in its head note
+  * pins read a tag by pattern only, each with a wrong-variant control: hdl-parser `src/tests/lit_origin.rs` (12) and `src/tests/const_entry.rs` (6), hdl-ast `lit_origin_rides_postcard`, `origin_is_not_identity` and `range_rules_dec_lit_is_parser`, elaborate `an_elaborate_literal_is_elab`, cli `s1b_vu_round_trip_keeps_each_origin`
+  * cli `tests/const_entry_pins.rs` (w_wild_same_typed, w_wild_same_mixed, w_wild_diff_ctl, k8_lp_string_int): PRE's whole stdout, stderr and exit code, with the iverilog 13.0 and verilator 5.054 lines in each doc
+  * mutants, narrow-first: C1 15 killed (m1–m13, m14a, m14b), 3 controls agree; C2 5 killed (n1–n5), 2 controls agree (W/parse1b/build/mutants.tsv)
+* rule (2026-11-16): what `origin` says (PLAN2.txt §1 R3, R4; `LitOrigin`'s doc in `hdl-ast/src/lib.rs`)
+  * `Source` = constructed by `Parser::lit_int` (`hdl-parser/src/expr_primary.rs:345`), whose `raw` is one lexer token's text, verbatim
+  * `Parser` = constructed by any other code that runs at parse time: a file under `crates/hdl-parser/src`, or hdl-ast's `range_rules::dec_lit` (part 5, called only from the parser)
+  * `Elab` = constructed by a file under `crates/elaborate/src`
+  * which fold, table or keyword stood behind a Parser number is not recorded, and no tag's truth beyond the constructing fn is claimed
+  * Parser / Elab  =>  vita computed this number ; a reader that cannot vouch for that computation declines.
+  * Source  =>  the digits are a lexer token of the preprocessed text. NOT "written at this position", NOT "in this scope", NOT "in this declaration"
+* consumer rule (2026-11-16), for every reader of `origin`; §5.2 23, 68, Q-CONSTSELLSB and Q-TLPCONV point here:
+  * a consumer declines on `!Source` and never trusts a value on `Source` alone
+  * a consumer's premise judge (ER §3.7) re-censuses the construction sites of the variant it trusts
+  * the carriers below are examples, not a census: each moves a `Source` literal to a place where the user wrote a name
+  * a typedef's range cloned into a declaration, at the six clone sites `hdl-parser/src/decls.rs:750`, `functask.rs:203`, `params.rs:529`, `type_params.rs:607`, `structs/member_array.rs:271` and `typedefs.rs:367` (premise judge 2 line 3)
+  * the symbolic member bound: `hdl-parser/src/sym_struct.rs:135` into `sym_member_width`'s `let e = msb.clone();` (`hdl-ast/src/range_rules.rs:862`), and `hdl-parser/src/struct_sel.rs:66`
+  * a class value parameter's actual (`monomorph.rs`), an SVA actual (elaborate `ast_query.rs` `subst_expr`), the package respell's `other => other,` (`hdl-parser/src/packed_md.rs:195`) and a macro body's token
+  * `__LINE__`: the preprocessor computes the number (`hdl-preprocess/src/scan.rs:167`) and the lexer reads it, so it is `Source`
+  * so the field is a one-way mark for declining: no reader may trust a value because its leaves are `Source`
+* narrowed against the 2026-11-16 note and structure review 2's B (PLAN2.txt §0, §2, §8):
+  * three variants by the constructing code, not a Desugar / lookup tag: premise judge 1 J3 found the tag's truth readable per site only (plan 1's 59 Desugar sites: 22 survive a strict re-read, 37 were wrong or in doubt), so the field says which code built the node and the home test checks it by path
+  * which producer made a Parser number (Desugar, Folded, a table) is not built: it goes to the consumer that needs it, with the strict-Desugar sites below as its list; not filed as a row
+  * `lane` in place of an `exact` flag: names true of W1's locals on every path; the initializer's shape at W1 (Written / Derived) goes to 68 (b)'s re-plan
+  * the declaring scope is left out of the row: W1 has no generate-block identity; it is the consumer's prerequisite, not filed
+  * StrLit's parser-written strings, RealLit and TimeLit carry no origin: no row
+  * any reader of `origin` or `lane`, and any value change: §5.2 23 (RE-a, RE-f), 68 (b), Q-CONSTSELLSB (RE-1's decline half) and Q-TLPCONV
+  * the row marks the parser-made leaves of j6_bits_gen_mix, j6_bits_unit_mix, j6_bits_pkg_mix, j8_clog2_bits, the R-X cells and c1_tp_mod as not lexed, and c1_tp_mod's entry with its lane (attribution by reading, PLAN2.txt §8): it closes nothing
+  * the plan's type-parameter cells j3_tp_lsb1_dflt, j3_tp_lsb1_ovr and j3_ltp_standin, with row 68's tps_ptype_lsb and tps_hdr_lsb, are filed in §2 overridable-type-param-range and type-param-standin (§4.5.645)
+  * strict-Desugar sites at 675862f5 (PLAN2.txt §2 R1, "at most 22": `udp.rs:433`'s closure callers were not read), in `hdl-parser/src`; the 9 a named consumer reads (a function's return range, a parameter's range, an enum base's range, `[N]` as `[0:N-1]`):
+    * `functask.rs:142` `:146` `:150`, `params.rs:280` `:285` `:290`, `typedefs.rs:267`, `type_params.rs:410` `:411`
+  * the other 13, statement-level constants no named consumer reads: `expr.rs:545`, `classes.rs:38`, `gates.rs:111`, `generate.rs:205`, `stmt.rs:51` `:91`, `stmt_ctl.rs:54`, `sva_seq.rs:27`, `udp.rs:433` `:462`, `udp_table.rs:23` `:75` `:111`
+  * what three variants cost those 9 consumers: an over-decline on those shapes, never a wrong trust; how many real-design declarations hit them: UNMEASURED
+* named differences (PLAN2.txt §6, difference 5 as amended by premise judge 2 line 9), each measured at the row end on 675862f5's binaries (W/parse1b/build/out/<stage>/SUMMARY.txt):
+  * 1 `hdl-ast/tests/schema_hash.rs` EXPECTED re-pinned ([70, 46, 70, 21, ..] -> [142, 157, 208, 148, ..])
+  * 2 every `.vu` byte and its md5 line: one more byte per `IntLit`
+  * 3 a `.vu` written before C1 is stale (exit 2)
+  * 4 compile fixes in test code: `walk_covers_every_kind.rs:103` and the 4 test constructions (closed test patterns rustc reported: 0)
+  * 5 every plain (non-lib) staged `.velab`: the header's 32-byte composite of the `.vu` (offsets 41..72); the body stays
+  * 6 a work library: the blob name `units/cu_<hex>.vu`, lib.toml's text and hash, a lib-mode `.velab`'s header and body trailers; a library built before C1 is stale (exit 2)
+  * 7 `hdl-parser/src/tests/composed_member.rs`'s `no_spans` also erases `, origin: <Source|Parser|Elab> }` outside quoted text
+  * gate (out/gate): VERDICT PASS, 10376 tests run, 10376 passed, 1 skipped, each failure token 0
+  * record (out/record): 8341 compared, same 5601, fmt_only 2726, noise_both 13, moved 1 (below)
+  * lanes (out/record): sys1 175, sys1b 148, parse1 123, val1 265, val2 85, val3 107, b3pins 6, bind1 61, bind2 53, b4pins 23 and parse1b 92 (new: the row's ground, premise and plan cells), each SAME
+  * `.velab` body (out/velab_body): 478 compared, moved 0, the differing offsets 41..72 only
+  * real designs (out/real): 51 the same
+  * cost (out/p0b): cost_parse instructions v +0.28 %, w +0.02 %; cost30's 30 cells worst +0.29 % (v__p_sized); 0 tripped
+* the one moved record cell, a named cost of difference 2: fixd_all7/ones1092__qvalrulesd__plan__chain__md_12 (W/homes/cells/qvalrulesd/plan/chain/md_12/t.sv, 16 lines) sits on the record's 4,000,000 kB cap
+  * under the record caps (30 s, 4,000,000 kB; the cell's `wall` files): PRE's `vcmp` finished at rss 3,818,976 kB and POST's was killed at 4,078,080 kB; an older PRE record (W/homes/pre/record.257c4990) was killed at 4,040,512 kB on the same stage
+  * re-run alone at 120 s and 8,000,000 kB (W/main_d7/2026-11-16/b_capedge): every stage finishes on both sides (one, vcmp, velab and vrun rc 0), stdout and stderr equal, only the `t.vu` and `t.velab` md5 lines differ, comparator SAME (fmt_only 1)
+  * `/usr/bin/time -l`, 3 runs each (W/main_d7/2026-11-16/b_rss; the third run's lines are its pre.err and post.err, the first two main's log lines in W/parse1b/BRIEF-docs.txt): `.vu` 197,300,706 -> 207,929,614 bytes (+10,628,908)
+  * peak memory footprint: PRE 3,088,993,544 / 3,038,006,488 / 3,081,653,512, POST 3,236,007,248 / 3,177,827,616 / 3,177,844,000
+  * instructions: PRE 42,713,870,322 / 42,764,398,556 / 42,750,964,545, POST 42,894,097,311 / 42,917,158,188 / 42,947,137,044
+  * the `.vu` growth is measured; what the footprint growth beyond the `.vu` bytes is: UNMEASURED
 * source: W/program/reorder2-2026-11-09/PLAN.txt G1 PARSE, OPS, G2 PARSE-1

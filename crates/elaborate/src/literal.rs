@@ -1,10 +1,13 @@
 //! 4-state integer-literal parser (IEEE 1364-2005 §3.5 / §3.5.1).
 //!
-//! Lowers a verbatim IntLit lexeme (`raw`, including the apostrophe) into a
-//! `sim_ir::ConstVal`. The two output planes follow the FROZEN encoding
+//! Lowers an IntLit's `raw` text (including the apostrophe) into a
+//! `sim_ir::ConstVal`. `raw` is one lexer token's text, verbatim, only when the
+//! literal's `origin` is `LitOrigin::Source`; a `Parser` or `Elab` literal's `raw` is
+//! text vita wrote (`range_rules::dec_lit` writes `v.to_string()`).
+//! The two output planes follow the FROZEN encoding
 //! `(v,u)`: `00→0`, `10→1`, `01→X`, `11→Z`; word0 bit0 = LSB.
 //!
-//! Forms handled (lexer-validated upstream — see hdl-lexer IntSized/
+//! Forms handled (lexer-validated upstream for a `Source` literal — see hdl-lexer IntSized/
 //! IntUnsizedBased/IntDecimal):
 //!   `42`, `1_000`                         → Decimal, 32-bit signed
 //!   `'b1101`, `'hFF`, `'sd9`              → UnsizedBased, 32-bit

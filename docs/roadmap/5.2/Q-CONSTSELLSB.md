@@ -64,3 +64,5 @@
 * kept: `decl_range_pins.rs` as expected values only (park/T_final.patch); c1.patch and c2_wip.patch are records, not bases (ER §3.6)
 * note: Q-CONSTAGG parks with it (Q-CONSTAGG.md:10, the same frame record)
 * note: the class's five falls across rows (fall 2 is this row's c2 and premise judge 2) are recorded once in §5.2 PARSE-1 (structure review 2, 2026-11-16)
+* note (2026-11-16, §4.5.645): RE-1's decline half: the mark is built (§5.2 PARSE-1: `IntLit`'s `origin`, the table entry's `lane`), with PARSE-1's consumer rule (decline on `!Source`, never trust on `Source` alone, re-census the construction sites of the variant trusted)
+  * a decline on a parser-written leaf of the declaration's `dtype.range` is still a design claim, not run; the row stays PARKED

@@ -895,7 +895,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-16): row 23 parked, row 68 held for a re-plan, Q-TLPCONV filed (§4.5.644); batch 5 has landed no code; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-16): PARSE-1's provenance piece built on the batch 5 branch (§4.5.645); batch 5 has landed no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -903,7 +903,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | # | slot | item | rank |
 |---|---|---|---|
 | SYS-1 | R2.1 · L1 (landed) | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
-| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast](roadmap/5.2/PARSE-1.md) | — F |
+| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast, which code made each literal and entry](roadmap/5.2/PARSE-1.md) | — F |
 | VAL-1 | R3.1 · L1 (landed) | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 (landed) | [the parameter declaration chain and the live-scope wide ask, written once](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 (landed) | [a declared range's bounds folded, then checked, in one body](roadmap/5.2/VAL-3.md) | — F |

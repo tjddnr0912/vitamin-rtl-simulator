@@ -270,7 +270,7 @@ errors=1 warnings=1 notes=0
 /// `A a=-9223372036854775808 bw=-1` (+ `warning: Vector size is greater than 1073741824.`),
 /// verilator 5.052 `%Error: t.sv:1:100: Value too wide for 32-bits expected in this context
 /// 64'h8000000000000002`. Owner: the bound range rule for a bound past `integer`,
-/// docs/roadmap/5.2/Q-PARAM2STATE.md:35 (Q-VALRULES (b) R6.x) ; that fix turns this pin red.
+/// docs/roadmap/5.2/Q-PARAM2STATE.md:37 (Q-VALRULES (b) R6.x) ; that fix turns this pin red.
 #[test]
 fn m_minus_min() {
     check(
