@@ -1,6 +1,7 @@
 use super::*;
 
 mod composed_member;
+mod const_entry;
 mod decl_type;
 mod expr_t;
 mod inst_gen;

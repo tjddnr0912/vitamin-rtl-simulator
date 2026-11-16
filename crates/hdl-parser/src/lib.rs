@@ -319,6 +319,61 @@ pub(crate) struct ConstVal {
     pub(crate) signed: bool,
 }
 
+/// One entry of the parser's constant table (`const_locals`, `pkg_const_scoped`, a
+/// package's `PkgBindings::consts`): the value, width and sign `ConstVal` holds, and the
+/// `lane` the one writer took (§5.2 PARSE-1). Constructed only where a declaration is
+/// recorded (`param_item_to_module_item`, W1) ; an import, a package's export, the
+/// generate-for loop's restore and a scope snapshot move the WHOLE entry. No
+/// `PartialEq`: the one compare, the wildcard-import ambiguity (`imports.rs`), reads
+/// `val()` on both sides, the three fields it compared before the lane existed.
+///
+/// `lane` belongs to the ENTRY, not to a name in the importing scope: two wildcard
+/// imports of the same name with equal values keep the first package's entry, so its
+/// lane, and the second package's lane is dropped (`localparam int N = 4` in `p`,
+/// `localparam N = 4` in `q`: the name reads `Converted`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConstEntry {
+    pub(crate) v: i64,
+    pub(crate) w: u32,
+    pub(crate) signed: bool,
+    #[allow(dead_code)] // first reader: 68 (b) / Q-TLPCONV
+    pub(crate) lane: EntryLane,
+}
+
+impl ConstEntry {
+    /// The value without its lane: what the wildcard-import compare reads.
+    pub(crate) fn val(self) -> ConstVal {
+        ConstVal {
+            v: self.v,
+            w: self.w,
+            signed: self.signed,
+        }
+    }
+}
+
+/// Which of W1's paths recorded an entry (`param_item_to_module_item`), by W1's locals
+/// `typed`, `w` and `ctx_v`, in this order: total over W1's inserts, nothing else writes
+/// one. It says which code decided the number, not that the number is right.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EntryLane {
+    /// W1's `(ParamType::Implicit, None)`: no data type and no range was recorded — no
+    /// keyword (`localparam X = 5`), a signing keyword only (`localparam signed X = 5`:
+    /// "untyped" would not be true of it), the `string` keyword (`params.rs` consumes it
+    /// into `Implicit`) or a string typedef (a typedef'd `string` declares `Implicit`).
+    /// `localparam [7:0] X` (a range, no keyword) is not in this lane. The value is the
+    /// i64 fold or the based literal, the width and sign `param_const_shape`'s.
+    NoTypeNoRange,
+    /// A type or range with a known width (`w > 0`), and the initializer folded at that
+    /// width and converted to the declared type (`ctx_v`, §11.6.1).
+    Converted,
+    /// A type or range with a known width, the width-aware fold declined, and the i64
+    /// fold or the based literal held a value `const_param_fits` admits.
+    Fallback,
+    /// A type or range whose width is not known here (`w == 0`). Two causes, one lane:
+    /// the declared range did not fold, or `param_const_shape` does not know the type.
+    WidthUnknown,
+}
+
 /// A resolved tf-port type carried through the comma-sticky inheritance:
 /// `(net_or_var kind, signed, range, struct-type-name, enum-type-name)`. The struct
 /// name is `Some` only for a packed struct/union typedef port (EXT2-C); the enum name
@@ -621,7 +676,7 @@ struct PkgBindings {
     /// §3 ⑤ ⓓ: `(name, value)` for every literal-valued constant the package
     /// DECLARED (`const_locals` ∩ its own declarations — an imported constant is
     /// not re-exported), replayed on import into `const_locals`.
-    consts: Vec<(String, ConstVal)>,
+    consts: Vec<(String, ConstEntry)>,
 }
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
@@ -660,7 +715,7 @@ struct ScopeSnapshot {
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
     scope_type_names: std::collections::HashSet<String>,
-    const_locals: std::collections::HashMap<String, ConstVal>,
+    const_locals: std::collections::HashMap<String, ConstEntry>,
     // §5.2 row 67a: the class records of the classes this scope declared (and its
     // enclosing scopes', down to the unit's), for an `extends` or a with-block to
     // replay; the class-handle bindings (V10).
@@ -953,11 +1008,11 @@ pub struct Parser<'t, 's> {
     /// entry also carries the constant's declared WIDTH and sign (§4.5.418) so the
     /// width-aware twin `try_const_index_w` can fold a member-width expression at
     /// the width IEEE §11.6 gives it (a 32-bit `W + 2` wraps; the i64 fold did not).
-    const_locals: std::collections::HashMap<String, ConstVal>,
+    const_locals: std::collections::HashMap<String, ConstEntry>,
     /// §3 ⑤ ⓓ: `"pkg::W"` → value for every constant a package exported
     /// (`const_locals` at its `endpackage`, own declarations only). Unit-scoped,
     /// like `packed_md_scoped`; read by `try_const_index` for a `pkg::W` operand.
-    pkg_const_scoped: std::collections::HashMap<String, ConstVal>,
+    pkg_const_scoped: std::collections::HashMap<String, ConstEntry>,
     /// §3 ⑤ ⓓ: the current module-like has an ANSI `#(…)` parameter header, so a
     /// body `parameter` is a localparam (IEEE §6.20.1) and may be recorded in
     /// `const_locals`. Set after the header is parsed; false in a package (whose

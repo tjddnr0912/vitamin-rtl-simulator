@@ -920,6 +920,16 @@ impl Parser<'_, '_> {
                             };
                             hdl_ast::value_rules::wrap_i128(x, w, signed)
                         });
+                    // §5.2 PARSE-1: which of the paths below records the entry (`EntryLane`).
+                    let lane = if !typed {
+                        EntryLane::NoTypeNoRange
+                    } else if w == 0 {
+                        EntryLane::WidthUnknown
+                    } else if ctx_v.is_some() {
+                        EntryLane::Converted
+                    } else {
+                        EntryLane::Fallback
+                    };
                     let fitted = ctx_v.or_else(|| {
                         self.try_const_index(&p.value)
                             .or(based.map(|b| b.0))
@@ -927,7 +937,7 @@ impl Parser<'_, '_> {
                     });
                     if let Some(v) = fitted {
                         self.const_locals
-                            .insert(p.name.name.clone(), ConstVal { v, w, signed });
+                            .insert(p.name.name.clone(), ConstEntry { v, w, signed, lane });
                     } else if self.names_an_overridable(&p.value) == Some(true) {
                         // §3 ⑤ ⓒ: a localparam DERIVED from an overridable parameter
                         // (`localparam int X = W * 2;`) has a per-instance value too —

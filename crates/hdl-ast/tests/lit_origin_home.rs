@@ -43,6 +43,25 @@
 //! - H5 no `IntLit {` construction outside `hdl-ast`, `hdl-parser` and `elaborate` ; no
 //!   `IntLit` / `LitOrigin` token inside a `macro_rules!` body.
 //!
+//! The constant table's entry (§5.2 PARSE-1 C2, `hdl-parser/src/lib.rs` `ConstEntry { v, w,
+//! signed, lane }` and `EntryLane`):
+//!
+//! - C-a a production `ConstEntry {` (not the `struct` item or an `impl` header) occurs once,
+//!   in (`hdl-parser/src/params.rs`, `param_item_to_module_item`): W1 is the one writer, every
+//!   copy (import, export, generate restore, scope snapshot) moves the entry whole.
+//! - C-b in `hdl-parser/src` production code no `. lane`, and the token `lane` only at the
+//!   field's declaration (1) and in W1's fn (its local and the construction's field, 2).
+//!   REVIEW-ONLY: the derived `Debug` prints the lane (a production `{:?}` of an entry is
+//!   not seen ; 0 by grep today) and a read through a type alias or a macro body.
+//! - C-c no compare of an entry or a lane compiles: both types derive exactly `Debug, Clone,
+//!   Copy`, no `impl .. for` either type anywhere, one `impl ConstEntry` holding `val` only,
+//!   the entry's fields exactly `v, w, signed` and `lane` under `#[allow(dead_code)]` (never
+//!   `#[expect]`), the lane's variants exactly `NoTypeNoRange, Converted, Fallback,
+//!   WidthUnknown` ; and `hdl-parser`'s production `. val (` calls are the two operands of the
+//!   one wildcard-import compare, `prev . val ( ) != v . val ( )` in (`imports.rs`,
+//!   `parse_import_term`). REVIEW-ONLY: a compare of an entry's fields (`c.w > 0` is a
+//!   reader's) — the readers are not counted here.
+//!
 //! Each rule has a planted negative control and a real site spelled back
 //! (`controls_*`).
 //!
@@ -50,9 +69,11 @@
 //! comments included, and the insides of string / char literals dropped) with brace
 //! groups tracked ; a token is keyed by its innermost enclosing `fn` (`-` outside any) ;
 //! test code = the item after `#[cfg(test)]` or `#[test]`, a file under a `#[cfg(test)] mod
-//! <name>;` declaration, and `crates/*/tests/**`. Only files whose text holds `LitOrigin`,
-//! `IntLit`, `origin`, `lit_int`, `range_rules` or `macro_rules` are tokenized: every rule
-//! keys on a token that holds one of those strings.
+//! <name>;` declaration, and `crates/*/tests/**`. Only files under `crates/hdl-parser/src`
+//! and files whose text holds `LitOrigin`, `IntLit`, `origin`, `lit_int`, `range_rules`,
+//! `macro_rules`, `ConstEntry` or `EntryLane` are tokenized: every H rule keys on a token
+//! that holds one of those strings, every C rule on such a token or on a file under
+//! `crates/hdl-parser/src`.
 //!
 //! REVIEW-ONLY (no token shows it): derive / proc-macro expansion (`Deserialize` rebuilds
 //! what was written, `Clone` copies it, `Debug` prints it) ; `#[cfg]` other than `test` ;
@@ -70,13 +91,15 @@ const VARIANTS: [&str; 3] = ["Source", "Parser", "Elab"];
 const DEF_FILE: &str = "crates/hdl-ast/src/lib.rs";
 const RANGE_RULES: &str = "crates/hdl-ast/src/range_rules.rs";
 const PART5_HEADER: &str = "// ─────────────────────────── 5. the parser's respell builders";
-const PREFILTER: [&str; 6] = [
+const PREFILTER: [&str; 8] = [
     "LitOrigin",
     "IntLit",
     "origin",
     "lit_int",
     "range_rules",
     "macro_rules",
+    "ConstEntry",
+    "EntryLane",
 ];
 
 /// H2: every production `LitOrigin :: <V>`, per (file, fn, variant).
@@ -673,7 +696,9 @@ fn build(raw: Vec<(String, String)>) -> Vec<FileA> {
         }
     }
     raw.into_iter()
-        .filter(|(_, src)| PREFILTER.iter().any(|p| src.contains(p)))
+        .filter(|(rel, src)| {
+            rel.starts_with("crates/hdl-parser/src/") || PREFILTER.iter().any(|p| src.contains(p))
+        })
         .map(|(rel, src)| {
             let in_tests_dir = rel.split('/').nth(2) == Some("tests");
             let test_file = in_tests_dir
@@ -1277,6 +1302,237 @@ fn all_rules(files: &[FileA]) -> Vec<String> {
     v.extend(h3(files));
     v.extend(h4(files));
     v.extend(h5(files));
+    v.extend(c_rules(files));
+    v
+}
+
+// ─────────────────── C2: the constant table's entry (hdl-parser) ───────────────────
+
+const ENTRY_FILE: &str = "crates/hdl-parser/src/lib.rs";
+const PARSER_SRC: &str = "crates/hdl-parser/src/";
+
+/// The attributes right before the item that starts at token `s`, nearest first.
+fn attrs_before(f: &FileA, s: usize) -> Vec<String> {
+    let mut k = s;
+    let mut attrs = Vec::new();
+    while k >= 1 && w(f, k - 1) == "]" {
+        let mut d = 0;
+        let mut j = k - 1;
+        loop {
+            match w(f, j) {
+                "]" => d += 1,
+                "[" => {
+                    d -= 1;
+                    if d == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            j -= 1;
+        }
+        let a: Vec<&str> = (j - 1..k).map(|x| w(f, x)).collect();
+        attrs.push(a.join(" "));
+        k = j - 1;
+    }
+    attrs
+}
+
+/// The body `{ .. }` of the item that starts at `head` in `f`, joined, once.
+fn item_text(f: &FileA, head: &[&str]) -> Option<(usize, String)> {
+    let sp = item_span(f, head);
+    let &[(s, e)] = sp.as_slice() else {
+        return None;
+    };
+    let o = (s..e).find(|&k| w(f, k) == "{")?;
+    Some((s, (o..=e).map(|k| w(f, k)).collect::<Vec<_>>().join(" ")))
+}
+
+/// C-c (the definition: no compare of an entry or a lane can compile): `ConstEntry` and
+/// `EntryLane` in hdl-parser's `lib.rs`, each derived exactly `Debug, Clone, Copy` ; the
+/// entry's fields exactly `v, w, signed` and `lane` under `#[allow(dead_code)]` (never
+/// `#[expect]`, premise judge 2 line 12) ; the lane's four unit variants ; no `impl .. for`
+/// either type anywhere ; one `impl ConstEntry` holding one fn, `val`.
+fn c_def(files: &[FileA]) -> Vec<String> {
+    let mut bad = Vec::new();
+    let mut trait_impls = Vec::new();
+    let mut inherent = Vec::new();
+    for f in files {
+        for i in 0..f.toks.len() {
+            if w(f, i) == "for" && matches!(w(f, i + 1), "ConstEntry" | "EntryLane") {
+                trait_impls.push(format!("{} {}", f.rel, w(f, i + 1)));
+            }
+            if w(f, i) == "impl" && matches!(w(f, i + 1), "ConstEntry" | "EntryLane") {
+                inherent.push((f.rel.clone(), w(f, i + 1).to_string(), i));
+            }
+        }
+    }
+    if !trait_impls.is_empty() {
+        bad.push(format!("C-c trait impls {trait_impls:?}"));
+    }
+    let Some(lib) = files.iter().find(|f| f.rel == ENTRY_FILE) else {
+        bad.push("C-c hdl-parser lib.rs not walked".into());
+        return bad;
+    };
+    let derive3 = ["# [ derive ( Debug , Clone , Copy ) ]".to_string()];
+    match item_text(lib, &["pub", "(", "crate", ")", "struct", "ConstEntry"]) {
+        Some((s, body)) => {
+            if attrs_before(lib, s) != derive3 {
+                bad.push(format!(
+                    "C-c ConstEntry attributes {:?}",
+                    attrs_before(lib, s)
+                ));
+            }
+            let want = "{ pub ( crate ) v : i64 , pub ( crate ) w : u32 , pub ( crate ) signed : bool , # [ allow ( dead_code ) ] pub ( crate ) lane : EntryLane , }";
+            if body != want {
+                bad.push(format!("C-c ConstEntry fields `{body}`"));
+            }
+        }
+        None => bad.push("C-c `struct ConstEntry` not found once".into()),
+    }
+    match item_text(lib, &["pub", "(", "crate", ")", "enum", "EntryLane"]) {
+        Some((s, body)) => {
+            if attrs_before(lib, s) != derive3 {
+                bad.push(format!(
+                    "C-c EntryLane attributes {:?}",
+                    attrs_before(lib, s)
+                ));
+            }
+            if body != "{ NoTypeNoRange , Converted , Fallback , WidthUnknown , }" {
+                bad.push(format!("C-c EntryLane variants `{body}`"));
+            }
+        }
+        None => bad.push("C-c `enum EntryLane` not found once".into()),
+    }
+    let fns: Vec<String> = match inherent.as_slice() {
+        [(rel, ty, i)] if rel == ENTRY_FILE && ty == "ConstEntry" => {
+            let o = i + 2;
+            (o..lib.close.get(&o).copied().unwrap_or(o))
+                .filter(|&k| w(lib, k) == "fn" && lib.toks[k].parent == Some(o))
+                .map(|k| w(lib, k + 1).to_string())
+                .collect()
+        }
+        _ => {
+            bad.push(format!("C-c inherent impls {inherent:?}"));
+            Vec::new()
+        }
+    };
+    if !inherent.is_empty() && fns != ["val"] {
+        bad.push(format!("C-c `impl ConstEntry` fns {fns:?}"));
+    }
+    bad
+}
+
+/// C-a: a production `ConstEntry {` that is not the definition or an `impl` header, per
+/// (file, fn): the one construction at W1.
+fn c_a(files: &[FileA]) -> Vec<String> {
+    let mut rows: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for f in files {
+        for i in 1..f.toks.len() {
+            if w(f, i) == "ConstEntry"
+                && w(f, i + 1) == "{"
+                && !matches!(w(f, i - 1), "struct" | "impl" | "for")
+                && production(f, i)
+            {
+                *rows
+                    .entry((f.rel.clone(), f.toks[i].func.clone()))
+                    .or_insert(0) += 1;
+            }
+        }
+    }
+    let want: BTreeMap<(String, String), usize> = [(
+        (
+            "crates/hdl-parser/src/params.rs".to_string(),
+            "param_item_to_module_item".to_string(),
+        ),
+        1,
+    )]
+    .into();
+    if rows != want {
+        return vec![format!(
+            "C-a `ConstEntry {{` constructions moved: measured {rows:?}"
+        )];
+    }
+    Vec::new()
+}
+
+/// C-b: in hdl-parser's production code no `. lane` and the token `lane` only at the field's
+/// declaration and in W1's fn (its local and the construction's shorthand field), per
+/// (file, fn).
+fn c_b(files: &[FileA]) -> Vec<String> {
+    let mut bad = Vec::new();
+    let mut rows: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for f in files.iter().filter(|f| f.rel.starts_with(PARSER_SRC)) {
+        for i in 1..f.toks.len() {
+            if w(f, i) != "lane" || !production(f, i) {
+                continue;
+            }
+            if w(f, i - 1) == "." {
+                bad.push(format!("C-b `. lane` read in {} {}", f.rel, f.toks[i].func));
+            }
+            *rows
+                .entry((f.rel.clone(), f.toks[i].func.clone()))
+                .or_insert(0) += 1;
+        }
+    }
+    let want: BTreeMap<(String, String), usize> = [
+        ((ENTRY_FILE.to_string(), "-".to_string()), 1),
+        (
+            (
+                "crates/hdl-parser/src/params.rs".to_string(),
+                "param_item_to_module_item".to_string(),
+            ),
+            2,
+        ),
+    ]
+    .into();
+    if rows != want {
+        bad.push(format!("C-b `lane` tokens moved: measured {rows:?}"));
+    }
+    bad
+}
+
+/// C-c (the compare): hdl-parser's production `. val (` calls are the two operands of the
+/// one wildcard-import compare, spelled `prev . val ( ) != v . val ( )`.
+fn c_c(files: &[FileA]) -> Vec<String> {
+    let mut bad = c_def(files);
+    let mut rows: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let shape = [
+        "prev", ".", "val", "(", ")", "!=", "v", ".", "val", "(", ")",
+    ];
+    let mut shaped = 0;
+    for f in files.iter().filter(|f| f.rel.starts_with(PARSER_SRC)) {
+        for i in 1..f.toks.len() {
+            if w(f, i) == "val" && w(f, i - 1) == "." && w(f, i + 1) == "(" && production(f, i) {
+                *rows
+                    .entry((f.rel.clone(), f.toks[i].func.clone()))
+                    .or_insert(0) += 1;
+            }
+            if production(f, i) && shape.iter().enumerate().all(|(k, x)| w(f, i + k) == *x) {
+                shaped += 1;
+            }
+        }
+    }
+    let want: BTreeMap<(String, String), usize> = [(
+        (
+            "crates/hdl-parser/src/imports.rs".to_string(),
+            "parse_import_term".to_string(),
+        ),
+        2,
+    )]
+    .into();
+    if rows != want || shaped != 1 {
+        bad.push(format!(
+            "C-c `. val (` calls moved: measured {rows:?}, {shaped} in the compare's shape"
+        ));
+    }
+    bad
+}
+
+fn c_rules(files: &[FileA]) -> Vec<String> {
+    let mut v = c_a(files);
+    v.extend(c_b(files));
+    v.extend(c_c(files));
     v
 }
 
@@ -1624,7 +1880,120 @@ fn controls_h5() {
     fails(h5, &m, "macro_rules");
 }
 
-/// Controls that must NOT fire: a comment, a string, a reordered `use`.
+#[test]
+fn c_a_the_entry_is_constructed_once() {
+    let v = c_a(tree());
+    assert!(v.is_empty(), "{v:#?}");
+}
+
+#[test]
+fn c_b_no_production_reads_the_lane() {
+    let v = c_b(tree());
+    assert!(v.is_empty(), "{v:#?}");
+}
+
+#[test]
+fn c_c_no_compare_but_val() {
+    let v = c_c(tree());
+    assert!(v.is_empty(), "{v:#?}");
+}
+
+#[test]
+fn controls_c() {
+    // n4: the export rebuilds the entry (a real site spelled back) ; a helper constructs one ;
+    // a destructuring pattern reads the lane
+    let mi = "crates/hdl-parser/src/module_items.rs";
+    let n4 = with_file(mi, None, |s| {
+        once(
+            s,
+            ".map(|(n, v)| (n.clone(), *v))",
+            ".map(|(n, v)| (n.clone(), ConstEntry { lane: EntryLane::Fallback, ..*v }))",
+        )
+    });
+    fails(c_a, &n4, "C-a");
+    fails(c_a, &plant(PLANT_P, "fn mk(v: i64) -> ConstEntry { ConstEntry { v, w: 32, signed: true, lane: EntryLane::Converted } }"), "C-a");
+    let pat = plant(PLANT_P, "fn f(e: ConstEntry) -> bool { let ConstEntry { lane, .. } = e; matches!(lane, EntryLane::Fallback) }");
+    fails(c_a, &pat, "C-a");
+    fails(c_b, &pat, "C-b `lane` tokens moved");
+    // n5: `.lane` read in const_fold (a real site spelled back)
+    let cf = "crates/hdl-parser/src/const_fold.rs";
+    fails(
+        c_b,
+        &with_file(cf, None, |s| {
+            once(
+                s,
+                "self.const_locals.get(&p.segments[0].name).map(|c| c.v)",
+                "self.const_locals.get(&p.segments[0].name).filter(|c| !matches!(c.lane, EntryLane::WidthUnknown)).map(|c| c.v)",
+            )
+        }),
+        "C-b `. lane` read",
+    );
+    // C-c: a compare made to compile (PartialEq derived on the entry, on the lane, by hand),
+    // `#[expect]` for `#[allow]`, a second method on the entry
+    let lib = |from: &str, to: &str| with_file(ENTRY_FILE, None, |s| once(s, from, to));
+    fails(
+        c_c,
+        &lib(
+            "#[derive(Debug, Clone, Copy)]\npub(crate) struct ConstEntry",
+            "#[derive(Debug, Clone, Copy, PartialEq)]\npub(crate) struct ConstEntry",
+        ),
+        "C-c ConstEntry attributes",
+    );
+    fails(
+        c_c,
+        &lib(
+            "#[derive(Debug, Clone, Copy)]\npub(crate) enum EntryLane",
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub(crate) enum EntryLane",
+        ),
+        "C-c EntryLane attributes",
+    );
+    fails(
+        c_c,
+        &plant(
+            PLANT_P,
+            "impl PartialEq for ConstEntry { fn eq(&self, o: &Self) -> bool { self.v == o.v } }",
+        ),
+        "C-c trait impls",
+    );
+    fails(
+        c_c,
+        &lib(
+            "#[allow(dead_code)] // first reader",
+            "#[expect(dead_code)] // first reader",
+        ),
+        "C-c ConstEntry fields",
+    );
+    fails(
+        c_c,
+        &lib(
+            "    pub(crate) fn val(self) -> ConstVal {",
+            "    pub(crate) fn lane(self) -> EntryLane {\n        self.lane\n    }\n    pub(crate) fn val(self) -> ConstVal {",
+        ),
+        "C-c `impl ConstEntry` fns",
+    );
+    // the import compare spelled on the fields (a real site spelled back) ; a third `.val()`
+    let im = "crates/hdl-parser/src/imports.rs";
+    fails(
+        c_c,
+        &with_file(im, None, |s| {
+            once(s, "prev.val() != v.val()", "(prev.v, prev.w) != (v.v, v.w)")
+        }),
+        "C-c `. val (` calls moved",
+    );
+    fails(
+        c_c,
+        &with_file(cf, None, |s| {
+            once(
+                s,
+                "self.const_locals.get(&p.segments[0].name).map(|c| c.v)",
+                "self.const_locals.get(&p.segments[0].name).map(|c| c.val().v)",
+            )
+        }),
+        "C-c `. val (` calls moved",
+    );
+}
+
+/// Controls that must NOT fire: a comment, a string, a reordered `use`, a reordered field list.
 #[test]
 fn controls_neutral() {
     assert!(
@@ -1645,5 +2014,25 @@ fn controls_neutral() {
         "IntLitKind, LitOrigin, Range",
         "IntLitKind, Range, LitOrigin"
     )))
+    .is_empty()); // C2: a comment holding every C token ; the construction's fields reordered
+    assert!(all_rules(&with_file(
+        "crates/hdl-parser/src/const_fold.rs",
+        None,
+        |s| once(
+            s,
+            "self.const_locals.get(&p.segments[0].name).map(|c| c.v)",
+            "self.const_locals.get(&p.segments[0].name).map(|c| c.v) // c.lane ConstEntry { lane } prev.val() != v.val()"
+        )
+    ))
     .is_empty());
+    assert!(
+        all_rules(&with_file("crates/hdl-parser/src/params.rs", None, |s| {
+            once(
+                s,
+                "ConstEntry { v, w, signed, lane }",
+                "ConstEntry { lane, signed, w, v }",
+            )
+        }))
+        .is_empty()
+    );
 }

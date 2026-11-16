@@ -271,7 +271,7 @@ impl Parser<'_, '_> {
                     } else if self.local_decl_names.contains(&n) {
                         // a local declaration wins over a wildcard
                     } else if let Some(prev) = self.const_locals.get(&n).copied() {
-                        if prev != v && self.wildcard_bound.contains(&n) {
+                        if prev.val() != v.val() && self.wildcard_bound.contains(&n) {
                             self.const_locals.remove(&n);
                         }
                     } else {
