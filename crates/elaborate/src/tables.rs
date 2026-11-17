@@ -562,7 +562,8 @@ pub struct Sidecars {
     /// settle fixpoint re-evaluates it per delta — so the profile counts it.
     pub ca_idents: Vec<ProcIdent>,
     /// §5.2 Q-WREXT: which writer writes which statically decided bits of which net
-    /// (`wext.rs`), as the end phase built it. Not serialized; no production reader yet.
+    /// (`wext.rs`), as the end phase built it. Not serialized; read in production only by the
+    /// end phase's `check_mixed_drivers` (`mdrv_mix.rs`), before this hand-off.
     pub write_view: crate::wext::WriteView,
     /// StmtIds of Force/Release stmts that are procedural assign/deassign.
     pub assign_ranks: AssignRankTable,

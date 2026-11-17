@@ -78,7 +78,9 @@ pub(crate) struct ContVarState {
     pub(crate) assigns: Vec<VarContAssign>,
     /// Variables another check already reported — E3001 from `multidriver.rs` Rules A, B
     /// and D and the overlap check `check_whole_net_multidriver`, and the whole-array
-    /// sole-writer E3009 (`cont_array.rs`) — so this module adds no E3018.
+    /// sole-writer E3009 (`cont_array.rs`) — so this module adds no E3018 ; and the
+    /// variables this module refused (E3018), so the mixed-driver check after it
+    /// (`mdrv_mix.rs`) adds no E3001 (one diagnostic per variable, §5.2 Q-MDRVMIX).
     pub(crate) reported: BTreeSet<u32>,
 }
 
@@ -275,6 +277,7 @@ impl Elaborator<'_> {
             };
             self.cur_prefix = a.prefix.clone();
             self.error_at(MsgCode::ElabLvalueKind, a.span, &msg);
+            self.cont_var.reported.insert(a.net);
         }
         // One warning per `assign` statement and variable: a whole-array `assign` is one
         // recorded row per element.
