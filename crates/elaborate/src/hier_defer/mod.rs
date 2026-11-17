@@ -105,12 +105,15 @@ pub(crate) struct DeferredHierWrite {
 /// and its chunk still carried a sentinel net.
 ///
 /// The literal is lowered self-determined (one bit) as usual and this record says
-/// where to go back and widen it: `expr_id` is the arena slot holding the `Const`
-/// (`push_expr` appends, so the slot is this literal's alone and overwriting it
-/// cannot disturb another expression), and `sentinel` names which deferral the width
-/// is waiting on. `resolve_pending_fill_widths` rebuilds the constant from
-/// `(raw, kind, resolved-width)` — no lowering scope required, which is why only a
-/// BARE fill is admitted here (see `bare_fill_literal`).
+/// where to go back and widen it: `expr_id` is the arena slot holding that first
+/// `Const` (the rhs root a statement or a continuous row points at), and `sentinel`
+/// names which deferral the width is waiting on. `resolve_pending_fill_widths`
+/// re-lowers the literal at the resolved width as a NEW expression and repoints every
+/// statement's and row's `rhs` from `expr_id` to it; the slot itself is never
+/// overwritten (`hier_defer/write.rs`: the statement's reference moves, not the arena
+/// slot), so the old `Const` stays behind as garbage and is not a patch the write
+/// view's funnel sees (`wext.rs`, THE STAND-DOWN). The rebuild needs no lowering scope,
+/// which is why only a BARE fill is admitted here (see `bare_fill_literal`).
 pub(crate) struct PendingFillWidth {
     pub(crate) expr_id: u32,
     pub(crate) sentinel: u32,

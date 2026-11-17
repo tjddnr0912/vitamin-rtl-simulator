@@ -134,9 +134,7 @@ impl Elaborator<'_> {
                 Some(w) => {
                     // `int` result (§20.6.2), like the placeholder it replaces.
                     let cid = self.intern_const(make_const_i64(i64::from(w), 32, true));
-                    if let Some(slot) = self.exprs.get_mut(d.eid as usize) {
-                        *slot = ir::Expr::Const { val: cid };
-                    }
+                    self.patch_expr_with(d.eid, |slot| *slot = ir::Expr::Const { val: cid });
                     self.undecided_placeholders.remove(&d.eid);
                 }
                 None => self.error(

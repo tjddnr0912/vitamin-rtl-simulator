@@ -31,8 +31,9 @@
 //!   bounds guard are such trees) that the geometry constant did not record either (a
 //!   genvar EXPRESSION index such as `2*g+1`: reach, not soundness, premise judge 1 N5)
 //!   — or a chunk that writes no bit at all (wholly out of range: the kernel answers
-//!   `None` for both, and so does the view). `Undecided` is not a fact: it never stands
-//!   for "the whole net".
+//!   `None` for both, and so does the view) — or any chunk with an offset or a width
+//!   expression in an elaboration that held a provisional constant (THE STAND-DOWN,
+//!   below). `Undecided` is not a fact: it never stands for "the whole net".
 //!
 //! THE WRITER is recorded as the IR has it (premise judge 1 K5): a static task inlined
 //! into its caller writes through statements of the CALLER's process, so its writes are
@@ -67,10 +68,13 @@
 //! read them; `finish` moves them), so the writes, their forms and their kernel extents
 //! are read from the finished IR. Three facts are not: the geometry constant, the
 //! declaration fact and the `via` intervals (C2, below) are taken during lowering, each
-//! when the lowering decides it, and the first of them can be stale (THE GEOMETRY
-//! CONSTANT's REVIEW-ONLY line); a kernel extent reads the finished IR's offset constant,
-//! which can itself be a lowering-time fold of a provisional value (the same line). It
-//! goes to `Sidecars::write_view` (the test and dump entry) and nothing reads it in a
+//! when the lowering decides it (the geometry constant also in the end phase: a deferred
+//! hierarchical element write's chunk is built through `flatten_word_eids` after the
+//! `$bits` patch, and a hierarchical read's before it, which is not a view write), and
+//! the first of them can be stale (THE GEOMETRY CONSTANT's REVIEW-ONLY line); a kernel
+//! extent reads the finished IR's offset constant, which can itself be a lowering-time
+//! fold of a provisional value (the same line). Both cases stand down (THE STAND-DOWN).
+//! It goes to `Sidecars::write_view` (the test and dump entry) and nothing reads it in a
 //! `vita` run.
 //! Built eagerly because it is cheap (Q-WREXT build r1, the view's instructions over an
 //! elaboration alone, same release binary, median of 3: +0.12 % y_wext_procs, +0.27 %
@@ -116,14 +120,47 @@
 //! hierarchical `$bits` in an index the geometry constant can name bits the finished IR
 //! does not write, and a kernel extent names the bits the finished IR writes, which are the
 //! folded 32's, not the design's (W/wrext/fix1/cells w01 w03 w06 w07 w08,
-//! W/batch5b/lens-sound/cells a1-a5; the store itself is §2 bits-hier-placeholder). The
-//! view has no production reader on this tree, so no output depends on it; §5.2 Q-WEXTPOS
-//! is the row that gives the view its stand-down on a provisional constant and each
-//! write's own position. The other in-place edits are not stale-able here:
-//! `param_query.rs`'s `patch_expr_param_const*` and `hier_defer/read.rs` write deferred
-//! READ placeholders, which are `Signal` nodes when the record is taken, so no constant
-//! leaf; `edge_gate.rs` repoints constant EDGES to a fresh id the record does not hold, so
-//! the kernel reads the fresh constant.
+//! W/batch5b/lens-sound/cells a1-a5; the store itself is §2 bits-hier-placeholder). Since
+//! §5.2 Q-WEXTPOS that elaboration stands down (THE STAND-DOWN, below): its select
+//! extents are `Undecided`, so neither stale value reaches a `W` line. The other in-place
+//! edits are not stale-able here: `param_query.rs`'s `patch_expr_param_const*` and
+//! `hier_defer/read.rs` write deferred READ placeholders — a `Signal` node (`POISON_NET`)
+//! for a hierarchical net, parameter or select, a `Call` node (`POISON_FID`,
+//! `inline_fn.rs`) for a hierarchical function call; neither is a constant leaf; and
+//! `edge_gate.rs` repoints constant EDGES to a fresh id the record does not hold, so the
+//! kernel reads the fresh constant.
+//!
+//! THE STAND-DOWN (§5.2 Q-WEXTPOS, unit C1). One flag, `WextRecords::provisional`: "this
+//! elaboration held a provisional constant". It is set by the one registered provisional
+//! constant and by any in-place overwrite of a `Const` slot, and nothing clears it:
+//! `register_provisional_const` registers the value-guess `Const` its one caller
+//! `lower_bits_fold` (`expr_special.rs`) makes for `$bits` of a hierarchical name (in the
+//! set `undecided_placeholders` the dead-arm and late-edge decisions read, and in the
+//! flag), and the patch funnel `patch_expr` / `patch_expr_with`, through which every
+//! in-place write of an `exprs` slot goes (the end phase's resolvers in
+//! `hier_defer/bits.rs`, `hier_defer/read.rs` and `param_query.rs`), raises it when the
+//! slot it overwrites is a `Const`. A provisional `Const` that is fixed by repointing its
+//! parent (`pending_fill_width`'s bare fill, an rhs `resolve_pending_fill_widths` in
+//! `hier_defer/write.rs` replaces in the statement or row) sets nothing and is no view
+//! fact, because the view reads lvalue chunks only. With the flag set, `chunk_extent`
+//! decides no select: after `Poison` and `Word`, every chunk with an offset or a width
+//! expression is `Undecided` (a lowering-time fold — `norm_sub_k`, `norm_k_sub`,
+//! `const_bound`, the geometry constant — may have read the provisional value, and the
+//! finished IR does not say which did); a whole-net chunk (no offset, no width) reads no
+//! expression and keeps the kernel's `[0, net_w)` (a declared width from a hierarchical
+//! `$bits` is refused by the lowering). The flag is the elaboration's, not the chunk's: a
+//! select that never read the provisional value stands down too (reach lost, never a
+//! wrong extent). `edge_gate.rs`'s `materialize` hands `&mut self.exprs` to
+//! `sim_ir::selfwidth::for_each_constant_edge_mut`, which repoints edge fields and writes
+//! no root slot: the one listed in-place hand-off outside the funnel. The funnel
+//! `debug_assert!`s that the view is not built yet (in a debug run only, so the narrow
+//! gate checks it and a release run does not). The stand-down is deleted when §5.2
+//! Q-HIERBITS lands (the registration then has no caller); the funnel stays, the patch
+//! census `wext_home.rs` H11 counts. NOT A FACT HERE: the view of an elaboration that
+//! latched `had_error`. After an error `placeholder_expr` stands a `Const` 0 in for a
+//! refused expression and a refused defparam leaves the parameter's default; neither is
+//! registered, and a reader returns on `had_error` before it reads (Q-MDRVMIX's re-entry
+//! (a)).
 //!
 //! THE DECLARATION FACT (PLAN2 addendum A1). `decl(net)` is `Some(DeclFact { site, kind,
 //! dir, type_param })` only for a net created by one of three declaration lowerings, each
@@ -273,6 +310,26 @@ pub(crate) struct WextRecords {
     decls: Vec<Option<DeclFact>>,
     /// `(via, start, end)` statement-id intervals (`record_via`).
     vias: Vec<(Via, u32, u32)>,
+    /// The elaboration held a provisional constant (THE STAND-DOWN; `note_provisional`,
+    /// `note_patch`).
+    provisional: bool,
+    /// `build_write_view` has run (the funnel's debug order check).
+    view_built: bool,
+}
+
+impl WextRecords {
+    /// A provisional `Const` was registered (`register_provisional_const`).
+    pub(crate) fn note_provisional(&mut self) {
+        self.provisional = true;
+    }
+
+    /// An `exprs` slot holding `old` is about to be overwritten in place (the patch
+    /// funnel): a `Const` there was provisional.
+    pub(crate) fn note_patch(&mut self, old: &ir::Expr) {
+        if matches!(old, ir::Expr::Const { .. }) {
+            self.provisional = true;
+        }
+    }
 }
 
 /// `flatten_word`'s arithmetic over constant leaves, one index at a time (module head).
@@ -381,6 +438,8 @@ pub(crate) struct WextSource<'a> {
     pub(crate) funcs: &'a [ir::FuncDef],
     pub(crate) geom: &'a std::collections::HashMap<u32, u32>,
     pub(crate) vias: &'a [(Via, u32, u32)],
+    /// THE STAND-DOWN's flag (`WextRecords::provisional`).
+    pub(crate) provisional: bool,
 }
 
 impl Elaborator<'_> {
@@ -401,9 +460,46 @@ impl Elaborator<'_> {
             funcs: &self.funcs,
             geom: &rec.geom,
             vias: &rec.vias,
+            provisional: rec.provisional,
         });
         view.decls = rec.decls;
         self.wext = view;
+        self.wext_rec.view_built = true;
+    }
+
+    /// The one registration of a provisional `Const` (THE STAND-DOWN): `eid` is a value
+    /// guess an end-phase patch replaces in place. It joins `undecided_placeholders` (a
+    /// width or count over it is undecided until the patch) and raises the flag.
+    pub(crate) fn register_provisional_const(&mut self, eid: u32) {
+        self.undecided_placeholders.insert(eid);
+        self.wext_rec.note_provisional();
+    }
+
+    /// The patch funnel, value form: overwrite `exprs[eid]` in place (an index write: a
+    /// slot past the arena panics, as the index writes it replaces did), raising the flag
+    /// when the slot held a `Const` (THE STAND-DOWN).
+    pub(crate) fn patch_expr(&mut self, eid: u32, e: ir::Expr) {
+        debug_assert!(
+            !self.wext_rec.view_built,
+            "§5.2 Q-WEXTPOS: an exprs slot patched after the write view was built"
+        );
+        let slot = &mut self.exprs[eid as usize];
+        self.wext_rec.note_patch(slot);
+        *slot = e;
+    }
+
+    /// The patch funnel, edit form: run the site's own edit on `exprs[eid]` when the slot
+    /// exists (as the `get_mut` writes it replaces did), raising the flag first when the
+    /// slot holds a `Const` (THE STAND-DOWN).
+    pub(crate) fn patch_expr_with(&mut self, eid: u32, edit: impl FnOnce(&mut ir::Expr)) {
+        debug_assert!(
+            !self.wext_rec.view_built,
+            "§5.2 Q-WEXTPOS: an exprs slot patched after the write view was built"
+        );
+        if let Some(slot) = self.exprs.get_mut(eid as usize) {
+            self.wext_rec.note_patch(slot);
+            edit(slot);
+        }
     }
 
     /// The geometry constant's writer (module head): `eid` is the offset ExprId a
@@ -497,7 +593,7 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
                 via: stmt.map(via),
                 chunk: k as u32,
                 net: c.net,
-                extent: chunk_extent(ctx, s.geom, c),
+                extent: chunk_extent(ctx, s.geom, s.provisional, c),
             });
         }
     };
@@ -592,10 +688,11 @@ fn frame_blocks(blocks: &[ir::BasicBlock], entry: u32) -> BTreeSet<u32> {
 }
 
 /// One chunk's extent (the module head's four cases, in that order; the kernel before the
-/// geometry constant).
+/// geometry constant; THE STAND-DOWN after `Word` when `provisional`).
 fn chunk_extent(
     ctx: ir::selfwidth::ExprCtx<'_>,
     geom: &std::collections::HashMap<u32, u32>,
+    provisional: bool,
     c: &ir::LvalChunk,
 ) -> Extent {
     let Some(nv) = ctx.nets.get(c.net as usize) else {
@@ -603,6 +700,12 @@ fn chunk_extent(
     };
     if c.word.is_some() {
         return Extent::Word;
+    }
+    // THE STAND-DOWN (module head): a select's offset or width may hold a fold of a
+    // provisional value; a whole-net chunk reads no expression. Deleted when §5.2
+    // Q-HIERBITS lands.
+    if provisional && (c.offset.is_some() || c.width.is_some()) {
+        return Extent::Undecided;
     }
     let net_w = nv.width.max(1);
     if let Some((lo, hi)) = ir::const_chunk_written_bits(ctx, c, net_w) {
@@ -812,6 +915,7 @@ mod tests {
             funcs: &[],
             geom: &std::collections::HashMap::new(),
             vias: &[],
+            provisional: false,
         });
         let ext: Vec<Extent> = v.writes.iter().map(|w| w.extent).collect();
         assert_eq!(
@@ -826,5 +930,109 @@ mod tests {
             ]
         );
         assert_eq!(v.writes[0].net, POISON_NET);
+    }
+
+    /// The registration's setter raises the flag (THE STAND-DOWN).
+    #[test]
+    fn reg_sets_flag() {
+        let mut r = WextRecords::default();
+        assert!(!r.provisional);
+        r.note_provisional();
+        assert!(r.provisional);
+    }
+
+    /// The funnel's setter: overwriting a `Const` slot raises the flag.
+    #[test]
+    fn patch_of_const_sets_flag() {
+        let mut r = WextRecords::default();
+        r.note_patch(&ir::Expr::Const { val: 0 });
+        assert!(r.provisional);
+    }
+
+    /// The funnel's setter: overwriting a deferred read placeholder (a `Signal` on
+    /// `POISON_NET`, a `Call` on `POISON_FID`) leaves the flag clear.
+    #[test]
+    fn patch_of_signal_keeps_clear() {
+        let mut r = WextRecords::default();
+        r.note_patch(&ir::Expr::Signal {
+            net: POISON_NET,
+            word: None,
+        });
+        r.note_patch(&ir::Expr::Call {
+            func: POISON_FID,
+            args: Vec::new(),
+        });
+        assert!(!r.provisional);
+    }
+
+    /// With the flag set a select (offset and width) is `Undecided`, a whole-net chunk
+    /// keeps the kernel's `[0, 8)` and an array word stays `Word`; with it clear the select
+    /// is the kernel's `[2, 3)`.
+    #[test]
+    fn stand_down_takes_selects_only() {
+        let nets = vec![net(8)];
+        let consts = vec![make_const_u32(2, 32), make_const_u32(1, 32)];
+        let exprs = vec![ir::Expr::Const { val: 0 }, ir::Expr::Const { val: 1 }];
+        let sel = ir::LvalChunk {
+            net: 0,
+            word: None,
+            offset: Some(0),
+            width: Some(1),
+            kind: ir::SelKind::Bit,
+        };
+        let word = ir::LvalChunk {
+            net: 0,
+            word: Some(0),
+            offset: None,
+            width: None,
+            kind: ir::SelKind::Bit,
+        };
+        let cas: Vec<ir::ContAssign> = [sel, word]
+            .into_iter()
+            .map(|c| ir::ContAssign {
+                lhs: ir::Lvalue { chunks: vec![c] },
+                rhs: 0,
+                delay: None,
+            })
+            .chain([ir::ContAssign {
+                lhs: whole(0),
+                rhs: 0,
+                delay: None,
+            }])
+            .collect();
+        let ids = vec![ProcIdent::default(); 3];
+        let ext = |provisional: bool| -> Vec<Extent> {
+            build_view(&WextSource {
+                nets: &nets,
+                exprs: &exprs,
+                consts: &consts,
+                cont_assigns: &cas,
+                ca_idents: &ids,
+                processes: &[],
+                proc_idents: &[],
+                stmts: &[],
+                blocks: &[],
+                funcs: &[],
+                geom: &std::collections::HashMap::new(),
+                vias: &[],
+                provisional,
+            })
+            .writes
+            .iter()
+            .map(|w| w.extent)
+            .collect()
+        };
+        let whole8 = Extent::Bits {
+            lo: 0,
+            hi: 8,
+            by: By::Kernel,
+        };
+        let bit2 = Extent::Bits {
+            lo: 2,
+            hi: 3,
+            by: By::Kernel,
+        };
+        assert_eq!(ext(false), vec![bit2, Extent::Word, whole8]);
+        assert_eq!(ext(true), vec![Extent::Undecided, Extent::Word, whole8]);
     }
 }

@@ -287,9 +287,7 @@ impl Elaborator<'_> {
             make_const_i64(v, 64, v < 0)
         };
         let cid = self.intern_const(cv);
-        if let Some(slot) = self.exprs.get_mut(eid as usize) {
-            *slot = ir::Expr::Const { val: cid };
-        }
+        self.patch_expr_with(eid, |slot| *slot = ir::Expr::Const { val: cid });
     }
 
     /// Width-aware [`Self::patch_expr_param_const`]: a hierarchical read of a TYPED
@@ -317,9 +315,7 @@ impl Elaborator<'_> {
             }
         };
         let cid = self.intern_const(cv);
-        if let Some(slot) = self.exprs.get_mut(eid as usize) {
-            *slot = ir::Expr::Const { val: cid };
-        }
+        self.patch_expr_with(eid, |slot| *slot = ir::Expr::Const { val: cid });
     }
 }
 

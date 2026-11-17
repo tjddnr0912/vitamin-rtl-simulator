@@ -553,8 +553,9 @@ impl Elaborator<'_> {
                     .join(".");
                 if self.lookup_net_scoped(&joined).is_none() {
                     let eid = self.int_result_expr(32);
-                    // a width or count over it is undecided until the patch
-                    self.undecided_placeholders.insert(eid);
+                    // a value guess: a width or count over it is undecided until the
+                    // patch, and the write view stands down (`wext.rs`)
+                    self.register_provisional_const(eid);
                     self.deferred_hier_bits.push(DeferredHierBits {
                         eid,
                         prefix: self.cur_prefix.clone(),

@@ -90,8 +90,11 @@ const ARR: [&str; 7] = [
     "func_blocks",
     "funcs",
 ];
-/// H1b: the mutating verbs (`push` is H1's).
-const MUT: [&str; 15] = [
+/// H1b / H11: the mutating verbs (`push` is H1's) — the grounding's `mutwalk2.py` VERBS
+/// list (premise judge 1 line 6 of §5.2 Q-WEXTPOS: mutwalk.py's list plus `split_at_mut`
+/// and `chunks_mut`; PLAN §6 MUT: `splice`, `extend_from_slice` and the `split_*_mut` /
+/// `chunks*_mut` family), `push` left out.
+const MUT: &[&str] = &[
     "extend",
     "insert",
     "append",
@@ -107,6 +110,58 @@ const MUT: [&str; 15] = [
     "drain",
     "pop",
     "resize",
+    "resize_with",
+    "extend_from_slice",
+    "splice",
+    "swap_remove",
+    "split_off",
+    "sort",
+    "sort_by",
+    "sort_by_key",
+    "sort_unstable",
+    "sort_unstable_by",
+    "sort_unstable_by_key",
+    "dedup",
+    "dedup_by",
+    "dedup_by_key",
+    "reverse",
+    "rotate_left",
+    "rotate_right",
+    "fill",
+    "fill_with",
+    "copy_from_slice",
+    "clone_from",
+    "as_mut",
+    "as_mut_slice",
+    "entry",
+    "or_insert",
+    "or_default",
+    "set_len",
+    "values_mut",
+    "get_or_insert_with",
+    "take",
+    "replace",
+    "split_at_mut",
+    "chunks_mut",
+    "chunks_exact_mut",
+    "split_first_mut",
+    "split_last_mut",
+    "retain_mut",
+    "push_back",
+    "push_front",
+    "pop_back",
+    "pop_front",
+];
+/// H11c: the verbs that add an entry to a producer list.
+const ADD: &[&str] = &[
+    "push",
+    "insert",
+    "extend",
+    "append",
+    "splice",
+    "entry",
+    "push_back",
+    "extend_from_slice",
 ];
 const STORE: [&str; 4] = ["BlockingAssign", "NonblockingAssign", "Force", "Release"];
 
@@ -439,6 +494,15 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 if l >= 1 && t[l - 1].text == "." && ARR.contains(&tx(l)) && tx(l + 1) != "(" {
                     out.push((format!("H1b:{}:&mut", tx(l)), k.clone()));
                 }
+                // H11 `& mut <path> . exprs`
+                if l >= 1 && t[l - 1].text == "." && tx(l) == "exprs" && tx(l + 1) != "(" {
+                    let recv = if l >= 2 && tx(l - 2) == "rs" {
+                        "rs.exprs"
+                    } else {
+                        "exprs"
+                    };
+                    out.push((format!("H11:{recv}:&mut"), k.clone()));
+                }
             }
         }
         // H1b `. <arr> [ .. ] .. =`
@@ -446,6 +510,57 @@ fn hits(src: &str) -> Vec<(String, String)> {
             let close = close_of(&t, i + 2);
             if assigned_after(&t, close) {
                 out.push((format!("H1b:{}:index=", tx(i + 1)), k.clone()));
+            }
+        }
+        // H1b `. <arr> =` (the whole field assigned; `==` / `=>` are one token here)
+        if tx(i) == "." && ARR.contains(&tx(i + 1)) && tx(i + 2) == "=" {
+            out.push((format!("H1b:{}:=", tx(i + 1)), k.clone()));
+        }
+        // H11 the `exprs` arena's writers: `. exprs . <verb> (` (`push` too), `. exprs [ .. ]
+        // .. =`, `. exprs =` ; the read set's map `rs . exprs` keyed apart
+        if tx(i) == "." && tx(i + 1) == "exprs" {
+            let recv = if i >= 1 && tx(i - 1) == "rs" {
+                "rs.exprs"
+            } else {
+                "exprs"
+            };
+            if tx(i + 2) == "." && tx(i + 4) == "(" {
+                let verb = tx(i + 3);
+                if verb == "push" || MUT.contains(&verb) {
+                    out.push((format!("H11:{recv}:{verb}"), k.clone()));
+                }
+            }
+            if tx(i + 2) == "[" && assigned_after(&t, close_of(&t, i + 2)) {
+                out.push((format!("H11:{recv}:index="), k.clone()));
+            }
+            if tx(i + 2) == "=" {
+                out.push((format!("H11:{recv}:="), k.clone()));
+            }
+        }
+        // H11b the stand-down's setters and the registered set's insert
+        if tx(i) == "."
+            && tx(i + 1) == "undecided_placeholders"
+            && tx(i + 2) == "."
+            && tx(i + 3) == "insert"
+            && tx(i + 4) == "("
+        {
+            out.push(("H11b:undecided_placeholders.insert".into(), k.clone()));
+        }
+        // H11c the producer lists: `. <recv> . <add verb> (` for a receiver `deferred_<x>`,
+        // `pending_<x>`, `late_<x>`, `provisional_<x>` or `<x>_placeholders`
+        if tx(i) == "."
+            && t.get(i + 1).is_some_and(|x| x.kind == Kind::Id)
+            && tx(i + 2) == "."
+            && ADD.contains(&tx(i + 3))
+            && tx(i + 4) == "("
+        {
+            let r = tx(i + 1);
+            if ["deferred_", "pending_", "late_", "provisional_"]
+                .iter()
+                .any(|p| r.starts_with(p))
+                || r.ends_with("_placeholders")
+            {
+                out.push((format!("H11c:{r}:{}", tx(i + 3)), k.clone()));
             }
         }
         if id && tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn") {
@@ -458,6 +573,12 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "record_geom" | "carry_geom" => out.push((format!("H7:{}", tx(i)), k.clone())),
                 "record_decl_fact" => out.push(("H8:record_decl_fact".into(), k.clone())),
                 "record_via" => out.push(("H9:record_via".into(), k.clone())),
+                "note_provisional" | "register_provisional_const" | "note_patch" => {
+                    out.push((format!("H11b:{}", tx(i)), k.clone()))
+                }
+                "patch_expr" | "patch_expr_with" => {
+                    out.push((format!("H11:call:{}", tx(i)), k.clone()))
+                }
                 _ => {}
             }
         }
@@ -580,6 +701,91 @@ fn h1b_the_in_place_writers() {
 #[test]
 fn h7_the_geometry_constant_home() {
     check("H7", H7);
+}
+
+/// H11 (§5.2 Q-WEXTPOS C1): every in-place write of an `exprs` slot is the patch funnel's.
+/// Also (premise judge round 1, line 3: A4's census widened to api.rs's three passes
+/// after `run`): those passes and the four checks after `build_write_view` hold no H11 or
+/// H1b token of their own — what this walker can see of "nothing patches after the view";
+/// the order itself is the funnel's `debug_assert!` (a debug run only).
+#[test]
+fn h11_the_exprs_slot_writers() {
+    check("H11", H11);
+    let tab = census();
+    let after = [
+        "check_whole_net_multidriver",
+        "check_whole_array_sole_writer",
+        "check_var_cont_assign_sole_writer",
+        "check_readmem_assoc_waits",
+        "assert_block_local_inits_drained",
+        "finish_assert_item_gate",
+        "edge_backstop",
+    ];
+    let hit: Vec<_> = tab
+        .keys()
+        .filter(|(r, _, k)| {
+            (r.starts_with("H11:") || r.starts_with("H1b:")) && after.contains(&k.as_str())
+        })
+        .collect();
+    assert!(hit.is_empty(), "a writer after the view: {hit:?}");
+    for f in after {
+        assert!(
+            census_fn_exists(f),
+            "`{f}` is not a fn of elaborate/src any more: re-read A4's list"
+        );
+    }
+}
+
+/// H11b (§5.2 Q-WEXTPOS C1): the stand-down's two setters each have their one caller,
+/// and the registered set has one insert, inside the registration.
+#[test]
+fn h11b_the_stand_down_setters() {
+    check("H11b", H11B);
+}
+
+/// H11c (§5.2 Q-WEXTPOS C1, premise judge 1 line 5 of the row): every producer list's
+/// add site, per (file, fn), with two hand-written columns — whether the node it records
+/// is an `exprs` `Const` the end phase replaces, and whether it is registered. A new site
+/// fails here until its author says both; a `Const` one must call
+/// `register_provisional_const` in the same fn or say why not.
+#[test]
+fn h11c_the_producer_lists() {
+    let rows: Vec<(&str, &str, &str, usize, &str)> = H11C
+        .iter()
+        .map(|&(r, f, k, n, _, _)| (r, f, k, n, ""))
+        .collect();
+    check("H11c", &rows);
+    let tab = census();
+    for &(r, f, k, _, konst, reg) in H11C {
+        assert!(
+            matches!(konst, "y" | "n" | "no slot"),
+            "{r} {f} {k}: Const column `{konst}`"
+        );
+        assert!(!reg.is_empty(), "{r} {f} {k}: registered column empty");
+        if konst == "y" && reg == "y" {
+            let registers = tab.keys().any(|(rr, ff, kk)| {
+                (rr == "H11b:register_provisional_const" || rr == "H11b:note_provisional")
+                    && ff == f
+                    && kk == k
+            });
+            assert!(registers, "{r} {f} {k}: says registered, calls no setter");
+        }
+        if konst == "y" && reg != "y" {
+            assert!(
+                reg.starts_with("no: "),
+                "{r} {f} {k}: a Const not registered says why"
+            );
+        }
+    }
+}
+
+/// Whether some fn of elaborate/src is named `name` (the census's own walk).
+fn census_fn_exists(name: &str) -> bool {
+    let root = workspace_root();
+    files_in(&root, SRC).iter().any(|(_, src)| {
+        let t = tokens(src);
+        t.windows(2).any(|w| w[0].text == "fn" && w[1].text == name)
+    })
 }
 
 #[test]
@@ -980,6 +1186,145 @@ fn walker_controls() {
         0,
         "H9 cfg(test)"
     );
+    // MUT (Q-WEXTPOS C1): the widened verbs and the whole-field assignment, on an H1b array
+    assert_eq!(
+        count(
+            "H1b",
+            "fn f(&mut self) { self.stmts.splice(0..0, v); self.funcs.split_at_mut(2); self.stmts = Vec::new(); }"
+        ),
+        3,
+        "MUT planted: splice, split_at_mut, `. <arr> =`"
+    );
+    assert_eq!(
+        count(
+            "H1b",
+            "fn f(&self) -> bool { self.stmts == v || self.stmts.len() > 0 }"
+        ),
+        0,
+        "MUT: a compare and a read"
+    );
+    let back = hits(
+        "impl E { fn g(&mut self) { if let Some(b) = self.func_blocks.get_mut(rb) { b.stmts.splice(0..0, u); } } }",
+    );
+    assert_eq!(
+        back,
+        vec![
+            ("H1b:func_blocks:get_mut".to_string(), "g".to_string()),
+            ("H1b:stmts:splice".to_string(), "g".to_string())
+        ],
+        "MUT real site (hier_defer/func_call.rs install_deferred_hier_call) spelled back"
+    );
+    // H11: PLAN §6's planted raw slot write in `resolve_deferred_hier`, each writer shape,
+    // the read set's map apart, and what is not a write
+    assert_eq!(
+        hits("impl E { fn resolve_deferred_hier(&mut self) { self.exprs[d.eid as usize] = m; } }"),
+        vec![(
+            "H11:exprs:index=".to_string(),
+            "resolve_deferred_hier".to_string()
+        )],
+        "H11 planted: a raw slot write beside the funnel"
+    );
+    let h11 = "fn f(&mut self) { self.exprs.split_at_mut(3); self.exprs = Vec::new(); \
+               let a = std::mem::take(&mut self.exprs); self.exprs.iter_mut(); }";
+    assert_eq!(
+        count("H11", h11),
+        4,
+        "H11 planted: split_at_mut, `=`, &mut, iter_mut"
+    );
+    assert_eq!(
+        hits("fn f(&mut self) { self.rs.exprs.insert(i, m); }"),
+        vec![("H11:rs.exprs:insert".to_string(), "f".to_string())],
+        "H11 the read set's map keyed apart"
+    );
+    assert_eq!(
+        count(
+            "H11",
+            "fn f(&self) { if self.exprs[e] == x {} let a = &self.exprs[e]; self.exprs.len(); }\n\
+             // self.exprs[e] = x;"
+        ),
+        0,
+        "H11 a compare, a read, a length, a comment"
+    );
+    let back = hits(
+        "impl E { fn g(&mut self, eid: u32, e: ir::Expr) { let slot = &mut self.exprs[eid as usize]; \
+         self.wext_rec.note_patch(slot); *slot = e; } }",
+    );
+    assert_eq!(
+        back,
+        vec![
+            ("H11:exprs:&mut".to_string(), "g".to_string()),
+            ("H7:wext_rec".to_string(), "g".to_string()),
+            ("H11b:note_patch".to_string(), "g".to_string())
+        ],
+        "H11 real site (wext.rs patch_expr) spelled back"
+    );
+    // H11b: a second registration caller, the set's insert spelled raw again, a definition
+    let h11b = "impl E { fn lower_bits_fold(&mut self) { self.undecided_placeholders.insert(eid); } \
+                fn h(&mut self) { self.register_provisional_const(e); self.wext_rec.note_provisional(); } }";
+    let got: Vec<(String, String)> = hits(h11b)
+        .into_iter()
+        .filter(|(r, _)| r.starts_with("H11b:"))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (
+                "H11b:undecided_placeholders.insert".to_string(),
+                "lower_bits_fold".to_string()
+            ),
+            (
+                "H11b:register_provisional_const".to_string(),
+                "h".to_string()
+            ),
+            ("H11b:note_provisional".to_string(), "h".to_string())
+        ],
+        "H11b planted"
+    );
+    assert_eq!(
+        count(
+            "H11b",
+            "fn note_patch(&mut self, old: &ir::Expr) {} fn register_provisional_const(&mut self) {}"
+        ),
+        0,
+        "H11b definitions"
+    );
+    // H11c: PLAN §6's planted new producer, the receiver shapes, and what is not an add
+    assert_eq!(
+        hits("impl E { fn lower_x(&mut self) { self.deferred_new.push(x); } }"),
+        vec![("H11c:deferred_new:push".to_string(), "lower_x".to_string())],
+        "H11c planted: an unlisted producer"
+    );
+    assert_eq!(
+        count(
+            "H11c",
+            "fn f(&mut self) { self.foo_placeholders.insert(e); self.pending_q.entry(k); self.late_v.extend(w); }"
+        ),
+        3,
+        "H11c receiver shapes"
+    );
+    assert_eq!(
+        count(
+            "H11c",
+            "fn f(&mut self) { self.deferred_hier.len(); self.pending_y.drain(..); self.deferredx.push(x); }"
+        ),
+        0,
+        "H11c a read, a removal, another name"
+    );
+    let back = hits(
+        "impl E { fn g(&mut self) { let eid = self.int_result_expr(32); self.register_provisional_const(eid); \
+         self.deferred_hier_bits.push(d); } }",
+    );
+    assert_eq!(
+        back,
+        vec![
+            (
+                "H11b:register_provisional_const".to_string(),
+                "g".to_string()
+            ),
+            ("H11c:deferred_hier_bits:push".to_string(), "g".to_string())
+        ],
+        "H11c real site (expr_special.rs lower_bits_fold) spelled back"
+    );
 }
 
 /// H1: (rule, file, fn, count, why) — the append points.
@@ -1020,6 +1365,7 @@ const H1B: &[(&str, &str, &str, usize, &str)] = &[
     ("H1b:stmts:&mut", "hier_defer/write.rs", "resolve_pending_fill_widths", 1, "before the view: a fill width once the chunk is decided"),
     ("H1b:stmts:insert", "stmt_flow.rs", "push_stmt", 1, "`self.rs.stmts`, the read-set provenance map, not the arena"),
     ("H1b:stmts:retain", "read_set.rs", "recompute_in_body_star_sites", 1, "before the view (R-SETTLE): a block's statement list"),
+    ("H1b:stmts:splice", "hier_defer/func_call.rs", "install_deferred_hier_call", 2, "resolve_deferred_hier_task_call, before the view: the copy-out unpacks put at the return block's head (seen since MUT took `splice`, Q-WEXTPOS C1)"),
 ];
 
 /// H2: the kernel callers.
@@ -1159,11 +1505,14 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:carry_geom", "packed_lval.rs", "try_nested_packed_part_lval", 1, "`base_off + l`: a part-select under an element (a struct member)"),
     ("H7:record_geom", "array_geom.rs", "flatten_word", 1, "the flat-offset tree's constant"),
     ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
-    ("H7:wext_rec", "wext.rs", "build_write_view", 1, "taken once into the view"),
+    ("H7:wext_rec", "wext.rs", "build_write_view", 2, "taken once into the view ; then marked built (the funnel's debug order check)"),
     ("H7:wext_rec", "wext.rs", "carry_geom", 2, "the geometry writer (read base, insert)"),
+    ("H7:wext_rec", "wext.rs", "patch_expr", 2, "the patch funnel: its debug order check and the stand-down's setter"),
+    ("H7:wext_rec", "wext.rs", "patch_expr_with", 2, "the patch funnel: its debug order check and the stand-down's setter"),
     ("H7:wext_rec", "wext.rs", "record_decl_fact", 1, "the declaration-fact writer"),
     ("H7:wext_rec", "wext.rs", "record_geom", 1, "the geometry writer"),
     ("H7:wext_rec", "wext.rs", "record_via", 1, "the via writer"),
+    ("H7:wext_rec", "wext.rs", "register_provisional_const", 1, "the stand-down's registration"),
 ];
 
 /// H8: the declaration fact's writer, the sites and scopes passed to it, and what it reads.
@@ -1209,4 +1558,72 @@ const H9: &[(&str, &str, &str, usize, &str)] = &[
     ("H9:Via::TaskInline", "wext.rs", "render", 1, "`task`"),
     ("H9:record_via", "inline_task.rs", "inline_task", 1, "around inline_static_task"),
     ("H9:record_via", "stmt_main.rs", "lower_stmt_inner", 1, "around the action arms"),
+];
+
+/// H11: the `exprs` arena's writers — the patch funnel and its 11 callers (the end
+/// phase's resolvers, ground Q2-B's 11 slot writers), the append funnel, the one listed
+/// hand-off, and the read set's provenance map `rs.exprs` (another receiver).
+#[rustfmt::skip]
+const H11: &[(&str, &str, &str, usize, &str)] = &[
+    ("H11:call:patch_expr", "hier_defer/read.rs", "resolve_deferred_hier", 1, "a readmem assoc marker over a Signal placeholder"),
+    ("H11:call:patch_expr", "hier_defer/read.rs", "resolve_one_deferred_hier_sel", 4, "a built select copied over a Signal placeholder"),
+    ("H11:call:patch_expr_with", "hier_defer/bits.rs", "resolve_deferred_hier_bits", 1, "the registered $bits Const 32 -> the width (the one Const overwrite)"),
+    ("H11:call:patch_expr_with", "hier_defer/read.rs", "resolve_deferred_hier", 2, "a wide param Const over a Signal placeholder ; the placeholder's net id"),
+    ("H11:call:patch_expr_with", "hier_defer/read.rs", "resolve_deferred_hier_call", 1, "the placeholder Call's func id"),
+    ("H11:call:patch_expr_with", "param_query.rs", "patch_expr_param_const", 1, "a param Const over a Signal placeholder"),
+    ("H11:call:patch_expr_with", "param_query.rs", "patch_expr_param_const_w", 1, "a typed param Const over a Signal placeholder"),
+    ("H11:exprs:&mut", "edge_gate.rs", "materialize", 1, "the listed hand-off: for_each_constant_edge_mut repoints edge fields, no root slot"),
+    ("H11:exprs:&mut", "wext.rs", "patch_expr", 1, "the patch funnel (value form)"),
+    ("H11:exprs:get_mut", "wext.rs", "patch_expr_with", 1, "the patch funnel (edit form)"),
+    ("H11:exprs:push", "expr_ctx.rs", "push_expr", 1, "the append funnel"),
+    ("H11:rs.exprs:entry", "read_set.rs", "mark_compound_lvalue_copy", 1, "the read set's provenance map, not the arena"),
+    ("H11:rs.exprs:insert", "expr_ctx.rs", "push_expr", 1, "the read set's provenance map, not the arena"),
+];
+
+/// H11b: the stand-down's setters and the registered set's insert.
+#[rustfmt::skip]
+const H11B: &[(&str, &str, &str, usize, &str)] = &[
+    ("H11b:note_patch", "wext.rs", "patch_expr", 1, "the funnel, value form"),
+    ("H11b:note_patch", "wext.rs", "patch_expr_with", 1, "the funnel, edit form"),
+    ("H11b:note_provisional", "wext.rs", "register_provisional_const", 1, "the registration"),
+    ("H11b:register_provisional_const", "expr_special.rs", "lower_bits_fold", 1, "$bits of a hierarchical name: the one value-guess Const"),
+    ("H11b:undecided_placeholders.insert", "wext.rs", "register_provisional_const", 1, "the registered set, inside the registration"),
+];
+
+/// H11c: (rule, file, fn, count, the node is an `exprs` `Const` the end phase replaces:
+/// y / n / no slot, registered: y / "no: <why>" / "-" when not a `Const`). Sources: the
+/// grounding's Q2-A and NM-5 tables (W/wextpos/ground, ground2), each site re-read.
+#[rustfmt::skip]
+const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
+    ("H11c:deferred_assert_items:push", "assert_item_gate.rs", "note_deferred_assert_item", 1, "no slot", "-"),
+    ("H11c:deferred_captures:push", "held.rs", "record_deferred_capture", 1, "no slot", "-"),
+    ("H11c:deferred_hier:push", "expr_main.rs", "lower_expr_ungated", 1, "n", "-"),
+    ("H11c:deferred_hier_bits:push", "expr_special.rs", "lower_bits_fold", 1, "y", "y"),
+    ("H11c:deferred_hier_calls:push", "inline_fn.rs", "inline_function", 1, "n", "-"),
+    ("H11c:deferred_hier_sel:push", "expr_main.rs", "lower_expr_ungated", 3, "n", "-"),
+    ("H11c:deferred_hier_sel_write:push", "hier_defer/write.rs", "defer_hier_sel_write", 1, "no slot", "-"),
+    ("H11c:deferred_hier_task_calls:push", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "no slot", "-"),
+    ("H11c:deferred_hier_task_calls:push", "hier_defer/func_call.rs", "emit_deferred_hier_func_call", 1, "no slot", "-"),
+    ("H11c:deferred_hier_task_calls:push", "inline_task.rs", "inline_task", 1, "no slot", "-"),
+    ("H11c:deferred_hier_write:push", "hier_defer/write.rs", "defer_hier_write", 1, "no slot", "-"),
+    ("H11c:error_placeholders:insert", "expr_ctx.rs", "placeholder_expr", 1, "y", "no: a Const 0 after an error only (had_error latched: no fact, the reader's guard)"),
+    ("H11c:error_placeholders:insert", "packed.rs", "lower_index_expr_inner", 2, "y", "no: a Const 0 index after an error only (had_error latched: no fact, the reader's guard)"),
+    ("H11c:pending_block_local_inits:entry", "var_init.rs", "push_block_local_init", 1, "no slot", "-"),
+    ("H11c:pending_block_local_inits:insert", "var_init.rs", "flush_block_local_inits", 1, "no slot", "-"),
+    ("H11c:pending_calls:push", "read_set.rs", "note_call_site_mark", 1, "no slot", "-"),
+    ("H11c:pending_cover:push", "stmt_main.rs", "lower_stmt_inner", 1, "no slot", "-"),
+    ("H11c:pending_fill_width:push", "expr_ctx.rs", "resize_rhs_for_lvalue", 1, "y", "no: an rhs, repointed by resolve_pending_fill_widths, never patched in its slot ; no lvalue chunk reads it"),
+    ("H11c:pending_fork_modes:push", "instance.rs", "record_fork_mode", 1, "no slot", "-"),
+    ("H11c:pending_hier_task_calls:push", "hier_defer/func_call.rs", "emit_deferred_hier_func_call", 1, "no slot", "-"),
+    ("H11c:pending_hier_task_calls:push", "inline_task.rs", "inline_task", 1, "no slot", "-"),
+    ("H11c:pending_scoped_presize:entry", "string_array_route.rs", "route_fixed_string_array", 1, "no slot", "-"),
+    ("H11c:pending_scoped_presize:insert", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
+    ("H11c:pending_sva:push", "stmt_main.rs", "lower_stmt_inner", 4, "no slot", "-"),
+    ("H11c:pending_task_calls:push", "frames_call/emit.rs", "emit_frame_func_out_call", 1, "no slot", "-"),
+    ("H11c:pending_task_calls:push", "frames_call/emit.rs", "emit_frame_task_call", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:extend", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:extend", "var_init.rs", "flush_block_local_inits", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:push", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:splice", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
+    ("H11c:undecided_placeholders:insert", "wext.rs", "register_provisional_const", 1, "y", "y"),
 ];

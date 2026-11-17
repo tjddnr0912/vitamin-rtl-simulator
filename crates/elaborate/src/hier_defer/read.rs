@@ -91,7 +91,7 @@ impl Elaborator<'_> {
                 if let Some(built) = self.build_hier_param_select(&d) {
                     self.verify_hier_sel_shape(d.eid, built, &d.path);
                     let e = self.exprs[built as usize].clone();
-                    self.exprs[d.eid as usize] = e;
+                    self.patch_expr(d.eid, e);
                 }
                 return;
             }
@@ -119,10 +119,13 @@ impl Elaborator<'_> {
             if let Some(word) = self.hier_dyn_container_word(net, &d.idx_eids) {
                 // A recorded shape never names a dynamic container.
                 self.verify_hier_shape_not_net(d.eid, &d.path, "a dynamic container element");
-                self.exprs[d.eid as usize] = ir::Expr::Signal {
-                    net,
-                    word: Some(word),
-                };
+                self.patch_expr(
+                    d.eid,
+                    ir::Expr::Signal {
+                        net,
+                        word: Some(word),
+                    },
+                );
                 return;
             }
         }
@@ -148,7 +151,7 @@ impl Elaborator<'_> {
             if let Some(e) = self.build_hier_read_part(net, &d.idx_eids, p, &path) {
                 self.verify_hier_sel_shape(d.eid, e, &d.path);
                 let ex = self.exprs[e as usize].clone();
-                self.exprs[d.eid as usize] = ex;
+                self.patch_expr(d.eid, ex);
             }
             return;
         }
@@ -192,7 +195,7 @@ impl Elaborator<'_> {
         };
         self.verify_hier_sel_shape(d.eid, built, &d.path);
         let e = self.exprs[built as usize].clone();
-        self.exprs[d.eid as usize] = e;
+        self.patch_expr(d.eid, e);
     }
 
     /// Resolve the N3 deferred hierarchical READ references against the completed
@@ -231,9 +234,7 @@ impl Elaborator<'_> {
                     // A >64-bit parameter: the same `Const` a bare read of it lowers to
                     // (`BareIdentRoute::Wide`), so `u.C` and `C` are byte-identical.
                     let cid = self.intern_const(cv);
-                    if let Some(slot) = self.exprs.get_mut(d.eid as usize) {
-                        *slot = ir::Expr::Const { val: cid };
-                    }
+                    self.patch_expr_with(d.eid, |slot| *slot = ir::Expr::Const { val: cid });
                 } else {
                     self.error_hier_unresolved(
                         &d.prefix,
@@ -354,13 +355,15 @@ impl Elaborator<'_> {
                 let mark = self.mark_of_expr(d.eid);
                 let path = d.path.join(".");
                 if let Some(m) = self.with_site(mark, |s| s.readmem_assoc_marker(net, &path)) {
-                    self.exprs[d.eid as usize] = m;
+                    self.patch_expr(d.eid, m);
                 }
                 continue;
             }
-            if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
-                *slot = net;
-            }
+            self.patch_expr_with(d.eid, |e| {
+                if let ir::Expr::Signal { net: slot, .. } = e {
+                    *slot = net;
+                }
+            });
         }
         self.cur_span = ambient;
     }
@@ -529,9 +532,11 @@ impl Elaborator<'_> {
             self.cur_span = Some(d.span);
             self.verify_hier_call_shape(d.eid, fid, &d.path);
             self.cur_span = ambient;
-            if let Some(ir::Expr::Call { func, .. }) = self.exprs.get_mut(d.eid as usize) {
-                *func = fid;
-            }
+            self.patch_expr_with(d.eid, |e| {
+                if let ir::Expr::Call { func, .. } = e {
+                    *func = fid;
+                }
+            });
         }
     }
 }
