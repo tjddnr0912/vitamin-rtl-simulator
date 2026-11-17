@@ -64,8 +64,14 @@
 //! hierarchical write is patched by then and no array the view reads is appended after it
 //! (the sole-writer checks, `check_readmem_assoc_waits`, then api.rs's
 //! `assert_block_local_inits_drained`, `finish_assert_item_gate` and `edge_backstop` only
-//! read them; `finish` moves them), so the record describes the finished IR. It goes to
-//! `Sidecars::write_view` (the test and dump entry) and nothing reads it in a `vita` run.
+//! read them; `finish` moves them), so the writes, their forms and their kernel extents
+//! are read from the finished IR. Three facts are not: the geometry constant, the
+//! declaration fact and the `via` intervals (C2, below) are taken during lowering, each
+//! when the lowering decides it, and the first of them can be stale (THE GEOMETRY
+//! CONSTANT's REVIEW-ONLY line); a kernel extent reads the finished IR's offset constant,
+//! which can itself be a lowering-time fold of a provisional value (the same line). It
+//! goes to `Sidecars::write_view` (the test and dump entry) and nothing reads it in a
+//! `vita` run.
 //! Built eagerly because it is cheap (Q-WREXT build r1, the view's instructions over an
 //! elaboration alone, same release binary, median of 3: +0.12 % y_wext_procs, +0.27 %
 //! y_wext_mix, +0.11 % y_wext_port, +0.04 % el2w; W/wrext/build/cost/probe/VIEW_COST.txt):
@@ -99,10 +105,25 @@
 //! folding the tree would be a second fold of `Mul` beside the kernel's). Equality with the
 //! engine: `sim-engine`'s `geometry_constant_is_what_the_stores_write` writes every
 //! geometry-decided chunk of a grid through both stores and compares. REVIEW-ONLY: a later
-//! in-place edit of a recorded ExprId's tree (`param_query.rs`'s `patch_expr_param_const*`
-//! and `hier_defer/read.rs` write deferred READ placeholders, which are `Signal` nodes when
-//! the record is taken, so no constant leaf; `edge_gate.rs` repoints constant EDGES to a
-//! fresh id the record does not hold, so the kernel reads the fresh constant).
+//! in-place edit of a recorded ExprId's tree. One such edit makes the view stale today
+//! (batch 5's soundness lens F1, W/batch5b/lens-sound/REPORT.txt): `lower_bits_fold`
+//! (`expr_special.rs`) lowers `$bits` of a hierarchical name to a provisional `Const` 32
+//! (kept in `undecided_placeholders`), and `resolve_deferred_hier_bits`
+//! (`hier_defer/bits.rs`) patches that node in place to the real width in the end phase,
+//! AFTER `record_geom` read the 32 at lowering; the lowering-time folds `norm_sub_k` /
+//! `norm_k_sub` (`packed.rs`) and `const_bound` (`arrays/pattern.rs`) read the same 32 and
+//! fold it into a fresh constant the patch never reaches. So on a design with a
+//! hierarchical `$bits` in an index the geometry constant can name bits the finished IR
+//! does not write, and a kernel extent names the bits the finished IR writes, which are the
+//! folded 32's, not the design's (W/wrext/fix1/cells w01 w03 w06 w07 w08,
+//! W/batch5b/lens-sound/cells a1-a5; the store itself is §2 bits-hier-placeholder). The
+//! view has no production reader on this tree, so no output depends on it; §5.2 Q-WEXTPOS
+//! is the row that gives the view its stand-down on a provisional constant and each
+//! write's own position. The other in-place edits are not stale-able here:
+//! `param_query.rs`'s `patch_expr_param_const*` and `hier_defer/read.rs` write deferred
+//! READ placeholders, which are `Signal` nodes when the record is taken, so no constant
+//! leaf; `edge_gate.rs` repoints constant EDGES to a fresh id the record does not hold, so
+//! the kernel reads the fresh constant.
 //!
 //! THE DECLARATION FACT (PLAN2 addendum A1). `decl(net)` is `Some(DeclFact { site, kind,
 //! dir, type_param })` only for a net created by one of three declaration lowerings, each

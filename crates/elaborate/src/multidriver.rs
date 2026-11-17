@@ -43,7 +43,8 @@
 //! `%Warning-MULTIDRIVEN: t.sv:4:15: Bits [3:2] of signal 't.v' have multiple
 //! combinational drivers. This can cause performance degradation.` and runs the
 //! design; on two `always_ff` writing overlapping parts (m_a_aff_aff_ppo) it still
-//! prints no driver line. Rules A–D are unchanged by it (§5.2 Q-MDRVMIX).
+//! prints no driver line. Rules A–D are unchanged by it; a rule over the bits of a
+//! partial or mixed pair is planned: §5.2 Q-MDRVMIX (parked).
 //!
 //! The severity is the OWNER's split, not the clause's: IEEE §9.2.2.3 words the
 //! `always_latch` rule exactly as §9.2.2.2 and §9.2.2.4 word theirs, and verilator
