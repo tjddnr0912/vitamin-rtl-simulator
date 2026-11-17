@@ -1,0 +1,14 @@
+(§3.b mdrv-unlisted-writers · OPEN · in Constants / parameters) (`final` and deferred-action writes are no mixed-driver writer):
+* symptom: §5.2 Q-MDRVMIX's writer lists hold the process kinds `always_comb`, `always_ff`, `always_latch`, `always`, `initial` (and `var_init` on rule X); a `final` procedure's write (kind `final`) and a write in a deferred assertion's action (`via` DeferAction, run in the Observed / Reactive region, not as the enclosing process's own statement) are no writer of either rule, so their pairs run at rc 0 (filed 2026-11-17, §4.5.648; W/mdrv/build/RESIDUES.txt blocks 12 R-FINAL and 14; PLAN2 §2, R9)
+* witness (R-FINAL, rule X's shape): c09_final_x, `assign v[3:0] = s[3:0];` beside `final begin v[3:0] = 4'h0; $display("F v=%b", v); end`: PRE rc 0 `A v=xxxx0101`, `F v=xxxx0000`, `simulation ended (Finish) at time 1`, `errors=0 warnings=1 notes=0`; POST the same (quiet pin c09_final_x)
+  * oracles: iverilog 13.0 -g2012 compile rc=1 (an ERROR): `t.sv:5: error: Cannot perform procedural assignment to part select 'v['sd3:'sd0]' because it is also continuously assigned.` / `1 error(s) during elaboration.`; verilator 5.054 --lint-only -Wall no driver line, --binary runs `A v=00000101` / `F v=00000000`
+  * IEEE 1800-2017 §6.5 (txt:3495-3497)
+* witness (R-FINAL, rule Y's shape): k3_final_comb, `always_comb v[3:0] = a;` beside the same `final`: PRE rc 0 `A v=xxxx0101`, `F v=xxxx0000`; POST the same
+  * oracles: iverilog 13.0 runs `A v=xxxx0101` / `F v=xxxx0000`; verilator 5.054 no driver line, runs `A v=00000101` / `F v=00000000`
+  * IEEE 1800-2017 §9.2.2.2 (txt:9036-9038)
+* witness (deferred action): c12_assert_action_y, `always_comb v[3:0] = s[3:0];` beside `#1 assert final (s == 8'h00) else v[3:0] = 4'hf;` in an `initial`: PRE rc 0 `A v=xxxx1111`, `simulation ended (Finish) at time 2`, `t.sv:7:8: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: a deferred assertion's action holds a statement other than a print, a file print, $finish or $stop; it executes inline (evaluate-when-reached), not deferred [in t]`, `errors=0 warnings=2 notes=0`; POST the same (quiet pin)
+  * oracles: iverilog 13.0 compile rc=1 `t.sv:7: sorry: Deferred assertions are not supported. Try -gno-assertions or -gsupported-assertions to turn this message off.`; verilator 5.054 --lint-only -Wall no driver line, --binary runs `A v=00000101`
+  * IEEE 1800-2017 §9.2.2.2 (txt:9036-9038)
+* note: §3.b deferred-inline-action holds the action running at reach; a `final` write runs once at the end of simulation
+* oracles: iverilog (c09) + hand-IEEE
+* status: OPEN

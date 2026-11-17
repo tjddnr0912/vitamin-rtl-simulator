@@ -13,7 +13,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §2 | recorded defects by mechanism | 339 | 217 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
 | §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
 | §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 209 | 174 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
+| §3.b | loud → correct-support, small | 215 | 180 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
 | §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
 | §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
@@ -22,7 +22,7 @@ Recount from the lines below in every docs step; the iteration report shows this
 | §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
 | §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 700 | 452 | 248 | | | |
+| total | | 706 | 458 | 248 | | | |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -657,6 +657,12 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - cont-var-gate — [a built-in gate driving a non-`logic` variable is refused](roadmap/3.b/cont-var-gate.md) · SPLIT
 - cont-var-string — [a continuous `assign` to a `string` or class handle is refused](roadmap/3.b/cont-var-string.md) · SPLIT
 - mdrv-hier-actual — [a hierarchical task call in `always_comb` is a false multidriver error](roadmap/3.b/mdrv-hier-actual.md) · OPEN
+- mdrv-runtime-prefix — [a run-time select beside another writer of a variable is not refused](roadmap/3.b/mdrv-runtime-prefix.md) · OPEN
+- mdrv-target-kinds — [an atom-typed or type-parameter-typed variable's mixed writes are not refused](roadmap/3.b/mdrv-target-kinds.md) · OPEN
+- mdrv-subroutine-sides — [writes that reach a variable through a subroutine are no rule Y side](roadmap/3.b/mdrv-subroutine-sides.md) · OPEN
+- proc-write-input-net — [a procedural write to an input-port net is accepted](roadmap/3.b/proc-write-input-net.md) · OPEN
+- mdrv-unlisted-writers — [`final` and deferred-action writes are no mixed-driver writer](roadmap/3.b/mdrv-unlisted-writers.md) · OPEN
+- mdrv-ff-latch-pairs — [overlapping always_ff / always_latch writes with no always_comb are not refused](roadmap/3.b/mdrv-ff-latch-pairs.md) · OPEN
 - frame-body-write-sites — [call sites of a body-writing frame function that cannot carry the call](roadmap/3.b/frame-body-write-sites.md) · OPEN
 - frame-body-write-order — [a hoisted body-writing call runs before a read to its left](roadmap/3.b/frame-body-write-order.md) · SPLIT
 - dyn-size-spellings — [`$size` of a dynamic array through a field, hierarchy or formal](roadmap/3.b/dyn-size-spellings.md) · OPEN
@@ -896,7 +902,7 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-16): Q-WREXT built on batch 5 (§4.5.647); row 24 waits behind it and Q-MDRVMIX; no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-17): Q-MDRVMIX built (§4.5.648), batch 5 closes; next 24 (re-plan), R7.4, R7.5, 29 page half, 31; no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -916,7 +922,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-CONSTAGG | R7.2 · L1 (PARKED) | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | Q-WREXT | R8.1 · L1 (built) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
-| Q-MDRVMIX | R8.1 · L1 (planned) | [overlapping partial and mixed writes of a packed variable are not refused](roadmap/5.2/Q-MDRVMIX.md) | ① F |
+| Q-MDRVMIX | R8.1 · L1 (built) | [a packed variable's overlapping mixed writes and always_comb pairs are E3001](roadmap/5.2/Q-MDRVMIX.md) | ① F |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |

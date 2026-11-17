@@ -411,7 +411,8 @@ connectivity, parameter resolution.
 
 ### `E-ELAB-MULTIDRIVER` in detail
 
-Four shapes reach this code.
+Six shapes reach this code; the last two read the bits a write to a variable
+covers.
 
 A **net** driven by more than one continuous assignment is an error only when the
 overlap is one the engine does not model. Whole-net, non-delayed continuous
@@ -466,21 +467,85 @@ md7.sv:2:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` has a declaration
 A gate output counts as a continuous driver, and an `always_latch` beside the
 `assign` is this error too, not the latch warning below. A `force` over the
 `assign` is not a second driver (IEEE §10.6.2). An `always_comb` or `always_ff`
-beside the `assign` is the previous shape, with its own message. Only whole-variable writes at module
-scope are read: a select, element or member write, a write through a task or a
+beside the `assign` is the previous shape, with its own message. The three variable shapes above read only whole-variable writes at module
+scope: a select, element or member write, a write through a task or a
 hierarchical name, a port binding, a generate-block `assign`, an interface body
 and an unpacked array (which is `VITA-E3009` when its whole-array `assign` has
-another writer) are outside the check.
+another writer) are outside them. The fifth and sixth shapes, below, read a select,
+a member write and a port binding by the bits they cover.
 
-Only a *direct*, *whole-variable* write counts. Direct means an assignment
+In those three only a *direct*, *whole-variable* write counts. Direct means an assignment
 (including `force` and a procedural `assign`), not a write that reaches the
 variable through a task or function call — `initial wt();` where
 `task wt(); v = 3; endtask` is not a driver here, because a variable merely passed
 to an `input` formal would otherwise be reported too. Whole means the lvalue is the
 bare identifier: a struct member (`s.x`), an array element (`mem[a]`), a bit
-(`bits[0]`) or a part select is a partial write and does not make a pair, which is
-what Verilator does on every partial pair measured. Xcelium's behaviour on a partial
-write has not been measured.
+(`bits[0]`) or a part select is a partial write and does not make a pair there.
+Verilator's lines on the overlapping partial pairs measured vary: a `MULTIDRIVEN`
+lint warning, a `BLKANDNBLK` "Unsupported" error, or none. Xcelium's behaviour on a partial write has not been measured.
+
+A **variable** declared `logic`, `reg` or `bit` in a module body, a generate block
+or a module's `output` port, driven on some bits by a continuous driver (an
+`assign`, a gate output or an instance's output port) and written on overlapping
+bits by a blocking or non-blocking assignment — in an `always_comb`, `always_ff`,
+`always_latch`, `always` or `initial` block, a static task such a block calls, a
+function or automatic task body, or a declaration initializer — is two writers on
+those bits under IEEE 1800 §6.5 and §10.3.2. Writes to disjoint bits are legal and
+run. On a `reg` or `bit` variable an `assign` beside another writer is
+`VITA-E3018` (`E-ELAB-LVALUE-KIND`) instead, reported first; an output port bound to
+it is this shape:
+
+```systemverilog
+// t.sv
+module t;
+  logic clk; logic [7:0] s;
+  logic [7:0] v;
+  assign v[5:2] = s[3:0];
+  always_comb v[3:0] = ~s[3:0];     // bits [3:2] have two writers
+endmodule
+```
+```
+error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `t.v` is driven by an `assign` or gate output at t.sv:5:3 in `t` AND written by `always_comb` at t.sv:6:3 in `t` on bits [3:2], and a variable driven by a continuous assignment takes no other writer on those bits (IEEE 1800-2017 §6.5, §10.3.2)
+```
+
+A **variable** of the same kinds whose bits an `always_comb` writes, written on
+overlapping bits by another process (`always_comb`, `always_ff`, `always_latch`,
+`always`, `always @*` or `initial`, directly or through a static task it calls), is
+two writers under IEEE 1800 §9.2.2.2: "The variables written on the left-hand side
+of assignments shall not be written to by any other process", while independent
+elements whose longest static prefixes do not overlap may be. No tool measured
+refuses these as illegal (Icarus Verilog runs them; Verilator warns, runs them or
+calls some unsupported); vita follows the standard:
+
+```systemverilog
+// t.sv
+module t;
+  logic clk; logic [7:0] s;
+  logic [7:0] v;
+  always_comb v[5:2] = s[3:0];
+  always_comb v[3:0] = ~s[3:0];     // bits [3:2] are written by two processes
+endmodule
+```
+```
+error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `t.v` is written by `always_comb` at t.sv:5:3 in `t` AND by `always_comb` at t.sv:6:3 in `t` on bits [3:2], and the bits an `always_comb` writes take no write from another process (IEEE 1800-2017 §9.2.2.2)
+```
+
+These two messages have no location prefix and name both writers. Two instances of
+one module read apart by their scope (`in t.u1`, `in t.u2`); a `.*` connection, which
+has no source position, says so; a function body is named by the function and where
+it is declared. The bits are counted from the variable's least significant bit as 0,
+and the message says so when the declared range does not end at 0 (`logic [8:1] v`).
+One error is reported per variable, and a variable one of the first four shapes
+(or `VITA-E3018`) already reports gets no second error.
+
+Both read only bits fixed at elaboration (a constant select, a struct member, a port
+binding). They do not read a select with a run-time index (`v[i]` in a loop), an
+unpacked array element, an `int`-family or type-parameter-typed variable, an input
+port, a `final` block, a deferred assertion's action, a clocking-block drive, a
+function's writes inside an `always_comb` (and a static task or void function an
+`always_comb` calls, which is not its own side of the second rule), or a pair of
+`always_ff` / `always_latch` / `always` / `initial` writers with no `always_comb`
+and no continuous driver among them; those partial writes run as before.
 
 Two shapes are deliberately not errors:
 

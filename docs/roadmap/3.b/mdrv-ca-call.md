@@ -2,6 +2,8 @@
 * Rule D reads lvalues only: a task-body write (`task wt; y = 0; endtask` + `initial wt();` beside `assign y = a;`, `y=1 y=0`) and a hierarchical write (`u.y = 0;` onto a child's `assign y = a;`) run
 * oracles: iverilog rejects both, verilator runs both
 * a system task's output argument is no writer either (`void'($sscanf("5", "%h", y));` beside `assign y = 4'h3;` prints `y=5`; iverilog run-time `$sscanf argument 3 (a vpiNet) is not assignable.`)
+* a clocking-block output drive is no writer either (2026-11-17, §4.5.648; W/mdrv/build/RESIDUES.txt block 7, L3): k3_clocking_out (W/mdrv/build/pins/cells/k3_clocking_out/t.sv), `clocking cb @(posedge clk); output v; endclocking` and `cb.v <= 8'hff;` beside `always_comb v[3:0] = a;`: PRE rc 0 `A v=11111111`, `simulation ended (Finish) at time 4`, `errors=0 warnings=1 notes=0`, and POST 92579c89 the same (quiet pin in `crates/cli/tests/mdrv_mix_pins.rs`); iverilog 13.0 -g2012 compile rc=4 `t.sv:2: syntax error` / `t.sv:2: error: Invalid module item.`; verilator 5.054 --lint-only -Wall no driver line, --binary runs `A v=11110101`; IEEE 1800-2017 §14.16 (txt:15655-15657) "Clocking block outputs (output or inout) are used to drive values onto their corresponding signals", §9.2.2.2 (txt:9036-9038)
+  * the drive reaches the signal through `clocking_outputs` (`elaborate/src/wext.rs:49-50` names it among Q-WREXT's OUT channels); the view records only `t.__clkout_cb_v` (no declaration fact) and no write of `t.v`, so §5.2 Q-MDRVMIX's rule Y does not see it
 * carry `call_body_writes_whole`, the hierarchical lvalue and the system-task destinations into `cont_assign_var_conflict`
 * oracles: iverilog + IEEE §6.5
 * status: OPEN
