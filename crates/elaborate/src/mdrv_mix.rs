@@ -1,32 +1,33 @@
-//! §5.2 Q-MDRVMIX — a packed variable's overlapping continuous and procedural writers
-//! (rule X, C1). A READER of the write-extent view (`wext.rs`, ER §5.1): every fact it
-//! decides with — which net a write lands on, which bits, the writer, how the statement
-//! came to sit in its body, and what was declared — is the view's (`WriteView::writes`,
-//! `WriteView::decl`), read through one entry, `check_mixed_drivers`. It re-derives no
-//! extent, no declaration fact and no `via`, reads no `intro_kind` and no net name to
-//! decide (the name is read once, for the message). Its home rules are H10-H12 of
+//! §5.2 Q-MDRVMIX — a packed variable's overlapping continuous and procedural writers (rule
+//! X, C1), and an `always_comb`'s bits written by another process (rule Y, C2). A READER of
+//! the write-extent view (`wext.rs`, ER §5.1): every fact it decides with — which net a
+//! write lands on, which bits, the writer, how the statement came to sit in its body, and
+//! what was declared — is the view's (`WriteView::writes`, `WriteView::decl`), read through
+//! one entry, `check_mixed_drivers`. It re-derives no extent, no declaration fact and no
+//! `via`, reads no `intro_kind` and no net name to decide (the name is read once, for the
+//! message). Its home rules are H3, H4, H8, H9 and H10 of
 //! `crates/elaborate/tests/wext_home.rs`, its pins `crates/cli/tests/mdrv_mix_pins.rs`.
 //!
 //! THE TARGET SET (T2, W/mdrv/plan2/PLAN2.txt §1, premise judge 2 K1). A net is a target
 //! when the view holds a declaration fact for it (`decl`) and the fact says: `site` is a
-//! module body, a generate scope, a module's ANSI header or its non-ANSI port
-//! (`DeclSite`, every variant: an interface, a package and a block local write no fact) ;
-//! `kind` is `logic`, `reg` or `bit` (the declared keyword, not `ir::NetKind`, which folds
-//! `event` and the atom types onto `Reg`) ; `dir` is internal or output (an input or inout
-//! port is a net, IEEE 1800-2017 §23.2.2.3) ; `type_param` is false. Every net without a
-//! fact (task and function formals and locals, loop variables, temporaries, implicit nets)
-//! is outside by construction. PLAN2's fifth term, "no unpacked dimension", is not a term
-//! here: the view's extent already decides it, `chunk_extent` gives `Word` to every chunk
-//! with a word index and a `Word` is never compared, and over the 442 lane views the 48
-//! nets with `array_len > 1` carry no `Bits` write (premise judge 2 L6: N12 equivalent) ;
-//! a 1-element unpacked array (`logic [7:0] one [1]`: no `array_dims` entry and an
-//! `array_len` of 1) has no other mark and is quiet by the same `Word` (k7_arr_whole, below).
-//! A UDP's own nets (premise judge 2 L9): the parser lowers a primitive to a module
-//! (`hdl-parser` `udp.rs`), so its output port (`AnsiPort`, `reg`, output) and its state
-//! register (`Module`, `reg`) carry facts and are targets by the fact's own definition ;
-//! their only writers are the primitive's own processes, so no pair is reachable today
-//! (cell k3_udp_seq_disjoint, quiet), and a variable the PARENT connects to a primitive's
-//! output is the parent's own target (k3_udp_out_comb, loud).
+//! module body, a generate scope, a module's ANSI header or its non-ANSI port (`DeclSite`,
+//! every variant: an interface, a package and a block local write no fact) ; `kind` is
+//! `logic`, `reg` or `bit` (the declared keyword, not `ir::NetKind`, which folds `event`
+//! and the atom types onto `Reg`) ; `dir` is internal or output (an input or inout port is
+//! a net, IEEE 1800-2017 §23.2.2.3) ; `type_param` is false. Every net without a fact (task
+//! and function formals and locals, loop variables, temporaries, implicit nets) is outside
+//! by construction. PLAN2's fifth term, "no unpacked dimension", is not a term here: the
+//! view's extent already decides it, `chunk_extent` gives `Word` to every chunk with a word
+//! index and a `Word` is never compared, and over the 442 lane views the 48 nets with
+//! `array_len > 1` carry no `Bits` write (premise judge 2 L6: N12 equivalent) ; a 1-element
+//! unpacked array (`logic [7:0] one [1]`: no `array_dims` entry and an `array_len` of 1)
+//! has no other mark and is quiet by the same `Word` (k7_arr_whole, below). A UDP's own
+//! nets (premise judge 2 L9): the parser lowers a primitive to a module (`hdl-parser`
+//! `udp.rs`), so its output port (`AnsiPort`, `reg`, output) and its state register
+//! (`Module`, `reg`) carry facts and are targets by the fact's own definition ; their only
+//! writers are the primitive's own processes, so no pair is reachable today (cell
+//! k3_udp_seq_disjoint, quiet), and a variable the PARENT connects to a primitive's output
+//! is the parent's own target (k3_udp_out_comb, loud).
 //!
 //! RULE X (IEEE 1800-2017 §6.5, ieee1800-2017.txt:3495-3497: "it shall be an error to have
 //! multiple continuous assignments or a mixture of procedural and continuous assignments
@@ -45,10 +46,44 @@
 //! either side, `final`, `sva`, `covergroup`, `clocking` and `net_init` are not in the
 //! lists, `Word`, `Undecided` and `Poison` never compare.
 //!
+//! RULE Y (IEEE 1800-2017 §9.2.2.2, ieee1800-2017.txt:9036-9038: "The variables written
+//! on the left-hand side of assignments shall not be written to by any other process.
+//! However, multiple assignments made to independent elements of a variable are allowed
+//! as long as their longest static prefixes do not overlap" ; §9.2.2.2.2, :9082-9084:
+//! "Variables on the left-hand side of assignments within an always_comb procedure,
+//! including variables from the contents of a called function, shall not be written to by
+//! any other processes, whereas always @* permits multiple processes to write to the same
+//! variable"). On a target net, an `always_comb`'s own blocking or non-blocking statement
+//! (`Direct`) and a statement of ANOTHER process (another `pid`) whose kind is one of
+//! P5 — `always_comb`, `always_ff`, `always_latch`, `always` (an `always @*` among them:
+//! its own variables may take several writers, the `always_comb`'s may not), `initial` —
+//! lowered `Direct` or inlined from a static task (`TaskInline`), whose extents are both
+//! `Bits` and intersect, is E3001. These are premise judge 2 K3's groups exactly (the two
+//! sides of a fork are one process: c08 ; one `always_comb` elaborated in two instances
+//! is two processes: k3_two_inst_hier). Not a writer of either side: a declaration
+//! initializer (`var_init`: rules A and C's), a frame body (a function or automatic task:
+//! R-FN), a deferred assertion's action, a `force` / `release`, `final`, `sva`,
+//! `covergroup`, `clocking`. Two statements of one process are never a pair.
+//! OUT of rule Y, each IEEE-illegal where it overlaps and left as PRE prints it: the
+//! pairs with no `always_comb` side — `always_ff` × `always_ff` / `always_latch` /
+//! `always` / `initial` and `always_latch` × `always_latch` / `always` / `initial` (R-FF:
+//! §9.2.2.4, txt:9105-9107, has no independent-element sentence, so a rule from its text
+//! also refuses the disjoint pairs real designs spell, and the memory-initialisation idiom
+//! beside an `always_ff` is the error `multidriver.rs` built once and reverted ; PLAN2 §3
+//! (a), filed with W/mdrv/premise2/K9_FACTS.txt) ; an `always @*` pair without an
+//! `always_comb` (legal, §9.2.2.2.2).
+//!
+//! X BEFORE Y. PLAN2 does not order the two rules ; here a net rule X reports is not asked
+//! rule Y (one E3001 per variable, and the clause it names is the continuous driver's,
+//! which iverilog refuses where it runs every rule Y pair measured), and the diagnostics of
+//! both rules come out together, lowest net first (pins y_x_first_one_net,
+//! y_x_and_y_two_nets).
+//!
 //! THE PAIR TEST. Per target net, the decided intervals of both sides sorted by `(lo,
 //! view order)` and swept once (`sweep`): an incoming interval meets the kept interval of
-//! the other side with the largest `hi` (of another writer, where the rule asks for one —
-//! rule Y's two processes, C2) when that `hi` is above its `lo`. O(n log n) per net (EL2:
+//! the other side with the largest `hi` (of another writer where the rule asks for one —
+//! rule Y's two processes) when that `hi` is above its `lo`. Rule Y's `always_comb`
+//! statement is on both sides at once. O(n log n) per net (EL2:
 //! 512 writers on its widest net). The kept set is the two largest `hi` of distinct
 //! writers per side, because one maximum held by the incoming writer's own interval
 //! hides a narrower interval of another (y_sweep_second_best) ; equal to brute force on
@@ -56,15 +91,18 @@
 //! judge 2 K6's fuzz). The pair REPORTED is the sweep's: the first incoming interval, in
 //! `(lo, view order)`, that meets a kept one, and that kept one (premise judge 2 L5).
 //!
-//! ONE DIAGNOSTIC PER VARIABLE, AND THE OLDER CHECKS FIRST (PLAN2 R14, the first plan's
-//! Q12). The three checkers that answer parts of this today are not re-pointed and keep
-//! their verdicts: `multidriver.rs` rules A, B and D (whole writes by name, E3001 /
+//! ONE DIAGNOSTIC PER VARIABLE, AND THE OLDER CHECKS FIRST (PLAN2 R14, the first plan's Q12
+//! ; both rules). The three checkers that answer parts of this today are not re-pointed and
+//! keep their verdicts: `multidriver.rs` rules A, B and D (whole writes by name, E3001 /
 //! W3060), `check_whole_net_multidriver` (continuous rows, E3001) and the sole-writer
 //! checks `cont_array.rs` (E3009) / `cont_var.rs` (E3018). This check runs after all of
 //! them and skips every net they reported (`cont_var.reported`: rules A, B and D's E3001,
 //! the overlap check's E3001, the whole-array E3009, and `cont_var.rs`'s own E3018s, which
 //! that check now records there too), so a variable gets the older diagnostic alone. One
-//! E3001 per net, lowest net id first, then the variable is recorded as reported.
+//! E3001 per net, lowest net id first, then the variable is recorded as reported. A
+//! `multidriver.rs` W3060 (a warning: whole writes of an `always_latch` and another
+//! process, or an initializer beside an `always_ff` / `always_latch`) records no net, so
+//! rule Y adds its E3001 for the `always_comb`'s pair there (pin y_w3060_and_y).
 //!
 //! THE MESSAGE says what is located and how (premise judge 2 L4). It is emitted with no
 //! source position of its own and no instance frame: both writers are named in the text,
@@ -78,38 +116,47 @@
 //! `assign` or gate output". The bits are storage bits `[hi:lo]` of the overlap, counted
 //! from the least significant bit as 0 (said so when the declared range is not `[w-1:0]`).
 //!
-//! NOT HERE (each keeps PRE's output, with its cell): rule Y, an `always_comb` beside
-//! another process (C2: its pins are PRE-text pins until then) ; the `always_ff` /
-//! `always_latch` pairs (R-FF) ; an `always_comb` writing only through a task (R-TASKA,
-//! c01 c02) or a void function called as a statement, which inlines like a task (R-VOIDFN,
-//! premise judge 2 L1, k2_voidfn_comb_ff: both C2's A side) ; `final` (R-FINAL, c09) ; an
+//! NOT HERE (each keeps PRE's output, with its cell): the `always_ff` / `always_latch`
+//! pairs with no `always_comb` side (R-FF, above) ; an `always_comb` writing the bits only
+//! through a task it enables (R-TASKA, c01 c02: §9.2.2.2.2 names a called function, not a
+//! task) or a void function called as a statement, which inlines like a task (R-VOIDFN,
+//! premise judge 2 L1, k2_voidfn_comb_ff: `via` TaskInline, never rule Y's `a`) ; a
+//! function's frame body on either side of rule Y (R-FN, m_c_func_comb_acomb_ppo,
+//! k3_fn_two_comb) ; a task called hierarchically, which is a frame body (premise judge 2
+//! L2, k2_hier_task) ; a static task's own formals and locals (shared items, IEEE 1800-2017
+//! §13.3.1: no declaration fact, q8_task_static_bit_comb_ff) ; `final` (R-FINAL, c09) ; an
 //! atom-typed variable (R-ATOM, c10 ; an `int` on a child's output port, k8_int_port_x,
 //! illegal and silent: an `int` written by `assign` and a process is `cont_var.rs`'s E3018
 //! already) ; a type-parameter-typed variable (k7_tparam_overlap) and a 1- or 2-element
 //! unpacked array written whole and per element (k7_arr_whole), both illegal and silent
-//! (premise judge 2 L8) ; an automatic task's copy-out
-//! (`out_binds`, no statement: c04) ; a clocking-block output drive, which reaches the
-//! signal through `clocking_outputs`, no write the view records (premise judge 2 L3,
-//! k3_clocking_out) ; a deferred assertion's action (c12) ; interface members and
-//! interface ports (no fact: k3_iface_overlap, k7_iface_port_overlap) ; input-port nets ;
-//! continuous × continuous (`check_whole_net_multidriver`, §5.2 Q-MDCONSTOFF) ; unpacked
-//! words (§5.2 Q-ARRWORDMD) ; run-time prefixes (`Undecided`: `v[i]` with a loop index
-//! beside `assign v[0]`, p7_loopidx, illegal by §6.5's longest static prefix, R-RT).
+//! (premise judge 2 L8) ; an automatic task's copy-out (`out_binds`, no statement: c04) ; a
+//! clocking-block output drive, which reaches the signal through `clocking_outputs`, no
+//! write the view records (premise judge 2 L3, k3_clocking_out) ; a deferred assertion's
+//! action (c12) ; interface members and interface ports (no fact: k3_iface_overlap,
+//! k7_iface_port_overlap) ; input-port nets ; continuous × continuous
+//! (`check_whole_net_multidriver`, §5.2 Q-MDCONSTOFF) ; unpacked words (§5.2 Q-ARRWORDMD) ;
+//! run-time prefixes (`Undecided`: `v[i]` with a loop index beside `assign v[0]`,
+//! p7_loopidx, illegal by §6.5's longest static prefix, R-RT).
 
 use super::*;
 use crate::wext::{DeclSite, Extent, Form, Via, Write, WriteView, Writer};
 
 /// The process kinds whose statements are rule X's procedural writers (PLAN2 §2's P6:
-/// `proc_idents`' kinds as their producers push them). Rule Y's B side (C2) is the first
-/// five; `final`, `sva`, `covergroup`, `clocking` are not here.
+/// `proc_idents`' kinds as their producers push them). Rule Y's processes are the same
+/// list without the declaration initializer (`in_p5`); `final`, `sva`, `covergroup`,
+/// `clocking` are not here.
 pub(crate) const P6: [&str; 6] = [
-    "always_comb",
+    ALWAYS_COMB,
     "always_ff",
     "always_latch",
     "always",
     "initial",
     VAR_INIT,
 ];
+
+/// The process kind of rule Y's first writer (`stmt_flow.rs`'s `always_comb`), P6's
+/// member rule Y names.
+const ALWAYS_COMB: &str = "always_comb";
 
 /// The process kind of a declaration initializer (`var_init.rs`), named in the message.
 const VAR_INIT: &str = "var_init";
@@ -144,12 +191,31 @@ fn procedural(w: &Write) -> bool {
         && matches!(w.via, Some(Via::Direct | Via::TaskInline))
 }
 
-/// Rule X's side of one write: `Some(true)` continuous, `Some(false)` procedural.
-fn x_side(w: &Write) -> Option<bool> {
+/// Rule Y's processes (PLAN2 §2's P5): P6 without the declaration initializer, which is
+/// not a process (rules A and C answer for it).
+fn in_p5(kind: &str) -> bool {
+    kind != VAR_INIT && P6.contains(&kind)
+}
+
+/// Rule X's sides of one write, `(a, b)`: `a` continuous, `b` procedural.
+fn x_side(w: &Write) -> Option<(bool, bool)> {
     match w.writer {
-        Writer::Cont { kind, .. } if CONT.contains(&kind) => Some(true),
-        Writer::Proc { kind, .. } if P6.contains(&kind) && procedural(w) => Some(false),
-        Writer::Body { .. } if procedural(w) => Some(false),
+        Writer::Cont { kind, .. } if CONT.contains(&kind) => Some((true, false)),
+        Writer::Proc { kind, .. } if P6.contains(&kind) && procedural(w) => Some((false, true)),
+        Writer::Body { .. } if procedural(w) => Some((false, true)),
+        _ => None,
+    }
+}
+
+/// Rule Y's sides of one write, `(a, b)` (module head): `a` a statement of an
+/// `always_comb`'s own text (`Direct`: not a task or void function it calls, R-TASKA /
+/// R-VOIDFN), `b` a statement of any P5 process, its own or inlined (`TaskInline`). An
+/// `always_comb`'s own statement is both. A frame body is neither (R-FN).
+fn y_side(w: &Write) -> Option<(bool, bool)> {
+    match w.writer {
+        Writer::Proc { kind, .. } if in_p5(kind) && procedural(w) => {
+            Some((kind == ALWAYS_COMB && w.via == Some(Via::Direct), true))
+        }
         _ => None,
     }
 }
@@ -243,26 +309,42 @@ pub(crate) fn sweep(ivs: &mut [Iv], distinct: bool) -> Option<(u32, u32)> {
     None
 }
 
-/// One rule X pair: the net, the continuous and the procedural write's view indices and
-/// the bits both write, `[lo, hi)`, from the two intervals the sweep compared (the one
-/// place a pair's extents are read, so the text says what the sweep found).
+/// Which rule a pair is (module head: X first on a net, then Y).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct XPair {
+enum Rule {
+    X,
+    Y,
+}
+
+/// One pair: the net, the `a` and the `b` write's view indices (rule X: the continuous and
+/// the procedural one ; rule Y: the `always_comb`'s own and the other process's) and the
+/// bits both write, `[lo, hi)`, from the two intervals the sweep compared (the one place a
+/// pair's extents are read, so the text says what the sweep found).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pair {
+    rule: Rule,
     net: u32,
-    cont: u32,
-    proc: u32,
+    a: u32,
+    b: u32,
     lo: u32,
     hi: u32,
 }
 
-/// Rule X's pairs, one per target net that `skip` does not name, lowest net first.
-fn x_pairs(view: &WriteView, skip: impl Fn(u32) -> bool) -> Vec<XPair> {
+/// One rule's pairs (`side` its sides of a write, `distinct` whether the two writers must
+/// differ), one per target net that `skip` does not name, lowest net first.
+fn pairs(
+    view: &WriteView,
+    rule: Rule,
+    side: fn(&Write) -> Option<(bool, bool)>,
+    distinct: bool,
+    skip: impl Fn(u32) -> bool,
+) -> Vec<Pair> {
     let mut per: BTreeMap<u32, Vec<Iv>> = BTreeMap::new();
     for (k, w) in view.writes.iter().enumerate() {
         let Extent::Bits { lo, hi, .. } = w.extent else {
             continue;
         };
-        let Some(cont) = x_side(w) else {
+        let Some((a, b)) = side(w) else {
             continue;
         };
         if !in_t2(view, w.net) {
@@ -272,8 +354,8 @@ fn x_pairs(view: &WriteView, skip: impl Fn(u32) -> bool) -> Vec<XPair> {
             lo,
             hi,
             who: who(&w.writer),
-            a: cont,
-            b: !cont,
+            a,
+            b,
             idx: k as u32,
         });
     }
@@ -282,16 +364,18 @@ fn x_pairs(view: &WriteView, skip: impl Fn(u32) -> bool) -> Vec<XPair> {
         if skip(net) || !ivs.iter().any(|i| i.a) || !ivs.iter().any(|i| i.b) {
             continue;
         }
-        if let Some((inc, kept)) = sweep(&mut ivs, false) {
+        if let Some((inc, kept)) = sweep(&mut ivs, distinct) {
             let at = |x: u32| ivs.iter().find(|i| i.idx == x).copied();
             let (Some(i), Some(k)) = (at(inc), at(kept)) else {
                 continue;
             };
-            let (c, p) = if i.a { (i, k) } else { (k, i) };
-            out.push(XPair {
+            // the sweep met an incoming `a` with a kept `b` first, else a kept `a`
+            let (a, b) = if i.a && k.b { (i, k) } else { (k, i) };
+            out.push(Pair {
+                rule,
                 net,
-                cont: c.idx,
-                proc: p.idx,
+                a: a.idx,
+                b: b.idx,
                 lo: i.lo.max(k.lo),
                 hi: i.hi.min(k.hi),
             });
@@ -301,34 +385,50 @@ fn x_pairs(view: &WriteView, skip: impl Fn(u32) -> bool) -> Vec<XPair> {
 }
 
 impl Elaborator<'_> {
-    /// The end phase's rule X (module head), after the older checks: one E3001 per target
-    /// net whose continuous and procedural writers overlap.
+    /// The end phase's rules X and Y (module head), after the older checks: one E3001 per
+    /// target net whose writers overlap, rule X's pair where a net has one, lowest net
+    /// first.
     pub(crate) fn check_mixed_drivers(&mut self) {
         // The one read of the view: each pair's two writes, copied out before emitting.
-        let found: Vec<(XPair, Write, Write)> = {
+        let found: Vec<(Pair, Write, Write)> = {
             let (view, reported) = (&self.wext, &self.cont_var.reported);
-            x_pairs(view, |n| reported.contains(&n))
-                .into_iter()
-                .map(|x| {
-                    (
-                        x,
-                        view.writes[x.cont as usize],
-                        view.writes[x.proc as usize],
-                    )
-                })
+            let x = pairs(view, Rule::X, x_side, false, |n| reported.contains(&n));
+            let xs: BTreeSet<u32> = x.iter().map(|p| p.net).collect();
+            let y = pairs(view, Rule::Y, y_side, true, |n| {
+                reported.contains(&n) || xs.contains(&n)
+            });
+            let mut all: Vec<Pair> = x.into_iter().chain(y).collect();
+            all.sort_by_key(|p| p.net);
+            all.into_iter()
+                .map(|p| (p, view.writes[p.a as usize], view.writes[p.b as usize]))
                 .collect()
         };
-        for (XPair { net, lo, hi, .. }, c, p) in found {
-            let msg = format!(
-                "variable `{}` is driven by {} AND written by {} on bits [{}:{lo}]{}, and a \
-                 variable driven by a continuous assignment takes no other writer on those \
-                 bits (IEEE 1800-2017 §6.5, §10.3.2)",
+        for (
+            Pair {
+                rule, net, lo, hi, ..
+            },
+            a,
+            b,
+        ) in found
+        {
+            let (name, wa, wb, bits) = (
                 self.mdrv_net_name(net),
-                self.mdrv_writer(&c),
-                self.mdrv_writer(&p),
-                hi - 1,
-                self.mdrv_bits_note(net),
+                self.mdrv_writer(&a),
+                self.mdrv_writer(&b),
+                format!("[{}:{lo}]{}", hi - 1, self.mdrv_bits_note(net)),
             );
+            let msg = match rule {
+                Rule::X => format!(
+                    "variable `{name}` is driven by {wa} AND written by {wb} on bits {bits}, \
+                     and a variable driven by a continuous assignment takes no other writer \
+                     on those bits (IEEE 1800-2017 §6.5, §10.3.2)"
+                ),
+                Rule::Y => format!(
+                    "variable `{name}` is written by {wa} AND by {wb} on bits {bits}, and \
+                     the bits an `always_comb` writes take no write from another process \
+                     (IEEE 1800-2017 §9.2.2.2)"
+                ),
+            };
             let (span, prefix) = (self.cur_span.take(), std::mem::take(&mut self.cur_prefix));
             self.error(MsgCode::ElabMultidriver, &msg);
             self.cur_span = span;
@@ -503,6 +603,157 @@ mod tests {
         assert!(
             fires > 50_000 && quiet > 50_000,
             "fires {fires} quiet {quiet}"
+        );
+    }
+
+    /// Rule Y's sides on a hand-built view (module head): which writes pair, which never do,
+    /// and the pair's orientation (`a` the `always_comb`'s own statement).
+    #[test]
+    fn rule_y_pairs_an_always_comb_with_another_process_only() {
+        use crate::wext::{By, DeclFact};
+        let fact = DeclFact {
+            site: DeclSite::Module,
+            kind: ast::NetVarKind::Logic,
+            dir: ir::PortDir::Internal,
+            type_param: false,
+        };
+        let bits = |lo, hi| Extent::Bits {
+            lo,
+            hi,
+            by: By::Kernel,
+        };
+        let w = |writer, form, via, extent| Write {
+            writer,
+            form,
+            stmt: Some(0),
+            via: Some(via),
+            chunk: 0,
+            net: 0,
+            extent,
+        };
+        let p = |pid, kind, via, extent| w(Writer::Proc { pid, kind }, Form::Blocking, via, extent);
+        let y = |ws: Vec<Write>, decl: Option<DeclFact>| {
+            pairs(
+                &WriteView::for_test(ws, vec![decl]),
+                Rule::Y,
+                y_side,
+                true,
+                |_| false,
+            )
+        };
+        let n = |ws: Vec<Write>| y(ws, Some(fact)).len();
+        let comb = p(0, ALWAYS_COMB, Via::Direct, bits(0, 4));
+        // the pair, oriented: the always_comb's own statement is `a`, whatever the view order
+        let got = y(
+            vec![p(1, "initial", Via::Direct, bits(2, 6)), comb],
+            Some(fact),
+        );
+        assert_eq!(
+            got.iter()
+                .map(|q| (q.a, q.b, q.lo, q.hi))
+                .collect::<Vec<_>>(),
+            vec![(1, 0, 2, 4)],
+            "pair"
+        );
+        for kind in [
+            "always_comb",
+            "always_ff",
+            "always_latch",
+            "always",
+            "initial",
+        ] {
+            assert_eq!(
+                n(vec![comb, p(1, kind, Via::Direct, bits(3, 8))]),
+                1,
+                "{kind}"
+            );
+        }
+        // another process through a static task it inlines: `b`
+        assert_eq!(
+            n(vec![comb, p(1, "always_ff", Via::TaskInline, bits(2, 6))]),
+            1,
+            "b via task"
+        );
+        // the always_comb only through a task: no `a` (R-TASKA, R-VOIDFN)
+        let comb_task = p(0, ALWAYS_COMB, Via::TaskInline, bits(0, 4));
+        assert_eq!(
+            n(vec![comb_task, p(1, "initial", Via::Direct, bits(2, 6))]),
+            0,
+            "a via task"
+        );
+        // one process twice ; disjoint and adjacent bits
+        assert_eq!(
+            n(vec![comb, p(0, ALWAYS_COMB, Via::Direct, bits(2, 6))]),
+            0,
+            "same pid"
+        );
+        assert_eq!(
+            n(vec![comb, p(1, "initial", Via::Direct, bits(4, 8))]),
+            0,
+            "adjacent"
+        );
+        // extents that never compare, on either side
+        for e in [Extent::Word, Extent::Undecided, Extent::Poison] {
+            assert_eq!(n(vec![comb, p(1, "initial", Via::Direct, e)]), 0, "{e:?} b");
+            let a = p(0, ALWAYS_COMB, Via::Direct, e);
+            assert_eq!(
+                n(vec![a, p(1, "initial", Via::Direct, bits(0, 8))]),
+                0,
+                "{e:?} a"
+            );
+        }
+        // not writers of rule Y: a deferred action, an initializer, `final`, a frame body, a force
+        assert_eq!(
+            n(vec![comb, p(1, "initial", Via::DeferAction, bits(0, 8))]),
+            0,
+            "defer"
+        );
+        assert_eq!(
+            n(vec![comb, p(1, VAR_INIT, Via::Direct, bits(0, 8))]),
+            0,
+            "var_init"
+        );
+        assert_eq!(
+            n(vec![comb, p(1, "final", Via::Direct, bits(0, 8))]),
+            0,
+            "final"
+        );
+        let body = Writer::Body {
+            func: 0,
+            task: false,
+        };
+        assert_eq!(
+            n(vec![comb, w(body, Form::Blocking, Via::Direct, bits(0, 8))]),
+            0,
+            "body"
+        );
+        let force = w(
+            Writer::Proc {
+                pid: 1,
+                kind: "initial",
+            },
+            Form::Force,
+            Via::Direct,
+            bits(0, 8),
+        );
+        assert_eq!(n(vec![comb, force]), 0, "force");
+        // no `always_comb` side: R-FF and `always @*` pairs stay out
+        for (k1, k2) in [
+            ("always_ff", "always_ff"),
+            ("always_ff", "always_latch"),
+            ("always_latch", "initial"),
+            ("always", "always"),
+        ] {
+            let ws = vec![
+                p(0, k1, Via::Direct, bits(0, 4)),
+                p(1, k2, Via::Direct, bits(2, 6)),
+            ];
+            assert_eq!(n(ws), 0, "{k1} x {k2}");
+        }
+        // a net outside the target set
+        assert!(
+            y(vec![comb, p(1, "initial", Via::Direct, bits(2, 6))], None).is_empty(),
+            "T2"
         );
     }
 

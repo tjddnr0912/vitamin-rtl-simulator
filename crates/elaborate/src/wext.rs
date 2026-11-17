@@ -348,6 +348,15 @@ impl WriteView {
     }
 }
 
+#[cfg(test)]
+impl WriteView {
+    /// A hand-built view for a reader's unit test (`mdrv_mix.rs`): the writes and the
+    /// declaration fact per net, as `build_view` would hold them.
+    pub(crate) fn for_test(writes: Vec<Write>, decls: Vec<Option<DeclFact>>) -> Self {
+        Self { writes, decls }
+    }
+}
+
 /// The arrays the view reads, borrowed (the elaborator's own, or a hand-built set in
 /// this file's unit test).
 pub(crate) struct WextSource<'a> {

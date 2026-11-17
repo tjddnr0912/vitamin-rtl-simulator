@@ -7319,14 +7319,19 @@ endmodule\n\
 ///
 /// Raw lines: PRE `C t=0 y=0 g=0010 | C t=0 y=0 g=0010 | C t=5 y=1 g=0011 | A end y=1 g=0011`; iv
 /// `C t=0 y=0 g=0010 | A end y=0 g=0011`; s2v `C t=0 y=0 g=0010 | C t=5 y=1 g=0011 | A end y=1
-/// g=0011`; vl `C t=0 y=0 g=0010 | A end y=0 g=0001`.
+/// g=0011`; vl `C t=0 y=0 g=0010 | A end y=0 g=0011`.
+/// C2 of §5.2 Q-MDRVMIX: the `initial` writes `g[0]` and `g[3:2]` and not all of `g` — `initial
+/// begin g = 0;` wrote the bit the `always_comb` writes, illegal by IEEE 1800-2017 §9.2.2.2
+/// (txt:9036-9038) and now rule Y's E3001 (the original design and its oracle text:
+/// W/mdrv/build/pins/irs/rp1_orig) ; the raw lines are re-measured on this design
+/// (W/mdrv/build/pins/irs/rp1_new), PRE prints the same lines.
 #[test]
 fn rp1_local_twin_bit_write_covers_that_bit() {
     pin(
         "module top;\n\
   logic [3:0] g; logic y;\n\
   always_comb begin g[1] = 1'b1; y = g[0]; $display(\"C t=%0t y=%0d g=%b\", $time, y, g); end\n\
-  initial begin g = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
+  initial begin g[0] = 0; g[3:2] = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
 endmodule\n\
 ",
         &[
@@ -7348,13 +7353,18 @@ endmodule\n\
 /// `C t=0 y=0 g=0010 | C t=0 y=0 g=0010 | A end y=0 g=0011`; s2v `C t=0 y=0 g=0010 | C t=5 y=1
 /// g=0011 | A end y=1 g=0011`; vl `C t=0 y=0 g=0010 | C t=5 y=1 g=0011 | C t=5 y=1 g=0011 | A end
 /// y=1 g=0011 | C t=7 y=1 g=0011 | C t=7 y=1 g=0011`.
+/// C2 of §5.2 Q-MDRVMIX: the `initial` writes `g[0]` and `g[3:2]` and not all of `g` — `initial
+/// begin g = 0;` wrote the bit the `always_comb` writes, illegal by IEEE 1800-2017 §9.2.2.2
+/// (txt:9036-9038) and now rule Y's E3001 (the original design and its oracle text:
+/// W/mdrv/build/pins/irs/rcond_orig) ; the raw lines are re-measured on this design
+/// (W/mdrv/build/pins/irs/rcond_new), PRE prints the same lines.
 #[test]
 fn rcond_local_twin() {
     pin(
         "module top;\n\
   logic [3:0] g; logic y, c;\n\
   always_comb begin if (c) g[1] = 1'b1; y = g[0]; $display(\"C t=%0t y=%0d g=%b\", $time, y, g); end\n\
-  initial begin c = 1; g = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
+  initial begin c = 1; g[0] = 0; g[3:2] = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
 endmodule\n\
 ",
         &["C t=0 y=0 g=0010", "C t=0 y=0 g=0010", "C t=5 y=1 g=0011", "A end y=1 g=0011"],
@@ -7414,14 +7424,19 @@ endmodule\n\
 ///
 /// Raw lines: PRE `C t=0 y=0 g=0110 | C t=0 y=0 g=0110 | C t=5 y=1 g=0111 | A end y=1 g=0111`; iv
 /// `C t=0 y=0 g=0110 | A end y=0 g=0111`; s2v `C t=0 y=0 g=0110 | C t=5 y=1 g=0111 | A end y=1
-/// g=0111`; vl `C t=0 y=0 g=0110 | A end y=0 g=0001`.
+/// g=0111`; vl `C t=0 y=0 g=0110 | A end y=0 g=0111`.
+/// C2 of §5.2 Q-MDRVMIX: the `initial` writes `g[0]` and `g[3]` and not all of `g` — `initial begin
+/// g = 0;` wrote the bit the `always_comb` writes, illegal by IEEE 1800-2017 §9.2.2.2
+/// (txt:9036-9038) and now rule Y's E3001 (the original design and its oracle text:
+/// W/mdrv/build/pins/irs/rtwo_orig) ; the raw lines are re-measured on this design
+/// (W/mdrv/build/pins/irs/rtwo_new), PRE prints the same lines.
 #[test]
 fn rtwo_local_twin() {
     pin(
         "module top;\n\
   logic [3:0] g; logic y;\n\
   always_comb begin g[1] = 1'b1; g[2] = 1'b1; y = g[0]; $display(\"C t=%0t y=%0d g=%b\", $time, y, g); end\n\
-  initial begin g = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
+  initial begin g[0] = 0; g[3] = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
 endmodule\n\
 ",
         &["C t=0 y=0 g=0110", "C t=0 y=0 g=0110", "C t=5 y=1 g=0111", "A end y=1 g=0111"],

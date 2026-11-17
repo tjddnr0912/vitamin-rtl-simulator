@@ -50,9 +50,12 @@
 //!   message reads (`symbols`, `display_of`, `nets`, `frame_func_names`,
 //!   `frame_decl_locs`, `ca_idents`, `proc_idents`, `span_resolver`) — in the message fns
 //!   only, so the decision fns (`in_t2`, `procedural`, `x_side`, `who`, `sweep`, `Top2`,
-//!   `x_pairs`) read no name — and no `intro_kind` / `net_names` at all ; and each
-//!   process / continuous kind string of the closed vocabulary (`KINDS`) spelled once,
-//!   in the lists `P6` / `CONT` and their two named members.
+//!   `pairs`, and C2's `in_p5`, `y_side`) read no name — and no `intro_kind` /
+//!   `net_names` at all ; each process / continuous kind string of the closed vocabulary
+//!   (`KINDS`) spelled once, in the lists `P6` / `CONT` and their three named members
+//!   (`ALWAYS_COMB`, `VAR_INIT`, `PORT`) ; and (C2, rule Y) every fn that compares a kind
+//!   through those five names, with its count: rule X's `x_side`, rule Y's `in_p5` and
+//!   `y_side`, the message's `mdrv_writer`.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -119,7 +122,12 @@ const MUT: [&str; 15] = [
 ];
 const STORE: [&str; 4] = ["BlockingAssign", "NonblockingAssign", "Force", "Release"];
 /// H10: the identifiers the mixed-driver reader may read (counted in `mdrv_mix.rs` only).
-const H10_READ: [&str; 13] = [
+const H10_READ: [&str; 18] = [
+    "P6",
+    "CONT",
+    "ALWAYS_COMB",
+    "VAR_INIT",
+    "PORT",
     "writes",
     "decl",
     "WriteView",
@@ -1067,6 +1075,30 @@ fn walker_controls() {
         ],
         "H10 real site (mdrv_mix.rs mdrv_net_name) spelled back in g"
     );
+    // H10 (C2) a kind compared through a list's name is counted where it is compared ; a
+    // new comparison site of rule Y's `always_comb` fails the census
+    assert_eq!(
+        count(
+            "H10",
+            "fn f(w: &Write) -> bool { P6.contains(&k) && k != VAR_INIT && k == ALWAYS_COMB }"
+        ),
+        3,
+        "H10 planted: three list names"
+    );
+    assert_eq!(
+        count("H10", "fn f() { let p6 = 1; let always_comb = P6x; }"),
+        0,
+        "H10 a list name is the whole identifier"
+    );
+    let back = hits("fn g(w: &Write) -> Option<(bool, bool)> { match w.writer { Writer::Proc { kind, .. } if in_p5(kind) => Some((kind == ALWAYS_COMB && w.via == Some(Via::Direct), true)), _ => None } }");
+    assert_eq!(
+        back,
+        vec![
+            ("H10:read:ALWAYS_COMB".to_string(), "g".to_string()),
+            ("H9:Via::Direct".to_string(), "g".to_string())
+        ],
+        "H10 real site (mdrv_mix.rs y_side) spelled back in g"
+    );
     let h9 = "fn f(&mut self) { let v0 = self.stmts.len(); self.record_via(wext::Via::TaskInline, v0); }";
     assert_eq!(count("H9", h9), 2, "H9 planted: writer, value");
     assert_eq!(
@@ -1307,6 +1339,7 @@ const H9: &[(&str, &str, &str, usize, &str)] = &[
     ("H9:Via::DeferAction", "wext.rs", "build_view", 1, "laid over task intervals"),
     ("H9:Via::DeferAction", "wext.rs", "render", 1, "`defer`"),
     ("H9:Via::Direct", "mdrv_mix.rs", "procedural", 1, "rule X's procedural writer"),
+    ("H9:Via::Direct", "mdrv_mix.rs", "y_side", 1, "rule Y's `always_comb` side: its own text only"),
     ("H9:Via::Direct", "wext.rs", "build_view", 2, "the default of a procedural statement"),
     ("H9:Via::Direct", "wext.rs", "render", 1, "`direct`"),
     ("H9:Via::TaskInline", "inline_task.rs", "inline_task", 1, "the inline decision"),
@@ -1322,14 +1355,26 @@ const H9: &[(&str, &str, &str, usize, &str)] = &[
 #[rustfmt::skip]
 const H10: &[(&str, &str, &str, usize, &str)] = &[
     ("H10:kind:always", "mdrv_mix.rs", "-", 1, "P6"),
-    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "ALWAYS_COMB, P6's member rule Y names"),
     ("H10:kind:always_ff", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:always_latch", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:assign", "mdrv_mix.rs", "-", 1, "CONT"),
     ("H10:kind:initial", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:port", "mdrv_mix.rs", "-", 1, "PORT, CONT's member the message names"),
     ("H10:kind:var_init", "mdrv_mix.rs", "-", 1, "VAR_INIT, P6's member the message names"),
-    ("H10:read:WriteView", "mdrv_mix.rs", "-", 3, "the `use` and the parameter of in_t2 and x_pairs"),
+    ("H10:read:ALWAYS_COMB", "mdrv_mix.rs", "-", 2, "its item and P6's member"),
+    ("H10:read:ALWAYS_COMB", "mdrv_mix.rs", "y_side", 1, "rule Y's `a`: an `always_comb`'s own statement"),
+    ("H10:read:CONT", "mdrv_mix.rs", "-", 1, "its item"),
+    ("H10:read:CONT", "mdrv_mix.rs", "x_side", 1, "rule X's continuous side"),
+    ("H10:read:P6", "mdrv_mix.rs", "-", 1, "its item"),
+    ("H10:read:P6", "mdrv_mix.rs", "in_p5", 1, "rule Y's processes: P6 without the initializer"),
+    ("H10:read:P6", "mdrv_mix.rs", "x_side", 1, "rule X's procedural side"),
+    ("H10:read:PORT", "mdrv_mix.rs", "-", 2, "its item and CONT's member"),
+    ("H10:read:PORT", "mdrv_mix.rs", "mdrv_writer", 3, "message: a port connection's three phrasings"),
+    ("H10:read:VAR_INIT", "mdrv_mix.rs", "-", 2, "its item and P6's member"),
+    ("H10:read:VAR_INIT", "mdrv_mix.rs", "in_p5", 1, "rule Y's processes: not the initializer"),
+    ("H10:read:VAR_INIT", "mdrv_mix.rs", "mdrv_writer", 1, "message: \"a declaration initializer\""),
+    ("H10:read:WriteView", "mdrv_mix.rs", "-", 3, "the `use` and the parameter of in_t2 and pairs"),
     ("H10:read:ca_idents", "mdrv_mix.rs", "mdrv_writer", 1, "message: a continuous writer's position"),
     ("H10:read:decl", "mdrv_mix.rs", "in_t2", 1, "the declaration fact (T2)"),
     ("H10:read:display_of", "mdrv_mix.rs", "mdrv_net_name", 1, "message: the variable's name"),
@@ -1340,6 +1385,6 @@ const H10: &[(&str, &str, &str, usize, &str)] = &[
     ("H10:read:proc_idents", "mdrv_mix.rs", "mdrv_writer", 1, "message: a process's position"),
     ("H10:read:span_resolver", "mdrv_mix.rs", "mdrv_writer", 1, "message: whether a missing port position means `.*`"),
     ("H10:read:symbols", "mdrv_mix.rs", "mdrv_net_name", 1, "message: the variable's name"),
-    ("H10:read:writes", "mdrv_mix.rs", "check_mixed_drivers", 2, "the pair's two writes, copied out at the one entry"),
-    ("H10:read:writes", "mdrv_mix.rs", "x_pairs", 1, "the view's writes (rule X's intervals)"),
+    ("H10:read:writes", "mdrv_mix.rs", "check_mixed_drivers", 2, "each pair's two writes, copied out at the one entry"),
+    ("H10:read:writes", "mdrv_mix.rs", "pairs", 1, "the view's writes (rules X and Y's intervals)"),
 ];
