@@ -29,4 +29,5 @@
   * size UNMEASURED: the plan's "1 gate site and the arms of `collides`" is its estimate
   * NOT measured (PLAN.txt §1, the fix's own grounding): whether the package walk sees an EnumLabel or Typedef DeclSite for every spelling (an anonymous enum in a variable, a label in a struct member's enum, a parser-minted name such as `T$w` in a package), the new refusal against the corpus and the 51 real designs, and the kinds outside the matrix's 8
   * row 23's RE-e waits on this fix: the parser records no second declaration of a package name (§5.2 23, the 2026-11-16 re-entry)
+* note (2026-11-17, owner Q4 (a)): the package-body pairs open as §5.2 Q-PKGDUPNAME (the plan's working name kept for the same item), held until goal G-PATTGEN starts; the routine-body pairs stay in this entry
 * status: OPEN

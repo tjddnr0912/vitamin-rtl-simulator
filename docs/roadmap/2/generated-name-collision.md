@@ -6,7 +6,7 @@
   * oracles: iverilog = sv2v → iverilog = verilator `A y=5 u=77`
 * witness: j6_udp_1 PRE rc 1 `` net/variable `top.g.__p_udp_q_0` redeclared `` and an E3018 line (W/qsymmix/premise5/cells, ORACLES6.txt)
   * oracles: iverilog = verilator `A q=1`, sv2v a parse error on `primitive`
-* census: the 11 colliding families: tpw (`hdl-parser/src/type_params.rs:168`), tpd (`:378`), tpp (`type_param_packed.rs:60`), udp (`udp.rs:481`)
+* census: the 11 colliding families: tpw (`hdl-parser/src/type_params.rs:168`), tpd (`:378`), tpp (`type_param_packed.rs:60`), udp (`udp.rs:483`)
 * and in elaborate: sad (`string_array_route.rs:229`), outp (`frames_call/emit.rs:628`), sva (`sva_check.rs:13`, `sva_prop.rs:956`, `cover.rs:96`), clk (`sva_clocking.rs:599`), taskarg (`inline_task.rs:416`), rand (`crv.rs:775`), genblk (`generate.rs:601`, `:657`)
 * census: 4 families do not collide (hout, forvar, foreach, grtn), and 5 are not reachable (enum stems and `$__vita_elab_` start with `$`, `__dynsnap_` has no caller, `cp_` / `cross_` are manifest labels)
 * note: families filed alone before: §3.b carrier-namespace (tpw, tpd, tpp), §2 🆕 N's `genblk1` collisions, and §2 23, two clocking blocks whose mangled names collide with each other

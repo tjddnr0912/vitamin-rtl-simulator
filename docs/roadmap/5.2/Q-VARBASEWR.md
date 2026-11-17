@@ -1,6 +1,6 @@
 (§5.2 Q-VARBASEWR · rank ② F · source Q6 re-plan page census (2026-11-01), row 29 r3 draft residue) (a variable-base `+:` write into a multi-dimensional packed element):
 * slot: after 29: the same lowering, `packed_lval.rs`
-* slot: 29's page half PARKED 2026-11-04 behind Q-PARAM2STATE, so this row waits on Q-PARAM2STATE through it
+* slot: this row waits on 29's page half, which waits on Q-OVRXPLANE (R7.4) and the literal lane (§5.2 Q-LITLANE, R7.5), no longer on Q-PARAM2STATE (owner O2, 2026-11-15: 29.md:7); this line read, until 2026-11-17: "29's page half PARKED 2026-11-04 behind Q-PARAM2STATE, so this row waits on Q-PARAM2STATE through it"
 * slot: T3 is not refilled, owner 2026-11-04
 * a variable-base indexed part-select of the innermost packed dimension of a multi-dimensional packed element as a write target is E3009: `logic [1:0][31:0] w; int o = 1; … for (int i = 0; i < 4; i++) w[o][8*i +: 8] = 8'(i+1);` prints `nested lvalue select (v1: single-level)` on PRE 719e37d2 and `variable-base indexed part-select of the innermost packed dimension is not supported as a write target` on row 29's r3 (W/row29/r3/bin/vita-post), verilator = sv2v → iverilog `R 0403020100000000`, iverilog refuses (W/program/q6-2026-10-31/replan/cells/c2.sv)
 * `tlul_adapter_sram.sv:447–448` (`wmask_int[woffset][8*i +: 8]` on `logic [WidthMult-1:0][TL_DW-1:0]`), hidden today behind that page's earlier errors

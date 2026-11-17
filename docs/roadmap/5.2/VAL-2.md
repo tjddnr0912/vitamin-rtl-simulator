@@ -8,7 +8,7 @@
 * fix: the 22 `had_error` references (13 files) each behind a named question (this fold's own failure, or any error so far), every one answering PRE's latch
 * note: one lane per call, never an eager second fold (S1v N-5: a second fold cost ~15 % wall); a check compares the exit code, the signal and the wall
 * pins: no fold entry outside `value/` (the delegate list pinned); ratchet c unchanged, b re-aimed at the home, not lowered by a rename
-* note: risk high: EVALUATION-ORDER (depth guards `MAX_DEPTH` 64 at `const_fn.rs:1607`, 8 at `const_bound.rs:410`) and Four vs No stickiness; size the 6 entry heads + `value/mod.rs`, 22 refs in 13 files named
+* note: risk high: EVALUATION-ORDER (depth guards `MAX_DEPTH` 64 at `const_fn.rs:1250`, 8 at `const_bound.rs:414`) and Four vs No stickiness; size the 6 entry heads + `value/mod.rs`, 22 refs in 13 files named
 * note: TW-LATCH: a named latch question answering unlike `had_error` on any cell is BLOCKING
 * note: as landed it does not free F24 or S1v's B-2 out of the value channel (§2 zero-width-gate-after-error) (P-e, P-f): F24's readers are fed by `range_facts` (VAL-3) and the frame (BIND-2), and B-2 is a value change
 * note: the Q-EXECSEM census (after VAL-2) and row 29 r1's `const_eval_u32` literal lane (R7.5) read the head note's lane table
@@ -28,7 +28,7 @@
 * note: P0-b's second form, a generic `fold<L: FoldLane>` over lane bodies: −0.045..+0.046 % on those loops, 0 trips after a re-measure alone: PASS; both patches are kept as evidence and nothing landed
 * note: the result record (P-c, `value/folded.rs`) is not built: nothing reads it yet, and a type nothing constructs fails `clippy -D warnings`; VAL-3 named its first reader, R6.1's typed bound (`BoundFold`, §5.2 VAL-3)
 * note: ratchet key b's re-aim goes with P-d: b counts only top-level `elaborate/src/const_*.rs`, so the five `pub(crate)` Option fns in `value/` are outside it; a row that moves a counted fn into `value/` without the re-aim lowers b by a rename (lens-sound N3)
-* note: measured at landing (F5): `had_error` has 9 code references (1 declaration, 2 writes, 6 reads, each "any error so far") in place of the 22 above; of the 8 readers above, 6 are fed by `range_facts`; `MAX_DEPTH` 64 sits at `const_fn.rs:1302`
+* note: measured at landing (F5): `had_error` has 9 code references (1 declaration, 2 writes, 6 reads, each "any error so far") in place of the 22 above; of the 8 readers above, 6 are fed by `range_facts`; `MAX_DEPTH` 64 sits at `const_fn.rs:1250`
 * note: `range_bounds_checked` (VAL-3) is the one `&mut self` entry, so its check can set the latch; `value/mod.rs` said no fold entry can (lens-sound N2, fixed in 4f68630b)
 * note: the decline readers (P-f): R1 R2 R3 R5 R6 to BIND-2, R7 R8 to VAL-3, R4 and N1–N12 REVIEW-ONLY; TW-LATCH is replaced by E5 failing, since no named latch question is built
 * note: filed (W/val2/plan/PLAN.txt F1–F4): F1 w0_local joins §2 const-fn-local-unbound-width; F2 §2 pkg-param-no-cause; F3 §2 override-recovery-reread; F4 s5_body joins §2 🆕 H

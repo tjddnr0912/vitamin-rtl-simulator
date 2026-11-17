@@ -43,8 +43,8 @@
 * first cells the premise3 cells above
 * then the 46 of 427 cells PLAN3's prototype F1z (W/qsymmix/plan3/bin/vita-f1z md5 1c616c6fb5ea0d2168b25d88558c0cdc) moves (41 wrong -> right, 0 descents, 0 outputs moved over 5572 sweep rows)
 * then sy9_mixgeom, sy7_noul, x1_ovr_sym_twin, c05_nested, c13_defparam, b07_neg, w03_selfwrap_total, then W/qsymmix/plan3/cells (s1_*, h1_*, q2_*) and W/qsymmix/plan3/chain
-* re-entry: on 2026-11-08 fix (d) slice A gave the three parked spellings one home without moving a value: the member width `(E < 0) ? 1 - E : E + 1` is `range_rules.rs` `sym_member_width` (`crates/hdl-ast/src/range_rules.rs:857`, called from `hdl-parser/src/sym_struct.rs:135`)
-* re-entry: after slice A the offsets and the total sums are `sym_sum_of` (`range_rules.rs:882`, called from `sym_struct.rs:212`), and the 1-bit width an errored member is laid out with is `sym_member_default_width` (`:875`, `sym_struct.rs:39`)
+* re-entry: on 2026-11-08 fix (d) slice A gave the three parked spellings one home without moving a value: the member width `(E < 0) ? 1 - E : E + 1` is `range_rules.rs` `sym_member_width` (`crates/hdl-ast/src/range_rules.rs:860`, called from `hdl-parser/src/sym_struct.rs:135`)
+* re-entry: after slice A the offsets and the total sums are `sym_sum_of` (`range_rules.rs:885`, called from `sym_struct.rs:212`), and the 1-bit width an errored member is laid out with is `sym_member_default_width` (`:875`, `sym_struct.rs:39`)
 * re-entry: after slice A P3's `sym_range_width` is `sym_typedef_width` with its `[X-1:0] -> X` shortcut (`range_rules.rs:817`, `:819`, called from `hdl-parser/src/type_params.rs:634`) and P2's builders are the `md_*` functions (`range_rules.rs:729`-`:793`, called from `hdl-parser/src/packed_md.rs`)
 * outside the file by its rule, so the re-entry meets them where they were: F1's alias slot (`hdl-parser/src/typedefs.rs`, a table: `range_rules.rs` OUTSIDE list) and F2's `$bits` fold in elaborate (an evaluator, the same list)
 * the record's count carries no `integer` limit since R1c moved to S1v, so an exact struct total past 2^31-1 meets no limit on that path: the re-entry censuses such totals or keeps its lane's PRE cap (UNMEASURED, W/qvalrulesd/plan7/filings.txt N7-2)
@@ -76,7 +76,7 @@
   * V1u-M3+DR rc 1 `` generate-scope parameter `s_t$1$0$sr` value is not a constant: undefined name `N` ... `` and `` ... `s_t$1$0$sw` value is not a constant: undefined name `s_t$1$0$sr` ... `` (an added refusal) (W/qsymmix/premise4/cells)
 * note: the anonymous member-type route (`hdl-parser/src/structs/mod.rs:144`) was outside the same census (F1b: a10 moves right, a13 prints `o_t$4$0$sw`)
 * note: the root both times: the mint was decided by a predicate over parser state (`in_package`, `gen_depth`, `mint_container`) the walk does not guarantee, and the items went down the shared channel `pending_module_items`, which four loops drain (W/qsymmix/replan3/PLAN.txt P1 K1)
-* binder arm (evidence round B-3): the minted pair does not reach `bind_one_param` (`elaborate/src/params.rs:1780`) as the re-entry plan's P1 said
+* binder arm (evidence round B-3): the minted pair does not reach `bind_one_param` (`elaborate/src/params.rs:1785`) as the re-entry plan's P1 said
 * its route is `elaborate/src/instance.rs:706-792` and `generate.rs:836-890` (`instance.rs:703` `targets` is false for a minted name)
 * binder arm (premise round 4 B-2): the body binder's string arm (`elaborate/src/instance.rs:717`) runs before the DR point (`:766`) and takes `$sr` over a bare string name, so the refusal prints the minted name
 * census: the arms `check_param_decl_range` `:712`, string `:717`, real `:719`, wide `:762-765`, fold / DR `:766`
@@ -133,7 +133,7 @@
 * note: VAL-2 landed without the one entry (§4.5.639): (C)'s count node is the first rule written for cores of different types, so (C) builds it, `fold_in(lane, e) -> Folded` in `value/lanes.rs`, called by arms only; P0-b measured a runtime-match entry +6.25 % instructions (FAIL) and a generic `fold<L: FoldLane>` −0.045..+0.046 % (PASS) (§5.2 VAL-2)
 * PARKED 2026-11-14 after the batch 5 P0 of spelling `{W}`, the one-operand concat around each member width, tripped the wire named before it ran (W/qsymmix5/plan/PLAN.txt Q3 TRIP WIRE), so the row parks with no second P0 and no patch round
 * nothing landed: P0 was a scratch diff on f0d87432, never committed (W/qsymmix5/p0/p0.patch md5 0e08b65e, 3 files +11 −1; binaries P0 f0c53487, PRE 4d1d84bb)
-* P0's three sites: `sym_member_width` returns `{W}` around PRE's ternary width (`crates/hdl-ast/src/range_rules.rs:859`)
+* P0's three sites: `sym_member_width` returns `{W}` around PRE's ternary width (`crates/hdl-ast/src/range_rules.rs:860`)
   * `names_an_overridable` gains `ExprKind::Concat { parts } if parts.len() == 1 => self.names_an_overridable(&parts[0]),` before its `_ => None,` (`hdl-parser/src/sym_struct.rs:205`, K1)
   * `const_fold_descends` gains `| K::Concat { .. }` after `| K::Cast { .. }` (`elaborate/src/const_bound.rs:302`, K2)
 * trip wire, named before the run: on the cells of record any right → wrong, right → loud, loud → value where both oracles refuse, or any diagnostic line that differs outside the claimed cells ends the parser-respelling axis (PLAN.txt Q3, :145-147)

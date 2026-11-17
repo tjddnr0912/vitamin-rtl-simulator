@@ -3,7 +3,7 @@
 Open work, one line per item: id, title and a link to its detail doc, and its status or slot when it has one. Format, filing, census: [roadmap/README.md](roadmap/README.md).
 
 ## Summary
-> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 637 open, 399 startable.
+> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 706 open, 458 startable.
 
 Recount from the lines below in every docs step; the iteration report shows this table; the census rule is in the notes ([notes](roadmap/README.md))
 
@@ -902,7 +902,12 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
 Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-17): Q-MDRVMIX built (§4.5.648), batch 5 closes; next 24 (re-plan), R7.4, R7.5, 29 page half, 31; no code on main; iteration and real-design-first rules ([notes](roadmap/5.2/README.md))
+State (2026-11-17): batch 5 (PARSE-1's piece, Q-WREXT, Q-MDRVMIX) closes, boundary verify next; batch 6 = G-EH1 (6 rows, cap 5: open question); owner Q1–Q5 ([notes](roadmap/5.2/README.md))
+Goals, in run order (the slot column is not the run order; owner, 2026-11-16 and 2026-11-17):
+Goal G-EH1, VeeR EH1 `eh1_noassert` on original source: Q-LOSSYSPELL → 24 (EH1 cut, re-plan) → Q-OVRXPLANE → Q-LITLANE → 29 page half → 31
+Goal G-PATTGEN, OpenTitan pattgen on original source: Q-TYPEOVERVAL → 33; Q-PKGDUPNAME → 23; Q-RTNTEXT and Q-NETSHAPE's first commit → 46; 24's OpenTitan half
+Goal G-OT5, uart, gpio, i2c and rv_timer on original source after pattgen: 35 and 43 (uart, gpio, i2c), then 37 (rv_timer)
+Not on a goal's chain: Q-SYMMIX and 11 rows waiting on it (review A15): Q-PARAM2STATE, Q-TPCARRIER, Q-TLPCONV, Q-CONSTSELLSB, Q-CONSTAGG, 76, Q-MEMBSRC, Q-CONSTXIDX, Q-CONSTPSELOOR, 6, 7
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))
@@ -910,7 +915,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | # | slot | item | rank |
 |---|---|---|---|
 | SYS-1 | R2.1 · L1 (landed) | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
-| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its 64-bit kernels in hdl-ast, which code made each literal and entry](roadmap/5.2/PARSE-1.md) | — F |
+| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its kernels in hdl-ast, literal origins](roadmap/5.2/PARSE-1.md) | — F |
 | VAL-1 | R3.1 · L1 (landed) | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 (landed) | [the parameter declaration chain and the live-scope wide ask, written once](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 (landed) | [a declared range's bounds folded, then checked, in one body](roadmap/5.2/VAL-3.md) | — F |
@@ -921,12 +926,15 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-CONSTSELLSB | R7.1 · L1 (PARKED) | [constant interpreter select writes ignore the declared LSB and direction](roadmap/5.2/Q-CONSTSELLSB.md) | ① S |
 | Q-CONSTAGG | R7.2 · L1 (PARKED) | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
+| Q-LITLANE | R7.5 · L1 | [`const_eval_u32` reads a sized signed literal as its unsigned pattern](roadmap/5.2/Q-LITLANE.md) | — F |
 | Q-WREXT | R8.1 · L1 (built) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
 | Q-MDRVMIX | R8.1 · L1 (built) | [a packed variable's overlapping mixed writes and always_comb pairs are E3001](roadmap/5.2/Q-MDRVMIX.md) | ① F |
+| Q-LOSSYSPELL | R8.1 · L1 | [which lossy constant producers a design spells, recorded once per design](roadmap/5.2/Q-LOSSYSPELL.md) | — F |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |
 | 68 | R9.1 · L1 (held) | [a typedef's bound re-folds where the type is used, not where declared](roadmap/5.2/68.md) | ① F |
+| Q-PKGDUPNAME | R9.1 · L1 (held) | [an enum label or typedef redeclaring a package-body name is accepted](roadmap/5.2/Q-PKGDUPNAME.md) | ① |
 | 23 | R9.1 · L1 (PARKED) | [the parser's constant fold lacks shift and power operators](roadmap/5.2/23.md) | ② F |
 | Q-RTNTEXT | R9.2 · L1 | [one answer for the scope a package routine's text binds in](roadmap/5.2/Q-RTNTEXT.md) | — F |
 | 46 | R9.3 · L1 (PARKED) | [a package typedef's named dimensions fold where the type is used](roadmap/5.2/46.md) | ② F |
@@ -962,7 +970,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-HANDLERET | 10 · any | [two routes into a class handle skip the handle check](roadmap/5.2/Q-HANDLERET.md) | ① |
 | Q-STRCATSEL | 10 · any | [a select on a string concatenation reads the packed vector](roadmap/5.2/Q-STRCATSEL.md) | ① |
 | Q-STRWAIT | 10 · any | [a `wait` on a string comparison never wakes](roadmap/5.2/Q-STRWAIT.md) | ① |
-| Q-VALRULES | 10 · L1 | [census and design of the value and width rules spelled several times, no code](roadmap/5.2/Q-VALRULES.md) | — F |
+| Q-VALRULES | 10 · L1 | [the value rows R6.1–R6.4: the typed bound, x evidence and the two lane tracks](roadmap/5.2/Q-VALRULES.md) | — F |
 | 74 | 10 · L1 | [ET: the expression-type funnel (string, real or integral, and width)](roadmap/5.2/74.md) | ① F |
 | Q-STRTERN | 10 · L1 | [a `?:` with a string arm is not typed as a string](roadmap/5.2/Q-STRTERN.md) | ② |
 | Q-STRCASTLIT | 10 · L1 | [`string'(<literal>)` lowers to a bare literal, not a string](roadmap/5.2/Q-STRCASTLIT.md) | ② |

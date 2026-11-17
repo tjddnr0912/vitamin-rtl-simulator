@@ -2,7 +2,7 @@
 * slot: row 29's prerequisite with Q-IDXVALUE
 * slot: shared flatten `elaborate/src/array_geom.rs`, `packed.rs`: D12 file check at start
 * an index is re-typed by the flatten it is lowered into: `flatten_word` / `flatten_word_eids` (`elaborate/src/array_geom.rs`) put every unpacked or packed index under synthesized 32-bit UNSIGNED constants (the bound guard `dim_guard`, the coordinate `dim_coord`, the stride `Mul` / `Add`), which IEEE 1800-2017 §11.6.1 / §11.8.2 make the operands' context
-* `seal_index_unsigned` (`packed.rs:748`) protects only a narrow signed REPEATABLE index (sign-extended) or a provably unsigned one (`{1'b0, e}`).
+* `seal_index_unsigned` (`packed.rs:737`) protects only a narrow signed REPEATABLE index (sign-extended) or a provably unsigned one (`{1'b0, e}`).
 * Two halves, measured on PRE 719e37d2 (W/row29/park/cells): (a) a narrower signed index zero-extends and `/` runs unsigned — sx01 `logic [1:0][15:2] b; logic signed [3:0] s = -1; b[s + 2] = 14'h3fff;` `R 0000000`, iverilog = sv2v = verilator `R fffc000`
 * sx02 `b[s + 2][5] = 1` `R 0000000`, sv2v = verilator `R 0020000`
 * sx03 reads `R xxxx xx x`, sv2v = verilator `R 0f25 09 0`

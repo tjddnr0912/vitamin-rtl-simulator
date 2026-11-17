@@ -10,4 +10,5 @@
   * oracles: all three run each, `A v=01011010` `B v=11000011` (m_k_b8_ca_init_ppd `B v=11001010`)
 * witness (the matrix, value-wrong, the undriven part of a `logic` variable with disjoint continuous `assign`s): m_o_ca_ca_bbd PRE rc 0 `A v=xxxxx01x ; B v=xxxxx10x`, iverilog = sv2v `A v=zzzzz01z ; B v=zzzzz10z`, verilator `A v=00000010 ; B v=00000100`; m_o_ca_ca_mpd (struct members) PRE `A v=1001xxxx ; B v=1100xxxx`, iverilog = sv2v `A v=1001zzzz ; B v=1100zzzz`, verilator `A v=10010000 ; B v=11000000`
   * the same split on m_o_ca_ca_eds, m_o_ca_ca_egd and m_o_ca_ca_eps (unpacked elements: PRE `v0=xxxxxxxx`, iverilog = sv2v `v0=zzzzzzzz`, verilator `v0=00000000` on the undriven word), m_o_ca_ca_ped (packed elements: PRE `A v=xxxxxxxx0101101010100101xxxxxxxx`, iverilog = sv2v `A v=zzzzzzzz0101101010100101zzzzzzzz`) and m_o_ca_ca_asd (array-of-struct members: PRE `A v=1010xxxx0101xxxx`, iverilog = sv2v `A v=1010zzzz0101zzzz`)
+* note (2026-11-17): `other_writers`' re-point onto the view is hosted by §5.2 Q-MDCONSTOFF (one host for the three checkers)
 * status: OPEN

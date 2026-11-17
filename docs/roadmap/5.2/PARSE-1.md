@@ -1,4 +1,4 @@
-(§5.2 PARSE-1 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G1 PARSE, OPS) (the parser's constant fold in one file, its 64-bit kernels in hdl-ast, which code made each literal and entry):
+(§5.2 PARSE-1 · rank — F · source W/program/reorder2-2026-11-09/PLAN.txt G1 PARSE, OPS) (the parser's constant fold in one file, its kernels in hdl-ast, literal origins):
 * slot: landed 2026-11-10 as batch 2's third row (§4.5.638, a392795c), one row with OPS, no split and no owner decision; the table keeps the row for this record and its lists, which the head note of `value_rules.rs` cites (lens-sound N4)
 * slot: R2.2 · L1, after SYS-1 (owner, 2026-11-09), with OPS, the operator and literal kernels
 * slot: hdl-parser `params.rs` is in batch 1's diff, so it builds after batch 1 lands (D12)
@@ -21,7 +21,7 @@
 * note: D12: PARSE × 68 + 23 × 46 × 39 share hdl-parser; PARSE × Q-NETSHAPE 0
 * note: it frees rows 23 and 68 in one place (row 23 admits `<<`, `>>`, `**` in the parser lane, OPS already has them), row 46's B1 and j1a3 (§5.2 46)
 * note: the home rows' trip wires and their honest cost are written once, in §5.2 SYS-1
-* record: PARSE-1 landed (§4.5.638, a392795c): row verify r1 10 / 10 (W/parse1/build/VERDICT-main.txt): 8341 record cells and the lanes 175 / 148 / 123 byte-equal to PRE, cost27 0 trips, cli nextest 9840 passed, 0 failed, 51 real designs equal, the census re-run (V13) 59 residual keys and 0 other
+* record: PARSE-1 landed (§4.5.638, a392795c): row verify r1 10 / 10 (W/parse1/build/VERDICT-main.txt): 8341 record cells and the lanes 175 / 148 / 123 byte-equal to PRE, cost27 0 trips, cli nextest 0 failed, 51 real designs equal, the census re-run (V13) 59 residual keys and 0 other
 * record: `parse1_lane`, 123 cells: Parser4 30, Lit3 9, ParserCtx5 / cw 21, elaborate `$clog2` 5, elaborate decimal 2, elaborate OPS sites 8, F24 readers 11, ground probes 6, override folds 11, re-point reach 9, lanes L12 / L13 / L15 6, PRE-EXISTING witnesses 5
 * note: lane L1 Full: `const_binop`, 22 arms, at elaborate in_scope `:530`, env `:1016`, env_fold `:746` and `fold.rs` `:288` `:467` `:543`; Shr declines a < 0, Pow None
 * note: lane L2 Parser4: Full restricted to {+ - * /}, in `try_const_index` (callers `expr_primary.rs:755`, `params.rs:924`, `typedefs.rs:451`), both operands `?` first
@@ -46,7 +46,7 @@
 * note: out O7, the respell builders (`range_rules` part 5, the adaptors in `packed_md.rs` passing `Self::const_lit`) and the table's producer and upkeep (`params.rs:890`; `imports.rs`, `generate.rs`, `scope.rs`, `functask.rs`, `decls.rs`, `module_items.rs`)
 * note: out O8, the folds' readers (`member_width`, `member_ascending`, `sym_struct`'s gates, `default_value_shape_free`, the enum loop of `typedefs.rs`, `const_index_string`, `literal_leaf`, `bind_md_return`, `ret_var_selects_carried`, the scaled and composed readers): each decides what a fold's no means at its site (F24)
 * note (structure review 2, 2026-11-16, W/review/structure-2026-11-16/REPORT.txt Q3 B): outs O7 and O8 take the record that review names first, where a parse-time number came from, recorded where it is made; it joins this row (ER §3.6), no new row
-  * `IntLit` gains an origin (Source, or Parser and where from), set in the two funnels `dec_lit` (`hdl-ast/src/range_rules.rs:661`) and `i64_lit` (`hdl-parser/src/expr_primary.rs:489`) and in the direct `IntLitKind::Decimal` constructions outside them; the lexer's `lit_int` (`:69-73`) writes Source
+  * `IntLit` gains an origin (Source, or Parser and where from), set in the two funnels `dec_lit` (`hdl-ast/src/range_rules.rs:661`) and `i64_lit` (`hdl-parser/src/expr_primary.rs:493`) and in the direct `IntLitKind::Decimal` constructions outside them; the lexer's `lit_int` (`:69-73`) writes Source
   * narrowed when built (2026-11-16, the record below): three variants by the constructing code, `Source | Parser | Elab`, not where from (premise judge 1 J3: a Desugar / lookup tag's truth is readable only per site); `Parser` is written in every other hdl-parser construction and inside `dec_lit` itself, `Elab` in elaborate's 18
   * `ConstVal` (`hdl-parser/src/lib.rs:316`) gains `exact` (Written, Converted, Unconverted, Derived) and its declaring scope at its one writer, `.insert(p.name.name.clone(), ConstVal { v, w, signed });` (`hdl-parser/src/params.rs:929-930`); the copy sites copy it whole, the 6 read sites in `const_fold.rs` (T6) stay the only readers
   * narrowed when built: `ConstVal` stays the fold's value type and the table stores a new `ConstEntry { v, w, signed, lane }`; `lane` names which of W1's paths recorded the entry, in place of `exact`; the initializer's shape (Written / Derived) goes to 68 (b)'s re-plan, and the declaring scope is left out of the row (W1 has no generate-block identity: the consumer's prerequisite, not filed)
@@ -152,7 +152,7 @@
   * 5 every plain (non-lib) staged `.velab`: the header's 32-byte composite of the `.vu` (offsets 41..72); the body stays
   * 6 a work library: the blob name `units/cu_<hex>.vu`, lib.toml's text and hash, a lib-mode `.velab`'s header and body trailers; a library built before C1 is stale (exit 2)
   * 7 `hdl-parser/src/tests/composed_member.rs`'s `no_spans` also erases `, origin: <Source|Parser|Elab> }` outside quoted text
-  * gate (out/gate): VERDICT PASS, 10376 tests run, 10376 passed, 1 skipped, each failure token 0
+  * gate (out/gate): VERDICT PASS, each failure token 0
   * record (out/record): 8341 compared, same 5601, fmt_only 2726, noise_both 13, moved 1 (below)
   * lanes (out/record): sys1 175, sys1b 148, parse1 123, val1 265, val2 85, val3 107, b3pins 6, bind1 61, bind2 53, b4pins 23 and parse1b 92 (new: the row's ground, premise and plan cells), each SAME
   * `.velab` body (out/velab_body): 478 compared, moved 0, the differing offsets 41..72 only

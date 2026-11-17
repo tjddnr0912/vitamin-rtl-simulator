@@ -45,7 +45,7 @@
 * note: lens-sound N-S7a: `DeclKept`'s seven fields are `pub(crate)` (`decl_scope.rs:108`) so `bound/undo.rs` can read them, the least visibility that compiles (W/batch4/RULINGS-lens-sound-r1.txt)
 * note: lens-sound N-S3a, N-S3c, N-S5a and N-S5b: `bound/mod.rs` names the whole-map replacements the walker cannot see REVIEW-ONLY, the one-caller rows, and `read.rs`'s head note takes R16 / R17's numbers (in f77e7989)
 * record: batch 4 boundary verify at f17a0ff6 (W/batch4/BOUNDARY.txt, SUMMARY.txt, battery/SUMMARY.txt):
-  * record: tip f17a0ff6; run_post PASS, 15 stages (W/batch4/SUMMARY.txt): gate 11231 run, 11231 passed, 0 fail tokens; sweep 26858 same; staged 429 same; corpus 0 regression, 0 drifted, 0 oracle-drift; pcells 430 same; real 51 same; wave 46 same
+  * record: tip f17a0ff6; run_post PASS, 15 stages (W/batch4/SUMMARY.txt): gate PASS, 0 fail tokens; sweep 26858 same; staged 429 same; corpus 0 regression, 0 drifted, 0 oracle-drift; pcells 430 same; real 51 same; wave 46 same
   * record: record cells 8341 same; lanes sys1 175, sys1b 148, parse1 123, val1 265, val2 85, val3 107, b3pins 6, bind1 61, bind2 53 same
   * record: cost: the two DEPTH cells in band, r_lsb_self_ok +1.85 % and r_msb_self +1.82 % instructions (R17's named difference); y_gen_cast's WALL3 flag cleared on the re-measure (+2.15 % wall, +0.012 % instructions); z_sel_write_loop a wall decrease (−5.05 %)
   * record: battery 202 rows (W/batch4/battery/SUMMARY.txt): 145 killed, 54 survived, controls C00 and C01 OK, 18 claims unmet, 30 listed equivalent, 1 probe (q01, SURVIVED, expected equivalent)
