@@ -1,4 +1,24 @@
-(§5.2 Q-MDRVMIX · rank ① F · source W/mdrv/ground/REPORT.txt Q1, row 24's F5 / D1 (owner, 2026-11-16)) (a packed variable's overlapping mixed writes and always_comb pairs are E3001):
+(§5.2 Q-MDRVMIX · rank ① F · source W/mdrv/ground/REPORT.txt Q1, row 24's F5 / D1 (owner, 2026-11-16)) (overlapping partial and mixed writes of a packed variable are not refused):
+* purpose: a continuous and a procedural writer on overlapping bits of a packed variable that elaboration decides (IEEE 1800-2017 §6.5, §10.3.2), and an `always_comb` and another process on overlapping bits (§9.2.2.2), are E3001
+* why: G-EH1, before row 24 (EH1 cut), whose K7 inputs it decides (24.md); the owner put the multidriver rule for partial and mixed writes before row 24 (2026-11-16)
+* needs: Q-WREXT, Q-WEXTPOS
+* readers: 24
+* state: PARKED Q-WEXTPOS (2026-11-17)
+* record: as filed below ; superseded order lines are kept for the record
+* slot: parked 2026-11-17 at R8.1 · L1 behind §5.2 Q-WEXTPOS (owner, 2026-11-17, option A): its two commits are pulled out of batch 5 by a33df0e0 and batch 5 goes on to its boundary as PARSE-1's provenance piece and Q-WREXT; nothing of this row is on main or on the batch 5 branch
+* park (2026-11-17): the class, in ER's words: a reader takes a value from a container filled for another purpose, or a context's value where the write's own was expected (ER §3.6 root class; the class premise judge 1 named for the first plan, B1 below); at the boundary the soundness lens found a legal design refused because the view's geometry constant and a kernel extent read a provisional constant as final (a hierarchical `$bits` lowered by `lower_bits_fold` in `expr_special.rs` and patched by `resolve_deferred_hier_bits` in `hier_defer/bits.rs` after the view read it: lens-sound F1), the differential lens found the E3001 text's bit range read from the normalized bounds `mdrv_bits_note` took from the net, not from the declared range (lens-diff B1), and the fix failed its premise judge three times on the same class in the text's sentences (the `.*` port name, the declaration initializer's position, a `$unit` routine's name, a gate list's and an enclosing statement's span); the verdicts loud and quiet were right on every cell, the sentences were not
+  * lenses: W/batch5b/lens-sound/REPORT.txt, W/batch5b/lens-diff/REPORT.txt (with D4_TABLE.txt)
+  * plans: W/wrext/fix1/PLAN.txt, W/wrext/fix1/PLAN2.txt, W/wrext/fix1/PLAN3.txt
+  * premise judges: W/wrext/fix1/premise/REPORT.txt (with LINES.txt), W/wrext/fix1/premise2/REPORT.txt, W/wrext/fix1/premise3/REPORT.txt
+* built and pulled: C1 0da863d1 (rule X) and C2 92579c89 (rule Y) on the batch 5 integration branch, reverted together by a33df0e0, so `crates/` is again 74b2bbe7's tree (Q-WREXT's row end); the code as built is W/mdrv/build/c1.patch and W/mdrv/build/c2.patch; what left with it: `elaborate/src/mdrv_mix.rs` and `check_mixed_drivers` with its call in `driver.rs`, the `cont_var.reported` insert in `cont_var.rs`, `WriteView::for_test`, `wext_home.rs`'s H10, the 130 pins of `crates/cli/tests/mdrv_mix_pins.rs`, the three rewritten `implicit_read_set.rs` pins (PRE's designs again) and `wext_view.rs`'s w01 (PRE's design again)
+* re-entry: a fresh plan on the code as it stands then, once §5.2 Q-WEXTPOS has landed (the view stands down on a provisional constant and carries each write's own position), with as its input:
+  * (a) `check_mixed_drivers` returns at its head when `had_error` is set, and the `cont_var.reported` stand-down is deleted (premise judge 2 of the fix, W/wrext/fix1/premise2/REPORT.txt D3 / D4: sound; 0 of the 130 pins and 0 of the 9923 record dirs go quiet)
+  * (b) the text reduced to the variable's name, the bits clause "on bits [HI:LO] of its packed value (bit 0 is the least significant bit)", the writers' kind words and each write's own position from Q-WEXTPOS's `at` (PLAN3.txt's templates; premise judge 3's literal lines 1–12, W/wrext/fix1/premise3/REPORT.txt); the words that text loses are §5.2 Q-MDRVWHO's
+  * (c) the differential lens's two filings, as this row's known silences, each PRE == POST: "target set by declaration site", interface members and package variables written by overlapping mixed writers stay silent (i48, rule X's shape, iverilog refuses it: `Cannot perform procedural assignment to bit select 'i0.v['sd0]' because it is also continuously assigned.`; n08 and n07, rule Y's shape), and "constant select left Undecided", a constant select the kernel's fold leaves `Undecided` (a negative index i61, n02, n04, n06; a multiply n21; a genvar expression i63) keeps both rules silent, iverilog refusing i61, n02, n06 and i63 (W/batch5b/lens-diff/REPORT.txt F1, F2)
+  * (d) the open pair question of §3.b mdrv-ff-latch-pairs (which `always_ff` / `always_latch` sub-forms to refuse is the owner's)
+* note: the manual's text for the two rules (b75c6d28, §4.5.648) left the manual with the park, since the manual says what the tree does; it stands at the end of this doc verbatim as it stood at a33df0e0, to be put back, with the re-plan's text, at this row's landing
+* note: line 1 as filed at b75c6d28 (§4.5.648), kept as written: "(§5.2 Q-MDRVMIX · rank ① F · source W/mdrv/ground/REPORT.txt Q1, row 24's F5 / D1 (owner, 2026-11-16)) (a packed variable's overlapping mixed writes and always_comb pairs are E3001):"; the title is again the one it had before that commit, the defect the row closes
+* note: the lines from here to the manual record are b75c6d28's built-state text, kept verbatim; where they say "built", "as built", "POST 92579c89" or name a pin of `mdrv_mix_pins.rs`, they describe the build a33df0e0 pulled out, not the tree
 * slot: built 2026-11-17 on the batch 5 integration branch (§4.5.648): C1 0da863d1, rule X, and C2 92579c89, rule Y, landing with batch 5; no code on main; batch 5 closes at this row (owner, 2026-11-17)
 * slot: R8.1 · L1, after Q-WREXT, the record it reads, and before row 24, which waited on it (owner, 2026-11-16, "2번이 좋을것 같음": the multidriver rule for partial and mixed writes first, a prerequisite row before row 24; main: the record first, ER §5.1)
 * note: superseded slot lines (2026-11-16), kept as written: "planned, not built (2026-11-16): R8.1 · L1, after Q-WREXT, the record it reads, and before row 24, which waits on it" and "premise judge 1 failed (B1, below), the re-plan is W/mdrv/plan2/PLAN2.txt, and premise judge 2 waits on the owner's answer on rule Y (the open question below)"
@@ -74,3 +94,121 @@
 * note: EH1's six false E3018 (ahb_sif.sv:216 / :219 / :220, imem and lmem) are not this row: row 29's nested select is refused at `lval_base_net` (`elaborate/src/lvalue.rs:551`, E3009) and returns `POISON_NET` (`limits.rs:49`), whose chunk sets `other_writers`' design-wide `unknown` (`cont_array.rs:367` / `:450`), so `cont_var.rs:204` (line corrected 2026-11-17, was :202) refuses every recorded variable `assign` in the design (`Refusal::Unresolved`; W/mdrv/ground/REPORT.txt Q3, cells q3_portnest and q3_portnest_ctl); §3.b nested-lval-select owns it
 * note (2026-11-17, roadmap review W/program/roadmap-review-2026-11-17/FIXLIST.txt G2): §5.2 Q-MIXCAPROC owns this row's rule X mechanism on its cells (`assign y[3 +: 2]` beside `always_comb y[4]`, IEEE §6.5); compared by design text with `mdrv_mix_pins.rs` (no run), no pin spells any of its eight cells, so a re-measure on POST is owed for all eight (Q-MIXCAPROC.md lists them and what rule X's text says of each)
 * source: W/mdrv/ground/REPORT.txt (Q1–Q8), W/mdrv/plan/PLAN.txt, W/mdrv/premise/REPORT.txt, W/mdrv/plan2/PLAN2.txt, W/mdrv/premise2/REPORT.txt, W/mdrv/build/NOTES.txt (rounds 1, 2), W/mdrv/build/RESIDUES.txt
+* record (manual, at a33df0e0): `docs/manual/003_language-reference.md`, the multiple-driver paragraph as b75c6d28 wrote it (the manual now reads as before b75c6d28: "The rule reads", "are not checked."), verbatim:
+```text
+Multiple drivers are legal on a net, not on a variable (IEEE 1800 §6.5). A
+variable driven by a continuous `assign` or a gate output — `logic y;`, or an
+`output logic y` port — takes no other driver: a second whole `assign` or gate
+output on it, a procedural write in an `always`, `always_latch`, `initial` or
+`final` block, a procedural `assign`, or a declaration initializer is
+`E-ELAB-MULTIDRIVER` / `VITA-E3001`, as Icarus Verilog refuses it. Declare the
+signal a net (`wire`) to have its drivers resolved. A `force` is not a driver
+(§10.6.2). That rule reads whole-variable writes at module scope only: a select,
+element or member write, a write through a task, a hierarchical name or a system
+task's output argument, and a port binding, a UDP instance, a generate block, a
+`generate … endgenerate` region or an interface body driving the same variable
+are not checked by it. On a variable that is not `logic` — `reg`, `integer`, `time`,
+`real`, `realtime`, a 2-state type — they are: a continuous `assign` there is kept
+only as the variable's sole writer, driving all of it, and is otherwise
+`E-ELAB-LVALUE-KIND` / `VITA-E3018` (§9.4).
+A second rule reads the bits: on a `logic`, `reg` or `bit`
+variable declared in a module (not an input port), a continuous driver — an
+`assign`, a gate output or an instance's output port, on the whole, a select or a
+member — and a procedural write in an `always`-family or `initial` block, a declaration initializer or a
+function or task body on overlapping bits fixed at elaboration is `VITA-E3001`
+(§6.5; on a `reg` or `bit` variable an `assign` beside another writer is that
+`VITA-E3018`); and an `always_comb` and another process writing overlapping bits is
+`VITA-E3001` (§9.2.2.2). Writes to disjoint bits are legal. A select with a run-time
+index, an unpacked array element and the other cases listed under
+`E-ELAB-MULTIDRIVER` in [007](007_error-codes.md) are not read by it.
+```
+* record (manual, at a33df0e0): `docs/manual/007_error-codes.md`, `E-ELAB-MULTIDRIVER` in detail, the opening sentence as b75c6d28 wrote it (the manual now reads "Four shapes reach this code."), verbatim:
+```text
+Six shapes reach this code; the last two read the bits a write to a variable
+covers.
+```
+* record (manual, at a33df0e0): `docs/manual/007_error-codes.md`, the paragraphs from the gate-output sentence to the end of the two new shapes as b75c6d28 wrote them (the manual now reads as before b75c6d28 there, but for the Verilator sentence, which stays as b75c6d28 corrected it: "Verilator's lines on the overlapping partial pairs measured vary: a `MULTIDRIVEN` lint warning, a `BLKANDNBLK` \"Unsupported\" error, or none."), verbatim:
+````text
+A gate output counts as a continuous driver, and an `always_latch` beside the
+`assign` is this error too, not the latch warning below. A `force` over the
+`assign` is not a second driver (IEEE §10.6.2). An `always_comb` or `always_ff`
+beside the `assign` is the previous shape, with its own message. The three variable shapes above read only whole-variable writes at module
+scope: a select, element or member write, a write through a task or a
+hierarchical name, a port binding, a generate-block `assign`, an interface body
+and an unpacked array (which is `VITA-E3009` when its whole-array `assign` has
+another writer) are outside them. The fifth and sixth shapes, below, read a select,
+a member write and a port binding by the bits they cover.
+
+In those three only a *direct*, *whole-variable* write counts. Direct means an assignment
+(including `force` and a procedural `assign`), not a write that reaches the
+variable through a task or function call — `initial wt();` where
+`task wt(); v = 3; endtask` is not a driver here, because a variable merely passed
+to an `input` formal would otherwise be reported too. Whole means the lvalue is the
+bare identifier: a struct member (`s.x`), an array element (`mem[a]`), a bit
+(`bits[0]`) or a part select is a partial write and does not make a pair there.
+Verilator's lines on the overlapping partial pairs measured vary: a `MULTIDRIVEN`
+lint warning, a `BLKANDNBLK` "Unsupported" error, or none. Xcelium's behaviour on a partial write has not been measured.
+
+A **variable** declared `logic`, `reg` or `bit` in a module body, a generate block
+or a module's `output` port, driven on some bits by a continuous driver (an
+`assign`, a gate output or an instance's output port) and written on overlapping
+bits by a blocking or non-blocking assignment — in an `always_comb`, `always_ff`,
+`always_latch`, `always` or `initial` block, a static task such a block calls, a
+function or automatic task body, or a declaration initializer — is two writers on
+those bits under IEEE 1800 §6.5 and §10.3.2. Writes to disjoint bits are legal and
+run. On a `reg` or `bit` variable an `assign` beside another writer is
+`VITA-E3018` (`E-ELAB-LVALUE-KIND`) instead, reported first; an output port bound to
+it is this shape:
+
+```systemverilog
+// t.sv
+module t;
+  logic clk; logic [7:0] s;
+  logic [7:0] v;
+  assign v[5:2] = s[3:0];
+  always_comb v[3:0] = ~s[3:0];     // bits [3:2] have two writers
+endmodule
+```
+```
+error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `t.v` is driven by an `assign` or gate output at t.sv:5:3 in `t` AND written by `always_comb` at t.sv:6:3 in `t` on bits [3:2], and a variable driven by a continuous assignment takes no other writer on those bits (IEEE 1800-2017 §6.5, §10.3.2)
+```
+
+A **variable** of the same kinds whose bits an `always_comb` writes, written on
+overlapping bits by another process (`always_comb`, `always_ff`, `always_latch`,
+`always`, `always @*` or `initial`, directly or through a static task it calls), is
+two writers under IEEE 1800 §9.2.2.2: "The variables written on the left-hand side
+of assignments shall not be written to by any other process", while independent
+elements whose longest static prefixes do not overlap may be. No tool measured
+refuses these as illegal (Icarus Verilog runs them; Verilator warns, runs them or
+calls some unsupported); vita follows the standard:
+
+```systemverilog
+// t.sv
+module t;
+  logic clk; logic [7:0] s;
+  logic [7:0] v;
+  always_comb v[5:2] = s[3:0];
+  always_comb v[3:0] = ~s[3:0];     // bits [3:2] are written by two processes
+endmodule
+```
+```
+error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `t.v` is written by `always_comb` at t.sv:5:3 in `t` AND by `always_comb` at t.sv:6:3 in `t` on bits [3:2], and the bits an `always_comb` writes take no write from another process (IEEE 1800-2017 §9.2.2.2)
+```
+
+These two messages have no location prefix and name both writers. Two instances of
+one module read apart by their scope (`in t.u1`, `in t.u2`); a `.*` connection, which
+has no source position, says so; a function body is named by the function and where
+it is declared. The bits are counted from the variable's least significant bit as 0,
+and the message says so when the declared range does not end at 0 (`logic [8:1] v`).
+One error is reported per variable, and a variable one of the first four shapes
+(or `VITA-E3018`) already reports gets no second error.
+
+Both read only bits fixed at elaboration (a constant select, a struct member, a port
+binding). They do not read a select with a run-time index (`v[i]` in a loop), an
+unpacked array element, an `int`-family or type-parameter-typed variable, an input
+port, a `final` block, a deferred assertion's action, a clocking-block drive, a
+function's writes inside an `always_comb` (and a static task or void function an
+`always_comb` calls, which is not its own side of the second rule), or a pair of
+`always_ff` / `always_latch` / `always` / `initial` writers with no `always_comb`
+and no continuous driver among them; those partial writes run as before.
+````

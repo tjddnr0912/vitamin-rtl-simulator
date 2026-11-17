@@ -1,0 +1,7 @@
+(§3.b based-leading-underscore · OPEN · in Parser accept) (a based literal whose digits start with `_` (`16'h_dE_aD`) is accepted):
+* symptom: a based literal whose value part starts with an underscore, `16'h_dE_aD`, is accepted and reads `dead`, where IEEE 1800-2017 §5.7.1 says "The underscore character (_) shall be legal anywhere in a number except as the first character" (ieee1800-2017.txt:3030) and A.8.7 spells `hex_value ::= hex_digit { _ | hex_digit }`; PRE == POST (batch 5's differential lens, a21, no oracle line in the lens's reading; filed 2026-11-17 at Q-MDRVMIX's park, not caused by batch 5)
+* witness: a21_xz_digits_underscores (W/batch5b/lens-diff/cells/d1/a21_xz_digits_underscores/t.sv), `c = 16'h_dE_aD;` beside `8'b1x0z_1x0z`, `'hxz` and `1_000_000`: PRE rc 0 `A 1x0z1x0z xxxxzzzz dead 1000000 zz1x`
+* oracles (W/batch5b/lens-diff/D4_TABLE.txt): iverilog 13.0 compile rc 2 `t.sv:4: syntax error` / `t.sv:4: error: Malformed statement`; sv2v rc 1 `t.sv:4:52: Parse error: unexpected token 'h_dE_aD' (Id_simple)`; verilator 5.054 --binary rc 0 runs `A 10001000 00000000 dead 1000000 zz1x` (it reads `16'h_dE_aD` as vita does)
+* note: the lens filed it as no-oracle (iverilog and sv2v against verilator); IEEE's text decides it (owner, 2026-11-17: IEEE first where it says "shall"); §3.b based-ws is the white-space neighbour of the same literal reader
+* oracles: iverilog + sv2v + hand-IEEE; verilator accepts
+* status: OPEN

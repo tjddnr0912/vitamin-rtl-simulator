@@ -15,7 +15,7 @@ The rule of a box:
 How it is kept: a landing's docs commit re-reads the lines of the clauses its rows touch; the counts below are
 recomputed then, from the boxes of this file. General, overview, informative and example subclauses carry no leaf;
 3.3–3.11, Annex A and Annex F carry none either, since their leaves are in the clauses they name. Batch 5
-(PARSE-1's piece, Q-WREXT, Q-MDRVMIX) is not on main: an item only it completes stays empty.
+(PARSE-1's piece, Q-WREXT) is not on main, and Q-MDRVMIX is parked (2026-11-17): an item only they complete stays empty.
 
 | clause | title | checked / leaves |
 |---|---|---|
@@ -177,7 +177,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 **6.5 Nets and variables**
 - [x] 6.5 Whole-net continuous drivers resolved
 - [ ] 6.5 Overlapping partial or delayed net drivers — false E3001; §3.b E3001-delayed, §7 60, §5.2 Q-MDPORTCOL
-- [ ] 6.5 Variable written by one continuous driver only — rules partly read; §5.2 Q-MDRVMIX, §5.2 Q-MIXCAPROC, §3.b mdrv-unlisted-writers
+- [ ] 6.5 Variable written by one continuous driver only — rules partly read (whole writes only); §5.2 Q-MDRVMIX (parked), §5.2 Q-MIXCAPROC, §3.b mdrv-unlisted-writers
 - [ ] 6.5 Procedural write to a net — an input-port net accepted; §3.b proc-write-input-net
 - [ ] 6.5 Net-array word with two drivers — neither refused nor resolved; §5.2 Q-ARRWORDMD
 
@@ -458,7 +458,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 9.2.2.1 `always` with no timing control — inert with a warning; §5.2 Q-ALWBUDGET
 - [ ] 9.2.2.2 `always_comb` time-0 pass and order — §2 🆕 AA, §2 comb-t0-pass-order
 - [ ] 9.2.2.2.1 Implicit `always_comb` sensitivities — longest static prefix; §5.2 ENG-3
-- [ ] 9.2.2.2 `always_comb` written by another process — rule on batch 5 only; §5.2 Q-MDRVMIX
+- [ ] 9.2.2.2 `always_comb` written by another process — whole writes only; the partial rule is §5.2 Q-MDRVMIX (parked)
 - [ ] 9.2.2.3 `always_latch` — as `always_comb`; §2 🆕 AA, §3.b mdrv-ff-latch-pairs
 - [x] 9.2.2.4 `always_ff` with an event-control header
 - [ ] 9.2.2.4 `always_ff` with no header — a missable event control refused; §7 FF-MISSED-AT

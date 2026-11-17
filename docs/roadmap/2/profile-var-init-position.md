@@ -1,0 +1,6 @@
+(§2 profile-var-init-position · RECORD · in Diagnostics / artifacts) (a declaration initializer's profile row names its scope's first initializer):
+* symptom: with `--obs-dir --obs-procs`, `run.json`'s process row of kind `var_init` gives one position per scope's flush of declaration initializers, the first initializer's, so a second initializer in the same scope (`y` below) is reported at the first one's line and column; PRE == POST (Q-MDRVMIX's fix, premise judge 2, B-2 and D7, W/wrext/fix1/premise2/REPORT.txt; filed 2026-11-17 at Q-MDRVMIX's park, not caused by batch 5)
+* witness: d7_q01p_profile (W/wrext/fix1/premise2/cells/d7_q01p_profile/t.sv), `logic [3:0] a = 4'h1;` at 2:19 and `logic [7:0] y = 8'h3;` at 3:19 in `top`: PRE == POST `run.json` row `{"kind": "var_init", "scope": "top", "file": "t.sv", "line": 2, "col": 19}` for the one flush of `a` and `y`
+* note: Q-MDRVMIX's fix read this position for a declaration initializer's writer and printed `a`'s 2:19 for `y` (premise judge 2 B-2, cells b10, b17, d7_q01); its re-entry prints no position for a declaration initializer (PLAN3.txt)
+* oracles: none apply (`run.json` is vita's own artifact; the source positions are the check)
+* status: RECORD

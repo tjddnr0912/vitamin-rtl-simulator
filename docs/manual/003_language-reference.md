@@ -361,24 +361,14 @@ output on it, a procedural write in an `always`, `always_latch`, `initial` or
 `final` block, a procedural `assign`, or a declaration initializer is
 `E-ELAB-MULTIDRIVER` / `VITA-E3001`, as Icarus Verilog refuses it. Declare the
 signal a net (`wire`) to have its drivers resolved. A `force` is not a driver
-(§10.6.2). That rule reads whole-variable writes at module scope only: a select,
+(§10.6.2). The rule reads whole-variable writes at module scope only: a select,
 element or member write, a write through a task, a hierarchical name or a system
 task's output argument, and a port binding, a UDP instance, a generate block, a
 `generate … endgenerate` region or an interface body driving the same variable
-are not checked by it. On a variable that is not `logic` — `reg`, `integer`, `time`,
+are not checked. On a variable that is not `logic` — `reg`, `integer`, `time`,
 `real`, `realtime`, a 2-state type — they are: a continuous `assign` there is kept
 only as the variable's sole writer, driving all of it, and is otherwise
 `E-ELAB-LVALUE-KIND` / `VITA-E3018` (§9.4).
-A second rule reads the bits: on a `logic`, `reg` or `bit`
-variable declared in a module (not an input port), a continuous driver — an
-`assign`, a gate output or an instance's output port, on the whole, a select or a
-member — and a procedural write in an `always`-family or `initial` block, a declaration initializer or a
-function or task body on overlapping bits fixed at elaboration is `VITA-E3001`
-(§6.5; on a `reg` or `bit` variable an `assign` beside another writer is that
-`VITA-E3018`); and an `always_comb` and another process writing overlapping bits is
-`VITA-E3001` (§9.2.2.2). Writes to disjoint bits are legal. A select with a run-time
-index, an unpacked array element and the other cases listed under
-`E-ELAB-MULTIDRIVER` in [007](007_error-codes.md) are not read by it.
 
 Multiple continuous drivers on one net are legal when every driver writes the
 whole net without a delay; the value is resolved by 4-state wire resolution at

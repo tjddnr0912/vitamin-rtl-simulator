@@ -42,8 +42,8 @@ Not goals, each trigger-gated in §7: a wider design set (verilog-pcie, row 63; 
 ### State
 > The one statement of now; HANDOFF and LOOPROMPT point here, and the update rule says who rewrites it.
 
-2026-11-17: goal G-EH1 is current. Batch 5 (PARSE-1's provenance piece, Q-WREXT, Q-MDRVMIX) is at its boundary verify;
-the lenses' round 1 found two blocking findings and the fix is in work. Nothing of batch 5 is on main yet. The chain's next row is Q-LOSSYSPELL (batch 6).
+2026-11-17: goal G-EH1 is current. Batch 5 (PARSE-1's provenance piece, Q-WREXT) is at its boundary verify; Q-MDRVMIX was parked on 2026-11-17 (owner)
+behind the new structural row Q-WEXTPOS and its two commits pulled out of batch 5. Nothing of batch 5 is on main yet. The chain's next row is Q-WEXTPOS (batch 6).
 
 ### Order rules
 > How the next row is chosen without asking: precedence P1–P5, then rules O1–O9, with the owner's answers of 2026-11-17 written in.
@@ -89,7 +89,9 @@ and it returns only on a design that spells one of its producers or a landed rec
 
 O5 BATCH. Chain rows stack on the integration branch. A boundary is run at five rows, at the goal's last row, and before a row that has parked before
 when two or more finished rows are stacked under it. A row that bumps a format or schema hash starts a batch, alone.
-G-EH1 is cut before row 29 (owner Q1 (a)): batch 6 = Q-LOSSYSPELL, 24 (EH1 cut), Q-OVRXPLANE, Q-LITLANE; batch 7 opens with 29 (page half), 31.
+G-EH1's cut by O5 on its chain of 2026-11-17 (8 rows; the owner's Q1 (a) cut was made for 6, so it is re-read at batch 6's start): batch 6 = Q-WEXTPOS, Q-MDRVMIX,
+Q-LOSSYSPELL (a boundary before 24, which parked before, three rows stacked); batch 7 = 24 (EH1 cut), Q-OVRXPLANE, Q-LITLANE (a boundary before 29's page half);
+batch 8 = 29 (page half), 31 (the goal's last row). Before Q-MDRVMIX, which parked before, one finished row is stacked, so no boundary there.
 
 O6 GOAL ORDER. Goals run in ladder order. Main proposes a re-order to the owner when: a chain has grown past 1.5x its listed rows; two rows of the chain
 are parked at once; a row goes DORMANT on the chain; or a goal's entry census shows another goal opens more designs per row. Until the owner answers,
@@ -114,16 +116,20 @@ Retired (owner Q6 (a), 2026-11-17): the Summary count table (roadmap/history/) a
 ### Current chain
 > The current goal's rows in run order, then the next goal's; the goal doc says why each row stands where it does.
 
-G-EH1, after batch 5 lands (PARSE-1's provenance piece, Q-WREXT, Q-MDRVMIX); batch 6 = rows 1–4, batch 7 = rows 5–6 (O5):
+G-EH1, after batch 5 lands (PARSE-1's provenance piece, Q-WREXT); batch 6 = rows 1–3, batch 7 = rows 4–6, batch 8 = rows 7–8 (O5, re-read at batch 6's start):
 
 | # | id | title | state |
 |---|---|---|---|
-| 1 | Q-LOSSYSPELL | which lossy constant producers a design spells, recorded once per design | OPEN |
-| 2 | 24 (EH1 cut) | struct member part-selects with named bounds, as reads and write targets | PARKED Q-LOSSYSPELL |
-| 3 | Q-OVRXPLANE (typed lane) | an override's sized x / z literal loses its unknown plane | OPEN |
-| 4 | Q-LITLANE | `const_eval_u32` reads a sized signed literal as its unsigned pattern | OPEN |
-| 5 | 29 (page half) | element selects nested in a write target are refused | PARKED Q-LOSSYSPELL, Q-OVRXPLANE, Q-LITLANE |
-| 6 | 31 | VeeR EH1 corpus row: the hello_world test passes on unmodified RTL | WAITS 24, 29 |
+| 1 | Q-WEXTPOS | the write view's stand-down on a provisional constant and each write's position | OPEN |
+| 2 | Q-MDRVMIX | overlapping partial and mixed writes of a packed variable are not refused | PARKED Q-WEXTPOS |
+| 3 | Q-LOSSYSPELL | which lossy constant producers a design spells, recorded once per design | OPEN |
+| 4 | 24 (EH1 cut) | struct member part-selects with named bounds, as reads and write targets | PARKED Q-LOSSYSPELL, Q-MDRVMIX |
+| 5 | Q-OVRXPLANE (typed lane) | an override's sized x / z literal loses its unknown plane | OPEN |
+| 6 | Q-LITLANE | `const_eval_u32` reads a sized signed literal as its unsigned pattern | OPEN |
+| 7 | 29 (page half) | element selects nested in a write target are refused | PARKED Q-LOSSYSPELL, Q-OVRXPLANE, Q-LITLANE |
+| 8 | 31 | VeeR EH1 corpus row: the hello_world test passes on unmodified RTL | WAITS 24, 29 |
+
+The State line, the O5 cut and this chain as they stood before Q-MDRVMIX's park: [the G-EH1 chain before Q-MDRVMIX's park](roadmap/history/mdrv-park-2026-11-17.md).
 
 G-PATTGEN, next (a prerequisite goes directly before its reader):
 
@@ -508,6 +514,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - duplicate-value-name-accepted — [32 measured same-name pairs holding an enum label or a `typedef` are accepted](roadmap/2/duplicate-value-name-accepted.md) · OPEN
 - loop-var-const-shadow — [a loop variable does not shadow a parse-time constant in a range](roadmap/2/loop-var-const-shadow.md) · OPEN
 - bind-actual-lexical-layout — [a `bind` actual's struct member takes the bind scope's layout, not the target's](roadmap/2/bind-actual-lexical-layout.md) · OPEN
+- pctm-unit-routine — [`%m` in a `$unit` or package routine prints the calling instance](roadmap/2/pctm-unit-routine.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -564,6 +571,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - override-recovery-reread — [a refused override's recovery value is read by a second diagnostic](roadmap/2/override-recovery-reread.md) · OPEN
 - param-range-net-name-text — [a localparam's range naming a net calls it an undefined name](roadmap/2/param-range-net-name-text.md) · OPEN
 - wide-name-concat-cause — [a wide name inside a concatenation in a range bound is called undefined](roadmap/2/wide-name-concat-cause.md) · OPEN
+- profile-var-init-position — [a declaration initializer's profile row names its scope's first initializer](roadmap/2/profile-var-init-position.md) · RECORD
 
 ### Performance (open, recorded)
 > Correct but slow paths: repeated continuous-assign calls, per-bit coercion, triple tree walks, `==?` chains; recorded, one blocked
@@ -710,6 +718,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - param-time-unsigned — [a signing keyword after `time` on a parameter is refused](roadmap/3.b/param-time-unsigned.md) · OPEN
 - begin-keywords-version — [a `begin_keywords` version does not narrow the keyword set](roadmap/3.b/begin-keywords-version.md) · OPEN
 - based-ws — [a space inside a based literal (`64'sh FFFF`) is a lexer error](roadmap/3.b/based-ws.md) · OPEN
+- based-leading-underscore — [a based literal whose digits start with `_` (`16'h_dE_aD`) is accepted](roadmap/3.b/based-leading-underscore.md) · OPEN
 - tf-localparam — [`localparam` inside a task body is rejected](roadmap/3.b/tf-localparam.md) · OPEN
 - blk-automatic — [an `automatic` declaration in a block of a task body is rejected](roadmap/3.b/blk-automatic.md) · OPEN
 - tf-decl-lifetime — [a `static` declaration after a task header is rejected](roadmap/3.b/tf-decl-lifetime.md) · OPEN
@@ -737,6 +746,8 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - anon-enum-member — [an anonymous `enum` as a struct member is rejected](roadmap/3.b/anon-enum-member.md) · OPEN
 - sym-member-user-cast — [a cast in a symbolic struct member's range is refused](roadmap/3.b/sym-member-user-cast.md) · OPEN
 - empty-positional-argument — [an empty positional argument `f(1, , 3)` is a parse error](roadmap/3.b/empty-positional-argument.md) · OPEN
+- gate-instance-array — [a primitive instance array (`and g[3:0] (...)`) is a parse error](roadmap/3.b/gate-instance-array.md) · OPEN
+- pkg-scoped-lvalue — [a package-scoped variable as a write target (`p::pv[3:0] =`) is a parse error](roadmap/3.b/pkg-scoped-lvalue.md) · OPEN
 
 **Constants / parameters**
 
@@ -778,6 +789,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - proc-write-input-net — [a procedural write to an input-port net is accepted](roadmap/3.b/proc-write-input-net.md) · OPEN
 - mdrv-unlisted-writers — [`final` and deferred-action writes are no mixed-driver writer](roadmap/3.b/mdrv-unlisted-writers.md) · OPEN
 - mdrv-ff-latch-pairs — [overlapping always_ff / always_latch writes with no always_comb are not refused](roadmap/3.b/mdrv-ff-latch-pairs.md) · OPEN
+- mdrv-force-comb — [`force` in an `initial` is taken as a second writer of an `always_comb` variable](roadmap/3.b/mdrv-force-comb.md) · SPLIT
 - frame-body-write-sites — [call sites of a body-writing frame function that cannot carry the call](roadmap/3.b/frame-body-write-sites.md) · OPEN
 - frame-body-write-order — [a hoisted body-writing call runs before a read to its left](roadmap/3.b/frame-body-write-order.md) · SPLIT
 - dyn-size-spellings — [`$size` of a dynamic array through a field, hierarchy or formal](roadmap/3.b/dyn-size-spellings.md) · OPEN
@@ -853,6 +865,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - frame-concat-split-residue — [concatenation targets over frame locals with a delay, call or hierarchy](roadmap/3.b/frame-concat-split-residue.md) · OPEN
 - frame-local-array-default — [`'{default: v}` onto a function-local unpacked array is refused](roadmap/3.b/frame-local-array-default.md) · OPEN
 - ca-fn-retvar-select — [a function in a continuous assign that select-writes its return variable](roadmap/3.b/ca-fn-retvar-select.md) · OPEN
+- escaped-name-dot — [an escaped name holding `.` is read as a hierarchical path (E3010)](roadmap/3.b/escaped-name-dot.md) · OPEN
 
 **System tasks & file I/O**
 
@@ -932,6 +945,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - string-door-pairs — [nested string concatenations: every spelling has to change at once](roadmap/3.b/string-door-pairs.md) · RECORD
 - dyn-md-elem-select — [selects into a multi-dimensional element of a dynamic container](roadmap/3.b/dyn-md-elem-select.md) · OPEN
 - class-field-select — [a part-select of a class field is refused](roadmap/3.b/class-field-select.md) · OPEN
+- class-handle-decl-init — [a class-handle declaration initializer (`c o = new;`) is refused](roadmap/3.b/class-handle-decl-init.md) · OPEN
 
 **VCD / real conversion**
 
@@ -1025,7 +1039,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | # | slot | item | rank |
 |---|---|---|---|
 | SYS-1 | R2.1 · L1 (landed) | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
-| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its kernels in hdl-ast, literal origins](roadmap/5.2/PARSE-1.md) | — F |
+| PARSE-1 | R2.2 · L1 (landed, piece built) | [the parser's constant fold in one file, its kernels in hdl-ast, literal origins](roadmap/5.2/PARSE-1.md) | — F |
 | VAL-1 | R3.1 · L1 (landed) | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 (landed) | [the parameter declaration chain and the live-scope wide ask, written once](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 (landed) | [a declared range's bounds folded, then checked, in one body](roadmap/5.2/VAL-3.md) | — F |
@@ -1038,7 +1052,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | Q-LITLANE | R7.5 · L1 | [`const_eval_u32` reads a sized signed literal as its unsigned pattern](roadmap/5.2/Q-LITLANE.md) | — F |
 | Q-WREXT | R8.1 · L1 (built) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
-| Q-MDRVMIX | R8.1 · L1 (built) | [a packed variable's overlapping mixed writes and always_comb pairs are E3001](roadmap/5.2/Q-MDRVMIX.md) | ① F |
+| Q-WEXTPOS | R8.1 · L1 | [the write view's stand-down on a provisional constant and each write's position](roadmap/5.2/Q-WEXTPOS.md) | — F |
+| Q-MDRVMIX | R8.1 · L1 (PARKED) | [overlapping partial and mixed writes of a packed variable are not refused](roadmap/5.2/Q-MDRVMIX.md) | ① F |
 | Q-LOSSYSPELL | R8.1 · L1 | [which lossy constant producers a design spells, recorded once per design](roadmap/5.2/Q-LOSSYSPELL.md) | — F |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
@@ -1252,6 +1267,8 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-ENUMCONV | 179 · any | [an implicit conversion to an enum is accepted](roadmap/5.2/Q-ENUMCONV.md) | — |
 | Q-PORTDEFAULT | 180 · any | [an ANSI port default is parsed and never lowered](roadmap/5.2/Q-PORTDEFAULT.md) | ① |
 | Q-SVALOCALKIND | 181 · any | [an SVA local variable's declared 2-state kind is dropped](roadmap/5.2/Q-SVALOCALKIND.md) | ① |
+| Q-MDRVWHO | 182 · any (held) | [the write record carries its writer's scope](roadmap/5.2/Q-MDRVWHO.md) | — |
+| Q-HIERBITS | 183 · any | [`$bits` of a hierarchical name lowers as a provisional constant, patched late](roadmap/5.2/Q-HIERBITS.md) | ① |
 
 Do not start:
 
