@@ -14,8 +14,8 @@
 //! to, and that a function writes in its frame, is how the IR lowers them (premise judge 1
 //! K5, W/mdrv/premise/REPORT.txt), recorded as is.
 //!
-//! The view itself prints nothing: its one production reader is `mdrv_mix.rs`'s rule X
-//! (§5.2 Q-MDRVMIX, pinned in `mdrv_mix_pins.rs`) ; these designs are its inputs, not its output.
+//! No user-visible output moves (the view has no production reader): the record lanes
+//! compare every stdout, stderr and exit code with PRE (Q-WREXT build r1, B/run_record.sh).
 //! The designs are elaborated without a span resolver, so no `@file:line:col` is printed.
 
 use diag::{LogEvent, LogSink};
@@ -44,21 +44,19 @@ fn pin(src: &str, want: &str) {
 }
 
 /// A continuous part-select and an `always_comb` part-select on one variable: two `Bits`
-/// extents by the kernel, `[5:2]` and `[1:0]`. Disjoint since §5.2 Q-MDRVMIX C1: the
-/// overlapping pair (`[3:0]`, matrix cell m_a_ca_acomb_ppo) is rule X's E3001 and has no IR
-/// to render (`mdrv_mix_pins.rs` m_a_ca_acomb_ppo).
+/// extents by the kernel, `[5:2]` and `[3:0]` (matrix cell m_a_ca_acomb_ppo's pair).
 #[test]
 fn w01_cont_and_comb_parts() {
     pin(
         "module t; logic [7:0] v; logic [3:0] s;
   assign v[5:2] = s;
-  always_comb v[1:0] = ~s[1:0];
+  always_comb v[3:0] = ~s;
 endmodule
 ",
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:t.v bits[5:2] via=-
-W P0:always_comb blk s0 c0 n0:t.v bits[1:0] via=direct
+W P0:always_comb blk s0 c0 n0:t.v bits[3:0] via=direct
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );

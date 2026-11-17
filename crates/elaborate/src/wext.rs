@@ -53,9 +53,7 @@
 //!
 //! NOT HERE: no target set (which nets a rule looks at: declaration facts, §5.2
 //! Q-MDRVMIX's re-plan; no `intro_kind` read), no pair test (which two writes overlap is
-//! the reader's). Its one production reader is `mdrv_mix.rs` (§5.2 Q-MDRVMIX: the target
-//! set from the declaration facts, the pair test, rule X), through one entry,
-//! `check_mixed_drivers`, right after the sole-writer checks. The three checkers that answer parts of this
+//! the reader's), no reader in production. The three checkers that answer parts of this
 //! today (`multidriver.rs` rules A-D over the AST, `netdecl.rs`
 //! `check_whole_net_multidriver` over continuous rows, `cont_array.rs` `other_writers`)
 //! are not re-pointed: their re-point is filed with the readers (§5.2 Q-WREXT). The
@@ -67,8 +65,7 @@
 //! (the sole-writer checks, `check_readmem_assoc_waits`, then api.rs's
 //! `assert_block_local_inits_drained`, `finish_assert_item_gate` and `edge_backstop` only
 //! read them; `finish` moves them), so the record describes the finished IR. It goes to
-//! `Sidecars::write_view` (the test and dump entry) ; in a `vita` run its one reader is
-//! `check_mixed_drivers` (`mdrv_mix.rs`), in the same end phase.
+//! `Sidecars::write_view` (the test and dump entry) and nothing reads it in a `vita` run.
 //! Built eagerly because it is cheap (Q-WREXT build r1, the view's instructions over an
 //! elaboration alone, same release binary, median of 3: +0.12 % y_wext_procs, +0.27 %
 //! y_wext_mix, +0.11 % y_wext_port, +0.04 % el2w; W/wrext/build/cost/probe/VIEW_COST.txt):
@@ -345,15 +342,6 @@ impl WriteView {
     /// The declaration fact of net `net` (module head, A1).
     pub fn decl(&self, net: u32) -> Option<DeclFact> {
         self.decls.get(net as usize).copied().flatten()
-    }
-}
-
-#[cfg(test)]
-impl WriteView {
-    /// A hand-built view for a reader's unit test (`mdrv_mix.rs`): the writes and the
-    /// declaration fact per net, as `build_view` would hold them.
-    pub(crate) fn for_test(writes: Vec<Write>, decls: Vec<Option<DeclFact>>) -> Self {
-        Self { writes, decls }
     }
 }
 

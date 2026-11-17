@@ -12,9 +12,7 @@
 //! The silent rows are the teeth: a diagnostic on RTL every tool accepts is a
 //! regression, so `always` + `always`, a clock generator, a write reaching the
 //! variable only through a TASK CALL, and every pair where either side writes only a
-//! PART of the variable are each pinned as producing nothing — none of them with an
-//! `always_comb` side: an `always_comb`'s partial pair on overlapping bits is
-//! `mdrv_mix.rs` rule Y's E3001 (§5.2 Q-MDRVMIX C2, `mdrv_mix_pins.rs`).
+//! PART of the variable are each pinned as producing nothing.
 
 use std::process::Command;
 
