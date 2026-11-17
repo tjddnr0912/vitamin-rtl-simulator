@@ -863,7 +863,10 @@ begin an item, right after the word) is a parse error, as are `inside.v` (an ins
 The rows below produce a value that differs from Icarus Verilog 13.0 or Verilator 5.050.
 They are the residues of the correct-or-loud rule that are still open, and they are
 tracked in [`../ROADMAP.md`](../ROADMAP.md) §2. Everything else in this chapter either
-matches the reference tools or refuses loudly.
+matches the reference tools or refuses loudly. Known deviations from IEEE 1800-2017 on
+forms that no design of vitamin's verified real-design set uses are recorded in the
+roadmap and wait until a design needs them, so check a design from outside that set
+against that record.
 
 ### 3.1 Value-level divergences
 

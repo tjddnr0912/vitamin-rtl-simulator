@@ -2,27 +2,142 @@
 
 Open work, one line per item: id, title and a link to its detail doc, and its status or slot when it has one. Format, filing, census: [roadmap/README.md](roadmap/README.md).
 
-## Summary
-> Per-track counts of open, startable and blocked items with their top blockers, ladder rung and next §5.2 rows: 706 open, 458 startable.
+## Direction
+> Where the program ends and stands, its goals in run order, the rules that choose the next row, and the current chain.
 
-Recount from the lines below in every docs step; the iteration report shows this table; the census rule is in the notes ([notes](roadmap/README.md))
+A plan made by reasoning, not by measurement (owner, 2026-11-17): every size and mapping in it is re-measured when its goal or row is opened.
+Who changes which line, and when: the update rule in [roadmap/README.md](roadmap/README.md).
+The whole language, clause by clause, as check boxes: [docs/IEEE_CHECKLIST.md](IEEE_CHECKLIST.md).
 
-| § | track | open | startable | blocked | blocked by (top reasons) | rung | next |
-|---|---|---:|---:|---:|---|---|---|
-| §2 | silent-wrong start-order rows | 36 | 7 | 29 | named prerequisite 14 · oracle split 5 · loud, zero demand 3 | frozen; six 🆕 rows held (§5.2) | 1, 3, 4, 6, 7 ([note](roadmap/README.md)) |
-| §2 | recorded defects by mechanism | 339 | 217 | 122 | oracle split or none 68 · prerequisite 21 | frozen; witness lines queued | 2, 8, 46, 51, 52, 68, 70, 71, 72b ([note](roadmap/README.md)) |
-| §2-N | corpus censuses | 6 | 0 | 6 | oracle split 3 · held on purpose 2 · upstream fst-writer 1 | ① | |
-| §3.a | loud → correct-support, numbered | 29 | 20 | 9 | loud by design 2 · named prerequisite 2 · loud, no census page 3 · deferred to §5 1 · deferred to §7 1 | ② | 42, 44 |
-| §3.b | loud → correct-support, small | 215 | 180 | 35 | named prerequisite 10 · deferred to §7 8 | ② | 5, 23, 24, 26, 29, 33–35, 37–41, 43, 45, 49, 50, 69 ([note](roadmap/README.md)) |
-| §3.c | intentionally loud | 11 | 0 | 11 | by design or oracle split 11 | — | |
-| §0 | promotion queue (T2 residues) | 14 | 8 | 6 | oracle split 3 · deliberate 2 · `defparam` non-goal 1 | ③ | |
-| §4 | SVA honest-loud | 6 | 0 | 6 | named prerequisite 6 | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 10 | 15 | 1 | call tree: two lowering paths 1 | ④ | |
-| study/03 | workload corpus | 3 | 0 | 3 | named prerequisite 3 | real-design | 31, 47, 53 |
-| §5.b | performance / hardening | 21 | 11 | 10 | named prerequisite 6 · held or trigger-gated 4 | below the ladder | |
-| §7 | conditional / long-term | 8 | 0 | 8 | trigger-gated 8 | trigger-gated | |
-| §8 | non-goals | 2 | 0 | 2 | permanent 2 | permanent | |
-| total | | 706 | 458 | 248 | | | |
+### The end
+> When vita is done on real designs, and the two words its progress is counted in: a design opens, then it runs.
+
+vita is done on real designs when every design of the real-design set runs from its ORIGINAL source, under a testbench, to a result the oracles agree with,
+as a corpus row in CI — and no converted twin is left in the set.
+What vita does not support stays loud, never a silent wrong value, and what IEEE says shall not be written is an error.
+The set: VeeR EH1 (2 configurations), VeeR EL2 (1), OpenTitan (19 IPs) and primstb (1), 23 originals, beside 28 converted twins (W/program/next-2026-11-16/designs.tsv).
+Two words are kept apart: a design OPENS when its original source elaborates with rc 0; it RUNS when it passes under its testbench with oracle agreement and is a corpus row.
+A goal is reached when its designs RUN (the owner's word is "runs"; the 2026-11-16 measurement's rc 0 is "opens": Quiescent at time 0 with no testbench).
+
+### Scoreboard
+> The one count that says where the program is: originals running, twin-only, twin fails; it replaces the count table.
+
+2026-11-16: originals running 1 / 23 (primstb); twin-only 10; twin fails 12; no other original reaches elaborate (W/program/next-2026-11-16/designs.tsv).
+The table this line replaces: [the Summary count table, retired 2026-11-17](roadmap/history/summary-2026-11-17.md) (owner Q6 (a), 2026-11-17).
+
+### Goal ladder
+> Seven goals in run order: G-EH1, G-PATTGEN and G-OT5 decided by the owner; G-OT9, G-EH1D, G-OT19 and G-EL2 proposed until G-OT5's last boundary.
+
+One line per goal: id, what runs, state (reached, current, next, later or proposed) and the scoreboard when it is reached; the goal doc holds the rest.
+- G-EH1 — [VeeR EH1 `eh1_noassert` runs from original source](roadmap/goals/G-EH1.md) · current · 2 / 23
+- G-PATTGEN — [OpenTitan pattgen runs from original source](roadmap/goals/G-PATTGEN.md) · next · 3 / 23
+- G-OT5 — [uart, gpio, i2c and rv_timer run beside pattgen under TL-UL testbenches](roadmap/goals/G-OT5.md) · later · 7 / 23
+- G-OT9 — [aon_timer, edn, rv_plic and sysrst_ctrl run from original source](roadmap/goals/G-OT9.md) · proposed · 11 / 23
+- G-EH1D — [VeeR EH1 `eh1_default`, assertions on, runs from original source](roadmap/goals/G-EH1D.md) · proposed · 12 / 23
+- G-OT19 — [the last ten OpenTitan IPs run from original source](roadmap/goals/G-OT19.md) · proposed · 22 / 23
+- G-EL2 — [VeeR EL2 runs from original source](roadmap/goals/G-EL2.md) · proposed · 23 / 23
+
+Not goals, each trigger-gated in §7: a wider design set (verilog-pcie, row 63; DPI-C, rows 61–62; a UVM testbench) and upstream testbenches in place of first-party ones.
+
+### State
+> The one statement of now; HANDOFF and LOOPROMPT point here, and the update rule says who rewrites it.
+
+2026-11-17: goal G-EH1 is current. Batch 5 (PARSE-1's provenance piece, Q-WREXT, Q-MDRVMIX) is at its boundary verify;
+the lenses' round 1 found two blocking findings and the fix is in work. Nothing of batch 5 is on main yet. The chain's next row is Q-LOSSYSPELL (batch 6).
+
+### Order rules
+> How the next row is chosen without asking: precedence P1–P5, then rules O1–O9, with the owner's answers of 2026-11-17 written in.
+
+From the forward plan (W/program/roadmap-plan-2026-11-17/PLAN.txt 2.1, 2.2); the owner's answers Q1–Q6 (2026-11-17, each the recommended option) are written in where a rule asked.
+Where the owner's positions pull apart, the higher line wins.
+
+P1 correct-or-loud is a constraint on every row, not an ordering: no row may add a silent wrong value, turn a refusal into a wrong value,
+or route new traffic onto a known silent defect. It binds what a row CHANGES and what a GOAL DESIGN REACHES.
+Combination with real-design-first (owner Q4 (a)): known silent wrongs on forms no design of the set spells are recorded and wait, with no reserved batch,
+and the manual says so in one sentence (manual/006_limitations.md §3).
+
+P2 IEEE first: where IEEE says shall not, the row builds an error, whatever the oracles do. If the error would refuse a design of the set, the owner decides.
+Not enforced by this plan: what vita accepts though IEEE forbids it (group K7) stays recorded with its clause until a chain row routes onto it (O3) or a set design spells it.
+
+P3 real-design-first: the current goal's chain is the queue.
+
+P4 record-first applies INSIDE a chain and to what the next goal reads — not as a queue of its own. Combination with real-design-first: the 11-09 record-first
+batches R5–R7 are not run for their own sake; a record is built when a chain row reads it (owner Q5 (a): the cluster this retires is DORMANT, O4).
+
+P5 everything else waits for a trigger (its group, K1–K10 below).
+
+O1 NEXT ROW. The next row is the first row of the current goal's chain that is not done and whose `needs` are met. If none can start, the next goal's first
+startable row whose files are disjoint from the work under way (a filler: it must be on a later chain, never off the ladder). Nothing else starts.
+Main opens that row without asking and reports it in one line (owner Q2 (a)); the owner is asked at a goal's entry, at a park and at the checkpoints (roadmap/goals/README.md).
+
+O2 RECORD BEFORE READER. A structural row is put directly before a chain row when one of these holds: (a) two or more rows on the current or the next goal's
+chain read the same fact and no record holds it; (b) a chain row's premise judge has failed twice on one root class; (c) a chain row's plan needs a record as
+its first commit. The structural row is its own row (a park of the reader does not pull it), structure only (every output PRE's), and narrowed to what its named
+readers read. A structural row with no reader on the current or next chain does not start.
+
+O3 PREREQUISITE DEFECT. A defect in a frozen section (§2, §3) becomes a chain row, directly before its reader, when the chain row would route new traffic onto it —
+turn its refusal into a value, or accept what IEEE forbids on input the row opens. It is opened only when its reader's goal is the current goal.
+A defect the chain row does not route onto is filed and stays frozen.
+
+O4 PARK AND RETURN. A row parks when its premise judge fails on the same class after one whole-table re-plan, when a trip wire named before the run fires,
+or when its blocker sits in code it only routes to. A park names one of two things: a prerequisite row with an id (it takes the chain position before the parked row),
+or no route. A parked row returns only when its named prerequisite has landed, by a fresh plan on current code. A row parked with no route is DORMANT: it and its
+dependants leave every chain, and it is not tried again on a new spelling until a record has landed that it reads or a goal design needs it.
+DORMANT now (owner Q5 (a)): the Q-SYMMIX cluster, group K2 — Q-SYMMIX, Q-PARAM2STATE (S1v-V), Q-TPCARRIER, Q-TLPCONV, Q-CONSTSELLSB, Q-CONSTAGG, 76,
+Q-MEMBSRC's read half, Q-MEMBIDXNOT, Q-LETCAST, Q-CONSTXIDX, Q-CONSTPSELOOR, 6, 7, 68 (a) and 71; Q-LOSSYSPELL is the standing gate that keeps set designs off it,
+and it returns only on a design that spells one of its producers or a landed record that gives it a route.
+
+O5 BATCH. Chain rows stack on the integration branch. A boundary is run at five rows, at the goal's last row, and before a row that has parked before
+when two or more finished rows are stacked under it. A row that bumps a format or schema hash starts a batch, alone.
+G-EH1 is cut before row 29 (owner Q1 (a)): batch 6 = Q-LOSSYSPELL, 24 (EH1 cut), Q-OVRXPLANE, Q-LITLANE; batch 7 opens with 29 (page half), 31.
+
+O6 GOAL ORDER. Goals run in ladder order. Main proposes a re-order to the owner when: a chain has grown past 1.5x its listed rows; two rows of the chain
+are parked at once; a row goes DORMANT on the chain; or a goal's entry census shows another goal opens more designs per row. Until the owner answers,
+O1's filler clause applies. After G-OT5 the ladder is G-OT9 → G-EH1D → G-OT19 → G-EL2, each re-censused at its entry, all four proposed until the owner
+re-decides them at G-OT5's last boundary (owner Q3 (a)).
+
+O7 PRE-EMPTION. Two things go before the chain: an external report reproduced at HEAD, and a silent wrong value found on a design of the set.
+If the fix is more than one row, the first row makes it loud.
+
+O8 OFF THE LADDER. A finding outside the chain's traffic is filed in its section with its oracle text and waits for its group's trigger (K1–K10 below).
+Filing is never a reason to start a row.
+
+O9 WHO DECIDES. The owner: the goal ladder (order, adding, abandoning a goal); a re-order signal of O6; an IEEE error that refuses a design of the set;
+leaving accepted what IEEE forbids, or any residue of a silent wrong value, on a goal design; a named cost a row adds (instructions upward past the cost gate);
+opening fewer forms than the goal design spells; landing a batch on main; a change to these rules; and, by owner Q2 (a), a goal's entry, a park and a checkpoint.
+Main, by these rules and reported in one line: the next row, a structural or prerequisite row of O2 / O3 (one per reader; a second for the same reader is an O6 signal),
+a filing, a batch cut, a filler row.
+
+K1–K10: the groups of rows on no goal's chain, each with the trigger that promotes it (PLAN.txt part 3; §5.2 lists the rows by group from migration step S2).
+Retired (owner Q6 (a), 2026-11-17): the Summary count table (roadmap/history/) and §5.2's slot column (to roadmap/history/ at step S2; until then a slot is record, not order).
+
+### Current chain
+> The current goal's rows in run order, then the next goal's; the goal doc says why each row stands where it does.
+
+G-EH1, after batch 5 lands (PARSE-1's provenance piece, Q-WREXT, Q-MDRVMIX); batch 6 = rows 1–4, batch 7 = rows 5–6 (O5):
+
+| # | id | title | state |
+|---|---|---|---|
+| 1 | Q-LOSSYSPELL | which lossy constant producers a design spells, recorded once per design | OPEN |
+| 2 | 24 (EH1 cut) | struct member part-selects with named bounds, as reads and write targets | PARKED Q-LOSSYSPELL |
+| 3 | Q-OVRXPLANE (typed lane) | an override's sized x / z literal loses its unknown plane | OPEN |
+| 4 | Q-LITLANE | `const_eval_u32` reads a sized signed literal as its unsigned pattern | OPEN |
+| 5 | 29 (page half) | element selects nested in a write target are refused | PARKED Q-LOSSYSPELL, Q-OVRXPLANE, Q-LITLANE |
+| 6 | 31 | VeeR EH1 corpus row: the hello_world test passes on unmodified RTL | WAITS 24, 29 |
+
+G-PATTGEN, next (a prerequisite goes directly before its reader):
+
+| # | id | title | state |
+|---|---|---|---|
+| 1 | Q-TYPEOVERVAL | a cast or `$bits` of a name binds a visible typedef over the scope's own value | OPEN |
+| 2 | 33 | `'{default: v}` onto a function-local unpacked array is refused | PARKED Q-TYPEOVERVAL |
+| 3 | Q-PKGDUPNAME | an enum label or typedef redeclaring a package-body name is accepted | OPEN when G-PATTGEN is current (O3) |
+| 4 | 23 | the parser's constant fold lacks shift and power operators | PARKED Q-PKGDUPNAME |
+| 5 | Q-NETSHAPE (first commit) | one net-shape record in elaborate, written only by add_net | OPEN |
+| 6 | Q-RTNTEXT | one answer for the scope a package routine's text binds in | OPEN |
+| 7 | 46 | a package typedef's named dimensions fold where the type is used | PARKED 23, Q-RTNTEXT, Q-NETSHAPE |
+| 8 | 24 (OT cut) | struct member part-selects with named bounds, as reads and write targets | WAITS 24 (EH1 cut) |
+| 9 | 47 (pattgen page) | OpenTitan corpus row: five IP pages run under first-party TL-UL testbenches | WAITS 33, 23, 46, 24 |
 
 ## 0. correct-support promotion queue
 > Honest-loud constructs waiting to become correct support: iverilog defects pinned as oracle disqualifiers and the T2 residues, 8 of 14 startable.
@@ -901,13 +1016,8 @@ Default backend `native` (tier 3); product `--no-default-features` = one executo
 ## 5.2 Queue (start order)
 > The start order of the open rows: slot = order · track, rank = defect class; C rows (the page cut) go first, and one slot runs the queue
 
-Canonical start order; LOOPROMPT's NEXT mirrors it and this table wins.
-State (2026-11-17): batch 5 (PARSE-1's piece, Q-WREXT, Q-MDRVMIX) closes, boundary verify next; batch 6 = G-EH1 (6 rows, cap 5: open question); owner Q1–Q5 ([notes](roadmap/5.2/README.md))
-Goals, in run order (the slot column is not the run order; owner, 2026-11-16 and 2026-11-17):
-Goal G-EH1, VeeR EH1 `eh1_noassert` on original source: Q-LOSSYSPELL → 24 (EH1 cut, re-plan) → Q-OVRXPLANE → Q-LITLANE → 29 page half → 31
-Goal G-PATTGEN, OpenTitan pattgen on original source: Q-TYPEOVERVAL → 33; Q-PKGDUPNAME → 23; Q-RTNTEXT and Q-NETSHAPE's first commit → 46; 24's OpenTitan half
-Goal G-OT5, uart, gpio, i2c and rv_timer on original source after pattgen: 35 and 43 (uart, gpio, i2c), then 37 (rv_timer)
-Not on a goal's chain: Q-SYMMIX and 11 rows waiting on it (review A15): Q-PARAM2STATE, Q-TPCARRIER, Q-TLPCONV, Q-CONSTSELLSB, Q-CONSTAGG, 76, Q-MEMBSRC, Q-CONSTXIDX, Q-CONSTPSELOOR, 6, 7
+Run order: the current goal's chain in the Direction block at the top of this file (rule O1); the slot column below records the older orders and retires at migration step S2 (owner Q6 (a)).
+State, goals and chains: the Direction block ([§5.2's order line, State line and goal block, moved to the Direction block](roadmap/history/5.2-state-2026-11-17.md)).
 Incoming reports pre-empt the queue; reproduce every item at HEAD first.
 
 The real-design program (its scope, the page-cut order, the T′ / V′ / B′ stages), how to read the slot and rank columns, and why rows 1–5 go first ([notes](roadmap/5.2/README.md))

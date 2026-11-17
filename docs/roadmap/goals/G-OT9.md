@@ -1,0 +1,5 @@
+(goal G-OT9 · 4 · proposed) (aon_timer, edn, rv_plic and sysrst_ctrl run from original source):
+* reach: OpenTitan aon_timer, edn, rv_plic and sysrst_ctrl run from original source under their testbenches with oracle agreement; aon_timer and edn as corpus row §5.2 53; the scoreboard after it reads originals running 11 / 23.
+* known members (forward plan, from W/program/next-2026-11-16/blockers.tsv and designs.tsv; every mapping past the OpenTitan five is REVIEW-ONLY): Q-NETSHAPE narrowed to what these rows read, as the goal's first row (O2); 8 → 44 (edn); Q-UNSZXPAD → 49, 40, 41's residue (aon_timer); Q-NETCAP, 41's residue with 29 (rv_plic); sysrst_ctrl's stops behind the 200-line cap, not known yet (not filed); 53, whose doc also names 45 and 50.
+* status: proposed (owner Q3 (a), 2026-11-17: after G-OT5; re-decided with the owner at G-OT5's last boundary, checkpoint C5).
+* re-censused at entry (migration step S8); the forward plan's reasons, risk, signal and estimate: W/program/roadmap-plan-2026-11-17/PLAN.txt 1.3 G4 (2026-11-17).
