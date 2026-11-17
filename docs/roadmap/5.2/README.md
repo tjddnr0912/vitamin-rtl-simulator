@@ -11,7 +11,7 @@
 * Q-SYMMIX parked 2026-11-06 behind Q-VALRULES fix (d) after three premise rounds, nothing landed (W/qsymmix/RULINGS-premise3.txt), keeping C0 · L1, and S1v's rule (C) lanes a symbolic struct, an md packed parameter or a symbolic typedef / type parameter reaches wait on fix (d);
 * Q-PKRDLSB parked 2026-11-02, T3 took C3 row 29's page half, which parked 2026-11-04 behind Q-PARAM2STATE;
 * T3 empties and is not refilled (owner, 2026-11-04, replacing the refill rule of 2026-11-02): rows 33 (L1) and 41 (L2) finished in their slots (row 41 ended 2026-11-04, §4.5.634; row 33 parked 2026-11-04), an emptied slot is not refilled;
-* rows 29, 33 and 41 have ended, so one slot runs the queue one row at a time, batch verify kept, with auto-fill off: the next row waits for the owner (owner, 2026-11-05).
+* rows 29, 33 and 41 have ended, so one slot runs the queue one row at a time, batch verify kept, the next row by ROADMAP Order rules O1 (owner, 2026-11-17).
 * The owner named the next rows (2026-11-06): Q-VALRULES fix (d) as a code row at C0 · L1, then Q-SYMMIX's re-entry, then S1v, then batch 1.
 * State (2026-11-08): Q-VALRULES fix (d) slice A landed (§4.5.636: the range record and every pair-of-bounds rule in `crates/hdl-ast/src/range_rules.rs`, every output PRE's), so Q-SYMMIX re-enters at C0 · L1, next, then S1v, which takes the four refusals slice A dropped beside R1v and the bound range rule, then batch 1;
 * Q-VALRULES keeps its census and design (a)–(c), measure only, at 10 · L1 just before row 74.
@@ -68,7 +68,7 @@
 * Held rows 1 and 3–8 hold slots in their stages since 2026-10-28 (T′ row 8; B′ rows 1, 3 and 4; V′ rows 5, 6 and 7, rows 1–5 still before rows 6–7);
 * row 2 ships with row 45;
 * row 72b stays held and joins B′ only if a stage's exit re-census finds it on an opened page.
-* For this program a blocking finding is fixed, never reverted for its round count (ER §3.6's two-round revert is suspended; from the second blocking round on one axis — the same root class — the axis is re-planned by a fresh planner, not patched; each round is a fresh agent, and a delta round re-runs only the cells its delta reaches, the full re-run once in the final round), and every round is reported.
+* For this program a blocking finding is fixed, never reverted for its round count (ER §3.6: from the second blocking round on one axis — the same root class — the axis is re-planned by a fresh planner, not patched; each round is a fresh agent, and a delta round re-runs only the cells its delta reaches, the full re-run once in the final round), and every round is reported.
 * The tier letter after the rank is the review tier (ER §3.7).
 
 * The `rank` column is a row's defect class — ① a silent-wrong, ② loud→supported (§1) — not its place in the queue: the `slot` column is the start order, and the row number is a stable name.
