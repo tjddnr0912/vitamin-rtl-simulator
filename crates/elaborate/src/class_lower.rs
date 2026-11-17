@@ -318,6 +318,8 @@ impl Elaborator<'_> {
         };
         let (blocks, entry) = self.with_scope(&scope_seg, |s| {
             let mut b = ProcessBuilder::new();
+            // §5.2 Q-WEXTPOS C3: the method body's floor.
+            let wext_tok = s.wext_body_enter();
             // A single exit block: `return` jumps here; the body also falls
             // through to it. `finish()` gives it the implicit `Return` terminator.
             let exit = b.new_block();
@@ -336,7 +338,9 @@ impl Elaborator<'_> {
             s.lower_stmt(&mut b, &body);
             b.goto(exit);
             b.start_block(exit);
-            b.finish()
+            let out = b.finish();
+            s.wext_body_exit(wext_tok);
+            out
         });
         self.cur_this = saved_this;
         self.cur_return = saved_ret;

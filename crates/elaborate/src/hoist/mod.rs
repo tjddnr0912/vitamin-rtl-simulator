@@ -364,7 +364,7 @@ impl Elaborator<'_> {
                 rhs: e.clone(),
                 span: e.span,
             };
-            self.lower_stmt(b, &assign);
+            self.wext_unlocated(|s| s.lower_stmt(b, &assign));
             return ast::Expr {
                 kind: K::Ident(ast::HierPath {
                     segments: vec![ast::Ident {

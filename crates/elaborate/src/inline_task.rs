@@ -854,17 +854,20 @@ impl Elaborator<'_> {
     /// jumps to a fresh convergence block scoped to THIS task; cur_return is
     /// saved/restored so a nested return never escapes to the caller's exit).
     pub(crate) fn inline_task_body(&mut self, b: &mut ProcessBuilder, body: &ast::Stmt) {
-        if body_has_return(body) {
-            let saved_ret = self.cur_return.take();
-            let exit = b.new_block();
-            self.cur_return = Some((None, exit));
-            self.lower_stmt(b, body);
-            b.goto(exit);
-            b.start_block(exit);
-            self.cur_return = saved_ret;
-        } else {
-            self.lower_stmt(b, body);
-        }
+        // §5.2 Q-WEXTPOS C3: the task's own text is located again under a mask (`wext.rs`).
+        self.wext_located(|s| {
+            if body_has_return(body) {
+                let saved_ret = s.cur_return.take();
+                let exit = b.new_block();
+                s.cur_return = Some((None, exit));
+                s.lower_stmt(b, body);
+                b.goto(exit);
+                b.start_block(exit);
+                s.cur_return = saved_ret;
+            } else {
+                s.lower_stmt(b, body);
+            }
+        });
     }
 }
 

@@ -11,6 +11,8 @@ impl Elaborator<'_> {
         // any expression inside it) to the statement's own source position. Restored on
         // the way out, so the enclosing construct keeps its own anchor.
         let saved_span = self.cur_span.replace(s.span());
+        // §5.2 Q-WEXTPOS C3: the first statement id this statement may push (`wext.rs`).
+        let wext_start = self.stmts.len();
         // §16.4: a user task (or void function) called as a deferred assertion's
         // action runs when reached, as a whole; the statements of its body are not
         // the assertion's report. Without this an INLINED body's system tasks were
@@ -33,6 +35,7 @@ impl Elaborator<'_> {
             self.cur_defer = saved_defer;
         }
         self.cur_span = saved_span;
+        self.record_stmt_at(s.span(), wext_start);
     }
 
     fn lower_stmt_inner(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {

@@ -83,7 +83,8 @@ impl Elaborator<'_> {
     ) -> ir::Process {
         // `user_written = false`: a synthesized block keeps the header lane byte for
         // byte (`const_level_header.rs` admits only what a user wrote).
-        let proc = self.lower_proc_block(pb, false);
+        // §5.2 Q-WEXTPOS C3: a synthesized body is no write's own text (`wext.rs`, THE MASK).
+        let proc = self.wext_unlocated(|s| s.lower_proc_block(pb, false));
         if let Some(id) = self.pending_proc_ident.as_mut() {
             id.kind = kind;
         }

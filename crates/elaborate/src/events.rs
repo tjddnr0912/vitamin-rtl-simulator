@@ -85,7 +85,7 @@ impl Elaborator<'_> {
             span,
         };
         for _ in 0..waits {
-            self.lower_stmt(b, &evt);
+            self.wext_unlocated(|s| s.lower_stmt(b, &evt));
         }
         // Write the captured value (lvalue index evaluated here, at write time).
         let tmp_read = self.push_expr(ir::Expr::Signal {
@@ -223,7 +223,7 @@ impl Elaborator<'_> {
             span,
         };
         for _ in 0..waits {
-            self.lower_stmt(b, &evt);
+            self.wext_unlocated(|s| s.lower_stmt(b, &evt));
         }
         let tmp_read = self.push_expr(ir::Expr::Signal {
             net: tmp,

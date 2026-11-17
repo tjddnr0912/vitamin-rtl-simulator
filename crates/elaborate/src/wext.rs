@@ -207,12 +207,71 @@
 //! is synthesized and stamped with the child module's name, which is not the write's
 //! text). The kinds no reader prints carry `None`: `net_init` (`var_init.rs`), the
 //! level-select net (`events.rs`) and the time-0 pulse (`const_level_header.rs`). A
-//! procedural write carries `None` until unit C3 records statements. `at` is not
+//! procedural write's `at` is a statement's (C3, below). `at` is not
 //! `ca_idents`' span (`push_cont_assign`'s `span`, the profile identity: the statement for
 //! an `assign`), which is kept as it was. The dump prints one last field per `W` line,
 //! ` at=<lo>` (the decimal byte offset) or ` at=-`. REVIEW-ONLY: that the spelled argument
 //! is the right node's on a form with no pin (`wext_view.rs` pins `lc(src, lo)` per form;
 //! `wext_home.rs` H13 counts each caller's spelling).
+//!
+//! A STATEMENT'S OWN POSITION (§5.2 Q-WEXTPOS, unit C3). `lower_stmt` reads `start =
+//! stmts.len()` at its entry and at its one exit calls `record_stmt_at` with the fn's OWN
+//! parameter's span `s.span()` (never `cur_span`, a context's: 41 writers), which keeps the
+//! interval `[start, stmts.len())` with that span in `stmt_at` — nothing when the statement
+//! pushed no IR statement, when the span is empty (`debug_assert!`ed after those two
+//! returns), or when THE MASK is up. A procedural write takes the span of the INNERMOST
+//! recorded interval holding its statement id, among equal intervals the one recorded first
+//! (a statement that pushes nothing of its own, a label or a guard shell, has exactly its
+//! child's interval, and the child exits first) ; no interval, or a FLOOR, gives `None` ;
+//! every chunk of one lvalue the same `at`. THE MASK, `wext_unlocated`: a depth counter
+//! around a statement vita BUILT (class S: the 19 `lower_stmt` calls `wext_home.rs` H14
+//! lists — a hoisted temporary, a dyn-array or frame local's built initializer, an
+//! intra-assignment event's wait, a covergroup's bitmap store, a frame call's unpack) and
+//! around `lower_synth_proc`'s body: inside it no interval is recorded, so a built
+//! statement's store takes the parsed statement around it, or none. Every body ELABORATE
+//! synthesizes (`lower_synth_proc`'s callers) gives `None`: the declaration-initializer flush `var_init` (its Block's span is the FIRST
+//! initializer's, a context for the others), `sva` including a concurrent assertion's action
+//! blocks, `cover`, the clocking commit handler and the module-level assertion wrapper
+//! (`lower_user_proc`). THE FLOORS, `wext_body_enter` / `wext_body_exit`: each body root
+//! (a function's and a task's frame body, a class method's body) saves the mask depth, sets
+//! it to 0 and at its exit restores it and records `(start, end, None)` over the body's ids,
+//! so a prologue store (a local's initializer) is `None` and a store the caller pushes after
+//! the body is the caller's statement, even when the body is lowered inside an open
+//! statement (a package function's frame on its first call). The process root
+//! (`lower_proc_block`, `wext_body_enter_keep`) records its floor but KEEPS the depth: it is
+//! reached under `lower_synth_proc`'s mask (premise judge round 1, line 1). The callee
+//! entries `inline_task_body` and `lower_frame_body_stmt` (`wext_located`) save, set 0 and
+//! restore the depth with no floor, so a task inlined into a synthesized body (an
+//! assertion's action calling a static task) records its own statements, and a copy-in or
+//! copy-out its call pushes is the call statement. `build_write_view` `debug_assert!`s the
+//! mask depth and the open bodies are 0.
+//! THE RESOLUTION, one reverse pass (`stmt_at_of`; the plan's sort by `(start, Reverse(end),
+//! Reverse(record index))` is its unit tests' reference): every recorder records at its OWN
+//! exit over `[stmts.len() at entry, stmts.len() at exit)`. It needs two facts. (1)
+//! Statement ids are only appended: `wext_home.rs` H1 (`push_stmt` the one arena appender)
+//! and H1b (the arena's `&mut` writers patch in place ; `retain` and `splice` act on a
+//! block's id list). (2) Every recorder is an entry / exit pair on one call stack: H7's
+//! equal body enter / exit count per (file, fn), and `push_interval`'s `debug_assert!` in a
+//! debug run. So of two recorded intervals either one holds no id of the other or the one
+//! recorded first lies inside the other (its recorder ran inside the other's) — an equal
+//! pair included. Painting the intervals last-recorded first therefore lets every inner
+//! interval overwrite its container, and among equal ones the first-recorded paints last.
+//! `push_interval` `debug_assert!`s that order against the interval recorded before.
+//! REVIEW-ONLY for C3: an S call's class (H14 counts the calls, a class written wrongly
+//! is the pins' and review's) ; that a masked built statement's store takes the parsed
+//! statement around it — a hoisted temporary the statement holding the expression, not the
+//! target's column ; a block-local initializer in a frame body its `begin` block ; an
+//! inlined task's copy-in, copy-out and local initializer the call statement — precision
+//! lost, the text holding the write, never another construct's ; that a `TaskInline` write's
+//! `at` is the callee's statement or the call (the view cannot tell which) ; the call site
+//! of an inlined callee's statement (not recorded) ; a UDP body's spans ; a statement from a
+//! macro body or an include (the record holds the raw offset of the preprocessed text) ;
+//! the spans of masked statements (not recorded, never measured) ; a body the PARSER
+//! synthesizes keeps the span the parser gave it: the enum `.name()` function
+//! `$enum_name$<T>` (hdl-parser enums.rs:111, `span = path.span` at enums.rs:74) stamps
+//! every statement with the FIRST `.name()` call's path, so its writes (its return variable
+//! and its scrutinee temporary, `$`-named static locals no user text can name, so no reader
+//! prints them) carry that call's offset (premise judge 2, F-A).
 
 use super::*;
 
@@ -334,6 +393,13 @@ pub(crate) struct WextRecords {
     /// Per continuous row, its write's own position (`record_row_at`; lockstep with
     /// `cont_assigns`).
     row_at: Vec<Option<ast::Span>>,
+    /// `(start, end, at)` statement-id intervals in record order (C3): a statement's own
+    /// span (`record_stmt_at`) or a body root's floor `None` (`wext_body_exit`).
+    stmt_at: Vec<(u32, u32, Option<ast::Span>)>,
+    /// The mask's depth (`wext_unlocated`): above 0 no statement interval is recorded.
+    mask: u32,
+    /// Body roots entered and not yet left (`wext_body_enter*` / `wext_body_exit`).
+    open_body: u32,
     /// The elaboration held a provisional constant (THE STAND-DOWN; `note_provisional`,
     /// `note_patch`).
     provisional: bool,
@@ -341,7 +407,35 @@ pub(crate) struct WextRecords {
     view_built: bool,
 }
 
+/// A body root's token (C3): the mask depth to restore and the first statement id.
+pub(crate) struct WextBody {
+    depth: u32,
+    start: usize,
+}
+
 impl WextRecords {
+    /// One statement-id interval (C3). Recorders run at their own exit, so an interval
+    /// recorded earlier either holds no id of this one's or lies inside it (the order the
+    /// resolution in `build_view` rests on; checked in a debug run).
+    fn push_interval(&mut self, start: usize, end: usize, at: Option<ast::Span>) {
+        debug_assert!(
+            self.stmt_at.last().is_none_or(
+                |&(a, b, _)| b as usize <= start || (start <= a as usize && b as usize <= end)
+            ),
+            "§5.2 Q-WEXTPOS: a statement interval crosses the one recorded before it"
+        );
+        self.stmt_at.push((start as u32, end as u32, at));
+    }
+
+    /// A statement's own interval `[start, end)` with its span: nothing when the span is
+    /// empty (the zero-span guard; `record_stmt_at` asserts it in a debug run).
+    pub(crate) fn note_stmt_at(&mut self, start: usize, end: usize, sp: ast::Span) {
+        if sp.lo >= sp.hi {
+            return;
+        }
+        self.push_interval(start, end, Some(sp));
+    }
+
     /// A provisional `Const` was registered (`register_provisional_const`).
     pub(crate) fn note_provisional(&mut self) {
         self.provisional = true;
@@ -466,6 +560,9 @@ pub(crate) struct WextSource<'a> {
     pub(crate) vias: &'a [(Via, u32, u32)],
     /// Per continuous row, `Write::at` (`WextRecords::row_at`).
     pub(crate) row_at: &'a [Option<ast::Span>],
+    /// Statement-id intervals with their span or a floor's `None`
+    /// (`WextRecords::stmt_at`, record order).
+    pub(crate) stmt_at: &'a [(u32, u32, Option<ast::Span>)],
     /// THE STAND-DOWN's flag (`WextRecords::provisional`).
     pub(crate) provisional: bool,
 }
@@ -479,6 +576,11 @@ impl Elaborator<'_> {
             rec.row_at.len(),
             self.cont_assigns.len(),
             "§5.2 Q-WEXTPOS: row_at must stay lockstep with cont_assigns"
+        );
+        debug_assert_eq!(rec.mask, 0, "§5.2 Q-WEXTPOS: the mask is up at the view");
+        debug_assert_eq!(
+            rec.open_body, 0,
+            "§5.2 Q-WEXTPOS: a body root is still open at the view"
         );
         let mut view = build_view(&WextSource {
             nets: &self.nets,
@@ -494,6 +596,7 @@ impl Elaborator<'_> {
             geom: &rec.geom,
             vias: &rec.vias,
             row_at: &rec.row_at,
+            stmt_at: &rec.stmt_at,
             provisional: rec.provisional,
         });
         view.decls = rec.decls;
@@ -592,6 +695,74 @@ impl Elaborator<'_> {
         self.wext_rec.row_at.push(at);
     }
 
+    /// The statement's position writer (module head, C3), called once at `lower_stmt`'s
+    /// one exit with the fn's own `s.span()` and `start = stmts.len()` read at its entry:
+    /// `[start, stmts.len())` with that span. Nothing when the mask is up (a statement
+    /// vita built, `wext_unlocated`), when the statement pushed no IR statement, or when
+    /// the span is empty.
+    pub(crate) fn record_stmt_at(&mut self, sp: ast::Span, start: usize) {
+        let end = self.stmts.len();
+        if self.wext_rec.mask > 0 || start == end {
+            return;
+        }
+        debug_assert!(
+            sp.lo < sp.hi,
+            "§5.2 Q-WEXTPOS: an empty span on a statement that pushed IR"
+        );
+        self.wext_rec.note_stmt_at(start, end, sp);
+    }
+
+    /// THE MASK (module head, C3): `f` lowers a statement vita built (or a synthesized
+    /// body), so no statement interval inside it is recorded; its stores take the
+    /// interval around it, or none.
+    pub(crate) fn wext_unlocated<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.wext_rec.mask += 1;
+        let r = f(self);
+        self.wext_rec.mask -= 1;
+        r
+    }
+
+    /// A callee body's entry (module head, C3: `inline_task_body`, `lower_frame_body_stmt`):
+    /// the callee's own text is located again under a mask; the depth is restored after.
+    pub(crate) fn wext_located<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let depth = std::mem::replace(&mut self.wext_rec.mask, 0);
+        let r = f(self);
+        self.wext_rec.mask = depth;
+        r
+    }
+
+    /// A body root (module head, C3: a frame or class-method body's `ProcessBuilder`):
+    /// save the mask depth and set it to 0, remember the first statement id.
+    pub(crate) fn wext_body_enter(&mut self) -> WextBody {
+        self.wext_rec.open_body += 1;
+        WextBody {
+            depth: std::mem::replace(&mut self.wext_rec.mask, 0),
+            start: self.stmts.len(),
+        }
+    }
+
+    /// The process root (`lower_proc_block`, premise judge line 1): save the mask depth
+    /// and KEEP it (a synthesized body is lowered under `lower_synth_proc`'s mask),
+    /// remember the first statement id.
+    pub(crate) fn wext_body_enter_keep(&mut self) -> WextBody {
+        self.wext_rec.open_body += 1;
+        WextBody {
+            depth: self.wext_rec.mask,
+            start: self.stmts.len(),
+        }
+    }
+
+    /// A body root's exit: restore the mask depth and record the FLOOR, `(start,
+    /// stmts.len(), None)`, when the body pushed any statement.
+    pub(crate) fn wext_body_exit(&mut self, tok: WextBody) {
+        self.wext_rec.open_body -= 1;
+        self.wext_rec.mask = tok.depth;
+        let end = self.stmts.len();
+        if tok.start < end {
+            self.wext_rec.push_interval(tok.start, end, None);
+        }
+    }
+
     /// The statement-id interval's writer (module head, A2): `[start, stmts.len())`.
     pub(crate) fn record_via(&mut self, via: Via, start: usize) {
         let end = self.stmts.len();
@@ -623,6 +794,8 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         }
     }
     let via = |sid: u32| via_of.get(sid as usize).copied().unwrap_or(Via::Direct);
+    let at_of = stmt_at_of(s.stmt_at, s.stmts.len());
+    let at = |sid: u32| at_of.get(sid as usize).copied().flatten();
     let mut writes = Vec::new();
     let mut add =
         |writer: Writer, form: Form, stmt: Option<u32>, at: Option<ast::Span>, lv: &ir::Lvalue| {
@@ -657,7 +830,7 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         for bb in &p.body {
             for &sid in &bb.stmts {
                 if let Some((form, lv)) = store_of(s.stmts, sid) {
-                    add(w, form, Some(sid), None, lv);
+                    add(w, form, Some(sid), at(sid), lv);
                 }
             }
         }
@@ -670,7 +843,7 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         for b in frame_blocks(s.blocks, fd.entry) {
             for &sid in &s.blocks[b as usize].stmts {
                 if let Some((form, lv)) = store_of(s.stmts, sid) {
-                    add(w, form, Some(sid), None, lv);
+                    add(w, form, Some(sid), at(sid), lv);
                 }
             }
         }
@@ -679,6 +852,27 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         writes,
         decls: Vec::new(),
     }
+}
+
+/// `at` per statement id (module head, C3): the span of the INNERMOST recorded interval
+/// holding it, among equal intervals the one recorded FIRST ; no interval, or a floor
+/// (`None`), gives `None`. The record order makes this one reverse pass: every recorder
+/// records at its own exit, so an interval inside another (or equal to it and recorded
+/// inside its call) is recorded before it, and painting the intervals last-recorded first
+/// lets each inner one overwrite its container (the order `push_interval` checks in a
+/// debug run).
+fn stmt_at_of(stmt_at: &[(u32, u32, Option<ast::Span>)], n: usize) -> Vec<Option<ast::Span>> {
+    if stmt_at.is_empty() {
+        return Vec::new();
+    }
+    let mut at_of = vec![None; n];
+    for &(a, b, sp) in stmt_at.iter().rev() {
+        let b = (b as usize).min(n);
+        for slot in at_of.iter_mut().take(b).skip(a as usize) {
+            *slot = sp;
+        }
+    }
+    at_of
 }
 
 /// The form and lvalue of a storing statement (`stmt_lvalue`'s four), else `None`.
@@ -960,6 +1154,7 @@ mod tests {
             geom: &std::collections::HashMap::new(),
             vias: &[],
             row_at: &[],
+            stmt_at: &[],
             provisional: false,
         });
         let ext: Vec<Extent> = v.writes.iter().map(|w| w.extent).collect();
@@ -1061,6 +1256,7 @@ mod tests {
                 geom: &std::collections::HashMap::new(),
                 vias: &[],
                 row_at: &[],
+                stmt_at: &[],
                 provisional,
             })
             .writes
@@ -1114,10 +1310,186 @@ mod tests {
             geom: &std::collections::HashMap::new(),
             vias: &[],
             row_at: &row_at,
+            stmt_at: &[],
             provisional: false,
         });
         let at: Vec<Option<u32>> = v.writes.iter().map(|w| w.at.map(|s| s.lo)).collect();
         assert_eq!(at, vec![Some(7), Some(7), None, None]);
         assert_eq!(v.writes[0].at, Some(ast::Span::new(7, 9)));
+    }
+
+    /// The plan's resolution, spelled with the sort (PLAN V4: sort key `(start,
+    /// Reverse(end), Reverse(record index))`, later paints win) — the reference the
+    /// one-pass `stmt_at_of` must equal on every family its recorders can make.
+    fn stmt_at_sorted(
+        stmt_at: &[(u32, u32, Option<ast::Span>)],
+        n: usize,
+    ) -> Vec<Option<ast::Span>> {
+        if stmt_at.is_empty() {
+            return Vec::new();
+        }
+        let mut at_of = vec![None; n];
+        let mut order: Vec<usize> = (0..stmt_at.len()).collect();
+        order.sort_by_key(|&i| {
+            let (a, b, _) = stmt_at[i];
+            (a, std::cmp::Reverse(b), std::cmp::Reverse(i))
+        });
+        for i in order {
+            let (a, b, sp) = stmt_at[i];
+            for slot in at_of.iter_mut().take(b as usize).skip(a as usize) {
+                *slot = sp;
+            }
+        }
+        at_of
+    }
+
+    /// C3, V4's meaning: innermost interval, equal intervals to the one recorded first,
+    /// a floor or no interval `None` — on a hand-built family whose ids 0..12 are:
+    /// 0 outside every interval ; 1 a prologue store under a floor ; 2 a statement inside
+    /// the floor ; 3 a statement equal to its child's interval (the child, recorded first,
+    /// wins) ; 4 the caller's own store after the body ; 5..7 a call statement around a
+    /// floor of the same extent recorded first (the floor wins) ; 8..10 nested three deep ;
+    /// 11 after every interval.
+    #[test]
+    fn stmt_at_innermost_first_recorded_floor() {
+        let sp = |lo: u32| Some(ast::Span::new(lo, lo + 1));
+        // record order = exit order of the recorders
+        let rec = vec![
+            (2, 3, sp(20)),  // a statement inside the floor
+            (3, 4, sp(30)),  // the child ...
+            (3, 4, sp(31)),  // ... and its parent, same ids
+            (1, 4, None),    // the floor of a body lowered inside the caller
+            (1, 5, sp(10)),  // the caller's statement (its own store 4)
+            (5, 8, None),    // a callee's floor ...
+            (5, 8, sp(50)),  // ... and the call statement, same ids, recorded after
+            (9, 10, sp(90)), // nested three deep
+            (8, 11, sp(80)),
+            (8, 11, sp(81)),
+        ];
+        let got = stmt_at_of(&rec, 12);
+        let lo: Vec<Option<u32>> = got.iter().map(|s| s.map(|s| s.lo)).collect();
+        assert_eq!(
+            lo,
+            vec![
+                None,
+                None,
+                Some(20),
+                Some(30),
+                Some(10),
+                None,
+                None,
+                None,
+                Some(80),
+                Some(90),
+                Some(80),
+                None
+            ]
+        );
+        assert_eq!(got, stmt_at_sorted(&rec, 12));
+        assert!(stmt_at_of(&[], 5).is_empty());
+    }
+
+    /// C3, the one-pass resolution equals the plan's sorted one on every family a
+    /// call-stack of recorders makes (each records `[len at entry, len at exit)` at its
+    /// exit, a floor `None`, empty ones skipped): 300 seeded trees, up to depth 5.
+    #[test]
+    fn stmt_at_one_pass_equals_sorted() {
+        fn gen(
+            rng: &mut u64,
+            depth: u32,
+            len: &mut u32,
+            rec: &mut Vec<(u32, u32, Option<ast::Span>)>,
+        ) {
+            let mut next = || {
+                *rng = rng
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (*rng >> 33) as u32
+            };
+            let start = *len;
+            *len += next() % 3;
+            let kids = if depth < 5 { next() % 3 } else { 0 };
+            let floor = next() % 4 == 0;
+            let after = next() % 2;
+            for _ in 0..kids {
+                gen(rng, depth + 1, len, rec);
+            }
+            *len += after;
+            if start < *len {
+                let at = (!floor).then(|| ast::Span::new(start * 7 + depth, start * 7 + depth + 1));
+                rec.push((start, *len, at));
+            }
+        }
+        for seed in 0..300u64 {
+            let mut rng = seed;
+            let (mut len, mut rec) = (0u32, Vec::new());
+            for _ in 0..3 {
+                gen(&mut rng, 0, &mut len, &mut rec);
+            }
+            let n = len as usize + 1;
+            assert_eq!(
+                stmt_at_of(&rec, n),
+                stmt_at_sorted(&rec, n),
+                "seed {seed}: {rec:?}"
+            );
+        }
+    }
+
+    /// C3, the zero-span guard: an empty span records no interval (`record_stmt_at`
+    /// asserts it in a debug run, before calling here) ; a span of one byte does.
+    #[test]
+    fn zero_span_records_nothing() {
+        let mut r = WextRecords::default();
+        r.note_stmt_at(2, 3, ast::Span::new(5, 5));
+        assert!(r.stmt_at.is_empty());
+        r.note_stmt_at(2, 3, ast::Span::new(5, 6));
+        assert_eq!(r.stmt_at, vec![(2, 3, Some(ast::Span::new(5, 6)))]);
+    }
+
+    /// C3: a statement's `at` is joined per statement id, every chunk of its lvalue the
+    /// same one (here in a frame body; a process body reads the same `at`).
+    #[test]
+    fn stmt_at_joins_each_chunk() {
+        let nets = vec![net(8), net(8)];
+        let two = ir::Lvalue {
+            chunks: vec![whole(0).chunks[0].clone(), whole(1).chunks[0].clone()],
+        };
+        let stmts = vec![
+            ir::Stmt::BlockingAssign { lhs: two, rhs: 0 },
+            ir::Stmt::BlockingAssign {
+                lhs: whole(1),
+                rhs: 0,
+            },
+        ];
+        let blocks = vec![ir::BasicBlock {
+            stmts: vec![0, 1],
+            term: ir::Terminator::Return,
+        }];
+        let funcs = vec![ir::FuncDef {
+            entry: 0,
+            n_params: 0,
+            locals_len: 0,
+            is_task: true,
+        }];
+        let rec = vec![(0, 1, Some(ast::Span::new(40, 45))), (1, 2, None)];
+        let v = build_view(&WextSource {
+            nets: &nets,
+            exprs: &[],
+            consts: &[],
+            cont_assigns: &[],
+            ca_idents: &[],
+            processes: &[],
+            proc_idents: &[],
+            stmts: &stmts,
+            blocks: &blocks,
+            funcs: &funcs,
+            geom: &std::collections::HashMap::new(),
+            vias: &[],
+            row_at: &[],
+            stmt_at: &rec,
+            provisional: false,
+        });
+        let at: Vec<Option<u32>> = v.writes.iter().map(|w| w.at.map(|s| s.lo)).collect();
+        assert_eq!(at, vec![Some(40), Some(40), None]);
     }
 }

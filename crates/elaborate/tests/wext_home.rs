@@ -39,7 +39,17 @@
 //!   `carry_geom (` at the two lowerings that add a constant to a flat offset, and the raw
 //!   store `. wext_rec` inside wext.rs's writers and `build_write_view` only. §5.2
 //!   Q-WEXTPOS C2: `record_row_at (` once, in `push_cont_assign` (each continuous row's
-//!   own position, pushed beside the row).
+//!   own position, pushed beside the row). §5.2 Q-WEXTPOS C3: `record_stmt_at (` once, in
+//!   `lower_stmt`, keyed by its first argument as spelled (`s . span ( )`, the fn's own
+//!   parameter) ; the mask `wext_unlocated (`, the body roots `wext_body_enter (` /
+//!   `wext_body_enter_keep (` / `wext_body_exit (` (enters and exits equal per (file, fn))
+//!   and the callee entries `wext_located (`, per (file, fn) ; no `cur_span` token in
+//!   wext.rs.
+//! - H14 (§5.2 Q-WEXTPOS C3) every `lower_stmt (` call, any receiver, per (file, fn), as
+//!   `bare` or `masked` (inside a `wext_unlocated (` argument group), with its class
+//!   written by hand: R (a parsed statement) is bare, S (one vita built) masked ; PLAN B7's
+//!   27 R + 1 MIXED (R) + 19 S. And the process root `lower_proc_block` keeps the mask
+//!   (`wext_body_enter_keep`), never zeroes it (premise judge round 1, line 1 and P-1).
 //! - H13 (§5.2 Q-WEXTPOS C2) the `at` argument of every `push_cont_assign (` /
 //!   `push_cont_assign_port (` call (its last argument), as spelled inline, per (file, fn):
 //!   an `assign` row passes its own target `Some ( lv . span ( ) )`, a port row the
@@ -488,11 +498,35 @@ fn last_arg(t: &[Tok], open: usize) -> String {
     args.pop().unwrap_or_default()
 }
 
+/// The first top-level argument of the call whose `(` is at `open`, its tokens joined with
+/// no space.
+fn first_arg(t: &[Tok], open: usize) -> String {
+    let close = close_of(t, open);
+    let mut s = String::new();
+    let mut d = 0usize;
+    for x in &t[open + 1..close] {
+        if x.kind == Kind::P && matches!(x.text.as_str(), "(" | "[" | "{") {
+            d += 1;
+        } else if x.kind == Kind::P && matches!(x.text.as_str(), ")" | "]" | "}") {
+            d -= 1;
+        } else if d == 0 && x.text == "," {
+            break;
+        }
+        s.push_str(&x.text);
+    }
+    s
+}
+
 /// (rule, fn key) hits of one source.
 fn hits(src: &str) -> Vec<(String, String)> {
     let t = tokens(src);
     let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
     let mut out: Vec<(String, String)> = Vec::new();
+    // H14: the argument groups of every `wext_unlocated (` call (THE MASK, Q-WEXTPOS C3)
+    let masks: Vec<(usize, usize)> = (0..t.len())
+        .filter(|&i| tx(i) == "wext_unlocated" && tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn"))
+        .map(|i| (i + 1, close_of(&t, i + 1)))
+        .collect();
     for i in 0..t.len() {
         let k = t[i].key.clone();
         let id = t[i].kind == Kind::Id;
@@ -600,8 +634,24 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "build_write_view" => out.push(("H3:build_write_view".into(), k.clone())),
                 "stmt_lvalue" => out.push(("H5:stmt_lvalue".into(), k.clone())),
                 "chunk_written_bits_at" => out.push(("H2:at".into(), k.clone())),
-                "record_geom" | "carry_geom" | "record_row_at" => {
-                    out.push((format!("H7:{}", tx(i)), k.clone()))
+                "record_geom"
+                | "carry_geom"
+                | "record_row_at"
+                | "wext_unlocated"
+                | "wext_located"
+                | "wext_body_enter"
+                | "wext_body_enter_keep"
+                | "wext_body_exit" => out.push((format!("H7:{}", tx(i)), k.clone())),
+                // H7 (C3): the statement recorder, keyed by its first argument as spelled
+                "record_stmt_at" => out.push((
+                    format!("H7:record_stmt_at:{}", first_arg(&t, i + 1)),
+                    k.clone(),
+                )),
+                // H14 (C3): every `lower_stmt (` call, any receiver, inside the mask or not
+                "lower_stmt" => {
+                    let masked = masks.iter().any(|&(a, b)| a < i && i < b);
+                    let m = if masked { "masked" } else { "bare" };
+                    out.push((format!("H14:lower_stmt:{m}"), k.clone()))
                 }
                 "record_decl_fact" => out.push(("H8:record_decl_fact".into(), k.clone())),
                 "record_via" => out.push(("H9:record_via".into(), k.clone())),
@@ -644,6 +694,10 @@ fn hits(src: &str) -> Vec<(String, String)> {
         }
         if id && tx(i) == "write_view" {
             out.push(("H3:write_view".into(), k.clone()));
+        }
+        // H7 (C3): the context's span, which the recorder must not read
+        if id && tx(i) == "cur_span" {
+            out.push(("R7:cur_span".into(), k.clone()));
         }
         if id && (tx(i) == "proc_idents" || tx(i) == "ca_idents") {
             out.push((format!("H4:{}", tx(i)), k.clone()));
@@ -720,12 +774,60 @@ fn check(prefix: &str, rows: &[(&str, &str, &str, usize, &str)]) {
     }
 }
 
+/// One synthetic source's hits as a census table under the file name `file`.
+fn table_of(file: &str, src: &str) -> Table {
+    let mut tab = Table::new();
+    for (r, k) in hits(src) {
+        *tab.entry((r, file.to_string(), k)).or_default() += 1;
+    }
+    tab
+}
+
+/// Per (file, fn): body-root enters (either form) minus exits (C3 ; 0 everywhere).
+fn body_balance(tab: &Table) -> BTreeMap<(String, String), i64> {
+    let mut bal: BTreeMap<(String, String), i64> = BTreeMap::new();
+    for ((r, f, k), n) in tab {
+        let d = match r.as_str() {
+            "H7:wext_body_enter" | "H7:wext_body_enter_keep" => *n as i64,
+            "H7:wext_body_exit" => -(*n as i64),
+            _ => continue,
+        };
+        *bal.entry((f.clone(), k.clone())).or_default() += d;
+    }
+    bal
+}
+
 /// The count of `rule` (exact, or `rule:<anything>`) in one synthetic source.
 fn count(rule: &str, src: &str) -> usize {
     hits(src)
         .iter()
         .filter(|(r, _)| r == rule || r.starts_with(&format!("{rule}:")))
         .count()
+}
+
+#[test]
+fn h14_every_lower_stmt_call() {
+    let rows: Vec<(&str, &str, &str, usize, &str)> = H14
+        .iter()
+        .map(|&(r, f, k, n, _, _)| (r, f, k, n, ""))
+        .collect();
+    check("H14", &rows);
+    for &(r, f, k, _, class, _) in H14 {
+        let want = match class {
+            "R" => "H14:lower_stmt:bare",
+            "S" => "H14:lower_stmt:masked",
+            _ => panic!("{r} {f} {k}: class `{class}`"),
+        };
+        assert_eq!(r, want, "{f} {k}: a class-{class} call must be {want}");
+    }
+    let n = |c: &str| -> usize { H14.iter().filter(|r| r.4 == c).map(|r| r.3).sum() };
+    assert_eq!(
+        (n("R"), n("S")),
+        (28, 19),
+        "PLAN B7: 27 R + 1 MIXED (R), 19 S"
+    );
+    let v = floor_rule(&census());
+    assert!(v.is_empty(), "the process root's floor: {v:?}");
 }
 
 #[test]
@@ -741,6 +843,16 @@ fn h1b_the_in_place_writers() {
 #[test]
 fn h7_the_geometry_constant_home() {
     check("H7", H7);
+    // C3: every body root's enter (either form) has its exit in the same (file, fn)
+    let tab = census();
+    let bal = body_balance(&tab);
+    assert!(bal.values().all(|&d| d == 0), "body enter / exit: {bal:?}");
+    // C3: the recorder's file reads no context span
+    let cs: Vec<_> = tab
+        .keys()
+        .filter(|(r, f, _)| r == "R7:cur_span" && f == "wext.rs")
+        .collect();
+    assert!(cs.is_empty(), "`cur_span` in wext.rs: {cs:?}");
 }
 
 /// H13 (§5.2 Q-WEXTPOS C2): each continuous append call's `at` argument as spelled, per
@@ -1422,6 +1534,177 @@ fn walker_controls() {
         ],
         "H11c real site (expr_special.rs lower_bits_fold) spelled back"
     );
+    // H7 (Q-WEXTPOS C3): the statement recorder's argument, the mask, the floors
+    let h7c3 = |src: &str| -> Vec<String> {
+        hits(src)
+            .into_iter()
+            .filter(|(r, _)| r.starts_with("H7:") || r.starts_with("R7:"))
+            .map(|(r, k)| format!("{r}@{k}"))
+            .collect()
+    };
+    assert_eq!(
+        h7c3("impl E { fn lower_stmt(&mut self, b: &mut B, s: &ast::Stmt) { let w = self.stmts.len(); self.record_stmt_at(self.cur_span.unwrap(), w); } }"),
+        vec![
+            "H7:record_stmt_at:self.cur_span.unwrap()@lower_stmt".to_string(),
+            "R7:cur_span@lower_stmt".to_string()
+        ],
+        "H7 planted: the recorder given the context's span (PLAN §6) moves the row ; `cur_span` seen"
+    );
+    assert_eq!(
+        h7c3("impl E { fn lower_stmt(&mut self, b: &mut B, s: &ast::Stmt) { let wext_start = self.stmts.len(); self.record_stmt_at(s.span(), wext_start); } \
+              fn record_stmt_at(&mut self, sp: ast::Span, start: usize) {} }"),
+        vec!["H7:record_stmt_at:s.span()@lower_stmt".to_string()],
+        "H7 real site (stmt_main.rs lower_stmt) spelled back ; the definition skipped"
+    );
+    assert_eq!(
+        h7c3("impl E { fn lower_synth_proc(&mut self, pb: &P) -> ir::Process { let proc = self.lower_proc_block(pb, false); proc } }"),
+        Vec::<String>::new(),
+        "H7 planted: lower_synth_proc unmasked (PLAN §6) loses its `wext_unlocated` row"
+    );
+    assert_eq!(
+        h7c3("impl E { fn lower_synth_proc(&mut self, pb: &P) -> ir::Process { let proc = self.wext_unlocated(|s| s.lower_proc_block(pb, false)); proc } \
+              fn wext_unlocated<R>(&mut self, f: F) -> R { f(self) } }"),
+        vec!["H7:wext_unlocated@lower_synth_proc".to_string()],
+        "H7 real site (proc_ident.rs lower_synth_proc) spelled back ; the definition skipped"
+    );
+    assert_eq!(
+        count("R7", "// self.cur_span\nfn f() {}"),
+        0,
+        "R7 a comment"
+    );
+    let unbal = table_of(
+        "frames_body.rs",
+        "impl E { fn g(&mut self) { let t = self.wext_body_enter(); } fn h(&mut self) { let t = s.wext_body_enter_keep(); s.wext_body_exit(t); } }",
+    );
+    let bal = body_balance(&unbal);
+    assert_eq!(
+        bal.get(&("frames_body.rs".to_string(), "g".to_string())),
+        Some(&1),
+        "H7 planted: a body root entered and never left"
+    );
+    assert_eq!(
+        bal.get(&("frames_body.rs".to_string(), "h".to_string())),
+        Some(&0),
+        "H7 a keep-form root with its exit balances"
+    );
+    assert_eq!(
+        h7c3("impl E { fn inline_task_body(&mut self, b: &mut B, body: &ast::Stmt) { self.wext_located(|s| { s.lower_stmt(b, body); }); } }"),
+        vec!["H7:wext_located@inline_task_body".to_string()],
+        "H7 real site (inline_task.rs inline_task_body, a callee entry) spelled back"
+    );
+    // H14 (Q-WEXTPOS C3): every `lower_stmt (` call, any receiver, masked or bare
+    let h14 = |src: &str| -> Vec<String> {
+        hits(src)
+            .into_iter()
+            .filter(|(r, _)| r.starts_with("H14:"))
+            .map(|(r, k)| format!("{r}@{k}"))
+            .collect()
+    };
+    assert_eq!(
+        h14("impl E { fn hoist_rhs_only(&mut self) { self.wext_unlocated(|s| s.lower_stmt(b, &synth)); self.lower_stmt(b, &x); } }"),
+        vec![
+            "H14:lower_stmt:masked@hoist_rhs_only".to_string(),
+            "H14:lower_stmt:bare@hoist_rhs_only".to_string()
+        ],
+        "H14 planted: a bare call added to a class-S fn (PLAN §6) is a `bare` row there"
+    );
+    assert_eq!(
+        h14("impl E { fn new_lowering(&mut self) { e.lower_stmt(b, x); } }"),
+        vec!["H14:lower_stmt:bare@new_lowering".to_string()],
+        "H14 planted: an unlisted new call, another receiver (premise judge 3 line 10)"
+    );
+    assert_eq!(
+        h14("impl E { fn f(&mut self) { self.wext_unlocated(|s| s.foo()); self.lower_stmt(b, x); self.lower_stmt_inner(b, x); } \
+             fn lower_stmt(&mut self) {} }\n// self.lower_stmt(b, x);"),
+        vec!["H14:lower_stmt:bare@f".to_string()],
+        "H14: masked only inside the mask's argument group ; another name, a definition, a comment not counted"
+    );
+    assert_eq!(
+        h14("impl E { fn synth_cover_sample_explicit(&mut self) { for s in &stmts { self.wext_unlocated(|e| e.lower_stmt(b, s)); } } }"),
+        vec!["H14:lower_stmt:masked@synth_cover_sample_explicit".to_string()],
+        "H14 real site (cover.rs synth_cover_sample_explicit) spelled back"
+    );
+    // H14 / P2: the process root zeroing the mask (PLAN's original V6 at stmt_flow.rs:471)
+    let zero = table_of(
+        "stmt_flow.rs",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter(); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+    );
+    assert_eq!(
+        floor_rule(&zero),
+        vec![
+            "lower_proc_block zeroes the mask (wext_body_enter)".to_string(),
+            "lower_proc_block has no keep-form body root".to_string()
+        ],
+        "H14 / P2 planted: the process root's floor zeroes the mask"
+    );
+    let keep = table_of(
+        "stmt_flow.rs",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter_keep(); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+    );
+    assert!(
+        floor_rule(&keep).is_empty(),
+        "H14 / P2 real site (stmt_flow.rs lower_proc_block) spelled back"
+    );
+}
+
+/// H14 (§5.2 Q-WEXTPOS C3): (rule, file, fn, count, class, why) — every `lower_stmt (`
+/// call, any receiver, per (file, fn): class R lowers a statement the PARSER built, with the
+/// span the parser gave it — its own text, or for the parser-built `$enum_name$<T>` body the
+/// first `.name()` call's path (premise judge 2, F-A) — (bare), class S a statement vita
+/// built whole (inside `wext_unlocated`). PLAN
+/// B7's 47 calls: R 27, S 19, MIXED 1 (`stmt_main.rs`'s `iff` guard shell, R by premise
+/// judge 3 line 1: its own lowering pushes no store, the parsed body inside records).
+#[rustfmt::skip]
+const H14: &[(&str, &str, &str, usize, &str, &str)] = &[
+    ("H14:lower_stmt:bare", "case_inside.rs", "lower_case_inside_body", 2, "R", "a `case inside` arm's parsed body"),
+    ("H14:lower_stmt:bare", "class_lower.rs", "lower_class_method_body", 1, "R", "a class method's parsed body (under its floor)"),
+    ("H14:lower_stmt:bare", "dead_arm.rs", "lower_if_arm", 2, "R", "an `if` arm's parsed body"),
+    ("H14:lower_stmt:bare", "frames_body.rs", "lower_frame_body_stmt", 2, "R", "a frame's body (parsed, or the parser's `$enum_name$` body: F-A)"),
+    ("H14:lower_stmt:bare", "inline_task.rs", "inline_task_body", 2, "R", "an inlined task's parsed body (callee entry, located again)"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_case", 2, "R", "a `case` arm / default's parsed body"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_for", 3, "R", "a `for` loop's parsed initializer, body and step"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_forever", 1, "R", "a `forever` (or self-timed `always`) parsed body"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_proc_block", 1, "R", "a procedural block's parsed body (under the process root's floor)"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_repeat", 2, "R", "a `repeat` / `do while` parsed body"),
+    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_while", 1, "R", "a `while` parsed body"),
+    ("H14:lower_stmt:bare", "stmt_main.rs", "lower_stmt_inner", 9, "R", "a block's / `if`'s / wait's / fork's parsed children ; the `iff` guard shell (MIXED, R: premise judge 3 line 1)"),
+    ("H14:lower_stmt:masked", "cover.rs", "synth_cover_sample", 1, "S", "a covergroup sampler's gated bitmap store"),
+    ("H14:lower_stmt:masked", "cover.rs", "synth_cover_sample_explicit", 2, "S", "a covergroup's explicit sample statements"),
+    ("H14:lower_stmt:masked", "cover.rs", "synth_cross_sample", 1, "S", "a cross's bitmap store"),
+    ("H14:lower_stmt:masked", "dynarr.rs", "dyn_blocking_special", 3, "S", "a dyn-array capture temp, its clear and its element stores"),
+    ("H14:lower_stmt:masked", "dynarr.rs", "hoist_dyn_pattern_actuals", 1, "S", "a dyn temp's element stores"),
+    ("H14:lower_stmt:masked", "events.rs", "lower_intra_event_assign", 1, "S", "an intra-assignment event's built wait"),
+    ("H14:lower_stmt:masked", "events.rs", "lower_intra_event_nba", 1, "S", "an intra-assignment event's built wait (NBA)"),
+    ("H14:lower_stmt:masked", "frames_body.rs", "emit_frame_local_inits", 2, "S", "a frame local's built initializer / its pre-store"),
+    ("H14:lower_stmt:masked", "frames_body.rs", "emit_per_entry_block_inits", 3, "S", "a block local's built re-initializer, clear and element stores"),
+    ("H14:lower_stmt:masked", "frames_call/emit.rs", "emit_frame_task_call", 1, "S", "a frame call's built unpack into a local"),
+    ("H14:lower_stmt:masked", "frames_static_init.rs", "emit_static_decl_inits", 1, "S", "a static local's built initializer"),
+    ("H14:lower_stmt:masked", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "S", "a hoisted call's temporary"),
+    ("H14:lower_stmt:masked", "hoist/special.rs", "hoist_rhs_only", 1, "S", "a hoisted rhs's temporary"),
+];
+
+/// The process root's floor (premise judge round 1, line 1 ; P2): `lower_proc_block` is
+/// reached under `lower_synth_proc`'s mask, so its body root must KEEP the mask depth
+/// (`wext_body_enter_keep`), never zero it (`wext_body_enter`, PLAN's original V6 there,
+/// premise P-1). The violations of that in a census table.
+fn floor_rule(tab: &Table) -> Vec<String> {
+    let at = |r: &str| {
+        tab.get(&(
+            r.to_string(),
+            "stmt_flow.rs".to_string(),
+            "lower_proc_block".to_string(),
+        ))
+        .copied()
+        .unwrap_or(0)
+    };
+    let mut v = Vec::new();
+    if at("H7:wext_body_enter") != 0 {
+        v.push("lower_proc_block zeroes the mask (wext_body_enter)".to_string());
+    }
+    if at("H7:wext_body_enter_keep") != 1 {
+        v.push("lower_proc_block has no keep-form body root".to_string());
+    }
+    v
 }
 
 /// H1: (rule, file, fn, count, why) — the append points.
@@ -1603,6 +1886,17 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:record_geom", "array_geom.rs", "flatten_word", 1, "the flat-offset tree's constant"),
     ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
     ("H7:record_row_at", "proc_ident.rs", "push_cont_assign", 1, "each continuous row's own position, pushed beside the row (Q-WEXTPOS C2)"),
+    ("H7:record_stmt_at:s.span()", "stmt_main.rs", "lower_stmt", 1, "a statement's own position: the fn's own parameter's span, at its one exit (Q-WEXTPOS C3, never `cur_span`)"),
+    ("H7:wext_body_enter", "class_lower.rs", "lower_class_method_body", 1, "the method body's floor: save, set 0 (the callee entry of a method), restore"),
+    ("H7:wext_body_enter", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "a function body's floor: save, set 0, restore"),
+    ("H7:wext_body_enter", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "a task body's floor: save, set 0, restore"),
+    ("H7:wext_body_enter_keep", "stmt_flow.rs", "lower_proc_block", 1, "the process root's floor: save and restore, the mask KEPT (premise judge line 1)"),
+    ("H7:wext_body_exit", "class_lower.rs", "lower_class_method_body", 1, "its floor's exit"),
+    ("H7:wext_body_exit", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "its floor's exit"),
+    ("H7:wext_body_exit", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "its floor's exit"),
+    ("H7:wext_body_exit", "stmt_flow.rs", "lower_proc_block", 1, "its floor's exit"),
+    ("H7:wext_located", "frames_body.rs", "lower_frame_body_stmt", 1, "a callee entry: save, set 0, restore"),
+    ("H7:wext_located", "inline_task.rs", "inline_task_body", 1, "a callee entry: save, set 0, restore (no floor: a copy-in belongs to the call)"),
     ("H7:wext_rec", "wext.rs", "build_write_view", 2, "taken once into the view ; then marked built (the funnel's debug order check)"),
     ("H7:wext_rec", "wext.rs", "carry_geom", 2, "the geometry writer (read base, insert)"),
     ("H7:wext_rec", "wext.rs", "patch_expr", 2, "the patch funnel: its debug order check and the stand-down's setter"),
@@ -1612,6 +1906,26 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:wext_rec", "wext.rs", "record_row_at", 1, "the row position writer (Q-WEXTPOS C2)"),
     ("H7:wext_rec", "wext.rs", "record_via", 1, "the via writer"),
     ("H7:wext_rec", "wext.rs", "register_provisional_const", 1, "the stand-down's registration"),
+    ("H7:wext_rec", "wext.rs", "record_stmt_at", 2, "the statement position writer: the mask read, the interval (Q-WEXTPOS C3)"),
+    ("H7:wext_rec", "wext.rs", "wext_body_enter", 2, "a body root: open count, mask saved and set 0"),
+    ("H7:wext_rec", "wext.rs", "wext_body_enter_keep", 2, "the process root: open count, mask saved and kept"),
+    ("H7:wext_rec", "wext.rs", "wext_body_exit", 3, "a body root's exit: open count, mask restored, the floor"),
+    ("H7:wext_rec", "wext.rs", "wext_located", 2, "a callee entry: mask saved and set 0, restored"),
+    ("H7:wext_rec", "wext.rs", "wext_unlocated", 2, "the mask: up, down"),
+    ("H7:wext_unlocated", "cover.rs", "synth_cover_sample", 1, "S (H14)"),
+    ("H7:wext_unlocated", "cover.rs", "synth_cover_sample_explicit", 2, "S (H14)"),
+    ("H7:wext_unlocated", "cover.rs", "synth_cross_sample", 1, "S (H14)"),
+    ("H7:wext_unlocated", "dynarr.rs", "dyn_blocking_special", 3, "S (H14)"),
+    ("H7:wext_unlocated", "dynarr.rs", "hoist_dyn_pattern_actuals", 1, "S (H14)"),
+    ("H7:wext_unlocated", "events.rs", "lower_intra_event_assign", 1, "S (H14)"),
+    ("H7:wext_unlocated", "events.rs", "lower_intra_event_nba", 1, "S (H14)"),
+    ("H7:wext_unlocated", "frames_body.rs", "emit_frame_local_inits", 2, "S (H14)"),
+    ("H7:wext_unlocated", "frames_body.rs", "emit_per_entry_block_inits", 3, "S (H14)"),
+    ("H7:wext_unlocated", "frames_call/emit.rs", "emit_frame_task_call", 1, "S (H14)"),
+    ("H7:wext_unlocated", "frames_static_init.rs", "emit_static_decl_inits", 1, "S (H14)"),
+    ("H7:wext_unlocated", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "S (H14)"),
+    ("H7:wext_unlocated", "hoist/special.rs", "hoist_rhs_only", 1, "S (H14)"),
+    ("H7:wext_unlocated", "proc_ident.rs", "lower_synth_proc", 1, "a synthesized body (var_init, sva and its action blocks, cover, clocking, the module-level assert wrapper)"),
 ];
 
 /// H13: (rule, file, fn, count, why) — each continuous append call's `at` as spelled (PLAN O8).

@@ -815,7 +815,7 @@ impl Elaborator<'_> {
                     rhs: packed_read,
                     span: sp,
                 };
-                self.lower_stmt(b, &stmt);
+                self.wext_unlocated(|s| s.lower_stmt(b, &stmt));
             }
             self.gate_ref_unpack(fid, *slot, s0); // ENG-2 B2 (`read_set.rs`)
         }

@@ -352,7 +352,7 @@ impl Elaborator<'_> {
                 },
                 span: e.span,
             };
-            self.lower_stmt(b, &synth);
+            self.wext_unlocated(|s| s.lower_stmt(b, &synth));
             return ident_expr(tmp_name, e.span);
         }
         let children: Vec<ast::Expr> = shape_children(e)

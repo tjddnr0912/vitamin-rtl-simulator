@@ -26,7 +26,7 @@ impl LogSink for CollectSink {
     }
 }
 // ── tiny AST builders ──
-const SP: ast::Span = ast::Span { lo: 0, hi: 0 };
+const SP: ast::Span = ast::Span { lo: 0, hi: 1 };
 
 fn ident(name: &str) -> ast::Ident {
     ast::Ident {

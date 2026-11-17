@@ -335,7 +335,7 @@ impl Elaborator<'_> {
                 span: sp,
                 assertion: None,
             };
-            self.lower_stmt(b, &set);
+            self.wext_unlocated(|s| s.lower_stmt(b, &set));
         }
     }
 
@@ -380,7 +380,7 @@ impl Elaborator<'_> {
                     span: sp,
                     assertion: None,
                 };
-                self.lower_stmt(b, &gated);
+                self.wext_unlocated(|s| s.lower_stmt(b, &gated));
                 continue;
             }
             let val = self.lower_expr(&t.expr);
@@ -494,10 +494,10 @@ impl Elaborator<'_> {
                 span: sp,
                 assertion: None,
             };
-            self.lower_stmt(b, &wrapped);
+            self.wext_unlocated(|s| s.lower_stmt(b, &wrapped));
         } else {
             for s in &stmts {
-                self.lower_stmt(b, s);
+                self.wext_unlocated(|e| e.lower_stmt(b, s));
             }
         }
     }

@@ -198,7 +198,7 @@ impl Elaborator<'_> {
                 span: a.span,
             };
             for st in &self.dyn_decl_init_stmts(&id, ir::NetKind::DynArray, &elems) {
-                self.lower_stmt(b, st);
+                self.wext_unlocated(|s| s.lower_stmt(b, st));
             }
             out.push(ast::Expr {
                 kind: ast::ExprKind::Ident(ast::HierPath {
@@ -622,7 +622,7 @@ impl Elaborator<'_> {
                                 rhs: e.clone(),
                                 span: e.span,
                             };
-                            self.lower_stmt(b, &cap);
+                            self.wext_unlocated(|s| s.lower_stmt(b, &cap));
                             snap.push(ast::Expr {
                                 kind: ast::ExprKind::Ident(ast::HierPath {
                                     segments: vec![tname],
@@ -647,10 +647,10 @@ impl Elaborator<'_> {
                         args: vec![],
                         span: rhs.span,
                     };
-                    self.lower_stmt(b, &clear);
+                    self.wext_unlocated(|s| s.lower_stmt(b, &clear));
                 }
                 for st in &self.dyn_decl_init_stmts(&id, kind, &elems) {
-                    self.lower_stmt(b, st);
+                    self.wext_unlocated(|s| s.lower_stmt(b, st));
                 }
                 true
             }

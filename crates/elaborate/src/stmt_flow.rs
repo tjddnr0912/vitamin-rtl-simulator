@@ -469,6 +469,10 @@ impl Elaborator<'_> {
         // `const_level_header.rs`: a header level list naming a constant also runs at t0.
         let sensitivity = self.proc_sensitivity(p, lane, user_written, desugared.is_some());
         let mut b = ProcessBuilder::new(); // entry block #0 open
+
+        // §5.2 Q-WEXTPOS C3: the process root's floor ; the mask depth is KEPT (a
+        // synthesized body is lowered under `lower_synth_proc`'s mask, `wext.rs`).
+        let wext_tok = self.wext_body_enter_keep();
         if bare_always_self_timed && stmt_has_timing(&p.body) {
             // Implicit `forever { body }` so the process re-arms on its own #/@.
             self.lower_forever(&mut b, &p.body);
@@ -476,6 +480,7 @@ impl Elaborator<'_> {
             self.lower_stmt(&mut b, &p.body); // recursive body lowering
         }
         let (body, entry) = b.finish(); // seals trailing block with Return
+        self.wext_body_exit(wext_tok);
 
         // Implicit-sensitivity inference for `@*` / `always_comb` / `always_latch`:
         // lower_sensitivity leaves these `Comb`/`Latch` with EMPTY edges. Infer the
