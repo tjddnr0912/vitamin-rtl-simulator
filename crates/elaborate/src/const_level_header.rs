@@ -296,6 +296,8 @@ impl Elaborator<'_> {
             },
             T0_PULSE_KIND,
             None,
+            // §5.2 Q-WEXTPOS C2: a synthesized net no write-view reader prints.
+            None,
         );
         self.t0_pulse = Some(net);
         net

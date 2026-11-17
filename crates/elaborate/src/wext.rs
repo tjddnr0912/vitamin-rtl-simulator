@@ -192,6 +192,27 @@
 //! ENG-2's `rs.stmts` (`read_set.rs`) keeps a per-statement mark for the read set
 //! (another purpose: its task mark covers the body, not the copy-in / copy-out, and its
 //! action mark both assertion kinds); not read here.
+//!
+//! EACH WRITE'S OWN POSITION (§5.2 Q-WEXTPOS, unit C2: continuous rows). `Write::at` is
+//! the raw source span (`ast::Span`, a byte range of the preprocessed text; no file, line
+//! or column is kept here) of the text that writes, or `None`. A continuous row takes the
+//! span its producer passes to `push_cont_assign` as `at`, recorded by `record_row_at`
+//! into `row_at` (lockstep with `cont_assigns`, checked at the build in a debug run). The
+//! positive set is the two kinds a reader prints: an `assign` row is its own
+//! assignment's target `lv.span()` (`netdecl.rs` `elaborate_cont_assign`, one row per
+//! assignment of a list or per gate terminal; `cont_array.rs` `cont_assign_whole_array`,
+//! every element row of one whole-array `assign` its one target), a `port` row the port
+//! connection in the parent's instantiation (`conn.span`: a named connection from its
+//! `.`, a positional one its expression) and `None` for a `.*` connection (its expression
+//! is synthesized and stamped with the child module's name, which is not the write's
+//! text). The kinds no reader prints carry `None`: `net_init` (`var_init.rs`), the
+//! level-select net (`events.rs`) and the time-0 pulse (`const_level_header.rs`). A
+//! procedural write carries `None` until unit C3 records statements. `at` is not
+//! `ca_idents`' span (`push_cont_assign`'s `span`, the profile identity: the statement for
+//! an `assign`), which is kept as it was. The dump prints one last field per `W` line,
+//! ` at=<lo>` (the decimal byte offset) or ` at=-`. REVIEW-ONLY: that the spelled argument
+//! is the right node's on a form with no pin (`wext_view.rs` pins `lc(src, lo)` per form;
+//! `wext_home.rs` H13 counts each caller's spelling).
 
 use super::*;
 
@@ -310,6 +331,9 @@ pub(crate) struct WextRecords {
     decls: Vec<Option<DeclFact>>,
     /// `(via, start, end)` statement-id intervals (`record_via`).
     vias: Vec<(Via, u32, u32)>,
+    /// Per continuous row, its write's own position (`record_row_at`; lockstep with
+    /// `cont_assigns`).
+    row_at: Vec<Option<ast::Span>>,
     /// The elaboration held a provisional constant (THE STAND-DOWN; `note_provisional`,
     /// `note_patch`).
     provisional: bool,
@@ -406,6 +430,8 @@ pub struct Write {
     /// The chunk's net id as the IR has it (`Poison` when it is not a net).
     pub net: u32,
     pub extent: Extent,
+    /// The write's own source position (module head, C2), raw; `None` when unrecorded.
+    pub at: Option<ast::Span>,
 }
 
 /// The view: every write site, in the order the module head names, and the declaration
@@ -438,6 +464,8 @@ pub(crate) struct WextSource<'a> {
     pub(crate) funcs: &'a [ir::FuncDef],
     pub(crate) geom: &'a std::collections::HashMap<u32, u32>,
     pub(crate) vias: &'a [(Via, u32, u32)],
+    /// Per continuous row, `Write::at` (`WextRecords::row_at`).
+    pub(crate) row_at: &'a [Option<ast::Span>],
     /// THE STAND-DOWN's flag (`WextRecords::provisional`).
     pub(crate) provisional: bool,
 }
@@ -447,6 +475,11 @@ impl Elaborator<'_> {
     /// own arrays, kept for `Sidecars::write_view`.
     pub(crate) fn build_write_view(&mut self) {
         let rec = std::mem::take(&mut self.wext_rec);
+        debug_assert_eq!(
+            rec.row_at.len(),
+            self.cont_assigns.len(),
+            "§5.2 Q-WEXTPOS: row_at must stay lockstep with cont_assigns"
+        );
         let mut view = build_view(&WextSource {
             nets: &self.nets,
             exprs: &self.exprs,
@@ -460,6 +493,7 @@ impl Elaborator<'_> {
             funcs: &self.funcs,
             geom: &rec.geom,
             vias: &rec.vias,
+            row_at: &rec.row_at,
             provisional: rec.provisional,
         });
         view.decls = rec.decls;
@@ -552,6 +586,12 @@ impl Elaborator<'_> {
         });
     }
 
+    /// The continuous row's position writer (module head, C2): one entry per row, pushed
+    /// by `push_cont_assign` beside the row.
+    pub(crate) fn record_row_at(&mut self, at: Option<ast::Span>) {
+        self.wext_rec.row_at.push(at);
+    }
+
     /// The statement-id interval's writer (module head, A2): `[start, stmts.len())`.
     pub(crate) fn record_via(&mut self, via: Via, start: usize) {
         let end = self.stmts.len();
@@ -584,26 +624,29 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
     }
     let via = |sid: u32| via_of.get(sid as usize).copied().unwrap_or(Via::Direct);
     let mut writes = Vec::new();
-    let mut add = |writer: Writer, form: Form, stmt: Option<u32>, lv: &ir::Lvalue| {
-        for (k, c) in lv.chunks.iter().enumerate() {
-            writes.push(Write {
-                writer,
-                form,
-                stmt,
-                via: stmt.map(via),
-                chunk: k as u32,
-                net: c.net,
-                extent: chunk_extent(ctx, s.geom, s.provisional, c),
-            });
-        }
-    };
+    let mut add =
+        |writer: Writer, form: Form, stmt: Option<u32>, at: Option<ast::Span>, lv: &ir::Lvalue| {
+            for (k, c) in lv.chunks.iter().enumerate() {
+                writes.push(Write {
+                    writer,
+                    form,
+                    stmt,
+                    via: stmt.map(via),
+                    chunk: k as u32,
+                    net: c.net,
+                    extent: chunk_extent(ctx, s.geom, s.provisional, c),
+                    at,
+                });
+            }
+        };
     for (row, ca) in s.cont_assigns.iter().enumerate() {
         let kind = s.ca_idents.get(row).map_or("", |id| id.kind);
         let w = Writer::Cont {
             row: row as u32,
             kind,
         };
-        add(w, Form::Continuous, None, &ca.lhs);
+        let at = s.row_at.get(row).copied().flatten();
+        add(w, Form::Continuous, None, at, &ca.lhs);
     }
     for (pid, p) in s.processes.iter().enumerate() {
         let kind = s.proc_idents.get(pid).map_or("", |id| id.kind);
@@ -614,7 +657,7 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         for bb in &p.body {
             for &sid in &bb.stmts {
                 if let Some((form, lv)) = store_of(s.stmts, sid) {
-                    add(w, form, Some(sid), lv);
+                    add(w, form, Some(sid), None, lv);
                 }
             }
         }
@@ -627,7 +670,7 @@ pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
         for b in frame_blocks(s.blocks, fd.entry) {
             for &sid in &s.blocks[b as usize].stmts {
                 if let Some((form, lv)) = store_of(s.stmts, sid) {
-                    add(w, form, Some(sid), lv);
+                    add(w, form, Some(sid), None, lv);
                 }
             }
         }
@@ -816,9 +859,10 @@ impl WriteView {
                 Some(Via::TaskInline) => "task",
                 Some(Via::DeferAction) => "defer",
             };
+            let at = w.at.map_or("-".to_string(), |sp| sp.lo.to_string());
             let _ = writeln!(
                 out,
-                "W {who} {form} {sid} c{} {net} {ext} via={via}",
+                "W {who} {form} {sid} c{} {net} {ext} via={via} at={at}",
                 w.chunk
             );
         }
@@ -915,6 +959,7 @@ mod tests {
             funcs: &[],
             geom: &std::collections::HashMap::new(),
             vias: &[],
+            row_at: &[],
             provisional: false,
         });
         let ext: Vec<Extent> = v.writes.iter().map(|w| w.extent).collect();
@@ -1015,6 +1060,7 @@ mod tests {
                 funcs: &[],
                 geom: &std::collections::HashMap::new(),
                 vias: &[],
+                row_at: &[],
                 provisional,
             })
             .writes
@@ -1034,5 +1080,44 @@ mod tests {
         };
         assert_eq!(ext(false), vec![bit2, Extent::Word, whole8]);
         assert_eq!(ext(true), vec![Extent::Undecided, Extent::Word, whole8]);
+    }
+
+    /// EACH WRITE'S OWN POSITION (C2): row `r` takes `row_at[r]`, every chunk of a row
+    /// the same one; a row past the record is `None`.
+    #[test]
+    fn row_at_joins_each_row() {
+        let nets = vec![net(8), net(8)];
+        let two = ir::Lvalue {
+            chunks: vec![whole(0).chunks[0].clone(), whole(1).chunks[0].clone()],
+        };
+        let cas: Vec<ir::ContAssign> = [two, whole(0), whole(1)]
+            .into_iter()
+            .map(|lhs| ir::ContAssign {
+                lhs,
+                rhs: 0,
+                delay: None,
+            })
+            .collect();
+        let ids = vec![ProcIdent::default(); 3];
+        let row_at = vec![Some(ast::Span::new(7, 9)), None];
+        let v = build_view(&WextSource {
+            nets: &nets,
+            exprs: &[],
+            consts: &[],
+            cont_assigns: &cas,
+            ca_idents: &ids,
+            processes: &[],
+            proc_idents: &[],
+            stmts: &[],
+            blocks: &[],
+            funcs: &[],
+            geom: &std::collections::HashMap::new(),
+            vias: &[],
+            row_at: &row_at,
+            provisional: false,
+        });
+        let at: Vec<Option<u32>> = v.writes.iter().map(|w| w.at.map(|s| s.lo)).collect();
+        assert_eq!(at, vec![Some(7), Some(7), None, None]);
+        assert_eq!(v.writes[0].at, Some(ast::Span::new(7, 9)));
     }
 }

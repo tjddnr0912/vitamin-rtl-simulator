@@ -257,7 +257,9 @@ impl Elaborator<'_> {
                 }
             };
             // R14: every element row carries the statement's span — the source holds one
-            // `assign`, and the split into rows is vita's (see `wire_array_port`).
+            // `assign`, and the split into rows is vita's (see `wire_array_port`). The
+            // write's own position (§5.2 Q-WEXTPOS C2) is the one target `lv` every
+            // element row writes.
             self.push_cont_assign(
                 ir::ContAssign {
                     lhs,
@@ -266,6 +268,7 @@ impl Elaborator<'_> {
                 },
                 "assign",
                 Some(span),
+                Some(lv.span()),
             );
         }
         self.whole_array_cas.push(WholeArrayCa {

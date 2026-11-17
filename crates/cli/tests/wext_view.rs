@@ -27,6 +27,17 @@
 //! text (k2m, k2n, k2o quiet and legal, k1k the reach-loss witness, k2e m4's killer) also
 //! run the built `vita` and compare its whole stdout, stderr and exit code with PRE
 //! 86fa310d's (W/wextpos/ground/cells/<id>/pre.out, pre.err): this row moves no text.
+//!
+//! §5.2 Q-WEXTPOS C2, EACH WRITE'S OWN POSITION (`wext.rs`): every `W` line ends with one
+//! field, ` at=<lo>` (the raw byte offset of the write's own text in the pin's source, which
+//! is not preprocessed) or ` at=-`. The pins above C2 were re-taken by that rule only (each
+//! changed line = the old line + the field). The `wb_` pins are the continuous rows'
+//! positive set (`assign`, `port`) and the kinds that carry none: each expected text is
+//! PRE's dump (W/wextpos/ground2/cells/<id>/dump.out, or W/wextpos/build/cells/<id> for a
+//! cell first dumped in C2, its `@` and `RESULT` dropped) + the field, and `rows_at` checks
+//! each recorded offset's `lc(src, lo)` and the text that starts there against the
+//! position written from the source by hand (and, for a port row, the `port@L:C` PRE's
+//! resolver printed for the same span). Statements print ` at=-` until C3.
 
 use diag::{LogEvent, LogSink};
 use std::collections::BTreeMap;
@@ -53,6 +64,36 @@ fn view(src: &str) -> String {
 fn pin(src: &str, want: &str) {
     let got = view(src);
     assert_eq!(got, want, "\n--- got ---\n{got}--- want ---\n{want}");
+}
+
+/// `line:col` (1-based, columns in bytes) of byte offset `lo` in `src`.
+fn lc(src: &str, lo: u32) -> String {
+    let lo = lo as usize;
+    let line = src[..lo].matches('\n').count() + 1;
+    let col = lo - src[..lo].rfind('\n').map_or(0, |n| n + 1) + 1;
+    format!("{line}:{col}")
+}
+
+/// For each `(writer, line:col, text)`: every `W` line of that writer has one `at=<lo>`,
+/// `lc(src, lo)` is `line:col` and the source text at `lo` starts with `text`.
+fn rows_at(src: &str, want: &[(&str, &str, &str)]) {
+    let dump = view(src);
+    for (who, at_lc, text) in want {
+        let ats: Vec<u32> = dump
+            .lines()
+            .filter(|l| l.starts_with(&format!("W {who} ")))
+            .map(|l| {
+                let (_, v) = l.rsplit_once(" at=").expect("an at field");
+                v.parse()
+                    .unwrap_or_else(|_| panic!("{who}: at={v} is not an offset"))
+            })
+            .collect();
+        assert!(!ats.is_empty(), "{who}: no W line");
+        for lo in ats {
+            assert_eq!(lc(src, lo), *at_lc, "{who}: at={lo}");
+            assert!(src[lo as usize..].starts_with(text), "{who}: text at {lo}");
+        }
+    }
 }
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -92,8 +133,8 @@ endmodule
 ",
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:t.v bits[5:2] via=-
-W P0:always_comb blk s0 c0 n0:t.v bits[3:0] via=direct
+W C0:assign cont - c0 n0:t.v bits[5:2] via=- at=49
+W P0:always_comb blk s0 c0 n0:t.v bits[3:0] via=direct at=-
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -118,12 +159,12 @@ endmodule
 ",
         "\
 WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
-W P0:always_ff nba s0 c0 n1:t.v bits[7:4] via=direct
-W P1:initial blk s1 c0 n2:t.w bits[7:0] via=direct
-W P1:initial force s2 c0 n3:t.r bits[7:0] via=direct
-W P1:initial release s3 c0 n3:t.r bits[7:0] via=direct
-W P1:initial force s4 c0 n1:t.v bits[7:0] via=direct
-W P1:initial release s5 c0 n1:t.v bits[7:0] via=direct
+W P0:always_ff nba s0 c0 n1:t.v bits[7:4] via=direct at=-
+W P1:initial blk s1 c0 n2:t.w bits[7:0] via=direct at=-
+W P1:initial force s2 c0 n3:t.r bits[7:0] via=direct at=-
+W P1:initial release s3 c0 n3:t.r bits[7:0] via=direct at=-
+W P1:initial force s4 c0 n1:t.v bits[7:0] via=direct at=-
+W P1:initial release s5 c0 n1:t.v bits[7:0] via=direct at=-
 N n1:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.r Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
@@ -143,9 +184,9 @@ endmodule
 ",
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n2:t.u.x bits[3:0] via=-
-W C1:port cont - c0 n0:t.v bits[3:0] via=-
-W C2:assign cont - c0 n3:t.u.y bits[3:0] via=-
+W C0:port cont - c0 n2:t.u.x bits[3:0] via=- at=124
+W C1:port cont - c0 n0:t.v bits[3:0] via=- at=131
+W C2:assign cont - c0 n3:t.u.y bits[3:0] via=- at=60
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.u.x Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
 N n3:t.u.y Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
@@ -167,9 +208,9 @@ endmodule
 ",
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:t.g bits[1:1] via=-
-W C1:net_init cont - c0 n4:t.w bits[3:0] via=-
-W P0:var_init blk s0 c0 n5:t.d bits[3:0] via=direct
+W C0:assign cont - c0 n2:t.g bits[1:1] via=- at=61
+W C1:net_init cont - c0 n4:t.w bits[3:0] via=- at=-
+W P0:var_init blk s0 c0 n5:t.d bits[3:0] via=direct at=-
 N n2:t.g Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n4:t.w Wire w=4 alen=1 dims=n decl=Module/Wire/Internal
 N n5:t.d Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -192,11 +233,11 @@ endmodule
 ",
         "\
 WEXT writes=5 bits=5 geo=0 word=0 undecided=0 poison=0
-W P0:always_comb blk s2 c0 n6:t.__taskarg_tk_x_6 bits[3:0] via=task
-W P0:always_comb blk s3 c0 n0:t.v bits[3:0] via=task
-W P1:always_comb blk s4 c0 n3:t.d bits[0:0] via=direct
-W F0:func:.t.fA blk s0 c0 n1:t.w bits[5:2] via=direct
-W F0:func:.t.fA blk s1 c0 n5:t.$func$fA.fA bits[0:0] via=direct
+W P0:always_comb blk s2 c0 n6:t.__taskarg_tk_x_6 bits[3:0] via=task at=-
+W P0:always_comb blk s3 c0 n0:t.v bits[3:0] via=task at=-
+W P1:always_comb blk s4 c0 n3:t.d bits[0:0] via=direct at=-
+W F0:func:.t.fA blk s0 c0 n1:t.w bits[5:2] via=direct at=-
+W F0:func:.t.fA blk s1 c0 n5:t.$func$fA.fA bits[0:0] via=direct at=-
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.d Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
@@ -221,12 +262,12 @@ endmodule
 ",
         "\
 WEXT writes=6 bits=2 geo=0 word=1 undecided=3 poison=0
-W P0:always_comb blk s0 c0 n0:t.m word via=direct
-W P1:always_comb blk s1 c0 n1:t.v undecided via=direct
-W P2:always_comb blk s2 c0 n5:t.__forvar_k_149 bits[31:0] via=direct
-W P2:always_comb blk s3 c0 n2:t.u undecided via=direct
-W P2:always_comb blk s4 c0 n5:t.__forvar_k_149 bits[31:0] via=direct
-W P3:initial blk s5 c0 n1:t.v undecided via=direct
+W P0:always_comb blk s0 c0 n0:t.m word via=direct at=-
+W P1:always_comb blk s1 c0 n1:t.v undecided via=direct at=-
+W P2:always_comb blk s2 c0 n5:t.__forvar_k_149 bits[31:0] via=direct at=-
+W P2:always_comb blk s3 c0 n2:t.u undecided via=direct at=-
+W P2:always_comb blk s4 c0 n5:t.__forvar_k_149 bits[31:0] via=direct at=-
+W P3:initial blk s5 c0 n1:t.v undecided via=direct at=-
 N n0:t.m Logic w=8 alen=4 dims=n decl=Module/Logic/Internal
 N n1:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.u Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
@@ -257,12 +298,12 @@ endmodule
 ",
         "\
 WEXT writes=6 bits=2 geo=2 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n2:t.v bits[0:0] via=-
-W C1:assign cont - c0 n3:t.x undecided via=-
-W C2:assign cont - c0 n2:t.v bits[1:1] via=-
-W C3:assign cont - c0 n3:t.x undecided via=-
-W P0:always_comb blk s0 c0 n0:t.p geo[15:8] via=direct
-W P1:always_comb blk s1 c0 n1:t.q geo[7:4] via=direct
+W C0:assign cont - c0 n2:t.v bits[0:0] via=- at=248
+W C1:assign cont - c0 n3:t.x undecided via=- at=272
+W C2:assign cont - c0 n2:t.v bits[1:1] via=- at=248
+W C3:assign cont - c0 n3:t.x undecided via=- at=272
+W P0:always_comb blk s0 c0 n0:t.p geo[15:8] via=direct at=-
+W P1:always_comb blk s1 c0 n1:t.q geo[7:4] via=direct at=-
 N n0:t.p Logic w=16 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.q Logic w=16 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -287,9 +328,9 @@ endmodule
 ",
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W P0:initial blk s0 c0 n3:t.u.v bits[3:0] via=direct
-W P0:initial blk s1 c0 n0:t.a bits[3:0] via=direct
-W P0:initial blk s1 c1 n1:t.b bits[1:0] via=direct
+W P0:initial blk s0 c0 n3:t.u.v bits[3:0] via=direct at=-
+W P0:initial blk s1 c0 n0:t.a bits[3:0] via=direct at=-
+W P0:initial blk s1 c1 n1:t.b bits[1:0] via=direct at=-
 N n0:t.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.b Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.u.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
@@ -315,11 +356,11 @@ endmodule
 ",
         "\
 WEXT writes=5 bits=5 geo=0 word=0 undecided=0 poison=0
-W P0:always_comb blk s4 c0 n3:t.d bits[0:0] via=direct
-W F0:func:.t.fB blk s0 c0 n0:t.v bits[1:0] via=direct
-W F0:func:.t.fB blk s1 c0 n0:t.v bits[3:2] via=direct
-W F0:func:.t.fB blk s2 c0 n5:t.$func$fB.fB bits[0:0] via=direct
-W F1:task:.t.tD blk s3 c0 n1:t.w bits[7:4] via=direct
+W P0:always_comb blk s4 c0 n3:t.d bits[0:0] via=direct at=-
+W F0:func:.t.fB blk s0 c0 n0:t.v bits[1:0] via=direct at=-
+W F0:func:.t.fB blk s1 c0 n0:t.v bits[3:2] via=direct at=-
+W F0:func:.t.fB blk s2 c0 n5:t.$func$fB.fB bits[0:0] via=direct at=-
+W F1:task:.t.tD blk s3 c0 n1:t.w bits[7:4] via=direct at=-
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.d Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
@@ -348,12 +389,12 @@ endmodule
 ",
         "\
 WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
-W P0:always_comb blk s5 c0 n3:t.d bits[0:0] via=direct
-W F0:func:.t.fI blk s0 c0 n6:t.$func$fI.fI bits[0:0] via=direct
-W F1:func:.t.fO blk s1 c0 n9:t.$func$fO.r bits[0:0] via=direct
-W F1:func:.t.fO blk s2 c0 n0:t.v bits[0:0] via=direct
-W F1:func:.t.fO blk s3 c0 n8:t.$func$fO.fO bits[0:0] via=direct
-W F2:task:.t.tW blk s4 c0 n1:t.w bits[3:0] via=direct
+W P0:always_comb blk s5 c0 n3:t.d bits[0:0] via=direct at=-
+W F0:func:.t.fI blk s0 c0 n6:t.$func$fI.fI bits[0:0] via=direct at=-
+W F1:func:.t.fO blk s1 c0 n9:t.$func$fO.r bits[0:0] via=direct at=-
+W F1:func:.t.fO blk s2 c0 n0:t.v bits[0:0] via=direct at=-
+W F1:func:.t.fO blk s3 c0 n8:t.$func$fO.fO bits[0:0] via=direct at=-
+W F2:task:.t.tW blk s4 c0 n1:t.w bits[3:0] via=direct at=-
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.d Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
@@ -378,8 +419,8 @@ endmodule
 ",
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W F0:task:.t.tA blk s0 c0 n0:t.w bits[7:4] via=direct
-W F1:task:.t.tB blk s1 c0 n0:t.w bits[3:0] via=direct
+W F0:task:.t.tA blk s0 c0 n0:t.w bits[7:4] via=direct at=-
+W F1:task:.t.tB blk s1 c0 n0:t.w bits[3:0] via=direct at=-
 N n0:t.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -411,16 +452,16 @@ endmodule
 ",
         "\
 WEXT writes=10 bits=0 geo=7 word=0 undecided=3 poison=0
-W C0:assign cont - c0 n2:t.a geo[15:8] via=-
-W C1:assign cont - c0 n3:t.b geo[23:16] via=-
-W C2:assign cont - c0 n4:t.c geo[15:8] via=-
-W C3:assign cont - c0 n5:t.d geo[23:20] via=-
-W C4:assign cont - c0 n6:t.e geo[21:18] via=-
-W C5:assign cont - c0 n7:t.f geo[19:12] via=-
-W C6:assign cont - c0 n8:t.g geo[19:17] via=-
-W C7:assign cont - c0 n9:t.h undecided via=-
-W C8:assign cont - c0 n10:t.k undecided via=-
-W P0:always_comb blk s0 c0 n11:t.m undecided via=direct
+W C0:assign cont - c0 n2:t.a geo[15:8] via=- at=292
+W C1:assign cont - c0 n3:t.b geo[23:16] via=- at=311
+W C2:assign cont - c0 n4:t.c geo[15:8] via=- at=330
+W C3:assign cont - c0 n5:t.d geo[23:20] via=- at=349
+W C4:assign cont - c0 n6:t.e geo[21:18] via=- at=376
+W C5:assign cont - c0 n7:t.f geo[19:12] via=- at=405
+W C6:assign cont - c0 n8:t.g geo[19:17] via=- at=429
+W C7:assign cont - c0 n9:t.h undecided via=- at=455
+W C8:assign cont - c0 n10:t.k undecided via=- at=474
+W P0:always_comb blk s0 c0 n11:t.m undecided via=direct at=-
 N n2:t.a Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.b Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 N n4:t.c Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
@@ -463,27 +504,27 @@ endmodule
 ",
         "\
 WEXT writes=21 bits=21 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n15:t.uu.i bits[3:0] via=-
-W C1:port cont - c0 n1:t.q bits[3:0] via=-
-W C2:port cont - c0 n4:t.w bits[3:0] via=-
-W C3:port cont - c0 n18:t.uu.io bits[3:0] via=-
-W C4:assign cont - c0 n16:t.uu.o bits[3:0] via=-
-W C5:assign cont - c0 n17:t.uu.w bits[3:0] via=-
-W C6:port cont - c0 n19:t.nn.a bits[3:0] via=-
-W C7:port cont - c0 n2:t.r bits[3:0] via=-
-W C8:port cont - c0 n21:t.pp.x bits[3:0] via=-
-W P0:always_comb blk s1 c0 n9:t.G[0].gv bits[1:0] via=direct
-W P1:always_comb blk s2 c0 n10:t.G[1].gv bits[1:0] via=direct
-W P2:always_comb blk s3 c0 n7:t.bl bits[3:0] via=direct
-W P3:initial blk s4 c0 n8:t.__forvar_j_754 bits[31:0] via=direct
-W P3:initial blk s5 c0 n6:t.k bits[31:0] via=direct
-W P3:initial blk s6 c0 n8:t.__forvar_j_754 bits[31:0] via=direct
-W P3:initial blk s7 c0 n13:t.__taskarg_tk_x_13 bits[3:0] via=task
-W P3:initial blk s8 c0 n14:t.$itask$tk$L.tl bits[3:0] via=task
-W P3:initial blk s9 c0 n3:t.y bits[3:0] via=direct
-W P4:always blk s10 c0 n20:t.nn.b bits[3:0] via=direct
-W P6:always_comb blk s12 c0 n22:t.pp.v bits[3:0] via=direct
-W F0:func:.t.f blk s0 c0 n12:t.$func$f.f bits[3:0] via=direct
+W C0:port cont - c0 n15:t.uu.i bits[3:0] via=- at=386
+W C1:port cont - c0 n1:t.q bits[3:0] via=- at=393
+W C2:port cont - c0 n4:t.w bits[3:0] via=- at=400
+W C3:port cont - c0 n18:t.uu.io bits[3:0] via=- at=407
+W C4:assign cont - c0 n16:t.uu.o bits[3:0] via=- at=94
+W C5:assign cont - c0 n17:t.uu.w bits[3:0] via=- at=108
+W C6:port cont - c0 n19:t.nn.a bits[3:0] via=- at=424
+W C7:port cont - c0 n2:t.r bits[3:0] via=- at=431
+W C8:port cont - c0 n21:t.pp.x bits[3:0] via=- at=446
+W P0:always_comb blk s1 c0 n9:t.G[0].gv bits[1:0] via=direct at=-
+W P1:always_comb blk s2 c0 n10:t.G[1].gv bits[1:0] via=direct at=-
+W P2:always_comb blk s3 c0 n7:t.bl bits[3:0] via=direct at=-
+W P3:initial blk s4 c0 n8:t.__forvar_j_754 bits[31:0] via=direct at=-
+W P3:initial blk s5 c0 n6:t.k bits[31:0] via=direct at=-
+W P3:initial blk s6 c0 n8:t.__forvar_j_754 bits[31:0] via=direct at=-
+W P3:initial blk s7 c0 n13:t.__taskarg_tk_x_13 bits[3:0] via=task at=-
+W P3:initial blk s8 c0 n14:t.$itask$tk$L.tl bits[3:0] via=task at=-
+W P3:initial blk s9 c0 n3:t.y bits[3:0] via=direct at=-
+W P4:always blk s10 c0 n20:t.nn.b bits[3:0] via=direct at=-
+W P6:always_comb blk s12 c0 n22:t.pp.v bits[3:0] via=direct at=-
+W F0:func:.t.f blk s0 c0 n12:t.$func$f.f bits[3:0] via=direct at=-
 N n1:t.q Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.r Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.y Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -537,25 +578,25 @@ endmodule
 ",
         "\
 WEXT writes=19 bits=19 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:t.a bits[3:0] via=-
-W P0:initial blk s0 c0 n0:t.v bits[3:0] via=direct
-W P0:initial blk s1 c0 n5:t.__taskarg_outer_x_5 bits[3:0] via=task
-W P0:initial blk s2 c0 n6:t.$itask$outer$L.cnt bits[31:0] via=task
-W P0:initial blk s3 c0 n7:t.$itask$outer$L.__taskarg_inner_x_7 bits[3:0] via=task
-W P0:initial blk s4 c0 n1:t.w bits[3:0] via=task
-W P0:initial blk s5 c0 n0:t.v bits[3:0] via=task
-W P0:initial blk s6 c0 n4:t.n bits[31:0] via=task
-W P0:initial blk s7 c0 n1:t.w bits[3:0] via=direct
-W P0:initial blk s9 c0 n5:t.__taskarg_outer_x_5 bits[3:0] via=defer
-W P0:initial blk s10 c0 n7:t.$itask$outer$L.__taskarg_inner_x_7 bits[3:0] via=defer
-W P0:initial blk s11 c0 n1:t.w bits[3:0] via=defer
-W P0:initial blk s12 c0 n0:t.v bits[3:0] via=defer
-W P0:initial blk s13 c0 n4:t.n bits[31:0] via=defer
-W P0:initial blk s15 c0 n3:t.z bits[3:0] via=defer
-W P0:initial blk s16 c0 n8:t.__taskarg_setz_x_8 bits[3:0] via=task
-W P0:initial blk s17 c0 n3:t.z bits[3:0] via=task
-W P0:initial blk s18 c0 n4:t.n bits[31:0] via=direct
-W F0:task:.t.u.ht blk s19 c0 n9:t.u.cv bits[3:0] via=direct
+W C0:assign cont - c0 n2:t.a bits[3:0] via=- at=333
+W P0:initial blk s0 c0 n0:t.v bits[3:0] via=direct at=-
+W P0:initial blk s1 c0 n5:t.__taskarg_outer_x_5 bits[3:0] via=task at=-
+W P0:initial blk s2 c0 n6:t.$itask$outer$L.cnt bits[31:0] via=task at=-
+W P0:initial blk s3 c0 n7:t.$itask$outer$L.__taskarg_inner_x_7 bits[3:0] via=task at=-
+W P0:initial blk s4 c0 n1:t.w bits[3:0] via=task at=-
+W P0:initial blk s5 c0 n0:t.v bits[3:0] via=task at=-
+W P0:initial blk s6 c0 n4:t.n bits[31:0] via=task at=-
+W P0:initial blk s7 c0 n1:t.w bits[3:0] via=direct at=-
+W P0:initial blk s9 c0 n5:t.__taskarg_outer_x_5 bits[3:0] via=defer at=-
+W P0:initial blk s10 c0 n7:t.$itask$outer$L.__taskarg_inner_x_7 bits[3:0] via=defer at=-
+W P0:initial blk s11 c0 n1:t.w bits[3:0] via=defer at=-
+W P0:initial blk s12 c0 n0:t.v bits[3:0] via=defer at=-
+W P0:initial blk s13 c0 n4:t.n bits[31:0] via=defer at=-
+W P0:initial blk s15 c0 n3:t.z bits[3:0] via=defer at=-
+W P0:initial blk s16 c0 n8:t.__taskarg_setz_x_8 bits[3:0] via=task at=-
+W P0:initial blk s17 c0 n3:t.z bits[3:0] via=task at=-
+W P0:initial blk s18 c0 n4:t.n bits[31:0] via=direct at=-
+W F0:task:.t.u.ht blk s19 c0 n9:t.u.cv bits[3:0] via=direct at=-
 N n0:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n2:t.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -585,9 +626,9 @@ endmodule
 ",
         "\
 WEXT writes=3 bits=0 geo=3 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n1:t.u.q geo[15:8] via=-
-W P0:initial blk s0 c0 n0:t.u.p geo[23:20] via=direct
-W P0:initial blk s1 c0 n1:t.u.q geo[23:16] via=direct
+W C0:assign cont - c0 n1:t.u.q geo[15:8] via=- at=144
+W P0:initial blk s0 c0 n0:t.u.p geo[23:20] via=direct at=-
+W P0:initial blk s1 c0 n1:t.u.q geo[23:16] via=direct at=-
 N n0:t.u.p Logic w=24 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.u.q Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -614,10 +655,10 @@ endmodule
 ",
         "\
 WEXT writes=4 bits=4 geo=0 word=0 undecided=0 poison=0
-W P0:initial blk s0 c0 n0:t.a bits[3:0] via=direct
-W P0:initial blk s4 c0 n1:t.v bits[3:0] via=defer
-W F0:func:.t.pf blk s2 c0 n4:t.$func$p::pf.y bits[3:0] via=direct
-W F0:func:.t.pf blk s3 c0 n3:t.$func$p::pf.pf bits[3:0] via=direct
+W P0:initial blk s0 c0 n0:t.a bits[3:0] via=direct at=-
+W P0:initial blk s4 c0 n1:t.v bits[3:0] via=defer at=-
+W F0:func:.t.pf blk s2 c0 n4:t.$func$p::pf.y bits[3:0] via=direct at=-
+W F0:func:.t.pf blk s3 c0 n3:t.$func$p::pf.pf bits[3:0] via=direct at=-
 N n0:t.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n3:t.$func$p::pf.pf Reg w=4 alen=1 dims=n decl=-
@@ -650,8 +691,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.x undecided via=-
-W P0:initial blk s0 c0 n0:top.x undecided via=direct
+W C0:assign cont - c0 n0:top.x undecided via=- at=83
+W P0:initial blk s0 c0 n0:top.x undecided via=direct at=-
 N n0:top.x Logic w=128 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -678,8 +719,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.x undecided via=-
-W P0:initial blk s0 c0 n0:top.x undecided via=direct
+W C0:assign cont - c0 n0:top.x undecided via=- at=83
+W P0:initial blk s0 c0 n0:top.x undecided via=direct at=-
 N n0:top.x Logic w=128 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -702,8 +743,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.y undecided via=-
-W P0:initial blk s0 c0 n0:top.y undecided via=direct
+W C0:assign cont - c0 n0:top.y undecided via=- at=78
+W P0:initial blk s0 c0 n0:top.y undecided via=direct at=-
 N n0:top.y Logic w=40 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -725,8 +766,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.x undecided via=-
-W P0:initial blk s0 c0 n0:top.x undecided via=direct
+W C0:assign cont - c0 n0:top.x undecided via=- at=88
+W P0:initial blk s0 c0 n0:top.x undecided via=direct at=-
 N n0:top.x Logic w=512 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -751,8 +792,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W P0:always_comb blk s0 c0 n0:top.y undecided via=direct
-W P1:always_comb blk s1 c0 n0:top.y undecided via=direct
+W P0:always_comb blk s0 c0 n0:top.y undecided via=direct at=-
+W P1:always_comb blk s1 c0 n0:top.y undecided via=direct at=-
 N n0:top.y Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -776,8 +817,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.y undecided via=-
-W P0:always_comb blk s0 c0 n0:top.y undecided via=direct
+W C0:assign cont - c0 n0:top.y undecided via=- at=78
+W P0:always_comb blk s0 c0 n0:top.y undecided via=direct at=-
 N n0:top.y Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -803,9 +844,9 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=1 geo=0 word=0 undecided=2 poison=0
-W C0:port cont - c0 n0:top.y undecided via=-
-W C1:assign cont - c0 n1:top.d.o bits[3:0] via=-
-W P0:always_comb blk s0 c0 n0:top.y undecided via=direct
+W C0:port cont - c0 n0:top.y undecided via=- at=138
+W C1:assign cont - c0 n1:top.d.o bits[3:0] via=- at=80
+W P0:always_comb blk s0 c0 n0:top.y undecided via=direct at=-
 N n0:top.y Logic w=32 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.d.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 ",
@@ -831,8 +872,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=0 undecided=2 poison=0
-W C0:assign cont - c0 n0:top.x undecided via=-
-W P0:initial blk s0 c0 n0:top.x undecided via=direct
+W C0:assign cont - c0 n0:top.x undecided via=- at=82
+W P0:initial blk s0 c0 n0:top.x undecided via=direct at=-
 N n0:top.x Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -857,9 +898,9 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n0:top.v bits[3:0] via=-
-W C1:assign cont - c0 n1:top.u.o bits[3:0] via=-
-W P0:always_comb blk s0 c0 n0:top.v bits[3:0] via=direct
+W C0:port cont - c0 n0:top.v bits[3:0] via=- at=117
+W C1:assign cont - c0 n1:top.u.o bits[3:0] via=- at=58
+W P0:always_comb blk s0 c0 n0:top.v bits[3:0] via=direct at=-
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.u.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 ",
@@ -887,8 +928,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=0 word=1 undecided=1 poison=0
-W P0:always_comb blk s0 c0 n0:top.m word via=direct
-W P1:always_comb blk s1 c0 n1:top.y undecided via=direct
+W P0:always_comb blk s0 c0 n0:top.m word via=direct at=-
+W P1:always_comb blk s1 c0 n1:top.y undecided via=direct at=-
 N n0:top.m Logic w=8 alen=4 dims=n decl=Module/Logic/Internal
 N n1:top.y Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -913,8 +954,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=0 geo=1 word=0 undecided=1 poison=0
-W C0:assign cont - c0 n0:top.x undecided via=-
-W P0:initial blk s0 c0 n0:top.x geo[65:64] via=direct
+W C0:assign cont - c0 n0:top.x undecided via=- at=89
+W P0:initial blk s0 c0 n0:top.x geo[65:64] via=direct at=-
 N n0:top.x Logic w=128 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -936,8 +977,8 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.y bits[4:4] via=-
-W P0:initial blk s0 c0 n0:top.y bits[4:4] via=direct
+W C0:assign cont - c0 n0:top.y bits[4:4] via=- at=84
+W P0:initial blk s0 c0 n0:top.y bits[4:4] via=direct at=-
 N n0:top.y Logic w=64 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -959,9 +1000,281 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.y bits[2:2] via=-
-W P0:initial blk s0 c0 n0:top.y bits[5:5] via=direct
+W C0:assign cont - c0 n0:top.y bits[2:2] via=- at=84
+W P0:initial blk s0 c0 n0:top.y bits[5:5] via=direct at=-
 N n0:top.y Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
+    );
+}
+
+/// A gate list (b3m): each gate's output terminal is its row's own position, not the
+/// statement's `and` (ca_idents' `assign@t.sv:3:3` for both rows on a resolver). Old output,
+/// not re-run: iverilog names the second gate's line, "t.sv:4".
+#[test]
+fn wb_gate_list() {
+    let src = r#"module top;
+  logic [3:0] v, w;
+  and g1(v[2], 1'b1, 1'b1),
+      g2(w[1], 1'b1, 1'b1);
+  initial begin w[1] = 1'b0; #1 $display("w=%b", w); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
+W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=41
+W C1:assign cont - c0 n1:top.w bits[1:1] via=- at=69
+W P0:initial blk s0 c0 n1:top.w bits[1:1] via=direct at=-
+N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    rows_at(
+        src,
+        &[("C0:assign", "3:10", "v[2]"), ("C1:assign", "4:10", "w[1]")],
+    );
+}
+
+/// An assignment list (b3): each assignment's target is its row's position (one statement, two
+/// columns).
+#[test]
+fn wb_assign_list() {
+    let src = r#"module top;
+  logic [3:0] v, w;
+  assign v[2] = 1'b1,       w[1] = 1'b1;
+  initial begin w[1] = 1'b0; #1 $display("w=%b", w); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
+W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=41
+W C1:assign cont - c0 n1:top.w bits[1:1] via=- at=60
+W P0:initial blk s0 c0 n1:top.w bits[1:1] via=direct at=-
+N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    rows_at(
+        src,
+        &[("C0:assign", "3:10", "v[2]"), ("C1:assign", "3:29", "w[1]")],
+    );
+}
+
+/// A `buf` with two outputs (c04): one row per output terminal, each at its own terminal.
+#[test]
+fn wb_buf_two() {
+    let src = r#"module top;
+  logic [3:0] v, w;
+  logic i = 1'b1;
+  buf b1(v[1], w[2], i);
+  initial begin w[2] = 1'b0; #1 $display("w=%b", w); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=4 bits=4 geo=0 word=0 undecided=0 poison=0
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=59
+W C1:assign cont - c0 n1:top.w bits[2:2] via=- at=65
+W P0:var_init blk s0 c0 n2:top.i bits[0:0] via=direct at=-
+W P1:initial blk s1 c0 n1:top.w bits[2:2] via=direct at=-
+N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.i Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    rows_at(
+        src,
+        &[("C0:assign", "4:10", "v[1]"), ("C1:assign", "4:16", "w[2]")],
+    );
+}
+
+/// A concatenation target (c05): one row, two chunks, both at the concatenation (the row's one
+/// target).
+#[test]
+fn wb_concat_target() {
+    let src = r#"module top;
+  logic [3:0] a, b;
+  assign {a[1], b[2]} = 2'b11;
+  initial begin b[2] = 1'b0; #1 $display("b=%b", b); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
+W C0:assign cont - c0 n0:top.a bits[1:1] via=- at=41
+W C0:assign cont - c1 n1:top.b bits[2:2] via=- at=41
+W P0:initial blk s0 c0 n1:top.b bits[2:2] via=direct at=-
+N n0:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    rows_at(src, &[("C0:assign", "3:10", "{a[1], b[2]}")]);
+}
+
+/// A named port connection under an instance array (q07): each port row at the connection's `.`
+/// in the parent (PRE's resolver printed the row identity `port@t.sv:2:39`, the same span) ;
+/// the child's `assign` at its target.
+#[test]
+fn wb_ports_one_line() {
+    let src = r#"module leaf(output logic [3:0] o); assign o = 4'h5; endmodule
+module mid; logic [3:0] v; leaf \l.1 (.o(v)); always_comb v[1] = 1'b0; endmodule
+module top; mid m[1:0] (); initial begin #1 $finish; end endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
+W C0:port cont - c0 n0:top.m[1].v bits[3:0] via=- at=100
+W C1:assign cont - c0 n1:top.m[1].\\l.1.o bits[3:0] via=- at=42
+W C2:port cont - c0 n2:top.m[0].v bits[3:0] via=- at=100
+W C3:assign cont - c0 n3:top.m[0].\\l.1.o bits[3:0] via=- at=42
+W P1:always_comb blk s1 c0 n0:top.m[1].v bits[1:1] via=direct at=-
+W P2:always_comb blk s2 c0 n2:top.m[0].v bits[1:1] via=direct at=-
+N n0:top.m[1].v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.m[1].\\l.1.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n2:top.m[0].v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.m[0].\\l.1.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "2:39", ".o(v)"),
+            ("C2:port", "2:39", ".o(v)"),
+            ("C1:assign", "1:43", "o = "),
+            ("C3:assign", "1:43", "o = "),
+        ],
+    );
+}
+
+/// A positional port connection (q08): the row at the connection expression (PRE's resolver:
+/// `port@t.sv:2:35`).
+#[test]
+fn wb_port_positional() {
+    let src = r#"module leaf(output logic [3:0] o); assign o = 4'h5; endmodule
+module top; logic [3:0] v; leaf l(v); always_comb v[1] = 1'b0; initial begin #1 $finish; end endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
+W C0:port cont - c0 n0:top.v bits[3:0] via=- at=96
+W C1:assign cont - c0 n1:top.l.o bits[3:0] via=- at=42
+W P0:always_comb blk s0 c0 n0:top.v bits[1:1] via=direct at=-
+N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.l.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[("C0:port", "2:35", "v);"), ("C1:assign", "1:43", "o = ")],
+    );
+}
+
+/// A `.*` connection: its rows have no text of their own (the synthesized expression carries
+/// the child module's name), `at=-` ; the child's `assign` at its target.
+#[test]
+fn wb_dotstar() {
+    let src = r#"module child(input logic [3:0] a, output logic [3:0] y);
+  assign y = a;
+endmodule
+module top;
+  logic [3:0] a = 4'h5;
+  logic [3:0] y;
+  child u(.*);
+  initial begin #1 $display("y=%h", y); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=4 bits=4 geo=0 word=0 undecided=0 poison=0
+W C0:port cont - c0 n2:top.u.a bits[3:0] via=- at=-
+W C1:port cont - c0 n1:top.y bits[3:0] via=- at=-
+W C2:assign cont - c0 n3:top.u.y bits[3:0] via=- at=66
+W P0:var_init blk s0 c0 n0:top.a bits[3:0] via=direct at=-
+N n0:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.y Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.u.a Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n3:top.u.y Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(src, &[("C2:assign", "2:10", "y = a")]);
+}
+
+/// The three continuous kinds no reader prints carry no position: a `wire` initializer
+/// (`net_init`), a level-select holder (`event_select`, `@(v[1])`) and the time-0 pulse
+/// (`t0_pulse`, `@(P)`).
+#[test]
+fn wb_net_init() {
+    let src = r#"module t;
+  parameter P = 1;
+  logic [3:0] v;
+  logic x, y;
+  wire [1:0] nw = 2'b01;
+  always @(v[1]) x = v[1];
+  always @(P) y = 1'b1;
+  initial begin v = 4'h2; #1 $display("%b %b %b", x, y, nw); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
+W C0:net_init cont - c0 n3:t.nw bits[1:0] via=- at=-
+W C1:event_select cont - c0 n4:t.$ia_tmp$4 bits[0:0] via=- at=-
+W C2:t0_pulse cont - c0 n5:t.$ia_tmp$5 bits[0:0] via=- at=-
+W P0:always blk s0 c0 n1:t.x bits[0:0] via=direct at=-
+W P1:always blk s1 c0 n2:t.y bits[0:0] via=direct at=-
+W P2:initial blk s2 c0 n0:t.v bits[3:0] via=direct at=-
+N n0:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n1:t.x Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n2:t.y Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n3:t.nw Wire w=2 alen=1 dims=n decl=Module/Wire/Internal
+N n4:t.$ia_tmp$4 Logic w=1 alen=1 dims=n decl=-
+N n5:t.$ia_tmp$5 Wire w=1 alen=1 dims=n decl=-
+",
+    );
+}
+
+/// A whole unpacked-array `assign` (`cont_array.rs`): both element rows (`word`) at the one
+/// target, and the row after them at its own target (a row the record skipped would shift it).
+#[test]
+fn wb_array_rows() {
+    let src = r#"module t;
+  logic [3:0] a [0:1];
+  logic [3:0] b [0:1];
+  logic [3:0] v;
+  assign a = b;
+  assign v[1] = 1'b1;
+  initial begin b[0] = 4'h1; b[1] = 4'h2; #1 $display("%h %h %b", a[0], a[1], v); $finish; end
+endmodule
+"#;
+    pin(
+        src,
+        "\
+WEXT writes=5 bits=1 geo=0 word=4 undecided=0 poison=0
+W C0:assign cont - c0 n0:t.a word via=- at=82
+W C1:assign cont - c0 n0:t.a word via=- at=82
+W C2:assign cont - c0 n2:t.v bits[1:1] via=- at=98
+W P0:initial blk s0 c0 n1:t.b word via=direct at=-
+W P0:initial blk s1 c0 n1:t.b word via=direct at=-
+N n0:t.a Logic w=4 alen=2 dims=n decl=Module/Logic/Internal
+N n1:t.b Logic w=4 alen=2 dims=n decl=Module/Logic/Internal
+N n2:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:assign", "5:10", "a = b"),
+            ("C1:assign", "5:10", "a = b"),
+            ("C2:assign", "6:10", "v[1]"),
+        ],
     );
 }

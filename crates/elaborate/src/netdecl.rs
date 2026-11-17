@@ -957,7 +957,9 @@ impl Elaborator<'_> {
                 self.ca_zero_scope.insert(idx);
             }
             // R14: `assign` — the user wrote it, so the identity is the
-            // statement's own span.
+            // statement's own span. The write's own position (§5.2 Q-WEXTPOS C2) is
+            // this assignment's target `lv` (a gate: its output terminal), not the
+            // statement, which a list or a gate list shares among its rows.
             self.push_cont_assign(
                 ir::ContAssign {
                     lhs,
@@ -966,6 +968,7 @@ impl Elaborator<'_> {
                 },
                 "assign",
                 Some(ca.span),
+                Some(lv.span()),
             );
             self.record_var_cont_assign(idx as usize, ca.span, calls, ca.from_gate);
         }

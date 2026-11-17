@@ -956,6 +956,8 @@ impl Elaborator<'_> {
             },
             LEVEL_SELECT_KIND,
             Some(e.span),
+            // §5.2 Q-WEXTPOS C2: a synthesized net no write-view reader prints.
+            None,
         );
         Some(net)
     }

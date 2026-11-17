@@ -172,6 +172,8 @@ impl Elaborator<'_> {
                 },
                 "net_init",
                 Some(name.name.span),
+                // §5.2 Q-WEXTPOS C2: a kind no write-view reader prints, so no position.
+                None,
             );
         }
     }

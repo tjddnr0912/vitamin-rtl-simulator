@@ -33,11 +33,17 @@ impl Elaborator<'_> {
     /// producers push continuous assigns (a user `assign`, a net-declaration
     /// initializer, three port-binding shapes, a `var_init` flush) and a
     /// per-site `ca_idents.push` next to each would be five chances to forget.
+    ///
+    /// `at` (§5.2 Q-WEXTPOS C2) is the write's OWN position for the write view
+    /// (`wext.rs`, EACH WRITE'S OWN POSITION), required so every producer chooses it:
+    /// the text that writes this row, or `None`. It is not `span` (the profile
+    /// identity), which is kept as it was.
     pub(crate) fn push_cont_assign(
         &mut self,
         ca: ir::ContAssign,
         kind: &'static str,
         span: Option<ast::Span>,
+        at: Option<ast::Span>,
     ) {
         let (file, line, col) = match span {
             Some(sp) => self.span_file_line_col(sp),
@@ -51,6 +57,7 @@ impl Elaborator<'_> {
             scope: self.cur_prefix.clone(),
         });
         self.cont_assigns.push(ca);
+        self.record_row_at(at);
         debug_assert_eq!(
             self.ca_idents.len(),
             self.cont_assigns.len(),
@@ -146,7 +153,10 @@ impl Elaborator<'_> {
     /// reports `("", 0, 0)` — the same honest "unlocated" a run with no span
     /// resolver gives. Aiming such a row at the nearest real token instead would
     /// be a location that does not survive being followed.
+    ///
+    /// The same span is the row's `at` (§5.2 Q-WEXTPOS C2): the connection is the text
+    /// that writes this hookup, and a `.*` row's `None` stays `None`.
     pub(crate) fn push_cont_assign_port(&mut self, ca: ir::ContAssign, span: Option<ast::Span>) {
-        self.push_cont_assign(ca, "port", span);
+        self.push_cont_assign(ca, "port", span, span);
     }
 }

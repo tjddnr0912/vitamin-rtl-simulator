@@ -37,7 +37,14 @@
 //!   the kernel's step on the recorded constant, not a second extent rule.
 //! - H7 (C2) the geometry constant: `record_geom (` in the two `flatten_word` twins,
 //!   `carry_geom (` at the two lowerings that add a constant to a flat offset, and the raw
-//!   store `. wext_rec` inside wext.rs's writers and `build_write_view` only.
+//!   store `. wext_rec` inside wext.rs's writers and `build_write_view` only. §5.2
+//!   Q-WEXTPOS C2: `record_row_at (` once, in `push_cont_assign` (each continuous row's
+//!   own position, pushed beside the row).
+//! - H13 (§5.2 Q-WEXTPOS C2) the `at` argument of every `push_cont_assign (` /
+//!   `push_cont_assign_port (` call (its last argument), as spelled inline, per (file, fn):
+//!   an `assign` row passes its own target `Some ( lv . span ( ) )`, a port row the
+//!   connection's span, the kinds no reader prints `None`. A new caller, or a spelling
+//!   that moves (a context's span, a span bound to a local first), fails here.
 //! - H8 (C2) the declaration fact: `record_decl_fact (` in its three writer fns, the
 //!   `DeclScope :: <V>` each `elaborate_netvar_decl` / `elaborate_ports` caller passes and
 //!   the `DeclSite :: <V>` each writer names, per (file, fn) ; and (R8) no `intro_kind` /
@@ -458,6 +465,29 @@ fn is_pattern(t: &[Tok], open: usize) -> bool {
     false
 }
 
+/// The last top-level argument of the call whose `(` is at `open`, its tokens joined with
+/// no space (a trailing comma ignored).
+fn last_arg(t: &[Tok], open: usize) -> String {
+    let close = close_of(t, open);
+    let mut args: Vec<String> = vec![String::new()];
+    let mut d = 0usize;
+    for x in &t[open + 1..close] {
+        if x.kind == Kind::P && matches!(x.text.as_str(), "(" | "[" | "{") {
+            d += 1;
+        } else if x.kind == Kind::P && matches!(x.text.as_str(), ")" | "]" | "}") {
+            d -= 1;
+        } else if d == 0 && x.text == "," {
+            args.push(String::new());
+            continue;
+        }
+        args.last_mut().expect("one arg").push_str(&x.text);
+    }
+    while args.len() > 1 && args.last().is_some_and(|a| a.is_empty()) {
+        args.pop();
+    }
+    args.pop().unwrap_or_default()
+}
+
 /// (rule, fn key) hits of one source.
 fn hits(src: &str) -> Vec<(String, String)> {
     let t = tokens(src);
@@ -570,7 +600,9 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "build_write_view" => out.push(("H3:build_write_view".into(), k.clone())),
                 "stmt_lvalue" => out.push(("H5:stmt_lvalue".into(), k.clone())),
                 "chunk_written_bits_at" => out.push(("H2:at".into(), k.clone())),
-                "record_geom" | "carry_geom" => out.push((format!("H7:{}", tx(i)), k.clone())),
+                "record_geom" | "carry_geom" | "record_row_at" => {
+                    out.push((format!("H7:{}", tx(i)), k.clone()))
+                }
                 "record_decl_fact" => out.push(("H8:record_decl_fact".into(), k.clone())),
                 "record_via" => out.push(("H9:record_via".into(), k.clone())),
                 "note_provisional" | "register_provisional_const" | "note_patch" => {
@@ -581,6 +613,14 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 }
                 _ => {}
             }
+        }
+        // H13 the `at` argument (the last one) of a continuous append call, spelled inline
+        if id
+            && matches!(tx(i), "push_cont_assign" | "push_cont_assign_port")
+            && tx(i + 1) == "("
+            && (i == 0 || tx(i - 1) != "fn")
+        {
+            out.push((format!("H13:{}:{}", tx(i), last_arg(&t, i + 1)), k.clone()));
         }
         if tx(i) == "." && tx(i + 1) == "wext" && tx(i + 2) != "(" {
             out.push(("H3:wext".into(), k.clone()));
@@ -701,6 +741,13 @@ fn h1b_the_in_place_writers() {
 #[test]
 fn h7_the_geometry_constant_home() {
     check("H7", H7);
+}
+
+/// H13 (§5.2 Q-WEXTPOS C2): each continuous append call's `at` argument as spelled, per
+/// (file, fn) — PLAN O8's table, the positive set being the reader's two kinds.
+#[test]
+fn h13_the_row_positions() {
+    check("H13", H13);
 }
 
 /// H11 (§5.2 Q-WEXTPOS C1): every in-place write of an `exprs` slot is the patch funnel's.
@@ -1150,6 +1197,56 @@ fn walker_controls() {
         vec![("H7:record_geom".to_string(), "g".to_string())],
         "H7 real site (array_geom.rs flatten_word) spelled back"
     );
+    // H7 (C2): the row position's writer call, not its definition
+    assert_eq!(
+        count(
+            "H7",
+            "fn record_row_at(&mut self) {} fn f(&mut self) { self.record_row_at(at); }"
+        ),
+        1,
+        "H7 record_row_at planted call, definition skipped"
+    );
+    assert_eq!(
+        hits("impl E { fn push_cont_assign(&mut self) { self.cont_assigns.push(ca); self.record_row_at(at); } }"),
+        vec![
+            ("H1:cont_assigns".to_string(), "push_cont_assign".to_string()),
+            ("H7:record_row_at".to_string(), "push_cont_assign".to_string())
+        ],
+        "H7 real site (proc_ident.rs push_cont_assign) spelled back"
+    );
+    // H13: PLAN §6's four planted spellings each move the table ; a definition is not a call
+    let h13 = |src: &str| -> Vec<String> {
+        hits(src)
+            .into_iter()
+            .filter(|(r, _)| r.starts_with("H13:"))
+            .map(|(r, k)| format!("{r}@{k}"))
+            .collect()
+    };
+    assert_eq!(
+        h13("impl E { fn elaborate_cont_assign(&mut self) { self.push_cont_assign(ir::ContAssign { lhs, rhs: rhs_id, delay }, \"assign\", Some(ca.span), Some(ca.span)); } }"),
+        vec!["H13:push_cont_assign:Some(ca.span)@elaborate_cont_assign".to_string()],
+        "H13 planted: netdecl back to the statement's span"
+    );
+    assert_eq!(
+        h13("impl E { fn wire_ports(&mut self) { self.push_cont_assign_port(ir::ContAssign { lhs, rhs, delay: None }, Some(module.name.span),); } }"),
+        vec!["H13:push_cont_assign_port:Some(module.name.span)@wire_ports".to_string()],
+        "H13 planted: a port site given the child module's name (trailing comma)"
+    );
+    assert_eq!(
+        h13("impl E { fn t0_pulse_net(&mut self) { self.push_cont_assign(ca, T0_PULSE_KIND, None, Some(e.span)); } }"),
+        vec!["H13:push_cont_assign:Some(e.span)@t0_pulse_net".to_string()],
+        "H13 planted: a None site given a span"
+    );
+    assert_eq!(
+        h13("impl E { fn elaborate_cont_assign(&mut self) { let at = Some(ca.span); self.push_cont_assign(ca, \"assign\", Some(ca.span), at); } }"),
+        vec!["H13:push_cont_assign:at@elaborate_cont_assign".to_string()],
+        "H13 planted: the span bound to a local first (J3 line 10)"
+    );
+    assert_eq!(
+        h13("impl E { fn push_cont_assign(&mut self, ca: C, kind: &str, span: S, at: S) {} fn push_cont_assign_port(&mut self) { self.push_cont_assign(ca, \"port\", span, span); } }"),
+        vec!["H13:push_cont_assign:span@push_cont_assign_port".to_string()],
+        "H13 real site (proc_ident.rs push_cont_assign_port) spelled back ; the definition skipped"
+    );
     // H8
     let h8 = "fn f(&mut self) { self.elaborate_netvar_decl(d, a, wext::DeclScope::Module); \
               self.record_decl_fact(n, Some(DeclSite::NonAnsiPort), k, dr, false); }";
@@ -1505,14 +1602,29 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:carry_geom", "packed_lval.rs", "try_nested_packed_part_lval", 1, "`base_off + l`: a part-select under an element (a struct member)"),
     ("H7:record_geom", "array_geom.rs", "flatten_word", 1, "the flat-offset tree's constant"),
     ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
+    ("H7:record_row_at", "proc_ident.rs", "push_cont_assign", 1, "each continuous row's own position, pushed beside the row (Q-WEXTPOS C2)"),
     ("H7:wext_rec", "wext.rs", "build_write_view", 2, "taken once into the view ; then marked built (the funnel's debug order check)"),
     ("H7:wext_rec", "wext.rs", "carry_geom", 2, "the geometry writer (read base, insert)"),
     ("H7:wext_rec", "wext.rs", "patch_expr", 2, "the patch funnel: its debug order check and the stand-down's setter"),
     ("H7:wext_rec", "wext.rs", "patch_expr_with", 2, "the patch funnel: its debug order check and the stand-down's setter"),
     ("H7:wext_rec", "wext.rs", "record_decl_fact", 1, "the declaration-fact writer"),
     ("H7:wext_rec", "wext.rs", "record_geom", 1, "the geometry writer"),
+    ("H7:wext_rec", "wext.rs", "record_row_at", 1, "the row position writer (Q-WEXTPOS C2)"),
     ("H7:wext_rec", "wext.rs", "record_via", 1, "the via writer"),
     ("H7:wext_rec", "wext.rs", "register_provisional_const", 1, "the stand-down's registration"),
+];
+
+/// H13: (rule, file, fn, count, why) — each continuous append call's `at` as spelled (PLAN O8).
+#[rustfmt::skip]
+const H13: &[(&str, &str, &str, usize, &str)] = &[
+    ("H13:push_cont_assign:None", "const_level_header.rs", "t0_pulse_net", 1, "`t0_pulse`: a synthesized net no reader prints"),
+    ("H13:push_cont_assign:None", "events.rs", "level_select_net", 1, "`event_select`: a synthesized holder no reader prints"),
+    ("H13:push_cont_assign:None", "var_init.rs", "elaborate_net_init_drivers", 1, "`net_init`: a kind no reader prints (PLAN O8)"),
+    ("H13:push_cont_assign:Some(lv.span())", "cont_array.rs", "cont_assign_whole_array", 1, "`assign`: the one target every element row writes (the fn's own parameter `lv`)"),
+    ("H13:push_cont_assign:Some(lv.span())", "netdecl.rs", "elaborate_cont_assign", 1, "`assign`: this assignment's own target (a gate: its output terminal), not the statement"),
+    ("H13:push_cont_assign:span", "proc_ident.rs", "push_cont_assign_port", 1, "`port`: the connection's span, the row identity's own (`.*` = None)"),
+    ("H13:push_cont_assign_port:conn.span", "ports.rs", "wire_array_port", 1, "a per-element port row: the one connection `.p(arr)`"),
+    ("H13:push_cont_assign_port:conn.span", "ports.rs", "wire_ports", 2, "an input / output port row: named from the `.`, positional the expression, `.*` None"),
 ];
 
 /// H8: the declaration fact's writer, the sites and scopes passed to it, and what it reads.
