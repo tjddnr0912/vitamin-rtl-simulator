@@ -1,7 +1,7 @@
 (§5.2 Q-WEXTPOS · rank — F · source W/wrext/fix1/PLAN.txt (S), W/wrext/fix1/PLAN3.txt (V), Q-MDRVMIX's park (2026-11-17)) (the write view's stand-down on a provisional constant and each write's position):
 * purpose: Q-WREXT's write view decides no select extent in an elaboration that held a provisional constant, and carries the source position of each write it records, structure only (every stdout, stderr and exit code PRE's; the view's dump gains one field); the record its reader's clauses read (IEEE 1800-2017 §6.5, §9.2.2.2)
 * why: G-EH1: the record §5.2 Q-MDRVMIX returns on (its park, 2026-11-17), before row 24 (EH1 cut), which waits on Q-MDRVMIX
-* needs: Q-WREXT (BUILT, lands with batch 5)
+* needs: Q-WREXT (LANDED, batch 5, §4.5.654)
 * readers: Q-MDRVMIX
 * state: OPEN (2026-11-17)
 * record: as filed below ; superseded order lines are kept for the record
@@ -20,5 +20,6 @@
   * premise judge 3 (W/wrext/fix1/premise3/REPORT.txt): the design stands; its two resolution lines (B-4), as written: "a call that lowers a parsed child is never inside `wext_unlocated` ; only a call whose whole statement is built is S" and "equal intervals go to the one recorded FIRST (`lower_stmt` records at exit, so the first recorded is the innermost). In a stack sweep: sort key `(start, Reverse(end), Reverse(record index))` ; or resolve in record order, first interval to claim an id wins."
   * the falsifier: the paired-anchor cells, each a twin whose located error must equal the write's position (premise judge 3 literal line 3: c01/p01, c09/p09, c14/p14, c12/p12, c02/p02, with c07 and c08; mutants m25 "equal intervals go to the later-recorded" and m26 "a parsed child's shell inside `wext_unlocated`"; W/wrext/fix1/premise3/cells)
   * premise judge 3's other literal lines that bind this record: 4 (the mask at callee-body entries), 5 (the BODY ROOT barrier, not a debug assert), 7 (a zero span, `debug_assert!(sp.lo < sp.hi)` at both recorders), 8 (PLAN3's census corrections), 9 and 10 (the home rules H13, H14 and what their walker counts)
+* note (2026-11-18, batch 5's delta judge, W/batch5c/judge/REPORT.txt R3 and N7): the row's first commit also corrects `wext.rs`'s head note, which calls the deferred READ placeholders "`Signal` nodes": a deferred hierarchical function call's placeholder is a `Call` node (`hier_defer/read.rs`), with no constant leaf either
 * scope: structure only, PRE's text on every design; the reader is Q-MDRVMIX (its re-plan), and the words its reduced text loses are §5.2 Q-MDRVWHO's
 * source: W/wrext/fix1/PLAN.txt, PLAN3.txt, premise/REPORT.txt + LINES.txt, premise3/REPORT.txt; W/batch5b/lens-sound/REPORT.txt; Q-MDRVMIX.md

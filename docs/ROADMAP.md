@@ -42,8 +42,8 @@ Not goals, each trigger-gated in §7: a wider design set (verilog-pcie, row 63; 
 ### State
 > The one statement of now; HANDOFF and LOOPROMPT point here, and the update rule says who rewrites it.
 
-2026-11-17: goal G-EH1 is current. Batch 5 (PARSE-1's provenance piece, Q-WREXT) is at its boundary verify; Q-MDRVMIX was parked on 2026-11-17 (owner)
-behind the new structural row Q-WEXTPOS and its two commits pulled out of batch 5. Nothing of batch 5 is on main yet. The chain's next row is Q-WEXTPOS (batch 6).
+2026-11-18: goal G-EH1 is current. Batch 5 landed on main (§4.5.654): PARSE-1's provenance piece and Q-WREXT, each structure only; Q-MDRVMIX, parked on
+2026-11-17 (owner) behind the structural row Q-WEXTPOS, left the batch before its boundary (§4.5.652). The chain's next row is Q-WEXTPOS (batch 6).
 
 ### Order rules
 > How the next row is chosen without asking: precedence P1–P5, then rules O1–O9, with the owner's answers of 2026-11-17 written in.
@@ -116,7 +116,7 @@ Retired (owner Q6 (a), 2026-11-17): the Summary count table (roadmap/history/) a
 ### Current chain
 > The current goal's rows in run order, then the next goal's; the goal doc says why each row stands where it does.
 
-G-EH1, after batch 5 lands (PARSE-1's provenance piece, Q-WREXT); batch 6 = rows 1–3, batch 7 = rows 4–6, batch 8 = rows 7–8 (O5, re-read at batch 6's start):
+G-EH1, after batch 5 (PARSE-1's provenance piece, Q-WREXT; landed, §4.5.654); batch 6 = rows 1–3, batch 7 = rows 4–6, batch 8 = rows 7–8 (O5, re-read at batch 6's start):
 
 | # | id | title | state |
 |---|---|---|---|
@@ -1039,7 +1039,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | # | slot | item | rank |
 |---|---|---|---|
 | SYS-1 | R2.1 · L1 (landed) | [one record per system function, in sim-ir](roadmap/5.2/SYS-1.md) | — F |
-| PARSE-1 | R2.2 · L1 (landed, piece built) | [the parser's constant fold in one file, its kernels in hdl-ast, literal origins](roadmap/5.2/PARSE-1.md) | — F |
+| PARSE-1 | R2.2 · L1 (landed) | [the parser's constant fold in one file, its kernels in hdl-ast, literal origins](roadmap/5.2/PARSE-1.md) | — F |
 | VAL-1 | R3.1 · L1 (landed) | [the elaborate constant evaluators' shared arms, written once](roadmap/5.2/VAL-1.md) | — F |
 | VAL-2 | R3.2 · L1 (landed) | [the parameter declaration chain and the live-scope wide ask, written once](roadmap/5.2/VAL-2.md) | — F |
 | VAL-3 | R3.3 · L1 (landed) | [a declared range's bounds folded, then checked, in one body](roadmap/5.2/VAL-3.md) | — F |
@@ -1051,7 +1051,7 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-CONSTAGG | R7.2 · L1 (PARKED) | [constant interpreter treats packed-dim and unpacked locals as one vector](roadmap/5.2/Q-CONSTAGG.md) | ① |
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | Q-LITLANE | R7.5 · L1 | [`const_eval_u32` reads a sized signed literal as its unsigned pattern](roadmap/5.2/Q-LITLANE.md) | — F |
-| Q-WREXT | R8.1 · L1 (built) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
+| Q-WREXT | R8.1 · L1 (landed) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
 | Q-WEXTPOS | R8.1 · L1 | [the write view's stand-down on a provisional constant and each write's position](roadmap/5.2/Q-WEXTPOS.md) | — F |
 | Q-MDRVMIX | R8.1 · L1 (PARKED) | [overlapping partial and mixed writes of a packed variable are not refused](roadmap/5.2/Q-MDRVMIX.md) | ① F |
 | Q-LOSSYSPELL | R8.1 · L1 | [which lossy constant producers a design spells, recorded once per design](roadmap/5.2/Q-LOSSYSPELL.md) | — F |

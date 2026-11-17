@@ -6,6 +6,8 @@
   * `t.sv:7:8: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '['`
   * `t.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ')' after gate terminals, found '('`
   * `t.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected gate needs an output and at least one input, found '('`
+  * `t.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';' after gate instantiation, found '('`
+  * `t.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected module item, found '('`
 * oracles (W/batch5b/lens-diff/D4_TABLE.txt): verilator 5.054 --binary rc 0, runs `A v=00000010 | B v=00000110` with `%Warning-MULTIDRIVEN: t.sv:6:15: Bit [0] of signal 'top.v' have multiple combinational drivers. This can cause performance degradation.`; iverilog 13.0 compile rc 2 on this witness's driver mix, not on the array: `t.sv:7: error: Variable 'v' cannot be driven by a primitive or continuous assignment with non-default strength.` / `t.sv:7: error: Failed to elaborate primitive output expression top.v['sd3:'sd0].` / `t.sv:8: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'a[7:0]').` / `2 error(s) during elaboration.`; sv2v → iverilog the same two errors on its output
 * note: the witness also writes `v[0]` from an `always_comb` beside the gate output, a §6.5 pair (Q-MDRVMIX's shape), so a witness of the array alone is owed at the row's start; Q-MDRVMIX's fix premise judge 3 met the same refusal on `and g[1:0] (o, a, b);` (W/wrext/fix1/premise3/REPORT.txt line 11: "stays parse-refused (E2002, no row)")
 * oracles: verilator + hand-IEEE

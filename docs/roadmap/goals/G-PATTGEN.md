@@ -17,7 +17,7 @@
 | 8 | 24 (OT cut) | design | WAITS 24 (EH1 cut) | `tl_i.a_address[RegAw-1:2]` (roadmap review A8), on G-EH1's row 24 |
 | 9 | 47 (pattgen page) | corpus | WAITS 33, 23, 46, 24 | the reach test: the testbench run that makes pattgen RUN, the first OpenTitan simulation on original source |
 
-* records: PARSE-1's provenance piece (built, batch 5): row 23's reader declines on a Parser-origin leaf; Q-NETSHAPE's first commit, row 5 (who wrote `DataType.range`; readers 46, later 71), its own batch (O5); Q-RTNTEXT, row 6, a structural row already filed, before 46.
+* records: PARSE-1's provenance piece (landed, batch 5, §4.5.654): row 23's reader declines on a Parser-origin leaf; Q-NETSHAPE's first commit, row 5 (who wrote `DataType.range`; readers 46, later 71), its own batch (O5); Q-RTNTEXT, row 6, a structural row already filed, before 46.
 * unowned: none named; Q-TYPEOVERVAL's grounding may name more producer classes than one (the signal below).
 * risk: row 33 parked after four lens rounds, each on a new instance of "a source the admission cannot see", and Q-TYPEOVERVAL is unstarted, in the parser, "census first".
 * signal: Q-TYPEOVERVAL's grounding: if it names more than one producer class (a typedef seen through a wildcard, `$unit`, a type parameter, an enum label), 33 is two or more prerequisite rows away, not one.
