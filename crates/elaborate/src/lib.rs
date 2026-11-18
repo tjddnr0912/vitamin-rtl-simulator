@@ -116,6 +116,7 @@ mod hier_defer;
 pub(crate) use held::{ClkRefused, DeferredCapture, Held};
 mod hier_leaf_shape;
 mod md_return;
+mod mdrv_mix;
 pub(crate) use hier_leaf_shape::HierLeafShape;
 mod hoist;
 mod ident_route;
@@ -1805,8 +1806,8 @@ struct Elaborator<'s> {
     pending_proc_ident: Option<ProcIdent>,
     // §5.2 Q-WREXT (`wext.rs`): the write-extent view, built once in the end phase
     // (`build_write_view`, before the whole-net multidriver check) and handed to
-    // `Sidecars::write_view`; no production reader yet (first reader planned: §5.2
-    // Q-MDRVMIX (parked)).
+    // `Sidecars::write_view`; read in production by `check_mixed_drivers` alone (§5.2
+    // Q-MDRVMIX, `mdrv_mix.rs`).
     wext: wext::WriteView,
     // §5.2 Q-WREXT C2 (`wext.rs`): the geometry constant, the declaration facts and the
     // statement-id intervals the lowering records for the view, each through its one

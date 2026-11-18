@@ -1039,6 +1039,10 @@ impl<'s> Elaborator<'s> {
         // `cont_var.rs`).
         self.check_whole_array_sole_writer();
         self.check_var_cont_assign_sole_writer();
+        // §5.2 Q-MDRVMIX: a variable's continuous and procedural writers on one bit, read
+        // from the view, after the three checks above ; it reads nothing when any error
+        // was latched, theirs included (`mdrv_mix.rs`).
+        self.check_mixed_drivers();
         // §5.2 row 27: every `wait` condition and function body exists, and every
         // hierarchical name is resolved.
         self.check_readmem_assoc_waits();

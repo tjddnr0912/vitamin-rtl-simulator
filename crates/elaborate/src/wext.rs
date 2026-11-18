@@ -54,8 +54,10 @@
 //!
 //! NOT HERE: no target set (which nets a rule looks at: declaration facts, §5.2
 //! Q-MDRVMIX's re-plan; no `intro_kind` read), no pair test (which two writes overlap is
-//! the reader's), no reader in production. The three checkers that answer parts of this
-//! today (`multidriver.rs` rules A-D over the AST, `netdecl.rs`
+//! the reader's). Its one production reader is `mdrv_mix.rs` (§5.2 Q-MDRVMIX: the target
+//! set from the declaration facts, the pair test, rule X), through one entry,
+//! `check_mixed_drivers`, right after the sole-writer checks. The three checkers that
+//! answer parts of this today (`multidriver.rs` rules A-D over the AST, `netdecl.rs`
 //! `check_whole_net_multidriver` over continuous rows, `cont_array.rs` `other_writers`)
 //! are not re-pointed: their re-point is filed with the readers (§5.2 Q-WREXT). The
 //! record is not serialized (no IR field, no `.vu` / `.velab` byte, no `SchemaHash`).
@@ -74,8 +76,8 @@
 //! the first of them can be stale (THE GEOMETRY CONSTANT's REVIEW-ONLY line); a kernel
 //! extent reads the finished IR's offset constant, which can itself be a lowering-time
 //! fold of a provisional value (the same line). Both cases stand down (THE STAND-DOWN).
-//! It goes to `Sidecars::write_view` (the test and dump entry) and nothing reads it in a
-//! `vita` run.
+//! It goes to `Sidecars::write_view` (the test and dump entry) ; in a `vita` run its one
+//! reader is `check_mixed_drivers` (`mdrv_mix.rs`), in the same end phase.
 //! Built eagerly because it is cheap (Q-WREXT build r1, the view's instructions over an
 //! elaboration alone, same release binary, median of 3: +0.12 % y_wext_procs, +0.27 %
 //! y_wext_mix, +0.11 % y_wext_port, +0.04 % el2w; W/wrext/build/cost/probe/VIEW_COST.txt):
@@ -159,8 +161,8 @@
 //! census `wext_home.rs` H11 counts. NOT A FACT HERE: the view of an elaboration that
 //! latched `had_error`. After an error `placeholder_expr` stands a `Const` 0 in for a
 //! refused expression and a refused defparam leaves the parameter's default; neither is
-//! registered, and a reader returns on `had_error` before it reads (Q-MDRVMIX's re-entry
-//! (a)).
+//! registered, and the one reader, `check_mixed_drivers`, returns on `had_error` before
+//! it reads (§5.2 Q-MDRVMIX's re-entry (a)).
 //!
 //! THE DECLARATION FACT (PLAN2 addendum A1). `decl(net)` is `Some(DeclFact { site, kind,
 //! dir, type_param })` only for a net created by one of three declaration lowerings, each

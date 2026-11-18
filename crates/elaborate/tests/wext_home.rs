@@ -1,7 +1,7 @@
 //! §5.2 Q-WREXT: the write-extent view has one home, `crates/elaborate/src/wext.rs` (ER
 //! §5.1). This test pins, counted per (file, enclosing fn) over
 //! `crates/elaborate/src/**/*.rs` (the item after `#[cfg(test)]` skipped), what the view
-//! rests on and what must stay true while nothing reads it:
+//! rests on, who reads it and what its one reader reads:
 //!
 //! - H1 the append points of the arrays the view reads: `. <arr> . push (` for
 //!   `cont_assigns` / `ca_idents` (`push_cont_assign` only), `processes` / `proc_idents`
@@ -15,12 +15,13 @@
 //!   author says whether it runs before the view or the view goes stale.
 //! - H2 `const_chunk_written_bits (` is called by `check_whole_net_multidriver` and by
 //!   `chunk_extent` only: the view's `Bits` is the kernel's answer, not a copy.
-//! - H3 the view is built once and read by nothing: `build_view (` only in
+//! - H3 the view is built once and read through one entry: `build_view (` only in
 //!   `build_write_view`, `build_write_view (` only in the end phase (`run`), `. wext`
-//!   only where it is built and handed to `Sidecars` (the `wext:` initialiser in
-//!   `driver.rs` `new` is a field init, not this token), and the token
-//!   `write_view` in no production source of any crate but `api.rs` (the hand-off) and
-//!   `tables.rs` (the field).
+//!   only where it is built, where it is handed to `Sidecars` (the `wext:` initialiser in
+//!   `driver.rs` `new` is a field init, not this token) and once in its one reader,
+//!   `mdrv_mix.rs` `check_mixed_drivers` (§5.2 Q-MDRVMIX ; a second reader fails here),
+//!   and the token `write_view` in no production source of any crate but `api.rs` (the
+//!   hand-off) and `tables.rs` (the field).
 //! - H4 who reads the process / continuous-row identities (`proc_idents`, `ca_idents`):
 //!   the producers, the hand-off, `wext.rs`, and the two readers that compare a kind today
 //!   (`cont_array.rs` `other_writers`, `hier_defer/func_call.rs`). PLAN B9's H4 asked for 0
@@ -61,6 +62,18 @@
 //!   `net_names` token in a writer's host fn or in wext.rs but the listed two.
 //! - H9 (C2) the `via` intervals: `record_via (` at the inline decision and around the
 //!   deferred action, and each `Via :: <V>` spelling.
+//! - H10 (§5.2 Q-MDRVMIX C1) what the view's one reader reads, in `mdrv_mix.rs`: H10d every
+//!   identifier of its decision fns (`H10D_FNS`: the target set, the sides, the sweep, the
+//!   pairs and the entry), any receiver, is on `H10D_ALLOW` — no `at`, no name
+//!   (`symbols`, `display_of`), no `nets`, no `intro_kind`, no `cont_var` / `reported` ;
+//!   H10m every identifier of its message fns (`H10M_FNS`) and every name a format literal
+//!   there captures (`{name}`, a `name$` in a spec) is on `H10M_ALLOW` — the view's `Write`
+//!   and the pair's fields, `symbols`, `display_of`, `span_file_line_col`, `error`,
+//!   `cur_span`, `cur_prefix`, the file's consts and std verbs, so no identity row
+//!   (`proc_idents`, `ca_idents`, `frame_func_names`, `frame_decl_locs`), no `nets`, no
+//!   `intro_kind`, no name split (`rsplit`) feeds a word of the text (the re-entry's (b)) ;
+//!   and each process / continuous kind string of the closed vocabulary (`KINDS`) spelled
+//!   once, in the file's consts.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -181,6 +194,255 @@ const ADD: &[&str] = &[
     "extend_from_slice",
 ];
 const STORE: [&str; 4] = ["BlockingAssign", "NonblockingAssign", "Force", "Release"];
+/// H10: the closed kind vocabulary of `proc_idents` (`push_process`, `lower_synth_proc`'s
+/// callers) and `ca_idents` (`push_cont_assign`'s callers).
+const KINDS: [&str; 13] = [
+    "initial",
+    "always",
+    "always_ff",
+    "always_comb",
+    "always_latch",
+    "final",
+    "sva",
+    "covergroup",
+    "var_init",
+    "assign",
+    "port",
+    "net_init",
+    "t0_pulse",
+];
+/// H10d: the reader's decision fns (`mdrv_mix.rs`).
+const H10D_FNS: [&str; 9] = [
+    "in_t2",
+    "procedural",
+    "x_side",
+    "who",
+    "meets",
+    "keep",
+    "sweep",
+    "x_pairs",
+    "check_mixed_drivers",
+];
+/// H10d: every identifier the decision fns may spell, any receiver: the view's `Write`
+/// fields but `at` and `stmt` / `chunk`, its declaration fact, the flag, the file's own
+/// items and std / language words. Not here, by design: `at`, `symbols`, `display_of`,
+/// `nets`, `intro_kind`, `net_names`, `cont_var`, `reported`, every identity row.
+#[rustfmt::skip]
+const H10D_ALLOW: &[&str] = &[
+    "AnsiPort",
+    "BTreeMap",
+    "Bit",
+    "Bits",
+    "Blocking",
+    "Body",
+    "CONT",
+    "Cont",
+    "DeclSite",
+    "Direct",
+    "Extent",
+    "Form",
+    "Generate",
+    "Internal",
+    "Iv",
+    "Logic",
+    "Module",
+    "NetVarKind",
+    "NonAnsiPort",
+    "NonBlocking",
+    "None",
+    "Output",
+    "P6",
+    "PortDir",
+    "Proc",
+    "Reg",
+    "Some",
+    "TaskInline",
+    "Top2",
+    "Vec",
+    "Via",
+    "Write",
+    "Writer",
+    "XPair",
+    "_",
+    "a",
+    "any",
+    "as",
+    "ast",
+    "b",
+    "c",
+    "collect",
+    "cont",
+    "contains",
+    "continue",
+    "copied",
+    "decl",
+    "default",
+    "dir",
+    "distinct",
+    "else",
+    "entry",
+    "enumerate",
+    "extent",
+    "f",
+    "false",
+    "find",
+    "flatten",
+    "for",
+    "form",
+    "found",
+    "from",
+    "func",
+    "had_error",
+    "hi",
+    "i",
+    "idx",
+    "if",
+    "in",
+    "in_t2",
+    "inc",
+    "into_iter",
+    "ir",
+    "iter",
+    "iv_of",
+    "ivs",
+    "k",
+    "ka",
+    "kb",
+    "keep",
+    "kept",
+    "kind",
+    "let",
+    "lo",
+    "map",
+    "match",
+    "matches",
+    "max",
+    "mdrv_emit",
+    "meets",
+    "min",
+    "mut",
+    "net",
+    "new",
+    "or_default",
+    "out",
+    "p",
+    "per",
+    "pid",
+    "proc",
+    "procedural",
+    "push",
+    "return",
+    "row",
+    "self",
+    "site",
+    "sort_unstable_by_key",
+    "sweep",
+    "t0",
+    "t1",
+    "then_some",
+    "true",
+    "type_param",
+    "u32",
+    "u64",
+    "usize",
+    "via",
+    "view",
+    "w",
+    "wext",
+    "who",
+    "writer",
+    "writes",
+    "x",
+    "x_pairs",
+    "x_side",
+];
+/// H10m: the reader's message fns (`mdrv_mix.rs`).
+const H10M_FNS: [&str; 3] = ["mdrv_emit", "mdrv_net_name", "mdrv_writer"];
+/// H10m: every identifier (and format capture) the message fns may spell: the view's
+/// `Write` fields (`writer`, `via`, `at`), the pair's (`net`, `lo`, `hi`), the net's one
+/// `symbols` key through `display_of`, `span_file_line_col`, `error`, `cur_span`,
+/// `cur_prefix`, the file's consts and std / language words.
+#[rustfmt::skip]
+const H10M_ALLOW: &[&str] = &[
+    "ASSIGN",
+    "Body",
+    "Cont",
+    "ElabMultidriver",
+    "MsgCode",
+    "None",
+    "PORT",
+    "Proc",
+    "Some",
+    "TaskInline",
+    "VAR_INIT",
+    "Via",
+    "Writer",
+    "_",
+    "at",
+    "c",
+    "col",
+    "cur_prefix",
+    "cur_span",
+    "display_of",
+    "error",
+    "false",
+    "file",
+    "filter",
+    "find",
+    "format",
+    "hi",
+    "id",
+    "if",
+    "iter",
+    "kind",
+    "let",
+    "line",
+    "lo",
+    "map",
+    "match",
+    "mdrv_net_name",
+    "mdrv_writer",
+    "mem",
+    "msg",
+    "mut",
+    "n",
+    "net",
+    "p",
+    "pos",
+    "prefix",
+    "return",
+    "self",
+    "sp",
+    "span",
+    "span_file_line_col",
+    "std",
+    "symbols",
+    "take",
+    "to_string",
+    "true",
+    "unwrap_or_else",
+    "via",
+    "w",
+    "what",
+    "writer",
+    "x",
+];
+/// H10: names neither list may hold (the self-check of the two lists).
+const H10_NEVER: [&str; 13] = [
+    "proc_idents",
+    "ca_idents",
+    "frame_func_names",
+    "frame_decl_locs",
+    "span_resolver",
+    "nets",
+    "intro_kind",
+    "net_names",
+    "rsplit",
+    "strip_prefix",
+    "scope",
+    "cont_var",
+    "reported",
+];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
@@ -664,6 +926,12 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 _ => {}
             }
         }
+        // H10 (§5.2 Q-MDRVMIX) a kind string of the closed vocabulary, as a whole literal
+        if t[i].kind == Kind::Lit {
+            if let Some(v) = KINDS.iter().find(|v| t[i].text == format!("\"{v}\"")) {
+                out.push((format!("H10:kind:{v}"), k.clone()));
+            }
+        }
         // H13 the `at` argument (the last one) of a continuous append call, spelled inline
         if id
             && matches!(tx(i), "push_cont_assign" | "push_cont_assign_port")
@@ -728,6 +996,78 @@ fn hits(src: &str) -> Vec<(String, String)> {
         }
     }
     out
+}
+
+/// H10: the names a format literal captures (`{name}`, `{name:spec}`, a `name$` width or
+/// precision in the spec) ; `{{` is no capture and a positional `{0}` names nothing.
+fn captures(lit: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let b: Vec<char> = lit.chars().collect();
+    let ident = |s: &str| {
+        s.chars()
+            .next()
+            .is_some_and(|c| c.is_alphabetic() || c == '_')
+            && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+    };
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '{' {
+            if b.get(i + 1) == Some(&'{') {
+                i += 2;
+                continue;
+            }
+            let end = (i + 1..b.len()).find(|&j| b[j] == '}').unwrap_or(b.len());
+            let inner: String = b[i + 1..end].iter().collect();
+            let (arg, spec) = inner.split_once(':').unwrap_or((inner.as_str(), ""));
+            if ident(arg) {
+                out.push(arg.to_string());
+            }
+            for (j, _) in spec.match_indices('$') {
+                let start = spec[..j]
+                    .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .map_or(0, |x| x + 1);
+                if ident(&spec[start..j]) {
+                    out.push(spec[start..j].to_string());
+                }
+            }
+            i = end + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// H10: per fn of `src` named in `fns`, every identifier token (any receiver) and every
+/// name a string literal captures, as (fn, name).
+fn h10_idents(src: &str, fns: &[&str]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for x in tokens(src) {
+        if !fns.contains(&x.key.as_str()) {
+            continue;
+        }
+        match x.kind {
+            Kind::Id => out.push((x.key.clone(), x.text.clone())),
+            Kind::Lit if x.text.ends_with('"') => {
+                for c in captures(&x.text) {
+                    out.push((x.key.clone(), c));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// H10: the (fn, name) pairs of `src`'s `fns` that `allow` does not hold, sorted, unique.
+fn h10_offenders(src: &str, fns: &[&str], allow: &[&str]) -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = h10_idents(src, fns)
+        .into_iter()
+        .filter(|(_, n)| !allow.contains(&n.as_str()))
+        .collect();
+    v.sort();
+    v.dedup();
+    v
 }
 
 type Table = BTreeMap<(String, String, String), usize>;
@@ -875,6 +1215,7 @@ fn h11_the_exprs_slot_writers() {
         "check_whole_net_multidriver",
         "check_whole_array_sole_writer",
         "check_var_cont_assign_sole_writer",
+        "check_mixed_drivers",
         "check_readmem_assoc_waits",
         "assert_block_local_inits_drained",
         "finish_assert_item_gate",
@@ -982,7 +1323,7 @@ fn h2_the_kernel_callers() {
 }
 
 #[test]
-fn h3_built_once_read_by_nothing() {
+fn h3_built_once_read_through_one_entry() {
     check("H3", H3);
     // `write_view` in the production source of every other crate: none.
     let root = workspace_root();
@@ -1009,6 +1350,56 @@ fn h3_built_once_read_by_nothing() {
     assert!(
         other.is_empty(),
         "`write_view` read outside elaborate: {other:?}"
+    );
+}
+
+/// H10 (§5.2 Q-MDRVMIX C1): what the view's one reader reads (module head). The kind
+/// spellings are census rows (`H10`, filtered to `mdrv_mix.rs`) ; the decision and the
+/// message fns are checked against their allow lists, and each listed fn must exist.
+#[test]
+fn h10_the_mixed_driver_reader() {
+    let got: Table = rows_of(&census(), "H10")
+        .into_iter()
+        .filter(|((_, f, _), _)| f == "mdrv_mix.rs")
+        .collect();
+    let want = want(H10);
+    if got != want {
+        let mut s = String::new();
+        for ((r, f, k), n) in &got {
+            s.push_str(&format!("    (\"{r}\", \"{f}\", \"{k}\", {n}, \"\"),\n"));
+        }
+        panic!("H10: the census moved.\n--- got ---\n{s}--- want ---\n{want:?}");
+    }
+    for n in H10_NEVER {
+        assert!(
+            !H10D_ALLOW.contains(&n) && !H10M_ALLOW.contains(&n),
+            "H10: `{n}` is on an allow list"
+        );
+    }
+    for n in ["at", "symbols", "display_of", "span_file_line_col"] {
+        assert!(
+            !H10D_ALLOW.contains(&n),
+            "H10d: `{n}` is on the decision list"
+        );
+    }
+    let root = workspace_root();
+    let src = std::fs::read_to_string(root.join(SRC).join("mdrv_mix.rs")).expect("mdrv_mix.rs");
+    let t = tokens(&src);
+    for f in H10D_FNS.iter().chain(H10M_FNS.iter()) {
+        assert!(
+            t.windows(2).any(|w| w[0].text == "fn" && w[1].text == *f),
+            "H10: `{f}` is not a fn of mdrv_mix.rs any more"
+        );
+    }
+    let d = h10_offenders(&src, &H10D_FNS, H10D_ALLOW);
+    assert!(
+        d.is_empty(),
+        "H10d: a decision fn reads a name off its list: {d:?}"
+    );
+    let m = h10_offenders(&src, &H10M_FNS, H10M_ALLOW);
+    assert!(
+        m.is_empty(),
+        "H10m: a message fn reads a name off its list: {m:?}"
     );
 }
 
@@ -1384,6 +1775,83 @@ fn walker_controls() {
         vec![("H8:DeclScope::BlockLocal".to_string(), "g".to_string())],
         "H8 real site (block_local/hoist.rs) spelled back"
     );
+    // H3 (§5.2 Q-MDRVMIX): a second reader file of the view is a row H3 does not hold
+    let second = table_of(
+        "mdrv_two.rs",
+        "impl E { fn g(&self) -> usize { self.wext.writes.len() } }",
+    );
+    assert!(
+        second.keys().any(|(r, _, _)| r == "H3:wext")
+            && !want(H3).keys().any(|(_, f, _)| f == "mdrv_two.rs"),
+        "H3 planted: a second reader"
+    );
+    // H10 kinds: the whole literal only ; a comment drops
+    assert_eq!(
+        count(
+            "H10",
+            "fn f() { let s = \"always_comb is a keyword\"; let t = \"always\"; }"
+        ),
+        1,
+        "H10 a kind is the whole literal"
+    );
+    assert_eq!(
+        count("H10", "// \"assign\"\nfn f() {}"),
+        0,
+        "H10 kind in a comment"
+    );
+    // H10 the capture parser: `{{` is none, a positional names nothing, a spec's `name$`
+    assert_eq!(
+        captures("\"{a} {{b}} {0} {c:>wd$} {d:.pr$} {:?}\""),
+        vec!["a", "c", "wd", "d", "pr"],
+        "H10 captures"
+    );
+    // H10d planted: a reported set through a local, a position, a name — each must fail
+    let d = "impl E { fn x_pairs(&self) { let s = &*self; s.cont_var.reported.contains(&n); \
+             let q = w.at; self.symbols.len(); } }";
+    let off = h10_offenders(d, &H10D_FNS, H10D_ALLOW);
+    for n in ["cont_var", "reported", "at", "symbols"] {
+        assert!(
+            off.iter().any(|(_, x)| x == n),
+            "H10d planted `{n}`: {off:?}"
+        );
+    }
+    // H10m planted: each former failure site's read (the re-entry's (b)) must fail
+    for (body, n) in [
+        ("self.proc_idents.get(0);", "proc_idents"),
+        ("self.frame_func_names.get(0);", "frame_func_names"),
+        ("self.ca_idents.get(0);", "ca_idents"),
+        ("let v = w; v.rsplit('.');", "rsplit"),
+        ("self.nets.get(0);", "nets"),
+        ("self.intro_kind.get(&n);", "intro_kind"),
+        ("format!(\"{port}\");", "port"),
+        ("format!(\"{x:>wd$}\", x = 1);", "wd"),
+        ("format!(\"{x:.pr$}\", x = 1);", "pr"),
+    ] {
+        let src = format!("impl E {{ fn mdrv_writer(&self) {{ {body} }} }}");
+        let off = h10_offenders(&src, &H10M_FNS, H10M_ALLOW);
+        assert!(
+            off.iter().any(|(_, x)| x == n),
+            "H10m planted `{n}`: {off:?}"
+        );
+    }
+    // H10m negative control: the same tokens in a comment and under `#[cfg(test)]`
+    let quiet =
+        "impl E { fn mdrv_writer(&self) {\n // self.proc_idents \"{port}\" self.nets\n } }\n\
+                 #[cfg(test)]\nmod t { fn mdrv_writer(&self) { self.proc_idents.get(0); \
+                 format!(\"{port}\"); self.nets.get(0); } }";
+    assert!(
+        h10_offenders(quiet, &H10M_FNS, H10M_ALLOW).is_empty(),
+        "H10m comment / cfg(test)"
+    );
+    // H10m real site spelled back (`mdrv_mix.rs` `mdrv_net_name`): on the list
+    let back = "impl E { fn mdrv_net_name(&self, net: u32) -> String { self.symbols.iter()\
+                .find(|(_, &id)| id == net).map(|(n, _)| self.display_of(n))\
+                .unwrap_or_else(|| format!(\"#{net}\")) } }";
+    assert!(
+        h10_offenders(back, &H10M_FNS, H10M_ALLOW).is_empty()
+            && h10_idents(back, &H10M_FNS).len() > 10,
+        "H10m real site spelled back"
+    );
     // H9
     let h9 = "fn f(&mut self) { let v0 = self.stmts.len(); self.record_via(wext::Via::TaskInline, v0); }";
     assert_eq!(count("H9", h9), 2, "H9 planted: writer, value");
@@ -1756,12 +2224,13 @@ const H2: &[(&str, &str, &str, usize, &str)] = &[
     ("H2:at", "wext.rs", "chunk_extent", 1, "the geometry constant's extent: the kernel's width and select step at a recorded offset"),
 ];
 
-/// H3: built once, handed to `Sidecars`, read by nothing.
+/// H3: built once, handed to `Sidecars`, read through one entry.
 #[rustfmt::skip]
 const H3: &[(&str, &str, &str, usize, &str)] = &[
     ("H3:build_view", "wext.rs", "build_write_view", 1, "the one build"),
     ("H3:build_write_view", "driver.rs", "run", 1, "the end phase, before check_whole_net_multidriver"),
     ("H3:wext", "api.rs", "elaborate_located_params", 1, "the hand-off to Sidecars::write_view"),
+    ("H3:wext", "mdrv_mix.rs", "check_mixed_drivers", 1, "the one reader's one entry (§5.2 Q-MDRVMIX)"),
     ("H3:wext", "wext.rs", "build_write_view", 1, "the one build"),
     ("H3:write_view", "api.rs", "elaborate_located_params", 1, "the hand-off to Sidecars::write_view"),
     ("H3:write_view", "tables.rs", "-", 1, "the Sidecars field"),
@@ -1955,10 +2424,14 @@ const H8: &[(&str, &str, &str, usize, &str)] = &[
     ("H8:DeclScope::Module", "wext.rs", "body_site", 1, "-> Module"),
     ("H8:DeclScope::Package", "package.rs", "elaborate_pkg_netvar", 1, "a package member: no fact"),
     ("H8:DeclScope::Package", "wext.rs", "body_site", 1, "-> None"),
+    ("H8:DeclSite::AnsiPort", "mdrv_mix.rs", "in_t2", 1, "the target set's reader (§5.2 Q-MDRVMIX T2)"),
     ("H8:DeclSite::AnsiPort", "ports.rs", "elaborate_ports", 1, "the ANSI port writer"),
+    ("H8:DeclSite::Generate", "mdrv_mix.rs", "in_t2", 1, "the target set's reader (§5.2 Q-MDRVMIX T2)"),
     ("H8:DeclSite::Generate", "wext.rs", "body_site", 1, "the body writer's generate site"),
+    ("H8:DeclSite::Module", "mdrv_mix.rs", "in_t2", 1, "the target set's reader (§5.2 Q-MDRVMIX T2)"),
     ("H8:DeclSite::Module", "wext.rs", "body_site", 1, "the body writer's module site"),
     ("H8:DeclSite::NonAnsiPort", "instance.rs", "elaborate_instance", 1, "the non-ANSI port writer"),
+    ("H8:DeclSite::NonAnsiPort", "mdrv_mix.rs", "in_t2", 1, "the target set's reader (§5.2 Q-MDRVMIX T2)"),
     ("H8:record_decl_fact", "instance.rs", "elaborate_instance", 1, "writer 3: a non-ANSI port net made from its port declaration"),
     ("H8:record_decl_fact", "netdecl.rs", "elaborate_netvar_decl_inner", 1, "writer 1: a body declaration (site from DeclScope)"),
     ("H8:record_decl_fact", "ports.rs", "elaborate_ports", 1, "writer 2: an ANSI port"),
@@ -1977,9 +2450,12 @@ const H9: &[(&str, &str, &str, usize, &str)] = &[
     ("H9:Via::DeferAction", "stmt_main.rs", "lower_stmt_inner", 1, "the deferred assertion's action arms"),
     ("H9:Via::DeferAction", "wext.rs", "build_view", 1, "laid over task intervals"),
     ("H9:Via::DeferAction", "wext.rs", "render", 1, "`defer`"),
+    ("H9:Via::Direct", "mdrv_mix.rs", "procedural", 1, "rule X's procedural writer"),
     ("H9:Via::Direct", "wext.rs", "build_view", 2, "the default of a procedural statement"),
     ("H9:Via::Direct", "wext.rs", "render", 1, "`direct`"),
     ("H9:Via::TaskInline", "inline_task.rs", "inline_task", 1, "the inline decision"),
+    ("H9:Via::TaskInline", "mdrv_mix.rs", "mdrv_writer", 1, "the message's \"through a subroutine it calls\""),
+    ("H9:Via::TaskInline", "mdrv_mix.rs", "procedural", 1, "rule X's procedural writer"),
     ("H9:Via::TaskInline", "wext.rs", "build_view", 1, "laid first"),
     ("H9:Via::TaskInline", "wext.rs", "render", 1, "`task`"),
     ("H9:record_via", "inline_task.rs", "inline_task", 1, "around inline_static_task"),
@@ -2052,4 +2528,17 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H11c:pending_var_inits:push", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
     ("H11c:pending_var_inits:splice", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
     ("H11c:undecided_placeholders:insert", "wext.rs", "register_provisional_const", 1, "y", "y"),
+];
+
+/// H10: the kind spellings of `mdrv_mix.rs`, each once, in its consts.
+#[rustfmt::skip]
+const H10: &[(&str, &str, &str, usize, &str)] = &[
+    ("H10:kind:always", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_ff", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_latch", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:assign", "mdrv_mix.rs", "-", 1, "ASSIGN, CONT's member the message names"),
+    ("H10:kind:initial", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:port", "mdrv_mix.rs", "-", 1, "PORT, CONT's member the message names"),
+    ("H10:kind:var_init", "mdrv_mix.rs", "-", 1, "VAR_INIT, P6's member the message names"),
 ];
