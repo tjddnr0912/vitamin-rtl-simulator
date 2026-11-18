@@ -62,9 +62,9 @@
 //!   `net_names` token in a writer's host fn or in wext.rs but the listed two.
 //! - H9 (C2) the `via` intervals: `record_via (` at the inline decision and around the
 //!   deferred action, and each `Via :: <V>` spelling.
-//! - H10 (§5.2 Q-MDRVMIX C1) what the view's one reader reads, in `mdrv_mix.rs`: H10d every
-//!   identifier of its decision fns (`H10D_FNS`: the target set, the sides, the sweep, the
-//!   pairs and the entry), any receiver, is on `H10D_ALLOW` — no `at`, no name
+//! - H10 (§5.2 Q-MDRVMIX C1, C2) what the view's one reader reads, in `mdrv_mix.rs`: H10d
+//!   every identifier of its decision fns (`H10D_FNS`: the target set, rule X's and rule
+//!   Y's sides and processes, the sweep, the pairs and the entry), any receiver, is on `H10D_ALLOW` — no `at`, no name
 //!   (`symbols`, `display_of`), no `nets`, no `intro_kind`, no `cont_var` / `reported` ;
 //!   H10m every identifier of its message fns (`H10M_FNS`) and every name a format literal
 //!   there captures (`{name}`, a `name$` in a spec) is on `H10M_ALLOW` — the view's `Write`
@@ -212,15 +212,17 @@ const KINDS: [&str; 13] = [
     "t0_pulse",
 ];
 /// H10d: the reader's decision fns (`mdrv_mix.rs`).
-const H10D_FNS: [&str; 9] = [
+const H10D_FNS: [&str; 11] = [
     "in_t2",
     "procedural",
     "x_side",
+    "in_p5",
+    "y_side",
     "who",
     "meets",
     "keep",
     "sweep",
-    "x_pairs",
+    "pairs",
     "check_mixed_drivers",
 ];
 /// H10d: every identifier the decision fns may spell, any receiver: the view's `Write`
@@ -229,8 +231,10 @@ const H10D_FNS: [&str; 9] = [
 /// `nets`, `intro_kind`, `net_names`, `cont_var`, `reported`, every identity row.
 #[rustfmt::skip]
 const H10D_ALLOW: &[&str] = &[
+    "ALWAYS_COMB",
     "AnsiPort",
     "BTreeMap",
+    "BTreeSet",
     "Bit",
     "Bits",
     "Blocking",
@@ -252,24 +256,30 @@ const H10D_ALLOW: &[&str] = &[
     "None",
     "Output",
     "P6",
+    "Pair",
     "PortDir",
     "Proc",
     "Reg",
+    "Rule",
     "Some",
     "TaskInline",
     "Top2",
+    "VAR_INIT",
     "Vec",
     "Via",
     "Write",
     "Writer",
-    "XPair",
+    "X",
+    "Y",
     "_",
     "a",
+    "all",
     "any",
     "as",
     "ast",
     "b",
     "c",
+    "chain",
     "collect",
     "cont",
     "contains",
@@ -298,6 +308,7 @@ const H10D_ALLOW: &[&str] = &[
     "idx",
     "if",
     "in",
+    "in_p5",
     "in_t2",
     "inc",
     "into_iter",
@@ -321,11 +332,13 @@ const H10D_ALLOW: &[&str] = &[
     "meets",
     "min",
     "mut",
+    "n",
     "net",
     "new",
     "or_default",
     "out",
     "p",
+    "pairs",
     "per",
     "pid",
     "proc",
@@ -333,8 +346,12 @@ const H10D_ALLOW: &[&str] = &[
     "push",
     "return",
     "row",
+    "rule",
     "self",
+    "side",
     "site",
+    "skip",
+    "sort_by_key",
     "sort_unstable_by_key",
     "sweep",
     "t0",
@@ -353,13 +370,15 @@ const H10D_ALLOW: &[&str] = &[
     "writer",
     "writes",
     "x",
-    "x_pairs",
     "x_side",
+    "xs",
+    "y",
+    "y_side",
 ];
 /// H10m: the reader's message fns (`mdrv_mix.rs`).
 const H10M_FNS: [&str; 3] = ["mdrv_emit", "mdrv_net_name", "mdrv_writer"];
 /// H10m: every identifier (and format capture) the message fns may spell: the view's
-/// `Write` fields (`writer`, `via`, `at`), the pair's (`net`, `lo`, `hi`), the net's one
+/// `Write` fields (`writer`, `via`, `at`), the pair's (`rule`, `net`, `lo`, `hi`), the net's one
 /// `symbols` key through `display_of`, `span_file_line_col`, `error`, `cur_span`,
 /// `cur_prefix`, the file's consts and std / language words.
 #[rustfmt::skip]
@@ -372,13 +391,18 @@ const H10M_ALLOW: &[&str] = &[
     "None",
     "PORT",
     "Proc",
+    "Rule",
     "Some",
     "TaskInline",
     "VAR_INIT",
     "Via",
     "Writer",
+    "X",
+    "Y",
     "_",
+    "a",
     "at",
+    "b",
     "c",
     "col",
     "cur_prefix",
@@ -406,11 +430,13 @@ const H10M_ALLOW: &[&str] = &[
     "msg",
     "mut",
     "n",
+    "name",
     "net",
     "p",
     "pos",
     "prefix",
     "return",
+    "rule",
     "self",
     "sp",
     "span",
@@ -423,6 +449,8 @@ const H10M_ALLOW: &[&str] = &[
     "unwrap_or_else",
     "via",
     "w",
+    "wa",
+    "wb",
     "what",
     "writer",
     "x",
@@ -1806,7 +1834,7 @@ fn walker_controls() {
         "H10 captures"
     );
     // H10d planted: a reported set through a local, a position, a name — each must fail
-    let d = "impl E { fn x_pairs(&self) { let s = &*self; s.cont_var.reported.contains(&n); \
+    let d = "impl E { fn pairs(&self) { let s = &*self; s.cont_var.reported.contains(&n); \
              let q = w.at; self.symbols.len(); } }";
     let off = h10_offenders(d, &H10D_FNS, H10D_ALLOW);
     for n in ["cont_var", "reported", "at", "symbols"] {
@@ -1852,6 +1880,45 @@ fn walker_controls() {
             && h10_idents(back, &H10M_FNS).len() > 10,
         "H10m real site spelled back"
     );
+    // H10d planted (C2, rule Y): y_side reading a position, a name or a process's identity
+    // row, and `in_p5` reading the declared bounds — each must fail
+    let d = "impl E { fn y_side(w: &Write) { let q = w.at; self.symbols.len(); \
+             self.proc_idents.get(0); } fn in_p5(k: &str) { self.nets.get(0); } }";
+    let off = h10_offenders(d, &H10D_FNS, H10D_ALLOW);
+    for (f, n) in [
+        ("y_side", "at"),
+        ("y_side", "symbols"),
+        ("y_side", "proc_idents"),
+        ("in_p5", "nets"),
+    ] {
+        assert!(
+            off.iter().any(|(g, x)| g == f && x == n),
+            "H10d planted `{f}` `{n}`: {off:?}"
+        );
+    }
+    // H10d real site spelled back (`mdrv_mix.rs` `y_side`): on the list, and H9 counts its
+    // `Via::Direct`
+    let back = "fn y_side(w: &Write) -> Option<(bool, bool)> { match w.writer { \
+                Writer::Proc { kind, .. } if in_p5(kind) && procedural(w) => { \
+                Some((kind == ALWAYS_COMB && w.via == Some(Via::Direct), true)) } _ => None } }";
+    assert!(
+        h10_offenders(back, &H10D_FNS, H10D_ALLOW).is_empty()
+            && h10_idents(back, &H10D_FNS).len() > 10
+            && count("H9", back) == 1,
+        "H10d real site spelled back (y_side)"
+    );
+    // H10m planted (C2): rule Y's sentence capturing a scope or reading a routine name
+    for (body, n) in [
+        ("format!(\"variable `{name}` in {scope}\");", "scope"),
+        ("self.frame_func_names.get(0);", "frame_func_names"),
+    ] {
+        let src = format!("impl E {{ fn mdrv_emit(&mut self) {{ {body} }} }}");
+        let off = h10_offenders(&src, &H10M_FNS, H10M_ALLOW);
+        assert!(
+            off.iter().any(|(_, x)| x == n),
+            "H10m planted (mdrv_emit) `{n}`: {off:?}"
+        );
+    }
     // H9
     let h9 = "fn f(&mut self) { let v0 = self.stmts.len(); self.record_via(wext::Via::TaskInline, v0); }";
     assert_eq!(count("H9", h9), 2, "H9 planted: writer, value");
@@ -2451,6 +2518,7 @@ const H9: &[(&str, &str, &str, usize, &str)] = &[
     ("H9:Via::DeferAction", "wext.rs", "build_view", 1, "laid over task intervals"),
     ("H9:Via::DeferAction", "wext.rs", "render", 1, "`defer`"),
     ("H9:Via::Direct", "mdrv_mix.rs", "procedural", 1, "rule X's procedural writer"),
+    ("H9:Via::Direct", "mdrv_mix.rs", "y_side", 1, "rule Y's A side: an `always_comb`'s own text only"),
     ("H9:Via::Direct", "wext.rs", "build_view", 2, "the default of a procedural statement"),
     ("H9:Via::Direct", "wext.rs", "render", 1, "`direct`"),
     ("H9:Via::TaskInline", "inline_task.rs", "inline_task", 1, "the inline decision"),
@@ -2534,7 +2602,7 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
 #[rustfmt::skip]
 const H10: &[(&str, &str, &str, usize, &str)] = &[
     ("H10:kind:always", "mdrv_mix.rs", "-", 1, "P6"),
-    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "ALWAYS_COMB, P6's member rule Y names"),
     ("H10:kind:always_ff", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:always_latch", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:assign", "mdrv_mix.rs", "-", 1, "ASSIGN, CONT's member the message names"),

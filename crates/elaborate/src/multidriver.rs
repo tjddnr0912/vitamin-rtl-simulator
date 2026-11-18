@@ -44,8 +44,9 @@
 //! combinational drivers. This can cause performance degradation.` and runs the
 //! design; on two `always_ff` writing overlapping parts (m_a_aff_aff_ppo) it still
 //! prints no driver line. Rules A–D are unchanged by it; a continuous and a procedural
-//! writer on overlapping bits are `mdrv_mix.rs`'s rule X (§5.2 Q-MDRVMIX), and a rule over
-//! the bits of a pair of processes is planned there (rule Y).
+//! writer on overlapping bits are `mdrv_mix.rs`'s rule X (§5.2 Q-MDRVMIX), and an
+//! `always_comb`'s bits written by another process on overlapping bits are its rule Y
+//! (IEEE §9.2.2.2) ; the partial pairs with no `always_comb` side stay silent there.
 //!
 //! The severity is the OWNER's split, not the clause's: IEEE §9.2.2.3 words the
 //! `always_latch` rule exactly as §9.2.2.2 and §9.2.2.4 word theirs, and verilator

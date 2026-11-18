@@ -55,7 +55,7 @@
 //! NOT HERE: no target set (which nets a rule looks at: declaration facts, §5.2
 //! Q-MDRVMIX's re-plan; no `intro_kind` read), no pair test (which two writes overlap is
 //! the reader's). Its one production reader is `mdrv_mix.rs` (§5.2 Q-MDRVMIX: the target
-//! set from the declaration facts, the pair test, rule X), through one entry,
+//! set from the declaration facts, the pair test, rules X and Y), through one entry,
 //! `check_mixed_drivers`, right after the sole-writer checks. The three checkers that
 //! answer parts of this today (`multidriver.rs` rules A-D over the AST, `netdecl.rs`
 //! `check_whole_net_multidriver` over continuous rows, `cont_array.rs` `other_writers`)
@@ -542,6 +542,15 @@ impl WriteView {
     /// The declaration fact of net `net` (module head, A1).
     pub fn decl(&self, net: u32) -> Option<DeclFact> {
         self.decls.get(net as usize).copied().flatten()
+    }
+}
+
+#[cfg(test)]
+impl WriteView {
+    /// A hand-built view for a reader's unit test (`mdrv_mix.rs`): the writes and the
+    /// declaration fact per net, as `build_view` would hold them.
+    pub(crate) fn for_test(writes: Vec<Write>, decls: Vec<Option<DeclFact>>) -> Self {
+        Self { writes, decls }
     }
 }
 
