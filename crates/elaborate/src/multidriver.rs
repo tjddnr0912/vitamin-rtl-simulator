@@ -14,7 +14,7 @@
 //!   decl initializer + always_latch         accepts       *E,MULAXX    W3060
 //!   initial + always_ff                     MULTIDRIVEN   *E,MULAXX    E3001
 //!   initial + always_comb                   MULTIDRIVEN   *E,MULAXX    E3001
-//!   initial + always_latch                  accepts       *E,MULAXX    W3060
+//!   initial + always_latch                  accepts       *E,MULAXX    E3001 (owner 2026-11-18)
 //!   two always_ff on one variable           MULTIDRIVEN   *E,MULAXX    E3001
 //!   always_ff + always                      MULTIDRIVEN   *E,MULAXX    E3001
 //!   always_comb + continuous assign         MULTIDRIVEN   *E,MULAXX    E3001
@@ -43,21 +43,32 @@
 //! `%Warning-MULTIDRIVEN: t.sv:4:15: Bits [3:2] of signal 't.v' have multiple
 //! combinational drivers. This can cause performance degradation.` and runs the
 //! design; on two `always_ff` writing overlapping parts (m_a_aff_aff_ppo) it still
-//! prints no driver line. Rules A–D are unchanged by it; a continuous and a procedural
-//! writer on overlapping bits are `mdrv_mix.rs`'s rule X (§5.2 Q-MDRVMIX), and an
-//! `always_comb`'s bits written by another process on overlapping bits are its rule Y
-//! (IEEE §9.2.2.2) ; the partial pairs with no `always_comb` side stay silent there.
+//! prints no driver line. Rules A, C and D are unchanged by it; a continuous and a
+//! procedural writer on overlapping bits are `mdrv_mix.rs`'s rule X (§5.2 Q-MDRVMIX),
+//! and the bits an `always_comb`, `always_latch` or `always_ff` writes, written by
+//! another process on overlapping bits, are its rule Y (IEEE §9.2.2.2, §9.2.2.3,
+//! §9.2.2.4: the owner's decision of 2026-11-18 widened it from `always_comb` to the
+//! three kinds) ; a whole pair Rule B sees stays Rule B's, and its error latches the
+//! flag rule Y returns on.
 //!
-//! The severity is the OWNER's split, not the clause's: IEEE §9.2.2.3 words the
+//! The severity WAS the owner's split, not the clause's: "IEEE §9.2.2.3 words the
 //! `always_latch` rule exactly as §9.2.2.2 and §9.2.2.4 word theirs, and verilator
 //! still accepts every `always_latch` pair measured. Where the two tools disagree
-//! vita warns rather than stops, so:
+//! vita warns rather than stops" (kept in §5.2 Q-MDRVMIX's record). Since the owner's
+//! decision of 2026-11-18 (D-WW, option A) an `always_latch` sharing a variable with
+//! another process is an error (IEEE 1800-2017 §9.2.2.3, ieee1800-2017.txt:9095-9098:
+//! "All statements in 9.2.2.2 shall apply to always_latch"): Rule B for whole
+//! module-body writers, §5.2 Q-MDRVMIX's rule Y for the rest. The split stands for ONE
+//! shape, a declaration initializer on an `always_ff` / `always_latch` variable, so:
 //!
-//! - Both tools reject ⇒ [`MsgCode::ElabMultidriver`] (error).
+//! - Both tools reject, or an `always_latch` pair ⇒ [`MsgCode::ElabMultidriver`]
+//!   (error).
 //! - Only xcelium rejects ⇒ [`MsgCode::ElabMultidriverStrict`] (warning). That code
-//!   covers two shapes: a declaration initializer on an `always_ff`/`always_latch`
-//!   variable, and an `always_latch` sharing a variable with another process (not with
-//!   a continuous `assign`: that is Rule D's error, below). The
+//!   covers one shape: a declaration initializer on an `always_ff`/`always_latch`
+//!   variable (Rule C). Rule B's latch pair keeps it only where the latch, or every
+//!   other writer, writes the variable by `force` alone — the text does not settle
+//!   whether a `force` is a write of §9.2.2.2-.4, so that pair prints what it printed.
+//!   The
 //!   initializer is that register's power-on value; verilator and every synthesis
 //!   flow implement it, and this repository's own `obs_procs` fixture is written in
 //!   that idiom. An error there was built once and reverted because it rejected
@@ -99,8 +110,8 @@
 //!
 //! The "(ruling)" rows are the owner's of 2026-10-06: loud where IEEE says error (E
 //! over W), and verilator is not an x/z oracle. An `always_latch` beside an `assign` is
-//! therefore Rule D's, not Rule B's latch warning: Rule B's W3060 stands down whenever
-//! Rule D fires, and stays for the latch pairs with no `assign`. Rule D does not reach
+//! therefore Rule D's, not Rule B's latch error: Rule B's latch error stands down
+//! whenever Rule D fires, and stays for the latch pairs with no `assign`. Rule D does not reach
 //! a select, element or member write (`mdrv-partial`), a write through a task, a
 //! hierarchical name or a system task's output argument (`mdrv-ca-call`), a port
 //! binding, a UDP instance, a generate block or an interface body (`mdrv-ca-port`), a
@@ -407,6 +418,11 @@ struct Writer {
     /// `None` for every other writer kind.
     clause: Option<&'static str>,
     span: ast::Span,
+    /// Rule B's own walk found this process writing the whole name ONLY by `force`
+    /// (`ProcWrites::All` holds and `ProcWrites::ExceptForce` does not) ; false for a
+    /// via-call writer and a continuous `assign` (premise judge 2 of §5.2 Q-MDRVMIX C3,
+    /// line 1). Read by Rule B's `always_latch` arm only.
+    force_only: bool,
 }
 
 /// What a diagnostic calls the variable: the code, severity and clause are the same
@@ -455,7 +471,12 @@ fn proc_writer(kind: ast::ProcKind, span: ast::Span) -> Writer {
         ast::ProcKind::Initial => ("`initial`", None),
         ast::ProcKind::Final => ("`final`", None),
     };
-    Writer { what, clause, span }
+    Writer {
+        what,
+        clause,
+        span,
+        force_only: false,
+    }
 }
 
 impl Elaborator<'_> {
@@ -876,8 +897,15 @@ impl Elaborator<'_> {
                 let via = p.kind == ast::ProcKind::AlwaysComb
                     && comb_writers >= 2
                     && via_call_writers.contains(&(name.clone(), pi));
-                if stmt_writes_whole_ident(&p.body, &name, ProcWrites::All) || via {
-                    writers.push(proc_writer(p.kind, p.span));
+                let all = stmt_writes_whole_ident(&p.body, &name, ProcWrites::All);
+                if all || via {
+                    let force_only = !via
+                        && all
+                        && !stmt_writes_whole_ident(&p.body, &name, ProcWrites::ExceptForce);
+                    writers.push(Writer {
+                        force_only,
+                        ..proc_writer(p.kind, p.span)
+                    });
                 }
             }
             for ca in &cont_assigns {
@@ -890,12 +918,13 @@ impl Elaborator<'_> {
                         what: "a continuous `assign`",
                         clause: None,
                         span: ca.span,
+                        force_only: false,
                     });
                 }
             }
             let inferred = writers.iter().position(|w| w.clause.is_some());
 
-            // Rule D's verdict (below), decided first because Rule B's warning defers
+            // Rule D's verdict (below), decided first because Rule B's latch arm defers
             // to it. A pure function of the AST plus the built net's array-ness: with
             // no whole continuous `assign` of `name` it is `None`, and every rule runs
             // exactly as it did before Rule D existed.
@@ -911,19 +940,29 @@ impl Elaborator<'_> {
 
             // ── Rule B: an inferring procedure plus ANY other module-scope writer. ─
             //
-            // One diagnostic per variable, at the always_* procedure, naming the first
-            // other writer. The SEVERITY is the oracle split, not the clause: measured,
-            // verilator reports MULTIDRIVEN for the `always_comb` and `always_ff` pairs
-            // and is SILENT for every `always_latch` pair, so a latch pair is the
-            // warning and the other two are the error.
+            // One diagnostic per variable, at the always_* procedure (the first in body
+            // order, `inferred`), naming the first other writer, and an error for every
+            // kind: IEEE §9.2.2.2, §9.2.2.3 ("All statements in 9.2.2.2 shall apply to
+            // always_latch") and §9.2.2.4 word one rule. The `always_comb` and
+            // `always_ff` line names the oracles (verilator reports MULTIDRIVEN on those
+            // pairs) ; the `always_latch` line names none, verilator being silent on
+            // every latch pair measured — the owner's decision of 2026-11-18 (D-WW,
+            // option A) made the latch pair the error the other two are, where it was
+            // the warning (W3060) of the oracle split.
             //
-            // Except when Rule D fires: a continuous `assign` beside the latch (or
-            // beside anything else) is IEEE §6.5's error whatever verilator says, and
+            // Except, on the latch arm: (1) when Rule D fires — a continuous `assign`
+            // beside the latch (or beside anything else) is IEEE §6.5's error, and
             // iverilog 13.0 rejects it ("Cannot perform procedural assignment to
-            // variable 'y' because it is also continuously assigned."). So the latch
-            // warning stands down and Rule D reports the variable — the owner's
-            // ruling of 2026-10-06 (E over W where IEEE says error). Without this, a
-            // latch also hid two `assign`s on the variable (`y=x` at exit 0).
+            // variable 'y' because it is also continuously assigned."), so Rule D
+            // reports the variable — the owner's ruling of 2026-10-06 (E over W where
+            // IEEE says error) ; without this, a latch also hid two `assign`s on the
+            // variable (`y=x` at exit 0) ; (2) when the latch, or every other writer,
+            // writes the name only by `force` (`force_only`): the text does not settle
+            // whether a `force` is a write of §9.2.2.2-.4 (§6.5 and §10.6 call it a
+            // procedural continuous assignment ; §6.5 also says "A force statement is
+            // neither a continuous nor a procedural assignment", and §10.6.2 lets it
+            // override a variable's procedural assignments), so the pair keeps the
+            // warning it had (W3060), naming the first other writer as before.
             if let Some(i) = inferred {
                 if writers.len() > 1 {
                     let other = writers
@@ -937,8 +976,22 @@ impl Elaborator<'_> {
                         writers[i].clause.unwrap_or("9.2.2"),
                         writers[i].span,
                     );
-                    if what == "`always_latch`" {
-                        if rule_d.is_none() {
+                    let latch = what == "`always_latch`";
+                    // On the latch arm, Rule D reports the variable when it fires (below).
+                    if !latch || rule_d.is_none() {
+                        // The latch arm's error names the first other writer that is
+                        // not force-only, and needs the latch not force-only itself.
+                        let err_other = if latch {
+                            writers
+                                .iter()
+                                .enumerate()
+                                .find(|(j, w)| *j != i && !w.force_only)
+                                .filter(|_| !writers[i].force_only)
+                                .map(|(_, w)| w.what)
+                        } else {
+                            Some(other)
+                        };
+                        let Some(err_other) = err_other else {
                             self.warn_code_at(
                                 MsgCode::ElabMultidriverStrict,
                                 span,
@@ -950,15 +1003,18 @@ impl Elaborator<'_> {
                                 ),
                             );
                             continue;
-                        }
-                    } else {
+                        };
+                        let tail = if latch {
+                            ""
+                        } else {
+                            " — verilator MULTIDRIVEN / xcelium *E,MULAXX"
+                        };
                         self.var_multidriver_error(
                             &name,
                             span,
                             &format!(
-                                "{subject} is written by {what} AND by {other}, \
-                                 which is two drivers on one variable (IEEE §{clause}) \
-                                 — verilator MULTIDRIVEN / xcelium *E,MULAXX"
+                                "{subject} is written by {what} AND by {err_other}, \
+                                 which is two drivers on one variable (IEEE §{clause}){tail}"
                             ),
                         );
                         continue;
@@ -977,7 +1033,7 @@ impl Elaborator<'_> {
             // already answered for every pair with an `always_comb`/`always_ff` writer
             // (its error `continue`d), so what reaches here is a continuous `assign`
             // (or gate) beside another one, a plain `always`, an `always_latch` (Rule
-            // B's warning stood down), an `initial`, a `final`, or the declaration
+            // B's latch arm stood down), an `initial`, a `final`, or the declaration
             // initializer — all of which ran at exit 0, two whole `assign`s resolved as
             // a `wire` (`y=x` where iverilog 13.0 says "Variable 'y' cannot have
             // multiple drivers.").

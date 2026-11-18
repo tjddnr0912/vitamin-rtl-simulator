@@ -1434,7 +1434,12 @@ module top; m u(); initial #5 $finish; endmodule
     );
 }
 
-/// Expected: s2+vl.
+/// Expected: s2+vl. The `initial` writes every field but `s.n[0]`, the bit the
+/// `always_ff` writes (§5.2 Q-MDRVMIX C3): until then it wrote `s = 20'h0` whole, which
+/// IEEE 1800-2017 §9.2.2.4 (ieee1800-2017.txt:9105-9107) forbids and which is now rule Y's
+/// E3001 (the owner's decision of 2026-11-18) ; PRE (0a9af60f) printed `A s=00010` on it
+/// (iverilog 13.0 the same ; verilator 5.054 lint no driver line) and prints it on this
+/// design. The original is pinned as `mdrv_mix_pins.rs` u4_p_b_w1n_orig.
 #[test]
 fn p_b_w1n() {
     value(
@@ -1445,7 +1450,7 @@ fn p_b_w1n() {
 endpackage
 module top; import rp::*; r_t s; logic x; 
   always_ff @(posedge x) s.n[0] <= 1'b1;
-  initial begin s = 20'h0; x=0; #1 x=1; #1 $display("A s=%h",s); $finish; end
+  initial begin s.m = '0; s.n[3:1] = '0; s.z = '0; x=0; #1 x=1; #1 $display("A s=%h",s); $finish; end
 endmodule
 "#,
         &["A s=00010"],

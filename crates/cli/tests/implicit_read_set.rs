@@ -7455,13 +7455,21 @@ endmodule\n\
 /// always_latch process has no event control. | t.sv:3: warning: System task ($display) cannot be
 /// synthesized in an always_latch process.`; s2v `C t=0 y=0 g=0010 | C t=5 y=1 g=0011 | A end y=1
 /// g=0011`; vl `C t=0 y=0 g=0010 | A end y=0 g=0001`.
+///
+/// §5.2 Q-MDRVMIX C3: the `initial` writes only the bits the `always_latch` does not (g[0],
+/// g[3], g[2]) ; the original `initial g = 0;` wrote g[1] too, which IEEE 1800-2017 §9.2.2.3
+/// (txt:9097-9098: "All statements in 9.2.2.2 shall apply to always_latch") forbids and which
+/// is now rule Y's E3001 (the owner's decision of 2026-11-18 ; the original design and its
+/// oracle text: W/mdrv2/build/pins/mv3/u5orig, pinned as `mdrv_mix_pins.rs` irs_rp1l_orig) ;
+/// the raw lines are re-measured on this design (W/mdrv2/build/pins/mv3/u5new), PRE prints the
+/// same lines.
 #[test]
 fn rp1l_local_twin() {
     pin(
         "module top;\n\
   logic [3:0] g; logic y;\n\
   always_latch begin g[1] = 1'b1; y = g[0]; $display(\"C t=%0t y=%0d g=%b\", $time, y, g); end\n\
-  initial begin g = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
+  initial begin g[0] = 0; g[3] = 0; g[2] = 0; #5 g[0] = 1'b1; #2 $display(\"A end y=%0d g=%b\", y, g); $finish; end\n\
 endmodule\n\
 ",
         &[

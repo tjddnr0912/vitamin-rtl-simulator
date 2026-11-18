@@ -9,10 +9,20 @@
 //! - only xcelium rejects            -> `VITA-W3060` W-ELAB-MULTIDRIVER-STRICT
 //! - both tools accept               -> silent
 //!
+//! Two owner decisions of 2026-11-18 (§5.2 Q-MDRVMIX C3) put IEEE first where the
+//! tools split: an `always_latch` pair is `VITA-E3001` like its `always_comb` /
+//! `always_ff` twins (IEEE 1800-2017 §9.2.2.3, "All statements in 9.2.2.2 shall apply
+//! to always_latch"), and overlapping bits of a variable an `always_comb`,
+//! `always_latch` or `always_ff` writes, written by another process, are `VITA-E3001`
+//! from `mdrv_mix.rs`'s rule Y even where one side is a PART (§9.2.2.2-.4: "shall not
+//! be written to by any other process"). The rows below that moved keep PRE's line and
+//! the oracles' in their doc. `VITA-W3060` is left for a declaration initializer.
+//!
 //! The silent rows are the teeth: a diagnostic on RTL every tool accepts is a
 //! regression, so `always` + `always`, a clock generator, a write reaching the
-//! variable only through a TASK CALL, and every pair where either side writes only a
-//! PART of the variable are each pinned as producing nothing.
+//! variable only through a TASK CALL, two processes on DISTINCT bits, and the struct
+//! member, unpacked-element and initializer pairs are each pinned as producing
+//! nothing.
 
 use std::process::Command;
 
@@ -112,29 +122,75 @@ fn initial_plus_always_comb_is_an_error() {
     );
 }
 
+/// IEEE 1800-2017 §9.2.2.3 (ieee1800-2017.txt:9097-9098): "All statements in 9.2.2.2
+/// shall apply to always_latch" ; §9.2.2.2 (:9036-9037): "The variables written on the
+/// left-hand side of assignments shall not be written to by any other process." The
+/// owner's decision of 2026-11-18 (D-WW, option A): an `always_latch` pair is the error
+/// its `always_comb` / `always_ff` twins are, with no oracle named on its line.
+/// Until §5.2 Q-MDRVMIX C3 this row was the warning (the oracle split: verilator is
+/// silent on every `always_latch` pair measured, xcelium rejects it) ; PRE (0a9af60f),
+/// rc 0: `d.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `lti` is
+/// written by `always_latch` AND by `initial`; xcelium rejects this as two drivers
+/// (*E,MULAXX, IEEE §9.2.2.3) while verilator accepts it — give the variable one writing
+/// process [in t]`. iverilog 13.0 -g2012: compile rc=0, vvp `$finish called at 1` ;
+/// verilator 5.054 --lint-only -Wall: no driver line (`%Warning-UNUSEDSIGNAL ... 'lti'`).
 #[test]
-fn initial_plus_always_latch_is_a_warning() {
-    // verilator is SILENT on every `always_latch` pair measured, while reporting
-    // MULTIDRIVEN for the `always_comb` and `always_ff` twins. xcelium rejects it.
-    // The severity follows the tools, not IEEE §9.2.2.3's wording, so this row is
-    // the warning and its two neighbours are errors.
+fn initial_plus_always_latch_is_an_error() {
     let (rc, text) = run(
         "lti",
         "module t(input logic a);\n  logic [3:0] lti; initial lti = 0;\n  always_latch if (a) lti = 1;\n  initial #1 $finish;\nendmodule\n",
         &[],
     );
-    assert_eq!(rc, Some(0), "expected a clean run, got:\n{text}");
+    assert_eq!(rc, Some(1), "expected an elaborate error, got:\n{text}");
     assert!(
-        text.contains("VITA-W3060")
-            && text.contains("variable `lti` is written by `always_latch` AND by `initial`"),
+        text.contains(
+            "d.sv:3:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `lti` is written by \
+             `always_latch` AND by `initial`, which is two drivers on one variable (IEEE \
+             §9.2.2.3) [in t]"
+        ),
         "got:\n{text}"
     );
-    assert!(!text.contains("VITA-E3001"), "got:\n{text}");
+    assert!(
+        !text.contains("VITA-W3060"),
+        "one diagnostic only, got:\n{text}"
+    );
 }
 
-/// The control twin for the row above: the same pair with `always_comb` in place of
-/// `always_latch` IS an error, so the demotion is scoped to the latch and not to the
-/// `initial` half of the pair.
+/// The latch pair of the row above on a variable that also has a declaration
+/// initializer is still ONE diagnostic: Rule B's E3001 ends the variable's checks, so
+/// Rule C's initializer warning (W3060) does not follow it (§5.2 Q-MDRVMIX C3, the
+/// latch arm keeps its `continue`). PRE (0a9af60f), rc 0:
+/// `t.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `lti` is written by
+/// `always_latch` AND by `initial`; xcelium rejects this as two drivers (*E,MULAXX, IEEE
+/// §9.2.2.3) while verilator accepts it — give the variable one writing process [in t]`.
+/// iverilog 13.0: compiles and runs ("$finish called at 1"); verilator 5.054
+/// --lint-only -Wall: `%Warning-PROCASSINIT: t.sv:2:21: Procedural assignment to
+/// declaration with initial value: 'lti'` (no MULTIDRIVEN).
+#[test]
+fn an_initialized_latch_pair_is_one_error() {
+    let (rc, text) = run(
+        "ltii",
+        "module t(input logic a);\n  logic [3:0] lti = 4'h1; initial lti = 0;\n  always_latch if (a) lti = 1;\n  initial #1 $finish;\nendmodule\n",
+        &[],
+    );
+    assert_eq!(rc, Some(1), "expected an elaborate error, got:\n{text}");
+    assert!(
+        text.contains(
+            "d.sv:3:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `lti` is written by \
+             `always_latch` AND by `initial`, which is two drivers on one variable (IEEE \
+             §9.2.2.3) [in t]"
+        ),
+        "got:\n{text}"
+    );
+    assert!(
+        !text.contains("VITA-W3060") && text.matches("VITA-E3001").count() == 1,
+        "one diagnostic only, got:\n{text}"
+    );
+}
+
+/// The control twin for `initial_plus_always_latch_is_an_error`: the same pair with `always_comb` in place of
+/// `always_latch` is an error whose line names the oracles (verilator MULTIDRIVEN /
+/// xcelium *E,MULAXX) ; the latch's line names none (§5.2 Q-MDRVMIX C3).
 #[test]
 fn always_latch_demotion_does_not_reach_always_comb() {
     expect_multidriver(
@@ -397,12 +453,39 @@ fn always_ff_struct_member_beside_initial_member_is_silent() {
     );
 }
 
-/// A BIT select from `always_ff` beside a WHOLE write from `initial`.
+/// The rule Y error of a pair whose `always_ff` side or other side is a PART: rc 1 and
+/// one E3001 holding each of `want`.
+fn expect_rule_y(name: &str, body: &str, want: &[&str]) {
+    let (rc, text) = run(name, body, &[]);
+    assert_eq!(rc, Some(1), "expected an elaborate error, got:\n{text}");
+    assert_eq!(text.matches("VITA-E3001").count(), 1, "got:\n{text}");
+    for w in want {
+        assert!(
+            text.contains("error[VITA-E3001] E-ELAB-MULTIDRIVER: ") && text.contains(w),
+            "wanted `{w}`, got:\n{text}"
+        );
+    }
+}
+
+/// A BIT select from `always_ff` beside a WHOLE write from `initial`: bit 0 is written
+/// by both, IEEE 1800-2017 §9.2.2.4 (ieee1800-2017.txt:9105-9107: "Variables on the
+/// left-hand side of assignments within an always_ff procedure, including variables from
+/// the contents of a called function, shall not be written to by any other process"),
+/// the owner's decision of 2026-11-18 — `mdrv_mix.rs`'s rule Y. Until §5.2 Q-MDRVMIX C3
+/// this row was silent: PRE (0a9af60f) rc 0, `simulation ended (Finish) at time 1` ;
+/// iverilog 13.0 compile rc=0, vvp `$finish called at 1` ; verilator 5.054
+/// --lint-only -Wall: no driver line (`%Warning-UNUSEDSIGNAL ... 'b1'`).
 #[test]
-fn partial_always_ff_bit_beside_whole_initial_is_silent() {
-    expect_silent(
+fn partial_always_ff_bit_beside_whole_initial_is_an_error() {
+    expect_rule_y(
         "b1",
         "module t(input logic clk, input logic d);\n  logic [3:0] b1;\n  always_ff @(posedge clk) b1[0] <= d;\n  initial b1 = 0;\n  initial #1 $finish;\nendmodule\n",
+        &[
+            "variable `t.b1` is written by `always_ff` (in the statement at ",
+            "on bits [0:0] of its packed value (bit 0 is the least significant bit), and the \
+             bits an `always_ff` writes take no write from another process (IEEE 1800-2017 \
+             §9.2.2.4)",
+        ],
     );
 }
 
@@ -415,12 +498,21 @@ fn two_processes_on_distinct_bits_is_silent() {
     );
 }
 
-/// A WHOLE `always_ff` write beside a PARTIAL `initial` write.
+/// A WHOLE `always_ff` write beside a PARTIAL `initial` write: bit 1 is written by both
+/// (IEEE 1800-2017 §9.2.2.4, as the row above) — rule Y. Until §5.2 Q-MDRVMIX C3 this row
+/// was silent: PRE (0a9af60f) rc 0, `simulation ended (Finish) at time 1` ; iverilog 13.0
+/// compile rc=0, vvp `$finish called at 1` ; verilator 5.054 --lint-only -Wall: no driver
+/// line (`%Warning-UNUSEDSIGNAL ... 'w'`).
 #[test]
-fn whole_always_ff_beside_partial_initial_is_silent() {
-    expect_silent(
+fn whole_always_ff_beside_partial_initial_is_an_error() {
+    expect_rule_y(
         "w",
         "module t(input logic clk);\n  logic [3:0] w;\n  always_ff @(posedge clk) w <= 1;\n  initial w[1] = 0;\n  initial #1 $finish;\nendmodule\n",
+        &[
+            "variable `t.w` is written by `always_ff` (in the statement at ",
+            "AND by `initial` (in the statement at ",
+            "on bits [1:1] of its packed value",
+        ],
     );
 }
 

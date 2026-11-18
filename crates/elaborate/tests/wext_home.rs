@@ -74,6 +74,15 @@
 //!   `intro_kind`, no name split (`rsplit`) feeds a word of the text (the re-entry's (b)) ;
 //!   and each process / continuous kind string of the closed vocabulary (`KINDS`) spelled
 //!   once, in the file's consts.
+//! - H10k (§5.2 Q-MDRVMIX C3) rule Y's A-kind list and its clause table are ONE const each
+//!   (`A_KINDS`, `A_CLAUSES`), of the same declared length and the same number of entries,
+//!   and no kind string of `KINDS` is spelled inside a fn of `mdrv_mix.rs`.
+//! - H-W1 (§5.2 Q-MDRVMIX C3) `MsgCode :: ElabMultidriverStrict` (W3060) is spelled in
+//!   exactly two non-comment, non-test sites of `crates/elaborate/src`, both in
+//!   `multidriver.rs` `check_multidriver_processes`: Rule C (a declaration initializer on
+//!   an `always_ff` / `always_latch` variable) and Rule B's `always_latch` arm when the
+//!   latch, or every other writer, writes the name by `force` alone (premise judge 2 of
+//!   C3, line 3) ; a third producer fails.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -232,6 +241,7 @@ const H10D_FNS: [&str; 11] = [
 #[rustfmt::skip]
 const H10D_ALLOW: &[&str] = &[
     "ALWAYS_COMB",
+    "A_KINDS",
     "AnsiPort",
     "BTreeMap",
     "BTreeSet",
@@ -384,6 +394,8 @@ const H10M_FNS: [&str; 3] = ["mdrv_emit", "mdrv_net_name", "mdrv_writer"];
 #[rustfmt::skip]
 const H10M_ALLOW: &[&str] = &[
     "ASSIGN",
+    "A_CLAUSES",
+    "A_KINDS",
     "Body",
     "Cont",
     "ElabMultidriver",
@@ -404,6 +416,7 @@ const H10M_ALLOW: &[&str] = &[
     "at",
     "b",
     "c",
+    "clause",
     "col",
     "cur_prefix",
     "cur_span",
@@ -418,11 +431,13 @@ const H10M_ALLOW: &[&str] = &[
     "id",
     "if",
     "iter",
+    "k",
     "kind",
     "let",
     "line",
     "lo",
     "map",
+    "map_or",
     "match",
     "mdrv_net_name",
     "mdrv_writer",
@@ -454,6 +469,7 @@ const H10M_ALLOW: &[&str] = &[
     "what",
     "writer",
     "x",
+    "zip",
 ];
 /// H10: names neither list may hold (the self-check of the two lists).
 const H10_NEVER: [&str; 13] = [
@@ -1431,6 +1447,105 @@ fn h10_the_mixed_driver_reader() {
     );
 }
 
+/// H10k (§5.2 Q-MDRVMIX C3): the problems of one `mdrv_mix.rs` source against the rule —
+/// `A_KINDS` and `A_CLAUSES` each declared once as `const NAME : [ & str ; N ]`, the same
+/// `N`, each initializer holding `N` entries, and no `KINDS` string inside a fn (the
+/// walker's key is `-` outside every fn). Empty = the rule holds.
+fn h10k_problems(src: &str) -> Vec<String> {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut out = Vec::new();
+    let mut lens: Vec<(String, String, usize)> = Vec::new();
+    for name in ["A_KINDS", "A_CLAUSES"] {
+        let at: Vec<usize> = (0..t.len())
+            .filter(|&i| tx(i) == "const" && tx(i + 1) == name)
+            .collect();
+        if at.len() != 1 {
+            out.push(format!("{name} declared {} times", at.len()));
+            continue;
+        }
+        let i = at[0];
+        // const NAME : [ & str ; N ] = [ e , e , .. ] ;
+        let ty = i + 3;
+        if tx(i + 2) != ":" || tx(ty) != "[" {
+            out.push(format!("{name}: not an array const"));
+            continue;
+        }
+        let ty_close = close_of(&t, ty);
+        let n = tx(ty_close - 1).to_string();
+        let init = ty_close + 2;
+        if tx(ty_close + 1) != "=" || tx(init) != "[" {
+            out.push(format!("{name}: no array initializer"));
+            continue;
+        }
+        let close = close_of(&t, init);
+        let entries = (init + 1..close).filter(|&j| tx(j) != ",").count();
+        lens.push((name.to_string(), n, entries));
+    }
+    if let [(_, na, ea), (_, nc, ec)] = lens.as_slice() {
+        if na != nc || ea != ec || na != &ea.to_string() {
+            out.push(format!(
+                "A_KINDS [{na}; {ea} entries] and A_CLAUSES [{nc}; {ec} entries] differ"
+            ));
+        }
+    }
+    for x in &t {
+        if x.kind == Kind::Lit && x.key != "-" && KINDS.iter().any(|v| x.text == format!("\"{v}\""))
+        {
+            out.push(format!("kind {} spelled in fn {}", x.text, x.key));
+        }
+    }
+    out
+}
+
+/// H10k (§5.2 Q-MDRVMIX C3): rule Y's A-kind list and its clause table (module head).
+#[test]
+fn h10k_one_a_kind_list_and_its_clause_table() {
+    let root = workspace_root();
+    let src = std::fs::read_to_string(root.join(SRC).join("mdrv_mix.rs")).expect("mdrv_mix.rs");
+    let p = h10k_problems(&src);
+    assert!(p.is_empty(), "H10k: {p:?}");
+}
+
+/// H-W1: the `MsgCode :: ElabMultidriverStrict` sites of `files` (non-comment, non-test:
+/// the walker drops comments and `#[cfg(test)]` items), per (file, fn).
+fn hw1_sites(files: &[(String, String)]) -> BTreeMap<(String, String), usize> {
+    let mut out: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for (rel, src) in files {
+        let f = rel.trim_start_matches("crates/elaborate/src/").to_string();
+        if f.starts_with("tests/") {
+            continue;
+        }
+        let t = tokens(src);
+        for i in 0..t.len().saturating_sub(2) {
+            if t[i].text == "MsgCode"
+                && t[i + 1].text == "::"
+                && t[i + 2].text == "ElabMultidriverStrict"
+            {
+                *out.entry((f.clone(), t[i].key.clone())).or_default() += 1;
+            }
+        }
+    }
+    out
+}
+
+/// H-W1 (§5.2 Q-MDRVMIX C3): W3060's two producers (module head).
+#[test]
+fn hw1_two_w3060_producers() {
+    let root = workspace_root();
+    let got = hw1_sites(&files_in(&root, SRC));
+    let want: BTreeMap<(String, String), usize> = [(
+        (
+            "multidriver.rs".to_string(),
+            "check_multidriver_processes".to_string(),
+        ),
+        2,
+    )]
+    .into_iter()
+    .collect();
+    assert_eq!(got, want, "H-W1: W3060's producers moved");
+}
+
 /// The files a `#[cfg(test)] mod <name>;` declaration (other attributes may sit between,
 /// none may carry `#[path]`) brings in — test code, as the walker skips an inline
 /// `#[cfg(test)]` item: `<dir>/<name>.rs` beside a `mod.rs` / `lib.rs` / `main.rs`, else
@@ -1919,6 +2034,66 @@ fn walker_controls() {
             "H10m planted (mdrv_emit) `{n}`: {off:?}"
         );
     }
+    // H10k (C3): the real shape spelled back holds ; a fourth kind without a clause, a kind
+    // spelled inline in y_side, a second list each fail ; a comment and cfg(test) are quiet
+    let real =
+        "const ALWAYS_COMB: &str = \"always_comb\"; const ALWAYS_LATCH: &str = \"always_latch\"; \
+                const ALWAYS_FF: &str = \"always_ff\"; \
+                const A_KINDS: [&str; 3] = [ALWAYS_COMB, ALWAYS_LATCH, ALWAYS_FF]; \
+                const A_CLAUSES: [&str; 3] = [\"9.2.2.2\", \"9.2.2.3\", \"9.2.2.4\"]; \
+                fn y_side(w: &Write) -> bool { A_KINDS.contains(&w.kind) }";
+    assert!(
+        h10k_problems(real).is_empty(),
+        "H10k real shape: {:?}",
+        h10k_problems(real)
+    );
+    for (planted, what) in [
+        (
+            real.replace(
+                "[&str; 3] = [ALWAYS_COMB, ALWAYS_LATCH, ALWAYS_FF]",
+                "[&str; 4] = [ALWAYS_COMB, ALWAYS_LATCH, ALWAYS_FF, \"always\"]",
+            ),
+            "a fourth kind without a clause",
+        ),
+        (
+            real.replace("A_KINDS.contains(&w.kind)", "w.kind == \"always_ff\""),
+            "a kind inline in y_side",
+        ),
+        (
+            format!("{real} const A_KINDS: [&str; 1] = [ALWAYS_COMB];"),
+            "a second A list",
+        ),
+    ] {
+        assert!(!h10k_problems(&planted).is_empty(), "H10k planted: {what}");
+    }
+    let quiet = format!(
+        "{real}\nfn f() {{ // \"always_ff\"\n }}\n#[cfg(test)]\nmod t {{ fn g() {{ let k = \"always_ff\"; }} }}"
+    );
+    assert!(h10k_problems(&quiet).is_empty(), "H10k comment / cfg(test)");
+    // H-W1 (C3): a third W3060 producer fails ; a comment and cfg(test) are quiet ; the real
+    // latch-arm site spelled back counts once in its fn
+    let site = |body: &str| {
+        vec![(
+            "crates/elaborate/src/multidriver.rs".to_string(),
+            format!("impl E {{ fn check_multidriver_processes(&mut self) {{ {body} }} }}"),
+        )]
+    };
+    let one = "self.warn_code_at(MsgCode::ElabMultidriverStrict, span, &m);";
+    let n_of = |fs: Vec<(String, String)>| hw1_sites(&fs).values().sum::<usize>();
+    assert_eq!(n_of(site(one)), 1, "H-W1 real site spelled back");
+    assert_eq!(
+        n_of(site(&format!("{one} {one} {one}"))),
+        3,
+        "H-W1 planted: a third producer"
+    );
+    assert_eq!(
+        n_of(vec![(
+            "crates/elaborate/src/x.rs".to_string(),
+            format!("// {one}\n#[cfg(test)]\nmod t {{ fn g() {{ {one} }} }}")
+        )]),
+        0,
+        "H-W1 comment / cfg(test)"
+    );
     // H9
     let h9 = "fn f(&mut self) { let v0 = self.stmts.len(); self.record_via(wext::Via::TaskInline, v0); }";
     assert_eq!(count("H9", h9), 2, "H9 planted: writer, value");
@@ -2602,9 +2777,9 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
 #[rustfmt::skip]
 const H10: &[(&str, &str, &str, usize, &str)] = &[
     ("H10:kind:always", "mdrv_mix.rs", "-", 1, "P6"),
-    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "ALWAYS_COMB, P6's member rule Y names"),
-    ("H10:kind:always_ff", "mdrv_mix.rs", "-", 1, "P6"),
-    ("H10:kind:always_latch", "mdrv_mix.rs", "-", 1, "P6"),
+    ("H10:kind:always_comb", "mdrv_mix.rs", "-", 1, "ALWAYS_COMB, P6's and A_KINDS' member"),
+    ("H10:kind:always_ff", "mdrv_mix.rs", "-", 1, "ALWAYS_FF, P6's and A_KINDS' member (C3)"),
+    ("H10:kind:always_latch", "mdrv_mix.rs", "-", 1, "ALWAYS_LATCH, P6's and A_KINDS' member (C3)"),
     ("H10:kind:assign", "mdrv_mix.rs", "-", 1, "ASSIGN, CONT's member the message names"),
     ("H10:kind:initial", "mdrv_mix.rs", "-", 1, "P6"),
     ("H10:kind:port", "mdrv_mix.rs", "-", 1, "PORT, CONT's member the message names"),

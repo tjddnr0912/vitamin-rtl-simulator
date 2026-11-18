@@ -1,5 +1,7 @@
 //! §5.2 Q-MDRVMIX — a packed variable's overlapping continuous and procedural writers
-//! (rule X, C1), and an `always_comb`'s bits written by another process (rule Y, C2). A
+//! (rule X, C1), and the bits an `always_comb`, `always_latch` or `always_ff` writes
+//! written by another process (rule Y, C2 ; the latch and ff kinds C3, the owner's
+//! decision of 2026-11-18). A
 //! READER of the write-extent view (`wext.rs`, ER §5.1): every fact it
 //! decides with — which net a write lands on, which bits, the writer, how the statement
 //! came to sit in its body, and what was declared — is the view's (`WriteView::writes`,
@@ -58,15 +60,21 @@
 //! "Variables on the left-hand side of assignments within an always_comb procedure,
 //! including variables from the contents of a called function, shall not be written to by
 //! any other processes, whereas always @* permits multiple processes to write to the same
-//! variable"). On a target net, the A side — a blocking or non-blocking statement of an
-//! `always_comb`'s own text (`Direct`) — and the B side — a blocking or non-blocking
+//! variable" ; §9.2.2.3, :9097-9098: "All statements in 9.2.2.2 shall apply to
+//! always_latch" ; §9.2.2.4, :9105-9107: "Variables on the left-hand side of assignments
+//! within an always_ff procedure, including variables from the contents of a called
+//! function, shall not be written to by any other process"). On a target net, the A side
+//! — a blocking or non-blocking statement of the own text (`Direct`) of a process whose
+//! kind is on the A-kind list `A_KINDS` (`always_comb`, `always_latch`, `always_ff`: the
+//! owner's decision 1 of 2026-11-18, IEEE first) — and the
+//! B side — a blocking or non-blocking
 //! statement of ANOTHER process (another `pid`: the sweep's `distinct` mode) whose kind is
 //! one of P5 (`P6` without the declaration initializer: `always_comb`, `always_ff`,
 //! `always_latch`, `always` — an `always @*` among them —, `initial`), lowered `Direct` or
 //! while a static task or void function was inlined into it (`TaskInline`: a write
 //! through a subroutine belongs to the calling process, the re-entry plan's S-c) — whose
-//! extents are both `Bits` and intersect, is E3001. An `always_comb`'s own statement is
-//! on both sides at once, so two `always_comb` processes pair. Two statements of one
+//! extents are both `Bits` and intersect, is E3001. An A-kind process's own statement is
+//! on both sides at once, so two such processes pair. Two statements of one
 //! process never pair (the two arms of a fork are one `initial`, c08_fork_arm ; one
 //! `always_comb` writing twice, k3_comb_twice_self) ; one `always_comb` elaborated in two
 //! instances is two processes, and a pair when both write one net upward
@@ -76,7 +84,7 @@
 //! caller's own, so an `always_ff` and the function it calls writing one bit, cell e2,
 //! is one process: R3 of the re-entry's rulings, the plan's S-a), a declaration
 //! initializer (`var_init`: rules A and C's), a deferred assertion's action, a `force` /
-//! `release`, `final`, `sva`, `covergroup`, `clocking`. An `always_comb` that writes the
+//! `release`, `final`, `sva`, `covergroup`, `clocking`. An A-kind process that writes the
 //! bits only through a subroutine it calls gives no A side (`via` does not tell a void
 //! function, which §9.2.2.2.2 names, from a task, which no clause names: R-TASKA,
 //! R-VOIDFN, the plan's S-c).
@@ -96,7 +104,7 @@
 //! judge 2 K6's fuzz). The pair REPORTED is the sweep's: the first incoming interval, in
 //! `(lo, view order)`, that meets a kept one, and that kept one (premise judge 2 L5) ; its
 //! bits are the intersection of the two intervals the sweep compared (`Pair`), and its
-//! `a` write is the one on the rule's A side (rule Y: the `always_comb`'s own statement ;
+//! `a` write is the one on the rule's A side (rule Y: the A-kind process's own statement ;
 //! when both are, the incoming one).
 //!
 //! AN ELABORATION THAT LATCHED AN ERROR IS NOT READ (the re-entry's (a), premise judge 2
@@ -123,9 +131,10 @@
 //!   continuous assignment takes no other writer on those bits (IEEE 1800-2017 §6.5,
 //!   §10.3.2)
 //!   rule Y: variable `NAME` is written by PROC AND by PROC on bits [HI:LO] of its packed
-//!   value (bit 0 is the least significant bit), and the bits an `always_comb` writes take
-//!   no write from another process (IEEE 1800-2017 §9.2.2.2) — the first PROC the A
-//!   write, the second the B write, each by the same words as rule X's PROC ;
+//!   value (bit 0 is the least significant bit), and the bits an `KIND_A` writes take no
+//!   write from another process (IEEE 1800-2017 §C) — the first PROC the A write, the
+//!   second the B write, each by the same words as rule X's PROC ; KIND_A the A write's
+//!   own kind and §C its entry of `A_CLAUSES` (9.2.2.2, 9.2.2.3, 9.2.2.4) ;
 //! - NAME: the `symbols` key whose id is the pair's net, through `display_of` (`#<net>`
 //!   when there is none: unreachable for a T2 net, which is declared) ;
 //! - HI, LO: the pair's `[lo, hi)` printed as `[hi-1:lo]`, storage bits counted from the
@@ -149,11 +158,16 @@
 //!   `at` is `Some` and the resolver gives a line above 0, otherwise nothing is printed
 //!   there (a `.*` connection and a declaration initializer carry no `at`).
 //!
-//! NOT HERE (each keeps PRE's output, with its cell): the pairs with no `always_comb` A
-//! side — `always_ff` × `always_ff` / `always_latch` / `always` / `initial`,
-//! `always_latch` × `always_latch` / `always` / `initial` (R-FF ; the re-entry's unit C3
-//! widens the A side to them, the owner's decision of 2026-11-18) — and `always @*` ×
-//! `always @*` / `initial` (legal, §9.2.2.2.2) ; an `always_comb` writing only through a
+//! A WHOLE `always_latch` pair `multidriver.rs`'s Rule B sees (module-body processes
+//! writing the bare name whole) is Rule B's E3001 (owner decision 2 of 2026-11-18, D-WW
+//! option A), which latches `had_error`, so rule Y prints nothing on that elaboration, as on a
+//! whole `always_ff` pair.
+//!
+//! NOT HERE (each keeps PRE's output, with its cell): `always @*` × `always @*` /
+//! `initial` (legal, §9.2.2.2.2) and `always` × `initial`, `initial` × `initial` (no
+//! A-kind side: no clause forbids them) ; DISJOINT bits of an `always_ff` (§9.2.2.4 has no
+//! independent-element sentence: the text does not settle it, never a pair here) ; an
+//! A-kind process writing only through a
 //! task (R-TASKA, c01 c02) or a void function called as a statement, which inlines like a
 //! task (R-VOIDFN, premise judge 2 L1, k2_voidfn_comb_ff) ; a frame body on either side of
 //! rule Y (R-FN: m_c_func_comb_acomb_ppo, k3_fn_two_comb, k2_fnframe_comb_ff, k2_hier_task)
@@ -182,16 +196,26 @@ use crate::wext::{DeclSite, Extent, Form, Via, Write, WriteView, Writer};
 /// `clocking` are not here.
 pub(crate) const P6: [&str; 6] = [
     ALWAYS_COMB,
-    "always_ff",
-    "always_latch",
+    ALWAYS_FF,
+    ALWAYS_LATCH,
     "always",
     "initial",
     VAR_INIT,
 ];
 
-/// The process kind of rule Y's A side (`stmt_flow.rs`'s `always_comb`), P6's member rule
-/// Y names.
+/// The process kinds of rule Y's A side (`stmt_flow.rs`'s `always_comb`, `always_latch`,
+/// `always_ff`), P6's members rule Y names: the A-kind list. Its clause table is
+/// `A_CLAUSES`, entry for entry.
 const ALWAYS_COMB: &str = "always_comb";
+const ALWAYS_LATCH: &str = "always_latch";
+const ALWAYS_FF: &str = "always_ff";
+const A_KINDS: [&str; 3] = [ALWAYS_COMB, ALWAYS_LATCH, ALWAYS_FF];
+
+/// The IEEE 1800-2017 clause of each `A_KINDS` entry, in its order, that the rule Y
+/// sentence names for the A write's kind: §9.2.2.2 (`always_comb`, txt:9036-9038),
+/// §9.2.2.3 (`always_latch`, txt:9097-9098: "All statements in 9.2.2.2 shall apply"),
+/// §9.2.2.4 (`always_ff`, txt:9105-9107).
+const A_CLAUSES: [&str; 3] = ["9.2.2.2", "9.2.2.3", "9.2.2.4"];
 
 /// The process kind of a declaration initializer (`var_init.rs`), named in the message.
 const VAR_INIT: &str = "var_init";
@@ -245,14 +269,15 @@ fn in_p5(kind: &str) -> bool {
     kind != VAR_INIT && P6.contains(&kind)
 }
 
-/// Rule Y's sides of one write, `(a, b)` (module head): `a` a statement of an
-/// `always_comb`'s own text (`Direct`: not a task or void function it calls, R-TASKA /
-/// R-VOIDFN), `b` a statement of any P5 process, its own or inlined (`TaskInline`). An
-/// `always_comb`'s own statement is both. A frame body is neither (R-FN, cell e2).
+/// Rule Y's sides of one write, `(a, b)` (module head): `a` a statement of the own text
+/// of a process whose kind is on the A-kind list (`A_KINDS`: `always_comb`,
+/// `always_latch`, `always_ff` ; `Direct`: not a task or void function it calls, R-TASKA
+/// / R-VOIDFN), `b` a statement of any P5 process, its own or inlined (`TaskInline`). Such
+/// a process's own statement is both. A frame body is neither (R-FN, cell e2).
 fn y_side(w: &Write) -> Option<(bool, bool)> {
     match w.writer {
         Writer::Proc { kind, .. } if in_p5(kind) && procedural(w) => {
-            Some((kind == ALWAYS_COMB && w.via == Some(Via::Direct), true))
+            Some((A_KINDS.contains(&kind) && w.via == Some(Via::Direct), true))
         }
         _ => None,
     }
@@ -355,7 +380,7 @@ enum Rule {
 }
 
 /// One pair: the rule, the net, the `a` and the `b` write's view indices (rule X: the
-/// continuous and the procedural one ; rule Y: the `always_comb`'s own and the other
+/// continuous and the procedural one ; rule Y: the A-kind process's own and the other
 /// process's) and the bits both write, `[lo, hi)`, from the two intervals the sweep
 /// compared (the one place a pair's extents are read, so the text says what the sweep
 /// found).
@@ -465,14 +490,25 @@ impl Elaborator<'_> {
                 x.hi - 1,
                 x.lo,
             ),
-            Rule::Y => format!(
-                "variable `{name}` is written by {wa} AND by {wb} on bits [{}:{}] of its \
-                 packed value (bit 0 is the least significant bit), and the bits an \
-                 `always_comb` writes take no write from another process (IEEE 1800-2017 \
-                 §9.2.2.2)",
-                x.hi - 1,
-                x.lo,
-            ),
+            Rule::Y => {
+                // the A write's own kind, an `A_KINDS` entry (`y_side`), and its clause
+                let (kind, clause) = match a.writer {
+                    Writer::Proc { kind, .. } => A_KINDS
+                        .iter()
+                        .zip(A_CLAUSES)
+                        .find(|(k, _)| **k == kind)
+                        .map_or((kind, "9.2.2"), |(k, c)| (*k, c)),
+                    _ => ("?", "9.2.2"),
+                };
+                format!(
+                    "variable `{name}` is written by {wa} AND by {wb} on bits [{}:{}] of its \
+                     packed value (bit 0 is the least significant bit), and the bits an \
+                     `{kind}` writes take no write from another process (IEEE 1800-2017 \
+                     §{clause})",
+                    x.hi - 1,
+                    x.lo,
+                )
+            }
         };
         let (span, prefix) = (self.cur_span.take(), std::mem::take(&mut self.cur_prefix));
         self.error(MsgCode::ElabMultidriver, &msg);
@@ -605,9 +641,9 @@ mod tests {
     }
 
     /// Rule Y's sides on a hand-built view (module head): which writes pair, which never do,
-    /// and the pair's orientation (`a` the `always_comb`'s own statement).
+    /// and the pair's orientation (`a` the A-kind process's own statement).
     #[test]
-    fn rule_y_pairs_an_always_comb_with_another_process_only() {
+    fn rule_y_pairs_an_a_kind_process_with_another_process_only() {
         use crate::wext::{By, DeclFact};
         let fact = DeclFact {
             site: DeclSite::Module,
@@ -736,12 +772,43 @@ mod tests {
             bits(0, 8),
         );
         assert_eq!(n(vec![comb, force]), 0, "force");
-        // no `always_comb` side: R-FF and `always @*` pairs stay out
+        // an `always_latch` or `always_ff` own statement is an A side too (C3): the pair,
+        // oriented, with the A write first whatever the view order
         for (k1, k2) in [
             ("always_ff", "always_ff"),
             ("always_ff", "always_latch"),
+            ("always_ff", "always"),
+            ("always_ff", "initial"),
+            ("always_latch", "always_latch"),
+            ("always_latch", "always"),
             ("always_latch", "initial"),
+        ] {
+            let ws = vec![
+                p(1, k2, Via::Direct, bits(2, 6)),
+                p(0, k1, Via::Direct, bits(0, 4)),
+            ];
+            let got = y(ws, Some(fact));
+            let ab: Vec<_> = got.iter().map(|q| (q.a, q.b, q.lo, q.hi)).collect();
+            let want = if A_KINDS.contains(&k2) {
+                (0, 1, 2, 4) // both A sides: the incoming one, in (lo, view order)
+            } else {
+                (1, 0, 2, 4)
+            };
+            assert_eq!(ab, vec![want], "{k1} x {k2}");
+        }
+        // only through a task: no A side, for every A kind
+        for k in A_KINDS {
+            let ws = vec![
+                p(0, k, Via::TaskInline, bits(0, 4)),
+                p(1, "initial", Via::Direct, bits(2, 6)),
+            ];
+            assert_eq!(n(ws), 0, "{k} via task");
+        }
+        // no A-kind side: `always @*` and plain pairs stay out
+        for (k1, k2) in [
             ("always", "always"),
+            ("always", "initial"),
+            ("initial", "initial"),
         ] {
             let ws = vec![
                 p(0, k1, Via::Direct, bits(0, 4)),
