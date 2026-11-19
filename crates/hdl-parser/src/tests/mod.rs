@@ -6,6 +6,7 @@ mod decl_type;
 mod expr_t;
 mod inst_gen;
 mod lit_origin;
+mod lossy_spell;
 mod misc_forms;
 mod stmt_s;
 mod sva_ca;

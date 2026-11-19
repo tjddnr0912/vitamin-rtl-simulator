@@ -492,7 +492,7 @@ impl Parser<'_, '_> {
                                 kind: pfx.kind,
                                 // The scalar's record (`param_dtype`) with the array
                                 // declaration's own sign and element range.
-                                dtype: Self::param_dtype(
+                                dtype: self.param_dtype(
                                     &pfx,
                                     d.dtype.signed,
                                     d.dtype.range.clone(),

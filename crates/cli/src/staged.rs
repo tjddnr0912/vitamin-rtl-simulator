@@ -195,7 +195,8 @@ pub(crate) fn run_velab_lib_gated(
                 | hdl_ast::TopItem::Bind(_)
                 | hdl_ast::TopItem::Error(_)
                 // nameless, so a library compose keeps every unit's record
-                | hdl_ast::TopItem::InsideNameUse(_) => None,
+                | hdl_ast::TopItem::InsideNameUse(_)
+                | hdl_ast::TopItem::LossySpell(_) => None,
             };
             if let Some(n) = name {
                 match unit_map.get(&n) {

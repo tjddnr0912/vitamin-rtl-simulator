@@ -175,6 +175,47 @@ pub enum TopItem {
     /// last, at most once per parsed unit. APPENDED LAST so postcard's positional
     /// discriminants of every existing `TopItem` are unchanged.
     InsideNameUse(Span),
+    /// Not an item: the parser's record of which lossy constant producers this unit's
+    /// tokens spell ([`LossySpell`], §5.2 Q-LOSSYSPELL). Pushed only when a bit is set,
+    /// only into a unit that exists, just before [`TopItem::InsideNameUse`]. APPENDED
+    /// LAST so postcard's positional discriminants of every existing `TopItem` are
+    /// unchanged.
+    LossySpell(LossySpell),
+}
+
+/// Which lossy constant producers a unit SPELLS (§5.2 Q-LOSSYSPELL): one bool per
+/// spelling, nothing else (no span, no module, no count, no name). A bit is "this
+/// spelling is in the tokens the parser was given"; it is not "a constant is wrong",
+/// not "reaches a read", not per module or instance, and `false` is not "every
+/// constant is right" (an x made by an operator, a `'0` / `'1` fill, a constant
+/// function's local, the Q-AESINK mark are in none of them).
+///
+/// - `param_xz`: an `IntSized` / `IntUnsizedBased` token (a fill included) with an
+///   `x X z Z ?` digit, at a token inside a `#( … )` or a `parameter` / `localparam` /
+///   `specparam` / `defparam` statement — also a delay or a type's range there, not
+///   only a value (`hdl-parser` `lossy.rs`, `scan_lossy`).
+/// - `unsized_xz`: an `IntUnsizedBased` token that is not a fill, with such a digit,
+///   anywhere (`'bx`, `'hz`, `'d?`; `'sx` / `'sz` count here, not as fills).
+/// - `sign_kw_param`: a parameter whose data type has a WRITTEN `signed` / `unsigned`,
+///   no type keyword and no packed range (`parameter signed N`).
+/// - `let_any`: a word `let` followed by an identifier or escaped identifier.
+/// - `fill_xz`: an `'x` / `'z` fill that is not the whole right side of `=` / `<=` …
+///   `;` (the owner's question Q1, option (c)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, SchemaHash)]
+pub struct LossySpell {
+    pub param_xz: bool,
+    pub unsized_xz: bool,
+    pub sign_kw_param: bool,
+    pub let_any: bool,
+    pub fill_xz: bool,
+}
+
+impl LossySpell {
+    /// Any bit set: the parser pushes the item only then, so a unit that spells none
+    /// keeps the `.vu` body it had before the record existed.
+    pub fn any(self) -> bool {
+        self.param_xz || self.unsized_xz || self.sign_kw_param || self.let_any || self.fill_xz
+    }
 }
 
 /// `bind <target_module> <checker_inst>;` (round-9). `target` is the module

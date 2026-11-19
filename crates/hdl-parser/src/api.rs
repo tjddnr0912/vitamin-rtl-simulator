@@ -33,7 +33,14 @@ pub fn parse_with_warnings(
         Some(unit)
     };
     // Only into a unit that exists: the record is not a design unit, so a source
-    // with none stays `None`, as before it existed.
+    // with none stays `None`, as before it existed. The lossy-spelling record is pushed
+    // only when a bit is set (a unit spelling none keeps its `.vu` body), before the
+    // `inside` record, which stays last.
+    let mut lossy = lossy::scan_lossy(tokens, src);
+    lossy.sign_kw_param = p.lossy_sign_kw_param;
+    if let (Some(u), true) = (&mut su, lossy.any()) {
+        u.items.push(TopItem::LossySpell(lossy));
+    }
     if let (Some(u), Some(span)) = (&mut su, first_inside_name_use(tokens, src, &p.inside_kw_at)) {
         u.items.push(TopItem::InsideNameUse(span));
     }

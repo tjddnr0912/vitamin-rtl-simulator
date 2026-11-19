@@ -596,7 +596,8 @@ pub(crate) fn run_vcmp_gated(
                 hdl_ast::TopItem::Import(_)
                 | hdl_ast::TopItem::Bind(_)
                 | hdl_ast::TopItem::Error(_)
-                | hdl_ast::TopItem::InsideNameUse(_) => None,
+                | hdl_ast::TopItem::InsideNameUse(_)
+                | hdl_ast::TopItem::LossySpell(_) => None,
             })
             .collect();
         let cu = worklib::Cu {

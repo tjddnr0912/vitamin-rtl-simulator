@@ -34,7 +34,8 @@ pub(crate) fn md_return_fn_names(unit: &ast::SourceUnit) -> BTreeSet<String> {
             ast::TopItem::Import(_)
             | ast::TopItem::Bind(_)
             | ast::TopItem::Error(_)
-            | ast::TopItem::InsideNameUse(_) => {}
+            | ast::TopItem::InsideNameUse(_)
+            | ast::TopItem::LossySpell(_) => {}
         }
     }
     out

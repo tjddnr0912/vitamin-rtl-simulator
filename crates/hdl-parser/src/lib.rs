@@ -108,6 +108,7 @@ mod generate;
 mod imports;
 mod instances;
 mod item_dispatch;
+mod lossy;
 mod lvalue;
 mod module_items;
 mod monomorph;
@@ -857,6 +858,10 @@ pub struct Parser<'t, 's> {
     /// `case … inside`); every other identifier token spelled `inside` is a NAME use
     /// (`api.rs`, `TopItem::InsideNameUse`).
     inside_kw_at: Vec<usize>,
+    /// §5.2 Q-LOSSYSPELL: a parameter's data type had a written signing keyword, no type
+    /// keyword and no packed range (`hdl_ast::LossySpell::sign_kw_param`). Written only by
+    /// `|=` in `lossy.rs` (`note_param_dtype`); in no scope snapshot, so nothing clears it.
+    lossy_sign_kw_param: bool,
     /// §5.2 row 66: every declared type's `TypeInfo`, by its declaration key
     /// (`type_rec.rs`). Never restored with a scope, like `decl_types`.
     type_infos: std::collections::HashMap<DeclKey, TypeInfo>,
@@ -1251,6 +1256,7 @@ impl<'t, 's> Parser<'t, 's> {
             node_count: 0,
             node_budget_blown: false,
             inside_kw_at: Vec::new(),
+            lossy_sign_kw_param: false,
             type_infos: std::collections::HashMap::new(),
             decl_sites: std::collections::HashMap::new(),
             in_body_typedef: false,
