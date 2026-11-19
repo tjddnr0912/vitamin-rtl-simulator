@@ -17,7 +17,10 @@
 //! M3 on b6_staged (mono `true`, staged `false` for the unit `velab -L` never decodes,
 //! RULINGS-plan R9) ; the left sides on which a plain fill is refused today (premise judge
 //! 2 L2) and the refused `config` use clause (L3), each LOUD with its code ; the all-false
-//! control (EH1's one fill shape) ; the design-level superset over the row's cells.
+//! control (EH1's one fill shape) ; the design-level superset over the row's cells. Unit U3
+//! (the lexer's x / z literal kinds) adds: the forms the split must not move, printed as
+//! U2 printed them (premise judge 3 L6) ; `let` as a type name (L7) ; the lexer's fact over
+//! the preprocessed text.
 
 use diag::{LogEvent, LogSink};
 use hdl_ast::{LossySpell, SourceUnit, TopItem};
@@ -830,4 +833,128 @@ endmodule
 module t; C c; initial begin c = new; #1 $display(\"A r=%b\", c.v()); end endmodule
 ";
     assert_eq!(design(&[("t.sv", default)], &[], &[]), Some(P));
+}
+
+// ───────────────────── U3: the lexer's x / z literal kinds (§5.2 Q-LOSSYSPELL U3) ─────────────────────
+
+/// What `vita t.sv` prints, stdout and stderr into ONE file as the cells' watchdog
+/// (W/tools/wd.pl: STDERR dup'd onto STDOUT) wrote U2's outputs, and its exit code.
+fn vita_merged(src: &str) -> (i32, String) {
+    let d = tdir();
+    std::fs::write(d.join("t.sv"), src).unwrap();
+    let path = d.join("merged.out");
+    let f = std::fs::File::create(&path).unwrap();
+    let st = std::process::Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg("t.sv")
+        .current_dir(&d)
+        .stdout(f.try_clone().unwrap())
+        .stderr(f)
+        .status()
+        .expect("run vita");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let _ = std::fs::remove_dir_all(&d);
+    (st.code().expect("exit code"), text)
+}
+
+/// Premise judge 3 L6: the split moves no lexeme. Three sources over every literal form the
+/// judge listed (a1: 43 legal forms, `?`, upper case, `_`, §5.7.1 spaces, tab, signed,
+/// decimal x / z, fills, casez / casex, a parameter override ; a2: illegal forms the parser
+/// refuses ; a3: forms elaborate refuses, `8'd1x` one token) print byte for byte what U2's
+/// release `vita` printed on them (W/lossy/premise3/out/<cell>.base.out, md5 fc0135e7,
+/// d42d7fbb, 334adbc0 ; rc 0, 1, 1). Run on this test's debug `vita`, so `parse_lexed`'s
+/// `debug_assert` (the lexer's fact against the token vector's) runs on each.
+#[test]
+fn split_forms_print_what_u2_printed() {
+    for (id, src, want, rc) in [
+        (
+            "a1_forms2",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a1_forms2.sv"),
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a1_forms2.out"),
+            0,
+        ),
+        (
+            "a2_iparse",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a2_iparse.sv"),
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a2_iparse.out"),
+            1,
+        ),
+        (
+            "a3_ielab",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a3_ielab.sv"),
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/a3_ielab.out"),
+            1,
+        ),
+    ] {
+        assert_eq!(vita_merged(src), (rc, want.to_string()), "{id}");
+    }
+}
+
+/// Premise judge 3 L7, RULINGS-plan R23: `let_any` is the parser's note at `parse_let_decl`,
+/// so a unit that uses `let` as a type name and builds no `LetDecl` reads false. U2 (the
+/// token scan's `let` arm) printed on each, W/lossy/premise3/out/k*.lb_base.out:
+/// "BITS param_xz=0 unsized_xz=0 sign_kw_param=0 let_any=1 fill_xz=0 items=1 parse_errors=0".
+/// `vita`'s output is U2's (W/lossy/plan3/cells/k*/vita.out).
+#[test]
+fn let_as_a_type_name_is_not_a_let_declaration() {
+    for (id, src, line) in [
+        (
+            "k1_fnlocal",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/k1_fnlocal.sv"),
+            "A 5",
+        ),
+        (
+            "k2_port",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/k2_port.sv"),
+            "B 3",
+        ),
+        (
+            "k3_block",
+            include_str!("../../hdl-parser/tests/testdata/lossy_u3/k3_block.sv"),
+            "C 9",
+        ),
+    ] {
+        let (rc, lines, codes) = vita(&[("t.sv", src)], &[], &[]);
+        assert_eq!(
+            (rc, lines, codes),
+            (0, vec![line.to_string()], vec![]),
+            "{id}"
+        );
+        assert_eq!(
+            design(&[("t.sv", src)], &[], &[]),
+            Some(0),
+            "{id}: all false"
+        );
+    }
+}
+
+/// The lexer's fact over the preprocessed text: an x / z literal in `ifdef`-off text or in
+/// a macro that is never expanded is no literal the lexer sees (false) ; an expanded one,
+/// or one pasted by the preprocessor, is (true). Production lexes `pp.text` once
+/// (`frontend.rs`), as here.
+#[test]
+fn lex_fact_reads_the_preprocessed_text() {
+    let fact = |src: &str| {
+        let d = tdir();
+        let pp = hdl_preprocess::preprocess_sources(
+            &d,
+            &[("t.sv".to_string(), src.to_string())],
+            &hdl_preprocess::PreOpts::default(),
+        );
+        let _ = std::fs::remove_dir_all(&d);
+        assert!(!pp.has_errors(), "`{src}`");
+        hdl_lexer::lex_facts(&pp.text).2.xz_literal()
+    };
+    assert!(!fact(
+        "`ifdef NEVER\nlocalparam P = 4'bx;\n`endif\nmodule m; endmodule\n"
+    ));
+    assert!(!fact("`define X 4'bz\nmodule m; endmodule\n"));
+    assert!(fact(
+        "`define X 4'bz\nmodule m; wire [3:0] w = `X; endmodule\n"
+    ));
+    assert!(fact(
+        "`define B(d) 4'b``d\nmodule m; wire [3:0] w = `B(1x01); endmodule\n"
+    ));
+    assert!(fact(
+        "`ifndef NEVER\nmodule m; wire w = 'z; endmodule\n`endif\n"
+    ));
 }

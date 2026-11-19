@@ -249,7 +249,7 @@ impl Parser<'_, '_> {
         // SVA-REST: `let NAME [(formals)] = expr;` (IEEE 1800 §11.13) — a named
         // expression macro. `let` is contextual (an SV reserved word, never a legal
         // net name), recognized only when followed by an identifier. The predicate is
-        // `lossy::is_let_head`, the one `LossySpell::let_any` reads too.
+        // `lossy::is_let_head`; `parse_let_decl`'s first line notes `LossySpell::let_any`.
         if lossy::is_let_head(self.toks, self.src, self.pos) {
             return self.parse_let_decl();
         }

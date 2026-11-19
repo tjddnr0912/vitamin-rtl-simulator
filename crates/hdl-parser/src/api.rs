@@ -21,10 +21,30 @@ pub fn parse(tokens: &[Spanned], src: &str) -> (Option<SourceUnit>, Vec<ParseErr
 /// / `unique0` qualifier). They ride a SEPARATE channel from `ParseError` because
 /// a warning must not gate the parse, and because a severity field on the error type
 /// would put "did this stop the parse?" and "how bad is it?" in one place.
+///
+/// The lexer's fact is taken from the tokens here ([`LexFacts::of_tokens`]); the
+/// production entry is [`parse_lexed`] with the fact [`hdl_lexer::lex_facts`] returned.
 pub fn parse_with_warnings(
     tokens: &[Spanned],
     src: &str,
 ) -> (Option<SourceUnit>, Vec<ParseError>, Vec<ParseWarn>) {
+    parse_lexed(tokens, src, LexFacts::of_tokens(tokens))
+}
+
+/// [`parse_with_warnings`] with the [`LexFacts`] of the lex that produced `tokens`
+/// (`hdl_lexer::lex_facts` over the same `src`; cli `frontend.rs` is the production
+/// caller). The fact only decides whether the lossy-spelling pass runs (§5.2
+/// Q-LOSSYSPELL U3): a fact from another token vector is a caller's bug, caught by the
+/// `debug_assert` in every test-profile run.
+pub fn parse_lexed(
+    tokens: &[Spanned],
+    src: &str,
+    facts: LexFacts,
+) -> (Option<SourceUnit>, Vec<ParseError>, Vec<ParseWarn>) {
+    debug_assert!(
+        facts.xz_literal() || !LexFacts::of_tokens(tokens).xz_literal(),
+        "parse_lexed: an x / z literal token under a fact that says none"
+    );
     let mut p = Parser::new(tokens, src);
     let unit = p.parse_source_unit();
     let mut su = if unit.items.is_empty() && p.errors.is_empty() {
@@ -35,9 +55,15 @@ pub fn parse_with_warnings(
     // Only into a unit that exists: the record is not a design unit, so a source
     // with none stays `None`, as before it existed. The lossy-spelling record is pushed
     // only when a bit is set (a unit spelling none keeps its `.vu` body), before the
-    // `inside` record, which stays last.
-    let mut lossy = lossy::scan_lossy(tokens, src);
+    // `inside` record, which stays last. The token pass runs only on a unit whose lexer
+    // saw an x / z literal: its three bits are false on any other (`lossy.rs`).
+    let mut lossy = if facts.xz_literal() {
+        lossy::scan_lossy(tokens, src)
+    } else {
+        LossySpell::default()
+    };
     lossy.sign_kw_param = p.lossy_sign_kw_param;
+    lossy.let_any = p.lossy_let_any;
     if let (Some(u), true) = (&mut su, lossy.any()) {
         u.items.push(TopItem::LossySpell(lossy));
     }

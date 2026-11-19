@@ -1,0 +1,7 @@
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+t.sv:4:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: malformed integer literal `8'd1x` [in top]
+t.sv:5:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: malformed integer literal `8'dx1` [in top]
+t.sv:8:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: malformed integer literal `4'b1x4` [in top]
+t.sv:9:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: malformed integer literal `8'o9x` [in top]
+t.sv:10:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: malformed integer literal `8'd?_?` [in top]
+errors=5 warnings=1 notes=0

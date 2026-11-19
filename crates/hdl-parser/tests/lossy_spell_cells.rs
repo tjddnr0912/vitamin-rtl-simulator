@@ -10,6 +10,9 @@
 //! the raw text (W/lossy/build/cells_u1.tsv: 116 accepted cells equal to the parser's bits);
 //! `None` = the parser refuses the cell (a parse error), so it carries no claim.
 //! Bits: P param_xz, U unsized_xz, S sign_kw_param, L let_any, F fill_xz.
+//! Unit U3: the table holds unedited (the bits of every accepted cell are U2's) ; the last
+//! test runs the production entries against the test entries on every cell (premise judge 3
+//! L3, L5).
 
 use hdl_ast::{LossySpell, TopItem};
 
@@ -227,4 +230,56 @@ fn the_fill_rule_cells() {
     }
     assert_eq!(get("premise_b3_letfill").map(|b| b & L), Some(L));
     assert_eq!(get("premise_b4_classcollide").map(|b| b & P), Some(P));
+}
+
+/// The sources U3's pins add (W/lossy/premise3/cells, W/lossy/plan3/cells ; testdata/lossy_u3).
+const U3_SOURCES: &[(&str, &str)] = &[
+    ("a1_forms2", include_str!("testdata/lossy_u3/a1_forms2.sv")),
+    ("a2_iparse", include_str!("testdata/lossy_u3/a2_iparse.sv")),
+    ("a3_ielab", include_str!("testdata/lossy_u3/a3_ielab.sv")),
+    ("b1_attr", include_str!("testdata/lossy_u3/b1_attr.sv")),
+    (
+        "k1_fnlocal",
+        include_str!("testdata/lossy_u3/k1_fnlocal.sv"),
+    ),
+    ("k2_port", include_str!("testdata/lossy_u3/k2_port.sv")),
+    ("k3_block", include_str!("testdata/lossy_u3/k3_block.sv")),
+];
+
+#[test]
+fn production_entries_equal_the_test_entries() {
+    // Premise judge 3 L3 and L5 (§5.2 Q-LOSSYSPELL U3): over the 132 cells and U3's
+    // sources, `lex` is `lex_facts` with the fact dropped, and the production pair
+    // (`lex_facts` then `parse_lexed` with the lexer's fact, cli `frontend.rs`) gives what
+    // `parse_with_warnings` (the fact from the tokens) gives: the unit, every error and
+    // warning, so the record too. The lexer's fact is a superset of the tokens' (it differs
+    // only where every x / z literal sits in a stripped attribute instance: b1_attr).
+    let all: Vec<(&str, &str)> = CELLS
+        .iter()
+        .map(|(id, src, _)| (*id, *src))
+        .chain(U3_SOURCES.iter().copied())
+        .collect();
+    assert_eq!(all.len(), 139);
+    let (mut with_fact, mut fact_only) = (0, Vec::new());
+    for (id, src) in all {
+        let (toks, errs, facts) = hdl_lexer::lex_facts(src);
+        assert_eq!(hdl_lexer::lex(src), (toks.clone(), errs), "{id}: lex");
+        let of_tokens = hdl_lexer::LexFacts::of_tokens(&toks).xz_literal();
+        assert!(
+            facts.xz_literal() || !of_tokens,
+            "{id}: the fact under the tokens'"
+        );
+        with_fact += usize::from(facts.xz_literal());
+        if facts.xz_literal() != of_tokens {
+            fact_only.push(id);
+        }
+        assert_eq!(
+            hdl_parser::parse_lexed(&toks, src, facts),
+            hdl_parser::parse_with_warnings(&toks, src),
+            "{id}: parse"
+        );
+    }
+    assert_eq!(fact_only, ["b1_attr"]);
+    // measured at U3: 106 of the 139 run the pass, 33 skip it.
+    assert_eq!(with_fact, 106, "units whose lexer saw an x / z literal");
 }

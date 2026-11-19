@@ -1,0 +1,13 @@
+t.sv:4:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found identifier 'g'
+t.sv:5:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found identifier 'g'
+t.sv:6:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found ''b1'
+t.sv:6:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found ''b1'
+t.sv:7:14: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found identifier 'F'
+t.sv:8:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '0'
+t.sv:8:15: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '0'
+t.sv:9:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found '''
+t.sv:9:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '''
+t.sv:9:9: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '''
+t.sv:10:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '''
+t.sv:10:11: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found '''
+errors=12 warnings=0 notes=0

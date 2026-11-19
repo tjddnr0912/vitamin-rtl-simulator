@@ -15,7 +15,7 @@
 //! `Location` newtype to surface spans and its recovery is `unstable-recover`-gated.
 
 use hdl_ast::*;
-use hdl_lexer::{Kw, Spanned, TokenKind, WordKind};
+use hdl_lexer::{Kw, LexFacts, Spanned, TokenKind, WordKind};
 
 // ── YELLOW #1/#9: User-Defined Primitive table symbols (module-scope so the
 //    `parse_udp_decl` row scanner helpers can name them in their signatures). All
@@ -862,6 +862,10 @@ pub struct Parser<'t, 's> {
     /// keyword and no packed range (`hdl_ast::LossySpell::sign_kw_param`). Written only by
     /// `|=` in `lossy.rs` (`note_param_dtype`); in no scope snapshot, so nothing clears it.
     lossy_sign_kw_param: bool,
+    /// §5.2 Q-LOSSYSPELL U3: the parser entered `parse_let_decl` (`hdl_ast::LossySpell::let_any`).
+    /// Written only by `|=` in `lossy.rs` (`note_let_decl`, the fn's first line); in no scope
+    /// snapshot, so a backtrack can leave it set (over-report), never clear it.
+    lossy_let_any: bool,
     /// §5.2 row 66: every declared type's `TypeInfo`, by its declaration key
     /// (`type_rec.rs`). Never restored with a scope, like `decl_types`.
     type_infos: std::collections::HashMap<DeclKey, TypeInfo>,
@@ -1257,6 +1261,7 @@ impl<'t, 's> Parser<'t, 's> {
             node_budget_blown: false,
             inside_kw_at: Vec::new(),
             lossy_sign_kw_param: false,
+            lossy_let_any: false,
             type_infos: std::collections::HashMap::new(),
             decl_sites: std::collections::HashMap::new(),
             in_body_typedef: false,

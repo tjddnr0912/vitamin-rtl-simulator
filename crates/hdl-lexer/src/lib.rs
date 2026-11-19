@@ -142,6 +142,9 @@ impl LexErrorKind {
 /// token's span; keyword identity rides in `WordKind`/`Kw` (both `Copy`).
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
 #[logos(error = LexErrorKind)]
+// The one fact the lexer carries beside the tokens (`LexFacts`): set by the callback of
+// the two x / z literal kinds, read once after the token loop in `lex_facts`.
+#[logos(extras = LexExtras)]
 // Boundaries with no value (token separators):
 #[logos(skip r"[ \t\r\n\u{000C}]+")]
 // whitespace incl. form-feed \f (\u{000C})
@@ -230,9 +233,12 @@ pub enum TokenKind {
     #[regex(r"\d[\d_]*\.\d[\d_]*")]
     RealFixed,
 
-    /// Sized based integer: `8'hAB`, `4'b1010`, `12'd255`, `6'o63`, `4'sd5`,
-    /// `12'sh800`, `4'bx`, `8'hzz`, `32'hDEAD_BEEF`. Base letter is
-    /// case-insensitive; digits include `x X z Z ? _`.
+    /// Sized based integer with no x / z digit: `8'hAB`, `4'b1010`, `12'd255`, `6'o63`,
+    /// `4'sd5`, `12'sh800`, `32'hDEAD_BEEF`. Base letter is case-insensitive. A sized
+    /// literal with an `x X z Z ?` digit is [`Self::IntSizedXz`]: the two regexes are
+    /// disjoint and their union is the one sized language (`[0-9a-fA-FxXzZ?_]+` after
+    /// the base), and at every position the longest match is the same lexeme as with
+    /// one regex, so no span moves (§5.2 Q-LOSSYSPELL U3).
     ///
     /// IEEE 1800-2017 §5.7.1 permits white space BETWEEN THE SIZE AND THE BASE
     /// SPECIFIER and BETWEEN THE BASE SPECIFIER AND THE VALUE, so `32'h 0000_0000`
@@ -245,17 +251,38 @@ pub enum TokenKind {
     /// includes line breaks, but a literal split across lines is not something real
     /// code does, and matching across a newline would let a stray apostrophe swallow
     /// the start of the next line.
-    #[regex(r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+")]
+    #[regex(r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-F_]+")]
     IntSized,
 
-    /// Unsized based integer: `'hFF`, `'b1101`, `'sd9`, and unsized fills
-    /// `'0 '1 'x 'z` (the `?_` class also admits `'?`).
+    /// Sized based integer with at least one `x X z Z ?` digit (IEEE 1800-2017 §5.7.1:
+    /// `?` is the z digit): `4'bx`, `8'hzz`, `8'b1x?Z_0101`, `8'dx`. The parser reads
+    /// it exactly as [`Self::IntSized`]; the kind exists so the lexer can tell, per
+    /// unit, whether any x / z literal was spelled ([`LexFacts::xz_literal`]).
+    #[regex(
+        r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]*[xXzZ?][0-9a-fA-FxXzZ?_]*",
+        xz_seen
+    )]
+    IntSizedXz,
+
+    /// Unsized based integer with no x / z digit: `'hFF`, `'b1101`, `'sd9`, and the
+    /// unsized fills `'0 '1`. The x / z forms (`'bx`, `'h?`, the fills `'x 'z`, `'sx`)
+    /// are [`Self::IntUnsizedBasedXz`]; the pair's union is the one unsized language
+    /// (`'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+|[01xXzZ])`).
     /// (§5.7.1 white space after the base specifier is admitted here too — see
     /// [`Self::IntSized`]. The unsized FILL forms `'0 '1 'x 'z` take no space:
     /// `' 0` is not a fill literal, and admitting it would swallow an apostrophe
     /// that belongs to a cast or an assignment pattern.)
-    #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+|[01xXzZ])")]
+    #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-F_]+|[01])")]
     IntUnsizedBased,
+
+    /// Unsized based integer with an `x X z Z ?` digit, the fills `'x` `'z` included
+    /// (`'bx`, `'h?`, `'x`, `'Z`, `'sx`). The parser reads it exactly as
+    /// [`Self::IntUnsizedBased`].
+    #[regex(
+        r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]*[xXzZ?][0-9a-fA-FxXzZ?_]*|[xXzZ])",
+        xz_seen
+    )]
+    IntUnsizedBasedXz,
 
     /// Plain unsized decimal: `42`, `0`, `1_000`. Underscores allowed (not first).
     #[regex(r"\d[\d_]*")]
@@ -332,7 +359,8 @@ pub enum TokenKind {
 
     // Standalone `'` — ONLY reachable for SV cast `type'(...)` / `N'(...)` and the
     // (still-unsupported) assignment-pattern `'{...}`. Logos longest-match keeps
-    // `8'hFF`→IntSized and `'0/'1/'x/'z/'hFF`→IntUnsizedBased intact: those regexes
+    // `8'hFF`→IntSized (`8'hx`→IntSizedXz) and `'0/'1/'hFF`→IntUnsizedBased
+    // (`'x/'z/'hx`→IntUnsizedBasedXz) intact: those regexes
     // consume ≥2 chars while this token is 1 char, so the literal always wins. A
     // bare `'` followed by `(` or `{` (which neither literal regex matches) was a
     // lex error before; this token upgrades it to a clean Apostrophe. No valid
@@ -479,6 +507,13 @@ fn escaped_ident(lex: &mut Lexer<TokenKind>) -> Result<(), LexErrorKind> {
     }
     lex.bump(end); // consume the name bytes; terminating ws stays for the skip
     Ok(())
+}
+
+/// The callback of the two x / z literal kinds ([`TokenKind::IntSizedXz`],
+/// [`TokenKind::IntUnsizedBasedXz`]) and of nothing else: it records that the unit spelled
+/// one, and the kind is emitted as for a plain unit variant. The ONE writer of the bit.
+fn xz_seen(lex: &mut Lexer<TokenKind>) {
+    lex.extras.xz_literal = true;
 }
 
 /// Scan a string body after the opening `"`. Handles escape pairs, stops at the
@@ -721,10 +756,59 @@ impl Kw {
 ///   in the returned vec (so the parser sees a concrete token and can recover)
 ///   AND a `LexError { kind, span }` in the error list (so the driver can emit a
 ///   diagnostic). The function never panics.
+///
+/// This is [`lex_facts`] with the fact dropped: one token loop, one attribute strip.
 pub fn lex(src: &str) -> (Vec<Spanned>, Vec<LexError>) {
+    let (tokens, errors, _) = lex_facts(src);
+    (tokens, errors)
+}
+
+/// The state logos threads through one lex (`#[logos(extras)]` needs `Default`, which
+/// [`LexFacts`] must not have): only [`xz_seen`] writes it, only [`lex_facts`] reads it.
+#[derive(Debug, Default)]
+pub struct LexExtras {
+    xz_literal: bool,
+}
+
+/// What the lexer saw in one source beside its tokens (§5.2 Q-LOSSYSPELL U3).
+///
+/// `xz_literal()`: the lexer matched an x / z literal ([`TokenKind::IntSizedXz`] or
+/// [`TokenKind::IntUnsizedBasedXz`]) somewhere in the text. It is a superset of "the token
+/// vector holds such a kind": [`strip_attribute_instances`] can remove one that sat in an
+/// attribute instance `(* … *)`, and then the fact is true over a vector without one.
+///
+/// Built in two places only, from a lex ([`lex_facts`]) or from a token vector
+/// ([`LexFacts::of_tokens`]): no `Default`, no public field, no constructor from a bool,
+/// so a `false` fact never comes from anywhere but tokens (premise judge 3 L2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LexFacts {
+    xz_literal: bool,
+}
+
+impl LexFacts {
+    /// The fact over a token vector: does it hold an x / z literal kind?
+    pub fn of_tokens(tokens: &[Spanned]) -> Self {
+        LexFacts {
+            xz_literal: tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::IntSizedXz | TokenKind::IntUnsizedBasedXz)),
+        }
+    }
+
+    /// Did the source spell an x / z literal (`4'bx`, `'hz`, `'x`, `8'b1?0`)?
+    #[inline]
+    pub fn xz_literal(&self) -> bool {
+        self.xz_literal
+    }
+}
+
+/// [`lex`] plus the [`LexFacts`] the token loop gathered (the production entry, cli
+/// `frontend.rs`; the parser's [`LexFacts`]-taking entry is `hdl_parser::parse_lexed`).
+pub fn lex_facts(src: &str) -> (Vec<Spanned>, Vec<LexError>, LexFacts) {
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
-    for (result, span) in TokenKind::lexer(src).spanned() {
+    let mut lexer = TokenKind::lexer(src).spanned();
+    for (result, span) in &mut lexer {
         match result {
             Ok(kind) => tokens.push(Spanned::new(kind, span)),
             Err(kind) => {
@@ -736,8 +820,11 @@ pub fn lex(src: &str) -> (Vec<Spanned>, Vec<LexError>) {
             }
         }
     }
+    let facts = LexFacts {
+        xz_literal: lexer.extras.xz_literal,
+    };
     strip_attribute_instances(&mut tokens, &mut errors);
-    (tokens, errors)
+    (tokens, errors, facts)
 }
 
 /// Is `a` immediately followed by `b` in the source, with nothing between them?
@@ -894,8 +981,12 @@ mod tests {
         assert_eq!(kinds("8'hFF"), vec![IntSized]);
         assert_eq!(kinds("4'sd5"), vec![IntSized]);
         assert_eq!(kinds("'hFF"), vec![IntUnsizedBased]);
-        for fill in ["'0", "'1", "'x", "'z"] {
+        for fill in ["'0", "'1"] {
             assert_eq!(kinds(fill), vec![IntUnsizedBased], "{fill}");
+        }
+        // The x / z fills are the Xz twin since the split (§5.2 Q-LOSSYSPELL U3).
+        for fill in ["'x", "'z"] {
+            assert_eq!(kinds(fill), vec![IntUnsizedBasedXz], "{fill}");
         }
         // Cast forms: a bare `'` followed by `(` is now a clean Apostrophe token.
         assert_eq!(kinds("8'("), vec![IntDecimal, Apostrophe, LParen]);
@@ -1109,5 +1200,390 @@ mod tests {
                 RBracket,
             ]
         );
+    }
+
+    // ───────────── §5.2 Q-LOSSYSPELL U3: the literal split and `LexFacts` ─────────────
+
+    /// The fact `lex_facts` returns for `src`.
+    fn fact(src: &str) -> bool {
+        lex_facts(src).2.xz_literal()
+    }
+
+    #[test]
+    fn xz_literal_kinds_each_form() {
+        use TokenKind::*;
+        // Sized: every x / z / ? digit, upper case, `_` before / between / after, the
+        // §5.7.1 spaces, signed, each base (decimal included: `8'dx` is legal, IEEE
+        // 1800-2017 §5.7.1 "[ size ] decimal_base x_digit { _ }").
+        for s in [
+            "4'bx",
+            "4'bX",
+            "4'bz",
+            "4'bZ",
+            "4'b?",
+            "8'hzz",
+            "8'HX",
+            "8'b1x?Z_0101",
+            "8'b1_x",
+            "8'b_x1",
+            "8'bx_",
+            "4 'b x",
+            "4\t'b\tx",
+            "8'sbx",
+            "8'Sh?",
+            "8'dx",
+            "8'dz",
+            "8'd?",
+            "8'dX_",
+            "6'o7x",
+            "32'hDEAD_zzzz",
+            "8'b0000_?1?1",
+            "8'd1x",
+        ] {
+            assert_eq!(kinds(s), vec![IntSizedXz], "`{s}`");
+            assert!(fact(s), "`{s}`");
+        }
+        // Unsized: based forms and the fills, `'sx` / `'Sz` (not fills, M12).
+        for s in [
+            "'bx", "'B X", "'hz", "'h_z", "'d?", "'dx", "'sb1x", "'SB1Z", "'sx", "'Sz", "'x", "'X",
+            "'z", "'Z",
+        ] {
+            assert_eq!(kinds(s), vec![IntUnsizedBasedXz], "`{s}`");
+            assert!(fact(s), "`{s}`");
+        }
+        // Their clean twins: no x / z / ? digit.
+        for s in [
+            "4'b1010",
+            "8'hFF",
+            "8'd255",
+            "4'sd5",
+            "32'hDEAD_BEEF",
+            "8'b1_0",
+            "4 'b 1",
+        ] {
+            assert_eq!(kinds(s), vec![IntSized], "`{s}`");
+            assert!(!fact(s), "`{s}`");
+        }
+        for s in ["'b1010", "'hFF", "'sd9", "'0", "'1", "'h_F"] {
+            assert_eq!(kinds(s), vec![IntUnsizedBased], "`{s}`");
+            assert!(!fact(s), "`{s}`");
+        }
+        // `'?` is no literal (the fill digits are `0 1 x X z Z`), `?:` no digit.
+        assert_eq!(kinds("'?"), vec![Apostrophe, Question]);
+        assert!(!fact("'? a ? b : c 1 ? 2 : 3"));
+    }
+
+    #[test]
+    fn lex_facts_fact_pins() {
+        // No literal, a clean literal, a decimal, a real: false.
+        for s in [
+            "",
+            "module m; endmodule",
+            "assign y = a & 8'hFF;",
+            "localparam P = 42, Q = 'b1, R = '0, T = 1.5e3;",
+        ] {
+            assert!(!fact(s), "`{s}`");
+            assert!(!LexFacts::of_tokens(&lex(s).0).xz_literal(), "`{s}`");
+        }
+        // One x / z literal anywhere: true, from the lex and from the tokens alike.
+        for s in [
+            "assign y = 4'b1x01;",
+            "localparam P = 'z;",
+            "case (s) 4'b1??0: ; endcase",
+            "x = 8'hFF + 'h?;",
+        ] {
+            assert!(fact(s), "`{s}`");
+            assert!(LexFacts::of_tokens(&lex(s).0).xz_literal(), "`{s}`");
+        }
+        // Inside a string or a comment the lexer matches no literal: false.
+        for s in [
+            "initial $display(\"4'bx 'z\");",
+            "wire w; // 4'bx 'z",
+            "wire w; /* 4'bx\n 'z */",
+        ] {
+            assert!(!fact(s), "`{s}`");
+        }
+        // Only inside an attribute instance: the lexer matched it (true), the strip
+        // removed it, so the token vector holds none (`of_tokens` false). The fact is a
+        // superset of the vector's (premise judge 3 E6); the pass then finds nothing.
+        let attr = "(* k = 1'bx, j = 'z *) wire w;";
+        let (toks, errs, facts) = lex_facts(attr);
+        assert!(errs.is_empty());
+        assert!(facts.xz_literal());
+        assert!(!LexFacts::of_tokens(&toks).xz_literal());
+        // A lex error keeps the fact the loop gathered.
+        let (_, errs, facts) = lex_facts("x = 4'bx; \"open");
+        assert_eq!(errs.len(), 1);
+        assert!(facts.xz_literal());
+    }
+
+    #[test]
+    fn lex_is_lex_facts_minus_the_fact() {
+        // Premise judge 3 L3 here on lexer-level sources (the 132 cells: hdl-parser
+        // `tests/lossy_spell_cells.rs`).
+        for s in [
+            "",
+            "assign y = a & 8'hFF;",
+            "(* k = 1'bx *) wire w; always @(*) a = 'z;",
+            "(* open 4'bx",
+            "x = \"open",
+            "a ? 'x : 4'b1?0;",
+        ] {
+            let (t, e, _) = lex_facts(s);
+            assert_eq!(lex(s), (t, e), "`{s}`");
+        }
+    }
+
+    /// U1's `based_digits` (hdl-parser `lossy.rs` at 12e978e9) verbatim: whether a based
+    /// literal's lexeme is a FILL and whether its digits hold an `x X z Z ?`. The reference
+    /// the split is measured against (PLAN3 D, PR18).
+    fn based_digits_u1(text: &str) -> (bool, bool) {
+        let Some((_, after)) = text.split_once('\'') else {
+            return (false, false);
+        };
+        let signed = after.strip_prefix(['s', 'S']);
+        let rest = signed.unwrap_or(after);
+        let base = rest.starts_with(['d', 'D', 'b', 'B', 'o', 'O', 'h', 'H']);
+        let digits = if base { &rest[1..] } else { rest };
+        let fill = signed.is_none() && !base;
+        (fill, digits.contains(['x', 'X', 'z', 'Z', '?']))
+    }
+
+    /// The lexer BEFORE the split, for the kinds a generated string can reach: the two
+    /// based-literal regexes as 12e978e9 spelled them, verbatim, and the neighbours from
+    /// `TokenKind` verbatim (premise judge 3 L6: the logos DFA is the part the judge could
+    /// not run).
+    #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
+    #[logos(skip r"[ \t\r\n\u{000C}]+")]
+    enum OldLit {
+        #[regex(r"[A-Za-z_][A-Za-z0-9_$]*")]
+        Word,
+        #[regex(r"\d[\d_]*(\.\d[\d_]*)?[eE][+-]?\d[\d_]*")]
+        RealExp,
+        #[regex(r"\d[\d_]*\.\d[\d_]*")]
+        RealFixed,
+        #[regex(r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+")]
+        IntSized,
+        #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]+|[01xXzZ])")]
+        IntUnsizedBased,
+        #[regex(r"\d[\d_]*")]
+        IntDecimal,
+        #[token(";")]
+        Semi,
+        #[token(".")]
+        Dot,
+        #[token("?")]
+        Question,
+        #[token("'")]
+        Apostrophe,
+    }
+
+    /// The negative control (premise judge 3 `ctl.py`): the split with `?` dropped from
+    /// the unsized Xz regex's required digit. The comparison must see it.
+    #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
+    #[logos(skip r"[ \t\r\n\u{000C}]+")]
+    enum CtlLit {
+        #[regex(r"[A-Za-z_][A-Za-z0-9_$]*")]
+        Word,
+        #[regex(r"\d[\d_]*(\.\d[\d_]*)?[eE][+-]?\d[\d_]*")]
+        RealExp,
+        #[regex(r"\d[\d_]*\.\d[\d_]*")]
+        RealFixed,
+        #[regex(r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-F_]+")]
+        IntSized,
+        #[regex(
+            r"\d[\d_]*[ \t]*'[sS]?[dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]*[xXzZ?][0-9a-fA-FxXzZ?_]*"
+        )]
+        IntSizedXz,
+        #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-F_]+|[01])")]
+        IntUnsizedBased,
+        #[regex(r"'[sS]?([dDbBoOhH][ \t]*[0-9a-fA-FxXzZ?_]*[xXzZ][0-9a-fA-FxXzZ?_]*|[xXzZ])")]
+        IntUnsizedBasedXz,
+        #[regex(r"\d[\d_]*")]
+        IntDecimal,
+        #[token(";")]
+        Semi,
+        #[token(".")]
+        Dot,
+        #[token("?")]
+        Question,
+        #[token("'")]
+        Apostrophe,
+    }
+
+    type Toks = Vec<(&'static str, std::ops::Range<usize>)>;
+
+    fn old_toks(s: &str) -> Toks {
+        OldLit::lexer(s)
+            .spanned()
+            .map(|(r, sp)| {
+                let k = match r {
+                    Ok(OldLit::Word) => "Word",
+                    Ok(OldLit::RealExp) => "RealExp",
+                    Ok(OldLit::RealFixed) => "RealFixed",
+                    Ok(OldLit::IntSized) => "IntSized",
+                    Ok(OldLit::IntUnsizedBased) => "IntUnsizedBased",
+                    Ok(OldLit::IntDecimal) => "IntDecimal",
+                    Ok(OldLit::Semi) => "Semi",
+                    Ok(OldLit::Dot) => "Dot",
+                    Ok(OldLit::Question) => "Question",
+                    Ok(OldLit::Apostrophe) => "Apostrophe",
+                    Err(()) => "ERR",
+                };
+                (k, sp)
+            })
+            .collect()
+    }
+
+    fn ctl_toks(s: &str) -> Toks {
+        CtlLit::lexer(s)
+            .spanned()
+            .map(|(r, sp)| {
+                let k = match r {
+                    Ok(CtlLit::Word) => "Word",
+                    Ok(CtlLit::RealExp) => "RealExp",
+                    Ok(CtlLit::RealFixed) => "RealFixed",
+                    Ok(CtlLit::IntSized | CtlLit::IntSizedXz) => "IntSized",
+                    Ok(CtlLit::IntUnsizedBased | CtlLit::IntUnsizedBasedXz) => "IntUnsizedBased",
+                    Ok(CtlLit::IntDecimal) => "IntDecimal",
+                    Ok(CtlLit::Semi) => "Semi",
+                    Ok(CtlLit::Dot) => "Dot",
+                    Ok(CtlLit::Question) => "Question",
+                    Ok(CtlLit::Apostrophe) => "Apostrophe",
+                    Err(()) => "ERR",
+                };
+                (k, sp)
+            })
+            .collect()
+    }
+
+    /// The real lexer's tokens, the Xz kinds mapped back to the old names.
+    fn new_toks(toks: &[Spanned]) -> Toks {
+        use TokenKind::*;
+        toks.iter()
+            .map(|t| {
+                let k = match t.kind {
+                    Word(_) => "Word",
+                    RealExp => "RealExp",
+                    RealFixed => "RealFixed",
+                    IntSized | IntSizedXz => "IntSized",
+                    IntUnsizedBased | IntUnsizedBasedXz => "IntUnsizedBased",
+                    IntDecimal => "IntDecimal",
+                    Semi => "Semi",
+                    Dot => "Dot",
+                    Question => "Question",
+                    Apostrophe => "Apostrophe",
+                    Error(_) => "ERR",
+                    _ => "OTHER",
+                };
+                (k, t.span.clone())
+            })
+            .collect()
+    }
+
+    /// premise judge 3 `lang.py`'s generator, in its order: size? ws? `'` s? base? ws?
+    /// 0-`max_digits` digits over `0 1 a F x X z Z ? _`, then a follower.
+    fn lang_strings(max_digits: usize) -> Vec<String> {
+        let alph: Vec<char> = "01aFxXzZ?_".chars().collect();
+        let mut digs = vec![String::new()];
+        let mut last = vec![String::new()];
+        for _ in 0..max_digits {
+            let mut next = Vec::new();
+            for p in &last {
+                for c in &alph {
+                    next.push(format!("{p}{c}"));
+                }
+            }
+            digs.extend(next.iter().cloned());
+            last = next;
+        }
+        let mut out = Vec::new();
+        for sz in ["", "4", "1_6"] {
+            for w1 in ["", " ", "\t"] {
+                if sz.is_empty() && !w1.is_empty() {
+                    continue;
+                }
+                for sg in ["", "s", "S"] {
+                    for b in ["", "b", "B", "d", "D", "h", "H", "o", "O"] {
+                        for w2 in ["", " "] {
+                            for d in &digs {
+                                for f in ["", "g", " 1", ";", "x1", ".5"] {
+                                    out.push(format!("{sz}{w1}'{sg}{b}{w2}{d}{f}"));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn split_keeps_every_old_span_and_kind() {
+        // PR2 / PR18 on the logos DFA itself: over lang.py's whole set (2519748 strings)
+        // the split lexer's spans and kinds (Xz mapped back) equal the old regexes', an Xz
+        // kind is exactly U1's `based_digits(text).1`, an unsized Xz token is a fill exactly
+        // when the byte after its `'` is the digit (the scan's byte test), and the lexer's
+        // fact equals the vector's.
+        let set = lang_strings(3);
+        assert_eq!(set.len(), 2_519_748);
+        let (mut diffs, mut xz_diffs, mut fill_diffs, mut fact_diffs, mut with_xz) =
+            (0, 0, 0, 0, 0);
+        let mut first = Vec::new();
+        for s in &set {
+            let (toks, _, facts) = lex_facts(s);
+            if new_toks(&toks) != old_toks(s) {
+                diffs += 1;
+                if first.len() < 5 {
+                    first.push(s.clone());
+                }
+            }
+            let mut any = false;
+            for t in &toks {
+                let xz = matches!(t.kind, TokenKind::IntSizedXz | TokenKind::IntUnsizedBasedXz);
+                any |= xz;
+                if matches!(
+                    t.kind,
+                    TokenKind::IntSized
+                        | TokenKind::IntSizedXz
+                        | TokenKind::IntUnsizedBased
+                        | TokenKind::IntUnsizedBasedXz
+                ) {
+                    let (fill, bxz) = based_digits_u1(&s[t.span.clone()]);
+                    if xz != bxz {
+                        xz_diffs += 1;
+                    }
+                    if t.kind == TokenKind::IntUnsizedBasedXz {
+                        let byte = matches!(
+                            s.as_bytes().get(t.span.start + 1),
+                            Some(b'x' | b'X' | b'z' | b'Z')
+                        );
+                        if byte != fill {
+                            fill_diffs += 1;
+                        }
+                    }
+                }
+            }
+            with_xz += usize::from(any);
+            if facts.xz_literal() != any || LexFacts::of_tokens(&toks).xz_literal() != any {
+                fact_diffs += 1;
+            }
+        }
+        assert_eq!(
+            (diffs, xz_diffs, fill_diffs, fact_diffs),
+            (0, 0, 0, 0),
+            "first span / kind differences: {first:?}"
+        );
+        assert!(with_xz > 0, "the set holds x / z literals");
+    }
+
+    #[test]
+    fn split_comparison_sees_the_negative_control() {
+        // ctl.py's set (0-2 digits) and its one change (`?` dropped from the unsized Xz
+        // regex): the same comparison counts the differences it makes.
+        let set = lang_strings(2);
+        let diffs = set.iter().filter(|s| ctl_toks(s) != old_toks(s)).count();
+        assert_eq!(diffs, 2880, "premise judge 3's ctl.py count");
     }
 }

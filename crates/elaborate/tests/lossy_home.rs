@@ -4,14 +4,26 @@
 //! (`crates/*/src/**/*.rs`, `src/tests/`, `src/tests.rs` and a trailing `#[cfg(test)]` item
 //! skipped, comment lines skipped), what the record rests on and who touches it:
 //!
-//! - H1 the parser's one lossy bool `lossy_sign_kw_param` is declared and initialised in
-//!   `lib.rs`, written only by `|=` in `lossy.rs` and read once in `api.rs`; it is not a
-//!   field of `ScopeSnapshot`, so no scope restore can clear it (premise judge 2 PR13, L9).
-//! - H2 (a) `scan_lossy (` has one caller, `api.rs` ; (b) `is_let_head (` has two,
-//!   `scan_lossy` and the module-item dispatch, and the string `"let"` is spelled in no
-//!   hdl-parser source but `lossy.rs` ; (c) `new_param (` in hdl-parser = one call with
+//! - H1 the parser's two lossy bools `lossy_sign_kw_param` and `lossy_let_any` are each
+//!   declared and initialised in `lib.rs`, written only by `|=` in `lossy.rs` and read
+//!   once in `api.rs`; neither is a field of `ScopeSnapshot`, so no scope restore can clear
+//!   it (premise judge 2 PR13, L9 ; PLAN3 PR13 for the second, §5.2 Q-LOSSYSPELL U3).
+//! - H2 (a) `scan_lossy (` has one caller, `api.rs`'s `parse_lexed`, under
+//!   `if facts.xz_literal()` (U3: the pass runs only on a unit whose lexer saw an x / z
+//!   literal) ; (b) `is_let_head (` has one, the module-item dispatch, and the string
+//!   `"let"` is spelled in no hdl-parser source but `lossy.rs` ; (b') `note_let_decl (`
+//!   has one caller, the first statement of `parse_let_decl` (`sva_seq.rs`), and
+//!   `LetDecl {` is built in that fn only ; (c) `new_param (` in hdl-parser = one call with
 //!   `Signing :: from_written` (`params.rs`, `param_dtype`) + four with the literal
-//!   `Signing :: Implicit`. H2 (d), the SUPERSET test, is `hdl-parser`
+//!   `Signing :: Implicit` ; (e) `lex_facts (` and `parse_lexed (` each have one production
+//!   caller outside their own crate, cli `frontend.rs` (inside it: `lex` and
+//!   `parse_with_warnings`, the wrappers) ; `LexFacts {` is the definition and two
+//!   constructions, in `lex_facts` and `LexFacts :: of_tokens`, both in hdl-lexer ; no
+//!   `Default`, no `From`, no `new`, no `pub` field on `LexFacts` (premise judge 3 L2) ;
+//!   the extras bool is written by `xz_seen` only, the callback of the two x / z literal
+//!   kinds and of nothing else ; `strip_attribute_instances` writes the token vector only
+//!   by `out.push(src[i].clone())` at two sites (premise judge 3 L4: the fact is then a
+//!   superset of the stripped vector's, E6). H2 (d), the SUPERSET test, is `hdl-parser`
 //!   `src/tests/lossy_spell.rs` `superset` (each parsed pin) and, through the design
 //!   record, `crates/cli/tests/lossy_spell_pins.rs` `design_superset_over_the_cells`.
 //!   Its blind spot (premise judge 2 L6): a class specialization actual is substituted
@@ -207,23 +219,33 @@ fn text_of<'a>(files: &'a [(String, String)], rel: &str) -> &'a str {
 
 // ─────────────────────────────── H1 ───────────────────────────────
 
-/// H1's check over a set of files: each code line naming the parser bool is one of the
-/// four allowed forms, at its file.
+/// The parser's lossy bools: (field, the `api.rs` read).
+const H1_BOOLS: [(&str, &str); 2] = [
+    (
+        "lossy_sign_kw_param",
+        "lossy.sign_kw_param = p.lossy_sign_kw_param;",
+    ),
+    ("lossy_let_any", "lossy.let_any = p.lossy_let_any;"),
+];
+
+/// H1's check over a set of files: each code line naming a parser bool is one of the four
+/// allowed forms, at its file.
 fn h1_violations(files: &[(String, String)]) -> Vec<(String, String)> {
-    word_sites(files, "lossy_sign_kw_param")
-        .into_iter()
-        .filter(|(f, l)| {
+    let mut out = Vec::new();
+    for (word, read) in H1_BOOLS {
+        out.extend(word_sites(files, word).into_iter().filter(|(f, l)| {
             let ok = match f.as_str() {
                 "hdl-parser/src/lib.rs" => {
-                    l == "lossy_sign_kw_param: bool," || l == "lossy_sign_kw_param: false,"
+                    *l == format!("{word}: bool,") || *l == format!("{word}: false,")
                 }
-                "hdl-parser/src/lossy.rs" => l.starts_with("self.lossy_sign_kw_param |= "),
-                "hdl-parser/src/api.rs" => l == "lossy.sign_kw_param = p.lossy_sign_kw_param;",
+                "hdl-parser/src/lossy.rs" => l.starts_with(&format!("self.{word} |= ")),
+                "hdl-parser/src/api.rs" => l == read,
                 _ => false,
             };
             !ok
-        })
-        .collect()
+        }));
+    }
+    out
 }
 
 /// The text of `struct ScopeSnapshot { … }`.
@@ -239,15 +261,17 @@ fn fn_like_body<'a>(text: &'a str, head: &str) -> &'a str {
 }
 
 #[test]
-fn h1_parser_bool_is_or_written_and_in_no_snapshot() {
+fn h1_parser_bools_are_or_written_and_in_no_snapshot() {
     let files = only(&production_sources(), "hdl-parser/src/");
     assert_eq!(h1_violations(&files), Vec::<(String, String)>::new());
-    let all = word_sites(&files, "lossy_sign_kw_param");
-    assert_eq!(
-        all.len(),
-        4,
-        "decl, init, the `|=` write, the read: {all:?}"
-    );
+    for (word, _) in H1_BOOLS {
+        let all = word_sites(&files, word);
+        assert_eq!(
+            all.len(),
+            4,
+            "{word}: decl, init, the `|=` write, the read: {all:?}"
+        );
+    }
     let snap = scope_snapshot(text_of(&files, "hdl-parser/src/lib.rs"));
     assert!(snap.contains("type_names"), "the snapshot body was found");
     assert!(!snap.contains("lossy"), "a lossy bit in ScopeSnapshot");
@@ -255,41 +279,49 @@ fn h1_parser_bool_is_or_written_and_in_no_snapshot() {
 
 #[test]
 fn h1_planted_controls_fail() {
-    let planted = vec![(
-        "hdl-parser/src/scope.rs".to_string(),
-        "fn restore(&mut self, s: Snap) {\n    self.lossy_sign_kw_param = s.saved;\n}\n"
-            .to_string(),
-    )];
-    assert_eq!(
-        h1_violations(&planted).len(),
-        1,
-        "an assignment from saved state"
-    );
-    let planted2 = vec![(
-        "hdl-parser/src/lossy.rs".to_string(),
-        "    self.lossy_sign_kw_param = matches!(x, y);\n".to_string(),
-    )];
-    assert_eq!(
-        h1_violations(&planted2).len(),
-        1,
-        "`=` where `|=` is the rule"
-    );
-    let snap = "struct ScopeSnapshot {\n    type_names: X,\n    lossy_sign_kw_param: bool,\n}\n";
+    for word in ["lossy_sign_kw_param", "lossy_let_any"] {
+        let planted = vec![(
+            "hdl-parser/src/scope.rs".to_string(),
+            format!("fn restore(&mut self, s: Snap) {{\n    self.{word} = s.saved;\n}}\n"),
+        )];
+        assert_eq!(
+            h1_violations(&planted).len(),
+            1,
+            "{word}: an assignment from saved state"
+        );
+        let planted2 = vec![(
+            "hdl-parser/src/lossy.rs".to_string(),
+            format!("    self.{word} = matches!(x, y);\n"),
+        )];
+        assert_eq!(
+            h1_violations(&planted2).len(),
+            1,
+            "{word}: `=` where `|=` is the rule"
+        );
+    }
+    let snap = "struct ScopeSnapshot {\n    type_names: X,\n    lossy_let_any: bool,\n}\n";
     assert!(scope_snapshot(snap).contains("lossy"));
 }
 
 // ─────────────────────────────── H2 ───────────────────────────────
 
+/// The files of a call's callers, its definition line left out.
+fn callers(files: &[(String, String)], needle: &str, def: &str) -> Vec<String> {
+    sites(files, needle)
+        .into_iter()
+        .filter(|(_, l)| !l.contains(def))
+        .map(|(f, _)| f)
+        .collect()
+}
+
+/// `text` with every run of white space made one space.
+fn squash(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn h2_counts(files: &[(String, String)]) -> (Vec<String>, Vec<String>, Vec<String>, usize, usize) {
-    let callers = |needle: &str, def: &str| -> Vec<String> {
-        sites(files, needle)
-            .into_iter()
-            .filter(|(_, l)| !l.contains(def))
-            .map(|(f, _)| f)
-            .collect()
-    };
-    let scan = callers("scan_lossy(", "fn scan_lossy(");
-    let let_head = callers("is_let_head(", "fn is_let_head(");
+    let scan = callers(files, "scan_lossy(", "fn scan_lossy(");
+    let let_head = callers(files, "is_let_head(", "fn is_let_head(");
     let let_str: Vec<String> = sites(files, "\"let\"")
         .into_iter()
         .map(|(f, _)| f)
@@ -310,14 +342,35 @@ fn h2_counts(files: &[(String, String)]) -> (Vec<String>, Vec<String>, Vec<Strin
     (scan, let_head, let_str, written, implicit)
 }
 
+/// H2 (a)'s gate: `parse_lexed`'s body runs the scan only under the lexer's fact.
+fn scan_is_gated(api: &str) -> bool {
+    squash(fn_body(api, "parse_lexed")).contains(
+        "let mut lossy = if facts.xz_literal() { lossy::scan_lossy(tokens, src) } else { \
+         LossySpell::default() };",
+    )
+}
+
+/// H2 (b'): `note_let_decl` is the first statement of `parse_let_decl`.
+fn let_note_first(sva_seq: &str) -> bool {
+    let body = fn_body(sva_seq, "parse_let_decl");
+    code_lines(&body[1..])
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .is_some_and(|l| l == "self.note_let_decl();")
+}
+
 #[test]
 fn h2_scan_let_and_signing_sites() {
     let files = only(&production_sources(), "hdl-parser/src/");
     let (scan, let_head, let_str, written, implicit) = h2_counts(&files);
     assert_eq!(scan, ["hdl-parser/src/api.rs"], "(a) scan_lossy's callers");
+    assert!(
+        scan_is_gated(text_of(&files, "hdl-parser/src/api.rs")),
+        "(a) the scan's one call sits under the lexer's fact"
+    );
     assert_eq!(
         let_head,
-        ["hdl-parser/src/item_dispatch.rs", "hdl-parser/src/lossy.rs"],
+        ["hdl-parser/src/item_dispatch.rs"],
         "(b) is_let_head's callers"
     );
     assert_eq!(
@@ -325,6 +378,25 @@ fn h2_scan_let_and_signing_sites() {
         ["hdl-parser/src/lossy.rs"],
         "(b) the string \"let\""
     );
+    assert_eq!(
+        callers(&files, "note_let_decl(", "fn note_let_decl("),
+        ["hdl-parser/src/sva_seq.rs"],
+        "(b') note_let_decl's callers"
+    );
+    let sva = text_of(&files, "hdl-parser/src/sva_seq.rs");
+    assert!(
+        let_note_first(sva),
+        "(b') the first statement of parse_let_decl"
+    );
+    assert_eq!(
+        sites(&files, "LetDecl {"),
+        [(
+            "hdl-parser/src/sva_seq.rs".to_string(),
+            "Some(ModuleItem::LetDecl(LetDecl {".to_string()
+        )],
+        "(b') the one LetDecl construction"
+    );
+    assert!(fn_body(sva, "parse_let_decl").contains("LetDecl {"));
     assert_eq!((written, implicit), (1, 4), "(c) new_param's calls");
     let params = text_of(&files, "hdl-parser/src/params.rs");
     assert!(fn_body(params, "param_dtype").contains("Signing::from_written("));
@@ -340,14 +412,300 @@ fn h2_planted_controls_fail() {
         (
             "hdl-parser/src/stmt.rs".to_string(),
             "    let again = lossy::scan_lossy(toks, src);\n    if t == \"let\" {}\n    \
-             let d = DataType::new_param(k, Signing::from_written(w), false, None);"
+             let d = DataType::new_param(k, Signing::from_written(w), false, None);\n    \
+             if lossy::is_let_head(t, s, i) { self.note_let_decl(); }"
                 .to_string(),
         ),
     ];
-    let (scan, _, let_str, written, _) = h2_counts(&planted);
+    let (scan, let_head, let_str, written, _) = h2_counts(&planted);
     assert_eq!(scan.len(), 2, "a second caller of scan_lossy is seen");
+    assert_eq!(let_head, ["hdl-parser/src/stmt.rs"]);
     assert_eq!(let_str, ["hdl-parser/src/stmt.rs"]);
     assert_eq!(written, 1);
+    assert_eq!(
+        callers(&planted, "note_let_decl(", "fn note_let_decl("),
+        ["hdl-parser/src/stmt.rs"]
+    );
+    // the scan called outside the gate
+    let ungated = "pub fn parse_lexed(t: &[S], src: &str, facts: LexFacts) {\n    \
+                   let mut lossy = lossy::scan_lossy(tokens, src);\n}\n";
+    assert!(!scan_is_gated(ungated));
+    // the note after the head's tokens are consumed
+    let late = "fn parse_let_decl(&mut self) -> Option<ModuleItem> {\n    \
+                let start = self.cur_span();\n    self.note_let_decl();\n}\n";
+    assert!(!let_note_first(late));
+    assert!(let_note_first(
+        "fn parse_let_decl(&mut self) {\n    // c\n    self.note_let_decl();\n}\n"
+    ));
+}
+
+// ─────────────────── H2 (e): the lexer's fact (§5.2 Q-LOSSYSPELL U3) ───────────────────
+
+/// What H2 (e) reads, over a set of files.
+#[derive(Debug, PartialEq)]
+struct H2e {
+    /// The files of each `lex_facts(` caller but the definition.
+    lex_facts: Vec<String>,
+    /// The files of each `parse_lexed(` caller but the definition.
+    parse_lexed: Vec<String>,
+    /// Code lines holding `LexFacts {`, but an `impl` header.
+    facts_braces: Vec<String>,
+    /// `Default`, `From<..>`, `fn new(` or a `pub` field on `LexFacts` (premise judge 3 L2).
+    facts_doors: Vec<String>,
+    /// Code lines writing the extras bool.
+    extras_writes: Vec<String>,
+    /// The variant each `xz_seen` callback sits on.
+    callback_variants: Vec<String>,
+    /// Lines of `strip_attribute_instances` that touch its output or the token vector in a
+    /// way other than its two `out.push(src[i].clone())`, `out.last()`, the take, the
+    /// final store and the pre-pass read (premise judge 3 L4).
+    strip_writes: Vec<String>,
+    /// `out.push(src[i].clone())` sites in `strip_attribute_instances`.
+    strip_pushes: usize,
+}
+
+fn h2e(files: &[(String, String)]) -> H2e {
+    let lexer = files
+        .iter()
+        .find(|(f, _)| f == "hdl-lexer/src/lib.rs")
+        .map_or("", |(_, t)| t.as_str());
+    let facts_braces: Vec<String> = sites(files, "LexFacts {")
+        .into_iter()
+        .filter(|(_, l)| !l.starts_with("impl"))
+        .map(|(f, l)| format!("{f}: {l}"))
+        .collect();
+    let mut facts_doors = Vec::new();
+    for (f, t) in files {
+        let lines: Vec<&str> = code_lines(t).collect();
+        for (i, l) in lines.iter().enumerate() {
+            let l = l.trim();
+            let default_derive = l.starts_with("#[derive(")
+                && l.contains("Default")
+                && lines
+                    .get(i + 1)
+                    .is_some_and(|n| n.contains("struct LexFacts"));
+            if default_derive
+                || (l.starts_with("impl") && l.contains("for LexFacts"))
+                || l.contains("Default for LexFacts")
+            {
+                facts_doors.push(format!("{f}: {l}"));
+            }
+        }
+    }
+    if !lexer.is_empty() && lexer.contains("pub struct LexFacts") {
+        let def = fn_like_body(lexer, "pub struct LexFacts");
+        for l in code_lines(def) {
+            if l.trim_start().starts_with("pub") {
+                facts_doors.push(format!("pub field: {}", l.trim()));
+            }
+        }
+        if let Some(at) = lexer.find("impl LexFacts {") {
+            let imp = fn_like_body(&lexer[at..], "impl LexFacts");
+            for l in code_lines(imp) {
+                if l.contains("fn new(") || l.contains("bool) -> Self") {
+                    facts_doors.push(format!("constructor: {}", l.trim()));
+                }
+            }
+        }
+    }
+    let extras_writes: Vec<String> = sites(files, "extras.xz_literal =")
+        .into_iter()
+        .map(|(f, l)| format!("{f}: {l}"))
+        .collect();
+    // the callback: each `xz_seen` word but the fn itself, and the variant line after it
+    let mut callback_variants = Vec::new();
+    let lines: Vec<&str> = lexer.lines().collect();
+    for (i, l) in lines.iter().enumerate() {
+        if has_word(l, "xz_seen") && !l.contains("fn xz_seen(") && !l.trim_start().starts_with("//")
+        {
+            let v = lines[i + 1..]
+                .iter()
+                .map(|n| n.trim())
+                .find(|n| {
+                    n.ends_with(',')
+                        && n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                        && !n.contains(' ')
+                })
+                .unwrap_or("NONE");
+            callback_variants.push(v.trim_end_matches(',').to_string());
+        }
+    }
+    let (mut strip_writes, mut strip_pushes) = (Vec::new(), 0);
+    if lexer.contains("fn strip_attribute_instances(") {
+        let body = fn_body(lexer, "strip_attribute_instances");
+        for l in code_lines(body) {
+            let l = l.trim();
+            let mut rest = l.to_string();
+            for ok in [
+                "out.push(src[i].clone())",
+                "out.last()",
+                "std::mem::take(tokens)",
+                "*tokens = out;",
+                "tokens.windows(2)",
+                "let mut out: Vec<Spanned> = Vec::with_capacity(src.len());",
+            ] {
+                if ok == "out.push(src[i].clone())" {
+                    strip_pushes += rest.matches(ok).count();
+                }
+                rest = rest.replace(ok, "");
+            }
+            if has_word(&rest, "out") || has_word(&rest, "tokens") {
+                strip_writes.push(l.to_string());
+            }
+        }
+    }
+    H2e {
+        lex_facts: callers(files, "lex_facts(", "fn lex_facts("),
+        parse_lexed: callers(files, "parse_lexed(", "fn parse_lexed("),
+        facts_braces,
+        facts_doors,
+        extras_writes,
+        callback_variants,
+        strip_writes,
+        strip_pushes,
+    }
+}
+
+#[test]
+fn h2e_lexer_fact_sites() {
+    let files = production_sources();
+    let got = h2e(&files);
+    assert_eq!(
+        got,
+        H2e {
+            lex_facts: vec!["cli/src/frontend.rs".into(), "hdl-lexer/src/lib.rs".into()],
+            parse_lexed: vec!["cli/src/frontend.rs".into(), "hdl-parser/src/api.rs".into()],
+            facts_braces: vec![
+                "hdl-lexer/src/lib.rs: pub struct LexFacts {".into(),
+                "hdl-lexer/src/lib.rs: LexFacts {".into(),
+                "hdl-lexer/src/lib.rs: let facts = LexFacts {".into(),
+            ],
+            facts_doors: vec![],
+            extras_writes: vec!["hdl-lexer/src/lib.rs: lex.extras.xz_literal = true;".into()],
+            callback_variants: vec!["IntSizedXz".into(), "IntUnsizedBasedXz".into()],
+            strip_writes: vec![],
+            strip_pushes: 2,
+        }
+    );
+    // Inside their crates the two callers are the wrappers: `lex` and `parse_with_warnings`.
+    let lexer = text_of(&files, "hdl-lexer/src/lib.rs");
+    assert!(fn_body(lexer, "lex").contains("lex_facts(src)"));
+    let api = text_of(&files, "hdl-parser/src/api.rs");
+    assert!(fn_body(api, "parse_with_warnings").contains("parse_lexed("));
+    // The two constructions sit in `of_tokens` and `lex_facts`; the one write in `xz_seen`.
+    assert!(fn_body(lexer, "of_tokens").contains("LexFacts {"));
+    assert!(fn_body(lexer, "lex_facts").contains("LexFacts {"));
+    assert!(fn_body(lexer, "xz_seen").contains("lex.extras.xz_literal = true;"));
+}
+
+#[test]
+fn h2e_planted_controls_fail() {
+    let base = production_sources();
+    let lexer = text_of(&base, "hdl-lexer/src/lib.rs").to_string();
+    let with = |edit: &dyn Fn(&str) -> String| -> H2e {
+        let mut files = base.clone();
+        for (f, t) in files.iter_mut() {
+            if f == "hdl-lexer/src/lib.rs" {
+                *t = edit(&lexer);
+            }
+        }
+        h2e(&files)
+    };
+    // L2: `Default` derived on LexFacts
+    let g = with(&|t| {
+        t.replace(
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct LexFacts {",
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]\npub struct LexFacts {",
+        )
+    });
+    assert_eq!(
+        g.facts_doors.len(),
+        1,
+        "a derived Default: {:?}",
+        g.facts_doors
+    );
+    // L2: a `From<bool>` / a `new(bool)` / a `pub` field
+    let g = with(&|t| {
+        format!(
+            "{t}\nimpl From<bool> for LexFacts {{\n    fn from(b: bool) -> Self {{\n        \
+             LexFacts {{ xz_literal: b }}\n    }}\n}}\n"
+        )
+    });
+    assert_eq!(g.facts_doors.len(), 1, "a From<bool>");
+    assert_eq!(g.facts_braces.len(), 4, "a third construction");
+    let g = with(&|t| {
+        t.replace(
+            "impl LexFacts {\n",
+            "impl LexFacts {\n    pub fn new(b: bool) -> Self { todo!() }\n",
+        )
+    });
+    assert_eq!(g.facts_doors.len(), 1, "a new(bool)");
+    let g = with(&|t| {
+        t.replacen(
+            "pub struct LexFacts {\n    xz_literal",
+            "pub struct LexFacts {\n    pub xz_literal",
+            1,
+        )
+    });
+    assert_eq!(g.facts_doors.len(), 1, "a pub field");
+    // the extras bool written elsewhere ; the callback on a third variant
+    let g = with(&|t| {
+        t.replacen(
+            "fn lone_sigil(",
+            "fn other(lex: &mut Lexer<TokenKind>) { lex.extras.xz_literal = true; }\nfn lone_sigil(",
+            1,
+        )
+    });
+    assert_eq!(
+        g.extras_writes.len(),
+        2,
+        "a second writer of the extras bool"
+    );
+    let g = with(&|t| {
+        t.replacen(
+            "#[regex(r\"\\d[\\d_]*\")]\n    IntDecimal,",
+            "#[regex(r\"\\d[\\d_]*\", xz_seen)]\n    IntDecimal,",
+            1,
+        )
+    });
+    assert_eq!(
+        g.callback_variants,
+        ["IntSizedXz", "IntUnsizedBasedXz", "IntDecimal"],
+        "the callback on a third variant"
+    );
+    // L4: the strip writes a token it did not take from the input
+    let g = with(&|t| {
+        t.replacen(
+            "                out.push(src[i].clone());\n                i += 1;\n            }",
+            "                out.push(Spanned::new(TokenKind::IntSizedXz, 0..0));\n                i += 1;\n            }",
+            1,
+        )
+    });
+    assert_eq!(g.strip_pushes, 1, "one of the two pushes replaced");
+    assert_eq!(
+        g.strip_writes.len(),
+        1,
+        "a push of a new token: {:?}",
+        g.strip_writes
+    );
+    let g = with(&|t| {
+        t.replacen(
+            "    *tokens = out;\n",
+            "    out.insert(0, src[0].clone());\n    *tokens = out;\n",
+            1,
+        )
+    });
+    assert_eq!(g.strip_writes.len(), 1, "an insert");
+    // a second production caller of the production entries
+    let mut files = base.clone();
+    files.push((
+        "elaborate/src/x.rs".to_string(),
+        "let (t, e, f) = hdl_lexer::lex_facts(s);\nlet u = hdl_parser::parse_lexed(&t, s, f);\n"
+            .to_string(),
+    ));
+    let g = h2e(&files);
+    assert_eq!(g.lex_facts.len(), 3);
+    assert_eq!(g.parse_lexed.len(), 3);
 }
 
 // ─────────────────────────────── H3 ───────────────────────────────

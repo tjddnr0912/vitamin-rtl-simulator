@@ -3,9 +3,11 @@
 //! reads it — every source with `read_to_string`, `-I` / `-D` into the preprocessor, all
 //! sources one compilation unit — then the steps of `cli::frontend_sources_mapped`
 //! (`hdl_preprocess::preprocess_sources`, `hdl_lexer::lex`, `hdl_parser::parse_with_warnings`).
-//! The bits are printed whether or not the parse reported errors: the four token bits are a
-//! function of the whole token vector; `sign_kw_param` holds what the parse reached. No
-//! production code reads the record; this is no CLI flag.
+//! The bits are printed whether or not the parse reported errors: the three token bits are a
+//! function of the whole token vector; `sign_kw_param` and `let_any` hold what the parse
+//! reached. It stays on `parse_with_warnings` (the fact from the tokens) where production
+//! calls `parse_lexed` with the lexer's (§5.2 Q-LOSSYSPELL U3), so a format check comparing
+//! the two compares the two facts. No production code reads the record; this is no CLI flag.
 //!
 //! `cargo run --locked -p cli --example lossy_bits -- [-I<dir> | -I <dir>] [-D<n>[=v] | -D <n>]
 //! [--top <m>] [--timeout <n>] [+plusarg] <file>...` prints one line:

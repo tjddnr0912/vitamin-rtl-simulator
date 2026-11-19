@@ -190,15 +190,17 @@ pub enum TopItem {
 /// constant is right" (an x made by an operator, a `'0` / `'1` fill, a constant
 /// function's local, the Q-AESINK mark are in none of them).
 ///
-/// - `param_xz`: an `IntSized` / `IntUnsizedBased` token (a fill included) with an
-///   `x X z Z ?` digit, at a token inside a `#( … )` or a `parameter` / `localparam` /
-///   `specparam` / `defparam` statement — also a delay or a type's range there, not
+/// - `param_xz`: an `IntSizedXz` / `IntUnsizedBasedXz` token (a based literal with an
+///   `x X z Z ?` digit, a fill included), at a token inside a `#( … )` or a `parameter` /
+///   `localparam` / `specparam` / `defparam` statement — also a delay or a type's range there, not
 ///   only a value (`hdl-parser` `lossy.rs`, `scan_lossy`).
-/// - `unsized_xz`: an `IntUnsizedBased` token that is not a fill, with such a digit,
+/// - `unsized_xz`: an `IntUnsizedBasedXz` token that is not a fill (it has such a digit),
 ///   anywhere (`'bx`, `'hz`, `'d?`; `'sx` / `'sz` count here, not as fills).
 /// - `sign_kw_param`: a parameter whose data type has a WRITTEN `signed` / `unsigned`,
 ///   no type keyword and no packed range (`parameter signed N`).
-/// - `let_any`: a word `let` followed by an identifier or escaped identifier.
+/// - `let_any`: the parser entered a `let` declaration (`parse_let_decl`, the one fn that
+///   builds a `LetDecl`; the word `let` followed by an identifier or escaped identifier at
+///   a module-item position).
 /// - `fill_xz`: an `'x` / `'z` fill that is not the whole right side of `=` / `<=` …
 ///   `;` (the owner's question Q1, option (c)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, SchemaHash)]

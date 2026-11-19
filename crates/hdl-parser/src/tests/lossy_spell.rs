@@ -5,6 +5,10 @@
 //! (W/lossy/plan2/PLAN2.txt section C, option (c) by RULINGS-plan R14, premise judge 2's
 //! literal lines L3 and L4). A pin whose bit is an over-report says so with its reason.
 //! Every source parsed through `bits` / `bits_loose` also passes `superset` (home rule H2(d)).
+//! Unit U3 (the lexer's x / z literal kinds gate the pass ; `let_any` is the parser's note at
+//! `parse_let_decl`, RULINGS-plan R23) moved the function-body `let` and the head snippets
+//! and adds the last section: the production pair (`lex_facts`, `parse_lexed`), the early
+//! return, `let` as a type name (premise judge 3 L7), the attribute-only literal.
 use super::*;
 
 const P: u8 = 1; // param_xz
@@ -494,8 +498,17 @@ fn let_any_every_declaration_head() {
     ] {
         assert_eq!(bits(src), L, "`{src}`");
     }
-    // A `let` in a function body is E2002 today, still a head: over-report.
-    let (b, _) = bits_loose("module m; function f(); let L = 1; endfunction endmodule");
+    // A `let` in a function body is E2002 today and never reaches `parse_let_decl` (the
+    // module-item dispatch is its one door): false since U3 (U1's token scan said true, an
+    // over-report). The refused unit reaches no reader (the front end returns `None` on a
+    // parse error ; W/lossy/plan3/PLAN3.txt section C (ii)).
+    let (b, refused) = bits_loose("module m; function f(); let L = 1; endfunction endmodule");
+    assert!(refused);
+    assert_eq!(b & L, 0);
+    // A head the dispatch took and whose body the parse then refuses stays noted
+    // (`note_let_decl` is `parse_let_decl`'s first line): over-report, loud either way.
+    let (b, refused) = bits_loose("module m; let L = ; endmodule");
+    assert!(refused);
     assert_eq!(b & L, L);
 }
 
@@ -506,21 +519,37 @@ fn let_any_negatives() {
         "module m; initial $display(\"let x = 1\"); endmodule",
         "module m; // let x = 1;\n /* let y = 2; */ endmodule",
         "module m; typedef logic letter_t; letter_t x; endmodule",
+        // A module whose name starts with `let`, instantiated: the dispatch tests the
+        // `let` head before the bare-identifier instance arm, so only the whole word
+        // `let` may take it (the U3 mutant `starts_with("let")` survived without it).
+        "module letter; endmodule module m; letter u (); endmodule",
     ] {
         assert_eq!(bits(src), 0, "`{src}`");
     }
     // the word `let` with no name after it is not a head
     let (b, _) = bits_loose("module m; wire let; endmodule");
     assert_eq!(b & L, 0);
-    assert_eq!(scan("let ;") & L, 0);
-    assert_eq!(scan("let 1") & L, 0);
-    assert_eq!(scan("let x") & L, L);
-    assert_eq!(scan("let \\x ") & L, L);
+    // The head predicate on token snippets (the dispatch guard ; the scan has no `let`
+    // arm since U3, so it sets no L on any of them).
+    assert!(!head("let ;"));
+    assert!(!head("let 1"));
+    assert!(head("let x"));
+    assert!(head("let \\x "));
+    for src in ["let ;", "let 1", "let x", "let \\x "] {
+        assert_eq!(scan(src) & L, 0, "`{src}`");
+    }
+}
+
+/// `is_let_head` at the first token of a snippet.
+fn head(src: &str) -> bool {
+    let (toks, le) = hdl_lexer::lex(src);
+    assert!(le.is_empty(), "lex errors: {le:?}");
+    lossy::is_let_head(&toks, src, 0)
 }
 
 #[test]
 fn is_let_head_is_the_dispatch_guard() {
-    // The guard and the scan read one fn; the guard's `let` still parses a declaration.
+    // The dispatch guard; the guard's `let` still parses a declaration.
     let src = "module m; let L = 1; endmodule";
     let (toks, _) = hdl_lexer::lex(src);
     let i = toks
@@ -636,4 +665,119 @@ fn plain_fill_on_a_refused_left_side_stays_refused() {
         let (_, refused) = bits_loose(src);
         assert!(refused, "`{src}` must stay refused");
     }
+}
+
+// ───────────────── U3: the gate, the early return, the parser's `let` note ─────────────────
+
+/// The bits through the PRODUCTION pair: `hdl_lexer::lex_facts` then `parse_lexed` with the
+/// fact the lexer returned (cli `frontend.rs`), and the parse error count.
+fn bits_lexed(src: &str) -> (u8, usize) {
+    let (toks, le, facts) = hdl_lexer::lex_facts(src);
+    assert!(le.is_empty(), "lex errors: {le:?}");
+    let (su, errs, _) = parse_lexed(&toks, src, facts);
+    let found: Vec<LossySpell> = su
+        .iter()
+        .flat_map(|u| u.items.iter())
+        .filter_map(|i| match i {
+            TopItem::LossySpell(ls) => Some(*ls),
+            _ => None,
+        })
+        .collect();
+    (found.first().map_or(0, |ls| mask(*ls)), errs.len())
+}
+
+#[test]
+fn let_as_a_type_name_builds_no_let_declaration() {
+    // Premise judge 3 L7 (RULINGS-plan R23): vita takes the reserved word `let` as a type
+    // name, these units build no `LetDecl`, so `let_any` is false. U2's token scan said, on
+    // each (W/lossy/premise3/out/k*.lb_base.out): "BITS param_xz=0 unsized_xz=0
+    // sign_kw_param=0 let_any=1 fill_xz=0 items=1 parse_errors=0".
+    for (id, src) in [
+        (
+            "k1_fnlocal",
+            include_str!("../../tests/testdata/lossy_u3/k1_fnlocal.sv"),
+        ),
+        (
+            "k2_port",
+            include_str!("../../tests/testdata/lossy_u3/k2_port.sv"),
+        ),
+        (
+            "k3_block",
+            include_str!("../../tests/testdata/lossy_u3/k3_block.sv"),
+        ),
+    ] {
+        assert_eq!(bits(src), 0, "{id}");
+        assert_eq!(bits_lexed(src), (0, 0), "{id}");
+    }
+}
+
+#[test]
+fn let_note_survives_later_units() {
+    // The second parser bool, like the first: `|=` only, in no scope snapshot.
+    assert_eq!(
+        bits("module a; let L = 1; endmodule module b; logic x; endmodule"),
+        L
+    );
+    assert_eq!(
+        bits("package p; let L = 1; endpackage module b; endmodule"),
+        L
+    );
+}
+
+#[test]
+fn scan_runs_past_two_bits_until_all_three() {
+    // The pass returns only when param_xz, unsized_xz and fill_xz are all set: each pair
+    // first, the third after it.
+    for (src, want) in [
+        // param_xz and unsized_xz by one token, the counted fill later
+        (
+            "module m; localparam P = 'bx; logic [69:0] r; logic [3:0] a; initial r = {'x, a}; endmodule",
+            P | U | F,
+        ),
+        // param_xz and fill_xz first (a fill in a region counts), unsized_xz later
+        (
+            "module m; localparam Q = {'z, 4'b0}; wire [127:0] w = 'hz; endmodule",
+            P | U | F,
+        ),
+        // unsized_xz and fill_xz outside every region, param_xz later
+        (
+            "module m; wire [127:0] w = 'hz; logic [69:0] r; initial r = {'x, 70'h0}; localparam R = 4'b1x01; endmodule",
+            P | U | F,
+        ),
+        // the same three, the sized one last
+        (
+            "module m; wire [127:0] w = 'hz; logic [69:0] r; initial r = {'x, 70'h0}; endmodule module n; localparam R = 4'b10?1; endmodule",
+            P | U | F,
+        ),
+    ] {
+        assert_eq!(bits(src), want, "`{src}`");
+        assert_eq!(bits_lexed(src), (want, 0), "`{src}`");
+    }
+}
+
+#[test]
+fn attribute_only_literal_runs_the_pass_and_finds_none() {
+    // b1_attr (premise judge 3 section B): every x / z literal sits in an attribute
+    // instance, which the lexer strips. Its fact is true, the token vector holds none, the
+    // record is all-false either way (U2: "BITS param_xz=0 unsized_xz=0 sign_kw_param=0
+    // let_any=0 fill_xz=0 items=0 parse_errors=0").
+    let src = include_str!("../../tests/testdata/lossy_u3/b1_attr.sv");
+    let (toks, _, facts) = hdl_lexer::lex_facts(src);
+    assert!(facts.xz_literal());
+    assert!(!hdl_lexer::LexFacts::of_tokens(&toks).xz_literal());
+    assert_eq!(bits_lexed(src), (0, 0));
+    assert_eq!(bits(src), 0);
+}
+
+#[test]
+fn a_clean_unit_skips_the_pass() {
+    // No x / z literal: the fact is false and the record holds only the parser's notes.
+    let src = "module m; parameter signed N = 4'b1010; let L = 8'hFF; logic [7:0] q; initial q = '1; endmodule";
+    let (toks, _, facts) = hdl_lexer::lex_facts(src);
+    assert!(!facts.xz_literal());
+    assert_eq!(
+        parse_lexed(&toks, src, facts),
+        parse_with_warnings(&toks, src)
+    );
+    assert_eq!(bits_lexed(src), (S | L, 0));
 }
