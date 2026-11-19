@@ -28,6 +28,7 @@
 //! feeds arena order.
 
 mod literal;
+mod lossy;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -739,6 +740,10 @@ struct Elaborator<'s> {
     /// The first use of `inside` as a NAME in any parsed unit (`TopItem::InsideNameUse`),
     /// read once by `run`; every `case … inside` is refused when it is set.
     inside_name_use: Option<ast::Span>,
+    /// §5.2 Q-LOSSYSPELL: the design-wide lossy-spelling record, written once at `run`'s
+    /// head (`lossy::design_lossy_spell`) and handed to `Sidecars::lossy_spell`; no
+    /// production reader.
+    lossy_spell: ast::LossySpell,
     // ⓑ-breadth (v17): the active array-method `with`-clause iterator name
     // (`item` by default, or the named `find(x)` variable). When set, a matching
     // single-segment Ident lowers to `Expr::ArrayItem{index:false}` and `iter.index`

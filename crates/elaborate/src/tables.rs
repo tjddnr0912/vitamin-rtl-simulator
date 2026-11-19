@@ -513,6 +513,13 @@ pub struct Sidecars {
     /// Read by that test only: not serialized, and no decision reads it yet (ROADMAP §5.2, the
     /// 4-state rule: no per-step stand-down, in any lane).
     pub const_seed_reads: std::collections::BTreeSet<ConstSeedRead>,
+    /// §5.2 Q-LOSSYSPELL: which lossy constant producers this design spells — the OR of
+    /// every parsed unit's `TopItem::LossySpell` the elaboration received, then `param_xz`
+    /// for a `-G` value that spells an unknown (`elaborate/src/lossy.rs`, complete at
+    /// `run`'s head). A spelling, not a value: what a bit does not claim is in that file's
+    /// head note. Read by tests only (`crates/cli/tests/lossy_spell_pins.rs`): not
+    /// serialized, and no decision reads it yet.
+    pub lossy_spell: hdl_ast::LossySpell,
     /// OBS-1b: per covergroup-instance coverage manifest (see [`CovgInstMeta`]).
     /// EMPTY ⇒ no covergroups ⇒ no `coverage.json` payload. Golden-neutral.
     pub coverage_manifest: Vec<CovgInstMeta>,

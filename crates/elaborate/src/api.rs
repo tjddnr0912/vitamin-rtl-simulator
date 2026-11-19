@@ -234,6 +234,7 @@ pub fn elaborate_located_params(
         instances_info: std::mem::take(&mut el.instances_info),
         // Last: the class tables and the tables above can still run the interpreter.
         const_seed_reads: el.const_seed_reads.take(),
+        lossy_spell: el.lossy_spell,
     };
     if el.had_error {
         (None, sc)

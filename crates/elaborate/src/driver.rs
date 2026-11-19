@@ -140,6 +140,7 @@ impl<'s> Elaborator<'s> {
             dyn_md_elem: BTreeSet::new(),
             dollar_subst: None,
             inside_name_use: None,
+            lossy_spell: ast::LossySpell::default(),
             array_iter: None,
             array_iter_elem: None,
             array_iter_index_base: 0,
@@ -686,6 +687,10 @@ impl<'s> Elaborator<'s> {
             ast::TopItem::InsideNameUse(at) => Some(*at),
             _ => None,
         });
+        // §5.2 Q-LOSSYSPELL: the design-wide record of which lossy constant producers this
+        // design spells — the OR of every unit's record, then the `-G` values — complete
+        // here and nowhere earlier. No production code reads it (`lossy.rs`).
+        self.lossy_spell = crate::lossy::design_lossy_spell(unit, &self.top_param_overrides);
         // §3 ⑤ⓖ: before anything lowers (package bodies and class methods lower below).
         self.md_return_fns = md_return::md_return_fn_names(unit);
         self.design_inout_port = struct_arm::design_has_inout_port(unit);
