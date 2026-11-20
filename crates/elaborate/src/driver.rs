@@ -314,7 +314,6 @@ impl<'s> Elaborator<'s> {
             deferred_hier_bits: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
-            pending_fill_width: Vec::new(),
             hier_resolved_chunk: std::collections::BTreeMap::new(),
             cover_types: std::collections::BTreeMap::new(),
             cover_insts: std::collections::BTreeMap::new(),
@@ -1015,11 +1014,10 @@ impl<'s> Elaborator<'s> {
         // ENG-1b: both write lanes have decided their chunks, so a capture temp whose
         // destination was a deferred hierarchical write takes that destination's type.
         self.verify_deferred_captures();
-        // §4.5.355: both lanes have now decided the real chunk, so the assignment
-        // width a fill literal could not be told at lowering time finally exists.
-        self.resolve_pending_fill_widths();
         // §4.5.601: every placeholder is patched, so decide the late constant edges now —
-        // before the multidriver scan below reads a continuous-assign chunk's width.
+        // before the multidriver scan below reads a continuous-assign chunk's width. Both
+        // write lanes have published their chunks, so this also ends every record a fill
+        // under an undecided target left (`edge_gate.rs` THE FILL RULE).
         self.decide_late_edges();
         // R-SETTLE (`read_set.rs`): every implicit read set — each comb-inferred process
         // header and each in-body `@(*)` — is computed here, after the last post-lowering

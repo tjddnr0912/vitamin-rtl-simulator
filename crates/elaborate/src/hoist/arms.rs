@@ -508,7 +508,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_loop_cond_operand(b, e);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);
-        let rhs_id = self.resize_rhs_for_lvalue(e, rhs_id, &lv);
+        let rhs_id = self.resize_rhs_for_lvalue(e, rhs_id, &lv, self.cur_span);
         let sid = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: lv,
             rhs: rhs_id,

@@ -332,7 +332,7 @@ impl Elaborator<'_> {
                 let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
                                                    // §5.7.1: context-determined fill literal → lvalue width.
-                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
                 if let Some(d) = delay {
                     // IEEE §9.2.2 intra-assignment delay: the RHS evaluates NOW,
                     // the process suspends `d`, THEN the write happens. Lower as
@@ -446,7 +446,7 @@ impl Elaborator<'_> {
                 let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018)
                                                    // §5.7.1: context-determined fill literal → lvalue width.
-                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
                 let delay_id = delay.as_ref().map(|d| self.lower_delay(d).0);
                 let sid = self.push_stmt(ir::Stmt::NonblockingAssign {
                     lhs: lv,
@@ -1250,8 +1250,9 @@ impl Elaborator<'_> {
                         // §11.8.1): its 64 is the STORAGE size, and sizing a fill to
                         // it made `return '1;` in a `real` function read
                         // 18446744073709551615 → as signed → `-1.000000` where both
-                        // oracles print `1.000000`. The same guard
-                        // `resize_rhs_for_lvalue` applies to `fname = '1;`.
+                        // oracles print `1.000000`. The same rule the assignment
+                        // funnel `resize_rhs_for_lvalue` applies to `fname = '1;`
+                        // (`fill_context`'s `TargetW::NoBits`).
                         let ctx_w = match retvar {
                             Some(rv) => self
                                 .nets
@@ -1378,7 +1379,7 @@ impl Elaborator<'_> {
                 // procedural continuous assign is an assignment, whatever IR node
                 // carries it. Lowering to `Stmt::Force` is an implementation choice
                 // and must not change how wide `'1` is.
-                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,
@@ -1423,7 +1424,7 @@ impl Elaborator<'_> {
                 // 1-bit fill and zero-extended it (00000001 against both oracles'
                 // 11111111). The target is already proved a whole single net above,
                 // so the width `resize_rhs_for_lvalue` asks for is the net's.
-                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,

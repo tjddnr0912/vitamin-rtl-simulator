@@ -17,44 +17,30 @@
 //! | `u.arr[0] = '1`           | `000000000001` | `111111111111` |
 //! | `u.a[7:0] = '1`           | `xxxx00000001` | `xxxx11111111` |
 //!
-//! ⭐ THE FIX ASKS THE SAME QUESTION LATER, IT DOES NOT ADD A SECOND WIDTH RULE. Both
-//! deferral lanes publish the chunk they decided on, and `resolve_pending_fill_widths`
-//! runs `ir_lvalue_width` on it — the very call that answered 1 at lowering time. That
-//! is what makes the sub-cases fall out instead of being enumerated, and in particular
-//! it is what protects the row NOT in the table:
+//! ⭐ HOW IT IS RIGHT NOW (§5.2 Q-LOSSYSPELL fix H; the mechanism §4.5.355 / §4.5.357 /
+//! §4.5.360 built — a second lowering of a "scope-free" right-hand side after elaboration,
+//! with its name re-check and its repoint of every statement — is deleted). A deferred
+//! piece is an UNDECIDED piece of the target (`edge_gate.rs` THE FILL RULE): the fill is
+//! lowered ONCE, at the assignment, in its own scope, under the width the lowering can see
+//! (the deferred piece counted 1). `'0` / `'1` are spelled `1'b0` / `~1'b0`, which the run
+//! sizes at the final assignment context; an `'x` / `'z` constant leaves a record naming
+//! its own slot, and after both deferral lanes have published the chunk they decided on,
+//! the end-phase decision re-sizes that slot in place at the decided width of the WHOLE
+//! target, or refuses the design. So any right-hand side is right, not only a scope-free
+//! one (a plain name, a dotted read, a call), and nothing is enumerated per lane — in
+//! particular the row NOT in the table:
 //!
 //! ⚠️ `u.a[0] = '1` is a ONE-BIT target and all three oracles read `xxxxxxxxxxx1`.
 //! It goes down the same deferral lane as the element and part-select writes, so a fix
-//! written per lane would have widened it to twelve ones. Here its rebuilt chunk is one
-//! bit, the width fed back is 1, and the literal is left exactly as `lower_expr` made
-//! it. The test below fails if that ever stops being true.
+//! written per lane would have widened it to twelve ones. Its rebuilt chunk is one bit,
+//! so the decided width is 1 and the run sizes `~1'b0` at one bit. The test below fails
+//! if that ever stops being true.
 //!
-//! ⚠️ WHAT IS DEFERRED IS A **SCOPE-FREE** FILL EXPRESSION, not just a bare fill
-//! (§4.5.357 widened it). The resolve pass runs after elaboration with no lowering
-//! scope, so the right-hand sides it can re-lower are the ones that never ask it
-//! anything — literals and the operators over them. `u.wide = '1 + 1`, `-'1`, `~'1`,
-//! `'1 << 0`, `'1 & 8'hF0` are all in.
-//!
-//! The rule this implements is `max(ctx, sibling)`: a fill normally takes its sibling's
-//! width, which is why `{2{'1}}` and `~'0` were right at a hierarchical target even
-//! before §4.5.355 — but when the sibling is NARROWER than the target the context is
-//! the only source, and at a deferred target it was 1. Measured at the boundary:
-//! `logic [63:0] W; W = '1 + 1;` is 0 (iverilog agrees) while `u.wide = '1 + 1;` was
-//! 4294967296, because the sibling `1` is 32 bits. At a 12-bit target the two coincide,
-//! which is how an earlier pass of §4.5.355 talked itself into "bare is the whole set".
-//!
-//! ⚠️ THE PREDICATE ALSO ADMITS A PLAIN NAME (§4.5.360). The prerequisite §2-1e recorded
-//! — "re-lowering needs the lowering scope" — turned out to be one STRING: vita resolves
-//! a name by walking outward from `cur_prefix` over FQ-keyed tables that outlive
-//! elaboration, so capturing that prefix with the pending record and restoring it is the
-//! whole snapshot. What stays out is anything resolved through state that is pushed and
-//! popped (an inlined formal's substitution, a frame window) and any dotted path.
-//!
-//! ⚠️ And the re-lowering is VERIFIED READ-ONLY FIRST. `lower_expr_ctx` reports an
-//! unresolved name by emitting the diagnostic, so a failed re-lowering cannot be rolled
-//! back; every name is checked with the same outward walk before anything is built, and
-//! a miss leaves `lower_expr`'s IR alone. Turning a wrong value into a spurious error
-//! would be a regression even though the value was wrong.
+//! The rule is `max(ctx, sibling)`: a fill normally takes its sibling's width, which is
+//! why `{2{'1}}` and `~'0` were right at a hierarchical target even before §4.5.355 — but
+//! when the sibling is NARROWER than the target the context is the only source. Measured
+//! at §4.5.357's boundary: `logic [63:0] W; W = '1 + 1;` is 0 (iverilog agrees) while
+//! `u.wide = '1 + 1;` was 4294967296, because the sibling `1` is 32 bits.
 //!
 //! The sibling-supplied cases are pinned below so a later "simplification" that routes
 //! them through the deferral cannot change them silently.
@@ -183,16 +169,16 @@ fn a_fill_whose_sibling_is_wide_enough_is_untouched_at_a_hierarchical_target() {
 
 #[test]
 fn a_parenthesised_bare_fill_is_still_a_bare_fill() {
-    // `lower_expr` sees through `(…)`, so the deferral predicate must too.
+    // `lower_expr` sees through `(…)`, so the fill lowering must too.
     assert_eq!(run("u.a = ('1);", "u.a"), "111111111111");
 }
 
 #[test]
 fn a_scope_free_fill_expression_reaches_the_target_width() {
-    // ⭐ §4.5.357: the deferral admits any right-hand side whose lowering needs no
-    // scope, not only a bare literal. Each of these has a sibling NARROWER than the
-    // 12-bit target, so the assignment context is the only width source — and at a
-    // deferred target it used to be 1. ORACLE: iverilog for every value.
+    // ⭐ §4.5.357: an operator over the fill, not only a bare literal. Each of these
+    // has a sibling NARROWER than the 12-bit target, so the assignment context is the
+    // only width source — and at a deferred target it used to be 1. ORACLE: iverilog
+    // for every value.
     for (rhs, want) in [
         ("'1 + 1", "000000000000"),
         ("'1 - 1", "111111111110"),
@@ -218,20 +204,20 @@ fn a_right_hand_side_that_reads_a_net_reaches_the_target_width_too() {
     assert_eq!(run("u.a = c ? '1 : 1'b0;", "u.a"), "111111111111");
     assert_eq!(run("L = c ? '1 : 1'b0;", "L"), "111111111111");
     // A name on the other side of the operator, and a name as the whole non-fill
-    // sibling — both go through the same verify-then-relower path.
+    // sibling — both lowered once, in their own scope (fix H).
     assert_eq!(run("u.a = c ? 1'b0 : '1;", "u.a"), "000000000000");
     assert_eq!(run("u.a = '1 & {11'b0, c};", "u.a"), "000000000001");
 }
 
 #[test]
 fn a_name_reached_from_a_subprogram_body_still_runs_and_agrees() {
-    // ⚠️ THE GUARD, stated as the property it protects rather than as a value: whatever
-    // the verification decides, the design must still RUN. The failure this rules out is
-    // a spurious unresolved-name error introduced by the SECOND lowering — a wrong value
-    // turning into a loud reject is still a regression.
+    // ⚠️ THE GUARD, stated as the property it protects rather than as a value: the
+    // design must still RUN. The failure this rules out is a spurious unresolved-name
+    // error from a lowering outside the name's scope (the deleted second lowering ran
+    // after elaboration) — a wrong value turning into a loud reject is still a regression.
     //
-    // A task formal is the interesting case: it reaches the pending path from inside a
-    // subprogram body, and both oracles read all-ones.
+    // A task formal is the interesting case: its name exists only inside the subprogram
+    // body the fill is lowered in, and both oracles read all-ones.
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let src = format!(
         "{SUB}module t; sub u();\n\

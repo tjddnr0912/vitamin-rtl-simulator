@@ -38,6 +38,24 @@
 //! value the consumer built depends on a width it could not know, it records that width,
 //! and the decision refuses the design when the decided width is not the one assumed.
 //!
+//! THE FILL RULE (§5.2 Q-LOSSYSPELL fix H). A fill in an assignment's right side is
+//! lowered ONCE, at the assignment, in its own scope, under the one value
+//! [`Elaborator::fill_context`] gives for the whole target ([`TargetW`]: every piece
+//! decided, some piece undecided, one `real` piece, or not provable), which the
+//! assignment funnel `resize_rhs_for_lvalue` (`expr_ctx.rs`) matches with no `_` arm. A
+//! fill lowered under an undecided target leaves one record per measure; an `'x` / `'z`
+//! one names its own arena slot. A fill on a target not provable leaves one record at the
+//! assignment's own position, and the funnel says nothing. The decision
+//! ([`Elaborator::verify_use_recs`]) ends every such record: the slot re-sized in place at
+//! the decided width of the whole target (only when every undecided piece is a deferred
+//! hierarchical piece, whose width nobody could read before its lane published it), or an
+//! error — for a target not provable, one error, and none when the elaboration had already
+//! reported an error. Every error this rule adds is the one constant sentence
+//! [`FILL_UNESTABLISHED`], which prints no value: the reasons and numbers the rule's first
+//! builds printed were read from bounds folded for another purpose (a sign-blind `u32`
+//! fold, a saturated width), and they return only with a producer sound for them (§5.2
+//! Q-SELBOUND). There is no second lowering of a right-hand side after elaboration.
+//!
 //! Nothing here asks whether the code is ever executed: a width in an uncalled function,
 //! a dead branch or an auto-elaborated root module is decided, or refused, like any other.
 
@@ -145,6 +163,11 @@ enum UseKind {
     Fill,
     Capture,
     Stream,
+    /// A fill on a target whose width is not provable ([`TargetW::Unprovable`]): the
+    /// funnel says nothing and leaves this record at the position its caller gave (the
+    /// statement, a continuous assignment's own pair, a net declarator); the decision
+    /// speaks for it only when no error had been reported when it started.
+    Unprovable,
 }
 
 /// A consumer's record, verified once the widths are decided.
@@ -154,6 +177,56 @@ pub(crate) struct UseRec {
     kind: UseKind,
     span: Option<ast::Span>,
     prefix: String,
+    /// An `'x` / `'z` fill's own constant (a `Fill` record only; `None` for an all-ones
+    /// or all-zeros fill, which the run sizes).
+    fill: Option<FillSlot>,
+}
+
+/// The bit an unknown fill replicates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FillBit {
+    X,
+    Z,
+}
+
+/// Where an `'x` / `'z` fill lowered under an undecided target lives, so the decision can
+/// re-size it in place.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FillSlot {
+    /// The arena slot holding the fill's `Const`.
+    eid: u32,
+    bit: FillBit,
+    /// The width it was lowered at.
+    sized: u32,
+    /// The record's one measure is a target whose every undecided piece is a deferred
+    /// hierarchical piece and which has no late width edge ([`TargetW::Late`]'s
+    /// `resizable`).
+    resizable: bool,
+}
+
+/// What [`Elaborator::fill_context`] says about a target's width: the one value the
+/// assignment funnel matches, with no `_` arm.
+#[derive(Clone, Debug)]
+pub(crate) enum TargetW {
+    /// Every piece's width is decided now; the sum.
+    Bits(u32),
+    /// At least one piece is undecided: a piece written through a deferred hierarchical
+    /// name (its width is the resolved chunk's), or a part-select whose width edge is late.
+    /// `visible` is the width the lowering can see (a deferred piece counts 1, a late edge
+    /// its provisional value or 1); `resizable` = every undecided piece is a deferred one
+    /// and no piece has a late width edge.
+    Late {
+        visible: u32,
+        f2: F2Ctx,
+        resizable: bool,
+    },
+    /// The target is one `real` piece: no bits to fill (IEEE 1800-2017 6.12; the fill is
+    /// self-determined, one bit, 5.7.1).
+    NoBits,
+    /// Not provable (a `real` piece beside another piece, or a piece whose width does not
+    /// fold and is not late): the funnel leaves an [`UseKind::Unprovable`] record. No
+    /// reason is carried: nothing that measured one soundly exists (§5.2 Q-SELBOUND).
+    Unprovable,
 }
 
 /// The fill context comes from widths not decided yet (F2): each measure with the width
@@ -161,17 +234,37 @@ pub(crate) struct UseRec {
 #[derive(Clone, Debug)]
 pub(crate) struct F2Ctx {
     measures: Vec<(Measure, u32)>,
+    /// Set by the assignment funnel from [`TargetW::Late`]'s `resizable`; a measure added
+    /// later (a sibling's) makes the record's measures more than the target alone.
+    resizable: bool,
 }
 
 impl F2Ctx {
     pub(crate) fn with(f2: &Option<F2Ctx>, m: Measure, assumed: u32) -> Option<F2Ctx> {
         let mut out = f2.clone().unwrap_or(F2Ctx {
             measures: Vec::new(),
+            resizable: false,
         });
         out.measures.push((m, assumed));
         Some(out)
     }
+
+    /// The state a [`TargetW::Late`] target's fill is lowered under: its one measure is
+    /// the target, `resizable` as `fill_context` decided it.
+    pub(crate) fn of_target(mut self, resizable: bool) -> F2Ctx {
+        self.resizable = resizable;
+        self
+    }
 }
+
+/// THE FILL RULE's one refusal sentence, for every error the rule adds (a target not
+/// provable; a late fill whose target no lane measured; a resolved target holding a `real`
+/// piece beside another; a fill on a target holding a deferred hierarchical piece that the
+/// decision cannot re-size), printed only by [`Elaborator::refuse_fill`]. A constant, so
+/// it cannot print a value made for another purpose: no reason, no clause, no number, no
+/// name (`fill_home.rs` HF8).
+const FILL_UNESTABLISHED: &str = "vita could not establish the width of this assignment \
+     target, so the unbased unsized fill on its right-hand side is refused";
 
 /// Does source range `outer` hold `inner`?
 fn span_holds(outer: ast::Span, inner: ast::Span) -> bool {
@@ -1016,68 +1109,130 @@ impl Elaborator<'_> {
         })
     }
 
-    /// The width of `lv` with every late edge evaluated now (the deferred passes are done):
-    /// what a pending fill is re-lowered at.
-    pub(crate) fn decided_lvalue_width(&self, lv: &ir::Lvalue) -> u32 {
-        let late_value = |eid: u32| -> Option<u32> {
-            let i = *self.edge_index.get(&eid)?;
-            let r = self.edge_recs.get(i)?;
-            match r.state {
-                State::Late => match self.decide_shape(r.shape) {
-                    Decision::Value(v) => u32::try_from(v).ok(),
-                    _ => None,
-                },
-                State::Decided(v) => u32::try_from(v).ok(),
-                _ => None,
-            }
-        };
-        lv.chunks
-            .iter()
-            .map(|c| match (c.kind, c.width) {
-                (ir::SelKind::Bit, _) | (_, None) => self.ir_lvalue_width(&ir::Lvalue {
-                    chunks: vec![c.clone()],
-                }),
-                (_, Some(w)) => late_value(w)
-                    .or_else(|| self.const_of_expr_u32(w))
-                    .unwrap_or(1),
-            })
-            .sum::<u32>()
-            .max(1)
+    fn push_use(&mut self, measure: Measure, need: Need, kind: UseKind) {
+        self.push_use_rec(measure, need, kind, None);
     }
 
-    fn push_use(&mut self, measure: Measure, need: Need, kind: UseKind) {
+    fn push_use_rec(
+        &mut self,
+        measure: Measure,
+        need: Need,
+        kind: UseKind,
+        fill: Option<FillSlot>,
+    ) {
         self.use_recs.push(UseRec {
             measure,
             need,
             kind,
             span: self.cur_span,
             prefix: self.cur_prefix.clone(),
+            fill,
         });
     }
 
-    /// The context `resize_rhs_for_lvalue` lowers a fill-bearing right-hand side in, and
-    /// the F2 state to lower it under: a decided target gives its exact width; an
-    /// undecided one gives the width the lowering can see (each late chunk read as 1) and
-    /// an F2 state, so an all-ones or all-zeros fill is spelled for the run to size.
-    pub(crate) fn fill_context(&self, lv: &ir::Lvalue) -> (u32, Option<F2Ctx>) {
-        let w = self.ir_lvalue_width(lv);
-        if !self.target_undecided(lv) {
-            return (w, None);
+    /// THE FILL RULE's one value: what `lv`'s width is for a fill on its right-hand side
+    /// (§5.2 Q-LOSSYSPELL fix H; [`TargetW`]). Each piece, in this order: a deferred
+    /// hierarchical piece (a sentinel chunk) is undecided and counts 1; a select whose
+    /// width edge is late is undecided and counts its tree's value now, or 1 where it
+    /// does not fold yet; a whole net or a bit counts its width; any other piece whose
+    /// width does not fold makes the target not provable, whatever the other pieces are.
+    /// A `real` piece first: alone it has no bits ([`TargetW::NoBits`]), with another
+    /// piece the target is not provable. The pieces are read on the LOWERED target (a
+    /// deferred piece is still its sentinel), never on a resolved chunk.
+    pub(crate) fn fill_context(&self, lv: &ir::Lvalue) -> TargetW {
+        let real_piece = lv.chunks.iter().any(|c| {
+            self.nets
+                .get(c.net as usize)
+                .is_some_and(|n| n.kind == ir::NetKind::Real)
+        });
+        if real_piece {
+            return if lv.chunks.len() == 1 {
+                TargetW::NoBits
+            } else {
+                TargetW::Unprovable
+            };
         }
-        (w, F2Ctx::with(&None, Measure::Target(lv.clone()), w))
+        let mut visible: u32 = 0;
+        let mut deferred = false;
+        let mut late_edge = false;
+        for c in &lv.chunks {
+            let w = if (HIER_SEL_WRITE_SENTINEL_BASE..POISON_NET).contains(&c.net) {
+                deferred = true;
+                1
+            } else if c.kind == ir::SelKind::Bit {
+                if c.offset.is_none() && c.width.is_none() {
+                    // `.get()` (not index): an error-recovery lvalue with an out-of-range
+                    // net id (POISON) counts 1 beside the error already reported.
+                    self.nets.get(c.net as usize).map_or(1, |n| n.width)
+                } else {
+                    1
+                }
+            } else {
+                match c.width {
+                    Some(w) if self.edge_is_late(w) => {
+                        late_edge = true;
+                        self.const_of_expr_u32(w).unwrap_or(1)
+                    }
+                    Some(w) => match self.const_of_expr_u32(w) {
+                        Some(v) => v,
+                        None => return TargetW::Unprovable,
+                    },
+                    None => return TargetW::Unprovable,
+                }
+            };
+            visible = visible.saturating_add(w);
+        }
+        let visible = visible.max(1);
+        if !deferred && !late_edge {
+            return TargetW::Bits(visible);
+        }
+        let f2 = F2Ctx::with(&None, Measure::Target(lv.clone()), visible)
+            .expect("F2Ctx::with returns Some");
+        TargetW::Late {
+            visible,
+            f2,
+            resizable: !late_edge,
+        }
     }
 
-    /// An `'x` / `'z` fill lowered at `w` under F2: the value is right for the assumed
-    /// width, or — when a sibling widened it — for any width up to `w`.
-    pub(crate) fn record_unknown_fill(&mut self, f2: &F2Ctx, w: u32) {
+    /// A fill lowered at `w` under F2 leaves one record per measure: the value is right
+    /// for the assumed width, or — when a sibling widened it — for any width up to `w`.
+    /// `slot` = an `'x` / `'z` fill's own constant and bit (`None` for an all-ones or
+    /// all-zeros fill, which the run sizes): the decision may re-size that slot when the
+    /// record's one measure is a `resizable` target.
+    pub(crate) fn record_fill(&mut self, f2: &F2Ctx, w: u32, slot: Option<(u32, FillBit)>) {
+        let only_target = f2.resizable
+            && f2.measures.len() == 1
+            && matches!(f2.measures[0].0, Measure::Target(_));
         for (m, assumed) in &f2.measures {
             let need = if w > *assumed {
                 Need::AtMost(w)
             } else {
                 Need::Assumed(*assumed)
             };
-            self.push_use(m.clone(), need, UseKind::Fill);
+            let fill = slot.map(|(eid, bit)| FillSlot {
+                eid,
+                bit,
+                sized: w,
+                resizable: only_target,
+            });
+            self.push_use_rec(m.clone(), need, UseKind::Fill, fill);
         }
+    }
+
+    /// A fill on target `lv` whose width is not provable ([`TargetW::Unprovable`]): the
+    /// funnel reports nothing (a width that failed to fold for a reason already reported
+    /// reaches here too) and leaves this one record, at `site` (the position the funnel's
+    /// caller gave), for the decision. The record's need is never read.
+    pub(crate) fn record_unprovable(&mut self, lv: &ir::Lvalue, site: Option<ast::Span>) {
+        self.use_recs.push(UseRec {
+            measure: Measure::Target(lv.clone()),
+            need: Need::Assumed(0),
+            kind: UseKind::Unprovable,
+            span: site,
+            prefix: self.cur_prefix.clone(),
+            fill: None,
+        });
     }
 
     /// RC2: is `sibling`'s self-determined width not decided yet — does it depend on a late
@@ -1262,10 +1417,99 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The resolved pieces of a measured target: each sentinel read through its lane's
+    /// published chunk (the caller has measured the target, so each is published).
+    fn resolved_pieces<'a>(
+        &'a self,
+        lv: &'a ir::Lvalue,
+    ) -> impl Iterator<Item = &'a ir::LvalChunk> {
+        lv.chunks.iter().map(|c| {
+            if (HIER_SEL_WRITE_SENTINEL_BASE..POISON_NET).contains(&c.net) {
+                self.hier_resolved_chunk.get(&c.net).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+    }
+
+    /// The decision over every consumer's record. A `Fill` record (THE FILL RULE) leaves
+    /// through exactly one of, in this order: (j1) its measure has no width — an error
+    /// unless the elaboration already failed; (j2) the resolved target holds a `real` piece —
+    /// beside another piece an error, alone nothing (no bits: the fill stays
+    /// self-determined, as [`TargetW::NoBits`]); (j3) the need holds, or the fill has no
+    /// slot — nothing; (j4) the slot of a fill whose one measure is a `resizable` target,
+    /// sized narrower than the decided width — re-sized in place at the decided width of
+    /// the whole target; (j5) otherwise an error. An `Unprovable` record speaks only when no
+    /// error had been reported when the decision started (`quiet`, read once, so the order
+    /// of the records cannot silence one): a width that failed to fold for a reason already
+    /// reported reaches that record too, and the reason was said there. Every error the fill
+    /// rule adds — the `Unprovable` record's, (j1), (j2) and (j5) on a target holding a
+    /// deferred hierarchical piece (a record the lowering before fix H never made) — is
+    /// [`Self::refuse_fill`]'s one constant; (j5) on any other measure, a capture and a
+    /// streaming concatenation keep the sentences below.
     fn verify_use_recs(&mut self, reported: &mut BTreeSet<(u32, u32, String)>) {
+        let quiet = self.had_error;
         let recs = std::mem::take(&mut self.use_recs);
         for u in &recs {
-            let Some(f) = self.measure_width(&u.measure) else {
+            if u.kind == UseKind::Unprovable {
+                if !quiet {
+                    self.refuse_fill(u, reported);
+                }
+                continue;
+            }
+            let measured = self.measure_width(&u.measure);
+            if u.kind == UseKind::Fill {
+                let Some(f) = measured else {
+                    if !self.had_error {
+                        self.refuse_fill(u, reported);
+                    }
+                    continue;
+                };
+                if let Measure::Target(lv) = &u.measure {
+                    let real = self.resolved_pieces(lv).any(|c| {
+                        self.nets
+                            .get(c.net as usize)
+                            .is_some_and(|n| n.kind == ir::NetKind::Real)
+                    });
+                    if real {
+                        if lv.chunks.len() > 1 {
+                            self.refuse_fill(u, reported);
+                        }
+                        continue;
+                    }
+                }
+                let holds = match u.need {
+                    Need::Assumed(a) => f == u64::from(a),
+                    Need::AtMost(a) => f <= u64::from(a),
+                };
+                let Some(slot) = u.fill.filter(|_| !holds) else {
+                    continue;
+                };
+                if slot.resizable && f > u64::from(slot.sized) {
+                    if let Ok(f) = u32::try_from(f) {
+                        let raw = match slot.bit {
+                            FillBit::X => "'x",
+                            FillBit::Z => "'z",
+                        };
+                        let cv = literal::fill_literal_const(raw, ast::IntLitKind::UnsizedBased, f)
+                            .expect("a fill literal");
+                        let val = self.intern_const(cv);
+                        self.patch_expr(slot.eid, ir::Expr::Const { val });
+                        continue;
+                    }
+                }
+                if let Measure::Target(lv) = &u.measure {
+                    if lv
+                        .chunks
+                        .iter()
+                        .any(|c| (HIER_SEL_WRITE_SENTINEL_BASE..POISON_NET).contains(&c.net))
+                    {
+                        self.refuse_fill(u, reported);
+                        continue;
+                    }
+                }
+            }
+            let Some(f) = measured else {
                 continue; // refused or reported where the width failed
             };
             let ok = match u.need {
@@ -1310,11 +1554,19 @@ impl Elaborator<'_> {
                     "the streaming concatenation on its right-hand side was padded before \
                      that, for {assumed} bit(s)"
                 ),
+                UseKind::Unprovable => continue, // judged at the loop's head
             };
             let msg = format!("{subject}, but {reason}");
             let (span, prefix) = (u.span, u.prefix.clone());
             self.report_at(span, &prefix, &msg, reported);
         }
+    }
+
+    /// THE FILL RULE's refusal: [`FILL_UNESTABLISHED`] at the record's own position. It
+    /// formats nothing and names no other text (`fill_home.rs` HF8): the sentence cannot
+    /// carry a value folded for another purpose.
+    fn refuse_fill(&mut self, u: &UseRec, reported: &mut BTreeSet<(u32, u32, String)>) {
+        self.report_at(u.span, &u.prefix, FILL_UNESTABLISHED, reported);
     }
 
     /// The operator that stops the engine's fold of edge `eid` once every leaf is a
@@ -1793,5 +2045,184 @@ mod tests {
         assert_eq!(lhs, root, "the value keeps the tree");
         el.edge_backstop();
         assert!(errors(&sink).is_empty(), "{:?}", errors(&sink));
+    }
+
+    /// A target holding one deferred hierarchical piece, as the lowering hands it out.
+    fn deferred_target() -> ir::Lvalue {
+        ir::Lvalue {
+            chunks: vec![ir::LvalChunk {
+                net: HIER_SEL_WRITE_SENTINEL_BASE,
+                word: None,
+                offset: None,
+                width: None,
+                kind: ir::SelKind::Bit,
+            }],
+        }
+    }
+
+    /// An `'x` fill lowered under `lv` the way the fill arm lowers it: its constant at the
+    /// visible width, and its record.
+    fn late_x_fill(el: &mut Elaborator<'_>, lv: &ir::Lvalue) -> u32 {
+        let TargetW::Late {
+            visible,
+            f2,
+            resizable,
+        } = el.fill_context(lv)
+        else {
+            panic!("a deferred piece is undecided");
+        };
+        assert_eq!((visible, resizable), (1, true));
+        let cv = literal::fill_literal_const("'x", ast::IntLitKind::UnsizedBased, visible).unwrap();
+        let val = el.intern_const(cv);
+        let eid = el.push_expr(ir::Expr::Const { val });
+        el.record_fill(&f2.of_target(resizable), visible, Some((eid, FillBit::X)));
+        eid
+    }
+
+    /// THE FILL RULE (j1): a late fill whose target no lane measured, in an elaboration
+    /// with no other error, is refused (no producer reaches it today: the premise judge's
+    /// census, Q-J3) — the record is never dropped.
+    #[test]
+    fn a_late_fill_whose_target_was_never_measured_is_refused() {
+        let sink = Collect::default();
+        let mut el = Elaborator::new(&sink);
+        let lv = deferred_target();
+        late_x_fill(&mut el, &lv);
+        el.decide_late_edges();
+        let e = errors(&sink);
+        assert_eq!(e, vec![format!("ElabUnsupported {FILL_UNESTABLISHED}")]);
+    }
+
+    /// THE FILL RULE (j4): once the lane published the piece, the fill's own slot holds
+    /// the decided width of the whole target, all `x`.
+    #[test]
+    fn a_late_fill_slot_is_resized_at_the_decided_width() {
+        let sink = Collect::default();
+        let mut el = Elaborator::new(&sink);
+        let lv = deferred_target();
+        let eid = late_x_fill(&mut el, &lv);
+        let off = el.const_u32_expr(0, 32);
+        let w = el.const_u32_expr(8, 32);
+        el.hier_resolved_chunk.insert(
+            HIER_SEL_WRITE_SENTINEL_BASE,
+            ir::LvalChunk {
+                net: 0,
+                word: None,
+                offset: Some(off),
+                width: Some(w),
+                kind: ir::SelKind::PartConst,
+            },
+        );
+        el.decide_late_edges();
+        assert_eq!(errors(&sink), Vec::<String>::new());
+        let ir::Expr::Const { val } = el.exprs[eid as usize] else {
+            panic!("the slot is a Const");
+        };
+        let cv = &el.consts[val as usize];
+        assert_eq!(cv.width, 8);
+        assert_eq!(cv.bits.unk[0] & 0xff, 0xff, "all x");
+    }
+
+    /// A width edge in `state` over a `[m:l]` whose bounds folded to `m` / `l` (the
+    /// constant domain's u32, a negative literal wrapped), as the part funnel records it;
+    /// its root a fresh tree the u32 mirror does not fold (`*`).
+    fn part_edge(el: &mut Elaborator<'_>, m: i32, l: i32, desc: bool, state: State) -> u32 {
+        let a = el.const_u32_expr(2, 32);
+        let b = el.const_u32_expr(3, 32);
+        let root = el.push_expr(ir::Expr::Binary {
+            op: ir::BinOp::Mul,
+            lhs: a,
+            rhs: b,
+        });
+        let shape = Shape::Part {
+            msb: Bound::Ast(m as u32),
+            lsb: Bound::Ast(l as u32),
+            desc,
+        };
+        el.push_edge(root, shape, EdgeKind::PartWidth, state, None, &[]);
+        root
+    }
+
+    /// A one-chunk part-select target over `net` 0 whose width is edge `w`.
+    fn part_target(el: &mut Elaborator<'_>, w: u32) -> ir::Lvalue {
+        let off = el.const_u32_expr(0, 32);
+        ir::Lvalue {
+            chunks: vec![ir::LvalChunk {
+                net: 0,
+                word: None,
+                offset: Some(off),
+                width: Some(w),
+                kind: ir::SelKind::PartConst,
+            }],
+        }
+    }
+
+    /// THE FILL RULE, a target not provable: whatever the width edge recorded (kept with
+    /// bounds reversed or in order, a span over vita's limit, decided wider than
+    /// `u32::MAX`, refused), the record's error is the one constant, at its own position —
+    /// no reason, no number.
+    #[test]
+    fn an_unprovable_target_s_error_is_the_one_constant() {
+        let sink = Collect::default();
+        let mut el = Elaborator::new(&sink);
+        let edges = [
+            (-1, 0, true, State::Kept),
+            (0, -1, false, State::Kept),
+            (-1, -4, true, State::Kept),
+            (-1, -1_048_577, true, State::Kept),
+            (0, 0, true, State::Decided(1 << 32)),
+            (0, 0, true, State::Decided(u64::MAX)),
+            (-1, 0, true, State::Refused),
+        ];
+        let n = edges.len();
+        for (i, (m, l, desc, state)) in edges.into_iter().enumerate() {
+            let w = part_edge(&mut el, m, l, desc, state);
+            let lv = part_target(&mut el, w);
+            let TargetW::Unprovable = el.fill_context(&lv) else {
+                panic!("edge {i}: a width that does not fold is not provable");
+            };
+            let lo = 10 * (i as u32 + 1);
+            el.record_unprovable(&lv, Some(ast::Span { lo, hi: lo + 1 }));
+        }
+        el.decide_late_edges();
+        let want = vec![format!("ElabUnsupported {FILL_UNESTABLISHED}"); n];
+        assert_eq!(errors(&sink), want);
+    }
+
+    /// THE FILL RULE, a target not provable: the funnel's record speaks once each, at its
+    /// own position, when the elaboration had no error when the decision started — and
+    /// the order of the records cannot silence one (an earlier record's report does not
+    /// count) ; after an earlier error every such record is silent.
+    #[test]
+    fn unprovable_records_speak_by_the_decision_s_first_state() {
+        let site = |lo| Some(ast::Span { lo, hi: lo + 1 });
+        for earlier_error in [false, true] {
+            let sink = Collect::default();
+            let mut el = Elaborator::new(&sink);
+            if earlier_error {
+                el.error(MsgCode::ElabUnsupported, "an earlier error");
+            }
+            for lo in [10, 20] {
+                let w = part_edge(&mut el, -1, 0, true, State::Kept);
+                let lv = part_target(&mut el, w);
+                let TargetW::Unprovable = el.fill_context(&lv) else {
+                    panic!("a kept reversed edge is not provable");
+                };
+                el.record_unprovable(&lv, site(lo));
+            }
+            assert_eq!(
+                errors(&sink).len(),
+                usize::from(earlier_error),
+                "the funnel is silent"
+            );
+            el.decide_late_edges();
+            let e = errors(&sink);
+            let want = if earlier_error {
+                vec!["ElabUnsupported an earlier error".to_string()]
+            } else {
+                vec![format!("ElabUnsupported {FILL_UNESTABLISHED}"); 2]
+            };
+            assert_eq!(e, want);
+        }
     }
 }
