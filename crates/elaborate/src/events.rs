@@ -71,6 +71,9 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
+                                           // §5.7.1: a fill takes the target's width — the assignment funnel, in the `#d`
+                                           // path's order (stmt_main.rs): after the target, before the capture.
+        let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
         let tmp = self.fresh_capture_for(&lv, rhs_id);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),
@@ -164,6 +167,8 @@ impl Elaborator<'_> {
             let rhs_id = self.lower_expr(rhs);
             let lv = self.lower_lvalue(lhs);
             self.check_lvalue_kind(&lv, true); // P1-9 (E3018)
+                                               // §5.7.1: the assignment funnel, as every plain NBA (stmt_main.rs).
+            let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
             let sid = self.push_stmt(ir::Stmt::NonblockingAssign {
                 lhs: lv,
                 rhs: rhs_id,
@@ -189,6 +194,9 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_expr(rhs);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
+                                           // §5.7.1: a fill takes the target's width — the assignment funnel, in the `#d`
+                                           // path's order (stmt_main.rs): after the target, before the capture.
+        let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv, self.cur_span);
         let tmp = self.fresh_capture_for(&lv, rhs_id);
         let cap = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: whole_net_lvalue(tmp),

@@ -7,6 +7,15 @@
 //! elaborate's production sources (comments and every `#[cfg(test)]` item cut, string
 //! literals kept: the reader `lossy_home.rs` uses), what that rests on:
 //!
+//! - HF1 (a census, not structure) the assignment funnel `resize_rhs_for_lvalue(` is called
+//!   at the pinned (file, fn, count) table — 12 calls in 7 fns: the four statement kinds of
+//!   `lower_stmt_inner`, the continuous assign, the net initializer, the ternary's take
+//!   arms and its x_merge block, the three intra-assignment event sites — and every fn of
+//!   elaborate that builds an `ir::Stmt::BlockingAssign` / `NonblockingAssign` / `Force` or
+//!   an `ir::ContAssign` and calls `lower_expr(` / `lower_loop_cond_operand(` without the
+//!   funnel is a listed non-assignment (its value is internal) or a listed known door of
+//!   §5.2 Q-FILLCTX (with the doors no fn-level census can see: a `let` body, a
+//!   hierarchical function's argument, a class method's and a constructor's argument).
 //! - HF2 `resize_rhs_for_lvalue` holds exactly one `match self.fill_context(`, with the four
 //!   arms `TargetW::Bits`, `TargetW::Late { visible, f2, resizable }`, `TargetW::NoBits`,
 //!   `TargetW::Unprovable` and no `_ =>` arm, no `..` ; and `fill_context(` has no other
@@ -950,5 +959,203 @@ fn hf8_planted_controls_fail() {
     assert!(
         !hf8_violations(&second).is_empty(),
         "an unlisted constant passed"
+    );
+}
+
+// ─────────────────────────────── HF1 ───────────────────────────────
+
+/// HF1: the assignment funnel's callers, per (file, fn): each hands it the lowered target
+/// of the assignment it builds.
+const HF1_FUNNEL: [(&str, &str, usize); 7] = [
+    ("elaborate/src/events.rs", "lower_intra_event_assign", 1),
+    ("elaborate/src/events.rs", "lower_intra_event_nba", 2),
+    ("elaborate/src/hoist/arms.rs", "assign_arm", 1),
+    ("elaborate/src/hoist/arms.rs", "lower_ternary_rhs", 2),
+    ("elaborate/src/netdecl.rs", "elaborate_cont_assign", 1),
+    ("elaborate/src/stmt_main.rs", "lower_stmt_inner", 4),
+    ("elaborate/src/var_init.rs", "elaborate_net_init_drivers", 1),
+];
+
+/// HF1: fns that build an assignment statement or row AND lower an expression with no
+/// context, and are not the funnel's: the value they assign is not a user right-hand side
+/// (the premise judge's census of fix H, P1).
+const HF1_NOT_ASSIGNMENTS: [(&str, &str, &str); 7] = [
+    (
+        "elaborate/src/cover.rs",
+        "synth_cover_sample",
+        "a covergroup's sampled value into its tracker (internal)",
+    ),
+    (
+        "elaborate/src/events.rs",
+        "level_select_net",
+        "a level-sensitive select's internal net",
+    ),
+    (
+        "elaborate/src/hoist/arms.rs",
+        "lower_shortcircuit_rhs",
+        "`&&` / `||` operands, self-determined (IEEE 11.4.7)",
+    ),
+    (
+        "elaborate/src/hoist/general.rs",
+        "capture_truth",
+        "a hoisted condition's truth temp (internal)",
+    ),
+    (
+        "elaborate/src/stmt_flow.rs",
+        "lower_branch_cond",
+        "a branch condition's temp (internal)",
+    ),
+    (
+        "elaborate/src/stmt_flow.rs",
+        "lower_repeat",
+        "a repeat count's temp (internal)",
+    ),
+    (
+        "elaborate/src/sys_special.rs",
+        "fopen_special",
+        "a file descriptor's internal value",
+    ),
+];
+
+/// HF1: the KNOWN assignment-like doors that lower a fill with no stated context, left out
+/// of fix H and filed as one structural row, §5.2 Q-FILLCTX (L9, RULINGS L2-31). A door
+/// with a fn name is one the census below sees; "-" = lowered in one fn and bound in
+/// another, which this census cannot see (the cells are its only guard).
+const HF1_DOORS: [(&str, &str, &str); 5] = [
+    (
+        "elaborate/src/dynarr_method.rs",
+        "lower_dyn_method_stmt",
+        "a queue / dynamic-array method argument: k18 d02 d05",
+    ),
+    (
+        "-",
+        "-",
+        "a `let` body (FI2): grounding fi2_let_1 fi2_let_x",
+    ),
+    (
+        "-",
+        "-",
+        "a hierarchical function call's argument: grounding arg_hierfunc_1",
+    ),
+    ("-", "-", "a class method's argument: premise d03"),
+    ("-", "-", "a constructor's argument: premise d04, plan2 k10"),
+];
+
+const HF1_BUILDS: [&str; 4] = [
+    "ir::Stmt::BlockingAssign {",
+    "ir::Stmt::NonblockingAssign {",
+    "ir::Stmt::Force {",
+    "ir::ContAssign {",
+];
+const HF1_LOWERS: [&str; 2] = ["lower_expr(", "lower_loop_cond_operand("];
+
+/// Every `fn NAME(` (or `fn NAME<…>(`) of `text` with its body; a nested fn is listed on
+/// its own and inside its host's body.
+fn fns(text: &str) -> Vec<(String, &str)> {
+    let b = text.as_bytes();
+    let mut out = Vec::new();
+    for (at, _) in text.match_indices("fn ") {
+        if at > 0 && (b[at - 1].is_ascii_alphanumeric() || b[at - 1] == b'_') {
+            continue;
+        }
+        let rest = &text[at + 3..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        let after = rest[name.len()..].trim_start();
+        if name.is_empty() || !(after.starts_with('(') || after.starts_with('<')) {
+            continue;
+        }
+        let Some(open) = text[at..].find('{').map(|o| o + at) else {
+            continue;
+        };
+        if text[at..open].contains(';') {
+            continue; // a declaration without a body
+        }
+        out.push((name, &text[open..group_end(b, open)]));
+    }
+    out
+}
+
+/// A token that is a call of `needle` (`needle` ends in `(`): no identifier character
+/// before it.
+fn calls_word(body: &str, needle: &str) -> usize {
+    let b = body.as_bytes();
+    body.match_indices(needle)
+        .filter(|(at, _)| *at == 0 || !(b[at - 1].is_ascii_alphanumeric() || b[at - 1] == b'_'))
+        .count()
+}
+
+fn hf1_violations(files: &[(String, String)]) -> Vec<String> {
+    let mut v = Vec::new();
+    let mut funnel = std::collections::BTreeMap::new();
+    for (f, t) in files {
+        for (name, body) in fns(t) {
+            let n = calls_word(body, "resize_rhs_for_lvalue(");
+            if n > 0 && name != "resize_rhs_for_lvalue" {
+                funnel.insert((f.clone(), name.clone()), n);
+            }
+            let builds = HF1_BUILDS.iter().any(|x| body.contains(x));
+            let lowers = HF1_LOWERS.iter().any(|x| calls_word(body, x) > 0);
+            if builds && lowers && n == 0 {
+                let known = HF1_NOT_ASSIGNMENTS
+                    .iter()
+                    .map(|&(file, func, _)| (file, func))
+                    .chain(HF1_DOORS.iter().map(|&(file, func, _)| (file, func)))
+                    .any(|(file, func)| file == f && func == name);
+                if !known {
+                    v.push(format!("{f} {name}: builds an assignment, lowers with no context, no funnel call, no row"));
+                }
+            }
+        }
+    }
+    let want: std::collections::BTreeMap<(String, String), usize> = HF1_FUNNEL
+        .iter()
+        .map(|&(f, k, n)| ((f.to_string(), k.to_string()), n))
+        .collect();
+    if funnel != want {
+        v.push(format!("the funnel's callers {funnel:?}"));
+    }
+    v
+}
+
+/// HF1 (a census, not structure: §5.2 Q-FILLCTX is the structural closure): the funnel's
+/// callers are the pinned table, and every fn that builds an assignment statement or row
+/// and lowers an expression with no context either calls the funnel or is a listed
+/// non-assignment or known door. It cannot see a right-hand side lowered in one fn and
+/// pushed in another (the `-` doors) ; a new file is walked.
+#[test]
+fn hf1_the_funnel_s_callers_and_the_doors_without_it() {
+    let v = hf1_violations(&elab());
+    assert!(v.is_empty(), "{v:?}");
+    for (f, k, why) in HF1_DOORS {
+        assert!(!why.is_empty() && (f == "-") == (k == "-"), "{f} {k}");
+    }
+}
+
+#[test]
+fn hf1_planted_controls_fail() {
+    let files = elab();
+    let skipped = planted(&files, "elaborate/src/stmt_flow.rs", |t| {
+        format!(
+            "{t}\nfn planted_door(&mut self) {{ let r = self.lower_expr(rhs); \
+             self.push_stmt(ir::Stmt::BlockingAssign {{ lhs, rhs: r }}); }}\n"
+        )
+    });
+    assert!(
+        !hf1_violations(&skipped).is_empty(),
+        "a builder without the funnel passed"
+    );
+    let dropped = planted(&files, "elaborate/src/events.rs", |t| {
+        t.replacen(
+            "self.resize_rhs_for_lvalue(",
+            "self.planted_not_the_funnel(",
+            1,
+        )
+    });
+    assert!(
+        !hf1_violations(&dropped).is_empty(),
+        "a dropped funnel call passed"
     );
 }

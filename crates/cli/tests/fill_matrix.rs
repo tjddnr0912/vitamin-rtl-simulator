@@ -290,6 +290,15 @@ fn judge_rows() {
     check("judge", &[], NATIVE);
 }
 
+/// The doors U2 routes through the assignment funnel: an intra-assignment event control
+/// (FI1: `v8 = @(posedge clk) 'x;`, `<= @(..)`, `<= repeat (n) @(..)` incl. `repeat (0)`,
+/// events.rs) and the x_merge block of a ternary whose arm calls a function with an output
+/// formal (hoist/arms.rs: `x8 = c ? '1 : f4(o8);` with `c` x, IEEE 11.4.11 l.11914-11919).
+#[test]
+fn u2_event_controls_and_x_merge() {
+    check("u2", &[], NATIVE);
+}
+
 /// The G2 site-by-form table, held here so a row cannot drop out of the data file and a
 /// new form cannot enter it unlisted: for each left-side form, the sites it has rows for.
 const FORMS: &[(&str, &str)] = &[
