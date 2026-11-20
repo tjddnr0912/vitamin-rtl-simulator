@@ -3625,7 +3625,7 @@ const H15: &[(&str, &str, &str, usize, &str, &str)] = &[
 /// parser builds whose statements carry their ITEM's span (18: `udp.rs` 10, `udp_table.rs` 4,
 /// `enums.rs` 2, `type_param_shape.rs` 2) — what V turns to `None`. It lives here, not in
 /// hdl-parser's tests: that crate has no `proc-macro2` dev-dependency and this walker is
-/// one (the `lossy_home.rs` precedent).
+/// one (as `lossy_home.rs` was, a home test of §5.2 Q-LOSSYSPELL, parked: not on this tree).
 #[rustfmt::skip]
 const H15P: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H15:ContinuousAssign:start.to(self.prev_span())", "decls.rs", "parse_cont_assign", 1, "OWN", "the parsed node's own text"),
