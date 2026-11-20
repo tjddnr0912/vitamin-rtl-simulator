@@ -238,7 +238,6 @@ const E5: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/driver.rs", "count_error_capped", 1, "write: an error was reported"),
     ("crates/elaborate/src/driver.rs", "new", 1, "write: false at construction"),
     ("crates/elaborate/src/edge_gate.rs", "edge_backstop", 1, "read: any error so far"),
-    ("crates/elaborate/src/edge_gate.rs", "verify_use_recs", 2, "read: any error so far (THE FILL RULE: `quiet`, read once at the decision's start, before any record: a target not provable speaks only when nothing was reported ; (j1): an unmeasured late fill is refused only when nothing was reported)"),
     ("crates/elaborate/src/edge_gate.rs", "zero_width_claim_is_sound", 1, "read: any error so far"),
     ("crates/elaborate/src/lib.rs", "-", 1, "the field"),
     ("crates/elaborate/src/read_set.rs", "census_sys_func", 1, "read: any error so far (debug_assertions only)"),

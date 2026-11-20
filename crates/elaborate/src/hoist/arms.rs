@@ -489,30 +489,6 @@ impl Elaborator<'_> {
         });
         let lvx = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lvx, true);
-        // §5.7.1 / IEEE 11.4.11: a fill-bearing arm takes the target's width through the
-        // assignment funnel, as `assign_arm` does on the two take paths (`x8 = c ? '1 :
-        // f4(o8);` merged a one-bit `'1` with the 4-bit call: `0000000x`). The target is a
-        // single bit-vector net (`ternary_lhs_width`), so its width is decided; a
-        // fill-free arm is not touched and the merge above stays as built.
-        let t_fill = if expr_contains_fill(then_e) {
-            self.resize_rhs_for_lvalue(then_e, t_val, &lvx, self.cur_span)
-        } else {
-            t_val
-        };
-        let e_fill = if expr_contains_fill(else_e) {
-            self.resize_rhs_for_lvalue(else_e, e_val, &lvx, self.cur_span)
-        } else {
-            e_val
-        };
-        let tern = if (t_fill, e_fill) == (t_val, e_val) {
-            tern
-        } else {
-            self.push_expr(ir::Expr::Ternary {
-                cond: cc3,
-                then_e: t_fill,
-                else_e: e_fill,
-            })
-        };
         let sidx = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: lvx,
             rhs: tern,
@@ -532,7 +508,7 @@ impl Elaborator<'_> {
         let rhs_id = self.lower_loop_cond_operand(b, e);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);
-        let rhs_id = self.resize_rhs_for_lvalue(e, rhs_id, &lv, self.cur_span);
+        let rhs_id = self.resize_rhs_for_lvalue(e, rhs_id, &lv);
         let sid = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: lv,
             rhs: rhs_id,

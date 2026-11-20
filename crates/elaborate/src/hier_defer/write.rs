@@ -133,10 +133,10 @@ impl Elaborator<'_> {
                 }
             };
             patch.insert(sentinel, real);
-            // Publish what this lane decided, so the end-phase decision can measure a
-            // target holding this deferred piece (`edge_gate.rs` `chunk_width`). This
-            // lane is WHOLE-NET only (see the doc above), so the resolved chunk is the
-            // plain net.
+            // §4.5.355: publish what this lane decided, so a fill literal whose
+            // assignment width had to wait for it can ask `ir_lvalue_width` now.
+            // This lane is WHOLE-NET only (see the doc above), so the resolved chunk
+            // is the plain net.
             self.hier_resolved_chunk.insert(
                 sentinel,
                 ir::LvalChunk {
@@ -313,9 +313,10 @@ impl Elaborator<'_> {
                     }
                 }
             };
-            // Same publish as the whole-net lane — here the REBUILT chunk is the
-            // answer, which is why a hierarchical BIT-select needs no special case: its
-            // rebuilt chunk is one bit wide, so the width the decision measures is 1.
+            // §4.5.355: same publish as the whole-net lane — here the REBUILT chunk
+            // is the answer, which is why a hierarchical BIT-select needs no special
+            // case: its rebuilt chunk is one bit wide, so the width this feeds back is
+            // 1 and the fill is left exactly as `lower_expr` made it.
             self.hier_resolved_chunk.insert(sentinel, chunk.clone());
             patch.insert(sentinel, (chunk, path));
         }
@@ -401,5 +402,146 @@ impl Elaborator<'_> {
             ),
         );
         true
+    }
+
+    /// §4.5.355: give every fill literal the assignment width its deferred
+    /// hierarchical target could not supply at lowering time.
+    ///
+    /// ⭐ THIS ASKS THE SAME QUESTION `resize_rhs_for_lvalue` ASKED, JUST LATER. Both
+    /// deferral lanes have published the chunk they decided on, so `ir_lvalue_width`
+    /// finally has a real net to read; there is no second width rule here, which is
+    /// what keeps the sub-cases honest by construction:
+    ///
+    /// - whole-net (`u.a = '1`)        → the net's width;
+    /// - part-select (`u.a[7:0] = '1`) → the rebuilt chunk's part width;
+    /// - element (`u.arr[0] = '1`)     → the element's width;
+    /// - **bit-select** (`u.a[0] = '1`) → 1, i.e. NO CHANGE — and that is the
+    ///   anti-regression pin, since all three oracles agree a one-bit hierarchical
+    ///   target takes a one-bit fill. A rule written per sub-case would have had to
+    ///   remember to exclude it.
+    ///
+    /// The rebuild is scope-free (`fill_literal_const` needs only the literal's own
+    /// text and a width), which is exactly why `bare_fill_literal` admits nothing else
+    /// — the resolve pass has no lowering scope to re-enter.
+    pub(crate) fn resolve_pending_fill_widths(&mut self) {
+        let pending = std::mem::take(&mut self.pending_fill_width);
+        let mut redirect: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+        for p in pending {
+            let Some(chunk) = self.hier_resolved_chunk.get(&p.sentinel).cloned() else {
+                // The lane errored out (or never ran) — a loud diagnostic already
+                // exists and there is no width to hand back.
+                continue;
+            };
+            if chunk.net == POISON_NET {
+                continue;
+            }
+            let lv = ir::Lvalue {
+                chunks: vec![chunk],
+            };
+            if self.lvalue_targets_real(&lv) {
+                continue; // §6.12, same withholding as the lowering-time guard
+            }
+            // The decided width: every deferred pass has run, so a late edge in the
+            // rebuilt chunk is evaluated now (`edge_gate.rs`).
+            let w = self.decided_lvalue_width(&lv);
+            // ⚠️ VERIFY BEFORE RE-LOWERING, READ-ONLY. `lower_expr_ctx` reports an
+            // unresolved name by EMITTING the diagnostic, so a re-lowering that fails to
+            // resolve cannot be rolled back — the error is already out. A right-hand
+            // side that mentions a name the resolve pass cannot see would therefore turn
+            // a working design LOUD, which is a regression even though the value was
+            // wrong. So every name is checked first with the SAME outward walk the
+            // lowering uses, and a miss simply leaves `lower_expr`'s IR in place.
+            let saved_prefix = std::mem::replace(&mut self.cur_prefix, p.prefix.clone());
+            let resolvable = self.every_name_resolves(&p.rhs);
+            // R-SITE: the re-lowered rhs replaces the old rhs root and takes its mark.
+            let site = self.mark_of_expr(p.expr_id);
+            let new_id = resolvable.then(|| self.with_site(site, |s| s.lower_expr_ctx(&p.rhs, w)));
+            self.cur_prefix = saved_prefix;
+            // The old subtree becomes garbage, exactly as a fill-bearing rhs does on the
+            // ordinary path (there is no golden to preserve).
+            if let Some(new_id) = new_id {
+                redirect.insert(p.expr_id, new_id);
+            }
+        }
+        // `hier_resolved_chunk` stays until the edge decision, which measures a capture
+        // into a sentinel target against it (`edge_gate.rs`).
+        if redirect.is_empty() {
+            return;
+        }
+        // ⚠️ THE STATEMENT'S REFERENCE MOVES, NOT THE ARENA SLOT. Copying the new root
+        // node over the old slot looks equivalent and is not: the expr arena is
+        // POST-ORDER (`sim-ir/src/selfwidth.rs` panics on a parent whose child id is
+        // larger), and a subtree built now has children above every earlier id. Only a
+        // childless node — the single `Const` a bare fill lowers to — could be moved
+        // that way, which is exactly how far the first draft of this got before the
+        // width pass caught it.
+        for s in &mut self.stmts {
+            match s {
+                ir::Stmt::BlockingAssign { rhs, .. }
+                | ir::Stmt::NonblockingAssign { rhs, .. }
+                | ir::Stmt::Force { rhs, .. } => {
+                    if let Some(&new) = redirect.get(rhs) {
+                        *rhs = new;
+                    }
+                }
+                _ => {}
+            }
+        }
+        // …and the CONTINUOUS assigns, the second rhs-bearing arena. `assign u1.x = '1;`
+        // onto a 12-bit target lowered its fill at width 1 and printed `001` where both
+        // oracles print `fff`: the record was made and the width recomputed, but the
+        // redirect only ever reached `stmts`. Same omission as the two chunk patches
+        // above — three arenas' worth of the same miss, all found by measuring the
+        // shape rather than by reading the lane.
+        for ca in &mut self.cont_assigns {
+            if let Some(&new) = redirect.get(&ca.rhs) {
+                ca.rhs = new;
+            }
+        }
+    }
+
+    /// Does every plain name in `e` resolve under the CURRENT `cur_prefix`?
+    ///
+    /// Read-only, and deliberately the same outward walk `lower_expr` performs
+    /// (`walk_scopes_key` over `symbols` then `params`), so this cannot answer yes where
+    /// the lowering would answer no — the failure mode a separate predicate would have
+    /// (§4.5.276's lesson: a classifier that resolves a name must call the resolver the
+    /// lowering calls).
+    ///
+    /// `scope_free_fill_expr` already restricted the shape to literals, operators and
+    /// single-segment `Ident`s, so this walk has only those to consider.
+    fn every_name_resolves(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind::*;
+        match &e.kind {
+            IntLit { .. } => true,
+            Ident(p) => match p.segments.as_slice() {
+                [seg] => self
+                    .walk_scopes_key(&seg.name, |k| {
+                        self.symbols.contains_key(k) || self.params.contains_key(k)
+                    })
+                    .is_some(),
+                _ => false,
+            },
+            Paren { inner } => self.every_name_resolves(inner),
+            MinTypMax { typ, .. } => self.every_name_resolves(typ),
+            Unary { operand, .. } => self.every_name_resolves(operand),
+            Binary { lhs, rhs, .. } => {
+                self.every_name_resolves(lhs) && self.every_name_resolves(rhs)
+            }
+            Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.every_name_resolves(cond)
+                    && self.every_name_resolves(then_e)
+                    && self.every_name_resolves(else_e)
+            }
+            Concat { parts } => parts.iter().all(|x| self.every_name_resolves(x)),
+            Replicate { count, value } => {
+                self.every_name_resolves(count) && value.iter().all(|x| self.every_name_resolves(x))
+            }
+            _ => false,
+        }
     }
 }

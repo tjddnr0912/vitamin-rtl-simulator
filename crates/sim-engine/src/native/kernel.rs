@@ -1635,7 +1635,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             // the dirty channel (`class_field_write` returns `false` for the
             // engine too, and it is what stops `obj.f = 1` from waking a process
             // sensitive to the handle).
-            if self.is_class_field(c) {
+            if self.is_class_handle(c.net) && c.word.is_some() {
                 let (_, word) = offsets.as_slice().first().copied().unwrap_or((0, 0));
                 return self
                     .sched
@@ -1665,7 +1665,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 .chunks
                 .iter()
                 .enumerate()
-                .map(|(i, c)| self.is_heap_net(c.net) || self.is_class_field(c) || skipped(i))
+                .map(|(i, c)| self.is_heap_net(c.net) || skipped(i))
                 .collect();
             if mask.iter().any(|&b| b) {
                 let mut esc = crate::native::write::Escape {
@@ -1683,17 +1683,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                     }
                     let c = &lhs.chunks[idx];
                     let (off, word) = offsets.as_slice().get(idx).copied().unwrap_or((0, 0));
-                    // A class field's piece goes to the heap through the single-chunk
-                    // lane's own call (§5.2 Q-LOSSYSPELL fix H, U-W7: the arena wrote it
-                    // as a part-select OF THE HANDLE NET — the value lost and the handle
-                    // corrupted ; the engine's `write_chunk` routes it per chunk).
-                    any |= if self.is_class_field(c) {
-                        self.sched
-                            .st
-                            .class_field_write_with(&*self, c, word, &piece)
-                    } else {
-                        self.sched.st.dyn_write(c, off, word, &piece)
-                    };
+                    any |= self.sched.st.dyn_write(c, off, word, &piece);
                 }
                 return any;
             }
@@ -1785,14 +1775,6 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// that holds no kernel (`wprog::compile`) asks the same question.
     pub(crate) fn is_class_handle(&self, net: u32) -> bool {
         self.arena.class.get(net as usize).copied().unwrap_or(false)
-    }
-
-    /// A class FIELD chunk (`obj.f`, `word = field-id`): the pair `class ∧ word.is_some()`
-    /// that `SimState::write_chunk` routes to the heap. A bare word-less chunk of a handle
-    /// net is the handle id itself and stays in this store.
-    #[inline]
-    pub(crate) fn is_class_field(&self, c: &LvalChunk) -> bool {
-        self.is_class_handle(c.net) && c.word.is_some()
     }
 
     pub(crate) fn is_frame_local(&self, net: u32) -> bool {

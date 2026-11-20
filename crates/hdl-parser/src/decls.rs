@@ -643,7 +643,7 @@ impl Parser<'_, '_> {
                 }
             }
             let init = if self.eat(TokenKind::Eq) {
-                Some(self.assign_rhs())
+                Some(self.expr(0))
             } else {
                 None
             };
@@ -897,7 +897,7 @@ impl Parser<'_, '_> {
             self.lval_site = delay.is_none();
             let lv = self.parse_lvalue();
             self.expect(TokenKind::Eq, "'=' in assign");
-            let rhs = self.assign_rhs();
+            let rhs = self.expr(0);
             // §10.9.1 packed-struct `'{…}` pattern on a continuous assign to a
             // whole struct net (same desugar as a procedural assign).
             let rhs = self.maybe_struct_pattern_rhs(&lv, rhs);

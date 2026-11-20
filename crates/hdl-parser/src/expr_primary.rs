@@ -70,10 +70,8 @@ impl Parser<'_, '_> {
                 let n = self.lit_int(IntLitKind::Decimal);
                 self.maybe_time_literal(n)
             }
-            Some(T::IntSized | T::IntSizedXz) => self.lit_int(IntLitKind::Sized),
-            Some(T::IntUnsizedBased | T::IntUnsizedBasedXz) => {
-                self.lit_int(IntLitKind::UnsizedBased)
-            }
+            Some(T::IntSized) => self.lit_int(IntLitKind::Sized),
+            Some(T::IntUnsizedBased) => self.lit_int(IntLitKind::UnsizedBased),
             Some(T::RealFixed) => {
                 let n = self.lit_real(RealLitKind::Fixed);
                 self.maybe_time_literal(n)
@@ -125,7 +123,7 @@ impl Parser<'_, '_> {
                     if let Some(e) = self.parse_bits_sym_type_arg() {
                         return e;
                     }
-                    self.rewind(save); // not a bare type → restore for normal expr-arg parse
+                    self.pos = save; // not a bare type → restore for normal expr-arg parse
                 }
                 let args = if self.peek() == Some(T::LParen) {
                     self.call_args()

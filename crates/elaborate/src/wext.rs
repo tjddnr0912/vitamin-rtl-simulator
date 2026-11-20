@@ -139,12 +139,12 @@
 //! flag), and the patch funnel `patch_expr` / `patch_expr_with`, through which every
 //! in-place write of an `exprs` slot goes (the end phase's resolvers in
 //! `hier_defer/bits.rs`, `hier_defer/read.rs` and `param_query.rs`), raises it when the
-//! slot it overwrites is a `Const` — the fill rule's re-size of an `'x` / `'z` fill
-//! under a deferred hierarchical target (`edge_gate.rs` `verify_use_recs`, §5.2
-//! Q-LOSSYSPELL fix H) is such a write: a right-hand-side slot, no view fact (the view
-//! reads lvalue chunks only), and it stands the view down all the same. With the flag
-//! set, `chunk_extent` decides no select: after `Poison` and `Word`, every chunk with an
-//! offset or a width expression is `Undecided` (a lowering-time fold — `norm_sub_k`, `norm_k_sub`,
+//! slot it overwrites is a `Const`. A provisional `Const` that is fixed by repointing its
+//! parent (`pending_fill_width`'s bare fill, an rhs `resolve_pending_fill_widths` in
+//! `hier_defer/write.rs` replaces in the statement or row) sets nothing and is no view
+//! fact, because the view reads lvalue chunks only. With the flag set, `chunk_extent`
+//! decides no select: after `Poison` and `Word`, every chunk with an offset or a width
+//! expression is `Undecided` (a lowering-time fold — `norm_sub_k`, `norm_k_sub`,
 //! `const_bound`, the geometry constant — may have read the provisional value, and the
 //! finished IR does not say which did); a whole-net chunk (no offset, no width) reads no
 //! expression and keeps the kernel's `[0, net_w)` (a declared width from a hierarchical

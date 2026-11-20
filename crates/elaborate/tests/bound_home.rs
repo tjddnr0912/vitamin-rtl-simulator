@@ -195,6 +195,7 @@ const W5C_EXCEPT: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/const_array.rs", "const_array_ref_of_base", 1, "array_const_vals || params || symbols: not a rule's set"),
     ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols)"),
     ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "left by R7: params || other_kind(k), any_const_or_net in another order"),
+    ("crates/elaborate/src/hier_defer/write.rs", "every_name_resolves", 1, "left by R7: symbols || params, value_or_net in the other order"),
     ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
     ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
 ];

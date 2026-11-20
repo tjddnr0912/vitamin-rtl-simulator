@@ -8,7 +8,7 @@
 //! `(v,u)`: `00→0`, `10→1`, `01→X`, `11→Z`; word0 bit0 = LSB.
 //!
 //! Forms handled (lexer-validated upstream for a `Source` literal — see hdl-lexer IntSized/
-//! IntSizedXz/IntUnsizedBased/IntUnsizedBasedXz/IntDecimal):
+//! IntUnsizedBased/IntDecimal):
 //!   `42`, `1_000`                         → Decimal, 32-bit signed
 //!   `'b1101`, `'hFF`, `'sd9`              → UnsizedBased, 32-bit
 //!   `8'hAB`, `4'b1010`, `4'sd5`           → Sized

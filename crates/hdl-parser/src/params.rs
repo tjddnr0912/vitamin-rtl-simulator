@@ -429,22 +429,14 @@ impl Parser<'_, '_> {
     /// keyword and `integer` arms read either position, every other arm only the
     /// leading one, `expl1` staying `None` there), and the declaration's effective
     /// sign and (flattened) range. The body scalar and the module-header array twin
-    /// both record through here, so the twin's record is the scalar's. Every data type
-    /// built here is noted for `LossySpell::sign_kw_param` (`lossy.rs`).
-    pub(crate) fn param_dtype(
-        &mut self,
-        pfx: &ParamPrefix,
-        signed: bool,
-        range: Option<Range>,
-    ) -> DataType {
-        let dt = DataType::new_param(
+    /// both record through here, so the twin's record is the scalar's.
+    pub(crate) fn param_dtype(pfx: &ParamPrefix, signed: bool, range: Option<Range>) -> DataType {
+        DataType::new_param(
             pfx.decl_kind,
             Signing::from_written(pfx.expl0.or(pfx.expl1)),
             signed,
             range,
-        );
-        self.note_param_dtype(&dt);
-        dt
+        )
     }
 
     /// The scalar-parameter shape of a resolved typedef: `(ParamType, var_kind,
@@ -713,7 +705,7 @@ impl Parser<'_, '_> {
         }
         Some(ParamItem::Scalar(ParamDecl {
             kind,
-            dtype: self.param_dtype(pfx, signed, range),
+            dtype: Self::param_dtype(pfx, signed, range),
             ty,
             name,
             value,

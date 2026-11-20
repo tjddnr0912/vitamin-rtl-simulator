@@ -276,7 +276,7 @@ impl Parser<'_, '_> {
         self.bump(); // force
         let lhs = self.parse_lvalue();
         self.expect(TokenKind::Eq, "'=' in force");
-        let rhs = self.assign_rhs();
+        let rhs = self.expr(0);
         let rhs = self.maybe_struct_pattern_rhs(&lhs, rhs);
         self.expect(TokenKind::Semi, "';'");
         Stmt::Force {

@@ -326,7 +326,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
     let expanded: &str = &pp.text;
 
     // ── lex ──────────────────────────────────────────────────────────────
-    let (tokens, lex_errors, lex_facts) = hdl_lexer::lex_facts(expanded);
+    let (tokens, lex_errors) = hdl_lexer::lex(expanded);
     if !lex_errors.is_empty() {
         for e in &lex_errors {
             let (mnemonic, _) = e.kind.msg_code_hint();
@@ -337,7 +337,7 @@ pub(crate) fn frontend_pp_to_unit_mapped(
     }
 
     // ── parse ─────────────────────────────────────────────────────────────
-    let (unit, parse_errors, parse_warns) = hdl_parser::parse_lexed(&tokens, expanded, lex_facts);
+    let (unit, parse_errors, parse_warns) = hdl_parser::parse_with_warnings(&tokens, expanded);
     // W2004 is emitted BEFORE the error gate below: a portability warning is about a
     // construct that parsed fine, so a syntax error elsewhere in the file must not
     // swallow it. The unique-overlap site is only held here (emitted further down).

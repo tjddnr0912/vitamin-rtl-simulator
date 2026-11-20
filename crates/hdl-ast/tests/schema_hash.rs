@@ -333,16 +333,9 @@ use vita_schema::schema_hash;
 /// LAST, so every existing field keeps its postcard position. Nothing reads it in
 /// production and its `PartialEq` is always true. hdl-ast only: no sim-ir change,
 /// format_version stays 38. All `.vu` artifacts are stale.
-/// Re-pinned 2026-11-19 (§5.2 Q-LOSSYSPELL U1) `TopItem::LossySpell(LossySpell)` (new
-/// `LossySpell`, five `bool`s: `param_xz`, `unsized_xz`, `sign_kw_param`, `let_any`,
-/// `fill_xz`): the parser's record of which lossy constant producers a unit spells,
-/// pushed only when a bit is set, so a unit spelling none keeps its `.vu` body. APPENDED
-/// LAST, so postcard's positional discriminants of every existing `TopItem` are
-/// unchanged. Nothing reads it in production. hdl-ast only: no sim-ir change,
-/// format_version stays 38. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    213, 15, 31, 19, 142, 229, 14, 133, 207, 243, 116, 197, 236, 176, 156, 1, 66, 99, 136, 15, 204,
-    36, 59, 174, 91, 37, 204, 45, 63, 93, 134, 158,
+    142, 157, 208, 148, 239, 218, 176, 224, 110, 203, 222, 174, 101, 210, 39, 21, 90, 68, 226, 205,
+    12, 42, 205, 98, 100, 158, 13, 159, 203, 113, 96, 23,
 ];
 
 #[test]

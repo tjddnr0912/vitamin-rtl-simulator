@@ -5,7 +5,6 @@ use super::*;
 impl Parser<'_, '_> {
     /// SVA-REST: `let NAME [(formals)] = expr ;` (IEEE 1800 §11.13). Cursor on `let`.
     pub(crate) fn parse_let_decl(&mut self) -> Option<ModuleItem> {
-        self.note_let_decl();
         let start = self.cur_span();
         self.bump(); // `let`
         let name = self.ident()?;

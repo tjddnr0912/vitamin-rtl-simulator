@@ -140,7 +140,6 @@ impl<'s> Elaborator<'s> {
             dyn_md_elem: BTreeSet::new(),
             dollar_subst: None,
             inside_name_use: None,
-            lossy_spell: ast::LossySpell::default(),
             array_iter: None,
             array_iter_elem: None,
             array_iter_index_base: 0,
@@ -314,6 +313,7 @@ impl<'s> Elaborator<'s> {
             deferred_hier_bits: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
+            pending_fill_width: Vec::new(),
             hier_resolved_chunk: std::collections::BTreeMap::new(),
             cover_types: std::collections::BTreeMap::new(),
             cover_insts: std::collections::BTreeMap::new(),
@@ -686,10 +686,6 @@ impl<'s> Elaborator<'s> {
             ast::TopItem::InsideNameUse(at) => Some(*at),
             _ => None,
         });
-        // §5.2 Q-LOSSYSPELL: the design-wide record of which lossy constant producers this
-        // design spells — the OR of every unit's record, then the `-G` values — complete
-        // here and nowhere earlier. No production code reads it (`lossy.rs`).
-        self.lossy_spell = crate::lossy::design_lossy_spell(unit, &self.top_param_overrides);
         // §3 ⑤ⓖ: before anything lowers (package bodies and class methods lower below).
         self.md_return_fns = md_return::md_return_fn_names(unit);
         self.design_inout_port = struct_arm::design_has_inout_port(unit);
@@ -1014,10 +1010,11 @@ impl<'s> Elaborator<'s> {
         // ENG-1b: both write lanes have decided their chunks, so a capture temp whose
         // destination was a deferred hierarchical write takes that destination's type.
         self.verify_deferred_captures();
+        // §4.5.355: both lanes have now decided the real chunk, so the assignment
+        // width a fill literal could not be told at lowering time finally exists.
+        self.resolve_pending_fill_widths();
         // §4.5.601: every placeholder is patched, so decide the late constant edges now —
-        // before the multidriver scan below reads a continuous-assign chunk's width. Both
-        // write lanes have published their chunks, so this also ends every record a fill
-        // under an undecided target left (`edge_gate.rs` THE FILL RULE).
+        // before the multidriver scan below reads a continuous-assign chunk's width.
         self.decide_late_edges();
         // R-SETTLE (`read_set.rs`): every implicit read set — each comb-inferred process
         // header and each in-body `@(*)` — is computed here, after the last post-lowering

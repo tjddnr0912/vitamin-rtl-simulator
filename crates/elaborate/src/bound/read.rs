@@ -55,7 +55,8 @@
 //! - A closure whose map set is a rule's in another `||` order (re-pointing it would
 //!   change its host function's code ; measured on a build that did, BIND-1b B2:
 //!   W/bind1/build_b/asm/B2_SUMMARY.txt, `cmp_post_extra`):
-//!   const_str.rs `const_str_at` (`str || real || params || wide || symbols`), edge_gate.rs
+//!   hier_defer/write.rs `every_name_resolves` (`symbols || params`), const_str.rs
+//!   `const_str_at` (`str || real || params || wide || symbols`), edge_gate.rs
 //!   `binding_encloses`'s innermost walk (`params || other_kind(k)`).
 //! - A closure in its rule's own order whose host function's code moved when it was
 //!   re-pointed (the hit became an out-of-line `bool` fn: `tbz w0, #0` became

@@ -2,6 +2,59 @@
 
 use super::*;
 
+/// Does `e` carry a fill AND lower WITHOUT CONSULTING ANY SCOPE?
+///
+/// ⭐ THE CONSTRAINT IS THE SCOPE, NOT THE SHAPE. `resolve_pending_fill_widths` runs
+/// after elaboration, where the lowering scope is gone, so the only right-hand sides
+/// it can re-lower are the ones that never ask it anything: literals and the operators
+/// over them. That covers the measured class almost entirely — `u.w64 = '1 + 1`,
+/// `-'1`, `~'1`, `'1 << 0`, `'1 & 8'hF0` — because a fill needs the assignment context
+/// exactly when no sibling is wide enough to supply the width, and a wide sibling is
+/// usually a literal.
+///
+/// ⚠️ An operand that READS something (`c ? '1 : 1'b0`) is deliberately excluded and
+/// stays in ROADMAP §2-1e: re-lowering it needs the scope, which is the item's stated
+/// prerequisite. Excluding it here is what keeps this predicate honest — it is a
+/// statement about what can be rebuilt, not a guess about what is common.
+fn scope_free_fill_expr(e: &ast::Expr) -> bool {
+    expr_contains_fill(e) && scope_free(e)
+}
+
+/// Structural whitelist: every node kind whose lowering reads only its own children,
+/// plus a single-segment `Ident`.
+///
+/// ⭐ THE IDENT IS ADMITTED BECAUSE THE SCOPE IS A STRING (§4.5.360). vita resolves a
+/// name by walking outward from `cur_prefix` over FQ-keyed tables that live for the
+/// whole elaboration, so "the lowering scope" of a plain name is just that prefix —
+/// captured with the pending record and restored at resolve. What is NOT admitted is
+/// anything whose lowering needs state that is pushed and popped (an inlined function's
+/// formal substitution, a frame window): those are absent by the time the resolve pass
+/// runs, and re-lowering under them would resolve the name somewhere else.
+///
+/// A `_` arm would silently admit the next kind someone adds, so the match is
+/// exhaustive on the ones that qualify and rejects everything else by default.
+fn scope_free(e: &ast::Expr) -> bool {
+    use ast::ExprKind::*;
+    match &e.kind {
+        IntLit { .. } => true,
+        // Single segment only: a dotted path is a hierarchical/member reference whose
+        // resolution is not the plain outward walk.
+        Ident(p) => p.segments.len() == 1,
+        Paren { inner } => scope_free(inner),
+        MinTypMax { typ, .. } => scope_free(typ),
+        Unary { operand, .. } => scope_free(operand),
+        Binary { lhs, rhs, .. } => scope_free(lhs) && scope_free(rhs),
+        Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => scope_free(cond) && scope_free(then_e) && scope_free(else_e),
+        Concat { parts } => parts.iter().all(scope_free),
+        Replicate { count, value } => scope_free(count) && value.iter().all(scope_free),
+        _ => false,
+    }
+}
+
 pub(crate) fn map_unop(op: ast::UnOp) -> ir::UnOp {
     use ast::UnOp::*;
     match op {
@@ -599,16 +652,11 @@ impl Elaborator<'_> {
     /// own node). What IS true: for a NON-fill rhs the lvalue width is never read and
     /// `rhs_id` is returned untouched, which is what makes every fill-free design
     /// byte-identical — an error-recovery lvalue (`x = 1` for undeclared `x`) included.
-    ///
-    /// `site` is the assignment's own position as its caller has it (the statement's
-    /// `cur_span`, a continuous assignment pair's target, a net declarator), read only for
-    /// a target whose width is not provable.
     pub(crate) fn resize_rhs_for_lvalue(
         &mut self,
         rhs: &ast::Expr,
         rhs_id: u32,
         lv: &ir::Lvalue,
-        site: Option<ast::Span>,
     ) -> u32 {
         // §11.4.14.3: a STREAMING rhs assigned to a wider target is left-justified,
         // not zero-extended. It rides this funnel rather than a second one because
@@ -623,39 +671,58 @@ impl Elaborator<'_> {
         if !expr_contains_fill(rhs) {
             return rhs_id;
         }
-        // THE FILL RULE (§5.2 Q-LOSSYSPELL fix H, `edge_gate.rs`): the rhs is re-lowered
-        // ONCE, here, in its own scope, under the one value `fill_context` gives for the
-        // whole target, matched with no `_` arm. The originally-lowered `rhs_id` (sized
-        // self-determined) becomes dead — a fill-bearing rhs has no golden to preserve.
-        //  - every piece decided: the sum is the assignment context (IEEE §11.6), so
-        //    every fill in a context-determined position grows to it;
-        //  - a piece undecided (a deferred hierarchical piece, whose lowered chunk is a
-        //    sentinel until its lane publishes it, or a select whose width edge is late):
-        //    the width the lowering can see, under F2 — an all-ones or all-zeros fill is
-        //    spelled `~1'b0` / a one-bit zero, which the run sizes at the final context,
-        //    and every fill leaves a record the end-phase decision ends (an `'x` / `'z`
-        //    fill's slot re-sized at the decided width of the whole target, or an error);
-        //  - one `real` piece: no bits to fill (IEEE 1800 §6.12; `'1` at the real's 64
-        //    storage bits would read 1.84467e+19 where both oracles give 1.0, the fill's
-        //    own one bit converted, §4.5.353), so `lower_expr`'s IR stays;
-        //  - not provable (a `real` piece beside another, a piece whose width does not
-        //    fold): a record at `site` (the assignment's own position), which the
-        //    end-phase decision turns into an error unless one was already reported (a
-        //    width that failed to fold for a reason already reported reaches here too).
-        //    There is no 1-bit answer for a width nobody established: the design fails.
-        match self.fill_context(lv) {
-            TargetW::Bits(w) => self.lower_expr_ctx_f2(rhs, w, &None),
-            TargetW::Late {
-                visible,
-                f2,
-                resizable,
-            } => self.lower_expr_ctx_f2(rhs, visible, &Some(f2.of_target(resizable))),
-            TargetW::NoBits => rhs_id,
-            TargetW::Unprovable => {
-                self.record_unprovable(lv, site);
-                rhs_id
-            }
+        // ⚠️ A `real` TARGET HAS NO BIT CONTEXT (IEEE 1800 §6.12 / §11.6: a real has
+        // no width to propagate, and §5.7.1's "fill every bit of the context" has no
+        // bits to fill). `ir_lvalue_width` answers 64 for a real net — the storage
+        // size — and taking that as the context turns `'1` into 2^64-1, which the
+        // engine then converts to 1.84467e+19. Both oracles give 1.0, i.e. the fill's
+        // own self-determined 1-bit value converted to real.
+        //
+        // The guard lives HERE and not at the call sites for two reasons: it is one
+        // spelling of one rule for all five callers, and the pre-existing callers were
+        // ALREADY wrong this way — `real e; e = '1;`, `real d = '1;` and
+        // `real f[0] = '1;` all read 1.84467e+19 before this slice. Adding the third
+        // and fourth call sites (force / procedural continuous assign) would have
+        // spread that from three spellings to five; putting the guard in the shared
+        // funnel repairs all of them instead. (§4.5.353, found by adversarial review:
+        // the first draft guarded nothing and regressed `force r = '1;` from a correct
+        // 1 to 1.84467e+19 — correct→silent-wrong, which the ladder forbids.)
+        if self.lvalue_targets_real(lv) {
+            return rhs_id;
         }
+        // ⚠️ A DEFERRED HIERARCHICAL TARGET HAS NO WIDTH YET. `u.a = '1;` lowers its
+        // lvalue to a SENTINEL chunk because the child instance's nets do not exist
+        // at this point; `ir_lvalue_width` then reads `nets.get(0xFF00_0000)` → `None`
+        // → `.max(1)` → 1, so the fill became one bit and `u.a` read
+        // `000000000001` where both oracles read `111111111111`. The width is not
+        // missing, only LATE — the same thing that is true of the net id, which this
+        // architecture already answers by lowering a sentinel and patching it when the
+        // answer arrives. The fill gets the same treatment (§4.5.355).
+        if let Some(sentinel) = self.deferred_lvalue_sentinel(lv) {
+            if scope_free_fill_expr(rhs) {
+                self.pending_fill_width.push(PendingFillWidth {
+                    expr_id: rhs_id,
+                    sentinel,
+                    rhs: rhs.clone(),
+                    prefix: self.cur_prefix.clone(),
+                });
+            }
+            // Either way the ctx here would be the bogus 1, so leave `lower_expr`'s IR
+            // alone rather than bake that in.
+            return rhs_id;
+        }
+        // Re-lower the rhs with the lvalue width as the assignment context so every
+        // fill in a context-determined position grows to that width (IEEE §11.6).
+        // The originally-lowered `rhs_id` (sized self-determined) becomes dead — a
+        // fill-bearing rhs has no golden to preserve, so this is harmless.
+        //
+        // A target whose width is decided only after the deferred passes
+        // (`a[gb.L-1:0]`, §4.5.601) lends the width the lowering can see, under F2:
+        // an all-ones or all-zeros fill is then spelled `~1'b0` / a one-bit zero, which
+        // the run sizes at the final assignment context, and an `'x` / `'z` fill records
+        // the width it was sized at (`edge_gate.rs`).
+        let (lv_width, f2) = self.fill_context(lv);
+        self.lower_expr_ctx_f2(rhs, lv_width, &f2)
     }
 
     /// The deferred-hierarchical sentinel this lvalue writes through, if any.
@@ -720,13 +787,7 @@ impl Elaborator<'_> {
     /// The context and F2 state a fill-bearing operand takes from its lowered `sibling`:
     /// `sibling_ctx`'s, unless the sibling's width is not decided yet — then the fill is
     /// lowered for the run to size (RC2), recording against the sibling's width.
-    /// A `real` sibling gives no bit context (`sibling_ctx` answers 0): the fill is its
-    /// own one bit and leaves no record (the value it converts to does not depend on a
-    /// width), so the F2 state ends there.
     fn fill_side_ctx(&self, base: u32, sibling: u32, f2: &Option<F2Ctx>) -> (u32, Option<F2Ctx>) {
-        if self.expr_is_real(sibling) {
-            return (0, None);
-        }
         if self.sibling_undecided(sibling) {
             let w = base.max(1);
             return (w, F2Ctx::with(f2, edge_gate::Measure::Expr(sibling), w));
@@ -740,28 +801,25 @@ impl Elaborator<'_> {
             Paren { inner } => self.lower_expr_ctx_f2(inner, ctx, f2),
             // A fill literal → a const of the context width (≥ 1 bit). Under F2 an
             // all-ones / all-zeros fill is spelled for the run to size (`~1'b0` is
-            // all ones at any context width, a one-bit zero zero-extends), and every
-            // fill leaves its record: an `'x` / `'z` one names its own slot and the
-            // width it was sized at (THE FILL RULE, `edge_gate.rs`).
+            // all ones at any context width, a one-bit zero zero-extends), and an
+            // `'x` / `'z` fill records the width it was sized at.
             IntLit {
                 kind,
                 raw,
                 origin: _,
             } if literal::is_fill_literal(raw, *kind) => {
                 let id = match f2 {
-                    Some(f2) if !literal::fill_is_unknown(raw, *kind) => {
+                    Some(_) if !literal::fill_is_unknown(raw, *kind) => {
                         let zcid = self.intern_const(make_const_u32(0, 1));
                         let zero = self.push_expr(ir::Expr::Const { val: zcid });
-                        let id = if literal::fill_is_zero(raw, *kind) {
+                        if literal::fill_is_zero(raw, *kind) {
                             zero
                         } else {
                             self.push_expr(ir::Expr::Unary {
                                 op: ir::UnOp::BitNot,
                                 operand: zero,
                             })
-                        };
-                        self.record_fill(f2, ctx.max(1), None);
-                        id
+                        }
                     }
                     _ => {
                         let w = ctx.max(1);
@@ -770,12 +828,7 @@ impl Elaborator<'_> {
                         let cid = self.intern_const(cv);
                         let id = self.push_expr(ir::Expr::Const { val: cid });
                         if let Some(f2) = f2 {
-                            let bit = if raw.ends_with(['x', 'X']) {
-                                edge_gate::FillBit::X
-                            } else {
-                                edge_gate::FillBit::Z
-                            };
-                            self.record_fill(f2, w, Some((id, bit)));
+                            self.record_unknown_fill(f2, w);
                         }
                         id
                     }

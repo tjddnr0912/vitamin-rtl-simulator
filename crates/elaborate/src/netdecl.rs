@@ -944,10 +944,7 @@ impl Elaborator<'_> {
                 .or_else(|| self.struct_arm_rhs(lv, &lhs, rhs));
             let rhs = packed.as_ref().unwrap_or(rhs);
             let rhs_id = self.lower_expr(rhs);
-            // A fill's refusal is located at this pair's own target (`lv`), the same
-            // position `push_cont_assign` below hands the write view: a list's pairs each
-            // at their own, never the statement's shared span.
-            let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lhs, Some(lv.span()));
+            let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lhs);
             // The index of THIS cont-assign is the len BEFORE the push.
             let idx = self.cont_assigns.len() as u32;
             if let Some(rft) = rft {

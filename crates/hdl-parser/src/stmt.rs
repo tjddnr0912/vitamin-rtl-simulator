@@ -372,7 +372,7 @@ impl Parser<'_, '_> {
             Some(TokenKind::Eq) => {
                 self.bump();
                 let (delay, event) = self.parse_intra_assign_timing(true);
-                let rhs = self.assign_rhs();
+                let rhs = self.expr(0);
                 // N3 SoA: `arr=new[N]` / `arr=other` / `arr[i]='{…}` on a SoA record
                 // array → a Block of per-field native dyn ops (only without intra-assign
                 // timing, which a whole-array op never has).
@@ -397,7 +397,7 @@ impl Parser<'_, '_> {
             Some(TokenKind::LtEq) => {
                 self.bump();
                 let (delay, event) = self.parse_intra_assign_timing(false);
-                let rhs = self.assign_rhs();
+                let rhs = self.expr(0);
                 if delay.is_none() && event.is_none() {
                     if let Some(stmt) =
                         self.try_soa_assign(&lhs, &rhs, false, start.to(self.prev_span()))
@@ -501,7 +501,7 @@ impl Parser<'_, '_> {
         self.bump(); // assign
         let lhs = self.parse_lvalue();
         self.expect(TokenKind::Eq, "'=' in procedural assign");
-        let rhs = self.assign_rhs();
+        let rhs = self.expr(0);
         let rhs = self.maybe_struct_pattern_rhs(&lhs, rhs);
         self.expect(TokenKind::Semi, "';'");
         Stmt::Assign {

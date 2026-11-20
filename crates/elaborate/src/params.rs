@@ -1357,27 +1357,6 @@ impl Elaborator<'_> {
         out
     }
 
-    /// §5.2 Q-LOSSYSPELL: does a `-G` value's TEXT spell an unknown digit? Read through the
-    /// raw → value fns `cli_overrides_for` above reads, in its order, so the record and the
-    /// override cannot read one text two ways: a fill goes to `literal::fill_is_unknown`
-    /// (`'x`, `'z`, `'?`), a quoted string spells none, and anything else is the parse whose
-    /// value `cli_overrides_for` installs, `parse_int_literal(.., IntLitKind::Sized)`, with a
-    /// non-zero unknown plane (`'bx`, `8'B1X01_0000`, `8'b1?01_0000`, each bound silently
-    /// today with the unknown dropped ; a decimal does not parse there and spells none).
-    /// The text alone decides: which parameter it names, and whether the override applies,
-    /// are not read.
-    pub(crate) fn cli_value_spells_unknown(raw: &str) -> bool {
-        let t = raw.trim();
-        if literal::is_fill_literal(t, ast::IntLitKind::UnsizedBased) {
-            return literal::fill_is_unknown(t, ast::IntLitKind::UnsizedBased);
-        }
-        if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
-            return false;
-        }
-        crate::literal::parse_int_literal(t, ast::IntLitKind::Sized)
-            .is_some_and(|c| c.bits.unk.iter().any(|&w| w != 0))
-    }
-
     /// An override's value RESIZED to the parameter's declared width, in the wide bit
     /// domain — the one place that can carry a value the 64-bit integer lane cannot.
     ///
