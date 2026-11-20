@@ -75,6 +75,19 @@
 //!   instance on one connection span, (ii) a connection at its instance item's span).
 //! - H15p (fix F1) the same census over hdl-parser's production sources (the parser builds
 //!   most statements ; its ANOTHER rows are the bodies V turns to `None`).
+//! - H11 (§5.2 Q-WEXTPOS C1) every in-place write of an `exprs` slot, per (file, fn): `.
+//!   exprs . <verb> (` for `push` and the mutating verbs, `. exprs [ .. ] .. =`, `. exprs =`,
+//!   `& mut <path> . exprs` ; fix F1 (lens N-S1) adds a verb after the index that is not a
+//!   read (`. exprs [ .. ] . clone_from (`, a slice's `swap` / `fill` / `copy_from_slice`)
+//!   and the parenthesized receiver `( <path> . exprs )` — each the patch funnel's
+//!   (`patch_expr` / `patch_expr_with`) or a listed site ; and no H11 / H1b token in the
+//!   passes after `build_write_view`.
+//! - H11b (C1) the stand-down's setters, each with its one caller: `note_patch` in the
+//!   funnel's two forms, `note_provisional` in `register_provisional_const`, that one in
+//!   `lower_bits_fold` ; and one insert into the registered set, inside the registration.
+//! - H11c (C1) every producer list's add site (`. deferred_<x> . <add verb> (`), with two
+//!   hand-written columns: whether the node recorded is an `exprs` `Const` the end phase
+//!   replaces, and whether it is registered.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -95,12 +108,19 @@
 //! a type alias of `Stmt` (H15 reads a `use .. as` alias, not a `type` alias nor a grouped
 //! `use p :: { .. }`), a construction through `Self { .. }` inside the type's own `impl`,
 //! a construction through a helper (`whole_net_lvalue`,
-//! `poison_chunk` are counted where their own `LvalChunk {` is). `exprs`, `consts` and
-//! `nets` (an offset tree's leaves, a net's width) are read by the kernel at the end
-//! phase and not pinned here: a later edit of an offset tree would make the view stale
-//! without moving a count. The ORDER is review-only too: that each H1b site runs before
-//! `build_write_view` (and that no append runs after it) is the listed reason, read from
-//! the call chain in `driver.rs` `run`, not a token this walker counts.
+//! `poison_chunk` are counted where their own `LvalChunk {` is). An in-place write of an
+//! `exprs` slot is pinned (H11: the funnel's), and so are the stand-down's setters and the
+//! producer lists of nodes patched later (H11b, H11c) ; `consts` and `nets` (a constant's
+//! value, a net's width), read by the kernel at the end phase, are not pinned here: a later
+//! edit of one would make the view stale without moving a count. H11 cannot see (§5.2
+//! Q-WEXTPOS fix F1, lens N-S1): a receiver with no `.` before `exprs` (`let Self { exprs,
+//! .. } = self; exprs[i] = e`), one through a deref group (`(*self).exprs`), a verb spelled
+//! with a turbofish (`. get_mut :: < .. > (`), a write through a raw pointer, an `unsafe`
+//! block or interior mutability, a macro that builds the receiver, and a callee that is
+//! handed a slot or a slice (sim-ir's bodies are not walked) ; 0 such sites at 17703a0c
+//! (the lens's census, a perl token scan). The ORDER is review-only too: that each H1b
+//! site runs before `build_write_view` (and that no append runs after it) is the listed
+//! reason, read from the call chain in `driver.rs` `run`, not a token this walker counts.
 //!
 //! The walker is `bound_home.rs`'s (proc_macro2 tokens, comments dropped, `#[..]` skipped,
 //! the item after `#[cfg(test)]` skipped, `=> == != ::` joined, a token keyed by its
@@ -184,6 +204,11 @@ const MUT: &[&str] = &[
     "push_front",
     "pop_back",
     "pop_front",
+];
+/// H11 (fix F1, lens N-S1): the verbs after `. exprs [ .. ] .` that only READ the slot or
+/// the slice (the tree's spellings: `clone`, `iter`) ; any other verb there is a row.
+const READ_AFTER_INDEX: &[&str] = &[
+    "clone", "iter", "len", "is_empty", "get", "first", "last", "to_vec", "as_ref",
 ];
 /// H11c: the verbs that add an entry to a producer list.
 const ADD: &[&str] = &[
@@ -609,24 +634,50 @@ fn hits(src: &str) -> Vec<(String, String)> {
             out.push((format!("H1b:{}:=", tx(i + 1)), k.clone()));
         }
         // H11 the `exprs` arena's writers: `. exprs . <verb> (` (`push` too), `. exprs [ .. ]
-        // .. =`, `. exprs =` ; the read set's map `rs . exprs` keyed apart
+        // .. =`, `. exprs =` ; the read set's map `rs . exprs` keyed apart. §5.2 Q-WEXTPOS
+        // fix F1 (lens N-S1): also a verb after the index, `. exprs [ .. ] . <verb> (` with
+        // the verb not in `READ_AFTER_INDEX` (`clone_from`, a slice's `swap` / `fill` /
+        // `copy_from_slice`), and the parenthesized receiver `( <path> . exprs ) [` / `) .`
+        // (keyed `paren`)
         if tx(i) == "." && tx(i + 1) == "exprs" {
             let recv = if i >= 1 && tx(i - 1) == "rs" {
                 "rs.exprs"
             } else {
                 "exprs"
             };
-            if tx(i + 2) == "." && tx(i + 4) == "(" {
-                let verb = tx(i + 3);
+            let (b, how) = if tx(i + 2) == ")" {
+                (i + 3, "paren")
+            } else {
+                (i + 2, "")
+            };
+            let tag = |w: &str| {
+                if how.is_empty() {
+                    format!("H11:{recv}:{w}")
+                } else {
+                    format!("H11:{recv}:{how}:{w}")
+                }
+            };
+            if tx(b) == "." && tx(b + 2) == "(" {
+                let verb = tx(b + 1);
                 if verb == "push" || MUT.contains(&verb) {
-                    out.push((format!("H11:{recv}:{verb}"), k.clone()));
+                    out.push((tag(verb), k.clone()));
                 }
             }
-            if tx(i + 2) == "[" && assigned_after(&t, close_of(&t, i + 2)) {
-                out.push((format!("H11:{recv}:index="), k.clone()));
+            if tx(b) == "[" {
+                let mut c = close_of(&t, b);
+                while tx(c + 1) == "[" {
+                    c = close_of(&t, c + 1);
+                }
+                if assigned_after(&t, close_of(&t, b)) {
+                    out.push((tag("index="), k.clone()));
+                }
+                let verb = tx(c + 2);
+                if tx(c + 1) == "." && tx(c + 3) == "(" && !READ_AFTER_INDEX.contains(&verb) {
+                    out.push((tag(&format!("index.{verb}")), k.clone()));
+                }
             }
-            if tx(i + 2) == "=" {
-                out.push((format!("H11:{recv}:="), k.clone()));
+            if tx(b) == "=" {
+                out.push((tag("="), k.clone()));
             }
         }
         // H11b the stand-down's setters and the registered set's insert
@@ -1834,6 +1885,36 @@ fn walker_controls() {
         count("H11", h11),
         4,
         "H11 planted: split_at_mut, `=`, &mut, iter_mut"
+    );
+    assert_eq!(
+        hits(
+            "fn f(&mut self) { self.exprs[i].clone_from(&e); self.exprs[a..b].swap(0, 1); \
+              self.exprs[a..b].fill(z); self.exprs[a][b].copy_from_slice(&s); }"
+        ),
+        vec![
+            ("H11:exprs:index.clone_from".to_string(), "f".to_string()),
+            ("H11:exprs:index.swap".to_string(), "f".to_string()),
+            ("H11:exprs:index.fill".to_string(), "f".to_string()),
+            (
+                "H11:exprs:index.copy_from_slice".to_string(),
+                "f".to_string()
+            )
+        ],
+        "H11 planted (lens N-S1): a writing verb after the index"
+    );
+    assert_eq!(
+        hits("fn f(&mut self) { let a = self.exprs[i].clone(); let n = self.exprs[a..].iter().count(); \
+              let l = self.exprs[a..b].len(); }"),
+        Vec::<(String, String)>::new(),
+        "H11 a reading verb after the index (the READ allow-list) is no row"
+    );
+    assert_eq!(
+        hits("fn f(&mut self) { (self.exprs)[i] = e; (self.exprs).truncate(3); let y = (self.exprs)[i].clone(); }"),
+        vec![
+            ("H11:exprs:paren:index=".to_string(), "f".to_string()),
+            ("H11:exprs:paren:truncate".to_string(), "f".to_string())
+        ],
+        "H11 planted (lens N-S1): the parenthesized receiver"
     );
     assert_eq!(
         hits("fn f(&mut self) { self.rs.exprs.insert(i, m); }"),
