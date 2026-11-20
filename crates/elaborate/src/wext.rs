@@ -213,7 +213,9 @@
 //!   intra-assignment capture, a case scrutinee, an inlined task's copy-in, copy-out and
 //!   local initializer (the CALL statement), a block-local initializer (its `begin` block,
 //!   in a frame body through `emit_frame_local_inits` and in a module process body through
-//!   `emit_per_entry_block_inits` alike) — always an `ast::Stmt`.
+//!   `emit_per_entry_block_inits` alike), a guarded wait's snapshot (the user's `@(.. iff
+//!   ..)` statement: fix S) — always an `ast::Stmt` a parsed body holds, never one vita
+//!   built (THE RULE OF ENTRY, C3 below).
 //!
 //! Otherwise `None`, and NEVER an item that holds several writes as peers (an instance item
 //! for its connections, a gate list, an `assign` list, a declaration list, a `primitive`, a
@@ -246,22 +248,41 @@
 //! carries its own text's span (sampled by the pins, censused by the premise judge: not a
 //! rule a test holds).
 //!
-//! A STATEMENT'S OWN POSITION (§5.2 Q-WEXTPOS, unit C3). `lower_stmt` reads `start =
-//! stmts.len()` at its entry and at its one exit calls `record_stmt_at` with the fn's OWN
-//! parameter's span `s.span()` (never `cur_span`, a context's: 41 writers), which keeps the
-//! interval `[start, stmts.len())` with that span in `stmt_at` — nothing when the statement
-//! pushed no IR statement, when the span is empty (`debug_assert!`ed after those two
-//! returns), or when THE MASK is up. A procedural write takes the span of the INNERMOST
+//! A STATEMENT'S OWN POSITION (§5.2 Q-WEXTPOS, unit C3 ; fix S: THE RULE OF ENTRY). A
+//! statement's interval is recorded only by `lower_parsed`, a call a fn makes only on a child
+//! of the parsed statement or body it was handed ; every other way into the statement
+//! lowering (`stmt_main.rs`, one implementation `lower_stmt_entry` under three names)
+//! records nothing. `lower_parsed` reads `start = stmts.len()` at its entry and at its one
+//! exit (in `lower_stmt_entry`, its `record` set) calls `record_stmt_at` with the fn's OWN parameter's span `s.span()` (never
+//! `cur_span`, a context's: 41 writers), which keeps the interval `[start, stmts.len())` with
+//! that span in `stmt_at` — nothing when the statement pushed no IR statement, when the span
+//! is empty (`debug_assert!`ed after those two returns), or when THE MASK is up. The plain
+//! entry `lower_stmt` lowers a statement vita BUILT under THE MASK, `wext_unlocated`, a depth
+//! counter inside which no interval is recorded (a hoisted temporary, a dyn-array or frame
+//! local's built initializer, an intra-assignment event's wait, a covergroup's bitmap store,
+//! a frame call's unpack, the in-body `iff` guard's wait loop `lower_event_iff_wait` ; 20
+//! calls, `wext_home.rs` H14) ; the mask is also around `lower_synth_proc`'s body.
+//! `lower_shell` lowers ONE built node with no interval of its own and no mask, so its
+//! statement children, all parsed, record themselves: the `always @(.. iff ..)` desugar's
+//! `if (guard) <body>` (`desugar_event_iff`), lowered by `lower_proc_block` — its one call.
+//! What the owner decided (2026-11-20, as recorded): "a statement elaborate built carries NO
+//! position, with no exception argued from 'it pushes no write'". So an elaborate-built
+//! statement records no interval of its own, and a store its lowering pushes reads the
+//! parsed statement that holds it (HOLDER) or `None` ; no hand class of what a built
+//! statement can push is kept (fix F1's MASKED / NOSTORE classes are deleted), and a call
+//! nobody classed is the plain entry: a forgotten class LOSES a position, it never invents
+//! one. The rule is held by four token rules over this crate in `wext_home.rs` (R1: no fn
+//! that builds a statement records or names a recording fn ; R2: a recording fn takes a
+//! built statement only from a rewriter or as the one shell ; R3: one `lower_shell` call, a
+//! rewriter lowers nothing ; R4: no routine, item or body definition is built here but the
+//! listed `ProceduralBlock`s) ; what those cannot see is that test's head note. The built
+//! nodes keep their spans: a diagnostic raised inside one is anchored there (`cur_span`), the
+//! position record only never reads them. A procedural write takes the span of the INNERMOST
 //! recorded interval holding its statement id, among equal intervals the one recorded first
-//! (a statement that pushes nothing of its own, a label or a guard shell, has exactly its
-//! child's interval, and the child exits first) ; no interval, or a FLOOR, gives `None` ;
-//! every chunk of one lvalue the same `at`. THE MASK, `wext_unlocated`: a depth counter
-//! around a statement vita BUILT (class S: the 19 `lower_stmt` calls `wext_home.rs` H14
-//! lists — a hoisted temporary, a dyn-array or frame local's built initializer, an
-//! intra-assignment event's wait, a covergroup's bitmap store, a frame call's unpack) and
-//! around `lower_synth_proc`'s body: inside it no interval is recorded, so a built
-//! statement's store takes the parsed statement around it, or none. Every body ELABORATE
-//! synthesizes (`lower_synth_proc`'s callers) gives `None`: the declaration-initializer flush `var_init` (its Block's span is the FIRST
+//! (a statement that pushes nothing of its own, a label, has exactly its child's interval,
+//! and the child exits first) ; no interval, or a FLOOR, gives `None` ; every chunk of one
+//! lvalue the same `at`. Every body ELABORATE synthesizes (`lower_synth_proc`'s callers)
+//! gives `None`: the declaration-initializer flush `var_init` (its Block's span is the FIRST
 //! initializer's, a context for the others), `sva` including a concurrent assertion's action
 //! blocks, `cover`, the clocking commit handler and the module-level assertion wrapper
 //! (`lower_user_proc`). THE FLOORS, `wext_body_enter` / `wext_body_exit`: each body root
@@ -275,8 +296,9 @@
 //! entries `inline_task_body` and `lower_frame_body_stmt` (`wext_located`) save, set 0 and
 //! restore the depth with no floor, so a task inlined into a synthesized body (an
 //! assertion's action calling a static task) records its own statements, and a copy-in or
-//! copy-out its call pushes is the call statement. `build_write_view` `debug_assert!`s the
-//! mask depth and the open bodies are 0.
+//! copy-out its call pushes is the call statement ; the bodies they and the body roots
+//! lower come from the routine tables, which hold parsed definitions only (R4).
+//! `build_write_view` `debug_assert!`s the mask depth and the open bodies are 0.
 //! V (fix F1): each body root also takes the span of the ITEM its body belongs to — the
 //! process block (`lower_proc_block`), the function or task (the frame bodies), the class
 //! method — never the body's own (an implicit body block starts at its first statement),
@@ -295,6 +317,10 @@
 //! labeled block, hdl-parser `item_dispatch.rs`) starts at the item's first byte, so a store
 //! whose innermost recorded statement is that root reads `None` (HOLDER lost, the safe
 //! direction ; the action statements inside it are their own ; no producing form found).
+//! V also declines the `always @(.. iff ..)` shell (its span is the process item's, `p.span`),
+//! which `lower_shell` already records nothing for: the two agree there, and V stays the
+//! stand-in for the parser's provenance until the structural row gives each body its
+//! builder.
 //! THE RESOLUTION, one reverse pass (`stmt_at_of`; the plan's sort by `(start, Reverse(end),
 //! Reverse(record index))` is its unit tests' reference): every recorder records at its OWN
 //! exit over `[stmts.len() at entry, stmts.len() at exit)`. It needs two facts. (1)
@@ -307,10 +333,10 @@
 //! pair included. Painting the intervals last-recorded first therefore lets every inner
 //! interval overwrite its container, and among equal ones the first-recorded paints last.
 //! `push_interval` `debug_assert!`s that order against the interval recorded before.
-//! REVIEW-ONLY for C3: an S call's class (H14 counts the calls, a class written wrongly
-//! is the pins' and review's) ; that a masked built statement's store takes the parsed
-//! statement around it (HOLDER above) — precision lost, the text holding the write, never
-//! another construct's ; that a `TaskInline` write's `at` is the callee's statement or the
+//! REVIEW-ONLY for C3: that a `lower_parsed` call's argument really is a child of what its
+//! fn was handed (read at all 28 by the plan and the premise judge of fix S ; not a token
+//! rule) ; that a masked built statement's store takes the parsed statement around it
+//! (HOLDER above) — precision lost, the text holding the write, never another construct's ; that a `TaskInline` write's `at` is the callee's statement or the
 //! call (the view cannot tell which) ; the call site of an inlined callee's statement (not
 //! recorded) ; a statement from a macro body or an include (the record holds the raw offset
 //! of the preprocessed text) ; the spans of masked statements (not recorded, never
@@ -755,11 +781,12 @@ impl Elaborator<'_> {
         self.wext_rec.row_at.push(at);
     }
 
-    /// The statement's position writer (module head, C3), called once at `lower_stmt`'s
-    /// one exit with the fn's own `s.span()` and `start = stmts.len()` read at its entry:
-    /// `[start, stmts.len())` with that span. Nothing when the mask is up (a statement
-    /// vita built, `wext_unlocated`), when the statement pushed no IR statement, when
-    /// the span is empty, or when it starts at the open body item's first byte (V,
+    /// The statement's position writer (module head, C3), called once, at the one exit of
+    /// `lower_stmt_entry` for `lower_parsed` (fix S: the plain entry and the shell never call
+    /// it), with the fn's own `s.span()` and `start = stmts.len()` read at its entry:
+    /// `[start, stmts.len())` with that span. Nothing when the mask is up (inside a
+    /// statement vita built, `wext_unlocated`), when the statement pushed no IR statement,
+    /// when the span is empty, or when it starts at the open body item's first byte (V,
     /// `note_stmt_at`).
     pub(crate) fn record_stmt_at(&mut self, sp: ast::Span, start: usize) {
         let end = self.stmts.len();
@@ -773,9 +800,9 @@ impl Elaborator<'_> {
         self.wext_rec.note_stmt_at(start, end, sp);
     }
 
-    /// THE MASK (module head, C3): `f` lowers a statement vita built (or a synthesized
-    /// body), so no statement interval inside it is recorded; its stores take the
-    /// interval around it, or none.
+    /// THE MASK (module head, C3): `f` lowers a statement vita built (the plain entry
+    /// `lower_stmt`, fix S) or a synthesized body (`lower_synth_proc`), so no statement
+    /// interval inside it is recorded; its stores take the interval around it, or none.
     pub(crate) fn wext_unlocated<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.wext_rec.mask += 1;
         let r = f(self);

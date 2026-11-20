@@ -4,9 +4,40 @@ use super::*;
 
 impl Elaborator<'_> {
     // ── the recursive statement-lowering heart ─────────────────────
-    /// CONTRACT: on entry `b.cur` is open; on exit `b.cur` is open and is the
-    /// "continue point" (where control flows next). Every form upholds this.
+    // §5.2 Q-WEXTPOS fix S, THE RULE OF ENTRY (`wext.rs`, module head): three names for
+    // one lowering. Only `lower_parsed` records a statement's interval, and it is called
+    // only on a child of the parsed statement or body its caller was handed ; the plain
+    // entry `lower_stmt` lowers under THE MASK (a statement vita built: nothing inside it
+    // records until a callee's own parsed body is entered) ; `lower_shell` lowers one
+    // built node unrecorded and unmasked, its statement children (all parsed) recording
+    // themselves — called once, by `lower_proc_block` for the `always @(.. iff ..)` desugar.
+    // A call nobody classed is the plain entry: a forgotten class loses a position, it
+    // never invents one (`wext_home.rs` R1-R4 hold who may call which).
+
+    /// A PARSED statement (a child of what the caller was handed): lowered and its own
+    /// interval recorded. CONTRACT: on entry `b.cur` is open; on exit `b.cur` is open and
+    /// is the "continue point" (where control flows next). Every form upholds this.
+    pub(crate) fn lower_parsed(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        self.lower_stmt_entry(b, s, true);
+    }
+
+    /// A statement vita BUILT: lowered under THE MASK (`wext_unlocated`), so neither it nor
+    /// anything inside it records an interval (a callee's own parsed body, entered through
+    /// `wext_located` or a body root, records again). Its stores read the parsed statement
+    /// around it, or the floor's none. The contract of `lower_parsed`.
     pub(crate) fn lower_stmt(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        self.wext_unlocated(|e| e.lower_stmt_entry(b, s, false));
+    }
+
+    /// The one built node whose children are all parsed (`desugar_event_iff`'s `if (guard)
+    /// <body>`): lowered with no interval of its own and no mask, so each parsed child
+    /// records itself. The contract of `lower_parsed`.
+    pub(crate) fn lower_shell(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        self.lower_stmt_entry(b, s, false);
+    }
+
+    /// The one implementation of the three entries above ; `record` is `lower_parsed`'s.
+    fn lower_stmt_entry(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt, record: bool) {
         // §4.5.249: anchor every diagnostic raised while lowering this statement (and
         // any expression inside it) to the statement's own source position. Restored on
         // the way out, so the enclosing construct keeps its own anchor.
@@ -35,7 +66,9 @@ impl Elaborator<'_> {
             self.cur_defer = saved_defer;
         }
         self.cur_span = saved_span;
-        self.record_stmt_at(s.span(), wext_start);
+        if record {
+            self.record_stmt_at(s.span(), wext_start);
+        }
     }
 
     fn lower_stmt_inner(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
@@ -652,7 +685,7 @@ impl Elaborator<'_> {
                             s.emit_per_entry_block_inits(b, decls, span_lo);
                         }
                         for st in stmts {
-                            s.lower_stmt(b, st);
+                            s.lower_parsed(b, st);
                         }
                     });
                 } else {
@@ -662,7 +695,7 @@ impl Elaborator<'_> {
                         self.emit_per_entry_block_inits(b, decls, span_lo);
                     }
                     for st in stmts {
-                        self.lower_stmt(b, st);
+                        self.lower_parsed(b, st);
                     }
                 }
                 if pushed_scope {
@@ -775,10 +808,10 @@ impl Elaborator<'_> {
                 // ENG-2: the pass / fail arms are action blocks (`read_set.rs`).
                 self.with_read_mark(read_set::MARK_ACTION, |s| {
                     b.start_block(then_bb);
-                    s.lower_stmt(b, then_s);
+                    s.lower_parsed(b, then_s);
                     b.goto(merge);
                     b.start_block(else_bb);
-                    s.lower_stmt(b, else_s);
+                    s.lower_parsed(b, else_s);
                 });
                 self.record_via(wext::Via::DeferAction, via0);
                 b.goto(merge);
@@ -812,7 +845,7 @@ impl Elaborator<'_> {
                 });
                 b.start_block(resume);
                 if let Some(body) = body {
-                    self.lower_stmt(b, body);
+                    self.lower_parsed(b, body);
                 }
             }
 
@@ -827,49 +860,15 @@ impl Elaborator<'_> {
                 // (cond)` desugar in `desugar_event_iff`, which is correct there because
                 // the always re-arms on every edge.) A multi-term `iff` already louded in
                 // `event_iff_guard` (returns None → falls through, elaboration fails).
+                // §5.2 Q-WEXTPOS fix S: the wait loop is a statement vita builds, lowered
+                // by `lower_event_iff_wait` under THE MASK ; the parsed body is this
+                // statement's child, lowered after it by `lower_parsed` (the same IR in the
+                // same order as the one built `Block [wait, while, body]` before: `wext.rs`).
                 if let Some(guard) = self.event_iff_guard(ctrl) {
-                    let gspan = guard.span;
-                    let stripped = match ctrl {
-                        ast::Sensitivity::List(terms) => {
-                            ast::Sensitivity::List(vec![ast::EventExpr {
-                                iff: None,
-                                ..terms[0].clone()
-                            }])
-                        }
-                        other => other.clone(),
-                    };
-                    let wait = ast::Stmt::EventCtrl {
-                        ctrl: stripped,
-                        body: None,
-                        span: gspan,
-                    };
-                    let not_guard = ast::Expr {
-                        kind: ast::ExprKind::Unary {
-                            op: ast::UnOp::LogNot,
-                            operand: Box::new(guard),
-                        },
-                        span: gspan,
-                    };
-                    let mut stmts = vec![
-                        wait.clone(),
-                        ast::Stmt::While {
-                            cond: not_guard,
-                            body: Box::new(wait),
-                            span: gspan,
-                        },
-                    ];
+                    self.lower_event_iff_wait(b, ctrl, guard);
                     if let Some(body) = body {
-                        stmts.push((**body).clone());
+                        self.lower_parsed(b, body);
                     }
-                    self.lower_stmt(
-                        b,
-                        &ast::Stmt::Block {
-                            label: None,
-                            decls: Vec::new(),
-                            stmts,
-                            span: gspan,
-                        },
-                    );
                     return;
                 }
                 // P1-4: in-body `@(*)` infers the read-set of the statement it
@@ -890,7 +889,7 @@ impl Elaborator<'_> {
                 });
                 b.start_block(resume);
                 if let Some(body) = body {
-                    self.lower_stmt(b, body);
+                    self.lower_parsed(b, body);
                 }
                 if star {
                     // ENG-2: a frame body's site (a frame task, a frame function, a class
@@ -953,7 +952,7 @@ impl Elaborator<'_> {
                 });
                 b.start_block(resume);
                 if let Some(body) = body {
-                    self.lower_stmt(b, body);
+                    self.lower_parsed(b, body);
                 }
             }
 
@@ -1104,7 +1103,7 @@ impl Elaborator<'_> {
                 self.disable_fork_floor = self.disable_stack.len();
                 for (child_entry, st) in child_entries.iter().zip(stmts.iter()) {
                     b.start_block(*child_entry);
-                    self.lower_stmt(b, st);
+                    self.lower_parsed(b, st);
                     b.goto(join_bb);
                 }
                 self.disable_fork_floor = prev_floor;

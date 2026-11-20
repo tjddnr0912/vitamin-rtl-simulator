@@ -64,6 +64,16 @@
 //! with the move written from a hand-read `line:col` (W/wextpos/fixf1/build/pins/pred), never
 //! the build's output. `wp_arr_obs_rows` pins the one run-time move, M1: `run.json`'s
 //! `kind:"port"` rows under `--obs-procs`.
+//!
+//! §5.2 Q-WEXTPOS fix S, U1 (batch 6, W/wextpos/fixs): the `wb_iff_*` pins. An in-body
+//! guarded wait `@(edge s iff g)` whose guard hoists a call wrote its snapshot with the guard
+//! EXPRESSION's position (a statement elaborate built, the wait loop, recorded itself): under
+//! the rule of entry (only `lower_parsed` records) the snapshot reads the user's `@(.. iff ..)`
+//! statement, and the body its own (`wb_iff_guard_snap`, `_task`, `_nested`, `_arms` ;
+//! `wb_iff_always_snap` pins the `always @(.. iff ..)` shell unchanged). Each expected text is the PRE dump (wext-dump-tip 920b3867) of the plan's or the
+//! premise judge's cell with the move written from a hand-read `line:col`
+//! (W/wextpos/fixs/build/pins/pred).
+
 
 use diag::{LogEvent, LogSink};
 use std::collections::BTreeMap;
@@ -2829,4 +2839,350 @@ endmodule
     .map(|&(i, s, l, c)| (i, s.to_string(), l, c))
     .collect();
     assert_eq!(rows, want, "UDP array port rows");
+}
+
+/// Fix S (agy F3, the class's third instance): an in-body `iff` guard that calls an output-formal
+/// function hoists an inout snapshot store ahead of the built wait loop. The loop is elaborate's
+/// (`lower_event_iff_wait`), lowered by the plain entry under THE MASK, so the store reads the
+/// user's `@(.. iff ..)` statement (HOLDER), `$ia_snap$7` 9:5 and the body-less wait's `$ia_snap$9`
+/// 11:5 ; PRE (and fix F1's tip) gave both the GUARD expression's span, 9:23 and 11:23. The body
+/// writes stay their own statements, `q` 10:7 and 12:5 (plan cell s1).
+#[test]
+fn wb_iff_guard_snap() {
+    let src = r#"module top;
+  logic clk = 0;
+  logic [7:0] a = 8'd1, o = 8'd0, q = 8'd0;
+  function automatic logic [7:0] f_out(input logic [7:0] x, output logic [7:0] outv);
+    outv = x + 8'd1;
+    return x;
+  endfunction
+  initial begin
+    @(posedge clk iff (o + f_out(a, o) > 8'd0))
+      q = 8'h55;
+    @(posedge clk iff (o + f_out(a, o) > 8'd0));
+    q = 8'h66;
+  end
+  initial begin #1 clk = 1; #1 clk = 0; #1 clk = 1; #1 $display("q=%h o=%h", q, o); end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=13 bits=13 geo=0 word=0 undecided=0 poison=0
+W P0:var_init@t.sv:2:15 blk s2 c0 n0:top.clk bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s3 c0 n1:top.a bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s4 c0 n2:top.o bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s5 c0 n3:top.q bits[7:0] via=direct at=-
+W P1:initial@t.sv:8:3 blk s6 c0 n7:top.$ia_snap$7 bits[7:0] via=direct at=228
+W P1:initial@t.sv:8:3 blk s7 c0 n3:top.q bits[7:0] via=direct at=278
+W P1:initial@t.sv:8:3 blk s8 c0 n9:top.$ia_snap$9 bits[7:0] via=direct at=293
+W P1:initial@t.sv:8:3 blk s9 c0 n3:top.q bits[7:0] via=direct at=342
+W P2:initial@t.sv:14:3 blk s10 c0 n0:top.clk bits[0:0] via=direct at=378
+W P2:initial@t.sv:14:3 blk s11 c0 n0:top.clk bits[0:0] via=direct at=390
+W P2:initial@t.sv:14:3 blk s12 c0 n0:top.clk bits[0:0] via=direct at=402
+W F0:func:.top.f_out blk s0 c0 n5:top.$func$f_out.outv bits[7:0] via=direct at=163
+W F0:func:.top.f_out blk s1 c0 n6:top.$func$f_out.f_out bits[7:0] via=direct at=184
+N n0:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.a Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.o Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.q Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n5:top.$func$f_out.outv Logic w=8 alen=1 dims=n decl=-
+N n6:top.$func$f_out.f_out Reg w=8 alen=1 dims=n decl=-
+N n7:top.$ia_snap$7 Reg w=8 alen=1 dims=n decl=-
+N n9:top.$ia_snap$9 Reg w=8 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("P1:initial@t.sv:8:3", "s6", "9:5", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s7", "10:7", "q = 8'h55"),
+            ("P1:initial@t.sv:8:3", "s8", "11:5", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s9", "12:5", "q = 8'h66"),
+        ],
+    );
+}
+
+/// Fix S: the same guard in a frame task (`ta`, automatic: its snapshot 9:5), in a static task
+/// inlined into its caller (`tst`, via=task: 12:5) and in a fork branch (17:5) — each the wait
+/// statement, never the guard (PRE 9:23, 12:23, 17:23) ; the bodies 9:49, 12:49, 17:49 (plan cell
+/// s3).
+#[test]
+fn wb_iff_guard_task() {
+    let src = r#"module top;
+  logic clk = 0;
+  logic [7:0] a = 8'd1, o = 8'd0, q = 8'd0, w = 8'd0;
+  function automatic logic [7:0] f_out(input logic [7:0] x, output logic [7:0] outv);
+    outv = x + 8'd1;
+    return x;
+  endfunction
+  task automatic ta;
+    @(posedge clk iff (o + f_out(a, o) > 8'd0)) q = 8'h55;
+  endtask
+  task tst;
+    @(posedge clk iff (o + f_out(a, o) > 8'd0)) w = 8'h77;
+  endtask
+  initial ta;
+  initial tst;
+  initial fork
+    @(posedge clk iff (o + f_out(a, o) > 8'd0)) a = 8'h02;
+  join
+  initial begin #1 clk = 1; #1 $display("q=%h w=%h o=%h", q, w, o); end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=14 bits=14 geo=0 word=0 undecided=0 poison=0
+W P0:var_init@t.sv:2:15 blk s4 c0 n0:top.clk bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s5 c0 n1:top.a bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s6 c0 n2:top.o bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s7 c0 n3:top.q bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s8 c0 n4:top.w bits[7:0] via=direct at=-
+W P2:initial@t.sv:15:3 blk s9 c0 n10:top.$ia_snap$10 bits[7:0] via=task at=324
+W P2:initial@t.sv:15:3 blk s10 c0 n4:top.w bits[7:0] via=task at=368
+W P3:initial@t.sv:16:3 blk s11 c0 n12:top.$ia_snap$12 bits[7:0] via=direct at=437
+W P3:initial@t.sv:16:3 blk s12 c0 n1:top.a bits[7:0] via=direct at=481
+W P4:initial@t.sv:19:3 blk s13 c0 n0:top.clk bits[0:0] via=direct at=518
+W F0:func:.top.f_out blk s0 c0 n6:top.$func$f_out.outv bits[7:0] via=direct at=173
+W F0:func:.top.f_out blk s1 c0 n7:top.$func$f_out.f_out bits[7:0] via=direct at=194
+W F1:task:.top.ta blk s2 c0 n8:top.$func$ta.$ia_snap$8 bits[7:0] via=direct at=243
+W F1:task:.top.ta blk s3 c0 n3:top.q bits[7:0] via=direct at=287
+N n0:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.a Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.o Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.q Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.w Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n6:top.$func$f_out.outv Logic w=8 alen=1 dims=n decl=-
+N n7:top.$func$f_out.f_out Reg w=8 alen=1 dims=n decl=-
+N n8:top.$func$ta.$ia_snap$8 Reg w=8 alen=1 dims=n decl=-
+N n10:top.$ia_snap$10 Reg w=8 alen=1 dims=n decl=-
+N n12:top.$ia_snap$12 Reg w=8 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("F1:task:.top.ta", "s2", "9:5", "@(posedge clk iff"),
+            ("F1:task:.top.ta", "s3", "9:49", "q = 8'h55"),
+            ("P2:initial@t.sv:15:3", "s9", "12:5", "@(posedge clk iff"),
+            ("P2:initial@t.sv:15:3", "s10", "12:49", "w = 8'h77"),
+            ("P3:initial@t.sv:16:3", "s11", "17:5", "@(posedge clk iff"),
+            ("P3:initial@t.sv:16:3", "s12", "17:49", "a = 8'h02"),
+        ],
+    );
+}
+
+/// Fix S: the `always @(.. iff ..)` twin (plan cell s4). Its desugar builds `if (guard) <body>`
+/// around the parsed body and `lower_proc_block` lowers that one node with `lower_shell` (no
+/// interval of its own, no mask): the guard's snapshot store reads ` at=-` (no parsed statement
+/// holds it) and the parsed body rows keep their own, 8:38, 8:53, 9:59 — the guard against lowering
+/// the shell under the mask (mutant s4). Values as PRE.
+#[test]
+fn wb_iff_always_snap() {
+    let src = r#"module top;
+  logic clk = 0, en = 1;
+  logic [7:0] a = 8'd1, o2 = 0, q = 0, r = 0;
+  function automatic logic [7:0] f_out(input logic [7:0] x, output logic [7:0] outv);
+    outv = x + 8'd1;
+    return x;
+  endfunction
+  always @(posedge clk iff en) begin q <= q + 8'd1; r = q; end
+  always_ff @(posedge clk iff (o2 + f_out(a, o2) > 8'd0)) a <= a + 8'd1;
+  initial begin #1 clk = 1; #1 $display("q=%h r=%h", q, r); end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=13 bits=13 geo=0 word=0 undecided=0 poison=0
+W P0:var_init@t.sv:2:15 blk s2 c0 n0:top.clk bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s3 c0 n1:top.en bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s4 c0 n2:top.a bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s5 c0 n3:top.o2 bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s6 c0 n4:top.q bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s7 c0 n5:top.r bits[7:0] via=direct at=-
+W P1:always@t.sv:8:3 nba s8 c0 n4:top.q bits[7:0] via=direct at=255
+W P1:always@t.sv:8:3 blk s9 c0 n5:top.r bits[7:0] via=direct at=270
+W P2:always_ff@t.sv:9:3 blk s10 c0 n9:top.$ia_snap$9 bits[7:0] via=direct at=-
+W P2:always_ff@t.sv:9:3 nba s11 c0 n2:top.a bits[7:0] via=direct at=339
+W P3:initial@t.sv:10:3 blk s12 c0 n0:top.clk bits[0:0] via=direct at=373
+W F0:func:.top.f_out blk s0 c0 n7:top.$func$f_out.outv bits[7:0] via=direct at=173
+W F0:func:.top.f_out blk s1 c0 n8:top.$func$f_out.f_out bits[7:0] via=direct at=194
+N n0:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.en Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.a Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.o2 Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.q Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n5:top.r Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n7:top.$func$f_out.outv Logic w=8 alen=1 dims=n decl=-
+N n8:top.$func$f_out.f_out Reg w=8 alen=1 dims=n decl=-
+N n9:top.$ia_snap$9 Reg w=8 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("P1:always@t.sv:8:3", "s8", "8:38", "q <= q"),
+            ("P1:always@t.sv:8:3", "s9", "8:53", "r = q"),
+            ("P2:always_ff@t.sv:9:3", "s11", "9:59", "a <= a"),
+        ],
+    );
+}
+
+/// Fix S (premise judge L4, cell k09): the body of an `iff` wait that is itself an `iff` wait —
+/// `lower_parsed(body)` after the masked loop lowers the inner wait, whose own loop's snapshot
+/// reads the inner statement: 9:5 and 10:7 (PRE 9:23, 10:25) ; the innermost body `q` 11:9.
+#[test]
+fn wb_iff_nested() {
+    let src = r#"module top;
+  logic clk = 0;
+  logic [7:0] a = 8'd1, o = 8'd0, q = 8'd0;
+  function automatic logic [7:0] f_out(input logic [7:0] x, output logic [7:0] outv);
+    outv = x + 8'd1;
+    return x;
+  endfunction
+  initial begin
+    @(posedge clk iff (o + f_out(a, o) > 8'd0))
+      @(negedge clk iff (o + f_out(a, o) > 8'd1))
+        q = 8'h77;
+  end
+  initial begin
+    #1 clk = 1; #1 clk = 0; #1 clk = 1; #1 clk = 0;
+    #1 $display("q=%h o=%h", q, o);
+    $finish;
+  end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=13 bits=13 geo=0 word=0 undecided=0 poison=0
+W P0:var_init@t.sv:2:15 blk s2 c0 n0:top.clk bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s3 c0 n1:top.a bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s4 c0 n2:top.o bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s5 c0 n3:top.q bits[7:0] via=direct at=-
+W P1:initial@t.sv:8:3 blk s6 c0 n7:top.$ia_snap$7 bits[7:0] via=direct at=228
+W P1:initial@t.sv:8:3 blk s7 c0 n9:top.$ia_snap$9 bits[7:0] via=direct at=278
+W P1:initial@t.sv:8:3 blk s8 c0 n3:top.q bits[7:0] via=direct at=330
+W P2:initial@t.sv:13:3 blk s9 c0 n0:top.clk bits[0:0] via=direct at=370
+W P2:initial@t.sv:13:3 blk s10 c0 n0:top.clk bits[0:0] via=direct at=382
+W P2:initial@t.sv:13:3 blk s11 c0 n0:top.clk bits[0:0] via=direct at=394
+W P2:initial@t.sv:13:3 blk s12 c0 n0:top.clk bits[0:0] via=direct at=406
+W F0:func:.top.f_out blk s0 c0 n5:top.$func$f_out.outv bits[7:0] via=direct at=163
+W F0:func:.top.f_out blk s1 c0 n6:top.$func$f_out.f_out bits[7:0] via=direct at=184
+N n0:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.a Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.o Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.q Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n5:top.$func$f_out.outv Logic w=8 alen=1 dims=n decl=-
+N n6:top.$func$f_out.f_out Reg w=8 alen=1 dims=n decl=-
+N n7:top.$ia_snap$7 Reg w=8 alen=1 dims=n decl=-
+N n9:top.$ia_snap$9 Reg w=8 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("P1:initial@t.sv:8:3", "s6", "9:5", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s7", "10:7", "@(negedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s8", "11:9", "q = 8'h77"),
+        ],
+    );
+}
+
+/// Fix S (premise judge L4, cell k14): guarded waits as an `if` arm (9:20), a `case` arm (11:13), a
+/// `do .. while` body lowered twice (two snapshots, both 14:8 — one parsed statement, FROM) and a
+/// `while` body (15:22) ; PRE gave each the guard's span (9:38, 11:31, 14:26 twice, 15:40). The
+/// bodies keep their own.
+#[test]
+fn wb_iff_arms() {
+    let src = r#"module top;
+  logic clk = 0;
+  logic [7:0] a = 8'd1, o = 8'd0, q = 8'd0, k = 8'd1;
+  function automatic logic [7:0] f_out(input logic [7:0] x, output logic [7:0] outv);
+    outv = x + 8'd1;
+    return x;
+  endfunction
+  initial begin
+    if (k == 8'd1) @(posedge clk iff (o + f_out(a, o) > 8'd0)) q = q + 8'd1;
+    case (k)
+      8'd1: @(posedge clk iff (o + f_out(a, o) > 8'd0)) q = q + 8'd2;
+      default: ;
+    endcase
+    do @(posedge clk iff (o + f_out(a, o) > 8'd0)) q = q + 8'd4; while (q < 8'd7);
+    while (q < 8'd9) @(posedge clk iff (o + f_out(a, o) > 8'd0)) q = q + 8'd1;
+  end
+  initial begin
+    repeat (8) begin #1 clk = 1; #1 clk = 0; end
+    #1 $display("q=%h o=%h", q, o);
+    $finish;
+  end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=34 bits=34 geo=0 word=0 undecided=0 poison=0
+W P0:var_init@t.sv:2:15 blk s2 c0 n0:top.clk bits[0:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s3 c0 n1:top.a bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s4 c0 n2:top.o bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s5 c0 n3:top.q bits[7:0] via=direct at=-
+W P0:var_init@t.sv:2:15 blk s6 c0 n4:top.k bits[7:0] via=direct at=-
+W P1:initial@t.sv:8:3 blk s9 c0 n10:top.$ia_tmp$10 bits[7:0] via=direct at=315
+W P1:initial@t.sv:8:3 blk s7 c0 n8:top.$ia_snap$8 bits[7:0] via=direct at=253
+W P1:initial@t.sv:8:3 blk s8 c0 n3:top.q bits[7:0] via=direct at=297
+W P1:initial@t.sv:8:3 blk s10 c0 n11:top.$ia_snap$11 bits[7:0] via=direct at=336
+W P1:initial@t.sv:8:3 blk s11 c0 n3:top.q bits[7:0] via=direct at=380
+W P1:initial@t.sv:8:3 blk s12 c0 n13:top.$ia_snap$13 bits[7:0] via=direct at=430
+W P1:initial@t.sv:8:3 blk s13 c0 n3:top.q bits[7:0] via=direct at=474
+W P1:initial@t.sv:8:3 blk s14 c0 n15:top.$ia_snap$15 bits[7:0] via=direct at=430
+W P1:initial@t.sv:8:3 blk s15 c0 n3:top.q bits[7:0] via=direct at=474
+W P1:initial@t.sv:8:3 blk s16 c0 n17:top.$ia_snap$17 bits[7:0] via=direct at=527
+W P1:initial@t.sv:8:3 blk s17 c0 n3:top.q bits[7:0] via=direct at=571
+W P2:initial@t.sv:17:3 blk s18 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s19 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s20 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s21 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s22 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s23 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s24 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s25 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s26 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s27 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s28 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s29 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s30 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s31 c0 n0:top.clk bits[0:0] via=direct at=643
+W P2:initial@t.sv:17:3 blk s32 c0 n0:top.clk bits[0:0] via=direct at=631
+W P2:initial@t.sv:17:3 blk s33 c0 n0:top.clk bits[0:0] via=direct at=643
+W F0:func:.top.f_out blk s0 c0 n6:top.$func$f_out.outv bits[7:0] via=direct at=173
+W F0:func:.top.f_out blk s1 c0 n7:top.$func$f_out.f_out bits[7:0] via=direct at=194
+N n0:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.a Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.o Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.q Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.k Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n6:top.$func$f_out.outv Logic w=8 alen=1 dims=n decl=-
+N n7:top.$func$f_out.f_out Reg w=8 alen=1 dims=n decl=-
+N n8:top.$ia_snap$8 Reg w=8 alen=1 dims=n decl=-
+N n10:top.$ia_tmp$10 Reg w=8 alen=1 dims=n decl=-
+N n11:top.$ia_snap$11 Reg w=8 alen=1 dims=n decl=-
+N n13:top.$ia_snap$13 Reg w=8 alen=1 dims=n decl=-
+N n15:top.$ia_snap$15 Reg w=8 alen=1 dims=n decl=-
+N n17:top.$ia_snap$17 Reg w=8 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("P1:initial@t.sv:8:3", "s7", "9:20", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s8", "9:64", "q = q"),
+            ("P1:initial@t.sv:8:3", "s10", "11:13", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s12", "14:8", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s13", "14:52", "q = q"),
+            ("P1:initial@t.sv:8:3", "s14", "14:8", "@(posedge clk iff"),
+            ("P1:initial@t.sv:8:3", "s16", "15:22", "@(posedge clk iff"),
+        ],
+    );
 }

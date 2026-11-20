@@ -152,13 +152,13 @@ impl Elaborator<'_> {
         dead: bool,
     ) {
         if !dead {
-            self.lower_stmt(b, s);
+            self.lower_parsed(b, s);
             return;
         }
         let first_new = b.body.len();
         let mark = self.dead_selects.len();
         self.dead_arm_depth += 1;
-        self.lower_stmt(b, s);
+        self.lower_parsed(b, s);
         self.dead_arm_depth -= 1;
         self.settle_dead_arm(b, entry, first_new, mark);
     }

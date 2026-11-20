@@ -336,7 +336,7 @@ impl Elaborator<'_> {
                     s.emit_discarded_call(&mut b, call);
                 }
             }
-            s.lower_stmt(&mut b, &body);
+            s.lower_parsed(&mut b, &body);
             b.goto(exit);
             b.start_block(exit);
             let out = b.finish();

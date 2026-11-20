@@ -85,7 +85,7 @@ impl Elaborator<'_> {
             span,
         };
         for _ in 0..waits {
-            self.wext_unlocated(|s| s.lower_stmt(b, &evt));
+            self.lower_stmt(b, &evt);
         }
         // Write the captured value (lvalue index evaluated here, at write time).
         let tmp_read = self.push_expr(ir::Expr::Signal {
@@ -223,7 +223,7 @@ impl Elaborator<'_> {
             span,
         };
         for _ in 0..waits {
-            self.wext_unlocated(|s| s.lower_stmt(b, &evt));
+            self.lower_stmt(b, &evt);
         }
         let tmp_read = self.push_expr(ir::Expr::Signal {
             net: tmp,
@@ -306,6 +306,59 @@ impl Elaborator<'_> {
             return None;
         }
         terms[0].iff.clone()
+    }
+
+    /// G7: the in-body guarded wait `@(edge sig iff g)` as the loop `@(edge sig); while (!g)
+    /// @(edge sig);` (IEEE §9.4.2.3: the wait ends at an occurrence AT WHICH `g` is true),
+    /// built here and lowered by the plain entry, under THE MASK (§5.2 Q-WEXTPOS fix S,
+    /// `wext.rs`): a statement vita builds records no interval, so a store the guard's
+    /// lowering pushes (a hoisted call's snapshot) reads the user's `@(.. iff ..)` statement
+    /// around it. The built nodes keep the guard's span: a diagnostic raised inside the
+    /// guard is anchored there (`cur_span`). The controlled statement is not part of this
+    /// loop: the `EventCtrl` arm lowers it after, as a parsed child (`lower_parsed`).
+    pub(crate) fn lower_event_iff_wait(
+        &mut self,
+        b: &mut ProcessBuilder,
+        ctrl: &ast::Sensitivity,
+        guard: ast::Expr,
+    ) {
+        let gspan = guard.span;
+        let stripped = match ctrl {
+            ast::Sensitivity::List(terms) => ast::Sensitivity::List(vec![ast::EventExpr {
+                iff: None,
+                ..terms[0].clone()
+            }]),
+            other => other.clone(),
+        };
+        let wait = ast::Stmt::EventCtrl {
+            ctrl: stripped,
+            body: None,
+            span: gspan,
+        };
+        let not_guard = ast::Expr {
+            kind: ast::ExprKind::Unary {
+                op: ast::UnOp::LogNot,
+                operand: Box::new(guard),
+            },
+            span: gspan,
+        };
+        let stmts = vec![
+            wait.clone(),
+            ast::Stmt::While {
+                cond: not_guard,
+                body: Box::new(wait),
+                span: gspan,
+            },
+        ];
+        self.lower_stmt(
+            b,
+            &ast::Stmt::Block {
+                label: None,
+                decls: Vec::new(),
+                stmts,
+                span: gspan,
+            },
+        );
     }
 
     /// G7: rewrite `always @(edge sig iff g) S` to `always @(edge sig) if (g) S` — the

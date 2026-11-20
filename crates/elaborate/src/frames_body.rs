@@ -756,7 +756,7 @@ impl Elaborator<'_> {
                     };
                     let saved = self.lowering_decl_init;
                     self.lowering_decl_init = true;
-                    self.wext_unlocated(|s| s.lower_stmt(b, &pre));
+                    self.lower_stmt(b, &pre);
                     self.lowering_decl_init = saved;
                 }
                 let Some(init) = &decl.init else { continue };
@@ -798,7 +798,7 @@ impl Elaborator<'_> {
                 let user_alloc = matches!(init.kind, ast::ExprKind::New { .. });
                 let saved = self.lowering_decl_init;
                 self.lowering_decl_init = !user_alloc;
-                self.wext_unlocated(|s| s.lower_stmt(b, &stmt));
+                self.lower_stmt(b, &stmt);
                 self.lowering_decl_init = saved;
             }
         }
@@ -852,7 +852,7 @@ impl Elaborator<'_> {
                                 args: vec![],
                                 span: decl.span,
                             };
-                            self.wext_unlocated(|s| s.lower_stmt(b, &clear));
+                            self.lower_stmt(b, &clear);
                         }
                         // R16 §3.3: a FIXED string array is dyn-BACKED, so its re-init
                         // runs through this same expansion and its `d = new[N]` is the
@@ -863,7 +863,7 @@ impl Elaborator<'_> {
                         let saved = self.lowering_decl_init;
                         self.lowering_decl_init = true;
                         for st in &stmts {
-                            self.wext_unlocated(|s| s.lower_stmt(b, st));
+                            self.lower_stmt(b, st);
                         }
                         self.lowering_decl_init = saved;
                         continue;
@@ -879,7 +879,7 @@ impl Elaborator<'_> {
                     rhs: init.clone(),
                     span: decl.span,
                 };
-                self.wext_unlocated(|s| s.lower_stmt(b, &stmt));
+                self.lower_stmt(b, &stmt);
             }
         }
     }
@@ -894,7 +894,7 @@ impl Elaborator<'_> {
         // §5.2 Q-WEXTPOS C3: the body's own text is located again under a mask (`wext.rs`).
         self.wext_located(|s| {
             if !self_disable {
-                s.lower_stmt(b, body);
+                s.lower_parsed(b, body);
                 return;
             }
             // A `disable <name>` (and every normal exit) jumps to this block, which
@@ -902,7 +902,7 @@ impl Elaborator<'_> {
             // step 6.5 (no fork/process context), so the name is visible to the lookup.
             let exit = b.new_block();
             s.disable_stack.push((name.to_string(), exit));
-            s.lower_stmt(b, body);
+            s.lower_parsed(b, body);
             b.goto(exit);
             b.start_block(exit);
             s.disable_stack.pop();

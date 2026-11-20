@@ -366,7 +366,7 @@ impl Elaborator<'_> {
                 span: decl.span,
             };
             let saved = std::mem::replace(&mut self.lowering_decl_init, true);
-            self.wext_unlocated(|s| s.lower_stmt(b, &stmt));
+            self.lower_stmt(b, &stmt);
             self.lowering_decl_init = saved;
             // The identity `emit_frame_local_inits` tests. Recorded HERE, at the one place
             // an initializer is actually lowered once-only, so the two emitters partition

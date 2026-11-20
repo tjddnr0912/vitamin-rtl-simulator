@@ -860,12 +860,12 @@ impl Elaborator<'_> {
                 let saved_ret = s.cur_return.take();
                 let exit = b.new_block();
                 s.cur_return = Some((None, exit));
-                s.lower_stmt(b, body);
+                s.lower_parsed(b, body);
                 b.goto(exit);
                 b.start_block(exit);
                 s.cur_return = saved_ret;
             } else {
-                s.lower_stmt(b, body);
+                s.lower_parsed(b, body);
             }
         });
     }

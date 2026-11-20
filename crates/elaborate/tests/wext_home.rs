@@ -40,18 +40,38 @@
 //!   store `. wext_rec` inside wext.rs's writers and `build_write_view` only. §5.2
 //!   Q-WEXTPOS C2: `record_row_at (` once, in `push_cont_assign` (each continuous row's
 //!   own position, pushed beside the row). §5.2 Q-WEXTPOS C3: `record_stmt_at (` once, in
-//!   `lower_stmt`, keyed by its first argument as spelled (`s . span ( )`, the fn's own
-//!   parameter) ; the mask `wext_unlocated (`, the body roots `wext_body_enter (` /
+//!   `lower_stmt_entry` (fix S: for `lower_parsed` only), keyed by its first argument as
+//!   spelled (`s . span ( )`, the fn's own parameter) ; the mask `wext_unlocated (` (fix S:
+//!   in the plain entry `lower_stmt` and `lower_synth_proc` only), the body roots `wext_body_enter (` /
 //!   `wext_body_enter_keep (` / `wext_body_exit (` (enters and exits equal per (file, fn))
 //!   and the callee entries `wext_located (`, per (file, fn) ; no `cur_span` token in
 //!   wext.rs. Fix F1 (V): each body root keyed by its first argument as spelled, the span of
 //!   the ITEM its body belongs to (`p . span`, `func . span`, `task . span`, the method's
 //!   `item`), never the body's (premise judge L8).
-//! - H14 (§5.2 Q-WEXTPOS C3) every `lower_stmt (` call, any receiver, per (file, fn), as
-//!   `bare` or `masked` (inside a `wext_unlocated (` argument group), with its class
-//!   written by hand: R (a parsed statement) is bare, S (one vita built) masked ; PLAN B7's
-//!   27 R + 1 MIXED (R) + 19 S. And the process root `lower_proc_block` keeps the mask
+//! - H14 (§5.2 Q-WEXTPOS C3 ; fix S) every call of the three statement entries, any
+//!   receiver, per (file, fn) — `lower_parsed` 28, `lower_stmt` 20, `lower_shell` 1, none
+//!   inside a `wext_unlocated (` group (a `:masked` key) — a drift table: which call may be
+//!   which is R1-R3. And the process root `lower_proc_block` keeps the mask
 //!   (`wext_body_enter_keep`), never zeroes it (premise judge round 1, line 1 and P-1).
+//! - R1-R3 (§5.2 Q-WEXTPOS fix S, THE RULE OF ENTRY ; `wext.rs` C3) over sets computed per
+//!   fn from tokens, by name, no hand class: BUILDER holds an `ast::Stmt` construction whose
+//!   span is not spelled `*span` ; REWRITER holds constructions all spelled `*span` ;
+//!   EXPORTER a builder or rewriter whose signature names `Stmt` / `ProceduralBlock` after
+//!   `->` or in a `& mut` parameter, or whose `& mut` parameter is a crate struct with such a
+//!   field (premise judge L2) ; REC a fn holding a call of `REC_CALLS` outside a mask group,
+//!   closed under "its parameter list names a statement-bearing type (`SB_PARAM`) and it
+//!   names a REC fn" (L1). R1: no BUILDER is REC or names a REC fn. R2: a REC fn names an
+//!   EXPORTER only if it is a REWRITER, or the REC fn holds `lower_shell (` and the
+//!   exporter's constructions hold no nested statement construction. R3: one `lower_shell (`,
+//!   in `lower_proc_block` ; a REWRITER holds no lowering call ; `record_stmt_at (` once is
+//!   H7's. REC (31) and EXPORTER (19) are drift lists ; 11 planted controls (c1-c11).
+//! - R4 (fix S, L3) no construction of a `FunctionDef`, `TaskDef`, `ModuleDecl`,
+//!   `ModuleItem`, `ClassItem` or `GenItem` in this crate, and a `ProceduralBlock` only in a
+//!   fn that calls `lower_synth_proc (` / `lower_synth_proc_inline (` or as
+//!   `desugar_event_iff`'s one shell (15).
+//! - H15f (fix S, L3) every struct field, tuple field, enum payload and type alias naming a
+//!   statement-bearing AST type (`SB_FIELD`): 24, 17 owned and 7 references, each with who
+//!   fills it.
 //! - H13 (§5.2 Q-WEXTPOS C2) the `at` argument of every `push_cont_assign (` /
 //!   `push_cont_assign_port (` call (its last argument), as spelled inline, per (file, fn):
 //!   an `assign` row passes its own target `Some ( lv . span ( ) )`, a port row the
@@ -68,8 +88,9 @@
 //!   alias read per file and fn, a glob's bare variant), `PortConn {`, `ConnSite {`,
 //!   `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (` — not a pattern (H5's
 //!   discriminator, climbing out of a tuple or a slice of patterns), keyed by its `span`
-//!   field as spelled, with a hand-written class (OWN / FROM / MASKED / NOSTORE / V / NONE).
-//!   A new construction, or a spelling that moves, fails: say whose text the span is.
+//!   field as spelled, with a class: a `Stmt` row's read off its spelling (fix S: REWRITE for
+//!   `*span`, BUILT otherwise), a connection row's hand-written (OWN / FROM / NONE). A new
+//!   construction, or a spelling that moves, fails: say whose text the span is.
 //! - H15v (fix F1) the connection-span assertion: `check_conn_spans (` once, in
 //!   `wire_ports`, and `conn_span_violations (` once, in it (P5's (i) two ports of one
 //!   instance on one connection span, (ii) a connection at its instance item's span).
@@ -99,6 +120,22 @@
 //! `via` interval brackets exactly the call's statements (the pins), and that
 //! `GeomAcc` matches `flatten_word`'s arithmetic (sim-engine's
 //! `geometry_constant_is_what_the_stores_write`).
+//!
+//! WHAT R1-R4 CANNOT SEE (fix S ; each a judge target, none with an instance today): a built
+//! statement stored in a field and lowered later by a REC fn — the 24 fields H15f lists
+//! (the routine tables `func_table` / `task_table` / `const_func_table` / `pkg_funcs` /
+//! `pkg_tasks`, `ifaces`, `ClassMethod`'s, `RoutineScope`'s and `StaticScopedCarry`'s
+//! tables, `ModuleFacts.body_write_funcs` are filled by parsed clones ; `PendingSva.pass` /
+//! `fail` and `SvaRegs.nbas` go to a synthesized body, masked ; the 7 references read) —
+//! a new one fails H15f, not R1-R3 ; a built statement handed on by a fn with no
+//! statement-bearing parameter (two hops up: R2 reads a REC fn's own names) ; a fn NAME
+//! shared by two fns, or a local of a REC fn's name (the graph is by name: it over-reports
+//! and fails, the safe side — a planted `c1` collided with a local of `synth_crossclock`) ;
+//! an exporter whose return type hides the node (a type alias, a tuple struct, `impl
+//! Trait`) ; a statement or definition built by `Default`, `mem::take`, serde, a variant
+//! used as a fn value (`.map(ast::GenItem::Item)`) or by MUTATING a clone (`x.span = ..`) ;
+//! a macro (0 `macro_rules!`) ; that a `lower_parsed` argument is a child of what its fn was
+//! handed (read at all 28, not a token rule) ; VALUES (only the pins see an `at`).
 //!
 //! REVIEW-ONLY (no token shape here sees it): an array reached through a local bound to
 //! it before (`let s = &mut self.stmts;` IS seen ; `let e = self; e.stmts.push(..)` is seen
@@ -583,6 +620,21 @@ fn hits(src: &str) -> Vec<(String, String)> {
             };
             out.push((format!("H15:{kind}:{}", span_field(&t, open)), k.clone()));
         }
+        // R4 (fix S, premise judge L3): a construction of a routine, item or body definition
+        if let Some(kind) = def_ctor_at(&t, i) {
+            out.push((format!("R4:{kind}"), k.clone()));
+        }
+        // H15f (fix S, L3): a struct field, a tuple field, an enum payload or a type alias
+        // whose type names a statement-bearing AST type
+        if id
+            && matches!(tx(i), "struct" | "enum" | "union" | "type")
+            && t.get(i + 1).is_some_and(|x| x.kind == Kind::Id)
+            && (i == 0 || tx(i - 1) != ".")
+        {
+            for (field, ty) in field_rows(&t, i) {
+                out.push((format!("H15f:{}{field}:{ty}", tx(i + 1)), k.clone()));
+            }
+        }
         // H1 / H1b `. <arr> . <verb> (`
         if tx(i) == "." && ARR.contains(&tx(i + 1)) && tx(i + 2) == "." && tx(i + 4) == "(" {
             let verb = tx(i + 3);
@@ -730,11 +782,16 @@ fn hits(src: &str) -> Vec<(String, String)> {
                     format!("H7:record_stmt_at:{}", first_arg(&t, i + 1)),
                     k.clone(),
                 )),
-                // H14 (C3): every `lower_stmt (` call, any receiver, inside the mask or not
-                "lower_stmt" => {
+                // H14 (C3 ; fix S): every call of the three statement entries, any receiver,
+                // keyed `:masked` when it sits inside a `wext_unlocated (` argument group
+                "lower_parsed" | "lower_stmt" | "lower_shell" => {
                     let masked = masks.iter().any(|&(a, b)| a < i && i < b);
-                    let m = if masked { "masked" } else { "bare" };
-                    out.push((format!("H14:lower_stmt:{m}"), k.clone()))
+                    let m = if masked { ":masked" } else { "" };
+                    out.push((format!("H14:{}{m}", tx(i)), k.clone()))
+                }
+                // R4 (fix S): the synthesized-body entries a built `ProceduralBlock` is handed to
+                "lower_synth_proc" | "lower_synth_proc_inline" => {
+                    out.push((format!("R4s:{}", tx(i)), k.clone()))
                 }
                 "record_decl_fact" => out.push(("H8:record_decl_fact".into(), k.clone())),
                 "record_via" => out.push(("H9:record_via".into(), k.clone())),
@@ -1036,6 +1093,552 @@ fn span_field(t: &[Tok], open: usize) -> String {
     rest.unwrap_or_else(|| "-".to_string())
 }
 
+/// R1 (fix S, premise judge L1): a parameter naming one of these AST types hands its fn a
+/// statement, or a definition or item that holds statements.
+const SB_PARAM: [&str; 10] = [
+    "Stmt",
+    "CaseItem",
+    "FunctionDef",
+    "TaskDef",
+    "ProceduralBlock",
+    "ModuleItem",
+    "ModuleDecl",
+    "GenItem",
+    "ClassMethod",
+    "RoutineView",
+];
+/// H15f (fix S, L3): the statement-bearing AST types a field can hold (the premise judge's
+/// field census list, `jfields.py`, without its seven statement-free SVA / cover types).
+const SB_FIELD: [&str; 15] = [
+    "Stmt",
+    "ProceduralBlock",
+    "FunctionDef",
+    "TaskDef",
+    "CaseItem",
+    "ClassDecl",
+    "ClassItem",
+    "ModuleDecl",
+    "ModuleItem",
+    "GenItem",
+    "GenerateConstruct",
+    "SourceUnit",
+    "TopItem",
+    "PackageDecl",
+    "InterfaceDecl",
+];
+/// R4 (fix S, L3): the definitions and items elaborate never builds — structs built
+/// `<T> {`, enums built `<T> :: <V> (` / `{` — `ProceduralBlock` only at its listed sites.
+const R4_STRUCTS: [&str; 4] = ["FunctionDef", "TaskDef", "ModuleDecl", "ProceduralBlock"];
+const R4_ENUMS: [&str; 3] = ["ModuleItem", "ClassItem", "GenItem"];
+/// R2 / R3 (fix S): the base recording calls (a fn holding one outside a `wext_unlocated (`
+/// group records, or lowers a body that records) — `lower_stmt_entry` is the three
+/// entries' one implementation (`stmt_main.rs`), `lower_proc_block` the process root.
+const REC_CALLS: [&str; 6] = [
+    "lower_parsed",
+    "lower_shell",
+    "lower_stmt_entry",
+    "lower_stmt_inner",
+    "lower_proc_block",
+    "lower_user_proc",
+];
+/// R3 (fix S): every statement-lowering entry a REWRITER must not hold (the REC set too).
+const LOWERING: [&str; 8] = [
+    "lower_stmt",
+    "lower_parsed",
+    "lower_shell",
+    "lower_stmt_entry",
+    "lower_stmt_inner",
+    "lower_proc_block",
+    "lower_synth_proc",
+    "lower_synth_proc_inline",
+];
+
+/// The AST type of `set` named at token `j` (`Stmt` under an `ir` / `sim_ir` path, or after
+/// a `.`, is not one).
+fn ast_type_at<'a>(t: &'a [Tok], j: usize, set: &[&str]) -> Option<&'a str> {
+    let x = t.get(j)?;
+    if x.kind != Kind::Id || !set.contains(&x.text.as_str()) {
+        return None;
+    }
+    if j >= 1 && t[j - 1].text == "." {
+        return None;
+    }
+    if x.text == "Stmt"
+        && j >= 2
+        && t[j - 1].text == "::"
+        && matches!(t[j - 2].text.as_str(), "ir" | "sim_ir")
+    {
+        return None;
+    }
+    Some(x.text.as_str())
+}
+
+/// R4 (fix S, L3): the definition or item kind CONSTRUCTED at token `i`, when one is (a
+/// pattern, a type's own item, a return type is not).
+fn def_ctor_at(t: &[Tok], i: usize) -> Option<String> {
+    let tx = |j: usize| t.get(j).map_or("", |x| x.text.as_str());
+    if t[i].kind != Kind::Id || (i >= 1 && tx(i - 1) == ".") {
+        return None;
+    }
+    let open = if R4_STRUCTS.contains(&tx(i)) && tx(i + 1) == "{" {
+        let mut j = i;
+        while j >= 2 && tx(j - 1) == "::" && t[j - 2].kind == Kind::Id {
+            j -= 2;
+        }
+        // a reference type's head: `& 'a mut` (a closure's `-> &'a ast::ModuleDecl {`)
+        loop {
+            if j >= 1 && matches!(tx(j - 1), "&" | "mut") {
+                j -= 1;
+            } else if j >= 2 && tx(j - 2) == "'" && t[j - 1].kind == Kind::Id {
+                j -= 2;
+            } else {
+                break;
+            }
+        }
+        let ret = j >= 2 && tx(j - 1) == ">" && tx(j - 2) == "-";
+        let item = j >= 1
+            && matches!(
+                tx(j - 1),
+                "struct" | "enum" | "impl" | "for" | "trait" | "type"
+            );
+        if ret || item {
+            return None;
+        }
+        i + 1
+    } else if R4_ENUMS.contains(&tx(i))
+        && tx(i + 1) == "::"
+        && t.get(i + 2).is_some_and(|x| {
+            x.kind == Kind::Id && x.text.starts_with(|c: char| c.is_ascii_uppercase())
+        })
+        && matches!(tx(i + 3), "{" | "(")
+    {
+        i + 3
+    } else {
+        return None;
+    };
+    if ctor_is_pattern(t, open) {
+        return None;
+    }
+    Some(tx(i).to_string())
+}
+
+/// The top-level comma-separated parts of the group opened at `open`, as token ranges — a
+/// list of types or typed names: a comma inside `< .. >` (a generic argument list) is not
+/// a separator (`->`'s `>` is not a closer).
+fn parts_of(t: &[Tok], open: usize) -> Vec<(usize, usize)> {
+    let close = close_of(t, open);
+    let mut out = Vec::new();
+    let mut a = open + 1;
+    let mut j = open + 1;
+    let mut angle = 0i32;
+    while j < close {
+        if t[j].kind == Kind::P && matches!(t[j].text.as_str(), "(" | "[" | "{") {
+            j = close_of(t, j) + 1;
+            continue;
+        }
+        if t[j].text == "<" {
+            angle += 1;
+        } else if t[j].text == ">" && t[j - 1].text != "-" {
+            angle -= 1;
+        }
+        if t[j].text == "," && angle <= 0 {
+            out.push((a, j));
+            a = j + 1;
+        }
+        j += 1;
+    }
+    if a < close {
+        out.push((a, close));
+    }
+    out
+}
+
+/// The statement-bearing types (`SB_FIELD`) named in tokens `a..b`, joined by `+`.
+fn sb_types(t: &[Tok], a: usize, b: usize) -> String {
+    let mut v: Vec<&str> = Vec::new();
+    for j in a..b {
+        if let Some(n) = ast_type_at(t, j, &SB_FIELD) {
+            if !v.contains(&n) {
+                v.push(n);
+            }
+        }
+    }
+    v.join("+")
+}
+
+/// The fields of a named-field group (`{ a: T, pub(crate) b: U }`) opened at `open` that
+/// name a statement-bearing type: (`.<field>`, types).
+fn named_fields(t: &[Tok], open: usize, pre: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (a, b) in parts_of(t, open) {
+        let Some(colon) = (a..b).find(|&j| t[j].text == ":") else {
+            continue;
+        };
+        let name = (a..colon)
+            .rev()
+            .find(|&j| t[j].kind == Kind::Id)
+            .map_or("?", |j| t[j].text.as_str());
+        let ty = sb_types(t, colon + 1, b);
+        if !ty.is_empty() {
+            out.push((format!("{pre}.{name}"), ty));
+        }
+    }
+    out
+}
+
+/// The fields of a tuple group opened at `open` that name a statement-bearing type:
+/// (`.<index>`, types).
+fn tuple_fields(t: &[Tok], open: usize, pre: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (n, (a, b)) in parts_of(t, open).into_iter().enumerate() {
+        let ty = sb_types(t, a, b);
+        if !ty.is_empty() {
+            out.push((format!("{pre}.{n}"), ty));
+        }
+    }
+    out
+}
+
+/// H15f (fix S, L3): the statement-bearing fields of the `struct` / `enum` / `type` item
+/// whose keyword is at token `i` — (`.<field>` / `.<index>` / `::<Variant>.<field>` / `` for
+/// a type alias, types).
+fn field_rows(t: &[Tok], i: usize) -> Vec<(String, String)> {
+    let tx = |j: usize| t.get(j).map_or("", |x| x.text.as_str());
+    let mut j = i + 2;
+    while j < t.len() && !matches!(tx(j), "{" | "(" | ";" | "=") {
+        j += 1;
+    }
+    match (tx(i), tx(j)) {
+        ("type", "=") => {
+            let mut k = j + 1;
+            while k < t.len() && tx(k) != ";" {
+                if matches!(tx(k), "(" | "[" | "{") {
+                    k = close_of(t, k) + 1;
+                } else {
+                    k += 1;
+                }
+            }
+            let ty = sb_types(t, j + 1, k);
+            if ty.is_empty() {
+                vec![]
+            } else {
+                vec![(String::new(), ty)]
+            }
+        }
+        ("struct", "{") => named_fields(t, j, ""),
+        ("struct", "(") => tuple_fields(t, j, ""),
+        ("enum", "{") => {
+            let mut out = Vec::new();
+            for (a, b) in parts_of(t, j) {
+                let Some(v) = (a..b).find(|&k| t[k].kind == Kind::Id) else {
+                    continue;
+                };
+                let pre = format!("::{}", t[v].text);
+                match tx(v + 1) {
+                    "{" if v + 1 < b => out.extend(named_fields(t, v + 1, &pre)),
+                    "(" if v + 1 < b => out.extend(tuple_fields(t, v + 1, &pre)),
+                    _ => {}
+                }
+            }
+            out
+        }
+        _ => vec![],
+    }
+}
+
+/// R1-R3 (fix S): what one fn of the crate holds, read from its tokens (its signature from
+/// `fn <name>`, its body from the tokens keyed by its name, closures included).
+#[derive(Default, Clone, Debug)]
+struct FnFacts {
+    /// the parameter list names a statement-bearing type (`SB_PARAM`)
+    sb_param: bool,
+    /// `->` names `Stmt` / `ProceduralBlock`
+    ret_stmt: bool,
+    /// a `& mut` parameter's type names `Stmt` / `ProceduralBlock`
+    mut_stmt: bool,
+    /// the identifiers of every `& mut` parameter's type (L2: a crate struct with a
+    /// statement field)
+    mut_types: Vec<String>,
+    /// each `ast::Stmt` construction: its span as spelled, and whether it holds another
+    /// statement construction inside its group
+    ctors: Vec<(String, bool)>,
+    /// every identifier outside any `wext_unlocated (` argument group (a call, a fn value,
+    /// a path), `fn <name>` heads left out
+    names: std::collections::BTreeSet<String>,
+    /// every identifier, inside a mask group or not
+    all_names: std::collections::BTreeSet<String>,
+    /// base recording calls (`REC_CALLS`) outside any mask group
+    rec_calls: usize,
+    /// `lower_shell (` calls
+    shell_calls: usize,
+}
+
+/// The facts of every fn of one source, keyed by fn name (two fns of one name merge), and
+/// the names of the structs of that source with a `Stmt` / `ProceduralBlock` field.
+fn fn_facts(src: &str) -> (BTreeMap<String, FnFacts>, Vec<String>) {
+    let t = tokens(src);
+    let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
+    let mut m: BTreeMap<String, FnFacts> = BTreeMap::new();
+    let mut stmt_structs = Vec::new();
+    let masks: Vec<(usize, usize)> = (0..t.len())
+        .filter(|&i| tx(i) == "wext_unlocated" && tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn"))
+        .map(|i| (i + 1, close_of(&t, i + 1)))
+        .collect();
+    let (alias, glob) = stmt_imports(&t);
+    for i in 0..t.len() {
+        // a signature
+        if tx(i) == "fn" && t.get(i + 1).is_some_and(|x| x.kind == Kind::Id) {
+            let name = tx(i + 1).to_string();
+            let mut j = i + 2;
+            let mut d = 0i32;
+            while j < t.len() {
+                match tx(j) {
+                    "<" => d += 1,
+                    ">" if tx(j - 1) != "-" => d -= 1,
+                    "(" if d == 0 => break,
+                    "{" | ";" => break,
+                    _ => {}
+                }
+                j += 1;
+            }
+            if tx(j) != "(" {
+                continue;
+            }
+            let close = close_of(&t, j);
+            let f = m.entry(name).or_default();
+            for (a, b) in parts_of(&t, j) {
+                if (a..b).any(|k| ast_type_at(&t, k, &SB_PARAM).is_some()) {
+                    f.sb_param = true;
+                }
+                let Some(colon) = (a..b).find(|&k| t[k].text == ":") else {
+                    continue;
+                };
+                let mut k = colon + 1;
+                if tx(k) != "&" {
+                    continue;
+                }
+                k += 1;
+                if tx(k) == "'" {
+                    k += 2;
+                }
+                if tx(k) != "mut" {
+                    continue;
+                }
+                for q in k + 1..b {
+                    if ast_type_at(&t, q, &["Stmt", "ProceduralBlock"]).is_some() {
+                        f.mut_stmt = true;
+                    }
+                    if t[q].kind == Kind::Id {
+                        f.mut_types.push(t[q].text.clone());
+                    }
+                }
+            }
+            let mut k = close + 1;
+            while k < t.len() && !matches!(tx(k), "{" | ";") {
+                if ast_type_at(&t, k, &["Stmt", "ProceduralBlock"]).is_some() {
+                    f.ret_stmt = true;
+                }
+                if matches!(tx(k), "(" | "[") {
+                    k = close_of(&t, k);
+                }
+                k += 1;
+            }
+        }
+        // a struct with a statement field (L2)
+        if tx(i) == "struct" && t.get(i + 1).is_some_and(|x| x.kind == Kind::Id) {
+            let rows = field_rows(&t, i);
+            if rows
+                .iter()
+                .any(|(_, ty)| ty.split('+').any(|x| x == "Stmt" || x == "ProceduralBlock"))
+            {
+                stmt_structs.push(tx(i + 1).to_string());
+            }
+        }
+        let key = t[i].key.clone();
+        if key == "-" {
+            continue;
+        }
+        let masked = masks.iter().any(|&(a, b)| a < i && i < b);
+        if let Some(kind) = node_ctor_at(&t, i, &alias, &glob) {
+            if kind == "Stmt" {
+                let open = if matches!(tx(i + 1), "{" | "(") {
+                    i + 1
+                } else {
+                    i + 3
+                };
+                let close = close_of(&t, open);
+                let nested = (open + 1..close)
+                    .any(|q| node_ctor_at(&t, q, &alias, &glob).as_deref() == Some("Stmt"));
+                m.entry(key.clone())
+                    .or_default()
+                    .ctors
+                    .push((span_field(&t, open), nested));
+            }
+        }
+        if t[i].kind == Kind::Id && !(i >= 1 && tx(i - 1) == "fn") {
+            let f = m.entry(key).or_default();
+            f.all_names.insert(tx(i).to_string());
+            if !masked {
+                f.names.insert(tx(i).to_string());
+            }
+            if tx(i + 1) == "(" {
+                if !masked && REC_CALLS.contains(&tx(i)) {
+                    f.rec_calls += 1;
+                }
+                if tx(i) == "lower_shell" {
+                    f.shell_calls += 1;
+                }
+            }
+        }
+    }
+    (m, stmt_structs)
+}
+
+type FnKey = (String, String);
+
+/// R1-R3 (fix S): the computed sets of the crate.
+struct Flow {
+    facts: BTreeMap<FnKey, FnFacts>,
+    /// REC: base (a recording call outside a mask) closed under L1
+    rec: std::collections::BTreeSet<String>,
+    builders: Vec<FnKey>,
+    rewriters: Vec<FnKey>,
+    exporters: std::collections::BTreeSet<String>,
+}
+
+/// The fn facts of elaborate's production sources (as `census` reads them).
+fn tree_facts() -> (BTreeMap<FnKey, FnFacts>, Vec<String>) {
+    let root = workspace_root();
+    let mut facts = BTreeMap::new();
+    let mut structs = Vec::new();
+    for (rel, src) in files_in(&root, SRC) {
+        let f = rel.trim_start_matches("crates/elaborate/src/").to_string();
+        if f.starts_with("tests/") {
+            continue;
+        }
+        let (m, s) = fn_facts(&src);
+        for (k, v) in m {
+            facts.insert((f.clone(), k), v);
+        }
+        structs.extend(s);
+    }
+    (facts, structs)
+}
+
+/// The sets of R1-R3 over `facts` (the crate's, or the crate's plus a planted source).
+fn flow_of(facts: BTreeMap<FnKey, FnFacts>, stmt_structs: &[String]) -> Flow {
+    let mut rec: std::collections::BTreeSet<String> = facts
+        .iter()
+        .filter(|(_, f)| f.rec_calls > 0)
+        .map(|((_, k), _)| k.clone())
+        .collect();
+    // L1: a fn whose parameter list names a statement-bearing type and that names a REC fn
+    loop {
+        let add: Vec<String> = facts
+            .iter()
+            .filter(|((_, k), f)| {
+                !rec.contains(k) && f.sb_param && f.names.iter().any(|n| rec.contains(n))
+            })
+            .map(|((_, k), _)| k.clone())
+            .collect();
+        if add.is_empty() {
+            break;
+        }
+        rec.extend(add);
+    }
+    let builders: Vec<FnKey> = facts
+        .iter()
+        .filter(|(_, f)| f.ctors.iter().any(|(s, _)| s != "*span"))
+        .map(|(k, _)| k.clone())
+        .collect();
+    let rewriters: Vec<FnKey> = facts
+        .iter()
+        .filter(|(_, f)| !f.ctors.is_empty() && f.ctors.iter().all(|(s, _)| s == "*span"))
+        .map(|(k, _)| k.clone())
+        .collect();
+    let exporters = builders
+        .iter()
+        .chain(rewriters.iter())
+        .filter(|k| {
+            let f = &facts[*k];
+            f.ret_stmt || f.mut_stmt || f.mut_types.iter().any(|x| stmt_structs.contains(x))
+        })
+        .map(|(_, k)| k.clone())
+        .collect();
+    Flow {
+        facts,
+        rec,
+        builders,
+        rewriters,
+        exporters,
+    }
+}
+
+/// R1-R3 (fix S): the violations of the rule of entry in a flow.
+fn flow_violations(fl: &Flow) -> Vec<String> {
+    let mut v = Vec::new();
+    let is_rewriter = |n: &str| fl.rewriters.iter().any(|(_, k)| k == n);
+    // R1: no BUILDER records or names a recording fn
+    for (f, k) in &fl.builders {
+        if fl.rec.contains(k) {
+            v.push(format!("R1 {f} {k}: a builder is a recording fn"));
+        }
+        for n in &fl.facts[&(f.clone(), k.clone())].names {
+            if n != k && fl.rec.contains(n) {
+                v.push(format!(
+                    "R1 {f} {k}: a builder names the recording fn `{n}`"
+                ));
+            }
+        }
+    }
+    // R2: a recording fn names an exporter only if it is a rewriter, or as the one shell
+    for ((f, k), facts) in &fl.facts {
+        if !fl.rec.contains(k) {
+            continue;
+        }
+        for n in &facts.names {
+            if n == k || !fl.exporters.contains(n) || is_rewriter(n) {
+                continue;
+            }
+            let flat = fl
+                .facts
+                .iter()
+                .filter(|((_, kk), _)| kk == n)
+                .all(|(_, e)| e.ctors.iter().all(|(_, nested)| !nested));
+            if facts.shell_calls > 0 && flat {
+                continue;
+            }
+            v.push(format!(
+                "R2 {f} {k}: a recording fn names the exporter `{n}`"
+            ));
+        }
+    }
+    // R3: one `lower_shell (`, in `lower_proc_block` ; a rewriter holds no lowering call
+    let shells: Vec<(&FnKey, usize)> = fl
+        .facts
+        .iter()
+        .filter(|(_, f)| f.shell_calls > 0)
+        .map(|(k, f)| (k, f.shell_calls))
+        .collect();
+    let one = shells.len() == 1
+        && shells[0].1 == 1
+        && shells[0].0 .0 == "stmt_flow.rs"
+        && shells[0].0 .1 == "lower_proc_block";
+    if !one {
+        v.push(format!("R3 `lower_shell (` calls: {shells:?}"));
+    }
+    for (f, k) in &fl.rewriters {
+        for n in &fl.facts[&(f.clone(), k.clone())].all_names {
+            if LOWERING.contains(&n.as_str()) || (n != k && fl.rec.contains(n)) {
+                v.push(format!(
+                    "R3 {f} {k}: a rewriter holds the lowering call `{n}`"
+                ));
+            }
+        }
+    }
+    v
+}
+
 type Table = BTreeMap<(String, String, String), usize>;
 
 /// Every rule hit of the elaborate sources, keyed (rule, file under `crates/elaborate/src`, fn).
@@ -1138,25 +1741,109 @@ fn count(rule: &str, src: &str) -> usize {
 fn h14_every_lower_stmt_call() {
     let rows: Vec<(&str, &str, &str, usize, &str)> = H14
         .iter()
-        .map(|&(r, f, k, n, _, _)| (r, f, k, n, ""))
+        .map(|&(r, f, k, n, _)| (r, f, k, n, ""))
         .collect();
     check("H14", &rows);
-    for &(r, f, k, _, class, _) in H14 {
-        let want = match class {
-            "R" => "H14:lower_stmt:bare",
-            "S" => "H14:lower_stmt:masked",
-            _ => panic!("{r} {f} {k}: class `{class}`"),
-        };
-        assert_eq!(r, want, "{f} {k}: a class-{class} call must be {want}");
-    }
-    let n = |c: &str| -> usize { H14.iter().filter(|r| r.4 == c).map(|r| r.3).sum() };
+    let n = |r: &str| -> usize { H14.iter().filter(|x| x.0 == r).map(|x| x.3).sum() };
     assert_eq!(
-        (n("R"), n("S")),
-        (28, 19),
-        "PLAN B7: 27 R + 1 MIXED (R), 19 S"
+        (n("H14:lower_parsed"), n("H14:lower_stmt"), n("H14:lower_shell")),
+        (28, 20, 1),
+        "fix S: 28 recording calls (PLAN B7's 27 R + the MIXED one's parsed body), 20 masked (the 19 S + the `iff` wait loop), 1 shell"
+    );
+    assert!(
+        H14.iter().all(|x| !x.0.ends_with(":masked")),
+        "fix S: no entry is called inside a `wext_unlocated (` group (the plain entry masks itself)"
     );
     let v = floor_rule(&census());
     assert!(v.is_empty(), "the process root's floor: {v:?}");
+}
+
+/// R1-R3 (§5.2 Q-WEXTPOS fix S, THE RULE OF ENTRY): no fn that builds a statement records
+/// or names a recording fn ; a recording fn takes a built statement only from a rewriter or
+/// as the one shell ; one `lower_shell (` ; a rewriter lowers nothing. The sets are computed
+/// (no hand class) ; REC and EXPORTER are kept below as drift lists.
+#[test]
+fn r1_r3_the_rule_of_entry() {
+    let (facts, structs) = tree_facts();
+    let fl = flow_of(facts, &structs);
+    let v = flow_violations(&fl);
+    assert!(v.is_empty(), "the rule of entry: {v:#?}");
+    let rec: Vec<&str> = fl.rec.iter().map(|s| s.as_str()).collect();
+    assert_eq!(
+        rec,
+        REC_SET.to_vec(),
+        "REC moved: say why the new fn records"
+    );
+    let exp: Vec<&str> = fl.exporters.iter().map(|s| s.as_str()).collect();
+    assert_eq!(
+        exp,
+        EXPORTERS.to_vec(),
+        "EXPORTER moved: say who lowers what it exports"
+    );
+    let mut st = structs.clone();
+    st.sort();
+    st.dedup();
+    assert_eq!(
+        st,
+        vec!["PendingSva", "RoutineView", "SvaRegs"],
+        "L2: the structs with a statement field"
+    );
+}
+
+/// R4 (fix S, premise judge L3): elaborate constructs no `FunctionDef`, `TaskDef`,
+/// `ModuleDecl`, `ModuleItem`, `ClassItem` or `GenItem` (a built routine or item in a
+/// routine table would have its body lowered as parsed), and a `ProceduralBlock` only in a
+/// fn that hands it to `lower_synth_proc` / `lower_synth_proc_inline` (masked) or in
+/// `desugar_event_iff` (the one shell).
+#[test]
+fn r4_no_built_definitions() {
+    check("R4", R4);
+    let v = r4_violations(&census());
+    assert!(v.is_empty(), "R4: {v:?}");
+    let n: usize = R4.iter().map(|r| r.3).sum();
+    assert_eq!(n, 15, "L3: 15 built `ProceduralBlock`");
+}
+
+/// The R4 rows of a census table outside the rule: any kind but `ProceduralBlock`, or one
+/// in a fn that neither calls a synthesized-body entry nor is `desugar_event_iff`.
+fn r4_violations(tab: &Table) -> Vec<String> {
+    let mut v = Vec::new();
+    for ((r, f, k), n) in tab {
+        if !r.starts_with("R4:") {
+            continue;
+        }
+        if r != "R4:ProceduralBlock" {
+            v.push(format!("{r} {f} {k} {n}"));
+            continue;
+        }
+        let synth = tab.keys().any(|(rr, ff, kk)| {
+            ff == f
+                && kk == k
+                && (rr == "R4s:lower_synth_proc" || rr == "R4s:lower_synth_proc_inline")
+        });
+        let shell = f == "events.rs" && k == "desugar_event_iff" && *n == 1;
+        if !synth && !shell {
+            v.push(format!(
+                "{r} {f} {k} {n}: not handed to a synthesized-body entry"
+            ));
+        }
+    }
+    v
+}
+
+/// H15f (fix S, L3): every struct field, tuple field, enum payload and type alias of this
+/// crate that names a statement-bearing AST type — 24 today (17 owned, 7 references). A
+/// statement or a routine stored in a field and lowered later is a door R1-R3 cannot see:
+/// a new one fails here until its author says who fills it and who lowers it.
+#[test]
+fn h15f_the_statement_fields() {
+    check_classed("H15f", &rows_of(&census(), "H15f"), H15F, &["OWNED", "REF"]);
+    let n = |c: &str| H15F.iter().filter(|r| r.4 == c).map(|r| r.3).sum::<usize>();
+    assert_eq!(
+        (n("OWNED"), n("REF")),
+        (17, 7),
+        "L3: 17 owned, 7 references"
+    );
 }
 
 #[test]
@@ -1237,15 +1924,43 @@ fn kind_counts(
     m
 }
 
-/// H15 (§5.2 Q-WEXTPOS fix F1): every construction of a node whose span a write's `at` can
-/// read, in this crate, with its span field as spelled (premise judge L2: 105 `Stmt`).
+/// H15 (§5.2 Q-WEXTPOS fix F1 ; fix S): every construction of a node whose span a write's
+/// `at` can read, in this crate, with its span field as spelled (premise judge L2: 105
+/// `Stmt`). A `Stmt` row's class is READ OFF its spelling (fix S: no hand class of what a
+/// built statement can push): REWRITE for `*span` (28: the matched parsed statement's own
+/// span, 4 fns), BUILT otherwise (77) ; a connection row keeps OWN / FROM / NONE.
 #[test]
 fn h15_the_node_constructions() {
     check_classed(
         "H15",
         &rows_of(&census(), "H15"),
         H15,
-        &["OWN", "FROM", "MASKED", "NOSTORE", "V", "NONE"],
+        &["OWN", "FROM", "NONE", "REWRITE", "BUILT"],
+    );
+    for &(r, f, k, _, c, _) in H15 {
+        if let Some(sp) = r.strip_prefix("H15:Stmt:") {
+            let want = if sp == "*span" { "REWRITE" } else { "BUILT" };
+            assert_eq!(
+                c, want,
+                "H15 {r} {f} {k}: the class is read off the spelling"
+            );
+        } else {
+            assert!(
+                matches!(c, "OWN" | "FROM" | "NONE"),
+                "H15 {r} {f} {k}: class `{c}`"
+            );
+        }
+    }
+    let stmt = |c: &str| -> usize {
+        H15.iter()
+            .filter(|x| x.0.starts_with("H15:Stmt:") && x.4 == c)
+            .map(|x| x.3)
+            .sum()
+    };
+    assert_eq!(
+        (stmt("REWRITE"), stmt("BUILT")),
+        (28, 77),
+        "H15: 28 rewrites, 77 built (P1)"
     );
     let all = kind_counts(H15, None);
     assert_eq!(
@@ -2027,10 +2742,10 @@ fn walker_controls() {
         "H7 planted: the recorder given the context's span (PLAN §6) moves the row ; `cur_span` seen"
     );
     assert_eq!(
-        h7c3("impl E { fn lower_stmt(&mut self, b: &mut B, s: &ast::Stmt) { let wext_start = self.stmts.len(); self.record_stmt_at(s.span(), wext_start); } \
+        h7c3("impl E { fn lower_stmt_entry(&mut self, b: &mut B, s: &ast::Stmt, record: bool) { let wext_start = self.stmts.len(); if record { self.record_stmt_at(s.span(), wext_start); } } \
               fn record_stmt_at(&mut self, sp: ast::Span, start: usize) {} }"),
-        vec!["H7:record_stmt_at:s.span()@lower_stmt".to_string()],
-        "H7 real site (stmt_main.rs lower_stmt) spelled back ; the definition skipped"
+        vec!["H7:record_stmt_at:s.span()@lower_stmt_entry".to_string()],
+        "H7 real site (stmt_main.rs lower_stmt_entry) spelled back ; the definition skipped"
     );
     assert_eq!(
         h7c3("impl E { fn lower_synth_proc(&mut self, pb: &P) -> ir::Process { let proc = self.lower_proc_block(pb, false); proc } }"),
@@ -2072,7 +2787,7 @@ fn walker_controls() {
         "H7 planted (fix F1, m9c / L8): a body root given the BODY's span, not the item's, moves the row"
     );
     assert_eq!(
-        h7c3("impl E { fn inline_task_body(&mut self, b: &mut B, body: &ast::Stmt) { self.wext_located(|s| { s.lower_stmt(b, body); }); } }"),
+        h7c3("impl E { fn inline_task_body(&mut self, b: &mut B, body: &ast::Stmt) { self.wext_located(|s| { s.lower_parsed(b, body); }); } }"),
         vec!["H7:wext_located@inline_task_body".to_string()],
         "H7 real site (inline_task.rs inline_task_body, a callee entry) spelled back"
     );
@@ -2128,7 +2843,8 @@ fn walker_controls() {
         ],
         "H15: constructions inside a vec and an argument list, the shorthand, a call, a functional update"
     );
-    // H14 (Q-WEXTPOS C3): every `lower_stmt (` call, any receiver, masked or bare
+    // H14 (Q-WEXTPOS C3 ; fix S): every call of the three entries, any receiver, keyed
+    // `:masked` inside a mask group
     let h14 = |src: &str| -> Vec<String> {
         hits(src)
             .into_iter()
@@ -2137,33 +2853,38 @@ fn walker_controls() {
             .collect()
     };
     assert_eq!(
-        h14("impl E { fn hoist_rhs_only(&mut self) { self.wext_unlocated(|s| s.lower_stmt(b, &synth)); self.lower_stmt(b, &x); } }"),
+        h14("impl E { fn hoist_rhs_only(&mut self) { self.wext_unlocated(|s| s.lower_stmt(b, &synth)); self.lower_parsed(b, &x); } }"),
         vec![
             "H14:lower_stmt:masked@hoist_rhs_only".to_string(),
-            "H14:lower_stmt:bare@hoist_rhs_only".to_string()
+            "H14:lower_parsed@hoist_rhs_only".to_string()
         ],
-        "H14 planted: a bare call added to a class-S fn (PLAN §6) is a `bare` row there"
+        "H14 planted: a call put back inside a mask group is a `:masked` row ; a recording call added to a builder is a row there"
     );
     assert_eq!(
-        h14("impl E { fn new_lowering(&mut self) { e.lower_stmt(b, x); } }"),
-        vec!["H14:lower_stmt:bare@new_lowering".to_string()],
-        "H14 planted: an unlisted new call, another receiver (premise judge 3 line 10)"
+        h14("impl E { fn new_lowering(&mut self) { e.lower_parsed(b, x); } }"),
+        vec!["H14:lower_parsed@new_lowering".to_string()],
+        "H14 planted: an unlisted new recording call, another receiver (premise judge 3 line 10)"
     );
     assert_eq!(
-        h14("impl E { fn f(&mut self) { self.wext_unlocated(|s| s.foo()); self.lower_stmt(b, x); self.lower_stmt_inner(b, x); } \
-             fn lower_stmt(&mut self) {} }\n// self.lower_stmt(b, x);"),
-        vec!["H14:lower_stmt:bare@f".to_string()],
+        h14("impl E { fn f(&mut self) { self.wext_unlocated(|s| s.foo()); self.lower_stmt(b, x); self.lower_stmt_inner(b, x); self.lower_stmt_entry(b, x, true); } \
+             fn lower_stmt(&mut self) {} }\n// self.lower_parsed(b, x);"),
+        vec!["H14:lower_stmt@f".to_string()],
         "H14: masked only inside the mask's argument group ; another name, a definition, a comment not counted"
     );
     assert_eq!(
-        h14("impl E { fn synth_cover_sample_explicit(&mut self) { for s in &stmts { self.wext_unlocated(|e| e.lower_stmt(b, s)); } } }"),
-        vec!["H14:lower_stmt:masked@synth_cover_sample_explicit".to_string()],
-        "H14 real site (cover.rs synth_cover_sample_explicit) spelled back"
+        h14("impl E { fn emit_static_decl_inits(&mut self) { self.lower_stmt(b, &stmt); } \
+             fn lower_proc_block(&mut self) { if d.is_some() { self.lower_shell(&mut b, &p.body); } else { self.lower_parsed(&mut b, &p.body); } } }"),
+        vec![
+            "H14:lower_stmt@emit_static_decl_inits".to_string(),
+            "H14:lower_shell@lower_proc_block".to_string(),
+            "H14:lower_parsed@lower_proc_block".to_string()
+        ],
+        "H14 real sites (frames_static_init.rs emit_static_decl_inits, stmt_flow.rs lower_proc_block) spelled back"
     );
     // H14 / P2: the process root zeroing the mask (PLAN's original V6 at stmt_flow.rs:471)
     let zero = table_of(
         "stmt_flow.rs",
-        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter(p.span); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter(p.span); self.lower_parsed(&mut b, &p.body); self.wext_body_exit(t); } }",
     );
     assert_eq!(
         floor_rule(&zero),
@@ -2175,7 +2896,7 @@ fn walker_controls() {
     );
     let keep = table_of(
         "stmt_flow.rs",
-        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter_keep(p.span); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter_keep(p.span); self.lower_parsed(&mut b, &p.body); self.wext_body_exit(t); } }",
     );
     assert!(
         floor_rule(&keep).is_empty(),
@@ -2183,40 +2904,285 @@ fn walker_controls() {
     );
 }
 
-/// H14 (§5.2 Q-WEXTPOS C3): (rule, file, fn, count, class, why) — every `lower_stmt (`
-/// call, any receiver, per (file, fn): class R lowers a statement the PARSER built, with the
-/// span the parser gave it — its own text, or for the parser-built `$enum_name$<T>` body the
-/// first `.name()` call's path (premise judge 2, F-A) — (bare), class S a statement vita
-/// built whole (inside `wext_unlocated`). PLAN
-/// B7's 47 calls: R 27, S 19, MIXED 1 (`stmt_main.rs`'s `iff` guard shell, R by premise
-/// judge 3 line 1: its own lowering pushes no store, the parsed body inside records).
+/// R1-R4 and H15f (§5.2 Q-WEXTPOS fix S): each planted control fails its rule, added to
+/// the crate's own facts as one more file (the crate alone: no violation) ; c8 spells real
+/// sites back and fails nothing. c1-c8 are PLAN §2's, c9-c11 the premise judge's L1-L3.
+#[test]
+fn rule_of_entry_controls() {
+    let (base, structs) = tree_facts();
+    let run = |src: &str| -> Vec<String> {
+        let mut facts = base.clone();
+        let (m, st) = fn_facts(src);
+        for (k, v) in m {
+            facts.insert(("planted.rs".to_string(), k), v);
+        }
+        let mut all = structs.clone();
+        all.extend(st);
+        flow_violations(&flow_of(facts, &all))
+    };
+    let only = |v: Vec<String>, rule: &str, what: &str| {
+        assert!(
+            !v.is_empty() && v.iter().all(|x| x.starts_with(rule)),
+            "{what}: {v:?}"
+        );
+    };
+    assert!(run("").is_empty(), "the crate alone");
+    only(
+        run("impl E { fn planted_c1(&mut self, b: &mut B, ctrl: &ast::Sensitivity, guard: ast::Expr) { let gspan = guard.span; \
+             let wait = ast::Stmt::EventCtrl { ctrl: c, body: None, span: gspan }; \
+             let w = ast::Stmt::While { cond: g, body: Box::new(wait), span: gspan }; self.lower_parsed(b, &w); } }"),
+        "R1",
+        "planted_c1 F3's shape: a built wait loop lowered by `lower_parsed`",
+    );
+    only(
+        run("impl E { fn planted_c2(&mut self, b: &mut B, s: &ast::Stmt) { let mk = |sp: Span| ast::Stmt::Null(sp); \
+             let n = mk(s.span()); self.lower_parsed(b, &n); } }"),
+        "R1",
+        "planted_c2 a construction behind a closure head in a recording fn",
+    );
+    only(
+        run("use hdl_ast::Stmt as S;\nimpl E { fn planted_c3(&mut self, b: &mut B, s: &ast::Stmt) { \
+             let n = S::Block { label: None, decls: vec![], stmts: vec![], span: x }; self.lower_parsed(b, &n); } }"),
+        "R1",
+        "planted_c3 the alias form in a recording fn",
+    );
+    only(
+        run("impl E { fn planted_mk_c4(&self, sp: Span) -> ast::Stmt { ast::Stmt::Null(sp) } \
+             fn planted_c4(&mut self, b: &mut B, sp: Span) { let n = self.planted_mk_c4(sp); self.lower_parsed(b, &n); } }"),
+        "R2",
+        "planted_c4 a recording fn naming a new exporter (`-> ast::Stmt`)",
+    );
+    only(
+        run("impl E { fn planted_mk_c5(&self, out: &mut Vec<ast::Stmt>, sp: Span) { out.push(ast::Stmt::Null(sp)); } \
+             fn planted_c5(&mut self, b: &mut B, sp: Span) { let mut v = Vec::new(); self.planted_mk_c5(&mut v, sp); for n in &v { self.lower_parsed(b, n); } } }"),
+        "R2",
+        "planted_c5 the same through `& mut Vec<ast::Stmt>`",
+    );
+    only(
+        run("impl E { fn planted_c6(&mut self, b: &mut B, s: &ast::Stmt) { self.lower_shell(b, s); } }"),
+        "R3",
+        "planted_c6 a second `lower_shell (`",
+    );
+    only(
+        run("impl E { fn planted_rw_c7(&mut self, b: &mut B, s: &ast::Stmt) { if let ast::Stmt::Expr { expr, span } = s { \
+             let n = ast::Stmt::Expr { expr: e2, span: *span }; self.lower_stmt(b, &n); } } }"),
+        "R3",
+        "c7 a `*span` construction beside a lowering call",
+    );
+    assert_eq!(
+        run("impl E { fn planted_c8_wait(&mut self, b: &mut B, ctrl: &ast::Sensitivity, guard: ast::Expr) { let gspan = guard.span; \
+             let w = ast::Stmt::Block { label: None, decls: Vec::new(), stmts: vec![], span: gspan }; self.lower_stmt(b, &w); } \
+             fn planted_c8_arm(&mut self, b: &mut B, s: &ast::Stmt) { if let Some(r) = self.hoist_stmt_top(b, s) { self.lower_stmt_inner(b, &r); return; } \
+             if let Some(g) = self.event_iff_guard(c) { self.planted_c8_wait(b, c, g); if let Some(body) = body { self.lower_parsed(b, body); } } } \
+             fn planted_c8_flush(&mut self) { let mut v = Vec::new(); self.cov_set_bit_stmt(&mut v); let p = self.wext_unlocated(|s| s.lower_proc_block(&pb, false)); } }"),
+        Vec::<String>::new(),
+        "c8 real sites spelled back (stmt_main.rs's `iff` split and rewrite arm, a synthesized body's builder) fail nothing"
+    );
+    only(
+        run("impl E { fn planted_fwd_c9(&mut self, b: &mut B, s: &ast::Stmt) { self.lower_while(b, c, s) } \
+             fn planted_c9(&mut self, b: &mut B, sp: Span) { let n = ast::Stmt::Null(sp); self.planted_fwd_c9(b, &n); } }"),
+        "R1",
+        "planted_c9 (L1) a builder handing its statement to a forwarder with a statement parameter",
+    );
+    only(
+        run("impl E { fn planted_sva_c10(&mut self, regs: &mut SvaRegs, sp: Span) { regs.nbas.push(ast::Stmt::Null(sp)); } \
+             fn planted_c10(&mut self, b: &mut B, s: &ast::Stmt, sp: Span) { let mut r = SvaRegs::default(); self.planted_sva_c10(&mut r, sp); self.lower_parsed(b, s); } }"),
+        "R2",
+        "planted_c10 (L2) a recording fn naming an exporter through a struct with a statement field",
+    );
+    // planted_c11 (L3): R4 over the census plus a planted file
+    let r4 = |src: &str| -> Vec<String> {
+        let mut tab = census();
+        tab.extend(table_of("planted.rs", src));
+        r4_violations(&tab)
+    };
+    assert!(r4("").is_empty(), "R4: the crate alone");
+    assert_eq!(
+        r4("impl E { fn planted_c11(&mut self) { let t = ast::TaskDef { name: n, ports: vec![], body: b, span: sp }; self.task_table.insert(n, t); } }"),
+        vec!["R4:TaskDef planted.rs planted_c11 1".to_string()],
+        "planted_c11 (L3) a built `TaskDef` inserted into the task table"
+    );
+    assert_eq!(
+        r4("impl E { fn planted_c11b(&mut self) { let it = ast::ModuleItem::Always(x); let p = ast::ProceduralBlock { kind: k, body: b, span: sp }; self.pending.push(p); } }"),
+        vec![
+            "R4:ModuleItem planted.rs planted_c11b 1".to_string(),
+            "R4:ProceduralBlock planted.rs planted_c11b 1: not handed to a synthesized-body entry".to_string()
+        ],
+        "R4 planted: a built item ; a built process block not handed to a synthesized-body entry"
+    );
+    assert!(
+        r4("impl E { fn planted_flush_c11(&mut self) { let pb = ast::ProceduralBlock { kind, body, span }; self.lower_synth_proc(&pb, \"x\"); } \
+            fn m(&self, it: &ast::ModuleItem) -> bool { if let ast::ModuleItem::Always(p) = it { return true; } \
+            let canon = |n: &str, f: &'a ast::ModuleDecl| -> &'a ast::ModuleDecl { f }; matches!(it, ast::GenItem::Item(_)) } \
+            fn n(&self) -> ast::FunctionDef { todo!() } }\nstruct FunctionDef { a: u8 }")
+        .is_empty(),
+        "R4: a synthesized body's block (real site), patterns, a closure's reference return type, a return type, an item are not rows"
+    );
+    // H15f: the field census's shapes
+    let h15f = |src: &str| -> Vec<String> {
+        hits(src)
+            .into_iter()
+            .filter(|(r, _)| r.starts_with("H15f:"))
+            .map(|(r, _)| r)
+            .collect()
+    };
+    assert_eq!(
+        h15f("struct A<'a> { pub(crate) m: BTreeMap<String, ast::FunctionDef>, n: u8, r: &'a ast::Stmt, i: ir::Stmt }\n\
+              enum K { X(ast::GenItem), Y { s: Box<ast::Stmt> }, Z }\nstruct T(u8, Vec<ast::TaskDef>);\n\
+              type L<'a> = &'a dyn Fn(&ast::Stmt) -> bool;\n#[cfg(test)]\nstruct U { s: ast::Stmt }\n// struct V { s: ast::Stmt }"),
+        vec![
+            "H15f:A.m:FunctionDef".to_string(),
+            "H15f:A.r:Stmt".to_string(),
+            "H15f:K::X.0:GenItem".to_string(),
+            "H15f:K::Y.s:Stmt".to_string(),
+            "H15f:T.1:TaskDef".to_string(),
+            "H15f:L:Stmt".to_string()
+        ],
+        "H15f: a generic map, a reference, an enum payload (tuple, named), a tuple struct, a type alias ; an `ir` path, a test item, a comment not"
+    );
+}
+
+/// H14 (§5.2 Q-WEXTPOS C3 ; fix S): (rule, file, fn, count, why) — every call of the three
+/// statement entries, any receiver, per (file, fn): `lower_parsed` records a child of the
+/// parsed statement or body its fn was handed, `lower_stmt` lowers a statement vita built
+/// under THE MASK, `lower_shell` the one built shell. A drift table: the rule itself is
+/// R1-R3, computed.
 #[rustfmt::skip]
-const H14: &[(&str, &str, &str, usize, &str, &str)] = &[
-    ("H14:lower_stmt:bare", "case_inside.rs", "lower_case_inside_body", 2, "R", "a `case inside` arm's parsed body"),
-    ("H14:lower_stmt:bare", "class_lower.rs", "lower_class_method_body", 1, "R", "a class method's parsed body (under its floor)"),
-    ("H14:lower_stmt:bare", "dead_arm.rs", "lower_if_arm", 2, "R", "an `if` arm's parsed body"),
-    ("H14:lower_stmt:bare", "frames_body.rs", "lower_frame_body_stmt", 2, "R", "a frame's body (parsed, or the parser's `$enum_name$` body: F-A)"),
-    ("H14:lower_stmt:bare", "inline_task.rs", "inline_task_body", 2, "R", "an inlined task's parsed body (callee entry, located again)"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_case", 2, "R", "a `case` arm / default's parsed body"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_for", 3, "R", "a `for` loop's parsed initializer, body and step"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_forever", 1, "R", "a `forever` (or self-timed `always`) parsed body"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_proc_block", 1, "R", "a procedural block's parsed body (under the process root's floor)"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_repeat", 2, "R", "a `repeat` / `do while` parsed body"),
-    ("H14:lower_stmt:bare", "stmt_flow.rs", "lower_while", 1, "R", "a `while` parsed body"),
-    ("H14:lower_stmt:bare", "stmt_main.rs", "lower_stmt_inner", 9, "R", "a block's / `if`'s / wait's / fork's parsed children ; the `iff` guard shell (MIXED, R: premise judge 3 line 1)"),
-    ("H14:lower_stmt:masked", "cover.rs", "synth_cover_sample", 1, "S", "a covergroup sampler's gated bitmap store"),
-    ("H14:lower_stmt:masked", "cover.rs", "synth_cover_sample_explicit", 2, "S", "a covergroup's explicit sample statements"),
-    ("H14:lower_stmt:masked", "cover.rs", "synth_cross_sample", 1, "S", "a cross's bitmap store"),
-    ("H14:lower_stmt:masked", "dynarr.rs", "dyn_blocking_special", 3, "S", "a dyn-array capture temp, its clear and its element stores"),
-    ("H14:lower_stmt:masked", "dynarr.rs", "hoist_dyn_pattern_actuals", 1, "S", "a dyn temp's element stores"),
-    ("H14:lower_stmt:masked", "events.rs", "lower_intra_event_assign", 1, "S", "an intra-assignment event's built wait"),
-    ("H14:lower_stmt:masked", "events.rs", "lower_intra_event_nba", 1, "S", "an intra-assignment event's built wait (NBA)"),
-    ("H14:lower_stmt:masked", "frames_body.rs", "emit_frame_local_inits", 2, "S", "a frame local's built initializer / its pre-store"),
-    ("H14:lower_stmt:masked", "frames_body.rs", "emit_per_entry_block_inits", 3, "S", "a block local's built re-initializer, clear and element stores"),
-    ("H14:lower_stmt:masked", "frames_call/emit.rs", "emit_frame_task_call", 1, "S", "a frame call's built unpack into a local"),
-    ("H14:lower_stmt:masked", "frames_static_init.rs", "emit_static_decl_inits", 1, "S", "a static local's built initializer"),
-    ("H14:lower_stmt:masked", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "S", "a hoisted call's temporary"),
-    ("H14:lower_stmt:masked", "hoist/special.rs", "hoist_rhs_only", 1, "S", "a hoisted rhs's temporary"),
+const H14: &[(&str, &str, &str, usize, &str)] = &[
+    ("H14:lower_parsed", "case_inside.rs", "lower_case_inside_body", 2, "a `case inside` arm's parsed body"),
+    ("H14:lower_parsed", "class_lower.rs", "lower_class_method_body", 1, "a class method's parsed body (under its floor)"),
+    ("H14:lower_parsed", "dead_arm.rs", "lower_if_arm", 2, "an `if` arm's parsed body"),
+    ("H14:lower_parsed", "frames_body.rs", "lower_frame_body_stmt", 2, "a frame's body (parsed, or the parser's `$enum_name$` body: V)"),
+    ("H14:lower_parsed", "inline_task.rs", "inline_task_body", 2, "an inlined task's parsed body (callee entry, located again)"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_case", 2, "a `case` arm / default's parsed body"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_for", 3, "a `for` loop's parsed initializer, body and step"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_forever", 1, "a `forever` (or self-timed `always`) parsed body"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_proc_block", 1, "a procedural block's parsed body (under the process root's floor)"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_repeat", 2, "a `repeat` / `do while` parsed body"),
+    ("H14:lower_parsed", "stmt_flow.rs", "lower_while", 1, "a `while` parsed body"),
+    ("H14:lower_parsed", "stmt_main.rs", "lower_stmt_inner", 9, "a block's / `if`'s / wait's / fork's parsed children ; an `iff` wait's parsed body"),
+    ("H14:lower_shell", "stmt_flow.rs", "lower_proc_block", 1, "the `always @(.. iff ..)` desugar's built `if (guard) <body>`: the one shell"),
+    ("H14:lower_stmt", "cover.rs", "synth_cover_sample", 1, "a covergroup sampler's gated bitmap store"),
+    ("H14:lower_stmt", "cover.rs", "synth_cover_sample_explicit", 2, "a covergroup's explicit sample statements"),
+    ("H14:lower_stmt", "cover.rs", "synth_cross_sample", 1, "a cross's bitmap store"),
+    ("H14:lower_stmt", "dynarr.rs", "dyn_blocking_special", 3, "a dyn-array capture temp, its clear and its element stores"),
+    ("H14:lower_stmt", "dynarr.rs", "hoist_dyn_pattern_actuals", 1, "a dyn temp's element stores"),
+    ("H14:lower_stmt", "events.rs", "lower_event_iff_wait", 1, "the in-body `iff` guard's wait loop `Block [wait, while (!g) wait]` (fix S)"),
+    ("H14:lower_stmt", "events.rs", "lower_intra_event_assign", 1, "an intra-assignment event's built wait"),
+    ("H14:lower_stmt", "events.rs", "lower_intra_event_nba", 1, "an intra-assignment event's built wait (NBA)"),
+    ("H14:lower_stmt", "frames_body.rs", "emit_frame_local_inits", 2, "a frame local's built initializer / its pre-store"),
+    ("H14:lower_stmt", "frames_body.rs", "emit_per_entry_block_inits", 3, "a block local's built re-initializer, clear and element stores"),
+    ("H14:lower_stmt", "frames_call/emit.rs", "emit_frame_task_call", 1, "a frame call's built unpack into a local"),
+    ("H14:lower_stmt", "frames_static_init.rs", "emit_static_decl_inits", 1, "a static local's built initializer"),
+    ("H14:lower_stmt", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "a hoisted call's temporary"),
+    ("H14:lower_stmt", "hoist/special.rs", "hoist_rhs_only", 1, "a hoisted rhs's temporary"),
+];
+
+/// R1-R3 (fix S): the REC set as computed (base: a call of `REC_CALLS` outside a mask ;
+/// closed under L1). A drift list.
+const REC_SET: &[&str] = &[
+    "elaborate_gen_if",
+    "elaborate_gen_item",
+    "elaborate_gen_scoped",
+    "elaborate_generate_scoped",
+    "elaborate_iface_instances",
+    "elaborate_instance",
+    "elaborate_instance_array",
+    "frame_scoped_pkg_routines",
+    "inline_static_task",
+    "inline_task_body",
+    "lower_case",
+    "lower_case_inside",
+    "lower_case_inside_body",
+    "lower_class_method_body",
+    "lower_for",
+    "lower_forever",
+    "lower_frame_body_inner_lower_frame_func_body",
+    "lower_frame_body_inner_lower_frame_task_body",
+    "lower_frame_body_stmt",
+    "lower_frame_func_body",
+    "lower_frame_task_body",
+    "lower_gen_module_item",
+    "lower_if_arm",
+    "lower_parsed",
+    "lower_proc_block",
+    "lower_repeat",
+    "lower_shell",
+    "lower_stmt_entry",
+    "lower_stmt_inner",
+    "lower_user_proc",
+    "lower_while",
+];
+
+/// R2 (fix S): the EXPORTER set as computed (a builder or rewriter whose signature names
+/// `Stmt` / `ProceduralBlock` after `->` or in a `& mut` parameter, or whose `& mut`
+/// parameter is a crate struct with such a field: L2). A drift list.
+const EXPORTERS: &[&str] = &[
+    "cov_auto_sample_stmt",
+    "cov_counter_then",
+    "cov_set_bit_stmt",
+    "desugar_event_iff",
+    "dyn_decl_init_stmts",
+    "gate_nba_with_disable",
+    "hoist_stmt_general",
+    "hoist_stmt_rhs_only",
+    "hoist_stmt_top",
+    "prop_expr_violation",
+    "rewrite_sampled_stmt",
+    "seq_delay_reg",
+    "sva_block_or_single",
+    "sva_error_stmt",
+    "sva_nb",
+    "sva_nb_set",
+    "sva_nba_1bit",
+    "sva_prev_for",
+    "synth_seq_pipeline",
+];
+
+/// R4 (fix S, L3): (rule, file, fn, count, why) — the built `ProceduralBlock`s.
+#[rustfmt::skip]
+const R4: &[(&str, &str, &str, usize, &str)] = &[
+    ("R4:ProceduralBlock", "cover.rs", "register_cover_instance", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "cover_synth.rs", "materialize_one_cover", 2, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "events.rs", "desugar_event_iff", 1, "the `always @(.. iff ..)` desugar: the parsed block with its body wrapped in `if (guard)` (the one shell)"),
+    ("R4:ProceduralBlock", "sva_check.rs", "materialize_one_sva", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_check.rs", "synth_local_var_assert", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_clocking.rs", "lower_clocking_blocks", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_clocking.rs", "synth_crossclock", 2, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_clocking.rs", "synth_multiclock", 2, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_liveness.rs", "synth_liveness", 2, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "sva_prop.rs", "synth_prop_expr", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+    ("R4:ProceduralBlock", "var_init.rs", "flush_pending_var_inits", 1, "a synthesized body, handed to `lower_synth_proc` (masked) in this fn"),
+];
+
+/// H15f (fix S, L3): (rule, file, fn, count, class, why) — the statement-bearing fields ;
+/// class OWNED (the value is held) or REF (a borrow of one held elsewhere).
+#[rustfmt::skip]
+const H15F: &[(&str, &str, &str, usize, &str, &str)] = &[
+    ("H15f:ClassMethod.func:FunctionDef", "classes.rs", "-", 1, "OWNED", "a class method's parsed routine (classes.rs: a parsed clone)"),
+    ("H15f:ClassMethod.task:TaskDef", "classes.rs", "-", 1, "OWNED", "a class method's parsed routine (classes.rs: a parsed clone)"),
+    ("H15f:Elaborator.const_func_table:FunctionDef", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:Elaborator.func_table:FunctionDef", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:Elaborator.ifaces:ModuleDecl", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:Elaborator.pkg_funcs:FunctionDef", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:Elaborator.pkg_tasks:TaskDef", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:Elaborator.task_table:TaskDef", "lib.rs", "-", 1, "OWNED", "the routine / interface tables: parsed definitions inserted (generate.rs, rtn_decl.rs, package.rs: parsed clones)"),
+    ("H15f:GenScope.items:GenItem", "gen_enum.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:HierBodyWriteCallee.def:FunctionDef", "expr_size_hier.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:LoopRunsOnce:Stmt", "da/mod.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:ModuleFacts.body_write_funcs:FunctionDef", "expr_size_hier.rs", "-", 1, "OWNED", "a module's body-writing functions: parsed definitions"),
+    ("H15f:ModuleMap:ModuleDecl", "toplevel.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:PendingSva.fail:Stmt", "sva_prop.rs", "-", 1, "OWNED", "an assertion's parsed action statement, lowered in a synthesized body (masked)"),
+    ("H15f:PendingSva.pass:Stmt", "sva_prop.rs", "-", 1, "OWNED", "an assertion's parsed action statement, lowered in a synthesized body (masked)"),
+    ("H15f:RoutineScope.const_func_table:FunctionDef", "iface_rtn_scope.rs", "-", 1, "OWNED", "a routine scope's tables: parsed definitions"),
+    ("H15f:RoutineScope.func_table:FunctionDef", "iface_rtn_scope.rs", "-", 1, "OWNED", "a routine scope's tables: parsed definitions"),
+    ("H15f:RoutineScope.task_table:TaskDef", "iface_rtn_scope.rs", "-", 1, "OWNED", "a routine scope's tables: parsed definitions"),
+    ("H15f:RoutineView.body:Stmt", "block_local/timed_task.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:RtnTables.func:FunctionDef", "iface_rtn_scope.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:RtnTables.task:TaskDef", "iface_rtn_scope.rs", "-", 1, "REF", "a borrow of a table or body held elsewhere (a reader)"),
+    ("H15f:StaticScopedCarry.func_table:FunctionDef", "iface_rtn_scope.rs", "-", 1, "OWNED", "a carried routine table: parsed definitions"),
+    ("H15f:StaticScopedCarry.task_table:TaskDef", "iface_rtn_scope.rs", "-", 1, "OWNED", "a carried routine table: parsed definitions"),
+    ("H15f:SvaRegs.nbas:Stmt", "sva_prop.rs", "-", 1, "OWNED", "built register updates, lowered in a synthesized body (masked)"),
 ];
 
 /// The process root's floor (premise judge round 1, line 1 ; P2): `lower_proc_block` is
@@ -2424,7 +3390,7 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:record_geom", "array_geom.rs", "flatten_word", 1, "the flat-offset tree's constant"),
     ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
     ("H7:record_row_at", "proc_ident.rs", "push_cont_assign", 1, "each continuous row's own position, pushed beside the row (Q-WEXTPOS C2)"),
-    ("H7:record_stmt_at:s.span()", "stmt_main.rs", "lower_stmt", 1, "a statement's own position: the fn's own parameter's span, at its one exit (Q-WEXTPOS C3, never `cur_span`)"),
+    ("H7:record_stmt_at:s.span()", "stmt_main.rs", "lower_stmt_entry", 1, "a statement's own position: the fn's own parameter's span, at its one exit, for `lower_parsed` only (Q-WEXTPOS C3 ; fix S ; never `cur_span`)"),
     ("H7:wext_body_enter:item", "class_lower.rs", "lower_class_method_body", 1, "the method body's floor: save, set 0 (the callee entry of a method), restore ; V's item = the method's function or task (fix F1, L8)"),
     ("H7:wext_body_enter:func.span", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "a function body's floor: save, set 0, restore ; V's item = the FunctionDef (L8)"),
     ("H7:wext_body_enter:task.span", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "a task body's floor: save, set 0, restore ; V's item = the TaskDef (L8)"),
@@ -2450,19 +3416,7 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:wext_rec", "wext.rs", "wext_body_exit", 4, "a body root's exit: open count, mask restored, the floor, V's open item restored (fix F1)"),
     ("H7:wext_rec", "wext.rs", "wext_located", 2, "a callee entry: mask saved and set 0, restored"),
     ("H7:wext_rec", "wext.rs", "wext_unlocated", 2, "the mask: up, down"),
-    ("H7:wext_unlocated", "cover.rs", "synth_cover_sample", 1, "S (H14)"),
-    ("H7:wext_unlocated", "cover.rs", "synth_cover_sample_explicit", 2, "S (H14)"),
-    ("H7:wext_unlocated", "cover.rs", "synth_cross_sample", 1, "S (H14)"),
-    ("H7:wext_unlocated", "dynarr.rs", "dyn_blocking_special", 3, "S (H14)"),
-    ("H7:wext_unlocated", "dynarr.rs", "hoist_dyn_pattern_actuals", 1, "S (H14)"),
-    ("H7:wext_unlocated", "events.rs", "lower_intra_event_assign", 1, "S (H14)"),
-    ("H7:wext_unlocated", "events.rs", "lower_intra_event_nba", 1, "S (H14)"),
-    ("H7:wext_unlocated", "frames_body.rs", "emit_frame_local_inits", 2, "S (H14)"),
-    ("H7:wext_unlocated", "frames_body.rs", "emit_per_entry_block_inits", 3, "S (H14)"),
-    ("H7:wext_unlocated", "frames_call/emit.rs", "emit_frame_task_call", 1, "S (H14)"),
-    ("H7:wext_unlocated", "frames_static_init.rs", "emit_static_decl_inits", 1, "S (H14)"),
-    ("H7:wext_unlocated", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "S (H14)"),
-    ("H7:wext_unlocated", "hoist/special.rs", "hoist_rhs_only", 1, "S (H14)"),
+    ("H7:wext_unlocated", "stmt_main.rs", "lower_stmt", 1, "the plain entry: a statement vita built, lowered under the mask (fix S ; H14's 20 calls)"),
     ("H7:wext_unlocated", "proc_ident.rs", "lower_synth_proc", 1, "a synthesized body (var_init, sva and its action blocks, cover, clocking, the module-level assert wrapper)"),
 ];
 
@@ -2595,62 +3549,63 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
 /// H15 (§5.2 Q-WEXTPOS fix F1): (rule, file, fn, count, class, why) — every CONSTRUCTION in
 /// this crate of a node whose span a write's `at` can read (`ast::Stmt :: <V>`, `PortConn {`,
 /// `ConnSite {`, `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (`), keyed by
-/// the `span` field as spelled. Class (hand-written, R-AT's words): OWN / FROM the write's
-/// own text ; MASKED a statement vita builds, lowered under THE MASK (its store takes the
-/// parsed statement around it) ; NOSTORE no store of its own ; V a span V records nothing for
-/// ; NONE no text. 105 `Stmt` (premise judge L2: `sva_seq.rs`'s `S::Repeat` is a `Sequence`),
-/// 1 `PortConn`, 3 `ConnSite`. A row that moves: say whose text the span is.
+/// the `span` field as spelled. Class: a `Stmt` row's is read off its spelling (fix S),
+/// REWRITE (`*span`, the matched parsed statement's own) or BUILT (a statement vita builds:
+/// it records no interval, its stores read the parsed statement that holds them or none) ; a
+/// connection row's is R-AT's word, OWN / FROM the write's own text, NONE no text. 105
+/// `Stmt` (premise judge L2: `sva_seq.rs`'s `S::Repeat` is a `Sequence`), 1 `PortConn`, 3
+/// `ConnSite`. A row that moves: say whose text the span is.
 #[rustfmt::skip]
 const H15: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H15:ConnSite:None", "ports.rs", "wire_ports", 1, "NONE", "a `.*` connection: its expression is synthesized (no write text)"),
     ("H15:ConnSite:Some(c.span)", "ports.rs", "wire_ports", 1, "OWN", "a named connection: the parser's `PortConn` from its `.`"),
     ("H15:ConnSite:Some(e.span)", "ports.rs", "wire_ports", 1, "OWN", "a positional connection: its expression"),
     ("H15:PortConn:*span", "instance_array.rs", "elaborate_instance_array", 1, "FROM", "an array element's connection: the parsed connection's span, a positional one's expression (X1)"),
-    ("H15:Stmt:*span", "hoist/general_stmt.rs", "hoist_stmt_general", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
-    ("H15:Stmt:*span", "hoist/mod.rs", "hoist_stmt_top", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
-    ("H15:Stmt:*span", "hoist/special.rs", "hoist_stmt_rhs_only", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
-    ("H15:Stmt:*span", "sva_decl.rs", "rewrite_sampled_stmt", 7, "OWN", "a pattern-bound parsed statement's own span, copied"),
-    ("H15:Stmt:cb.span", "sva_clocking.rs", "lower_clocking_blocks", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:decl.span", "frames_body.rs", "emit_frame_local_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:decl.span", "frames_body.rs", "emit_per_entry_block_inits", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:decl.span", "frames_static_init.rs", "emit_static_decl_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:e.span", "dynarr.rs", "dyn_blocking_special", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:e.span", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:e.span", "hoist/special.rs", "hoist_rhs_only", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:gspan", "stmt_main.rs", "lower_stmt_inner", 3, "NOSTORE", "the `iff` guard's wait loop (the guard expression's span)"),
-    ("H15:Stmt:p.span", "events.rs", "desugar_event_iff", 1, "V", "the always ITEM's span: V records nothing for it (PLAN J3)"),
-    ("H15:Stmt:rhs.span", "dynarr.rs", "dyn_blocking_special", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover.rs", "register_cover_instance", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample_explicit", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover.rs", "synth_cross_sample", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover_synth.rs", "cov_auto_sample_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover_synth.rs", "cov_counter_then", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover_synth.rs", "cov_set_bit_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "cover_synth.rs", "materialize_one_cover", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "frames_call/emit.rs", "emit_frame_task_call", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_ast.rs", "sva_block_or_single", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_ast.rs", "sva_error_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb_set", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_ast.rs", "sva_nba_1bit", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_check.rs", "materialize_one_sva", 5, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_check.rs", "prop_expr_violation", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_check.rs", "synth_local_var_assert", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_clocking.rs", "synth_crossclock", 7, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_clocking.rs", "synth_multiclock", 7, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_liveness.rs", "synth_liveness", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_prop.rs", "sva_prev_for", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_prop.rs", "synth_prop_expr", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_seq.rs", "seq_delay_reg", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "sva_seq.rs", "synth_seq_pipeline", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:sp", "var_init.rs", "flush_pending_var_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "dynarr.rs", "dyn_decl_init_stmts", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "events.rs", "lower_intra_event_assign", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "events.rs", "lower_intra_event_nba", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "frames_body.rs", "emit_frame_local_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "sva_ast.rs", "gate_nba_with_disable", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
-    ("H15:Stmt:span", "var_init.rs", "flush_pending_var_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:*span", "hoist/general_stmt.rs", "hoist_stmt_general", 7, "REWRITE", "a hoist rewrite: the rewritten parsed statement's own span, lowered under its `lower_parsed`"),
+    ("H15:Stmt:*span", "hoist/mod.rs", "hoist_stmt_top", 7, "REWRITE", "a hoist rewrite: the rewritten parsed statement's own span, lowered under its `lower_parsed`"),
+    ("H15:Stmt:*span", "hoist/special.rs", "hoist_stmt_rhs_only", 7, "REWRITE", "a hoist rewrite: the rewritten parsed statement's own span, lowered under its `lower_parsed`"),
+    ("H15:Stmt:*span", "sva_decl.rs", "rewrite_sampled_stmt", 7, "REWRITE", "a pattern-bound parsed statement's own span, copied (a synthesized body: masked)"),
+    ("H15:Stmt:cb.span", "sva_clocking.rs", "lower_clocking_blocks", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:decl.span", "frames_body.rs", "emit_frame_local_inits", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:decl.span", "frames_body.rs", "emit_per_entry_block_inits", 2, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:decl.span", "frames_static_init.rs", "emit_static_decl_inits", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:e.span", "dynarr.rs", "dyn_blocking_special", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:e.span", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:e.span", "hoist/special.rs", "hoist_rhs_only", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:gspan", "events.rs", "lower_event_iff_wait", 3, "BUILT", "the in-body `iff` guard's wait loop (the guard expression's span: a diagnostic anchor), the plain entry (fix S)"),
+    ("H15:Stmt:p.span", "events.rs", "desugar_event_iff", 1, "BUILT", "the `always @(.. iff ..)` shell (the always ITEM's span): `lower_shell`, no interval ; V declines it too (fix S)"),
+    ("H15:Stmt:rhs.span", "dynarr.rs", "dyn_blocking_special", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover.rs", "register_cover_instance", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample_explicit", 4, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cross_sample", 2, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_auto_sample_stmt", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_counter_then", 4, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_set_bit_stmt", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "materialize_one_cover", 3, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "frames_call/emit.rs", "emit_frame_task_call", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_block_or_single", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_error_stmt", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb_set", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nba_1bit", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_check.rs", "materialize_one_sva", 5, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_check.rs", "prop_expr_violation", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_check.rs", "synth_local_var_assert", 2, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_clocking.rs", "synth_crossclock", 7, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_clocking.rs", "synth_multiclock", 7, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_liveness.rs", "synth_liveness", 4, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_prop.rs", "sva_prev_for", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_prop.rs", "synth_prop_expr", 3, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_seq.rs", "seq_delay_reg", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "sva_seq.rs", "synth_seq_pipeline", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:sp", "var_init.rs", "flush_pending_var_inits", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "dynarr.rs", "dyn_decl_init_stmts", 3, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "events.rs", "lower_intra_event_assign", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "events.rs", "lower_intra_event_nba", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "frames_body.rs", "emit_frame_local_inits", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "sva_ast.rs", "gate_nba_with_disable", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
+    ("H15:Stmt:span", "var_init.rs", "flush_pending_var_inits", 1, "BUILT", "a statement vita builds: lowered by the plain entry or in a synthesized body, no interval (fix S)"),
 ];
 
 /// H15p (§5.2 Q-WEXTPOS fix F1, L1): the same census over the PARSER's production sources

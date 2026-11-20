@@ -247,12 +247,12 @@ impl Elaborator<'_> {
             }
         }
         if let Some(body) = default_body {
-            self.lower_stmt(b, body);
+            self.lower_parsed(b, body);
         }
         b.goto(merge);
         for (arm, body) in arms.into_iter().zip(arm_bodies) {
             b.start_block(arm);
-            self.lower_stmt(b, body);
+            self.lower_parsed(b, body);
             b.goto(merge);
         }
         b.start_block(merge);

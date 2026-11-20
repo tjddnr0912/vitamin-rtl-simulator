@@ -477,8 +477,13 @@ impl Elaborator<'_> {
         if bare_always_self_timed && stmt_has_timing(&p.body) {
             // Implicit `forever { body }` so the process re-arms on its own #/@.
             self.lower_forever(&mut b, &p.body);
+        } else if desugared.is_some() {
+            // §5.2 Q-WEXTPOS fix S: the `iff` desugar's `if (guard) <body>` is a node vita
+            // built around the parsed body: the one `lower_shell` call (`wext.rs`), so the
+            // shell records no interval and the body records its own.
+            self.lower_shell(&mut b, &p.body);
         } else {
-            self.lower_stmt(&mut b, &p.body); // recursive body lowering
+            self.lower_parsed(&mut b, &p.body); // recursive body lowering
         }
         let (body, entry) = b.finish(); // seals trailing block with Return
         self.wext_body_exit(wext_tok);
@@ -854,14 +859,14 @@ impl Elaborator<'_> {
         }
         // All tests missed → the default (or empty) → merge.
         if let Some(body) = default_body {
-            self.lower_stmt(b, body);
+            self.lower_parsed(b, body);
         }
         b.goto(merge);
 
         // Lower each arm body, each ending Goto(merge).
         for (arm, body) in arm_bodies {
             b.start_block(arm);
-            self.lower_stmt(b, body);
+            self.lower_parsed(b, body);
             b.goto(merge);
         }
         b.start_block(merge);
@@ -1097,7 +1102,7 @@ impl Elaborator<'_> {
             });
         }
         b.start_block(body_bb);
-        self.lower_stmt(b, body);
+        self.lower_parsed(b, body);
         b.goto(head); // back-edge
         b.start_block(exit);
     }
@@ -1106,7 +1111,7 @@ impl Elaborator<'_> {
         let head = b.new_block();
         b.goto(head);
         b.start_block(head);
-        self.lower_stmt(b, body);
+        self.lower_parsed(b, body);
         b.goto(head); // unconditional back-edge
                       // No natural continue point; open a fresh (unreachable) block so the
                       // post-condition (cursor open) holds. It gets Return at finish.
@@ -1145,7 +1150,7 @@ impl Elaborator<'_> {
             Some(n) => {
                 // constant the unroller consumes ⇒ straight unroll (no runtime counter).
                 for _ in 0..n {
-                    self.lower_stmt(b, body);
+                    self.lower_parsed(b, body);
                 }
             }
             None => {
@@ -1252,7 +1257,7 @@ impl Elaborator<'_> {
                     else_bb: exit.raw(),
                 });
                 b.start_block(body_bb);
-                self.lower_stmt(b, body);
+                self.lower_parsed(b, body);
                 let cnt_rd2 = self.push_expr(ir::Expr::Signal {
                     net: cnt_net,
                     word: None,
@@ -1289,7 +1294,7 @@ impl Elaborator<'_> {
         step: &ast::Stmt,
         body: &ast::Stmt,
     ) {
-        self.lower_stmt(b, init); // run the initializer once, before the loop head
+        self.lower_parsed(b, init); // run the initializer once, before the loop head
         let head = b.new_block();
         let body_bb = b.new_block();
         let exit = b.new_block();
@@ -1311,8 +1316,8 @@ impl Elaborator<'_> {
             });
         }
         b.start_block(body_bb);
-        self.lower_stmt(b, body);
-        self.lower_stmt(b, step); // step runs at the END of each iteration
+        self.lower_parsed(b, body);
+        self.lower_parsed(b, step); // step runs at the END of each iteration
         b.goto(head); // back-edge to re-test the condition
         b.start_block(exit);
     }
