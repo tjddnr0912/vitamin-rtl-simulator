@@ -9856,6 +9856,287 @@ endmodule
 endmodule
 
 %%end
+%%cell S1_concat_class2_x
+%%meta class	S1	concat_class2	'x	right	-
+%%out p8	xxxxxxxx
+%%out p70	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {o.p8, o.p70} = 'x;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:p70=%b", o.p70);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S1_concat_class_1
+%%meta class	S1	concat_class	'1	right	-
+%%out p8	11111111
+%%out a4	1111
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {o.p8, a4} = '1;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:a4=%b", a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S1_concat_class_hier_x
+%%meta class	S1	concat_class_hier	'x	right	-
+%%out p8	xxxxxxxx
+%%out ua4	xxxx
+%%use b0
+%%use b3
+%%use b5
+  initial begin
+    #1;
+    o = new; {o.p8, u.a4} = 'x;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:ua4=%b", u.a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S1_concat_class_last_x
+%%meta class	S1	concat_class_last	'x	right	-
+%%out a4	xxxx
+%%out p8	xxxxxxxx
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {a4, o.p8} = 'x;
+    #2;
+    $display("C:a4=%b", a4);
+    $display("C:p8=%b", o.p8);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S1_concat_class_wide_x
+%%meta class	S1	concat_class_wide	'x	right	-
+%%out p70	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+%%out b8	xxxxxxxx
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {o.p70, b8} = 'x;
+    #2;
+    $display("C:p70=%b", o.p70);
+    $display("C:b8=%b", b8);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S1_concat_class_x
+%%meta class	S1	concat_class	'x	right	-
+%%out p8	xxxxxxxx
+%%out a4	xxxx
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {o.p8, a4} = 'x;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:a4=%b", a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell S2_concat_class_z
+%%meta class	S2	concat_class	'z	right	-
+%%out p8	zzzzzzzz
+%%out a4	zzzz
+%%use b0
+%%use b2
+  initial begin
+    #1;
+    o = new; {o.p8, a4} <= 'z;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:a4=%b", a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_k19_cls
+%%meta class	JUDGE	k19_cls	'z	right	-
+%%out sized	
+%%out p8	11111111
+%%out a4	1111
+%%out sized2	
+%%out p8	01011010
+%%out a4	0101
+%%out fillz	
+%%out p8	zzzzzzzz
+%%out a4	zzzz
+%%out sizedz	
+%%out p8	zzzzzzzz
+%%out a4	zzzz
+%%use b124
+  initial begin
+    o = new;
+    {o.p8, a4} = 12'hfff;
+    $display("C:sized p8=%b a4=%b", o.p8, a4);
+    {o.p8, a4} = 12'h5a5;
+    $display("C:sized2 p8=%b a4=%b", o.p8, a4);
+    o.p8 = 8'h00;
+    {o.p8, a4} = 'z;
+    $display("C:fillz p8=%b a4=%b", o.p8, a4);
+    {o.p8, a4} = 12'bzzzz_zzzz_zzzz;
+    $display("C:sizedz p8=%b a4=%b", o.p8, a4);
+    #1 $finish;
+  end
+  initial #50 $finish;
+endmodule
+
+%%end
+%%cell j_k20_cls_last
+%%meta class	JUDGE	k20_cls_last	-	right	-
+%%out a4	0101
+%%out p8	10100101
+%%use b121
+%%use b122
+  initial begin
+    o = new;
+    
+    #1;
+    {a4, o.p8} = 12'h5a5;
+    #2;
+    $display("C:a4=%b", a4);
+    $display("C:p8=%b", o.p8);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_k21_cls_70
+%%meta class	JUDGE	k21_cls_70	-	right	-
+%%out p70	0000000000000000000000000000000000000000000000000000000000000000000101
+%%out b8	00000011
+%%use b121
+%%use b122
+  initial begin
+    o = new;
+    
+    #1;
+    {o.p70, b8} = {70'h5, 8'h3};
+    #2;
+    $display("C:p70=%b", o.p70);
+    $display("C:b8=%b", b8);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_k22_cls_two
+%%meta class	JUDGE	k22_cls_two	-	right	-
+%%out p8	00010010
+%%out q8	00110100
+%%use b121
+%%use b122
+  initial begin
+    o = new;
+    
+    #1;
+    {o.p8, o.q8} = 16'h1234;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:q8=%b", o.q8);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_k23_cls_single
+%%meta class	JUDGE	k23_cls_single	-	right	-
+%%out p8	xxxxxxxx
+%%out p32	11111111111111111111111111111111
+%%use b121
+%%use b122
+  initial begin
+    o = new;
+    
+    #1;
+    o.p8 = 'x; o.p32 = '1;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:p32=%b", o.p32);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_k25_cls_32
+%%meta class	JUDGE	k25_cls_32	-	right	-
+%%out p32	00010010001101000101011001111000
+%%out a4	1001
+%%use b121
+%%use b122
+  initial begin
+    o = new;
+    
+    #1;
+    {o.p32, a4} = 36'h123456789;
+    #2;
+    $display("C:p32=%b", o.p32);
+    $display("C:a4=%b", a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
+%%cell j_w04_cls_nb
+%%meta class	JUDGE	w04_cls_nb	-	right	-
+%%out p8	01011010
+%%out a4	0101
+%%use b117
+%%use b118
+%%use b119
+%%use b120
+  initial begin
+    o = new;
+    
+    #1;
+    {o.p8, a4} <= 12'h5a5;
+    #2;
+    $display("C:p8=%b", o.p8);
+    $display("C:a4=%b", a4);
+    $finish;
+  end
+  initial #60 $finish;
+endmodule
+
+%%end
 %%cell j2_p02_ca_two
 %%meta judge	JUDGE2	p02_ca_two	-	loud	-
 %%err t.sv:5:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: vita could not establish the width of this assignment target, so the unbased unsized fill on its right-hand side is refused [in t]

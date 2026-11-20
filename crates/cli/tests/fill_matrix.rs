@@ -299,6 +299,18 @@ fn u2_event_controls_and_x_merge() {
     check("u2", &[], NATIVE);
 }
 
+/// A class property inside a concatenation target: the native kernel's multi-chunk write
+/// routes the property's piece to the class-field store (U-W7), as the single-chunk path
+/// and the `vm` / `interp` executors do. Every row on all three backends.
+#[test]
+fn class_property_in_a_concatenation_target_on_every_backend() {
+    check(
+        "class",
+        &[],
+        &[&[], &["--backend", "vm"], &["--backend", "interp"]],
+    );
+}
+
 /// The G2 site-by-form table, held here so a row cannot drop out of the data file and a
 /// new form cannot enter it unlisted: for each left-side form, the sites it has rows for.
 const FORMS: &[(&str, &str)] = &[
@@ -315,6 +327,11 @@ const FORMS: &[(&str, &str)] = &[
     ("clocking_drive_wide", "S2"),
     ("concat_2s4s", "S1 S2"),
     ("concat_bits_hier_decl", "S1 S2"),
+    ("concat_class", "S1 S2"),
+    ("concat_class2", "S1"),
+    ("concat_class_hier", "S1"),
+    ("concat_class_last", "S1"),
+    ("concat_class_wide", "S1"),
     ("concat_gen_local", "S1 S2"),
     ("concat_gen_local_first", "S1"),
     ("concat_genfor", "S1"),
