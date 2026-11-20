@@ -248,9 +248,10 @@ impl Elaborator<'_> {
         let (Some(fid), Some(this_net)) = (method.fid, method.this_net) else {
             return;
         };
-        let body = match (&method.func, &method.task) {
-            (Some(f), _) => f.body.clone(),
-            (_, Some(t)) => t.body.clone(),
+        // `item`: the method's own span (§5.2 Q-WEXTPOS fix F1, V), never its body's.
+        let (body, item) = match (&method.func, &method.task) {
+            (Some(f), _) => (f.body.clone(), f.span),
+            (_, Some(t)) => (t.body.clone(), t.span),
             _ => return,
         };
         // §13.4.4: a method body-local declaration initializer runs at entry.
@@ -318,8 +319,8 @@ impl Elaborator<'_> {
         };
         let (blocks, entry) = self.with_scope(&scope_seg, |s| {
             let mut b = ProcessBuilder::new();
-            // §5.2 Q-WEXTPOS C3: the method body's floor.
-            let wext_tok = s.wext_body_enter();
+            // §5.2 Q-WEXTPOS C3: the method body's floor ; fix F1 (V): the method item.
+            let wext_tok = s.wext_body_enter(item);
             // A single exit block: `return` jumps here; the body also falls
             // through to it. `finish()` gives it the implicit `Return` terminator.
             let exit = b.new_block();

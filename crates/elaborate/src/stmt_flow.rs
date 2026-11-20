@@ -471,8 +471,9 @@ impl Elaborator<'_> {
         let mut b = ProcessBuilder::new(); // entry block #0 open
 
         // §5.2 Q-WEXTPOS C3: the process root's floor ; the mask depth is KEPT (a
-        // synthesized body is lowered under `lower_synth_proc`'s mask, `wext.rs`).
-        let wext_tok = self.wext_body_enter_keep();
+        // synthesized body is lowered under `lower_synth_proc`'s mask, `wext.rs`). Fix F1
+        // (V): the process ITEM's span, never the body's.
+        let wext_tok = self.wext_body_enter_keep(p.span);
         if bare_always_self_timed && stmt_has_timing(&p.body) {
             // Implicit `forever { body }` so the process re-arms on its own #/@.
             self.lower_forever(&mut b, &p.body);

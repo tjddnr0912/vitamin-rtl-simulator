@@ -51,6 +51,19 @@
 //! `line:col` is the one PRE 86fa310d's located error printed on the twin cell (the same
 //! statement with an unsupported call in it: the error is anchored at the innermost
 //! `lower_stmt`'s own span), the paired anchor.
+//!
+//! §5.2 Q-WEXTPOS fix F1 (batch 6, W/wextpos/fixf1): the `wp_` pins and `wb_method_rows`. A
+//! positional instance-array connection's rows carry the connection's own expression (X1:
+//! `instance_array.rs` gives the synthesized `PortConn` the expression's span), identity and
+//! ` at=` alike, and a body the PARSER builds (a UDP's, the enum `.name()` helper's) reads
+//! ` at=-` (V: `record_stmt_at` records nothing for a statement that starts at its open body
+//! item's first byte). These pins dump through `vita`'s own front end with its span resolver
+//! (`view_located`, as the lane's `wext-dump` does), so a row's `@file:line:col` identity is
+//! pinned beside its ` at=`. Each expected text is the PRE dump of the plan's or the premise
+//! judge's cell (W/wextpos/fixf1/plan/cells, premise/cells: wext-dump 1a391133 of 17703a0c)
+//! with the move written from a hand-read `line:col` (W/wextpos/fixf1/build/pins/pred), never
+//! the build's output. `wp_arr_obs_rows` pins the one run-time move, M1: `run.json`'s
+//! `kind:"port"` rows under `--obs-procs`.
 
 use diag::{LogEvent, LogSink};
 use std::collections::BTreeMap;
@@ -128,6 +141,67 @@ fn stmts_at(src: &str, want: &[(&str, &str, &str)]) {
         for lo in ats {
             assert_eq!(lc(src, lo), *at_lc, "{sid}: at={lo}");
             assert!(src[lo as usize..].starts_with(text), "{sid}: text at {lo}");
+        }
+    }
+}
+
+struct Res<'a>(&'a hdl_preprocess::SourceMap);
+impl diag::SpanResolver for Res<'_> {
+    fn resolve(&self, lo: u32, hi: u32) -> diag::SourceLoc {
+        self.0.resolve_span(lo as usize, hi as usize)
+    }
+}
+
+/// The view's dump of `src` (as `t.sv`) through `vita`'s front end and elaborated with its
+/// span resolver (§5.2 Q-WEXTPOS fix F1): every writer prints its `@t.sv:line:col` identity
+/// (`ca_idents` / `proc_idents`), as the lane's `wext-dump` prints it.
+fn view_located(src: &str) -> String {
+    let sources = vec![("t.sv".to_string(), src.to_string())];
+    let ((unit, rt, _), smap) =
+        cli::frontend_sources_mapped(&sources, &Quiet, &hdl_preprocess::PreOpts::default())
+            .expect("the front end accepts the design");
+    let res = Res(&smap);
+    let (ir, sc) = elaborate::elaborate_located_params(
+        &unit,
+        &Quiet,
+        &rt.unit_exp,
+        &rt.prec_exp,
+        rt.global_prec_exp,
+        None,
+        Some(&res),
+        &[],
+    );
+    let ir = ir.expect("the design elaborates");
+    sc.write_view.render(&ir, &sc)
+}
+
+fn pin_located(src: &str, want: &str) {
+    let got = view_located(src);
+    assert_eq!(got, want, "\n--- got ---\n{got}--- want ---\n{want}");
+}
+
+/// For each `(writer, statement, line:col, text)`: every `W` line of that writer (its whole
+/// located identity) and statement id has one `at=<lo>` at `line:col` whose text starts with
+/// `text`.
+fn writer_stmts_at(src: &str, want: &[(&str, &str, &str, &str)]) {
+    let dump = view_located(src);
+    for (who, sid, at_lc, text) in want {
+        let ats: Vec<u32> = dump
+            .lines()
+            .filter(|l| l.starts_with(&format!("W {who} ")) && l.split(' ').nth(3) == Some(sid))
+            .map(|l| {
+                let (_, v) = l.rsplit_once(" at=").expect("an at field");
+                v.parse()
+                    .unwrap_or_else(|_| panic!("{who} {sid}: at={v} is not an offset"))
+            })
+            .collect();
+        assert!(!ats.is_empty(), "{who} {sid}: no W line");
+        for lo in ats {
+            assert_eq!(lc(src, lo), *at_lc, "{who} {sid}: at={lo}");
+            assert!(
+                src[lo as usize..].starts_with(text),
+                "{who} {sid}: text at {lo}"
+            );
         }
     }
 }
@@ -1831,7 +1905,11 @@ N n1:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
     stmts_at(src, &[("s8", "4:14", "v[1] = 1")]);
 }
 
-/// premise judge 2 line 4 (F-A): the enum `.name()` function `$enum_name$e_t` is a body the PARSER builds, every statement stamped with the FIRST `.name()` call's path (hdl-parser enums.rs:74, :111), so its writes (`$`-named static locals no user text can name) carry `t.sv:7:9`, not the second call's 9:9: the known parser-synthesized residue ; the four `initial` writes are their own statements.
+/// The enum `.name()` function `$enum_name$e_t` is a body the PARSER builds, its item and every
+/// statement stamped with the FIRST `.name()` call's path (hdl-parser enums.rs:74, :111). Since
+/// §5.2 Q-WEXTPOS fix F1 its writes read ` at=-` (V: a statement starting at its open body item's
+/// first byte records nothing ; RULINGS L1-22 supersedes premise judge 2 line 4's 7:9) ; the four
+/// `initial` writes are their own statements.
 #[test]
 fn wb_enum_name() {
     let src = r#"module top;
@@ -1856,11 +1934,11 @@ W P0:initial blk s5 c0 n0:top.v bits[1:0] via=direct at=99
 W P0:initial blk s6 c0 n1:top.s bits[0:0] via=direct at=110
 W P0:initial blk s7 c0 n0:top.v bits[1:0] via=direct at=128
 W P0:initial blk s8 c0 n2:top.s2 bits[0:0] via=direct at=139
-W F0:func:.top.$enum_name$e_t blk s0 c0 n5:top.$func$$enum_name$e_t.$ia_tmp$5 bits[63:0] via=direct at=114
-W F0:func:.top.$enum_name$e_t blk s2 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=114
-W F0:func:.top.$enum_name$e_t blk s3 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=114
-W F0:func:.top.$enum_name$e_t blk s4 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=114
-W F0:func:.top.$enum_name$e_t blk s1 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=114
+W F0:func:.top.$enum_name$e_t blk s0 c0 n5:top.$func$$enum_name$e_t.$ia_tmp$5 bits[63:0] via=direct at=-
+W F0:func:.top.$enum_name$e_t blk s2 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=-
+W F0:func:.top.$enum_name$e_t blk s3 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=-
+W F0:func:.top.$enum_name$e_t blk s4 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=-
+W F0:func:.top.$enum_name$e_t blk s1 c0 n4:top.$func$$enum_name$e_t.$enum_name$e_t bits[0:0] via=direct at=-
 N n0:top.v Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.s String w=0 alen=0 dims=n decl=-
 N n2:top.s2 String w=0 alen=0 dims=n decl=-
@@ -1889,8 +1967,866 @@ N n5:top.$func$$enum_name$e_t.$ia_tmp$5 Reg w=64 alen=1 dims=n decl=-
         assert_eq!(lc(src, lo), at_lc, "{sid}: at={lo}");
         assert!(src[lo as usize..].starts_with(text), "{sid}: text at {lo}");
     }
-    // Every `F0` write at the FIRST `.name()` call's path, 7:9 (not 9:9): the known
-    // parser-synthesized residue (premise judge 2, F-A ; wext.rs's REVIEW-ONLY list).
-    rows_at(src, &[("F0:func:.top.$enum_name$e_t", "7:9", "v.name()")]);
+    // Every `F0` write unlocated (V): the parser-made body's statements start at its item's
+    // first byte, the first `.name()` call's path (7:9), a position that is not theirs.
+    let f0: Vec<&str> = dump
+        .lines()
+        .filter(|l| l.starts_with("W F0:func:.top.$enum_name$e_t "))
+        .collect();
+    assert_eq!(f0.len(), 5, "F0 rows: {f0:?}");
+    assert!(f0.iter().all(|l| l.ends_with(" at=-")), "F0 rows: {f0:?}");
     pre_text(src, "B C\nsimulation ended (Finish) at time 1\n");
+}
+
+/// A positional instance array (main's D7 cell b6_f1 = the plan's o01, every connection a Slice):
+/// each element's port row at its own connection expression, `a` 8:5, `b` 9:5, `c` 10:5 on both
+/// elements, identity and ` at=` alike (X1). PRE (86fa310d, and 17703a0c's dump): all six at the
+/// instance item, `port@t.sv:7:7` / at=143.
+#[test]
+fn wp_arr_pos() {
+    let src = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic [1:0] a, b, c;
+  sub u[1:0](
+    a,
+    b,
+    c
+  );
+  initial begin a = 2'b01; #1 $display("%b %b", b, c); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=11 bits=11 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:8:5 cont - c0 n3:top.u[1].a bits[0:0] via=- at=155
+W C1:port@t.sv:9:5 cont - c0 n1:top.b bits[1:1] via=- at=162
+W C2:port@t.sv:10:5 cont - c0 n2:top.c bits[1:1] via=- at=169
+W C3:assign@t.sv:2:3 cont - c0 n4:top.u[1].b bits[0:0] via=- at=68
+W C4:assign@t.sv:3:3 cont - c0 n5:top.u[1].c bits[0:0] via=- at=84
+W C5:port@t.sv:8:5 cont - c0 n6:top.u[0].a bits[0:0] via=- at=155
+W C6:port@t.sv:9:5 cont - c0 n1:top.b bits[0:0] via=- at=162
+W C7:port@t.sv:10:5 cont - c0 n2:top.c bits[0:0] via=- at=169
+W C8:assign@t.sv:2:3 cont - c0 n7:top.u[0].b bits[0:0] via=- at=68
+W C9:assign@t.sv:3:3 cont - c0 n8:top.u[0].c bits[0:0] via=- at=84
+W P0:initial@t.sv:12:3 blk s0 c0 n0:top.a bits[1:0] via=direct at=192
+N n0:top.a Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.c Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n4:top.u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n5:top.u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n6:top.u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n7:top.u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n8:top.u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "8:5", "a,"),
+            ("C5:port", "8:5", "a,"),
+            ("C1:port", "9:5", "b,"),
+            ("C6:port", "9:5", "b,"),
+            ("C2:port", "10:5", "c\n"),
+            ("C7:port", "10:5", "c\n"),
+        ],
+    );
+}
+
+/// The same with a one-bit `a` (the Shared plan) beside two Slice connections (cell a01): the
+/// synthesized part-selects keep `bits[1:1]` / `bits[0:0]` ; every row at its own expression (PRE:
+/// 7:7).
+#[test]
+fn wp_arr_pos_slice() {
+    let src = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic a; logic [1:0] b, c;
+  sub u[1:0](
+    a,
+    b,
+    c
+  );
+  initial begin a = 1; #1 $display("%b %b", b, c); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=11 bits=11 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:8:5 cont - c0 n3:top.u[1].a bits[0:0] via=- at=161
+W C1:port@t.sv:9:5 cont - c0 n1:top.b bits[1:1] via=- at=168
+W C2:port@t.sv:10:5 cont - c0 n2:top.c bits[1:1] via=- at=175
+W C3:assign@t.sv:2:3 cont - c0 n4:top.u[1].b bits[0:0] via=- at=68
+W C4:assign@t.sv:3:3 cont - c0 n5:top.u[1].c bits[0:0] via=- at=84
+W C5:port@t.sv:8:5 cont - c0 n6:top.u[0].a bits[0:0] via=- at=161
+W C6:port@t.sv:9:5 cont - c0 n1:top.b bits[0:0] via=- at=168
+W C7:port@t.sv:10:5 cont - c0 n2:top.c bits[0:0] via=- at=175
+W C8:assign@t.sv:2:3 cont - c0 n7:top.u[0].b bits[0:0] via=- at=68
+W C9:assign@t.sv:3:3 cont - c0 n8:top.u[0].c bits[0:0] via=- at=84
+W P0:initial@t.sv:12:3 blk s0 c0 n0:top.a bits[0:0] via=direct at=198
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.c Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n4:top.u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n5:top.u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n6:top.u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n7:top.u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n8:top.u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "8:5", "a,"),
+            ("C5:port", "8:5", "a,"),
+            ("C1:port", "9:5", "b,"),
+            ("C6:port", "9:5", "b,"),
+            ("C2:port", "10:5", "c\n"),
+            ("C7:port", "10:5", "c\n"),
+        ],
+    );
+}
+
+/// An open third positional connection (cell a03): it wires no row on either element (4 port rows,
+/// none for `c`) ; `a` 7:14, `b` 8:5 (PRE: 7:7).
+#[test]
+fn wp_arr_pos_open() {
+    let src = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic a; logic [1:0] b;
+  sub u[1:0](a,
+    b, );
+  initial begin a = 1; #1 $display("%b", b); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=9 bits=9 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:7:14 cont - c0 n2:top.u[1].a bits[0:0] via=- at=153
+W C1:port@t.sv:8:5 cont - c0 n1:top.b bits[1:1] via=- at=160
+W C2:assign@t.sv:2:3 cont - c0 n3:top.u[1].b bits[0:0] via=- at=68
+W C3:assign@t.sv:3:3 cont - c0 n4:top.u[1].c bits[0:0] via=- at=84
+W C4:port@t.sv:7:14 cont - c0 n5:top.u[0].a bits[0:0] via=- at=153
+W C5:port@t.sv:8:5 cont - c0 n1:top.b bits[0:0] via=- at=160
+W C6:assign@t.sv:2:3 cont - c0 n6:top.u[0].b bits[0:0] via=- at=68
+W C7:assign@t.sv:3:3 cont - c0 n7:top.u[0].c bits[0:0] via=- at=84
+W P0:initial@t.sv:9:3 blk s0 c0 n0:top.a bits[0:0] via=direct at=182
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n3:top.u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n4:top.u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n5:top.u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n6:top.u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n7:top.u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "7:14", "a,"),
+            ("C4:port", "7:14", "a,"),
+            ("C1:port", "8:5", "b,"),
+            ("C5:port", "8:5", "b,"),
+        ],
+    );
+}
+
+/// The named twin (cell a02): unchanged by fix F1 — each row at its connection's `.` on both
+/// elements (FROM), the `.c` shorthand from its `.` too. The guard against moving the named arm.
+#[test]
+fn wp_arr_named() {
+    let src = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic a; logic [1:0] b, c;
+  sub u[1:0](
+    .a(a),
+    .b(b),
+    .c
+  );
+  initial begin a = 1; #1 $display("%b %b", b, c); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=11 bits=11 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:8:5 cont - c0 n3:top.u[1].a bits[0:0] via=- at=161
+W C1:port@t.sv:9:5 cont - c0 n1:top.b bits[1:1] via=- at=172
+W C2:port@t.sv:10:5 cont - c0 n2:top.c bits[1:1] via=- at=183
+W C3:assign@t.sv:2:3 cont - c0 n4:top.u[1].b bits[0:0] via=- at=68
+W C4:assign@t.sv:3:3 cont - c0 n5:top.u[1].c bits[0:0] via=- at=84
+W C5:port@t.sv:8:5 cont - c0 n6:top.u[0].a bits[0:0] via=- at=161
+W C6:port@t.sv:9:5 cont - c0 n1:top.b bits[0:0] via=- at=172
+W C7:port@t.sv:10:5 cont - c0 n2:top.c bits[0:0] via=- at=183
+W C8:assign@t.sv:2:3 cont - c0 n7:top.u[0].b bits[0:0] via=- at=68
+W C9:assign@t.sv:3:3 cont - c0 n8:top.u[0].c bits[0:0] via=- at=84
+W P0:initial@t.sv:12:3 blk s0 c0 n0:top.a bits[0:0] via=direct at=207
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.c Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n4:top.u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n5:top.u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n6:top.u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n7:top.u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n8:top.u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "8:5", ".a(a)"),
+            ("C5:port", "8:5", ".a(a)"),
+            ("C1:port", "9:5", ".b(b)"),
+            ("C6:port", "9:5", ".b(b)"),
+            ("C2:port", "10:5", ".c\n"),
+            ("C7:port", "10:5", ".c\n"),
+        ],
+    );
+}
+
+/// A positional instance array inside a generate loop (cell a04): both copies `gg[0]` / `gg[1]` and
+/// both elements give their rows the one connection's text (FROM x FROM), `a` 9:16, `b` 10:7, `c`
+/// 11:7 (PRE: 9:9) ; the plain `v(a, , )` row stays 12:11.
+#[test]
+fn wp_arr_in_gen() {
+    let src = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic a;
+  for (genvar g = 0; g < 2; g++) begin : gg
+    logic [1:0] b, c;
+    sub u[1:0](a,
+      b,
+      c);
+    sub v(a, , );
+  end
+  initial begin a = 1; #1 $display("%b %b", gg[0].b, gg[1].c); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=27 bits=27 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:9:16 cont - c0 n5:top.gg[0].u[1].a bits[0:0] via=- at=206
+W C1:port@t.sv:10:7 cont - c0 n1:top.gg[0].b bits[1:1] via=- at=215
+W C2:port@t.sv:11:7 cont - c0 n2:top.gg[0].c bits[1:1] via=- at=224
+W C3:assign@t.sv:2:3 cont - c0 n6:top.gg[0].u[1].b bits[0:0] via=- at=68
+W C4:assign@t.sv:3:3 cont - c0 n7:top.gg[0].u[1].c bits[0:0] via=- at=84
+W C5:port@t.sv:9:16 cont - c0 n8:top.gg[0].u[0].a bits[0:0] via=- at=206
+W C6:port@t.sv:10:7 cont - c0 n1:top.gg[0].b bits[0:0] via=- at=215
+W C7:port@t.sv:11:7 cont - c0 n2:top.gg[0].c bits[0:0] via=- at=224
+W C8:assign@t.sv:2:3 cont - c0 n9:top.gg[0].u[0].b bits[0:0] via=- at=68
+W C9:assign@t.sv:3:3 cont - c0 n10:top.gg[0].u[0].c bits[0:0] via=- at=84
+W C10:port@t.sv:12:11 cont - c0 n11:top.gg[0].v.a bits[0:0] via=- at=238
+W C11:assign@t.sv:2:3 cont - c0 n12:top.gg[0].v.b bits[0:0] via=- at=68
+W C12:assign@t.sv:3:3 cont - c0 n13:top.gg[0].v.c bits[0:0] via=- at=84
+W C13:port@t.sv:9:16 cont - c0 n14:top.gg[1].u[1].a bits[0:0] via=- at=206
+W C14:port@t.sv:10:7 cont - c0 n3:top.gg[1].b bits[1:1] via=- at=215
+W C15:port@t.sv:11:7 cont - c0 n4:top.gg[1].c bits[1:1] via=- at=224
+W C16:assign@t.sv:2:3 cont - c0 n15:top.gg[1].u[1].b bits[0:0] via=- at=68
+W C17:assign@t.sv:3:3 cont - c0 n16:top.gg[1].u[1].c bits[0:0] via=- at=84
+W C18:port@t.sv:9:16 cont - c0 n17:top.gg[1].u[0].a bits[0:0] via=- at=206
+W C19:port@t.sv:10:7 cont - c0 n3:top.gg[1].b bits[0:0] via=- at=215
+W C20:port@t.sv:11:7 cont - c0 n4:top.gg[1].c bits[0:0] via=- at=224
+W C21:assign@t.sv:2:3 cont - c0 n18:top.gg[1].u[0].b bits[0:0] via=- at=68
+W C22:assign@t.sv:3:3 cont - c0 n19:top.gg[1].u[0].c bits[0:0] via=- at=84
+W C23:port@t.sv:12:11 cont - c0 n20:top.gg[1].v.a bits[0:0] via=- at=238
+W C24:assign@t.sv:2:3 cont - c0 n21:top.gg[1].v.b bits[0:0] via=- at=68
+W C25:assign@t.sv:3:3 cont - c0 n22:top.gg[1].v.c bits[0:0] via=- at=84
+W P0:initial@t.sv:14:3 blk s0 c0 n0:top.a bits[0:0] via=direct at=268
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.gg[0].b Logic w=2 alen=1 dims=n decl=Generate/Logic/Internal
+N n2:top.gg[0].c Logic w=2 alen=1 dims=n decl=Generate/Logic/Internal
+N n3:top.gg[1].b Logic w=2 alen=1 dims=n decl=Generate/Logic/Internal
+N n4:top.gg[1].c Logic w=2 alen=1 dims=n decl=Generate/Logic/Internal
+N n5:top.gg[0].u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n6:top.gg[0].u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n7:top.gg[0].u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n8:top.gg[0].u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n9:top.gg[0].u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n10:top.gg[0].u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n11:top.gg[0].v.a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n12:top.gg[0].v.b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n13:top.gg[0].v.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n14:top.gg[1].u[1].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n15:top.gg[1].u[1].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n16:top.gg[1].u[1].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n17:top.gg[1].u[0].a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n18:top.gg[1].u[0].b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n19:top.gg[1].u[0].c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n20:top.gg[1].v.a Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n21:top.gg[1].v.b Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n22:top.gg[1].v.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "9:16", "a,"),
+            ("C18:port", "9:16", "a,"),
+            ("C1:port", "10:7", "b,"),
+            ("C19:port", "10:7", "b,"),
+            ("C2:port", "11:7", "c);"),
+            ("C20:port", "11:7", "c);"),
+            ("C10:port", "12:11", "a, , );"),
+            ("C23:port", "12:11", "a, , );"),
+        ],
+    );
+}
+
+/// A UDP instance array (cell b01, plan X2 / L11): `ma[1:0](oo, a, b, s)` gives each element's four
+/// rows their own expressions, `oo` 25:17, `a` 25:21, `b` 25:24, `s` 25:27 (PRE: 25:9) ; the plain
+/// instances `m1` / `f1` keep their own (22:12 .. 24:20). Every row of the parser-made bodies reads
+/// ` at=-` (V: `wp_udp_body`).
+#[test]
+fn wp_udp_arr() {
+    let src = r#"primitive mux_p(o, a, b, s);
+  output o; input a, b, s;
+  table
+    0 ? 0 : 0;
+    1 ? 0 : 1;
+    ? 0 1 : 0;
+    ? 1 1 : 1;
+  endtable
+endprimitive
+primitive dff_p(q, clk, d);
+  output q; reg q; input clk, d;
+  initial q = 0;
+  table
+    (01) 0 : ? : 0;
+    (01) 1 : ? : 1;
+    (1?) ? : ? : -;
+    ?  (??) : ? : -;
+  endtable
+endprimitive
+module top;
+  logic a, b, s, clk, d; wire o, q; wire [1:0] oo;
+  mux_p m1(o,
+     a, b, s);
+  dff_p f1(q, clk, d);
+  mux_p ma[1:0](oo, a, b, s);
+  initial begin a = 0; b = 1; s = 1; clk = 0; d = 1; #1 clk = 1; #1 $display("%b %b %b", o, q, oo); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=45 bits=45 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:22:12 cont - c0 n5:top.o bits[0:0] via=- at=413
+W C1:port@t.sv:23:6 cont - c0 n9:top.m1.a bits[0:0] via=- at=421
+W C2:port@t.sv:23:9 cont - c0 n10:top.m1.b bits[0:0] via=- at=424
+W C3:port@t.sv:23:12 cont - c0 n11:top.m1.s bits[0:0] via=- at=427
+W C4:port@t.sv:24:12 cont - c0 n6:top.q bits[0:0] via=- at=442
+W C5:port@t.sv:24:15 cont - c0 n13:top.f1.clk bits[0:0] via=- at=445
+W C6:port@t.sv:24:20 cont - c0 n14:top.f1.d bits[0:0] via=- at=450
+W C7:port@t.sv:25:17 cont - c0 n7:top.oo bits[1:1] via=- at=470
+W C8:port@t.sv:25:21 cont - c0 n18:top.ma[1].a bits[0:0] via=- at=474
+W C9:port@t.sv:25:24 cont - c0 n19:top.ma[1].b bits[0:0] via=- at=477
+W C10:port@t.sv:25:27 cont - c0 n20:top.ma[1].s bits[0:0] via=- at=480
+W C11:port@t.sv:25:17 cont - c0 n7:top.oo bits[0:0] via=- at=470
+W C12:port@t.sv:25:21 cont - c0 n22:top.ma[0].a bits[0:0] via=- at=474
+W C13:port@t.sv:25:24 cont - c0 n23:top.ma[0].b bits[0:0] via=- at=477
+W C14:port@t.sv:25:27 cont - c0 n24:top.ma[0].s bits[0:0] via=- at=480
+W P0:initial@t.sv:26:3 blk s0 c0 n0:top.a bits[0:0] via=direct at=500
+W P0:initial@t.sv:26:3 blk s1 c0 n1:top.b bits[0:0] via=direct at=507
+W P0:initial@t.sv:26:3 blk s2 c0 n2:top.s bits[0:0] via=direct at=514
+W P0:initial@t.sv:26:3 blk s3 c0 n3:top.clk bits[0:0] via=direct at=521
+W P0:initial@t.sv:26:3 blk s4 c0 n4:top.d bits[0:0] via=direct at=530
+W P0:initial@t.sv:26:3 blk s5 c0 n3:top.clk bits[0:0] via=direct at=540
+W P1:initial@t.sv:1:1 blk s8 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P1:initial@t.sv:1:1 blk s9 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P1:initial@t.sv:1:1 blk s10 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P2:always@t.sv:1:1 blk s11 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P2:always@t.sv:1:1 blk s12 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P2:always@t.sv:1:1 blk s13 c0 n8:top.m1.o bits[0:0] via=direct at=-
+W P3:initial@t.sv:10:1 blk s14 c0 n12:top.f1.q bits[0:0] via=direct at=-
+W P4:always@t.sv:10:1 blk s18 c0 n15:top.f1.__p_udp_q_0 bits[0:0] via=direct at=-
+W P4:always@t.sv:10:1 blk s19 c0 n16:top.f1.__p_udp_q_1 bits[0:0] via=direct at=-
+W P4:always@t.sv:10:1 blk s15 c0 n12:top.f1.q bits[0:0] via=direct at=-
+W P4:always@t.sv:10:1 blk s16 c0 n12:top.f1.q bits[0:0] via=direct at=-
+W P4:always@t.sv:10:1 blk s17 c0 n12:top.f1.q bits[0:0] via=direct at=-
+W P5:initial@t.sv:1:1 blk s20 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P5:initial@t.sv:1:1 blk s21 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P5:initial@t.sv:1:1 blk s22 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P6:always@t.sv:1:1 blk s23 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P6:always@t.sv:1:1 blk s24 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P6:always@t.sv:1:1 blk s25 c0 n17:top.ma[1].o bits[0:0] via=direct at=-
+W P7:initial@t.sv:1:1 blk s26 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+W P7:initial@t.sv:1:1 blk s27 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+W P7:initial@t.sv:1:1 blk s28 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+W P8:always@t.sv:1:1 blk s29 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+W P8:always@t.sv:1:1 blk s30 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+W P8:always@t.sv:1:1 blk s31 c0 n21:top.ma[0].o bits[0:0] via=direct at=-
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.s Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.clk Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.d Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n5:top.o Wire w=1 alen=1 dims=n decl=Module/Wire/Internal
+N n6:top.q Wire w=1 alen=1 dims=n decl=Module/Wire/Internal
+N n7:top.oo Wire w=2 alen=1 dims=n decl=Module/Wire/Internal
+N n8:top.m1.o Reg w=1 alen=1 dims=n decl=AnsiPort/Reg/Output
+N n9:top.m1.a Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n10:top.m1.b Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n11:top.m1.s Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n12:top.f1.q Reg w=1 alen=1 dims=n decl=AnsiPort/Reg/Output
+N n13:top.f1.clk Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n14:top.f1.d Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n15:top.f1.__p_udp_q_0 Reg w=1 alen=1 dims=n decl=Module/Reg/Internal
+N n16:top.f1.__p_udp_q_1 Reg w=1 alen=1 dims=n decl=Module/Reg/Internal
+N n17:top.ma[1].o Reg w=1 alen=1 dims=n decl=AnsiPort/Reg/Output
+N n18:top.ma[1].a Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n19:top.ma[1].b Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n20:top.ma[1].s Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n21:top.ma[0].o Reg w=1 alen=1 dims=n decl=AnsiPort/Reg/Output
+N n22:top.ma[0].a Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n23:top.ma[0].b Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+N n24:top.ma[0].s Wire w=1 alen=1 dims=n decl=AnsiPort/Wire/Input
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C7:port", "25:17", "oo,"),
+            ("C11:port", "25:17", "oo,"),
+            ("C8:port", "25:21", "a,"),
+            ("C12:port", "25:21", "a,"),
+            ("C9:port", "25:24", "b,"),
+            ("C13:port", "25:24", "b,"),
+            ("C10:port", "25:27", "s);"),
+            ("C14:port", "25:27", "s);"),
+            ("C0:port", "22:12", "o,"),
+            ("C1:port", "23:6", "a,"),
+            ("C3:port", "23:12", "s);"),
+        ],
+    );
+}
+
+/// Connection expressions of several shapes on plain instances (cell c02, plan P6's sampled forms):
+/// a packed member `p.hi`, an unpacked member `k.g`, a binary `a + 4'd1`, a concatenation (two
+/// chunks, one row), a parenthesized `(c2)` and named members — each row at its own connection,
+/// unchanged by fix F1.
+#[test]
+fn wp_conn_exprs() {
+    let src = r#"module sub(input logic [3:0] a, output logic [3:0] b, output logic c);
+  assign b = a; assign c = ^a;
+endmodule
+module top;
+  typedef struct packed { logic [3:0] hi; logic [3:0] lo; } pk;
+  typedef struct { logic [3:0] f; logic g; } un;
+  pk p; un k; logic [3:0] a; logic [3:0] r; logic c1, c2, c3;
+  sub u1(a,
+         p.hi,
+         k.g);
+  sub u2(.a(a + 4'd1),
+         .b(p.lo), .c(c1));
+  sub u3(a, {r[1:0], r[3:2]}, (c2));
+  sub u4(.a(a), .b(k.f), .c(c3));
+  initial begin a = 5; #1 $display("%h %h %b", p, r, c1); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=22 bits=22 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:8:10 cont - c0 n7:top.u1.a bits[3:0] via=- at=308
+W C1:port@t.sv:9:10 cont - c0 n0:top.p bits[7:4] via=- at=320
+W C2:port@t.sv:10:10 cont - c0 n1:top.k bits[0:0] via=- at=335
+W C3:assign@t.sv:2:3 cont - c0 n8:top.u1.b bits[3:0] via=- at=80
+W C4:assign@t.sv:2:17 cont - c0 n9:top.u1.c bits[0:0] via=- at=94
+W C5:port@t.sv:11:10 cont - c0 n10:top.u2.a bits[3:0] via=- at=350
+W C6:port@t.sv:12:10 cont - c0 n0:top.p bits[3:0] via=- at=373
+W C7:port@t.sv:12:20 cont - c0 n4:top.c1 bits[0:0] via=- at=383
+W C8:assign@t.sv:2:3 cont - c0 n11:top.u2.b bits[3:0] via=- at=80
+W C9:assign@t.sv:2:17 cont - c0 n12:top.u2.c bits[0:0] via=- at=94
+W C10:port@t.sv:13:10 cont - c0 n13:top.u3.a bits[3:0] via=- at=401
+W C11:port@t.sv:13:13 cont - c0 n3:top.r bits[1:0] via=- at=404
+W C11:port@t.sv:13:13 cont - c1 n3:top.r bits[3:2] via=- at=404
+W C12:port@t.sv:13:31 cont - c0 n5:top.c2 bits[0:0] via=- at=422
+W C13:assign@t.sv:2:3 cont - c0 n14:top.u3.b bits[3:0] via=- at=80
+W C14:assign@t.sv:2:17 cont - c0 n15:top.u3.c bits[0:0] via=- at=94
+W C15:port@t.sv:14:10 cont - c0 n16:top.u4.a bits[3:0] via=- at=438
+W C16:port@t.sv:14:17 cont - c0 n1:top.k bits[4:1] via=- at=445
+W C17:port@t.sv:14:26 cont - c0 n6:top.c3 bits[0:0] via=- at=454
+W C18:assign@t.sv:2:3 cont - c0 n17:top.u4.b bits[3:0] via=- at=80
+W C19:assign@t.sv:2:17 cont - c0 n18:top.u4.c bits[0:0] via=- at=94
+W P0:initial@t.sv:15:3 blk s0 c0 n2:top.a bits[3:0] via=direct at=479
+N n0:top.p Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.k Logic w=5 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.r Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.c1 Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n5:top.c2 Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n6:top.c3 Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n7:top.u1.a Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n8:top.u1.b Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n9:top.u1.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n10:top.u2.a Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n11:top.u2.b Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n12:top.u2.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n13:top.u3.a Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n14:top.u3.b Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n15:top.u3.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n16:top.u4.a Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n17:top.u4.b Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n18:top.u4.c Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C1:port", "9:10", "p.hi"),
+            ("C2:port", "10:10", "k.g"),
+            ("C5:port", "11:10", ".a(a + "),
+            ("C11:port", "13:13", "{r[1:0]"),
+            ("C12:port", "13:31", "(c2)"),
+            ("C16:port", "14:17", ".b(k.f)"),
+        ],
+    );
+}
+
+/// Two instance arrays in one instantiation (premise judge L6, cell k07): each item's rows at its
+/// own connections, `ua`'s `a` 4:15 / `b` 4:18, `ub`'s `c` 4:30 / `d` 5:30 on both elements (per
+/// item, not per instantiation ; PRE: 4:7 and 4:22).
+#[test]
+fn wp_arr_two_items() {
+    let src = r#"module sub(input logic i, output logic o); assign o = ~i; endmodule
+module top;
+  logic [1:0] a, b, c, d;
+  sub ua[1:0](a, b), ub[1:0](c,
+                             d);
+  initial begin a = 2'b01; c = 2'b10; #1 $display("%b %b", b, d); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=14 bits=14 geo=0 word=0 undecided=0 poison=0
+W C0:port@t.sv:4:15 cont - c0 n4:top.ua[1].i bits[0:0] via=- at=120
+W C1:port@t.sv:4:18 cont - c0 n1:top.b bits[1:1] via=- at=123
+W C2:assign@t.sv:1:44 cont - c0 n5:top.ua[1].o bits[0:0] via=- at=50
+W C3:port@t.sv:4:15 cont - c0 n6:top.ua[0].i bits[0:0] via=- at=120
+W C4:port@t.sv:4:18 cont - c0 n1:top.b bits[0:0] via=- at=123
+W C5:assign@t.sv:1:44 cont - c0 n7:top.ua[0].o bits[0:0] via=- at=50
+W C6:port@t.sv:4:30 cont - c0 n8:top.ub[1].i bits[0:0] via=- at=135
+W C7:port@t.sv:5:30 cont - c0 n3:top.d bits[1:1] via=- at=167
+W C8:assign@t.sv:1:44 cont - c0 n9:top.ub[1].o bits[0:0] via=- at=50
+W C9:port@t.sv:4:30 cont - c0 n10:top.ub[0].i bits[0:0] via=- at=135
+W C10:port@t.sv:5:30 cont - c0 n3:top.d bits[0:0] via=- at=167
+W C11:assign@t.sv:1:44 cont - c0 n11:top.ub[0].o bits[0:0] via=- at=50
+W P0:initial@t.sv:6:3 blk s0 c0 n0:top.a bits[1:0] via=direct at=187
+W P0:initial@t.sv:6:3 blk s1 c0 n2:top.c bits[1:0] via=direct at=198
+N n0:top.a Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.c Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.d Logic w=2 alen=1 dims=n decl=Module/Logic/Internal
+N n4:top.ua[1].i Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n5:top.ua[1].o Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n6:top.ua[0].i Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n7:top.ua[0].o Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n8:top.ub[1].i Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n9:top.ub[1].o Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n10:top.ub[0].i Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Input
+N n11:top.ub[0].o Logic w=1 alen=1 dims=n decl=AnsiPort/Logic/Output
+",
+    );
+    rows_at(
+        src,
+        &[
+            ("C0:port", "4:15", "a, b)"),
+            ("C3:port", "4:15", "a, b)"),
+            ("C1:port", "4:18", "b),"),
+            ("C4:port", "4:18", "b),"),
+            ("C6:port", "4:30", "c,"),
+            ("C9:port", "4:30", "c,"),
+            ("C7:port", "5:30", "d);"),
+            ("C10:port", "5:30", "d);"),
+        ],
+    );
+}
+
+/// Class method bodies (premise judge L5, cell k14): V's head at the class-method root is the
+/// METHOD item's (`function` / `task`), so each method's first statement stays located — `B.new` `v
+/// = 1` 4:19, `C.new` `w = 2` 8:19, `C.get` `return w + v` 9:31, `C.put` `w = x` 10:36 ; `C.new`'s
+/// auto-inserted `super.new()` discard stays ` at=-` (a prologue store, the floor).
+#[test]
+fn wb_method_rows() {
+    let src = r#"typedef enum {X, Y} ce_t;
+class B;
+  int v;
+  function new(); v = 1; endfunction
+endclass
+class C extends B;
+  int w;
+  function new(); w = 2; endfunction
+  virtual function int get(); return w + v; endfunction
+  task automatic put(input int x); w = x; endtask
+endclass
+module top;
+  C c; int r;
+  initial begin c = new(); c.put(5); r = c.get(); $display("%0d", r); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=9 bits=6 geo=0 word=3 undecided=0 poison=0
+W P0:initial@t.sv:14:3 blk s5 c0 n13:top.c bits[31:0] via=direct at=312
+W P0:initial@t.sv:14:3 blk s6 c0 n15:top.$ia_tmp$15 bits[0:0] via=direct at=312
+W P0:initial@t.sv:14:3 blk s7 c0 n16:top.$ia_tmp$16 bits[0:0] via=direct at=323
+W P0:initial@t.sv:14:3 blk s8 c0 n14:top.r bits[31:0] via=direct at=333
+W F0:func:B.new blk s0 c0 n0:$class$B$new.this word via=direct at=62
+W F1:func:C.new blk s1 c0 n5:$class$C$new.$discard bits[63:0] via=direct at=-
+W F1:func:C.new blk s2 c0 n3:$class$C$new.this word via=direct at=136
+W F2:func:C.get blk s3 c0 n7:$class$C$get.get bits[31:0] via=direct at=185
+W F3:func:C.put blk s4 c0 n9:$class$C$put.this word via=direct at=246
+N n0:$class$B$new.this Integer w=32 alen=1 dims=n decl=-
+N n3:$class$C$new.this Integer w=32 alen=1 dims=n decl=-
+N n5:$class$C$new.$discard Reg w=64 alen=1 dims=n decl=-
+N n7:$class$C$get.get Integer w=32 alen=1 dims=n decl=-
+N n9:$class$C$put.this Integer w=32 alen=1 dims=n decl=-
+N n13:top.c Integer w=32 alen=1 dims=n decl=-
+N n14:top.r Reg w=32 alen=1 dims=n decl=Module/Int/Internal
+N n15:top.$ia_tmp$15 Reg w=1 alen=1 dims=n decl=-
+N n16:top.$ia_tmp$16 Reg w=1 alen=1 dims=n decl=-
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("F0:func:B.new", "s0", "4:19", "v = 1"),
+            ("F1:func:C.new", "s2", "8:19", "w = 2"),
+            ("F2:func:C.get", "s3", "9:31", "return w + v"),
+            ("F3:func:C.put", "s4", "10:36", "w = x"),
+        ],
+    );
+}
+
+/// Deferred assertion ITEMS whose root starts at the item (plan v01): V hides only a store whose
+/// innermost recorded statement is that root ; the user's action writes are their own statements
+/// inside it and stay located, `b = 1'b1` 3:22, `c = 1'b0` 4:20, `c = 1'b1` 4:35.
+#[test]
+fn wp_item_head() {
+    let src = r#"module top;
+  logic a, b, c; logic [3:0] n;
+  assert #0 (a) else b = 1'b1;
+  assert final (a) c = 1'b0; else c = 1'b1;
+  initial begin a = 0; n = 0; #1 a = 1; #1 $display("%b %b %h", b, c, n); $finish; end
+endmodule
+"#;
+    pin_located(
+        src,
+        "\
+WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
+W P0:always_comb@t.sv:3:3 blk s1 c0 n1:top.b bits[0:0] via=defer at=65
+W P1:always_comb@t.sv:4:3 blk s3 c0 n2:top.c bits[0:0] via=defer at=94
+W P1:always_comb@t.sv:4:3 blk s4 c0 n2:top.c bits[0:0] via=defer at=109
+W P2:initial@t.sv:5:3 blk s5 c0 n0:top.a bits[0:0] via=direct at=135
+W P2:initial@t.sv:5:3 blk s6 c0 n3:top.n bits[3:0] via=direct at=142
+W P2:initial@t.sv:5:3 blk s7 c0 n0:top.a bits[0:0] via=direct at=152
+N n0:top.a Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n1:top.b Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n2:top.c Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
+N n3:top.n Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
+",
+    );
+    writer_stmts_at(
+        src,
+        &[
+            ("P0:always_comb@t.sv:3:3", "s1", "3:22", "b = 1'b1"),
+            ("P1:always_comb@t.sv:4:3", "s3", "4:20", "c = 1'b0"),
+            ("P1:always_comb@t.sv:4:3", "s4", "4:35", "c = 1'b1"),
+        ],
+    );
+}
+
+/// The bodies the PARSER builds for a UDP (cell b01, plan X3): every statement of a
+/// `primitive`'s `initial` / `always` carries the whole primitive's span, which is also the
+/// process item's (hdl-parser udp.rs, udp_table.rs), so V leaves all 24 body rows of `m1`,
+/// `f1` and both `ma` elements ` at=-` (PRE: at=0 `primitive mux_p` and at=148 `primitive
+/// dff_p`, a position that is not theirs ; PLAN-ADD M3). The user's `initial` keeps its six.
+#[test]
+fn wp_udp_body() {
+    let src = r#"primitive mux_p(o, a, b, s);
+  output o; input a, b, s;
+  table
+    0 ? 0 : 0;
+    1 ? 0 : 1;
+    ? 0 1 : 0;
+    ? 1 1 : 1;
+  endtable
+endprimitive
+primitive dff_p(q, clk, d);
+  output q; reg q; input clk, d;
+  initial q = 0;
+  table
+    (01) 0 : ? : 0;
+    (01) 1 : ? : 1;
+    (1?) ? : ? : -;
+    ?  (??) : ? : -;
+  endtable
+endprimitive
+module top;
+  logic a, b, s, clk, d; wire o, q; wire [1:0] oo;
+  mux_p m1(o,
+     a, b, s);
+  dff_p f1(q, clk, d);
+  mux_p ma[1:0](oo, a, b, s);
+  initial begin a = 0; b = 1; s = 1; clk = 0; d = 1; #1 clk = 1; #1 $display("%b %b %b", o, q, oo); $finish; end
+endmodule
+"#;
+    let dump = view(src);
+    let body: Vec<&str> = dump
+        .lines()
+        .filter(|l| l.starts_with("W P") && !l.starts_with("W P0:"))
+        .collect();
+    assert_eq!(body.len(), 24, "UDP body rows: {body:?}");
+    assert!(
+        body.iter().all(|l| l.ends_with(" at=-")),
+        "UDP body rows: {body:?}"
+    );
+    stmts_at(
+        src,
+        &[
+            ("s0", "26:17", "a = 0"),
+            ("s1", "26:24", "b = 1"),
+            ("s2", "26:31", "s = 1"),
+            ("s3", "26:38", "clk = 0"),
+            ("s4", "26:47", "d = 1"),
+            ("s5", "26:57", "clk = 1"),
+        ],
+    );
+}
+
+/// `--obs-procs`'s `run.json`: each `kind:"port"` row of `processes.items` as `(index, scope,
+/// line, col)`, with the run's stdout (stderr and exit code are PRE's, checked here).
+fn obs_port_rows(src: &str) -> (String, Vec<(u64, String, u64, u64)>) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_wext_obs_{}_{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).expect("temp dir");
+    std::fs::write(d.join("t.sv"), src).expect("write t.sv");
+    let r = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .args(["t.sv", "--obs-dir", "obs", "--obs-procs"])
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let json = std::fs::read_to_string(d.join("obs").join("run.json")).expect("run.json");
+    let _ = std::fs::remove_dir_all(&d);
+    assert_eq!(String::from_utf8_lossy(&r.stderr), PRE_ERR, "stderr");
+    assert_eq!(r.status.code(), Some(0), "exit code");
+    let field = |row: &str, key: &str| -> String {
+        let pat = format!("\"{key}\": ");
+        let i = row
+            .find(&pat)
+            .unwrap_or_else(|| panic!("no {key} in {row}"))
+            + pat.len();
+        let rest = &row[i..];
+        let end = rest.find([',', '}']).expect("a field end");
+        rest[..end].trim_matches('"').to_string()
+    };
+    let rows = json
+        .lines()
+        .filter(|l| l.contains("\"kind\": \"port\""))
+        .map(|l| {
+            (
+                field(l, "index").parse().expect("index"),
+                field(l, "scope"),
+                field(l, "line").parse().expect("line"),
+                field(l, "col").parse().expect("col"),
+            )
+        })
+        .collect();
+    (String::from_utf8_lossy(&r.stdout).into_owned(), rows)
+}
+
+/// M1 (PLAN-ADD A.2, premise judge L11), the one run-time move of fix F1: under `--obs-dir ..
+/// --obs-procs`, `run.json`'s `kind:"port"` rows of a POSITIONAL instance array carry each
+/// connection's own `line` / `col`. PRE 86fa310d printed the instance item for every row: the
+/// module array (main's b6_f1 = plan cell o01) `t.sv 7 7` on all six, the UDP array (premise
+/// cell k06) `t.sv 12 9` on all eight. The simulation's stdout is PRE's.
+#[test]
+fn wp_arr_obs_rows() {
+    let module_arr = r#"module sub(input logic a, output logic b, output logic c);
+  assign b = a;
+  assign c = ~a;
+endmodule
+module top;
+  logic [1:0] a, b, c;
+  sub u[1:0](
+    a,
+    b,
+    c
+  );
+  initial begin a = 2'b01; #1 $display("%b %b", b, c); $finish; end
+endmodule
+"#;
+    let (out, rows) = obs_port_rows(module_arr);
+    assert_eq!(
+        out, "01 10\nsimulation ended (Finish) at time 1\n",
+        "stdout"
+    );
+    let want: Vec<(u64, String, u64, u64)> = [
+        (0, "top.u[1]", 8, 5),
+        (1, "top.u[1]", 9, 5),
+        (2, "top.u[1]", 10, 5),
+        (5, "top.u[0]", 8, 5),
+        (6, "top.u[0]", 9, 5),
+        (7, "top.u[0]", 10, 5),
+    ]
+    .iter()
+    .map(|&(i, s, l, c)| (i, s.to_string(), l, c))
+    .collect();
+    assert_eq!(rows, want, "module array port rows");
+    let udp_arr = r#"primitive mux_p(o, a, b, s);
+  output o; input a, b, s;
+  table
+    0 ? 0 : 0;
+    1 ? 0 : 1;
+    ? 0 1 : 0;
+    ? 1 1 : 1;
+  endtable
+endprimitive
+module top;
+  logic a, b, s; wire [1:0] oo;
+  mux_p ma[1:0](oo,
+     a, b, s);
+  initial begin a = 0; b = 1; s = 1; #1 $display("%b", oo); $finish; end
+endmodule
+"#;
+    let (out, rows) = obs_port_rows(udp_arr);
+    assert_eq!(out, "11\nsimulation ended (Finish) at time 1\n", "stdout");
+    let want: Vec<(u64, String, u64, u64)> = [
+        (0, "top.ma[1]", 12, 17),
+        (1, "top.ma[1]", 13, 6),
+        (2, "top.ma[1]", 13, 9),
+        (3, "top.ma[1]", 13, 12),
+        (4, "top.ma[0]", 12, 17),
+        (5, "top.ma[0]", 13, 6),
+        (6, "top.ma[0]", 13, 9),
+        (7, "top.ma[0]", 13, 12),
+    ]
+    .iter()
+    .map(|&(i, s, l, c)| (i, s.to_string(), l, c))
+    .collect();
+    assert_eq!(rows, want, "UDP array port rows");
 }

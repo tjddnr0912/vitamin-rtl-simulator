@@ -193,27 +193,58 @@
 //! (another purpose: its task mark covers the body, not the copy-in / copy-out, and its
 //! action mark both assertion kinds); not read here.
 //!
-//! EACH WRITE'S OWN POSITION (§5.2 Q-WEXTPOS, unit C2: continuous rows). `Write::at` is
-//! the raw source span (`ast::Span`, a byte range of the preprocessed text; no file, line
-//! or column is kept here) of the text that writes, or `None`. A continuous row takes the
-//! span its producer passes to `push_cont_assign` as `at`, recorded by `record_row_at`
-//! into `row_at` (lockstep with `cont_assigns`, checked at the build in a debug run). The
-//! positive set is the two kinds the planned reader prints (§5.2 Q-MDRVMIX, parked): an
-//! `assign` row is its own
-//! assignment's target `lv.span()` (`netdecl.rs` `elaborate_cont_assign`, one row per
-//! assignment of a list or per gate terminal; `cont_array.rs` `cont_assign_whole_array`,
-//! every element row of one whole-array `assign` its one target), a `port` row the port
-//! connection in the parent's instantiation (`conn.span`: a named connection from its
-//! `.`, a positional one its expression) and `None` for a `.*` connection (its expression
-//! is synthesized and stamped with the child module's name, which is not the write's
-//! text). The kinds no reader prints carry `None`: `net_init` (`var_init.rs`), the
-//! level-select net (`events.rs`) and the time-0 pulse (`const_level_header.rs`). A
-//! procedural write's `at` is a statement's (C3, below). `at` is not
-//! `ca_idents`' span (`push_cont_assign`'s `span`, the profile identity: the statement for
-//! an `assign`), which is kept as it was. The dump prints one last field per `W` line,
-//! ` at=<lo>` (the decimal byte offset) or ` at=-`. REVIEW-ONLY: that the spelled argument
-//! is the right node's on a form with no pin (`wext_view.rs` pins `lc(src, lo)` per form;
-//! `wext_home.rs` H13 counts each caller's spelling).
+//! EACH WRITE'S OWN POSITION (§5.2 Q-WEXTPOS, unit C2: continuous rows ; fix F1: the rule
+//! and V). `Write::at` is a raw source span (`ast::Span`, a byte range of the preprocessed
+//! text; no file, line or column is kept here), or `None`. THE RULE (R-AT): `Some(s)` only
+//! when `s` is one of
+//! - OWN: the text of the parsed node that IS this write — an `assign`'s target, a gate's
+//!   output terminal, a port connection (a named one from its `.`, a positional one its
+//!   expression, on a plain instance and on each element of an instance array alike), a
+//!   procedural assignment, force or release statement ;
+//! - FROM: one written construct vita splits into several rows, every row that construct's
+//!   own text — the element rows of a whole-array `assign` or of an array port, the element
+//!   instances of an instance array (named or positional: its element rows share their one
+//!   connection's text), the copies of a generate body, the instances of one module, the
+//!   copies of a `do .. while` body, the elements of an array pattern ; so a generate body
+//!   elaborated N times, a module instantiated N times and a `do .. while` body give N
+//!   writes with one `at` ;
+//! - HOLDER (procedural rows only): the innermost PARSED statement whose lowering pushed a
+//!   store vita built — a hoisted temporary, a loop's control variable, an
+//!   intra-assignment capture, a case scrutinee, an inlined task's copy-in, copy-out and
+//!   local initializer (the CALL statement), a block-local initializer (its `begin` block,
+//!   in a frame body through `emit_frame_local_inits` and in a module process body through
+//!   `emit_per_entry_block_inits` alike) — always an `ast::Stmt`.
+//!
+//! Otherwise `None`, and NEVER an item that holds several writes as peers (an instance item
+//! for its connections, a gate list, an `assign` list, a declaration list, a `primitive`, a
+//! module name) or a node from elsewhere (another call site, a child module's name). The
+//! view does not record which of the three a row is: a reader that needs the difference
+//! reads `via` and the target's name ; the source map is the reader's (two rows from one
+//! macro expansion have two offsets and one `file:line:col`, the invocation's).
+//! A continuous row takes the span its producer passes to `push_cont_assign` as `at`,
+//! recorded by `record_row_at` into `row_at` (lockstep with `cont_assigns`, checked at the
+//! build in a debug run). The positive set is the two kinds the planned reader prints
+//! (§5.2 Q-MDRVMIX, parked): an `assign` row is its own assignment's target `lv.span()`
+//! (`netdecl.rs` `elaborate_cont_assign`, one row per assignment of a list or per gate
+//! terminal; `cont_array.rs` `cont_assign_whole_array`, every element row of one whole-array
+//! `assign` its one target), a `port` row the port connection in the parent's instantiation
+//! (`conn.span`, the `ConnSite` `wire_ports` picks: a positional connection's expression, a
+//! named one's `PortConn` span — the parser's from the `.`, or the one `instance_array.rs`
+//! builds per element, which carries the parsed connection's span, the expression's for a
+//! positional list) and `None` for a `.*` connection (its expression is synthesized and
+//! stamped with the child module's name, which is not the write's text). The kinds no
+//! reader prints carry `None`: `net_init` (`var_init.rs`), the level-select net
+//! (`events.rs`) and the time-0 pulse (`const_level_header.rs`). A procedural write's `at`
+//! is a statement's (C3, below). `at` is not `ca_idents`' span for an `assign` row
+//! (`push_cont_assign`'s `span`, the profile identity: the statement), which is kept as it
+//! was ; a `port` row's identity is the same connection span. The dump prints one last
+//! field per `W` line, ` at=<lo>` (the decimal byte offset) or ` at=-`. REVIEW-ONLY: that
+//! the spelled argument is the right node's on a form with no pin (`wext_view.rs` pins
+//! `lc(src, lo)` per form; `wext_home.rs` H13 counts each caller's spelling, H15 each
+//! construction of a connection or a statement node in this crate and its span field) ;
+//! that the top node of a parsed connection expression, gate terminal or `assign` target
+//! carries its own text's span (sampled by the pins, censused by the premise judge: not a
+//! rule a test holds).
 //!
 //! A STATEMENT'S OWN POSITION (§5.2 Q-WEXTPOS, unit C3). `lower_stmt` reads `start =
 //! stmts.len()` at its entry and at its one exit calls `record_stmt_at` with the fn's OWN
@@ -246,6 +277,24 @@
 //! assertion's action calling a static task) records its own statements, and a copy-in or
 //! copy-out its call pushes is the call statement. `build_write_view` `debug_assert!`s the
 //! mask depth and the open bodies are 0.
+//! V (fix F1): each body root also takes the span of the ITEM its body belongs to — the
+//! process block (`lower_proc_block`), the function or task (the frame bodies), the class
+//! method — never the body's own (an implicit body block starts at its first statement),
+//! keeps it as the open item while it is open and restores the enclosing root's at its exit
+//! (a frame body lowered inside an open process statement nests) ; the callee entries keep
+//! the caller's. `note_stmt_at` records nothing for a statement whose span starts at the open
+//! item's first byte: no user-written statement of a process or a routine starts at its
+//! item's keyword, while a body the PARSER builds stamps one span on its item and on every
+//! statement — a UDP's `initial` and `always` (hdl-parser `udp.rs`, `udp_table.rs`: the
+//! whole `primitive`), the enum `.name()` function `$enum_name$<T>` (`enums.rs`: the FIRST
+//! `.name()` call's path) and the two `type_param_shape` guards (no store) — so their stores
+//! take the floor's `None` where they took a position that was not theirs. V is a value
+//! rule, not provenance: which code built a body is not a fact here (the structural row
+//! of parser-made names and bodies owns it ; V is what it replaces). Its one residue on user
+//! text: a deferred assertion ITEM's root statement (an unlabeled `DeferredAssert` or a
+//! labeled block, hdl-parser `item_dispatch.rs`) starts at the item's first byte, so a store
+//! whose innermost recorded statement is that root reads `None` (HOLDER lost, the safe
+//! direction ; the action statements inside it are their own ; no producing form found).
 //! THE RESOLUTION, one reverse pass (`stmt_at_of`; the plan's sort by `(start, Reverse(end),
 //! Reverse(record index))` is its unit tests' reference): every recorder records at its OWN
 //! exit over `[stmts.len() at entry, stmts.len() at exit)`. It needs two facts. (1)
@@ -260,19 +309,14 @@
 //! `push_interval` `debug_assert!`s that order against the interval recorded before.
 //! REVIEW-ONLY for C3: an S call's class (H14 counts the calls, a class written wrongly
 //! is the pins' and review's) ; that a masked built statement's store takes the parsed
-//! statement around it — a hoisted temporary the statement holding the expression, not the
-//! target's column ; a block-local initializer in a frame body its `begin` block ; an
-//! inlined task's copy-in, copy-out and local initializer the call statement — precision
-//! lost, the text holding the write, never another construct's ; that a `TaskInline` write's
-//! `at` is the callee's statement or the call (the view cannot tell which) ; the call site
-//! of an inlined callee's statement (not recorded) ; a UDP body's spans ; a statement from a
-//! macro body or an include (the record holds the raw offset of the preprocessed text) ;
-//! the spans of masked statements (not recorded, never measured) ; a body the PARSER
-//! synthesizes keeps the span the parser gave it: the enum `.name()` function
-//! `$enum_name$<T>` (hdl-parser enums.rs:111, `span = path.span` at enums.rs:74) stamps
-//! every statement with the FIRST `.name()` call's path, so its writes (its return variable
-//! and its scrutinee temporary, `$`-named static locals no user text can name, so no reader
-//! prints them) carry that call's offset (premise judge 2, F-A).
+//! statement around it (HOLDER above) — precision lost, the text holding the write, never
+//! another construct's ; that a `TaskInline` write's `at` is the callee's statement or the
+//! call (the view cannot tell which) ; the call site of an inlined callee's statement (not
+//! recorded) ; a statement from a macro body or an include (the record holds the raw offset
+//! of the preprocessed text) ; the spans of masked statements (not recorded, never
+//! measured) ; that no other body the parser builds carries a span that is not its own and
+//! is not its item's (V cannot see it ; `wext_home.rs` H15p counts every statement
+//! construction of the parser with its span field).
 
 use super::*;
 
@@ -401,6 +445,10 @@ pub(crate) struct WextRecords {
     mask: u32,
     /// Body roots entered and not yet left (`wext_body_enter*` / `wext_body_exit`).
     open_body: u32,
+    /// The span of the ITEM whose body root is open innermost (a process block, a
+    /// function, a task, a class method), `None` while no body root is open (V,
+    /// `note_stmt_at`); each root saves the one before and restores it at its exit.
+    body_item: Option<ast::Span>,
     /// The elaboration held a provisional constant (THE STAND-DOWN; `note_provisional`,
     /// `note_patch`).
     provisional: bool,
@@ -408,10 +456,12 @@ pub(crate) struct WextRecords {
     view_built: bool,
 }
 
-/// A body root's token (C3): the mask depth to restore and the first statement id.
+/// A body root's token (C3): the mask depth to restore, the first statement id and the
+/// enclosing root's item span (V) to restore.
 pub(crate) struct WextBody {
     depth: u32,
     start: usize,
+    item: Option<ast::Span>,
 }
 
 impl WextRecords {
@@ -429,9 +479,14 @@ impl WextRecords {
     }
 
     /// A statement's own interval `[start, end)` with its span: nothing when the span is
-    /// empty (the zero-span guard; `record_stmt_at` asserts it in a debug run).
+    /// empty (the zero-span guard; `record_stmt_at` asserts it in a debug run), and nothing
+    /// when the span starts at the first byte of the open body's item (V, module head: a
+    /// body the parser builds stamps its item's span on every statement).
     pub(crate) fn note_stmt_at(&mut self, start: usize, end: usize, sp: ast::Span) {
         if sp.lo >= sp.hi {
+            return;
+        }
+        if self.body_item.is_some_and(|item| item.lo == sp.lo) {
             return;
         }
         self.push_interval(start, end, Some(sp));
@@ -583,6 +638,10 @@ impl Elaborator<'_> {
             rec.open_body, 0,
             "§5.2 Q-WEXTPOS: a body root is still open at the view"
         );
+        debug_assert!(
+            rec.body_item.is_none(),
+            "§5.2 Q-WEXTPOS: a body item is still set at the view"
+        );
         let mut view = build_view(&WextSource {
             nets: &self.nets,
             exprs: &self.exprs,
@@ -699,8 +758,9 @@ impl Elaborator<'_> {
     /// The statement's position writer (module head, C3), called once at `lower_stmt`'s
     /// one exit with the fn's own `s.span()` and `start = stmts.len()` read at its entry:
     /// `[start, stmts.len())` with that span. Nothing when the mask is up (a statement
-    /// vita built, `wext_unlocated`), when the statement pushed no IR statement, or when
-    /// the span is empty.
+    /// vita built, `wext_unlocated`), when the statement pushed no IR statement, when
+    /// the span is empty, or when it starts at the open body item's first byte (V,
+    /// `note_stmt_at`).
     pub(crate) fn record_stmt_at(&mut self, sp: ast::Span, start: usize) {
         let end = self.stmts.len();
         if self.wext_rec.mask > 0 || start == end {
@@ -733,31 +793,35 @@ impl Elaborator<'_> {
     }
 
     /// A body root (module head, C3: a frame or class-method body's `ProcessBuilder`):
-    /// save the mask depth and set it to 0, remember the first statement id.
-    pub(crate) fn wext_body_enter(&mut self) -> WextBody {
+    /// save the mask depth and set it to 0, remember the first statement id ; `item` is the
+    /// span of the routine ITEM the body belongs to (V), never the body's own.
+    pub(crate) fn wext_body_enter(&mut self, item: ast::Span) -> WextBody {
         self.wext_rec.open_body += 1;
         WextBody {
             depth: std::mem::replace(&mut self.wext_rec.mask, 0),
             start: self.stmts.len(),
+            item: self.wext_rec.body_item.replace(item),
         }
     }
 
     /// The process root (`lower_proc_block`, premise judge line 1): save the mask depth
     /// and KEEP it (a synthesized body is lowered under `lower_synth_proc`'s mask),
-    /// remember the first statement id.
-    pub(crate) fn wext_body_enter_keep(&mut self) -> WextBody {
+    /// remember the first statement id ; `item` is the process block's span (V).
+    pub(crate) fn wext_body_enter_keep(&mut self, item: ast::Span) -> WextBody {
         self.wext_rec.open_body += 1;
         WextBody {
             depth: self.wext_rec.mask,
             start: self.stmts.len(),
+            item: self.wext_rec.body_item.replace(item),
         }
     }
 
-    /// A body root's exit: restore the mask depth and record the FLOOR, `(start,
-    /// stmts.len(), None)`, when the body pushed any statement.
+    /// A body root's exit: restore the mask depth and the enclosing root's item, and record
+    /// the FLOOR, `(start, stmts.len(), None)`, when the body pushed any statement.
     pub(crate) fn wext_body_exit(&mut self, tok: WextBody) {
         self.wext_rec.open_body -= 1;
         self.wext_rec.mask = tok.depth;
+        self.wext_rec.body_item = tok.item;
         let end = self.stmts.len();
         if tok.start < end {
             self.wext_rec.push_interval(tok.start, end, None);
@@ -1445,6 +1509,31 @@ mod tests {
         assert!(r.stmt_at.is_empty());
         r.note_stmt_at(2, 3, ast::Span::new(5, 6));
         assert_eq!(r.stmt_at, vec![(2, 3, Some(ast::Span::new(5, 6)))]);
+    }
+
+    /// Fix F1, V: with a body item open, a statement whose span starts at the item's first
+    /// byte records nothing (whatever its end) ; one starting a byte later, or before the
+    /// item (an inlined callee's text), records ; with no body open (`None`, never 0) a
+    /// statement at offset 0 records.
+    #[test]
+    fn v_item_head_records_nothing() {
+        let mut r = WextRecords::default();
+        r.note_stmt_at(0, 1, ast::Span::new(0, 4));
+        assert_eq!(r.stmt_at.len(), 1, "no body open: offset 0 records");
+        r.body_item = Some(ast::Span::new(10, 50));
+        r.note_stmt_at(1, 2, ast::Span::new(10, 50));
+        r.note_stmt_at(2, 3, ast::Span::new(10, 20));
+        assert_eq!(r.stmt_at.len(), 1, "a statement at the item's first byte");
+        r.note_stmt_at(3, 4, ast::Span::new(11, 20));
+        r.note_stmt_at(4, 5, ast::Span::new(4, 8));
+        assert_eq!(
+            r.stmt_at,
+            vec![
+                (0, 1, Some(ast::Span::new(0, 4))),
+                (3, 4, Some(ast::Span::new(11, 20))),
+                (4, 5, Some(ast::Span::new(4, 8)))
+            ]
+        );
     }
 
     /// C3: a statement's `at` is joined per statement id, every chunk of its lvalue the

@@ -44,7 +44,9 @@
 //!   parameter) ; the mask `wext_unlocated (`, the body roots `wext_body_enter (` /
 //!   `wext_body_enter_keep (` / `wext_body_exit (` (enters and exits equal per (file, fn))
 //!   and the callee entries `wext_located (`, per (file, fn) ; no `cur_span` token in
-//!   wext.rs.
+//!   wext.rs. Fix F1 (V): each body root keyed by its first argument as spelled, the span of
+//!   the ITEM its body belongs to (`p . span`, `func . span`, `task . span`, the method's
+//!   `item`), never the body's (premise judge L8).
 //! - H14 (§5.2 Q-WEXTPOS C3) every `lower_stmt (` call, any receiver, per (file, fn), as
 //!   `bare` or `masked` (inside a `wext_unlocated (` argument group), with its class
 //!   written by hand: R (a parsed statement) is bare, S (one vita built) masked ; PLAN B7's
@@ -61,6 +63,13 @@
 //!   `net_names` token in a writer's host fn or in wext.rs but the listed two.
 //! - H9 (C2) the `via` intervals: `record_via (` at the inline decision and around the
 //!   deferred action, and each `Via :: <V>` spelling.
+//! - H15 (§5.2 Q-WEXTPOS fix F1) every CONSTRUCTION of a node whose span a write's `at`
+//!   can read — `ast :: Stmt :: <V> {` / `(` (an `ir` path left out, a `use .. :: Stmt as X`
+//!   alias read per file and fn, a glob's bare variant), `PortConn {`, `ConnSite {`,
+//!   `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (` — not a pattern (H5's
+//!   discriminator, climbing out of a tuple or a slice of patterns), keyed by its `span`
+//!   field as spelled, with a hand-written class (OWN / FROM / MASKED / NOSTORE / V / NONE).
+//!   A new construction, or a spelling that moves, fails: say whose text the span is.
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -78,7 +87,9 @@
 //! as H1 ; a reference handed into a helper fn and written there is seen only by the
 //! helper's own spelling), a write through `mem::swap` / `mem::replace` with no `& mut
 //! <recv> . <arr>` token run, a macro that builds the receiver, a pattern spelled through
-//! a type alias of `Stmt`, a construction through a helper (`whole_net_lvalue`,
+//! a type alias of `Stmt` (H15 reads a `use .. as` alias, not a `type` alias nor a grouped
+//! `use p :: { .. }`), a construction through `Self { .. }` inside the type's own `impl`,
+//! a construction through a helper (`whole_net_lvalue`,
 //! `poison_chunk` are counted where their own `LvalChunk {` is). `exprs`, `consts` and
 //! `nets` (an offset tree's leaves, a net's width) are read by the kernel at the end
 //! phase and not pinned here: a later edit of an offset tree would make the view stale
@@ -527,9 +538,21 @@ fn hits(src: &str) -> Vec<(String, String)> {
         .filter(|&i| tx(i) == "wext_unlocated" && tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn"))
         .map(|i| (i + 1, close_of(&t, i + 1)))
         .collect();
+    // H15 (fix F1): the `ast::Stmt` imports of this source, per fn key
+    let (stmt_alias, stmt_glob) = stmt_imports(&t);
     for i in 0..t.len() {
         let k = t[i].key.clone();
         let id = t[i].kind == Kind::Id;
+        // H15 / H15p (fix F1): every CONSTRUCTION of a node whose span can become a write's
+        // `at`, keyed by its kind and its `span` field as spelled
+        if let Some(kind) = node_ctor_at(&t, i, &stmt_alias, &stmt_glob) {
+            let open = if matches!(tx(i + 1), "{" | "(") {
+                i + 1
+            } else {
+                i + 3
+            };
+            out.push((format!("H15:{kind}:{}", span_field(&t, open)), k.clone()));
+        }
         // H1 / H1b `. <arr> . <verb> (`
         if tx(i) == "." && ARR.contains(&tx(i + 1)) && tx(i + 2) == "." && tx(i + 4) == "(" {
             let verb = tx(i + 3);
@@ -634,14 +657,14 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "build_write_view" => out.push(("H3:build_write_view".into(), k.clone())),
                 "stmt_lvalue" => out.push(("H5:stmt_lvalue".into(), k.clone())),
                 "chunk_written_bits_at" => out.push(("H2:at".into(), k.clone())),
-                "record_geom"
-                | "carry_geom"
-                | "record_row_at"
-                | "wext_unlocated"
-                | "wext_located"
-                | "wext_body_enter"
-                | "wext_body_enter_keep"
-                | "wext_body_exit" => out.push((format!("H7:{}", tx(i)), k.clone())),
+                "record_geom" | "carry_geom" | "record_row_at" | "wext_unlocated"
+                | "wext_located" | "wext_body_exit" => {
+                    out.push((format!("H7:{}", tx(i)), k.clone()))
+                }
+                // H7 (fix F1, V): a body root keyed by its item argument as spelled
+                "wext_body_enter" | "wext_body_enter_keep" => {
+                    out.push((format!("H7:{}:{}", tx(i), first_arg(&t, i + 1)), k.clone()))
+                }
                 // H7 (C3): the statement recorder, keyed by its first argument as spelled
                 "record_stmt_at" => out.push((
                     format!("H7:record_stmt_at:{}", first_arg(&t, i + 1)),
@@ -730,6 +753,229 @@ fn hits(src: &str) -> Vec<(String, String)> {
     out
 }
 
+/// H15 / H15p (fix F1): the watched node structs (a construction of one makes a span a
+/// continuous row's `at` can read).
+const H15_STRUCTS: [&str; 4] = ["PortConn", "ConnSite", "ContinuousAssign", "InstanceItem"];
+
+/// `ast::Stmt`'s variants (hdl-ast `pub enum Stmt`), read from the source, with whether it
+/// is a tuple variant.
+fn stmt_variants() -> Vec<(String, bool)> {
+    let root = workspace_root();
+    let src = std::fs::read_to_string(root.join("crates/hdl-ast/src/lib.rs")).expect("hdl-ast");
+    let t = tokens(&src);
+    let at = (0..t.len())
+        .find(|&i| t[i].text == "enum" && t[i + 1].text == "Stmt" && t[i + 2].text == "{")
+        .expect("pub enum Stmt");
+    let close = close_of(&t, at + 2);
+    let mut v = Vec::new();
+    let mut j = at + 3;
+    while j < close {
+        if t[j].kind == Kind::Id && (j == at + 3 || t[j - 1].text == ",") {
+            v.push((t[j].text.clone(), t[j + 1].text == "("));
+        }
+        if matches!(t[j].text.as_str(), "(" | "{" | "[") {
+            j = close_of(&t, j) + 1;
+        } else {
+            j += 1;
+        }
+    }
+    v
+}
+
+/// H15: the `use <path> :: Stmt as <X> ;` aliases and the `use <path> :: Stmt :: * ;`
+/// globs of one source, per fn key (`-` = the whole file), an `ir` / `sim_ir` path left
+/// out. A grouped `use p :: { .. }` is not read (none today: named in the head note).
+fn stmt_imports(t: &[Tok]) -> (BTreeMap<String, Vec<String>>, Vec<String>) {
+    let mut alias: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut glob = Vec::new();
+    for i in 0..t.len() {
+        if !(t[i].kind == Kind::Id && t[i].text == "use") {
+            continue;
+        }
+        let Some(end) = (i..t.len()).find(|&j| t[j].text == ";") else {
+            continue;
+        };
+        let w: Vec<&str> = t[i + 1..end].iter().map(|x| x.text.as_str()).collect();
+        let ir_path = w.iter().any(|s| *s == "ir" || *s == "sim_ir");
+        let n = w.len();
+        if n >= 3 && w[n - 3] == "Stmt" && w[n - 2] == "as" && !ir_path {
+            alias
+                .entry(t[i].key.clone())
+                .or_default()
+                .push(w[n - 1].to_string());
+        }
+        if n >= 3 && w[n - 3] == "Stmt" && w[n - 2] == "::" && w[n - 1] == "*" && !ir_path {
+            glob.push(t[i].key.clone());
+        }
+    }
+    (alias, glob)
+}
+
+/// H15: the kind of the node CONSTRUCTED at token `i`, when one is (a pattern, a type's own
+/// item, a return type, an `ir` path or a method name is not): `Stmt` for `<path> :: Stmt
+/// :: <V> {` / `(` (or an alias of `Stmt`, or a bare variant under a glob import of the same
+/// fn), a struct of `H15_STRUCTS` for `<Struct> {`, `PortConnList` for `PortConnList :: <V>
+/// (`. Closure heads (`|sp| Stmt :: Null ( sp )`) are not a pattern: the discriminator
+/// reads what FOLLOWS the group (H5's), climbing out of a tuple or a slice.
+fn node_ctor_at(
+    t: &[Tok],
+    i: usize,
+    alias: &BTreeMap<String, Vec<String>>,
+    glob: &[String],
+) -> Option<String> {
+    let tx = |j: usize| t.get(j).map_or("", |x| x.text.as_str());
+    if t[i].kind != Kind::Id || (i >= 1 && tx(i - 1) == ".") {
+        return None;
+    }
+    let key = &t[i].key;
+    let aliased = |name: &str| {
+        [key.as_str(), "-"]
+            .iter()
+            .any(|k| alias.get(*k).is_some_and(|v| v.iter().any(|a| a == name)))
+    };
+    let upper = |j: usize| {
+        t.get(j).is_some_and(|x| {
+            x.kind == Kind::Id && x.text.starts_with(|c: char| c.is_ascii_uppercase())
+        })
+    };
+    let (kind, open) = if (tx(i) == "Stmt" || aliased(tx(i)))
+        && tx(i + 1) == "::"
+        && upper(i + 2)
+        && matches!(tx(i + 3), "{" | "(")
+    {
+        let ir =
+            tx(i) == "Stmt" && i >= 2 && tx(i - 1) == "::" && matches!(tx(i - 2), "ir" | "sim_ir");
+        if ir {
+            return None;
+        }
+        ("Stmt".to_string(), i + 3)
+    } else if tx(i) == "PortConnList" && tx(i + 1) == "::" && upper(i + 2) && tx(i + 3) == "(" {
+        ("PortConnList".to_string(), i + 3)
+    } else if H15_STRUCTS.contains(&tx(i)) && tx(i + 1) == "{" {
+        let mut j = i;
+        while j >= 2 && tx(j - 1) == "::" && t[j - 2].kind == Kind::Id {
+            j -= 2;
+        }
+        let ret = j >= 2 && tx(j - 1) == ">" && tx(j - 2) == "-";
+        let item = j >= 1
+            && matches!(
+                tx(j - 1),
+                "struct" | "enum" | "impl" | "for" | "trait" | "type"
+            );
+        if ret || item {
+            return None;
+        }
+        (tx(i).to_string(), i + 1)
+    } else if (glob.iter().any(|g| g == key || g == "-"))
+        && (i == 0 || tx(i - 1) != "::")
+        && STMT_VARIANTS.with(|v| {
+            v.iter()
+                .any(|(n, tuple)| n == tx(i) && (tx(i + 1) == "{" || (*tuple && tx(i + 1) == "(")))
+        })
+    {
+        ("Stmt".to_string(), i + 1)
+    } else {
+        return None;
+    };
+    if ctor_is_pattern(t, open) {
+        return None;
+    }
+    Some(kind)
+}
+
+thread_local! {
+    static STMT_VARIANTS: Vec<(String, bool)> = stmt_variants();
+}
+
+/// H15: the group opened at `open` is a PATTERN: H5's discriminator (`=>`, `|`, `=`, `if`
+/// after it, or inside `matches ! (`), or, when a `,` / `)` / `]` follows it, the same test
+/// on the enclosing tuple or slice (`(A { .. }, B { .. }) =>`), never across a `{`.
+fn ctor_is_pattern(t: &[Tok], open: usize) -> bool {
+    if is_pattern(t, open) {
+        return true;
+    }
+    let mut o = open;
+    loop {
+        let c = close_of(t, o);
+        if !t
+            .get(c + 1)
+            .is_some_and(|n| matches!(n.text.as_str(), "," | ")" | "]"))
+        {
+            return false;
+        }
+        let Some(e) = enclosing(t, o) else {
+            return false;
+        };
+        if t[e].text == "{" {
+            return false;
+        }
+        if is_pattern(t, e) {
+            return true;
+        }
+        o = e;
+    }
+}
+
+/// The innermost group opener holding token `j`, if any.
+fn enclosing(t: &[Tok], j: usize) -> Option<usize> {
+    let mut d = 0i32;
+    let mut k = j;
+    while k > 0 {
+        k -= 1;
+        if t[k].kind != Kind::P {
+            continue;
+        }
+        match t[k].text.as_str() {
+            ")" | "]" | "}" => d += 1,
+            "(" | "[" | "{" => {
+                if d == 0 {
+                    return Some(k);
+                }
+                d -= 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// H15: the `span` a construction spells — a `{ .. }` group's top-level `span : <expr>`
+/// field (`span` for the shorthand, `..<rest>` when only a functional update gives it, `-`
+/// when it has none), a `( .. )` group's first argument.
+fn span_field(t: &[Tok], open: usize) -> String {
+    if t[open].text == "(" {
+        return first_arg(t, open);
+    }
+    let close = close_of(t, open);
+    let mut fields: Vec<Vec<&str>> = vec![Vec::new()];
+    let mut d = 0usize;
+    for x in &t[open + 1..close] {
+        if x.kind == Kind::P && matches!(x.text.as_str(), "(" | "[" | "{") {
+            d += 1;
+        } else if x.kind == Kind::P && matches!(x.text.as_str(), ")" | "]" | "}") {
+            d -= 1;
+        } else if d == 0 && x.text == "," {
+            fields.push(Vec::new());
+            continue;
+        }
+        fields.last_mut().expect("one field").push(&x.text);
+    }
+    let mut rest = None;
+    for f in &fields {
+        if f.first() == Some(&"span") {
+            return if f.len() == 1 {
+                "span".to_string()
+            } else {
+                f[2..].concat()
+            };
+        }
+        if f.first() == Some(&".") && f.get(1) == Some(&".") {
+            rest = Some(f.concat());
+        }
+    }
+    rest.unwrap_or_else(|| "-".to_string())
+}
+
 type Table = BTreeMap<(String, String, String), usize>;
 
 /// Every rule hit of the elaborate sources, keyed (rule, file under `crates/elaborate/src`, fn).
@@ -788,7 +1034,11 @@ fn body_balance(tab: &Table) -> BTreeMap<(String, String), i64> {
     let mut bal: BTreeMap<(String, String), i64> = BTreeMap::new();
     for ((r, f, k), n) in tab {
         let d = match r.as_str() {
-            "H7:wext_body_enter" | "H7:wext_body_enter_keep" => *n as i64,
+            _ if r.starts_with("H7:wext_body_enter:")
+                || r.starts_with("H7:wext_body_enter_keep:") =>
+            {
+                *n as i64
+            }
             "H7:wext_body_exit" => -(*n as i64),
             _ => continue,
         };
@@ -860,6 +1110,75 @@ fn h7_the_geometry_constant_home() {
 #[test]
 fn h13_the_row_positions() {
     check("H13", H13);
+}
+
+/// A census table against a (rule, file, fn, count, class, why) table: the census moved, or
+/// a class out of `classes`.
+fn check_classed(
+    name: &str,
+    got: &Table,
+    rows: &[(&str, &str, &str, usize, &str, &str)],
+    classes: &[&str],
+) {
+    let want: Table = rows
+        .iter()
+        .map(|&(r, f, k, n, _, _)| ((r.to_string(), f.to_string(), k.to_string()), n))
+        .collect();
+    if *got != want {
+        let mut s = String::new();
+        for ((r, f, k), n) in got {
+            if want.get(&(r.clone(), f.clone(), k.clone())) != Some(n) {
+                s.push_str(&format!("    got  {r} {f} {k} {n}\n"));
+            }
+        }
+        for ((r, f, k), n) in &want {
+            if got.get(&(r.clone(), f.clone(), k.clone())) != Some(n) {
+                s.push_str(&format!("    want {r} {f} {k} {n}\n"));
+            }
+        }
+        panic!("{name}: the census moved — say whose text each span is:\n{s}");
+    }
+    for &(r, f, k, _, c, _) in rows {
+        assert!(classes.contains(&c), "{name} {r} {f} {k}: class `{c}`");
+    }
+}
+
+/// Per node kind (the rule's second field), the summed count of a table, and of one class.
+fn kind_counts(
+    rows: &[(&str, &str, &str, usize, &str, &str)],
+    class: Option<&str>,
+) -> BTreeMap<String, usize> {
+    let mut m = BTreeMap::new();
+    for &(r, _, _, n, c, _) in rows {
+        if class.is_none_or(|w| w == c) {
+            *m.entry(r.split(':').nth(1).unwrap_or("").to_string())
+                .or_default() += n;
+        }
+    }
+    m
+}
+
+/// H15 (§5.2 Q-WEXTPOS fix F1): every construction of a node whose span a write's `at` can
+/// read, in this crate, with its span field as spelled (premise judge L2: 105 `Stmt`).
+#[test]
+fn h15_the_node_constructions() {
+    check_classed(
+        "H15",
+        &rows_of(&census(), "H15"),
+        H15,
+        &["OWN", "FROM", "MASKED", "NOSTORE", "V", "NONE"],
+    );
+    let all = kind_counts(H15, None);
+    assert_eq!(
+        (
+            all.get("Stmt"),
+            all.get("PortConn"),
+            all.get("ConnSite"),
+            all.len()
+        ),
+        (Some(&105), Some(&1), Some(&3), 3),
+        "H15 totals (L2)"
+    );
 }
 
 /// H11 (§5.2 Q-WEXTPOS C1): every in-place write of an `exprs` slot is the patch funnel's.
@@ -1574,7 +1893,7 @@ fn walker_controls() {
     );
     let unbal = table_of(
         "frames_body.rs",
-        "impl E { fn g(&mut self) { let t = self.wext_body_enter(); } fn h(&mut self) { let t = s.wext_body_enter_keep(); s.wext_body_exit(t); } }",
+        "impl E { fn g(&mut self) { let t = self.wext_body_enter(f.span); } fn h(&mut self) { let t = s.wext_body_enter_keep(p.span); s.wext_body_exit(t); } }",
     );
     let bal = body_balance(&unbal);
     assert_eq!(
@@ -1588,9 +1907,64 @@ fn walker_controls() {
         "H7 a keep-form root with its exit balances"
     );
     assert_eq!(
+        h7c3("impl E { fn lower_proc_block(&mut self, p: &P) { let t = self.wext_body_enter_keep(p.body.span()); self.wext_body_exit(t); } }"),
+        vec![
+            "H7:wext_body_enter_keep:p.body.span()@lower_proc_block".to_string(),
+            "H7:wext_body_exit@lower_proc_block".to_string()
+        ],
+        "H7 planted (fix F1, m9c / L8): a body root given the BODY's span, not the item's, moves the row"
+    );
+    assert_eq!(
         h7c3("impl E { fn inline_task_body(&mut self, b: &mut B, body: &ast::Stmt) { self.wext_located(|s| { s.lower_stmt(b, body); }); } }"),
         vec!["H7:wext_located@inline_task_body".to_string()],
         "H7 real site (inline_task.rs inline_task_body, a callee entry) spelled back"
+    );
+    // H15 / H15p (fix F1): constructions, not patterns ; aliases resolved per file / fn
+    let h15 = |src: &str| -> Vec<String> {
+        hits(src)
+            .into_iter()
+            .filter(|(r, _)| r.starts_with("H15:"))
+            .map(|(r, k)| format!("{r}@{k}"))
+            .collect()
+    };
+    assert_eq!(
+        h15("use hdl_ast::Sequence as S;\nimpl E { fn g(&mut self) { let q = S::Repeat { span: sp, n: 1 }; } }"),
+        Vec::<String>::new(),
+        "H15 planted (L2): `S::Repeat {{` under `use ast::Sequence as S` is not a statement"
+    );
+    assert_eq!(
+        h15("use hdl_ast::Stmt as S;\nimpl E { fn g(&mut self) { let q = S::Null(sp); } fn h(&mut self) { let r = Sequence::Repeat { span: sp }; } }"),
+        vec!["H15:Stmt:sp@g".to_string()],
+        "H15 an alias of `Stmt` counts ; another enum's variant does not"
+    );
+    assert_eq!(
+        h15("impl E { fn wire(&mut self) { let a = ast::PortConn { name: n, expr: e, span: *span }; \
+             let b = ast::PortConn { name: m, expr: f, span: item.span }; let c = ConnSite { span: Some(item.span), e }; } }"),
+        vec![
+            "H15:PortConn:*span@wire".to_string(),
+            "H15:PortConn:item.span@wire".to_string(),
+            "H15:ConnSite:Some(item.span)@wire".to_string()
+        ],
+        "H15 planted: a second `PortConn {{` and `ConnSite {{ span: Some(item.span) }}` are rows"
+    );
+    assert_eq!(
+        h15("impl E { fn m(&mut self, s: &Stmt) { match s { Stmt::Null(sp) => {} Stmt::If { span, .. } | Stmt::Case { span, .. } => {} } \
+             if let ast::Stmt::Block { span, .. } = s {} let ok = matches!(s, Stmt::Error(_)); \
+             match (a, b) { (Stmt::Null(x), ConnSite { span, .. }) => {} } let i = ir::Stmt::Nop { span }; } \
+             fn n(&self) -> ast::PortConn { todo!() } }\nstruct PortConn { span: Span }\nimpl PortConn { fn f() {} }"),
+        Vec::<String>::new(),
+        "H15: patterns (match arms, `|`, `if let`, `matches!`, a tuple of patterns), an `ir` path, a return type, an item are not constructions"
+    );
+    assert_eq!(
+        h15("impl E { fn k(&mut self) { let v = vec![Stmt::Null(a), Stmt::Blocking { lhs: l, rhs: r, span }]; \
+             f(Stmt::Return { value: None, span: s.span() }, x); let u = Stmt::If { span: sp, ..base }; } }"),
+        vec![
+            "H15:Stmt:a@k".to_string(),
+            "H15:Stmt:span@k".to_string(),
+            "H15:Stmt:s.span()@k".to_string(),
+            "H15:Stmt:sp@k".to_string()
+        ],
+        "H15: constructions inside a vec and an argument list, the shorthand, a call, a functional update"
     );
     // H14 (Q-WEXTPOS C3): every `lower_stmt (` call, any receiver, masked or bare
     let h14 = |src: &str| -> Vec<String> {
@@ -1627,7 +2001,7 @@ fn walker_controls() {
     // H14 / P2: the process root zeroing the mask (PLAN's original V6 at stmt_flow.rs:471)
     let zero = table_of(
         "stmt_flow.rs",
-        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter(); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter(p.span); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
     );
     assert_eq!(
         floor_rule(&zero),
@@ -1639,7 +2013,7 @@ fn walker_controls() {
     );
     let keep = table_of(
         "stmt_flow.rs",
-        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter_keep(); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
+        "impl E { fn lower_proc_block(&mut self) { let mut b = B::new(); let t = self.wext_body_enter_keep(p.span); self.lower_stmt(&mut b, &p.body); self.wext_body_exit(t); } }",
     );
     assert!(
         floor_rule(&keep).is_empty(),
@@ -1688,14 +2062,16 @@ const H14: &[(&str, &str, &str, usize, &str, &str)] = &[
 /// (`wext_body_enter_keep`), never zero it (`wext_body_enter`, PLAN's original V6 there,
 /// premise P-1). The violations of that in a census table.
 fn floor_rule(tab: &Table) -> Vec<String> {
-    let at = |r: &str| {
-        tab.get(&(
-            r.to_string(),
-            "stmt_flow.rs".to_string(),
-            "lower_proc_block".to_string(),
-        ))
-        .copied()
-        .unwrap_or(0)
+    // a body root's row is keyed by its item argument (fix F1, V): summed over the spellings
+    let at = |r: &str| -> usize {
+        tab.iter()
+            .filter(|((rr, f, k), _)| {
+                rr.strip_prefix(r).is_some_and(|t| t.starts_with(':'))
+                    && f == "stmt_flow.rs"
+                    && k == "lower_proc_block"
+            })
+            .map(|(_, n)| *n)
+            .sum()
     };
     let mut v = Vec::new();
     if at("H7:wext_body_enter") != 0 {
@@ -1887,10 +2263,10 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:record_geom", "array_geom.rs", "flatten_word_eids", 1, "its eid twin's constant"),
     ("H7:record_row_at", "proc_ident.rs", "push_cont_assign", 1, "each continuous row's own position, pushed beside the row (Q-WEXTPOS C2)"),
     ("H7:record_stmt_at:s.span()", "stmt_main.rs", "lower_stmt", 1, "a statement's own position: the fn's own parameter's span, at its one exit (Q-WEXTPOS C3, never `cur_span`)"),
-    ("H7:wext_body_enter", "class_lower.rs", "lower_class_method_body", 1, "the method body's floor: save, set 0 (the callee entry of a method), restore"),
-    ("H7:wext_body_enter", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "a function body's floor: save, set 0, restore"),
-    ("H7:wext_body_enter", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "a task body's floor: save, set 0, restore"),
-    ("H7:wext_body_enter_keep", "stmt_flow.rs", "lower_proc_block", 1, "the process root's floor: save and restore, the mask KEPT (premise judge line 1)"),
+    ("H7:wext_body_enter:item", "class_lower.rs", "lower_class_method_body", 1, "the method body's floor: save, set 0 (the callee entry of a method), restore ; V's item = the method's function or task (fix F1, L8)"),
+    ("H7:wext_body_enter:func.span", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "a function body's floor: save, set 0, restore ; V's item = the FunctionDef (L8)"),
+    ("H7:wext_body_enter:task.span", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "a task body's floor: save, set 0, restore ; V's item = the TaskDef (L8)"),
+    ("H7:wext_body_enter_keep:p.span", "stmt_flow.rs", "lower_proc_block", 1, "the process root's floor: save and restore, the mask KEPT (premise judge line 1) ; V's item = the ProceduralBlock (L8)"),
     ("H7:wext_body_exit", "class_lower.rs", "lower_class_method_body", 1, "its floor's exit"),
     ("H7:wext_body_exit", "frames_body.rs", "lower_frame_body_inner_lower_frame_func_body", 1, "its floor's exit"),
     ("H7:wext_body_exit", "frames_body.rs", "lower_frame_body_inner_lower_frame_task_body", 1, "its floor's exit"),
@@ -1907,9 +2283,9 @@ const H7: &[(&str, &str, &str, usize, &str)] = &[
     ("H7:wext_rec", "wext.rs", "record_via", 1, "the via writer"),
     ("H7:wext_rec", "wext.rs", "register_provisional_const", 1, "the stand-down's registration"),
     ("H7:wext_rec", "wext.rs", "record_stmt_at", 2, "the statement position writer: the mask read, the interval (Q-WEXTPOS C3)"),
-    ("H7:wext_rec", "wext.rs", "wext_body_enter", 2, "a body root: open count, mask saved and set 0"),
-    ("H7:wext_rec", "wext.rs", "wext_body_enter_keep", 2, "the process root: open count, mask saved and kept"),
-    ("H7:wext_rec", "wext.rs", "wext_body_exit", 3, "a body root's exit: open count, mask restored, the floor"),
+    ("H7:wext_rec", "wext.rs", "wext_body_enter", 3, "a body root: open count, mask saved and set 0, V's open item saved and set (fix F1)"),
+    ("H7:wext_rec", "wext.rs", "wext_body_enter_keep", 3, "the process root: open count, mask saved and kept, V's open item saved and set (fix F1)"),
+    ("H7:wext_rec", "wext.rs", "wext_body_exit", 4, "a body root's exit: open count, mask restored, the floor, V's open item restored (fix F1)"),
     ("H7:wext_rec", "wext.rs", "wext_located", 2, "a callee entry: mask saved and set 0, restored"),
     ("H7:wext_rec", "wext.rs", "wext_unlocated", 2, "the mask: up, down"),
     ("H7:wext_unlocated", "cover.rs", "synth_cover_sample", 1, "S (H14)"),
@@ -2052,4 +2428,65 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H11c:pending_var_inits:push", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
     ("H11c:pending_var_inits:splice", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
     ("H11c:undecided_placeholders:insert", "wext.rs", "register_provisional_const", 1, "y", "y"),
+];
+
+/// H15 (§5.2 Q-WEXTPOS fix F1): (rule, file, fn, count, class, why) — every CONSTRUCTION in
+/// this crate of a node whose span a write's `at` can read (`ast::Stmt :: <V>`, `PortConn {`,
+/// `ConnSite {`, `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (`), keyed by
+/// the `span` field as spelled. Class (hand-written, R-AT's words): OWN / FROM the write's
+/// own text ; MASKED a statement vita builds, lowered under THE MASK (its store takes the
+/// parsed statement around it) ; NOSTORE no store of its own ; V a span V records nothing for
+/// ; NONE no text. 105 `Stmt` (premise judge L2: `sva_seq.rs`'s `S::Repeat` is a `Sequence`),
+/// 1 `PortConn`, 3 `ConnSite`. A row that moves: say whose text the span is.
+#[rustfmt::skip]
+const H15: &[(&str, &str, &str, usize, &str, &str)] = &[
+    ("H15:ConnSite:None", "ports.rs", "wire_ports", 1, "NONE", "a `.*` connection: its expression is synthesized (no write text)"),
+    ("H15:ConnSite:Some(c.span)", "ports.rs", "wire_ports", 1, "OWN", "a named connection: the parser's `PortConn` from its `.`"),
+    ("H15:ConnSite:Some(e.span)", "ports.rs", "wire_ports", 1, "OWN", "a positional connection: its expression"),
+    ("H15:PortConn:*span", "instance_array.rs", "elaborate_instance_array", 1, "FROM", "an array element's connection: the parsed connection's span, a positional one's expression (X1)"),
+    ("H15:Stmt:*span", "hoist/general_stmt.rs", "hoist_stmt_general", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
+    ("H15:Stmt:*span", "hoist/mod.rs", "hoist_stmt_top", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
+    ("H15:Stmt:*span", "hoist/special.rs", "hoist_stmt_rhs_only", 7, "OWN", "a hoist rewrite: the rewritten parsed statement's own span"),
+    ("H15:Stmt:*span", "sva_decl.rs", "rewrite_sampled_stmt", 7, "OWN", "a pattern-bound parsed statement's own span, copied"),
+    ("H15:Stmt:cb.span", "sva_clocking.rs", "lower_clocking_blocks", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:decl.span", "frames_body.rs", "emit_frame_local_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:decl.span", "frames_body.rs", "emit_per_entry_block_inits", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:decl.span", "frames_static_init.rs", "emit_static_decl_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:e.span", "dynarr.rs", "dyn_blocking_special", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:e.span", "hoist/mod.rs", "hoist_dyn_formal_calls", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:e.span", "hoist/special.rs", "hoist_rhs_only", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:gspan", "stmt_main.rs", "lower_stmt_inner", 3, "NOSTORE", "the `iff` guard's wait loop (the guard expression's span)"),
+    ("H15:Stmt:p.span", "events.rs", "desugar_event_iff", 1, "V", "the always ITEM's span: V records nothing for it (PLAN J3)"),
+    ("H15:Stmt:rhs.span", "dynarr.rs", "dyn_blocking_special", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover.rs", "register_cover_instance", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cover_sample_explicit", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover.rs", "synth_cross_sample", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_auto_sample_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_counter_then", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "cov_set_bit_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "cover_synth.rs", "materialize_one_cover", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "frames_call/emit.rs", "emit_frame_task_call", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_block_or_single", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_error_stmt", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nb_set", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_ast.rs", "sva_nba_1bit", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_check.rs", "materialize_one_sva", 5, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_check.rs", "prop_expr_violation", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_check.rs", "synth_local_var_assert", 2, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_clocking.rs", "synth_crossclock", 7, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_clocking.rs", "synth_multiclock", 7, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_liveness.rs", "synth_liveness", 4, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_prop.rs", "sva_prev_for", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_prop.rs", "synth_prop_expr", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_seq.rs", "seq_delay_reg", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "sva_seq.rs", "synth_seq_pipeline", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:sp", "var_init.rs", "flush_pending_var_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "dynarr.rs", "dyn_decl_init_stmts", 3, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "events.rs", "lower_intra_event_assign", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "events.rs", "lower_intra_event_nba", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "frames_body.rs", "emit_frame_local_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "sva_ast.rs", "gate_nba_with_disable", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+    ("H15:Stmt:span", "var_init.rs", "flush_pending_var_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
 ];

@@ -420,8 +420,9 @@ impl Elaborator<'_> {
             // scope), visible to the body, restored before the scope closes.
             let (saved_labels, saved_meta) = s.push_body_enum_labels(&func.body_enums, &func.body);
             let mut b = ProcessBuilder::new();
-            // §5.2 Q-WEXTPOS C3: the frame body's floor.
-            let wext_tok = s.wext_body_enter();
+            // §5.2 Q-WEXTPOS C3: the frame body's floor ; fix F1 (V): the function ITEM's
+            // span, never the body's (an implicit body Block starts at its first statement).
+            let wext_tok = s.wext_body_enter(func.span);
             // §13.4.4 / §4.5.189: TOP-LEVEL body_decls run at frame entry (once per
             // activation); NESTED block-local inits run at their OWN block entry (the
             // `Block` arm of `lower_stmt`, gated on `in_frame_body`) so a decl-init
@@ -588,8 +589,9 @@ impl Elaborator<'_> {
             };
             let (saved_labels, saved_meta) = s.push_body_enum_labels(&task.body_enums, &task.body);
             let mut b = ProcessBuilder::new();
-            // §5.2 Q-WEXTPOS C3: the frame body's floor.
-            let wext_tok = s.wext_body_enter();
+            // §5.2 Q-WEXTPOS C3: the frame body's floor ; fix F1 (V): the task ITEM's span,
+            // never the body's.
+            let wext_tok = s.wext_body_enter(task.span);
             // §13.4.4 / §4.5.189: TOP-LEVEL body_decls run at frame entry (once per
             // activation). NESTED block-local inits run at their OWN block entry (the
             // `Block` arm of `lower_stmt`, gated on `in_frame_body`) so a decl-init

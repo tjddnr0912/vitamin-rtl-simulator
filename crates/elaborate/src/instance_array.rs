@@ -174,7 +174,10 @@ impl Elaborator<'_> {
                         name: format!("<positional {i}>"),
                         span: item.span,
                     });
-                    (pname, e.as_ref(), item.span)
+                    // §5.2 Q-WEXTPOS fix F1 (X1): the connection's own text, as a plain
+                    // instance's positional connection has it (`ports.rs` `wire_ports`) ;
+                    // an open one wires no row and keeps the item's.
+                    (pname, e.as_ref(), e.as_ref().map_or(item.span, |e| e.span))
                 })
                 .collect(),
         };
