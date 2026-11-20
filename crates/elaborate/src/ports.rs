@@ -582,9 +582,11 @@ impl Elaborator<'_> {
         inst_span: Option<ast::Span>,
     ) {
         let ports = port_list_dirs(module);
-        // H15v (§5.2 Q-WEXTPOS fix F1, P5): this instance's located connections, one per
-        // port (a debug run only ; an array port's element rows share their one entry)
-        let mut wext_conns: Vec<(usize, ast::Span)> = Vec::new();
+        // H15v (§5.2 Q-WEXTPOS fix F1, P5 ; fix S, U2): this instance's located connections,
+        // one per port as (port index, the connection's expression as an address, span) — a
+        // debug run only ; an array port's element rows share their one entry, and two
+        // ports a repeated name resolves to one connection share its node
+        let mut wext_conns: Vec<(usize, usize, ast::Span)> = Vec::new();
         // `.*` wildcard (IEEE §23.3.2.5): connect every port the explicit list
         // does not name to a same-named NET or VARIABLE in the instantiating
         // scope. A same-named NET is connected; a same-named constant
@@ -735,7 +737,7 @@ impl Elaborator<'_> {
             };
             if cfg!(debug_assertions) {
                 if let Some(sp) = conn.span {
-                    wext_conns.push((i, sp));
+                    wext_conns.push((i, conn.expr as *const ast::Expr as usize, sp));
                 }
             }
 

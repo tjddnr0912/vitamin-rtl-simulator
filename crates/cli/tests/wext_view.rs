@@ -73,7 +73,11 @@
 //! `wb_iff_always_snap` pins the `always @(.. iff ..)` shell unchanged). Each expected text is the PRE dump (wext-dump-tip 920b3867) of the plan's or the
 //! premise judge's cell with the move written from a hand-read `line:col`
 //! (W/wextpos/fixs/build/pins/pred).
-
+//!
+//! §5.2 Q-WEXTPOS fix S, U2: the `wp_dup_port_*` pins run the debug `vita` this harness
+//! builds on a repeated port name in a named list (IEEE 1800-2017 23.2.2.1, Example 6) and its
+//! instance-array and `bind` twins: PRE's whole text and exit code, where the debug-only
+//! connection-span check (H15v) used to panic on one connection reached by two port indices.
 
 use diag::{LogEvent, LogSink};
 use std::collections::BTreeMap;
@@ -239,6 +243,27 @@ fn pre_text(src: &str, out: &str) {
     assert_eq!(String::from_utf8_lossy(&r.stdout), out, "stdout");
     assert_eq!(String::from_utf8_lossy(&r.stderr), PRE_ERR, "stderr");
     assert_eq!(r.status.code(), Some(0), "exit code");
+}
+
+/// §5.2 Q-WEXTPOS fix S, U2: the `vita` this test harness builds (a debug build: every
+/// `debug_assert!` of elaborate is live, H15v's among them) on `src` (as `t.sv`, in a fresh
+/// directory) prints `out` on stdout, `err` on stderr and exits `rc` — PRE's whole text, and
+/// no panic (a debug assertion's panic exits 101).
+fn debug_text(src: &str, out: &str, err: &str, rc: i32) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_wext_dbg_{}_{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).expect("temp dir");
+    std::fs::write(d.join("t.sv"), src).expect("write t.sv");
+    let r = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg("t.sv")
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let _ = std::fs::remove_dir_all(&d);
+    assert_eq!(String::from_utf8_lossy(&r.stdout), out, "stdout");
+    assert_eq!(String::from_utf8_lossy(&r.stderr), err, "stderr");
+    assert_eq!(r.status.code(), Some(rc), "exit code");
 }
 
 /// A continuous part-select and an `always_comb` part-select on one variable: two `Bits`
@@ -3184,5 +3209,107 @@ N n17:top.$ia_snap$17 Reg w=8 alen=1 dims=n decl=-
             ("P1:initial@t.sv:8:3", "s14", "14:8", "@(posedge clk iff"),
             ("P1:initial@t.sv:8:3", "s16", "15:22", "@(posedge clk iff"),
         ],
+    );
+}
+
+/// Fix S, U2 (agy F2 ; IEEE 1800-2017 23.2.2.1 Example 6: `module same_input (a,a); input a;` is
+/// legal): a non-ANSI port list naming one port twice, input (plan cell h02) or output (h04),
+/// connected by name. `wire_ports` finds the ONE `.a(x)` connection for both port indices, so H15v
+/// (i) must not fire: it is keyed by the connection node. The debug `vita` the test harness builds
+/// runs it with every debug assertion live and prints PRE's whole text (fix F1's tip panicked here,
+/// rc 101).
+#[test]
+fn wp_dup_port_named() {
+    // h02: plan/cells/h02_dup_named
+    debug_text(
+        r#"module sub(a, a); input logic a; endmodule
+module top; logic x = 1; sub u(.a(x)); initial $display("ok"); endmodule
+"#,
+        "ok\nsimulation ended (Quiescent) at time 0\n",
+        "warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base\nerrors=0 warnings=1 notes=0\n",
+        0,
+    );
+    // h04: plan/cells/h04_dup_out
+    debug_text(
+        r#"module sub(o, o, i); output logic o; input logic i; assign o = i; endmodule
+module top; logic x, i = 1; sub u(.o(x), .i(i)); initial #1 $display("x=%b", x); endmodule
+"#,
+        "x=1\nsimulation ended (Quiescent) at time 1\n",
+        "warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base\nerrors=0 warnings=1 notes=0\n",
+        0,
+    );
+}
+
+/// Fix S, U2 (agy r2_46's shape): an ANSI port declared twice, connected by name and positionally
+/// (plan cell h09): PRE refuses it with its three E3009 and ends rc 1 ; the debug `vita` does the
+/// same and does not panic after the diagnostics (one connection node found for two ports).
+#[test]
+fn wp_dup_port_refused() {
+    // h09: plan/cells/h09_ansi_dup
+    debug_text(
+        r#"module sub(input logic a, input logic a); endmodule
+module top; logic x = 1, y = 0; sub u(.a(x)); sub v(x, y); initial $display("ok"); endmodule
+"#,
+        "",
+        concat!(
+            "warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base\n",
+            "t.sv:1:39: error[VITA-E3009] E-ELAB-UNSUPPORTED: `a` is declared twice in this module, both times as a port — a module body is ONE name space (IEEE 1800-2017 §3.13), so a name is declared there once. Rename one of them [in sub]\n",
+            "t.sv:1:24: note[VITA-E3009] E-ELAB-UNSUPPORTED: the first declaration of that name is here [in sub]\n",
+            "t.sv:2:37: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.u.a` redeclared (duplicate declaration) [in top.u]\n",
+            "t.sv:2:51: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.v.a` redeclared (duplicate declaration) [in top.v]\n",
+            "errors=3 warnings=1 notes=1\n",
+        ),
+        1,
+    );
+}
+
+/// Fix S, U2 (premise judge L5, cell e10): the same duplicate ANSI port under two instance ARRAYS,
+/// positional and named — the connection nodes `instance_array.rs` builds per element (both named
+/// `a`): PRE's five errors, rc 1, no panic.
+#[test]
+fn wp_dup_port_arr_err() {
+    // e10: premise/cells/e10_arr_dup_err
+    debug_text(
+        r#"module sub(input logic a, input logic a);
+endmodule
+module top;
+  logic [1:0] x = 2'b10, y = 2'b01;
+  sub u[1:0](x, y);
+  sub v[1:0](.a(x));
+endmodule
+"#,
+        "",
+        concat!(
+            "warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base\n",
+            "t.sv:1:39: error[VITA-E3009] E-ELAB-UNSUPPORTED: `a` is declared twice in this module, both times as a port — a module body is ONE name space (IEEE 1800-2017 §3.13), so a name is declared there once. Rename one of them [in sub]\n",
+            "t.sv:1:24: note[VITA-E3009] E-ELAB-UNSUPPORTED: the first declaration of that name is here [in sub]\n",
+            "t.sv:5:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.u[1].a` redeclared (duplicate declaration) [in top.u[1]]\n",
+            "t.sv:5:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.u[0].a` redeclared (duplicate declaration) [in top.u[0]]\n",
+            "t.sv:6:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.v[1].a` redeclared (duplicate declaration) [in top.v[1]]\n",
+            "t.sv:6:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: net/variable `top.v[0].a` redeclared (duplicate declaration) [in top.v[0]]\n",
+            "errors=5 warnings=1 notes=1\n",
+        ),
+        1,
+    );
+}
+
+/// Fix S, U2 (premise judge L5, cell e02): the repeated non-ANSI port reached through `bind`: PRE's
+/// `a=1`, rc 0, no panic.
+#[test]
+fn wp_dup_port_bind() {
+    // e02: premise/cells/e02_bind_dup
+    debug_text(
+        r#"module sub(a, a);
+  input logic a;
+  initial #1 $display("a=%b", a);
+endmodule
+module top;
+  logic x = 1'b1;
+endmodule
+bind top sub u2(.a(x));
+"#,
+        "a=1\nsimulation ended (Quiescent) at time 1\n",
+        "warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base\nerrors=0 warnings=1 notes=0\n",
+        0,
     );
 }

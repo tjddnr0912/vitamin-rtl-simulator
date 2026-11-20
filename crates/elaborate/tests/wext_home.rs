@@ -92,8 +92,10 @@
 //!   `*span`, BUILT otherwise), a connection row's hand-written (OWN / FROM / NONE). A new
 //!   construction, or a spelling that moves, fails: say whose text the span is.
 //! - H15v (fix F1) the connection-span assertion: `check_conn_spans (` once, in
-//!   `wire_ports`, and `conn_span_violations (` once, in it (P5's (i) two ports of one
-//!   instance on one connection span, (ii) a connection at its instance item's span).
+//!   `wire_ports`, and `conn_span_violations (` once, in it (P5's (i) two DIFFERENT
+//!   connection nodes of one instance on one start — fix S, U2: two ports a repeated port
+//!   name resolves to one connection are one node —, (ii) a connection at its instance
+//!   item's span).
 //! - H15p (fix F1) the same census over hdl-parser's production sources (the parser builds
 //!   most statements ; its ANOTHER rows are the bodies V turns to `None`).
 //! - H11 (§5.2 Q-WEXTPOS C1) every in-place write of an `exprs` slot, per (file, fn): `.
