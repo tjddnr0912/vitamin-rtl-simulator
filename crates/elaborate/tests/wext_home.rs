@@ -83,12 +83,15 @@
 //!   `net_names` token in a writer's host fn or in wext.rs but the listed two.
 //! - H9 (C2) the `via` intervals: `record_via (` at the inline decision and around the
 //!   deferred action, and each `Via :: <V>` spelling.
-//! - H15 (§5.2 Q-WEXTPOS fix F1) every CONSTRUCTION of a node whose span a write's `at`
-//!   can read — `ast :: Stmt :: <V> {` / `(` (an `ir` path left out, a `use .. :: Stmt as X`
-//!   alias read per file and fn, a glob's bare variant), `PortConn {`, `ConnSite {`,
-//!   `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (` — not a pattern (H5's
-//!   discriminator, climbing out of a tuple or a slice of patterns), keyed by its `span`
-//!   field as spelled, with a class: a `Stmt` row's read off its spelling (fix S: REWRITE for
+//! - H15 (§5.2 Q-WEXTPOS fix F1) every construction of an `ast::Stmt`, `PortConn`,
+//!   `ConnSite`, `ContinuousAssign`, `InstanceItem` or `PortConnList` — `ast :: Stmt :: <V>
+//!   {` / `(` (an `ir` path left out, a `use .. :: Stmt as X` alias read per file and fn, a
+//!   glob's bare variant), `PortConn {`, `ConnSite {`, `ContinuousAssign {`, `InstanceItem
+//!   {`, `PortConnList :: <V> (` — not a pattern (H5's discriminator, climbing out of a tuple
+//!   or a slice of patterns) ; an `Lvalue`, a `HierPath` and an expression top, whose spans
+//!   a write's `at` also reads, are NOT censused (the pins sample them: batch 6 soundness
+//!   lens NB4). Keyed by its `span` field as spelled (a `PortConnList`, which has no `span`
+//!   field, by its first tuple argument: agy read NB4), with a class: a `Stmt` row's read off its spelling (fix S: REWRITE for
 //!   `*span`, BUILT otherwise), a connection row's hand-written (OWN / FROM / NONE). A new
 //!   construction, or a spelling that moves, fails: say whose text the span is.
 //! - H15v (fix F1) the connection-span assertion: `check_conn_spans (` once, in
@@ -153,7 +156,9 @@
 //! value, a net's width), read by the kernel at the end phase, are not pinned here: a later
 //! edit of one would make the view stale without moving a count. H11 cannot see (§5.2
 //! Q-WEXTPOS fix F1, lens N-S1): a receiver with no `.` before `exprs` (`let Self { exprs,
-//! .. } = self; exprs[i] = e`), one through a deref group (`(*self).exprs`), a verb spelled
+//! .. } = self; exprs[i] = e`), a `& mut` taken through a deref group (`&mut (*self).exprs` ;
+//! `(*self).exprs[i] = e` and `(*self).exprs.push(..)` ARE seen: batch 6 soundness lens
+//! NB5b, agy read NB4), a verb spelled
 //! with a turbofish (`. get_mut :: < .. > (`), a write through a raw pointer, an `unsafe`
 //! block or interior mutability, a macro that builds the receiver, and a callee that is
 //! handed a slot or a slice (sim-ir's bodies are not walked) ; 0 such sites at 17703a0c
@@ -1926,9 +1931,10 @@ fn kind_counts(
     m
 }
 
-/// H15 (§5.2 Q-WEXTPOS fix F1 ; fix S): every construction of a node whose span a write's
-/// `at` can read, in this crate, with its span field as spelled (premise judge L2: 105
-/// `Stmt`). A `Stmt` row's class is READ OFF its spelling (fix S: no hand class of what a
+/// H15 (§5.2 Q-WEXTPOS fix F1 ; fix S): every construction in this crate of an
+/// `ast::Stmt`, a connection or an instance node (an `Lvalue`, a `HierPath` and an
+/// expression top are not censused: lens NB4), with its span field as spelled (premise
+/// judge L2: 105 `Stmt`). A `Stmt` row's class is READ OFF its spelling (fix S: no hand class of what a
 /// built statement can push): REWRITE for `*span` (28: the matched parsed statement's own
 /// span, 4 fns), BUILT otherwise (77) ; a connection row keeps OWN / FROM / NONE.
 #[test]
@@ -3549,9 +3555,10 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
 ];
 
 /// H15 (§5.2 Q-WEXTPOS fix F1): (rule, file, fn, count, class, why) — every CONSTRUCTION in
-/// this crate of a node whose span a write's `at` can read (`ast::Stmt :: <V>`, `PortConn {`,
-/// `ConnSite {`, `ContinuousAssign {`, `InstanceItem {`, `PortConnList :: <V> (`), keyed by
-/// the `span` field as spelled. Class: a `Stmt` row's is read off its spelling (fix S),
+/// this crate of an `ast::Stmt :: <V>`, `PortConn {`, `ConnSite {`, `ContinuousAssign {`,
+/// `InstanceItem {` or `PortConnList :: <V> (` (an `Lvalue`, a `HierPath` and an expression
+/// top, whose spans a write's `at` also reads, are not censused: lens NB4), keyed by the
+/// `span` field as spelled (a `PortConnList` by its first tuple argument). Class: a `Stmt` row's is read off its spelling (fix S),
 /// REWRITE (`*span`, the matched parsed statement's own) or BUILT (a statement vita builds:
 /// it records no interval, its stores read the parsed statement that holds them or none) ; a
 /// connection row's is R-AT's word, OWN / FROM the write's own text, NONE no text. 105

@@ -317,6 +317,12 @@
 //! labeled block, hdl-parser `item_dispatch.rs`) starts at the item's first byte, so a store
 //! whose innermost recorded statement is that root reads `None` (HOLDER lost, the safe
 //! direction ; the action statements inside it are their own ; no producing form found).
+//! REVIEW-ONLY (agy read of batch 6, NB3): V compares raw offsets with no unit id, which is
+//! sound in one expanded buffer (every file of one `vita` / `vcmp` run) ; the staged `velab
+//! -L` path splices units whose spans each start at byte 0 (`cli/src/staged.rs`, which drops
+//! the source maps for that reason), so an inlined package routine's statement at offset N
+//! of one unit, called from a process item starting at N in another, is declined by V and
+//! reads the call statement's position (no cell measured ; no pin).
 //! V also declines the `always @(.. iff ..)` shell (its span is the process item's, `p.span`),
 //! which `lower_shell` already records nothing for: the two agree there, and V stays the
 //! stand-in for the parser's provenance until the structural row gives each body its
