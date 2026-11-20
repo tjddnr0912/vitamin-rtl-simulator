@@ -856,7 +856,8 @@ pub struct Parser<'t, 's> {
     node_budget_blown: bool,
     /// Token indices taken as the contextual keyword `inside` (the `inside` operator and
     /// `case … inside`); every other identifier token spelled `inside` is a NAME use
-    /// (`api.rs`, `TopItem::InsideNameUse`).
+    /// (`api.rs`, `TopItem::InsideNameUse`). Ascending ; a parse taken back pops its entries
+    /// (`rewind`).
     inside_kw_at: Vec<usize>,
     /// §5.2 Q-LOSSYSPELL: a parameter's data type had a written signing keyword, no type
     /// keyword and no packed range (`hdl_ast::LossySpell::sign_kw_param`). Written only by
@@ -866,6 +867,13 @@ pub struct Parser<'t, 's> {
     /// Written only by `|=` in `lossy.rs` (`note_let_decl`, the fn's first line); in no scope
     /// snapshot, so a backtrack can leave it set (over-report), never clear it.
     lossy_let_any: bool,
+    /// §5.2 Q-LOSSYSPELL U4 (fix N4): the token index of each unsized x / z literal the parser
+    /// took as the FIRST token of an assignment's or a net / variable declaration
+    /// initializer's right side, at one of the 8 sites that call `assign_rhs` (`lossy.rs`, its
+    /// one writer) ; read once, by the token pass (`api.rs`). Ascending ; a parse taken back
+    /// pops its marks (`rewind`), so a mark exists only for a token consumed once and kept.
+    /// A mark's absence makes a fill COUNT (`fill_xz`), never the other way.
+    lossy_whole_rhs: Vec<usize>,
     /// §5.2 row 66: every declared type's `TypeInfo`, by its declaration key
     /// (`type_rec.rs`). Never restored with a scope, like `decl_types`.
     type_infos: std::collections::HashMap<DeclKey, TypeInfo>,
@@ -1262,6 +1270,7 @@ impl<'t, 's> Parser<'t, 's> {
             inside_kw_at: Vec::new(),
             lossy_sign_kw_param: false,
             lossy_let_any: false,
+            lossy_whole_rhs: Vec::new(),
             type_infos: std::collections::HashMap::new(),
             decl_sites: std::collections::HashMap::new(),
             in_body_typedef: false,
@@ -1375,6 +1384,21 @@ impl<'t, 's> Parser<'t, 's> {
     }
 
     // -- cursor primitives --
+    /// The one restore of the cursor (§5.2 Q-LOSSYSPELL U4, fix N4): `pos` back to `save`, and
+    /// every token index the taken-back parse pushed into a list a token pass reads — the
+    /// right-side marks (`lossy_whole_rhs`) and the contextual `inside` keywords
+    /// (`inside_kw_at`, RULINGS L1-19) — popped. Both lists are pushed in cursor order, so
+    /// they stay ascending and the entries `>= save` are a suffix. Every speculative parse
+    /// restores through here (home rule H6 (c) in `elaborate/tests/lossy_home.rs`).
+    fn rewind(&mut self, save: usize) {
+        self.pos = save;
+        while self.lossy_whole_rhs.last().is_some_and(|&m| m >= save) {
+            self.lossy_whole_rhs.pop();
+        }
+        while self.inside_kw_at.last().is_some_and(|&m| m >= save) {
+            self.inside_kw_at.pop();
+        }
+    }
     #[inline]
     fn peek(&self) -> Option<TokenKind> {
         self.toks.get(self.pos).map(|t| t.kind)

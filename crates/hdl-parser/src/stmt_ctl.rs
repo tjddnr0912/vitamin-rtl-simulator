@@ -385,7 +385,7 @@ impl Parser<'_, '_> {
         let n_start = self.cur_span();
         let orig = self.ident()?;
         let init_expr = if self.eat(TokenKind::Eq) {
-            self.expr(0)
+            self.assign_rhs()
         } else {
             // No initializer — the For has no defined start value. Emit loud and
             // bail rather than fabricate a `0`; the caller's `None` arm then falls
@@ -446,7 +446,7 @@ impl Parser<'_, '_> {
             return stmt;
         }
         self.expect(TokenKind::Eq, "'=' in for-clause assignment");
-        let rhs = self.expr(0);
+        let rhs = self.assign_rhs();
         let rhs = self.maybe_struct_pattern_rhs(&lhs, rhs);
         Stmt::Blocking {
             lhs,

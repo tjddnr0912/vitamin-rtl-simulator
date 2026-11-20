@@ -471,7 +471,7 @@ impl Parser<'_, '_> {
                     let extra = self.opt_packed_dims();
                     if range.is_none() && !extra.is_empty() {
                         // a range-less kind cannot carry further dimensions
-                        self.pos = save;
+                        self.rewind(save);
                         return None;
                     }
                     packed = Self::packed_dim_list(range.as_ref(), &extra);
@@ -485,7 +485,7 @@ impl Parser<'_, '_> {
                         match self.packed_dims_width(&packed, span) {
                             Some(e) => e,
                             None => {
-                                self.pos = save;
+                                self.rewind(save);
                                 return None;
                             }
                         }
@@ -497,7 +497,7 @@ impl Parser<'_, '_> {
                                 None => match self.sym_range_width(r) {
                                     Some(e) => e,
                                     None => {
-                                        self.pos = save;
+                                        self.rewind(save);
                                         return None;
                                     }
                                 },
@@ -861,14 +861,14 @@ impl Parser<'_, '_> {
         // default's dim list at parse time, so a differing arity cannot be
         // followed and `shape_flags` turns it into the `$fatal` it was.
         let Some(tv) = self.parse_type_param_value(true) else {
-            self.pos = save;
+            self.rewind(save);
             self.error(
                 "an integral type as the type parameter override (a struct, enum, real, string or class type is unsupported in v1)",
             );
             return false;
         };
         if !matches!(self.peek(), Some(TokenKind::RParen | TokenKind::Comma)) {
-            self.pos = save;
+            self.rewind(save);
             return false;
         }
         let span = start.to(self.prev_span());
@@ -877,7 +877,7 @@ impl Parser<'_, '_> {
         let mut dims = Vec::new();
         for d in &tv.unpacked {
             let Some(ab) = Self::dim_endpoints(d, span) else {
-                self.pos = save;
+                self.rewind(save);
                 self.error(
                     "an integral type as the type parameter override (a struct, enum, real, string or class type is unsupported in v1)",
                 );

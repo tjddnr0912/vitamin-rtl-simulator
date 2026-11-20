@@ -201,8 +201,16 @@ pub enum TopItem {
 /// - `let_any`: the parser entered a `let` declaration (`parse_let_decl`, the one fn that
 ///   builds a `LetDecl`; the word `let` followed by an identifier or escaped identifier at
 ///   a module-item position).
-/// - `fill_xz`: an `'x` / `'z` fill that is not the whole right side of `=` / `<=` …
-///   `;` (the owner's question Q1, option (c)).
+/// - `fill_xz`: an `'x` / `'z` fill that the parser did not take as the whole right side
+///   of an assignment or of a net / variable declaration initializer (the owner's question
+///   Q1, option (c)): the exempt fill sits between `=` / `<=` and `;` AND starts a right
+///   side the parser took at one of its 8 sites — blocking `=`, nonblocking `<=`,
+///   procedural `assign`, `force`, continuous `assign`, a declarator's initializer, a typed
+///   for-init, a for-clause assignment (`hdl-parser` `lossy.rs`, `assign_rhs`, §5.2
+///   Q-LOSSYSPELL U4). Every other fill counts, whatever tokens surround it: a relational
+///   operand (`b = a <= 'z;`) in any position, a parameter / localparam / specparam /
+///   defparam value, a `let` body, a genvar initialization, a covergroup option, a clocking
+///   signal's or a UDP's initializer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, SchemaHash)]
 pub struct LossySpell {
     pub param_xz: bool,

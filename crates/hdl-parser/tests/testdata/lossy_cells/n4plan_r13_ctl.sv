@@ -1,0 +1,1 @@
+module top; logic [99:0] a, b; wire [99:0] w = 'z; logic [99:0] v = 'x; assign b = 'z; initial begin a = 'x; a <= 'z; force a = 'x; for (a = 'x; a != 0; a = 0) ; for (logic [69:0] lv = 'z; lv != 0; lv = 0) ; end endmodule

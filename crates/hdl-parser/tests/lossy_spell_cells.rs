@@ -2,7 +2,10 @@
 //! judges (§5.2 Q-LOSSYSPELL, unit U1), each source copied verbatim from
 //! W/lossy/{ground,plan,premise,plan2,premise2}/cells/<id>/t.sv into
 //! `testdata/lossy_cells/<stage>_<id>.sv` (ground q4_include is left out: its producer is in
-//! an included file, which a parser test cannot preprocess; the cli pins carry it).
+//! an included file, which a parser test cannot preprocess; the cli pins carry it), and fix
+//! N4's (the soundness lens's N4: the token shape alone exempted a relational tail) from
+//! W/lossy/fixn4/plan/cells/<id> as `n4plan_<id>` and W/lossy/fixn4/premise/cells{,2}/<id>
+//! as `n4prem_<id>`, each "before" bit the frozen printer's (lossy_bits 1228f9dc).
 //!
 //! No oracle: the record is which spellings the token vector holds, not a value of the
 //! language. Each expected value was read off the row's rule (W/lossy/plan2/PLAN2.txt
@@ -12,7 +15,13 @@
 //! Bits: P param_xz, U unsized_xz, S sign_kw_param, L let_any, F fill_xz.
 //! Unit U3: the table holds unedited (the bits of every accepted cell are U2's) ; the last
 //! test runs the production entries against the test entries on every cell (premise judge 3
-//! L3, L5).
+//! L3, L5). Unit U4 (fix N4): a fill is exempt only where the token shape holds AND the
+//! parser marked it as the right side it took at one of its 8 assignment / initializer sites
+//! (`lossy.rs` `assign_rhs`). Nine rows moved, each 0 -> F or X -> X | F, none the other way:
+//! premise2_p9_stmt (the relational tail `b1 = b1 <= 'x;`), premise2_t4_genvar (a genvar
+//! initialization), plan_f3_pval, premise_b1_paruntyped, premise_b1_parwide (a parameter
+//! value), premise_b2_defparamfill (a defparam value), premise_b3_letctl, premise_b5_letparam,
+//! premise2_u4_letifc (a `let` body) — the classes the plan's section 3 and main's K1 name.
 
 use hdl_ast::{LossySpell, TopItem};
 
@@ -90,7 +99,7 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("plan_f1_nba", include_str!("testdata/lossy_cells/plan_f1_nba.sv"), Some(0)),
     ("plan_f10_enumx", include_str!("testdata/lossy_cells/plan_f10_enumx.sv"), Some(0)),
     ("plan_f2_tern", include_str!("testdata/lossy_cells/plan_f2_tern.sv"), Some(F)),
-    ("plan_f3_pval", include_str!("testdata/lossy_cells/plan_f3_pval.sv"), Some(P)),
+    ("plan_f3_pval", include_str!("testdata/lossy_cells/plan_f3_pval.sv"), Some(P | F)),
     ("plan_f4_ovr", include_str!("testdata/lossy_cells/plan_f4_ovr.sv"), Some(P | F)),
     ("plan_f5_binop", include_str!("testdata/lossy_cells/plan_f5_binop.sv"), Some(F)),
     ("plan_f6_arg", include_str!("testdata/lossy_cells/plan_f6_arg.sv"), Some(F)),
@@ -105,13 +114,13 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("premise_b1_constfn", include_str!("testdata/lossy_cells/premise_b1_constfn.sv"), Some(F)),
     ("premise_b1_inside", include_str!("testdata/lossy_cells/premise_b1_inside.sv"), Some(F)),
     ("premise_b1_parexpr", include_str!("testdata/lossy_cells/premise_b1_parexpr.sv"), Some(P | F)),
-    ("premise_b1_paruntyped", include_str!("testdata/lossy_cells/premise_b1_paruntyped.sv"), Some(P)),
-    ("premise_b1_parwide", include_str!("testdata/lossy_cells/premise_b1_parwide.sv"), Some(P)),
+    ("premise_b1_paruntyped", include_str!("testdata/lossy_cells/premise_b1_paruntyped.sv"), Some(P | F)),
+    ("premise_b1_parwide", include_str!("testdata/lossy_cells/premise_b1_parwide.sv"), Some(P | F)),
     ("premise_b1_pattern", include_str!("testdata/lossy_cells/premise_b1_pattern.sv"), Some(F)),
     ("premise_b1_retdef", include_str!("testdata/lossy_cells/premise_b1_retdef.sv"), Some(F)),
     ("premise_b2_classparam", include_str!("testdata/lossy_cells/premise_b2_classparam.sv"), Some(P | F)),
     ("premise_b2_condlet", include_str!("testdata/lossy_cells/premise_b2_condlet.sv"), Some(L | F)),
-    ("premise_b2_defparamfill", include_str!("testdata/lossy_cells/premise_b2_defparamfill.sv"), Some(P)),
+    ("premise_b2_defparamfill", include_str!("testdata/lossy_cells/premise_b2_defparamfill.sv"), Some(P | F)),
     ("premise_b2_enum", include_str!("testdata/lossy_cells/premise_b2_enum.sv"), Some(F)),
     ("premise_b2_genif", include_str!("testdata/lossy_cells/premise_b2_genif.sv"), Some(F)),
     ("premise_b2_Gwide", include_str!("testdata/lossy_cells/premise_b2_Gwide.sv"), Some(0)),
@@ -119,7 +128,7 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("premise_b2_wideovr", include_str!("testdata/lossy_cells/premise_b2_wideovr.sv"), Some(P | F)),
     ("premise_b2_wideovr1", include_str!("testdata/lossy_cells/premise_b2_wideovr1.sv"), Some(0)),
     ("premise_b3_classctl", include_str!("testdata/lossy_cells/premise_b3_classctl.sv"), Some(P)),
-    ("premise_b3_letctl", include_str!("testdata/lossy_cells/premise_b3_letctl.sv"), Some(L)),
+    ("premise_b3_letctl", include_str!("testdata/lossy_cells/premise_b3_letctl.sv"), Some(L | F)),
     ("premise_b3_letfill", include_str!("testdata/lossy_cells/premise_b3_letfill.sv"), Some(L | F)),
     ("premise_b4_arrsigned", include_str!("testdata/lossy_cells/premise_b4_arrsigned.sv"), None),
     ("premise_b4_blocklocal", include_str!("testdata/lossy_cells/premise_b4_blocklocal.sv"), None),
@@ -133,7 +142,7 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("premise_b5_G_q", include_str!("testdata/lossy_cells/premise_b5_G_q.sv"), Some(0)),
     ("premise_b5_G_unszb", include_str!("testdata/lossy_cells/premise_b5_G_unszb.sv"), Some(0)),
     ("premise_b5_G_upper", include_str!("testdata/lossy_cells/premise_b5_G_upper.sv"), Some(0)),
-    ("premise_b5_letparam", include_str!("testdata/lossy_cells/premise_b5_letparam.sv"), Some(L)),
+    ("premise_b5_letparam", include_str!("testdata/lossy_cells/premise_b5_letparam.sv"), Some(L | F)),
     ("premise_b5_lex", include_str!("testdata/lossy_cells/premise_b5_lex.sv"), Some(U)),
     ("premise_b7_classbodylp", include_str!("testdata/lossy_cells/premise_b7_classbodylp.sv"), None),
     ("premise_b7_classsign", include_str!("testdata/lossy_cells/premise_b7_classsign.sv"), None),
@@ -165,7 +174,7 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("premise2_p7_width", include_str!("testdata/lossy_cells/premise2_p7_width.sv"), Some(0)),
     ("premise2_p8_illegal", include_str!("testdata/lossy_cells/premise2_p8_illegal.sv"), Some(0)),
     ("premise2_p8b_enumstr", include_str!("testdata/lossy_cells/premise2_p8b_enumstr.sv"), Some(0)),
-    ("premise2_p9_stmt", include_str!("testdata/lossy_cells/premise2_p9_stmt.sv"), Some(0)),
+    ("premise2_p9_stmt", include_str!("testdata/lossy_cells/premise2_p9_stmt.sv"), Some(F)),
     ("premise2_q1_late", include_str!("testdata/lossy_cells/premise2_q1_late.sv"), Some(0)),
     ("premise2_q2_ovr", include_str!("testdata/lossy_cells/premise2_q2_ovr.sv"), Some(0)),
     ("premise2_q2g_G", include_str!("testdata/lossy_cells/premise2_q2g_G.sv"), Some(0)),
@@ -183,14 +192,42 @@ const CELLS: &[(&str, &str, Option<u8>)] = &[
     ("premise2_t1c_enum", include_str!("testdata/lossy_cells/premise2_t1c_enum.sv"), Some(0)),
     ("premise2_t2_config", include_str!("testdata/lossy_cells/premise2_t2_config.sv"), None),
     ("premise2_t3_hashnoparen", include_str!("testdata/lossy_cells/premise2_t3_hashnoparen.sv"), None),
-    ("premise2_t4_genvar", include_str!("testdata/lossy_cells/premise2_t4_genvar.sv"), Some(0)),
+    ("premise2_t4_genvar", include_str!("testdata/lossy_cells/premise2_t4_genvar.sv"), Some(F)),
     ("premise2_u1_svalocal", include_str!("testdata/lossy_cells/premise2_u1_svalocal.sv"), None),
     ("premise2_u2_letclass", include_str!("testdata/lossy_cells/premise2_u2_letclass.sv"), None),
     ("premise2_u3_letunit", include_str!("testdata/lossy_cells/premise2_u3_letunit.sv"), None),
-    ("premise2_u4_letifc", include_str!("testdata/lossy_cells/premise2_u4_letifc.sv"), Some(L)),
+    ("premise2_u4_letifc", include_str!("testdata/lossy_cells/premise2_u4_letifc.sv"), Some(L | F)),
     ("premise2_v1_selw", include_str!("testdata/lossy_cells/premise2_v1_selw.sv"), Some(0)),
     ("premise2_v1b_letw", include_str!("testdata/lossy_cells/premise2_v1b_letw.sv"), Some(L)),
     ("premise2_w1_wide", include_str!("testdata/lossy_cells/premise2_w1_wide.sv"), Some(0)),
+    ("n4plan_r1_return", include_str!("testdata/lossy_cells/n4plan_r1_return.sv"), Some(F)),
+    ("n4plan_r2_forcond", include_str!("testdata/lossy_cells/n4plan_r2_forcond.sv"), Some(F)),
+    ("n4plan_r3_prop", include_str!("testdata/lossy_cells/n4plan_r3_prop.sv"), Some(F)),
+    ("n4plan_r4_seq", include_str!("testdata/lossy_cells/n4plan_r4_seq.sv"), Some(F)),
+    ("n4plan_r5_constraint", include_str!("testdata/lossy_cells/n4plan_r5_constraint.sv"), Some(F)),
+    ("n4plan_r6_cont", include_str!("testdata/lossy_cells/n4plan_r6_cont.sv"), Some(F)),
+    ("n4plan_r7_init", include_str!("testdata/lossy_cells/n4plan_r7_init.sv"), Some(F)),
+    ("n4plan_r8_nbarel", include_str!("testdata/lossy_cells/n4plan_r8_nbarel.sv"), Some(F)),
+    ("n4plan_r9_delay", include_str!("testdata/lossy_cells/n4plan_r9_delay.sv"), Some(F)),
+    ("n4plan_r10_paren", include_str!("testdata/lossy_cells/n4plan_r10_paren.sv"), Some(F)),
+    ("n4plan_r11_genfor", include_str!("testdata/lossy_cells/n4plan_r11_genfor.sv"), Some(F)),
+    ("n4plan_r12_cgopt", include_str!("testdata/lossy_cells/n4plan_r12_cgopt.sv"), Some(F)),
+    ("n4plan_r13_ctl", include_str!("testdata/lossy_cells/n4plan_r13_ctl.sv"), Some(0)),
+    ("n4plan_r14_pass", include_str!("testdata/lossy_cells/n4plan_r14_pass.sv"), Some(F)),
+    ("n4prem_d01_clk", include_str!("testdata/lossy_cells/n4prem_d01_clk.sv"), Some(F)),
+    ("n4prem_d02_udp", include_str!("testdata/lossy_cells/n4prem_d02_udp.sv"), None),
+    ("n4prem_d02b_udp", include_str!("testdata/lossy_cells/n4prem_d02b_udp.sv"), Some(F)),
+    ("n4prem_d03_spec", include_str!("testdata/lossy_cells/n4prem_d03_spec.sv"), Some(P | F)),
+    ("n4prem_d04_tdfor", include_str!("testdata/lossy_cells/n4prem_d04_tdfor.sv"), Some(0)),
+    ("n4prem_d05_pasg_rel", include_str!("testdata/lossy_cells/n4prem_d05_pasg_rel.sv"), Some(F)),
+    ("n4prem_d06_force_rel", include_str!("testdata/lossy_cells/n4prem_d06_force_rel.sv"), Some(F)),
+    ("n4prem_d07_tfor_rel", include_str!("testdata/lossy_cells/n4prem_d07_tfor_rel.sv"), Some(F)),
+    ("n4prem_d08_ffor_rel", include_str!("testdata/lossy_cells/n4prem_d08_ffor_rel.sv"), Some(F)),
+    ("n4prem_d09_rwith", include_str!("testdata/lossy_cells/n4prem_d09_rwith.sv"), None),
+    ("n4prem_d09b_rwith", include_str!("testdata/lossy_cells/n4prem_d09b_rwith.sv"), Some(F)),
+    ("n4prem_d10_randprop", include_str!("testdata/lossy_cells/n4prem_d10_randprop.sv"), Some(0)),
+    ("n4prem_d11_tdfor_rel", include_str!("testdata/lossy_cells/n4prem_d11_tdfor_rel.sv"), Some(F)),
+    ("n4prem_d12_pasg", include_str!("testdata/lossy_cells/n4prem_d12_pasg.sv"), Some(0)),
 ];
 
 #[test]
@@ -259,7 +296,7 @@ fn production_entries_equal_the_test_entries() {
         .map(|(id, src, _)| (*id, *src))
         .chain(U3_SOURCES.iter().copied())
         .collect();
-    assert_eq!(all.len(), 139);
+    assert_eq!(all.len(), 167);
     let (mut with_fact, mut fact_only) = (0, Vec::new());
     for (id, src) in all {
         let (toks, errs, facts) = hdl_lexer::lex_facts(src);
@@ -280,6 +317,6 @@ fn production_entries_equal_the_test_entries() {
         );
     }
     assert_eq!(fact_only, ["b1_attr"]);
-    // measured at U3: 106 of the 139 run the pass, 33 skip it.
-    assert_eq!(with_fact, 106, "units whose lexer saw an x / z literal");
+    // measured at U3: 106 of the 139 run the pass, 33 skip it ; fix N4's 28 cells each spell one.
+    assert_eq!(with_fact, 134, "units whose lexer saw an x / z literal");
 }

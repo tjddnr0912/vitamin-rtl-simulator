@@ -56,9 +56,10 @@ pub fn parse_lexed(
     // with none stays `None`, as before it existed. The lossy-spelling record is pushed
     // only when a bit is set (a unit spelling none keeps its `.vu` body), before the
     // `inside` record, which stays last. The token pass runs only on a unit whose lexer
-    // saw an x / z literal: its three bits are false on any other (`lossy.rs`).
+    // saw an x / z literal: its three bits are false on any other (`lossy.rs`). It reads
+    // the parser's right-side marks for `fill_xz` (§5.2 Q-LOSSYSPELL U4).
     let mut lossy = if facts.xz_literal() {
-        lossy::scan_lossy(tokens, src)
+        lossy::scan_lossy(tokens, src, &p.lossy_whole_rhs)
     } else {
         LossySpell::default()
     };

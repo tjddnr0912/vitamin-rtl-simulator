@@ -125,7 +125,7 @@ impl Parser<'_, '_> {
                     if let Some(e) = self.parse_bits_sym_type_arg() {
                         return e;
                     }
-                    self.pos = save; // not a bare type → restore for normal expr-arg parse
+                    self.rewind(save); // not a bare type → restore for normal expr-arg parse
                 }
                 let args = if self.peek() == Some(T::LParen) {
                     self.call_args()

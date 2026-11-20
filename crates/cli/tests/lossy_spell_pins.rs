@@ -21,7 +21,9 @@
 //! control (EH1's one fill shape) ; the design-level superset over the row's cells. Unit U3
 //! (the lexer's x / z literal kinds) adds: the forms the split must not move, printed as
 //! U2 printed them (premise judge 3 L6) ; `let` as a type name (L7) ; the lexer's fact over
-//! the preprocessed text.
+//! the preprocessed text. Fix N4 (unit U4, the right-side marks) adds: a plain fill that is
+//! a whole marked right side on a left side refused today stays LOUD with its code (premise
+//! judge N4 L8: a concatenation target, a part-select `force`, a concatenation `force`).
 
 use diag::{LogEvent, LogSink};
 use hdl_ast::{LossySpell, SourceUnit, TopItem};
@@ -652,6 +654,28 @@ fn plain_fill_on_a_refused_left_side_stays_loud() {
         &["A w=xxxxxxxxxxxxxxxxxx w2=zzzzzzzzzzzzzzzzzz"],
         &[],
         0,
+    );
+}
+
+/// Premise judge L8 of fix N4 (§5.2 Q-LOSSYSPELL U4): a plain fill the parser marks at the
+/// procedural `assign` (S3) and `force` (S4) sites is exempt, and on these left sides it is
+/// right only because vita refuses them (E3009 ; IEEE 1800-2017 10.6.1 / 10.6.2 allow them,
+/// iverilog runs them: RULINGS L1-20, a pre-existing loud refusal). PR16 holds here only
+/// while refused ; opening one re-measures the plain fill there (T7). Cells
+/// W/lossy/fixn4/premise/cells e1_pasg, e2_force (E3009 on PRE and POST).
+#[test]
+fn n4_marked_fill_on_a_refused_target_stays_loud() {
+    loud(
+        "module t; logic [34:0] c1, c0; initial begin assign {c1, c0} = 'z; #1 $display(\"A c=%h%h\", c1, c0); end endmodule\n",
+        "E3009",
+    );
+    loud(
+        "module t; wire [69:0] n = 70'h5; initial begin force n[39:0] = 'x; #1 $display(\"A n=%h\", n); end endmodule\n",
+        "E3009",
+    );
+    loud(
+        "module t; wire [34:0] a1, a0; assign a1 = '0; assign a0 = '1; initial begin force {a1, a0} = 'x; #1 $display(\"A a=%h%h\", a1, a0); end endmodule\n",
+        "E3009",
     );
 }
 

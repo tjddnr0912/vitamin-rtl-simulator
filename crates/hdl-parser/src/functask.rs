@@ -417,7 +417,7 @@ impl Parser<'_, '_> {
             if self.at_ident_kw("ref") {
                 saw_const_ref = true;
             } else {
-                self.pos = save; // not `const ref` — restore
+                self.rewind(save); // not `const ref` — restore
             }
         }
         let (dir, dir_spelling, dir_present) = if self.at_ident_kw("ref") {

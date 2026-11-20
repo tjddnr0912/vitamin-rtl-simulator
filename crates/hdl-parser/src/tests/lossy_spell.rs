@@ -80,9 +80,14 @@ fn bits_loose(src: &str) -> (u8, bool) {
 /// `scan_lossy` alone over a token snippet that is not a design: the depth rule over the
 /// lexer's opener and closer kinds (premise judge 2, L4).
 fn scan(src: &str) -> u8 {
+    scan_marked(src, &[])
+}
+
+/// `scan_lossy` over a token snippet with the given right-side marks (token indices).
+fn scan_marked(src: &str, marks: &[usize]) -> u8 {
     let (toks, le) = hdl_lexer::lex(src);
     assert!(le.is_empty(), "lex errors: {le:?}");
-    mask(lossy::scan_lossy(&toks, src))
+    mask(lossy::scan_lossy(&toks, src, marks))
 }
 
 /// Home rule H2(d), the SUPERSET test: every parameter holder of the parsed unit — a
@@ -383,7 +388,8 @@ fn param_xz_spelling_variants() {
             "module m; localparam H = 4'b1010, I = 8'hFF, J = 'd9; endmodule",
             0,
         ),
-        ("module m; localparam K = 'x; endmodule", P),
+        // a localparam value is no mark site (main's K1, fix N4): its plain fill counts
+        ("module m; localparam K = 'x; endmodule", P | F),
     ] {
         assert_eq!(bits(src), want, "`{src}`");
     }
@@ -413,7 +419,10 @@ fn unsized_xz_based_not_fill() {
 
 #[test]
 fn fill_xz_plain_shape_is_not_counted() {
-    // `=` / `<=` FILL `;`: PR16, measured right or loud on every left side that takes it.
+    // `=` / `<=` FILL `;` where the parser took the fill as the whole right side of an
+    // assignment or initializer (fix N4: the shape AND the parser's mark): PR16, measured
+    // right or loud on every left side that takes it. The relational tail `b1 = b1 <= 'x;`
+    // (p9) has the same tokens and is counted since fix N4 (`fill_xz_relational_matrix`).
     for src in [
         "module m; logic [69:0] q; initial q = 'x; endmodule",
         "module m; logic [69:0] q; logic c; always @(posedge c) q <= 'z; endmodule",
@@ -421,8 +430,6 @@ fn fill_xz_plain_shape_is_not_counted() {
         "module m; wire [69:0] w; assign w = 'z; endmodule",
         // EH1's one form, `Q <= 'x;` (41 of 41 sites)
         "module m; logic [31:0] Q; logic c; always @(posedge c) begin Q <= 'x; end endmodule",
-        // the relational `<=` operand ends with the same tokens: measured right (p9)
-        "module m; logic b1; initial b1 = b1 <= 'x; endmodule",
     ] {
         assert_eq!(bits(src), 0, "`{src}`");
     }
@@ -451,10 +458,11 @@ fn fill_xz_every_other_position_counts() {
 }
 
 #[test]
-fn fill_xz_let_body_is_held_by_let_any() {
-    // `let LX = 'x;` has the plain shape, so the fill is not counted; the `let` is
-    // (b3_letfill: silently wrong today, PLAN2 section A's table, (c) needs let_any).
-    assert_eq!(bits("module m; let LX = 'x; endmodule"), L);
+fn fill_xz_let_body_counts_and_let_any_is_set() {
+    // `let LX = 'x;` has the plain shape but a `let` body is no mark site (main's K1,
+    // RULINGS L1-10): the fill counts, and the `let` is noted too (b3_letfill: silently
+    // wrong today, PLAN2 section A's table).
+    assert_eq!(bits("module m; let LX = 'x; endmodule"), L | F);
     let letfill = "module t; logic [69:0] w1, w2, w3, w4; logic c;
   let LX = 'x; let ID(q) = q; let A(q) = q | 70'h0; let T(q) = c ? q : 70'h0;
   initial begin c = 1; w1 = LX; w2 = ID('z); w3 = A('z); w4 = T('x); end
@@ -473,15 +481,24 @@ fn zero_one_fills_set_no_bit() {
 }
 
 #[test]
-fn fill_rule_is_the_token_shape() {
-    // fill_counts reads the previous and next token only.
-    assert_eq!(scan("a = 'x ;") & F, 0);
-    assert_eq!(scan("a <= 'z ;") & F, 0);
+fn fill_rule_shape_alone_exempts_nothing() {
+    // Pin (e): `scan_lossy` with an EMPTY mark list — the token shape alone exempts no fill
+    // (fix N4: the exemption is the shape AND the parser's mark at the fill's index).
+    assert_eq!(scan("a = 'x ;") & F, F);
+    assert_eq!(scan("a <= 'z ;") & F, F);
     assert_eq!(scan("a = 'x , b = 1 ;") & F, F);
     assert_eq!(scan("a = ( 'x ) ;") & F, F);
     assert_eq!(scan("'x ;") & F, F);
     assert_eq!(scan("a = 'x") & F, F);
     assert_eq!(scan("a == 'x ;") & F, F);
+    // ... and with the parser's mark at the fill's index (2) the shape exempts it ; a mark
+    // elsewhere, or a mark where the shape fails, exempts nothing.
+    assert_eq!(scan_marked("a = 'x ;", &[2]) & F, 0);
+    assert_eq!(scan_marked("a <= 'z ;", &[2]) & F, 0);
+    assert_eq!(scan_marked("a = 'x ;", &[0, 1, 3]) & F, F);
+    assert_eq!(scan_marked("a = 'x , b = 1 ;", &[2]) & F, F);
+    assert_eq!(scan_marked("a == 'x ;", &[2]) & F, F);
+    assert_eq!(scan_marked("a = # 1 'x ;", &[4]) & F, F);
 }
 
 // ───────────────────────────── let_any ─────────────────────────────
@@ -780,4 +797,395 @@ fn a_clean_unit_skips_the_pass() {
         parse_with_warnings(&toks, src)
     );
     assert_eq!(bits_lexed(src), (S | L, 0));
+}
+
+// ──────────── fix N4: the exemption is the parser's mark (§5.2 Q-LOSSYSPELL U4) ────────────
+//
+// The boundary's soundness lens (N4) found the token shape `=` / `<=` FILL `;` exempting a
+// fill that is a relational operand (`b = a <= 'z;`), a parameter value, a defparam value, a
+// `let` body: positions PR16 never measured. Since U4 a fill is exempt only when the shape
+// holds AND the parser pushed the fill's token index when it took the right side of an
+// assignment or initializer at one of its 8 sites (`lossy.rs` `assign_rhs`; W/lossy/fixn4/
+// plan/PLAN.txt section 1, premise judge W/lossy/fixn4/premise L1-L9, main's K1). Each pin's
+// "before" bit is the frozen printer's (lossy_bits 1228f9dc, W/lossy/fixn4/{plan,premise}/cells).
+
+/// Every source of a matrix: (label, source, want, parse accepted), the mismatches listed.
+fn mismatches(cases: &[(String, String, u8)]) -> Vec<String> {
+    cases
+        .iter()
+        .filter_map(|(label, src, want)| {
+            let (got, refused) = bits_loose(src);
+            (refused || got != *want)
+                .then(|| format!("{label}: got {got}, want {want}, refused {refused}: `{src}`"))
+        })
+        .collect()
+}
+
+/// Pin (a)'s four spellings of the relational operand.
+const REL_FORMS: [(&str, &str); 4] = [
+    ("bare", "a <= 'z"),
+    ("whole paren", "(a <= 'z)"),
+    ("fill paren", "a <= ('z)"),
+    ("operand paren", "((a) <= 'z)"),
+];
+
+/// Pin (a)'s positions, `@R` the relational operand. The first eighteen read 0 before U4 in
+/// the bare spelling (the plan's cells r1-r8, r11 ; premise judge's d05-d08, d11 ; L5) ; a
+/// parenthesized spelling never had the shape.
+const REL_POSITIONS: [(&str, &str); 19] = [
+    (
+        "S1 blocking",
+        "module m; logic [99:0] a; logic b; initial b = @R; endmodule",
+    ),
+    (
+        "S2 nonblocking",
+        "module m; logic [99:0] a; logic q; initial q <= @R; endmodule",
+    ),
+    (
+        "S5 continuous",
+        "module m; logic [99:0] a; wire y; assign y = @R; endmodule",
+    ),
+    (
+        "S6 initializer",
+        "module m; logic [99:0] a; logic b = @R; endmodule",
+    ),
+    (
+        "return",
+        "module m; logic [99:0] a; function automatic logic f(); return @R; endfunction endmodule",
+    ),
+    (
+        "for condition",
+        "module m; logic [99:0] a; int i; initial for (i = 0; @R; i = i + 1) ; endmodule",
+    ),
+    (
+        "generate-for condition",
+        "module m; logic [99:0] a; for (genvar g = 0; @R; g++) begin : b end endmodule",
+    ),
+    (
+        "wait statement",
+        "module m; logic [99:0] a; logic b, c; initial wait (c) b = @R; endmodule",
+    ),
+    (
+        "property body",
+        "module m; logic c; logic [99:0] a; property p; @(posedge c) @R; endproperty \
+         assert property (p); endmodule",
+    ),
+    (
+        "sequence body",
+        "module m; logic c; logic [99:0] a; sequence s; @R; endsequence \
+         assert property (@(posedge c) s); endmodule",
+    ),
+    (
+        "constraint body",
+        "class C; rand logic [99:0] a; constraint k { @R; } endclass module m; endmodule",
+    ),
+    (
+        "compound",
+        "module m; logic [99:0] a; logic b; initial b |= @R; endmodule",
+    ),
+    (
+        "ternary tail",
+        "module m; logic [99:0] a; logic b, c, d; initial b = c ? d : @R; endmodule",
+    ),
+    // premise judge L5: the other four sites' tails
+    (
+        "S3 tail",
+        "module m; logic [99:0] a; logic b; initial assign b = @R; endmodule",
+    ),
+    (
+        "S4 tail",
+        "module m; logic [99:0] a; logic b; initial force b = @R; endmodule",
+    ),
+    (
+        "S7 tail",
+        "module m; logic [99:0] a; initial for (logic i = @R; i; i = 0) ; endmodule",
+    ),
+    (
+        "S7 typedef tail",
+        "typedef logic w1_t; module m; logic [99:0] a; initial for (w1_t j = @R; j; j = 0) ; \
+         endmodule",
+    ),
+    (
+        "S8 tail",
+        "module m; logic [99:0] a; logic b; initial for (b = @R; b; b = 0) ; endmodule",
+    ),
+    // premise judge L6: an inline constraint's `with { … }` (cells2/d09b)
+    (
+        "inline constraint",
+        "class C; rand logic [99:0] a; endclass module m; C o; initial begin o = new; \
+         o.randomize() with { @R; }; end endmodule",
+    ),
+];
+
+#[test]
+fn fill_xz_relational_matrix() {
+    // Pin (a): the relational `a <= 'z` counts in every spelling at every position — the
+    // fill is no assignment's whole right side whatever tokens surround it.
+    let mut cases = Vec::new();
+    for (pos, tpl) in REL_POSITIONS {
+        for (form, rel) in REL_FORMS {
+            cases.push((format!("{pos} / {form}"), tpl.replace("@R", rel), F));
+        }
+    }
+    // the row's own cell (premise2_p9_stmt's shape) and the nonblocking tail of r8
+    cases.push((
+        "p9".into(),
+        "module m; logic b1; initial b1 = b1 <= 'x; endmodule".into(),
+        F,
+    ));
+    assert_eq!(cases.len(), 77);
+    let wrong = mismatches(&cases);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn fill_xz_whole_right_side_per_site() {
+    // Pin (b): one cell per mark site holding only that site's whole-right-side fill: 0.
+    // A site whose mark were lost would read 1 (trip-wire W4).
+    let cases: Vec<(String, String, u8)> = [
+        ("S1", "module m; logic [69:0] q; initial q = 'x; endmodule"),
+        (
+            "S2",
+            "module m; logic [69:0] q; logic c; always @(posedge c) q <= 'z; endmodule",
+        ),
+        (
+            "S3",
+            "module m; logic [99:0] b; initial assign b = 'z; endmodule",
+        ),
+        (
+            "S4",
+            "module m; logic [69:0] v; initial force v = 'x; endmodule",
+        ),
+        ("S5", "module m; wire [69:0] w; assign w = 'z; endmodule"),
+        (
+            "S6 module variable",
+            "module m; logic [69:0] v = 'x; endmodule",
+        ),
+        ("S6 net", "module m; wire [69:0] w = 'z; endmodule"),
+        (
+            "S6 class property",
+            "class C; logic [69:0] p = 'x; endclass module m; endmodule",
+        ),
+        (
+            "S6 rand class property",
+            "class C; rand logic [69:0] p = 'x; endclass module m; endmodule",
+        ),
+        (
+            "S6 function local",
+            "module m; function automatic void f(); logic [69:0] l = 'x; endfunction endmodule",
+        ),
+        (
+            "S6 block local",
+            "module m; initial begin logic [69:0] l = 'z; end endmodule",
+        ),
+        (
+            "S6 automatic block local",
+            "module m; typedef logic [69:0] t70; initial begin automatic t70 s = 'z; end \
+             endmodule",
+        ),
+        (
+            "S6 typed name",
+            "module m; typedef logic [69:0] t70; t70 v = 'x; endmodule",
+        ),
+        (
+            "S6 struct typed",
+            "module m; typedef struct packed { logic [69:0] a; } ps_t; ps_t s = 'x; endmodule",
+        ),
+        (
+            "S7",
+            "module m; initial for (logic [69:0] lv = 'z; lv != 0; lv = 0) ; endmodule",
+        ),
+        (
+            "S7 typedef",
+            "typedef logic [99:0] w_t; module m; int k; initial for (w_t j = 'z; k < 1; \
+             k = k + 1) ; endmodule",
+        ),
+        (
+            "S8",
+            "module m; logic [69:0] a; initial for (a = 'x; a != 0; a = 0) ; endmodule",
+        ),
+        // the plan's r13_ctl with the procedural `assign` premise judge L7 adds: 8 sites
+        (
+            "r13_ctl + S3",
+            "module top; logic [99:0] a, b; wire [99:0] w = 'z; logic [99:0] v = 'x; \
+             assign b = 'z; initial begin a = 'x; a <= 'z; force a = 'x; assign a = 'x; \
+             for (a = 'x; a != 0; a = 0) ; for (logic [69:0] lv = 'z; lv != 0; lv = 0) ; end \
+             endmodule",
+        ),
+        // EH1's one form (mem_lib.sv)
+        (
+            "EH1",
+            "module m; logic [31:0] Q; logic CLK, WE; always @(posedge CLK) begin if (WE) \
+             begin end else Q <= 'x; end endmodule",
+        ),
+    ]
+    .into_iter()
+    .map(|(l, s)| (l.to_string(), s.to_string(), 0))
+    .collect();
+    let wrong = mismatches(&cases);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn fill_xz_k1_and_unmarked_sites_count() {
+    // Pin (c): main's K1 (RULINGS L1-10) — a parameter / localparam / specparam / defparam
+    // value and a `let` body are no mark site, so their plain fill counts (param_xz /
+    // let_any carry it too) ; a genvar initialization, a covergroup option, a clocking
+    // signal's `= expr` and a UDP's `initial` (premise judge L6) are no mark site either.
+    let sub = "module s #(parameter W = 0) (); endmodule ";
+    let cases: Vec<(String, String, u8)> = [
+        (
+            "localparam",
+            "module m; localparam L = 'x; endmodule".to_string(),
+            P | F,
+        ),
+        (
+            "parameter",
+            "module m; parameter Q = 'z; endmodule".to_string(),
+            P | F,
+        ),
+        (
+            "specparam",
+            "module top; specparam S = 'x; endmodule".to_string(),
+            P | F,
+        ),
+        (
+            "defparam",
+            format!("{sub}module m; s u(); defparam u.W = 'z; endmodule"),
+            P | F,
+        ),
+        (
+            "let body",
+            "module m; let LX = 'x; endmodule".to_string(),
+            L | F,
+        ),
+        (
+            "genvar initialization",
+            "module m; for (genvar g = 'x; g < 2; g = g + 1) begin : b end endmodule".to_string(),
+            F,
+        ),
+        (
+            "covergroup option",
+            "module top; logic c; covergroup cg @(posedge c); option.per_instance = 'x; \
+             endgroup endmodule"
+                .to_string(),
+            F,
+        ),
+        (
+            "clocking signal",
+            "module top; logic c; logic [3:0] x; clocking cb @(posedge c); output o = 'x; \
+             endclocking endmodule"
+                .to_string(),
+            F,
+        ),
+        (
+            "UDP initial",
+            "primitive p(q, a, b); output q; reg q; input a, b; initial q = 'x; table \
+             0 ? : ? : 0; 1 ? : ? : 1; endtable endprimitive\nmodule top; wire y; reg a, b; \
+             p u(y, a, b); endmodule"
+                .to_string(),
+            F,
+        ),
+        (
+            "inline constraint",
+            "class C; rand logic [99:0] a; endclass module top; C o; initial begin o = new; \
+             o.randomize() with { a <= 'z; }; end endmodule"
+                .to_string(),
+            F,
+        ),
+    ]
+    .into_iter()
+    .map(|(l, s, w)| (l.to_string(), s, w))
+    .collect();
+    let wrong = mismatches(&cases);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn fill_xz_unchanged_over_reports() {
+    // Pin (d): marked, but the shape fails, so the fill counts as it did before U4 — the
+    // intra-assignment delay (`#1` before the fill), a parenthesized fill, a declarator
+    // that ends at `,` (an over-report each, stated).
+    for src in [
+        "module m; logic [99:0] a; initial a = #1 'x; endmodule",
+        "module m; logic [99:0] a; initial a <= ('z); endmodule",
+        "module m; logic [99:0] a = 'x, b; endmodule",
+    ] {
+        assert_eq!(bits(src), F, "`{src}`");
+    }
+}
+
+/// A parser that has parsed `src` (a design), and the token index of `src`'s first fill.
+fn parsed_parser<'t, 's>(toks: &'t [Spanned], src: &'s str) -> Parser<'t, 's> {
+    let mut p = Parser::new(toks, src);
+    let _ = p.parse_source_unit();
+    assert!(p.errors.is_empty(), "`{src}` must parse: {:?}", p.errors);
+    p
+}
+
+#[test]
+fn rewind_pops_the_marks_at_and_past_its_position() {
+    // Pin (f) with premise judge L3: the mark sits at the fill's index m ; `rewind(m)` pops
+    // it, `rewind(m + 1)` keeps it (an off-by-one `> save` keeps it at m: fx_m11), and
+    // `rewind(0)` pops everything (a rewind that pops nothing: fx_m10).
+    let src = "module m; logic a; initial a = 'x; endmodule";
+    let (toks, _) = hdl_lexer::lex(src);
+    let m = toks
+        .iter()
+        .position(|t| t.kind == TokenKind::IntUnsizedBasedXz)
+        .unwrap();
+    let mut p = parsed_parser(&toks, src);
+    assert_eq!(p.lossy_whole_rhs, [m]);
+    p.rewind(m + 1);
+    assert_eq!(p.lossy_whole_rhs, [m], "rewind(m + 1) keeps the mark at m");
+    assert_eq!(p.pos, m + 1);
+    p.rewind(m);
+    assert!(p.lossy_whole_rhs.is_empty(), "rewind(m) pops the mark at m");
+    let mut p = parsed_parser(&toks, src);
+    p.rewind(0);
+    assert!(p.lossy_whole_rhs.is_empty(), "rewind(0) pops every mark");
+    assert_eq!(p.pos, 0);
+}
+
+#[test]
+fn rewind_pops_the_inside_keywords_too() {
+    // RULINGS L1-19: the one funnel truncates `inside_kw_at` the same way.
+    let src = "module m; logic [3:0] a; logic b; initial b = a inside {1, 2}; endmodule";
+    let (toks, _) = hdl_lexer::lex(src);
+    let k = toks
+        .iter()
+        .position(|t| &src[t.span.clone()] == "inside")
+        .unwrap();
+    let mut p = parsed_parser(&toks, src);
+    assert_eq!(p.inside_kw_at, [k]);
+    p.rewind(k + 1);
+    assert_eq!(p.inside_kw_at, [k]);
+    p.rewind(k);
+    assert!(p.inside_kw_at.is_empty());
+}
+
+#[test]
+fn marks_are_only_unsized_xz_right_side_starts() {
+    // Pin (f), second half: a right side that starts at any other token is not marked
+    // (the helper's kind test: fx_m12) ; every mark is an `IntUnsizedBasedXz` token, at a
+    // site's right side, in ascending order. Plain assignments with no fill leave it empty.
+    let plain = "module m; logic [7:0] a, b; wire [7:0] w = 8'd1; assign b = a; initial begin                  a = 1; a <= b; a = 4'bx; a = '1; force a = b; assign a = b;                  for (a = 0; a < 2; a = a + 1) ; end endmodule";
+    let (toks, _) = hdl_lexer::lex(plain);
+    assert!(parsed_parser(&toks, plain).lossy_whole_rhs.is_empty());
+    let src = "module m; logic [69:0] a, b; logic [69:0] v = 'x; initial begin a = 'z; \
+               b = 'bx; a = b | 'x; a = {'x}; a <= 'Z; end endmodule";
+    let (toks, _) = hdl_lexer::lex(src);
+    let p = parsed_parser(&toks, src);
+    let marked: Vec<&str> = p
+        .lossy_whole_rhs
+        .iter()
+        .map(|&i| {
+            assert_eq!(toks[i].kind, TokenKind::IntUnsizedBasedXz);
+            &src[toks[i].span.clone()]
+        })
+        .collect();
+    // the initializer's `'x`, `'z`, `'bx` (an unsized based literal: marked, never read as
+    // a fill), `'Z` ; `b | 'x` starts at `b` and `{'x}` at `{`: no mark.
+    assert_eq!(marked, ["'x", "'z", "'bx", "'Z"]);
+    assert!(p.lossy_whole_rhs.windows(2).all(|w| w[0] < w[1]));
 }
