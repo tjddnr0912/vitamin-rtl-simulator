@@ -70,6 +70,8 @@
 //!   discriminator, climbing out of a tuple or a slice of patterns), keyed by its `span`
 //!   field as spelled, with a hand-written class (OWN / FROM / MASKED / NOSTORE / V / NONE).
 //!   A new construction, or a spelling that moves, fails: say whose text the span is.
+//! - H15p (fix F1) the same census over hdl-parser's production sources (the parser builds
+//!   most statements ; its ANOTHER rows are the bodies V turns to `None`).
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
 //!   inside `vec ! [ .. ]`, which this token walker reads: premise judge 1 K1's count) and
 //!   `ContAssign {` constructions (8), per (file, fn). A new producer fails: its author
@@ -995,6 +997,25 @@ fn census() -> Table {
     tab
 }
 
+/// H15p (fix F1): the H15 rows of the PARSER's production sources (`crates/hdl-parser/src`,
+/// its `src/tests/` left out as `census` leaves elaborate's), keyed (rule, file, fn).
+fn parser_census() -> Table {
+    let root = workspace_root();
+    let mut tab = Table::new();
+    for (rel, src) in files_in(&root, "crates/hdl-parser/src") {
+        let f = rel.trim_start_matches("crates/hdl-parser/src/").to_string();
+        if f.starts_with("tests/") {
+            continue;
+        }
+        for (r, k) in hits(&src) {
+            if r.starts_with("H15:") {
+                *tab.entry((r, f.clone(), k)).or_default() += 1;
+            }
+        }
+    }
+    tab
+}
+
 fn rows_of(tab: &Table, prefix: &str) -> Table {
     tab.iter()
         .filter(|((r, _, _), _)| r == prefix || r.starts_with(&format!("{prefix}:")))
@@ -1178,6 +1199,46 @@ fn h15_the_node_constructions() {
         ),
         (Some(&105), Some(&1), Some(&3), 3),
         "H15 totals (L2)"
+    );
+}
+
+/// H15p (§5.2 Q-WEXTPOS fix F1, L1): the parser's constructions — 104 `Stmt`, of which the
+/// 18 ANOTHER bodies V reads `None` on.
+#[test]
+fn h15p_the_parser_constructions() {
+    check_classed(
+        "H15p",
+        &parser_census(),
+        H15P,
+        &[
+            "OWN",
+            "HOLDER",
+            "FROM",
+            "HOLDER+FROM",
+            "OWN+HOLDER",
+            "NOSTORE",
+            "ITEM",
+            "NOSPAN",
+            "ANOTHER",
+        ],
+    );
+    let all = kind_counts(H15P, None);
+    assert_eq!(all.get("Stmt"), Some(&104), "H15p: 104 `Stmt` (L1)");
+    let mut another: BTreeMap<&str, usize> = BTreeMap::new();
+    for &(_, f, _, n, c, _) in H15P {
+        if c == "ANOTHER" {
+            *another.entry(f).or_default() += n;
+        }
+    }
+    assert_eq!(
+        another.into_iter().collect::<Vec<_>>(),
+        vec![
+            ("enums.rs", 2),
+            ("type_param_shape.rs", 2),
+            ("udp.rs", 10),
+            ("udp_table.rs", 4)
+        ],
+        "H15p: the 18 ANOTHER (L1)"
     );
 }
 
@@ -1928,6 +1989,11 @@ fn walker_controls() {
             .collect()
     };
     assert_eq!(
+        h15("impl P { fn g(&mut self) { let f = |sp: Span| Stmt::Null(sp); body.push(f(s)); } }"),
+        vec!["H15:Stmt:sp@g".to_string()],
+        "H15p planted (L1): a construction after a closure head is counted (fails the table)"
+    );
+    assert_eq!(
         h15("use hdl_ast::Sequence as S;\nimpl E { fn g(&mut self) { let q = S::Repeat { span: sp, n: 1 }; } }"),
         Vec::<String>::new(),
         "H15 planted (L2): `S::Repeat {{` under `use ast::Sequence as S` is not a statement"
@@ -2489,4 +2555,81 @@ const H15: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H15:Stmt:span", "frames_body.rs", "emit_frame_local_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
     ("H15:Stmt:span", "sva_ast.rs", "gate_nba_with_disable", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
     ("H15:Stmt:span", "var_init.rs", "flush_pending_var_inits", 1, "MASKED", "a statement vita builds, lowered under THE MASK (premise 2's census)"),
+];
+
+/// H15p (§5.2 Q-WEXTPOS fix F1, L1): the same census over the PARSER's production sources
+/// (`crates/hdl-parser/src`): 104 `Stmt`, 2 `PortConn`, 2 `ContinuousAssign`, 1
+/// `InstanceItem`, 4 `PortConnList`. Class: OWN the parsed node's own text ; HOLDER a span
+/// handed in from the statement being rewritten ; FROM one construct's rows ; NOSTORE an
+/// `Error` / `Null` / a store-less node ; ITEM / NOSPAN an item, a list ; ANOTHER a body the
+/// parser builds whose statements carry their ITEM's span (18: `udp.rs` 10, `udp_table.rs` 4,
+/// `enums.rs` 2, `type_param_shape.rs` 2) — what V turns to `None`. It lives here, not in
+/// hdl-parser's tests: that crate has no `proc-macro2` dev-dependency and this walker is
+/// one (the `lossy_home.rs` precedent).
+#[rustfmt::skip]
+const H15P: &[(&str, &str, &str, usize, &str, &str)] = &[
+    ("H15:ContinuousAssign:start.to(self.prev_span())", "decls.rs", "parse_cont_assign", 1, "OWN", "the parsed node's own text"),
+    ("H15:ContinuousAssign:start.to(self.prev_span())", "gates.rs", "parse_gate_primitive", 1, "OWN", "the parsed node's own text"),
+    ("H15:InstanceItem:start.to(self.prev_span())", "instances.rs", "parse_instance_item", 1, "ITEM", "an instance item's own text (R-AT: never a row's `at`)"),
+    ("H15:PortConn:start.to(self.prev_span())", "instances.rs", "parse_named_port_conn", 2, "OWN", "the parsed node's own text"),
+    ("H15:PortConnList:Vec::new()", "instances.rs", "parse_port_conns", 2, "NOSPAN", "a connection list: no span of its own"),
+    ("H15:PortConnList:conns", "instances.rs", "parse_port_conns", 2, "NOSPAN", "a connection list: no span of its own"),
+    ("H15:Stmt:n_start.to(self.prev_span())", "stmt_ctl.rs", "build_for_typed_init", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:qspan.to(self.prev_span())", "assertions.rs", "parse_unique_priority", 1, "NOSTORE", "an `Error`"),
+    ("H15:Stmt:s", "stmt.rs", "parse_statement", 1, "NOSTORE", "an `Error` / `Null` at the current token"),
+    ("H15:Stmt:s", "stmt.rs", "parse_statement_inner", 2, "NOSTORE", "an `Error` / `Null` at the current token"),
+    ("H15:Stmt:s", "stmt.rs", "stmt_error", 1, "NOSTORE", "an `Error` / `Null` at the current token"),
+    ("H15:Stmt:self.cur_span()", "functask.rs", "tf_body", 1, "NOSTORE", "an empty routine body's `Null`"),
+    ("H15:Stmt:sp", "assertions.rs", "parse_assert_stmt", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "assertions.rs", "parse_assert_stmt", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "assertions.rs", "parse_unique_priority", 1, "HOLDER", "a `unique` / `priority` warning: the statement's span, no store (L1: :514)"),
+    ("H15:Stmt:span", "enums.rs", "build_enum_name_fn", 2, "ANOTHER", "the `$enum_name$` body: the first `.name()` call's path (F-A ; V: at=-)"),
+    ("H15:Stmt:span", "item_dispatch.rs", "parse_module_item", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "soa.rs", "try_soa_assign", 7, "HOLDER", "a struct-of-arrays rewrite: the rewritten statement's span"),
+    ("H15:Stmt:span", "soa.rs", "try_soa_queue_method_stmt", 2, "HOLDER+FROM", "a struct-of-arrays queue method: the rewritten statement's span (L1: :135 FROM)"),
+    ("H15:Stmt:span", "stmt.rs", "assign_stmt", 2, "HOLDER", "soa's assignment builder: its caller's statement span"),
+    ("H15:Stmt:span", "stmt.rs", "parse_assign_or_call", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt.rs", "parse_break_continue", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt.rs", "parse_labeled_stmt", 4, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt.rs", "parse_pre_incdec", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt.rs", "parse_void_cast_stmt", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt.rs", "try_compound_assign", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt_ctl.rs", "build_multi_foreach", 5, "HOLDER", "a multi-dimensional `foreach`'s built loop: the `foreach` (L1: :810)"),
+    ("H15:Stmt:span", "stmt_ctl.rs", "parse_do_while", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt_ctl.rs", "parse_for", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:span", "stmt_ctl.rs", "parse_foreach", 4, "OWN+HOLDER", "a `foreach`'s own loop nodes ; its built index initializer (L1: :617 HOLDER)"),
+    ("H15:Stmt:span", "type_param_shape.rs", "type_param_shape_guard", 2, "ANOTHER", "a type-parameter shape guard (`$fatal`, no store ; V: at=-)"),
+    ("H15:Stmt:span", "udp.rs", "parse_udp_decl", 10, "ANOTHER", "a UDP body: the whole `primitive` (V: at=-)"),
+    ("H15:Stmt:span", "udp_table.rs", "build_comb_udp", 4, "ANOTHER", "a combinational UDP's body: the whole `primitive` (V: at=-)"),
+    ("H15:Stmt:start", "assertions.rs", "parse_assert_stmt", 1, "NOSTORE", "an assertion's `Null` action"),
+    ("H15:Stmt:start", "stmt.rs", "wrap_break", 1, "HOLDER", "a loop's `break` wrapper: the loop keyword"),
+    ("H15:Stmt:start", "stmt_ctl.rs", "parse_foreach", 2, "NOSTORE", "an `Error` at the `foreach`"),
+    ("H15:Stmt:start", "stmt_ctl.rs", "parse_loop_body", 1, "HOLDER", "a loop body's `continue` wrapper: the loop keyword"),
+    ("H15:Stmt:start", "stmt_ctl.rs", "parse_multidim_foreach", 2, "NOSTORE", "an `Error` at the `foreach` (PLAN: HOLDER)"),
+    ("H15:Stmt:start.to(self.prev_span())", "assertions.rs", "parse_concurrent_assert", 3, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_deassign", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_delay_stmt", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_event_stmt", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_force", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_par_block", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_release", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_trigger_stmt", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "blocks_timing.rs", "parse_wait", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "cover.rs", "parse_cover_property", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "expr.rs", "parse_systask_call", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "functask.rs", "tf_body", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt.rs", "parse_assign_or_call", 3, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt.rs", "parse_disable", 2, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt.rs", "parse_proc_assign", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt.rs", "parse_return", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt.rs", "stmt_error_at", 1, "NOSTORE", "an `Error` over the statement's text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_case", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_case_inside", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_do_while", 1, "NOSTORE", "an `Error` over the statement's text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_for_assign", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_forever", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_if", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_repeat", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_while", 1, "OWN", "the parsed node's own text"),
+    ("H15:Stmt:start.to(self.prev_span())", "sva_seq.rs", "parse_seq_block", 1, "OWN", "the parsed node's own text"),
 ];
