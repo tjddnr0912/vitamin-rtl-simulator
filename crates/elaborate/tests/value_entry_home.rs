@@ -240,7 +240,6 @@ const E5: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/edge_gate.rs", "edge_backstop", 1, "read: any error so far"),
     ("crates/elaborate/src/edge_gate.rs", "zero_width_claim_is_sound", 1, "read: any error so far"),
     ("crates/elaborate/src/lib.rs", "-", 1, "the field"),
-    ("crates/elaborate/src/mdrv_mix.rs", "check_mixed_drivers", 1, "read: any error so far (rule X stands down, §5.2 Q-MDRVMIX)"),
     ("crates/elaborate/src/read_set.rs", "census_sys_func", 1, "read: any error so far (debug_assertions only)"),
     ("crates/elaborate/src/read_set.rs", "census_sys_task", 1, "read: any error so far (debug_assertions only)"),
     ("crates/elaborate/src/var_init.rs", "assert_block_local_inits_drained", 1, "read: any error so far"),

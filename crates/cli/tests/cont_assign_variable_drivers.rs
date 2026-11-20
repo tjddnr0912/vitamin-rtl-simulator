@@ -601,55 +601,27 @@ endmodule
     );
 }
 
-/// With no `assign`, an `always_latch` pair is Rule B's error (the owner's decision of
-/// 2026-11-18, D-WW option A ; IEEE 1800-2017 §9.2.2.3, ieee1800-2017.txt:9097-9098: "All
-/// statements in 9.2.2.2 shall apply to always_latch"), and a declaration initializer
-/// beside the latch stays Rule C's warning. iverilog runs each (`y=1`, `y=0`, `y=0`) and
-/// verilator reports no MULTIDRIVEN (PROCASSINIT on the initializer). Until §5.2
-/// Q-MDRVMIX C3 the first two were the warning too ; PRE (0a9af60f), rc 0: `t.sv:4:3:
-/// warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `y` is written by
-/// `always_latch` AND by `always_latch`; xcelium rejects this as two drivers (*E,MULAXX,
-/// IEEE §9.2.2.3) while verilator accepts it — give the variable one writing process [in
-/// t]` (`y=1`) and the same with `AND by `initial`` (`y=0`).
 #[test]
-fn a_latch_pair_with_no_assign_is_an_error() {
+fn a_latch_pair_with_no_assign_keeps_its_warning() {
+    // Unchanged (Rule B / Rule C): iverilog runs each (`y=1`, `y=0`, `y=0`) and
+    // verilator reports no MULTIDRIVEN (PROCASSINIT on the initializer).
     for (decl, items, want) in [
         (
             "logic y;",
             "  always_latch if (en) y = d;\n  always_latch if (!en) y = a;",
-            "t.sv:4:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` is written by \
-             `always_latch` AND by `always_latch`, which is two drivers on one variable (IEEE \
-             §9.2.2.3) [in t]",
+            "is written by `always_latch` AND by `always_latch`",
         ),
         (
             "logic y;",
             "  always_latch if (!en) y = d;\n  initial y = 1'b0;",
-            "t.sv:4:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `y` is written by \
-             `always_latch` AND by `initial`, which is two drivers on one variable (IEEE \
-             §9.2.2.3) [in t]",
+            "is written by `always_latch` AND by `initial`",
         ),
-    ] {
-        let src = format!(
-            "module t;
-  logic en = 1, d = 1, a = 0;
-  {decl}
-{items}
-  initial begin #1 $display(\"y=%b\", y); $finish; end
-endmodule
-"
-        );
-        let (rc, out) = run(&src);
-        assert_eq!(rc, Some(1), "{out}");
-        expect_codes(&out, &["VITA-E3001"], want);
-        assert!(out.contains(want), "{want}:\n{out}");
-    }
-    // Rule C: an initializer beside the latch keeps its warning.
-    {
-        let (decl, items, want) = (
+        (
             "logic y = 1'b0;",
             "  always_latch if (!en) y = d;",
             "has a declaration initializer AND is written by `always_latch`",
-        );
+        ),
+    ] {
         let src = format!(
             "module t;
   logic en = 1, d = 1, a = 0;

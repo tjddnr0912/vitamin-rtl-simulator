@@ -14,14 +14,8 @@
 //! to, and that a function writes in its frame, is how the IR lowers them (premise judge 1
 //! K5, W/mdrv/premise/REPORT.txt), recorded as is.
 //!
-//! The view itself prints nothing: its one production reader is `mdrv_mix.rs`'s rule X
-//! (§5.2 Q-MDRVMIX C1, pinned in `mdrv_mix_pins.rs`) ; these designs are its inputs, not its output.
-//! A design rule X refuses (E3001) has no IR to render, so since C1 no pin here holds a continuous
-//! and a procedural write on one bit: in the 18 `wb_` pins below whose designs did, the smallest
-//! source token was changed (each pin's doc says which) and only that write's `bits[..]` / net
-//! field moved, with the ` at=` offsets after a token of another length moved by that length
-//! (W/mdrv2/build/r2/vpin.py) ; in w01, wa_k2e and wa_k8a the partner of the pair moved and the
-//! overlapping design is a pin of `mdrv_mix_pins.rs` (`wv_<test>`).
+//! No user-visible output moves (the view has no production reader): the record lanes
+//! compare every stdout, stderr and exit code with PRE (Q-WREXT build r1, B/run_record.sh).
 //! The designs are elaborated without a span resolver, so no `@file:line:col` is printed.
 //!
 //! §5.2 Q-WEXTPOS C1, THE STAND-DOWN (`wext.rs`): the `wa_` pins. In an elaboration that
@@ -165,20 +159,18 @@ fn pre_text(src: &str, out: &str) {
 
 /// A continuous part-select and an `always_comb` part-select on one variable: two `Bits`
 /// extents by the kernel, `[5:2]` and `[3:0]` (matrix cell m_a_ca_acomb_ppo's pair).
-/// §5.2 Q-MDRVMIX C1 (R15 b): the `always_comb` takes `[1:0]` (was `v[3:0] = ~s`, overlapping `[3:2]`): the
-/// overlapping design is rule X's E3001 and has no IR to render (`mdrv_mix_pins.rs` wv_w01_cont_and_comb_parts).
 #[test]
 fn w01_cont_and_comb_parts() {
     pin(
         "module t; logic [7:0] v; logic [3:0] s;
   assign v[5:2] = s;
-  always_comb v[1:0] = ~s[1:0];
+  always_comb v[3:0] = ~s;
 endmodule
 ",
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:t.v bits[5:2] via=- at=49
-W P0:always_comb blk s0 c0 n0:t.v bits[1:0] via=direct at=75
+W P0:always_comb blk s0 c0 n0:t.v bits[3:0] via=direct at=75
 N n0:t.v Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -928,16 +920,13 @@ N n0:top.x Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 /// `$display`) a whole-net chunk reads no expression and keeps the kernel's `bits[3:0]`,
 /// for the port row and the `always_comb` writer of `v` alike (PRE's dump, unchanged) ;
 /// vita's text is PRE's (`b=4 v=0`).
-/// §5.2 Q-MDRVMIX C1 (R15 b): the `always_comb` writes a second variable `z` whole (was `v`, the port's
-/// variable): still a whole-net chunk under the flag ; the overlapping design is rule X's E3001
-/// (`mdrv_mix_pins.rs` wv_wa_k2e_whole_net_stays) ; PRE 0a9af60f prints `b=4 v=5` on this design.
 #[test]
 fn wa_k2e_whole_net_stays() {
     let src = r#"module child(output logic [3:0] o); logic [3:0] w; assign o = 4'h5; endmodule
 module top;
-  logic [3:0] v, z;
+  logic [3:0] v;
   child u(.o(v));
-  always_comb z = 4'h0;
+  always_comb v = 4'h0;
   initial begin #1 $display("b=%0d v=%h", $bits(u.w), v); $finish; end
 endmodule
 "#;
@@ -945,15 +934,14 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n0:top.v bits[3:0] via=- at=120
-W C1:assign cont - c0 n2:top.u.o bits[3:0] via=- at=58
-W P0:always_comb blk s0 c0 n1:top.z bits[3:0] via=direct at=142
+W C0:port cont - c0 n0:top.v bits[3:0] via=- at=117
+W C1:assign cont - c0 n1:top.u.o bits[3:0] via=- at=58
+W P0:always_comb blk s0 c0 n0:top.v bits[3:0] via=direct at=139
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
-N n1:top.z Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
-N n2:top.u.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
+N n1:top.u.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 ",
     );
-    pre_text(src, "b=4 v=5\nsimulation ended (Finish) at time 1\n");
+    pre_text(src, "b=4 v=0\nsimulation ended (Finish) at time 1\n");
 }
 
 /// An unpacked-array word stays `word` under the flag (the stand-down comes after `Word`),
@@ -1011,8 +999,6 @@ N n0:top.x Logic w=128 alen=1 dims=n decl=Module/Logic/Internal
 
 /// Control, flag CLEAR (R1): a one-dimensional `y[u.P]` is decided by the kernel from the
 /// patched parameter `Const` (`bits[4:4]`, P = 4), beside `y[4]` — as PRE.
-/// §5.2 Q-MDRVMIX C1 (R15 b): the `initial` writes `y[5]` (was `y[4]`, the bit `y[u.P]` decides): the
-/// overlapping design is rule X's E3001 (`mdrv_mix_pins.rs` wv_wa_k8a_control_decided).
 #[test]
 fn wa_k8a_control_decided() {
     let src = r#"module child; parameter int P = 4; endmodule
@@ -1020,7 +1006,7 @@ module top;
   logic [63:0] y;
   assign y[u.P] = 1'b1;
   child u();
-  initial begin y[5] = 1'b0; #1 $display("y4=%b", y[4]); $finish; end
+  initial begin y[4] = 1'b0; #1 $display("y4=%b", y[4]); $finish; end
 endmodule
 "#;
     pin(
@@ -1028,7 +1014,7 @@ endmodule
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:top.y bits[4:4] via=- at=84
-W P0:initial blk s0 c0 n0:top.y bits[5:5] via=direct at=128
+W P0:initial blk s0 c0 n0:top.y bits[4:4] via=direct at=128
 N n0:top.y Logic w=64 alen=1 dims=n decl=Module/Logic/Internal
 ",
     );
@@ -1060,14 +1046,13 @@ N n0:top.y Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
 /// A gate list (b3m): each gate's output terminal is its row's own position, not the
 /// statement's `and` (ca_idents' `assign@t.sv:3:3` for both rows on a resolver). Old output,
 /// not re-run: iverilog names the second gate's line, "t.sv:4".
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `initial` writes bit 0 (was the bit the row drives).
 #[test]
 fn wb_gate_list() {
     let src = r#"module top;
   logic [3:0] v, w;
   and g1(v[2], 1'b1, 1'b1),
       g2(w[1], 1'b1, 1'b1);
-  initial begin w[0] = 1'b0; #1 $display("w=%b", w); $finish; end
+  initial begin w[1] = 1'b0; #1 $display("w=%b", w); $finish; end
 endmodule
 "#;
     pin(
@@ -1076,7 +1061,7 @@ endmodule
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=41
 W C1:assign cont - c0 n1:top.w bits[1:1] via=- at=69
-W P0:initial blk s0 c0 n1:top.w bits[0:0] via=direct at=104
+W P0:initial blk s0 c0 n1:top.w bits[1:1] via=direct at=104
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1089,13 +1074,12 @@ N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 
 /// An assignment list (b3): each assignment's target is its row's position (one statement, two
 /// columns).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `initial` writes bit 0 (was the bit the row drives).
 #[test]
 fn wb_assign_list() {
     let src = r#"module top;
   logic [3:0] v, w;
   assign v[2] = 1'b1,       w[1] = 1'b1;
-  initial begin w[0] = 1'b0; #1 $display("w=%b", w); $finish; end
+  initial begin w[1] = 1'b0; #1 $display("w=%b", w); $finish; end
 endmodule
 "#;
     pin(
@@ -1104,7 +1088,7 @@ endmodule
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=41
 W C1:assign cont - c0 n1:top.w bits[1:1] via=- at=60
-W P0:initial blk s0 c0 n1:top.w bits[0:0] via=direct at=89
+W P0:initial blk s0 c0 n1:top.w bits[1:1] via=direct at=89
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1116,14 +1100,13 @@ N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// A `buf` with two outputs (c04): one row per output terminal, each at its own terminal.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `initial` writes bit 0 (was the bit the row drives).
 #[test]
 fn wb_buf_two() {
     let src = r#"module top;
   logic [3:0] v, w;
   logic i = 1'b1;
   buf b1(v[1], w[2], i);
-  initial begin w[0] = 1'b0; #1 $display("w=%b", w); $finish; end
+  initial begin w[2] = 1'b0; #1 $display("w=%b", w); $finish; end
 endmodule
 "#;
     pin(
@@ -1133,7 +1116,7 @@ WEXT writes=4 bits=4 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=59
 W C1:assign cont - c0 n1:top.w bits[2:2] via=- at=65
 W P0:var_init blk s0 c0 n2:top.i bits[0:0] via=direct at=-
-W P1:initial blk s1 c0 n1:top.w bits[0:0] via=direct at=91
+W P1:initial blk s1 c0 n1:top.w bits[2:2] via=direct at=91
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.w Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n2:top.i Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
@@ -1147,13 +1130,12 @@ N n2:top.i Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
 
 /// A concatenation target (c05): one row, two chunks, both at the concatenation (the row's one
 /// target).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `initial` writes bit 0 (was the bit the row drives).
 #[test]
 fn wb_concat_target() {
     let src = r#"module top;
   logic [3:0] a, b;
   assign {a[1], b[2]} = 2'b11;
-  initial begin b[0] = 1'b0; #1 $display("b=%b", b); $finish; end
+  initial begin b[2] = 1'b0; #1 $display("b=%b", b); $finish; end
 endmodule
 "#;
     pin(
@@ -1162,7 +1144,7 @@ endmodule
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
 W C0:assign cont - c0 n0:top.a bits[1:1] via=- at=41
 W C0:assign cont - c1 n1:top.b bits[2:2] via=- at=41
-W P0:initial blk s0 c0 n1:top.b bits[0:0] via=direct at=79
+W P0:initial blk s0 c0 n1:top.b bits[2:2] via=direct at=79
 N n0:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.b Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1173,23 +1155,22 @@ N n1:top.b Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 /// A named port connection under an instance array (q07): each port row at the connection's `.`
 /// in the parent (PRE's resolver printed the row identity `port@t.sv:2:39`, the same span) ;
 /// the child's `assign` at its target.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the connection takes `v[0]` (was `v`, the whole variable beside `v[1]`).
 #[test]
 fn wb_ports_one_line() {
     let src = r#"module leaf(output logic [3:0] o); assign o = 4'h5; endmodule
-module mid; logic [3:0] v; leaf \l.1 (.o(v[0])); always_comb v[1] = 1'b0; endmodule
+module mid; logic [3:0] v; leaf \l.1 (.o(v)); always_comb v[1] = 1'b0; endmodule
 module top; mid m[1:0] (); initial begin #1 $finish; end endmodule
 "#;
     pin(
         src,
         "\
 WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n0:top.m[1].v bits[0:0] via=- at=100
+W C0:port cont - c0 n0:top.m[1].v bits[3:0] via=- at=100
 W C1:assign cont - c0 n1:top.m[1].\\l.1.o bits[3:0] via=- at=42
-W C2:port cont - c0 n2:top.m[0].v bits[0:0] via=- at=100
+W C2:port cont - c0 n2:top.m[0].v bits[3:0] via=- at=100
 W C3:assign cont - c0 n3:top.m[0].\\l.1.o bits[3:0] via=- at=42
-W P1:always_comb blk s1 c0 n0:top.m[1].v bits[1:1] via=direct at=123
-W P2:always_comb blk s2 c0 n2:top.m[0].v bits[1:1] via=direct at=123
+W P1:always_comb blk s1 c0 n0:top.m[1].v bits[1:1] via=direct at=120
+W P2:always_comb blk s2 c0 n2:top.m[0].v bits[1:1] via=direct at=120
 N n0:top.m[1].v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.m[1].\\l.1.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 N n2:top.m[0].v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -1199,8 +1180,8 @@ N n3:top.m[0].\\l.1.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
     rows_at(
         src,
         &[
-            ("C0:port", "2:39", ".o(v[0])"),
-            ("C2:port", "2:39", ".o(v[0])"),
+            ("C0:port", "2:39", ".o(v)"),
+            ("C2:port", "2:39", ".o(v)"),
             ("C1:assign", "1:43", "o = "),
             ("C3:assign", "1:43", "o = "),
         ],
@@ -1209,26 +1190,25 @@ N n3:top.m[0].\\l.1.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 
 /// A positional port connection (q08): the row at the connection expression (PRE's resolver:
 /// `port@t.sv:2:35`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the connection takes `v[0]` (was `v`, the whole variable beside `v[1]`).
 #[test]
 fn wb_port_positional() {
     let src = r#"module leaf(output logic [3:0] o); assign o = 4'h5; endmodule
-module top; logic [3:0] v; leaf l(v[0]); always_comb v[1] = 1'b0; initial begin #1 $finish; end endmodule
+module top; logic [3:0] v; leaf l(v); always_comb v[1] = 1'b0; initial begin #1 $finish; end endmodule
 "#;
     pin(
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:port cont - c0 n0:top.v bits[0:0] via=- at=96
+W C0:port cont - c0 n0:top.v bits[3:0] via=- at=96
 W C1:assign cont - c0 n1:top.l.o bits[3:0] via=- at=42
-W P0:always_comb blk s0 c0 n0:top.v bits[1:1] via=direct at=115
+W P0:always_comb blk s0 c0 n0:top.v bits[1:1] via=direct at=112
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.l.o Logic w=4 alen=1 dims=n decl=AnsiPort/Logic/Output
 ",
     );
     rows_at(
         src,
-        &[("C0:port", "2:35", "v[0]);"), ("C1:assign", "1:43", "o = ")],
+        &[("C0:port", "2:35", "v);"), ("C1:assign", "1:43", "o = ")],
     );
 }
 
@@ -1336,13 +1316,12 @@ N n2:t.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B6 / B10: an NBA under an `iff` event control is its own statement (PRE twin p01_iff_nba_err `t.sv:5:32`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c01_iff_nba() {
     let src = r#"module top;
   logic clk = 0, en = 1;
   logic [3:0] v;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   always @(posedge clk iff en) v[1] <= 1'b1;
   initial begin #1 clk = 1; #1 $display("v=%b", v); $finish; end
 endmodule
@@ -1351,7 +1330,7 @@ endmodule
         src,
         "\
 WEXT writes=5 bits=5 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:top.v bits[0:0] via=- at=63
+W C0:assign cont - c0 n2:top.v bits[1:1] via=- at=63
 W P0:var_init blk s0 c0 n0:top.clk bits[0:0] via=direct at=-
 W P0:var_init blk s1 c0 n1:top.en bits[0:0] via=direct at=-
 W P1:always nba s2 c0 n2:top.v bits[1:1] via=direct at=107
@@ -1369,13 +1348,12 @@ N n2:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B10: a one-statement task inlined into its caller: the task's own statement (PRE twin p09 `t.sv:3:11`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c09_task_single_stmt() {
     let src = r#"module top;
   logic [3:0] v;
   task t; v[1] = 1'b1; endtask
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin t(); #1 $display("v=%b", v); $finish; end
 endmodule
 "#;
@@ -1383,7 +1361,7 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[0:0] via=- at=69
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=69
 W P0:initial blk s0 c0 n0:top.v bits[1:1] via=task at=39
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1393,12 +1371,11 @@ N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// mb3 / mb4: a `begin` holding one statement over several lines: the innermost statement, not the block (PRE twin p14 `t.sv:7:7` ; iverilog "t.sv:7", old output, not re-run).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c14_begin_one_stmt() {
     let src = r#"module top;
   logic [3:0] v;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin
     #1;
     begin
@@ -1412,7 +1389,7 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[0:0] via=- at=38
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=38
 W P0:initial blk s0 c0 n0:top.v bits[1:1] via=direct at=91
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1422,13 +1399,12 @@ N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B11 / mb6: the `iff` guard's shell (stmt_main.rs, class R, unmasked) around a parsed body: each write its own statement (PRE twin p12 `t.sv:8:7`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c12_iff_body_multiline() {
     let src = r#"module top;
   logic clk = 0, en = 1;
   logic [3:0] v, a;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin
     @(posedge clk iff en) begin
       a = 4'h1;
@@ -1442,7 +1418,7 @@ endmodule
         src,
         "\
 WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:top.v bits[0:0] via=- at=66
+W C0:assign cont - c0 n2:top.v bits[1:1] via=- at=66
 W P0:var_init blk s0 c0 n0:top.clk bits[0:0] via=direct at=-
 W P0:var_init blk s1 c0 n1:top.en bits[0:0] via=direct at=-
 W P1:initial blk s2 c0 n3:top.a bits[3:0] via=direct at=133
@@ -1459,14 +1435,13 @@ N n3:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B11: a task call under an `iff` wait: the inlined task's own statement (PRE twin p02 `t.sv:4:11`) ; the callee entry `wext_located` locates it again, so masking the guard shell (mutant mb6) does not reach it.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c02_iff_wait_task() {
     let src = r#"module top;
   logic clk = 0, en = 1;
   logic [3:0] v;
   task t; v[1] = 1'b1; endtask
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin @(posedge clk iff en) t(); end
   initial begin #1 clk = 1; #1 $display("v=%b", v); $finish; end
 endmodule
@@ -1475,7 +1450,7 @@ endmodule
         src,
         "\
 WEXT writes=5 bits=5 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:top.v bits[0:0] via=- at=94
+W C0:assign cont - c0 n2:top.v bits[1:1] via=- at=94
 W P0:var_init blk s0 c0 n0:top.clk bits[0:0] via=direct at=-
 W P0:var_init blk s1 c0 n1:top.en bits[0:0] via=direct at=-
 W P1:initial blk s2 c0 n2:top.v bits[1:1] via=task at=64
@@ -1490,12 +1465,11 @@ N n2:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B10: a labelled statement pushes nothing of its own: the child's interval, recorded first (PRE twin p07 `t.sv:4:20`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c07_label() {
     let src = r#"module top;
   logic [3:0] v;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin L: v[1] = 1'b1; #1 $display("v=%b", v); $finish; end
 endmodule
 "#;
@@ -1503,7 +1477,7 @@ endmodule
         src,
         "\
 WEXT writes=2 bits=2 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[0:0] via=- at=38
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=38
 W P0:initial blk s0 c0 n0:top.v bits[1:1] via=direct at=70
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 ",
@@ -1513,13 +1487,12 @@ N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B10: an `if` without `else` around one write: the write's own statement (PRE twin p08 `t.sv:5:24`).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c08_if_noelse() {
     let src = r#"module top;
   logic [3:0] v;
   logic c = 1;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   initial begin if (c) v[1] = 1'b1; #1 $display("v=%b", v); $finish; end
 endmodule
 "#;
@@ -1527,7 +1500,7 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[0:0] via=- at=53
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=53
 W P0:var_init blk s0 c0 n1:top.c bits[0:0] via=direct at=-
 W P1:initial blk s1 c0 n0:top.v bits[1:1] via=direct at=89
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -1539,13 +1512,12 @@ N n1:top.c Logic w=1 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B10: an NBA in a `begin` under an `iff` event control (no PRE twin: position by hand).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_c17_iff_block() {
     let src = r#"module top;
   logic clk = 0, en = 1;
   logic [3:0] v;
-  assign v[0] = 1'b0;
+  assign v[1] = 1'b0;
   always @(posedge clk iff en) begin v[1] <= 1'b1; end
   initial begin #1 clk = 1; #1 $display("v=%b", v); $finish; end
 endmodule
@@ -1554,7 +1526,7 @@ endmodule
         src,
         "\
 WEXT writes=5 bits=5 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:top.v bits[0:0] via=- at=63
+W C0:assign cont - c0 n2:top.v bits[1:1] via=- at=63
 W P0:var_init blk s0 c0 n0:top.clk bits[0:0] via=direct at=-
 W P0:var_init blk s1 c0 n1:top.en bits[0:0] via=direct at=-
 W P1:always nba s2 c0 n2:top.v bits[1:1] via=direct at=113
@@ -1652,13 +1624,12 @@ N n1:top.b Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 }
 
 /// B13 / mb7, premise judge line 1 / 2: the declaration-initializer flush is a synthesized body (`lower_synth_proc`'s mask, kept through the process root): both stores ` at=-` (its Block span is the FIRST initializer's, context for the second).
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives an implicit net `z` (was `y[5]`: `y` and `a` are each written whole by their initializer).
 #[test]
 fn wb_var_init() {
     let src = r#"module top;
   logic [3:0] a = 4'h1;
   logic [7:0] y = 8'h3;
-  assign z = 1'b1;
+  assign y[5] = 1'b1;
   initial begin #1 $display("y=%b", y); $finish; end
 endmodule
 "#;
@@ -1666,23 +1637,21 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n2:top.z bits[0:0] via=- at=69
+W C0:assign cont - c0 n1:top.y bits[5:5] via=- at=69
 W P0:var_init blk s0 c0 n0:top.a bits[3:0] via=direct at=-
 W P0:var_init blk s1 c0 n1:top.y bits[7:0] via=direct at=-
 N n0:top.a Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
 N n1:top.y Logic w=8 alen=1 dims=n decl=Module/Logic/Internal
-N n2:top.z Wire w=1 alen=1 dims=n decl=-
 ",
     );
 }
 
 /// a static task's body write is its own statement ; the copy-out the call pushes after the body is the call statement.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives bit 0 (was the bit the statement writes).
 #[test]
 fn wb_copy_out() {
     let src = r#"module top;
   logic [3:0] v;
-  assign v[0] = 1'b1;
+  assign v[1] = 1'b1;
   task t(output logic o); o = 1'b0; endtask
   initial begin t(v[1]); #1 $display("v=%b", v); $finish; end
 endmodule
@@ -1691,7 +1660,7 @@ endmodule
         src,
         "\
 WEXT writes=3 bits=3 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[0:0] via=- at=38
+W C0:assign cont - c0 n0:top.v bits[1:1] via=- at=38
 W P0:initial blk s0 c0 n1:top.__taskarg_t_o_1 bits[0:0] via=task at=77
 W P0:initial blk s1 c0 n0:top.v bits[1:1] via=task at=111
 N n0:top.v Logic w=4 alen=1 dims=n decl=Module/Logic/Internal
@@ -1702,7 +1671,6 @@ N n1:top.__taskarg_t_o_1 Logic w=1 alen=1 dims=n decl=-
 }
 
 /// B14: a package function's frame body lowered inside the calling statement: its own `return` statement ; the caller's writes theirs.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives `v[3]` (was `v[2]`, written by the `initial`).
 #[test]
 fn wb_c06_pkg_fn_in_stmt() {
     let src = r#"package p;
@@ -1710,7 +1678,7 @@ fn wb_c06_pkg_fn_in_stmt() {
 endpackage
 module top;
   logic [3:0] v;
-  assign v[3] = 1'b0;
+  assign v[2] = 1'b0;
   initial begin v[1] = p::f(0); v[2] = 1'b1; #1 $display("v=%b", v); $finish; end
 endmodule
 "#;
@@ -1718,7 +1686,7 @@ endmodule
         src,
         "\
 WEXT writes=4 bits=4 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[3:3] via=- at=121
+W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=121
 W P0:initial blk s1 c0 n0:top.v bits[1:1] via=direct at=150
 W P0:initial blk s2 c0 n0:top.v bits[2:2] via=direct at=166
 W F0:func:.top.f blk s0 c0 n2:top.$func$p::f.f bits[31:0] via=direct at=46
@@ -1737,7 +1705,6 @@ N n2:top.$func$p::f.f Integer w=32 alen=1 dims=n decl=-
 }
 
 /// R3 / mb11: the frame body's floor: its prologue store (the local's initializer, a built statement) ` at=-`, not the calling statement around the body ; its own statements theirs.
-/// §5.2 Q-MDRVMIX C1 (R15 a): rule X refuses this pin's original design (a continuous and a procedural write on one bit, IEEE 1800-2017 §6.5) ; the `assign` drives `v[3]` (was `v[2]`, written by the `initial`).
 #[test]
 fn wb_pkg_fn_init_local() {
     let src = r#"package p;
@@ -1745,7 +1712,7 @@ fn wb_pkg_fn_init_local() {
 endpackage
 module top;
   logic [3:0] v;
-  assign v[3] = 1'b0;
+  assign v[2] = 1'b0;
   initial begin v[1] = p::f(0); v[2] = 1'b1; #1 $display("v=%b", v); $finish; end
 endmodule
 "#;
@@ -1753,7 +1720,7 @@ endmodule
         src,
         "\
 WEXT writes=6 bits=6 geo=0 word=0 undecided=0 poison=0
-W C0:assign cont - c0 n0:top.v bits[3:3] via=- at=139
+W C0:assign cont - c0 n0:top.v bits[2:2] via=- at=139
 W P0:initial blk s3 c0 n0:top.v bits[1:1] via=direct at=168
 W P0:initial blk s4 c0 n0:top.v bits[2:2] via=direct at=184
 W F0:func:.top.f blk s0 c0 n3:top.$func$p::f.t bits[31:0] via=direct at=-

@@ -37,7 +37,7 @@
 //!   `run`'s head in `driver.rs`, the field and its initialiser, the hand-off in `api.rs`
 //!   and the `Sidecars` field in `tables.rs` — and 0 production readers while nothing
 //!   reads it: no other line of any crate's source names it (the first reader edits this
-//!   rule, as wext_home's H3 was edited).
+//!   rule, as the write view's first reader will edit wext_home's H3).
 //! - H5 the `-G` test `cli_value_spells_unknown` and `cli_overrides_for` (`params.rs`)
 //!   read one text through the same raw → value fns: both call
 //!   `literal :: is_fill_literal (t , ast :: IntLitKind :: UnsizedBased)` and

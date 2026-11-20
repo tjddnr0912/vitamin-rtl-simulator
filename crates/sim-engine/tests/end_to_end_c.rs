@@ -214,14 +214,6 @@ fn parameter_override_and_generate_with_param() {
 // ── implicit sensitivity: @* / always_comb / always_latch infer the read-set
 //    and RE-FIRE on any input change (sweep gaps 10-12). ───────────────────────
 
-/// `q` has one writer, the `always_latch` (§5.2 Q-MDRVMIX C3): until then the `initial`
-/// also wrote `q=0`, which IEEE 1800-2017 §9.2.2.3 (ieee1800-2017.txt:9097-9098, "All
-/// statements in 9.2.2.2 shall apply to always_latch") forbids and which is now Rule B's
-/// E3001 (the owner's decision of 2026-11-18, D-WW option A) ; PRE (0a9af60f) on that
-/// design: `t.sv:1:117: warning[VITA-W3060] ... variable `q` is written by `always_latch`
-/// AND by `initial`; ...` and `7 6 0` / `14 20 42` (iverilog 13.0 the same). The original
-/// is pinned as `cli/tests/mdrv_mix_pins.rs` u3_e2e_implicit_orig. On this design PRE
-/// prints `7 6 x` / `14 20 42`: `q` is unwritten while `en` is 0.
 #[test]
 fn implicit_sensitivity_recomputes_on_change() {
     let src = "module t; reg [7:0] a, b, sc, cc; reg en; reg [7:0] din, q; \
@@ -229,16 +221,15 @@ fn implicit_sensitivity_recomputes_on_change() {
                always_comb     cc = a * 2; \
                always_latch    if (en) q = din; \
                initial begin \
-                 a=3; b=4; en=0; din=0; \
+                 a=3; b=4; en=0; din=0; q=0; \
                  #1 $display(\"%0d %0d %0d\", sc, cc, q); \
                  a=10; en=1; din=42; \
                  #1 $display(\"%0d %0d %0d\", sc, cc, q); \
                  $finish; end endmodule";
     let ir = build(src);
     let (_res, out) = simulate_capture(&ir, SimOpts::default());
-    // t1: sc=3+4=7, cc=3*2=6, q=x (en=0, never written). t2: sc=10+4=14, cc=10*2=20,
-    // q=42 (en=1).
-    assert_eq!(out, "7 6 x\n14 20 42\n");
+    // t1: sc=3+4=7, cc=3*2=6, q=0 (en=0). t2: sc=10+4=14, cc=10*2=20, q=42 (en=1).
+    assert_eq!(out, "7 6 0\n14 20 42\n");
 }
 
 // ── casez / casex wildcard matching: `?`/`z`/`x` label bits are don't-care

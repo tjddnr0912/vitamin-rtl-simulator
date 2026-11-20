@@ -6,7 +6,8 @@
 //!
 //! Every pin also fixes what `vita` prints (exit code, the design's own lines, the codes of
 //! its diagnostics): those are PRE's (W/mdrv2/verify/bin/vita-post, md5 54bc2791, recorded
-//! in W/lossy/build/u2pins/pre), so a pin that moves an output fails on that half first.
+//! in W/lossy/build/u2pins/pre ; a build with §5.2 Q-MDRVMIX's rules, since pulled out,
+//! which no pinned design reaches), so a pin that moves an output fails on that half first.
 //! No oracle for the bits: a bit is which spellings the design's text (and `-G`) holds,
 //! read off the row's rule (W/lossy/plan2/PLAN2.txt section C, option (c) by RULINGS-plan
 //! R14). Bits: P param_xz, U unsized_xz, S sign_kw_param, L let_any, F fill_xz.

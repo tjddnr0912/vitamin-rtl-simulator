@@ -272,29 +272,20 @@ fn port_initializer_and_always_ff_is_a_warning_like_its_twin() {
     );
 }
 
-/// IEEE 1800-2017 §9.2.2.3 (ieee1800-2017.txt:9097-9098): "All statements in 9.2.2.2
-/// shall apply to always_latch" — the owner's decision of 2026-11-18 (D-WW, option A):
-/// an `always_latch` pair is an error, on the port as on its twin, with no oracle named.
-/// Until §5.2 Q-MDRVMIX C3 both were the warning ; PRE (0a9af60f), rc 0 each:
-/// `t.sv:2:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: output port `y` (a variable,
-/// IEEE §23.2.2.3) is written by `always_latch` AND by `always_latch`; xcelium rejects
-/// this as two drivers (*E,MULAXX, IEEE §9.2.2.3) while verilator accepts it — give the
-/// variable one writing process [in t]` and the twin's `t.sv:3:3: ... variable `y` ...`.
 #[test]
-fn always_latch_pair_on_an_output_port_is_an_error_like_its_twin() {
-    let line = twin(
+fn always_latch_pair_on_an_output_port_is_a_warning_like_its_twin() {
+    twin(
         "module t(input logic en, d, e, output logic y);\n  always_latch if (en) y = d;\n  \
          always_latch if (!en) y = e;\nendmodule\n",
         "module t(input logic en, d, e, output logic o);\n  logic y;\n  \
          always_latch if (en) y = d;\n  always_latch if (!en) y = e;\n  assign o = y;\n\
          endmodule\n",
         "y",
-        "VITA-E3001",
-        1,
-        "is written by `always_latch` AND by `always_latch`, which is two drivers on one \
-         variable (IEEE §9.2.2.3) [in t]",
+        "VITA-W3060",
+        0,
+        "is written by `always_latch` AND by `always_latch`; xcelium rejects this as two \
+         drivers (*E,MULAXX, IEEE §9.2.2.3)",
     );
-    assert!(line.starts_with("t.sv:2:3: error[VITA-E3001]"), "{line}");
 }
 
 /// Every explicit-data-type spelling is a variable, classified by the kind the port's
