@@ -579,8 +579,12 @@ impl Elaborator<'_> {
         binding: PortBinding<'_>,
         parent_prefix: &str,
         is_root: bool,
+        inst_span: Option<ast::Span>,
     ) {
         let ports = port_list_dirs(module);
+        // H15v (§5.2 Q-WEXTPOS fix F1, P5): this instance's located connections, one per
+        // port (a debug run only ; an array port's element rows share their one entry)
+        let mut wext_conns: Vec<(usize, ast::Span)> = Vec::new();
         // `.*` wildcard (IEEE §23.3.2.5): connect every port the explicit list
         // does not name to a same-named NET or VARIABLE in the instantiating
         // scope. A same-named NET is connected; a same-named constant
@@ -729,6 +733,11 @@ impl Elaborator<'_> {
                 }
                 continue;
             };
+            if cfg!(debug_assertions) {
+                if let Some(sp) = conn.span {
+                    wext_conns.push((i, sp));
+                }
+            }
 
             // child port net id (current scope is the child).
             let child_id = {
@@ -822,6 +831,10 @@ impl Elaborator<'_> {
                 }
             }
         }
+
+        // H15v (§5.2 Q-WEXTPOS fix F1, P5 (i), (ii)): each connection its own text, never the
+        // instance item's (a debug run only)
+        crate::wext::check_conn_spans(&wext_conns, inst_span);
 
         // Fix 2 (Finding M2): detect connections that match NO declared port.
         // Symmetric with bind_params' surplus-positional / unknown-named checks.

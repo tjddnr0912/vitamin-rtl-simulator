@@ -827,7 +827,7 @@ impl Elaborator<'_> {
                     };
                     let saved_prefix = std::mem::replace(&mut self.cur_prefix, path.clone());
                     let parent = saved_prefix.clone();
-                    self.wire_ports(&decl, binding, &parent, false);
+                    self.wire_ports(&decl, binding, &parent, false, Some(item.span));
                     self.cur_prefix = saved_prefix;
                 }
             }

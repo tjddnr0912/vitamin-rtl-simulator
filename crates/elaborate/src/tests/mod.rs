@@ -440,15 +440,58 @@ fn unit_of(modules: Vec<ast::ModuleDecl>) -> ast::SourceUnit {
         span: SP,
     }
 }
+/// One fixture instance item, its spans laid out as a parsed tree has them (§5.2 Q-WEXTPOS
+/// fix F1, H15v): the item first, then each connection after it (connection `k` at
+/// `24 + 16k`), each named connection's expression inside it, a positional expression as its
+/// connection's text. A hand-built tree with one span for everything is the shape
+/// `wext::check_conn_spans` exists to refuse (two ports at one offset, a connection at its
+/// item's first byte).
+fn fixture_item(inst: &str, mut conns: ast::PortConnList) -> ast::InstanceItem {
+    const ITEM_LO: u32 = 16;
+    let conn_at = |k: usize| {
+        let lo = ITEM_LO + 8 + 16 * k as u32;
+        ast::Span { lo, hi: lo + 12 }
+    };
+    let n = match &mut conns {
+        ast::PortConnList::Named(v, _) => {
+            for (k, c) in v.iter_mut().enumerate() {
+                c.span = conn_at(k);
+                if let Some(e) = c.value.as_mut() {
+                    e.span = ast::Span {
+                        lo: c.span.lo + 4,
+                        hi: c.span.hi - 1,
+                    };
+                }
+            }
+            v.len()
+        }
+        ast::PortConnList::Positional(v) => {
+            for (k, e) in v.iter_mut().enumerate() {
+                if let Some(e) = e {
+                    e.span = conn_at(k);
+                }
+            }
+            v.len()
+        }
+    };
+    ast::InstanceItem {
+        name: ident(inst),
+        unpacked: Vec::new(),
+        conns,
+        span: ast::Span {
+            lo: ITEM_LO,
+            hi: ITEM_LO + 8 + 16 * n as u32,
+        },
+    }
+}
 /// A `child u(.p(expr), …)` named-connection instance item.
 fn inst_named(module: &str, inst: &str, conns: Vec<(&str, ast::Expr)>) -> ast::ModuleItem {
     ast::ModuleItem::Instance(ast::ModuleInstance {
         module_name: ident(module),
         param_overrides: Vec::new(),
-        instances: vec![ast::InstanceItem {
-            name: ident(inst),
-            unpacked: Vec::new(),
-            conns: ast::PortConnList::Named(
+        instances: vec![fixture_item(
+            inst,
+            ast::PortConnList::Named(
                 conns
                     .into_iter()
                     .map(|(p, e)| ast::PortConn {
@@ -460,8 +503,7 @@ fn inst_named(module: &str, inst: &str, conns: Vec<(&str, ast::Expr)>) -> ast::M
                     .collect(),
                 false,
             ),
-            span: SP,
-        }],
+        )],
         span: SP,
     })
 }
@@ -482,10 +524,9 @@ fn inst_named_param(
                 span: SP,
             })
             .collect(),
-        instances: vec![ast::InstanceItem {
-            name: ident(inst),
-            unpacked: Vec::new(),
-            conns: ast::PortConnList::Named(
+        instances: vec![fixture_item(
+            inst,
+            ast::PortConnList::Named(
                 conns
                     .into_iter()
                     .map(|(p, e)| ast::PortConn {
@@ -497,8 +538,7 @@ fn inst_named_param(
                     .collect(),
                 false,
             ),
-            span: SP,
-        }],
+        )],
         span: SP,
     })
 }
@@ -521,10 +561,9 @@ fn inst_named_param_expr(
                 span: SP,
             })
             .collect(),
-        instances: vec![ast::InstanceItem {
-            name: ident(inst),
-            unpacked: Vec::new(),
-            conns: ast::PortConnList::Named(
+        instances: vec![fixture_item(
+            inst,
+            ast::PortConnList::Named(
                 conns
                     .into_iter()
                     .map(|(p, e)| ast::PortConn {
@@ -536,8 +575,7 @@ fn inst_named_param_expr(
                     .collect(),
                 false,
             ),
-            span: SP,
-        }],
+        )],
         span: SP,
     })
 }
@@ -546,12 +584,7 @@ fn inst_positional(module: &str, inst: &str, conns: Vec<Option<ast::Expr>>) -> a
     ast::ModuleItem::Instance(ast::ModuleInstance {
         module_name: ident(module),
         param_overrides: Vec::new(),
-        instances: vec![ast::InstanceItem {
-            name: ident(inst),
-            unpacked: Vec::new(),
-            conns: ast::PortConnList::Positional(conns),
-            span: SP,
-        }],
+        instances: vec![fixture_item(inst, ast::PortConnList::Positional(conns))],
         span: SP,
     })
 }

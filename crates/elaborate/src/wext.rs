@@ -838,6 +838,46 @@ impl Elaborator<'_> {
 }
 
 /// The one builder.
+/// H15v (§5.2 Q-WEXTPOS fix F1, P5 (i) and (ii), premise judge L9): what is wrong with ONE
+/// instance's located connection spans, keyed by connection (the port index, one entry per
+/// port: a concatenation or an array port wires several rows of one connection) — (i) two
+/// ports whose connections start at one offset (each connection is its own text ; F1 gave
+/// every positional port of an array element the item's span) ; (ii) a connection that
+/// starts at the instance item's first byte (the item holds the connections as peers, R-AT's
+/// NEVER list). Empty = none.
+pub(crate) fn conn_span_violations(
+    conns: &[(usize, ast::Span)],
+    item: Option<ast::Span>,
+) -> Vec<String> {
+    let mut v = Vec::new();
+    for (n, &(i, a)) in conns.iter().enumerate() {
+        for &(j, b) in &conns[n + 1..] {
+            if i != j && a.lo == b.lo {
+                v.push(format!(
+                    "H15v (i): ports {i} and {j} share one connection span (lo {})",
+                    a.lo
+                ));
+            }
+        }
+        if item.is_some_and(|it| it.lo == a.lo) {
+            v.push(format!(
+                "H15v (ii): port {i}'s connection span is its instance item's (lo {})",
+                a.lo
+            ));
+        }
+    }
+    v
+}
+
+/// H15v's assertion site (a debug run only): `wire_ports` calls it once per instance, after
+/// the instance's port rows are pushed.
+pub(crate) fn check_conn_spans(conns: &[(usize, ast::Span)], item: Option<ast::Span>) {
+    if cfg!(debug_assertions) {
+        let v = conn_span_violations(conns, item);
+        debug_assert!(v.is_empty(), "§5.2 Q-WEXTPOS fix F1: {}", v.join(" ; "));
+    }
+}
+
 pub(crate) fn build_view(s: &WextSource<'_>) -> WriteView {
     let ctx = ir::selfwidth::ExprCtx {
         exprs: s.exprs,
@@ -1509,6 +1549,40 @@ mod tests {
         assert!(r.stmt_at.is_empty());
         r.note_stmt_at(2, 3, ast::Span::new(5, 6));
         assert_eq!(r.stmt_at, vec![(2, 3, Some(ast::Span::new(5, 6)))]);
+    }
+
+    /// H15v (fix F1, P5 (i)): two ports whose connections start at one offset.
+    #[test]
+    #[should_panic(expected = "H15v (i)")]
+    fn h15v_i_two_ports_one_span() {
+        check_conn_spans(
+            &[(0, ast::Span::new(10, 11)), (1, ast::Span::new(10, 14))],
+            Some(ast::Span::new(5, 40)),
+        );
+    }
+
+    /// H15v (fix F1, P5 (ii)): a connection at its instance item's first byte.
+    #[test]
+    #[should_panic(expected = "H15v (ii)")]
+    fn h15v_ii_the_item_span() {
+        check_conn_spans(&[(0, ast::Span::new(5, 6))], Some(ast::Span::new(5, 40)));
+    }
+
+    /// H15v: keyed by connection — one port's entry is no pair ; distinct starts, a root
+    /// instance (no item) and no connection pass.
+    #[test]
+    fn h15v_clean() {
+        let a = (0, ast::Span::new(10, 11));
+        check_conn_spans(
+            &[a, (1, ast::Span::new(13, 14)), (2, ast::Span::new(16, 20))],
+            Some(ast::Span::new(5, 40)),
+        );
+        check_conn_spans(&[a, (1, ast::Span::new(5, 6))], None);
+        check_conn_spans(&[], Some(ast::Span::new(5, 40)));
+        assert_eq!(
+            conn_span_violations(&[a, a], Some(ast::Span::new(5, 40))),
+            Vec::<String>::new()
+        );
     }
 
     /// Fix F1, V: with a body item open, a statement whose span starts at the item's first

@@ -70,6 +70,9 @@
 //!   discriminator, climbing out of a tuple or a slice of patterns), keyed by its `span`
 //!   field as spelled, with a hand-written class (OWN / FROM / MASKED / NOSTORE / V / NONE).
 //!   A new construction, or a spelling that moves, fails: say whose text the span is.
+//! - H15v (fix F1) the connection-span assertion: `check_conn_spans (` once, in
+//!   `wire_ports`, and `conn_span_violations (` once, in it (P5's (i) two ports of one
+//!   instance on one connection span, (ii) a connection at its instance item's span).
 //! - H15p (fix F1) the same census over hdl-parser's production sources (the parser builds
 //!   most statements ; its ANOTHER rows are the bodies V turns to `None`).
 //! - H6 the write-shape producers: `LvalChunk {` constructions (43 at b9cb67a1, 8 of them
@@ -659,6 +662,10 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 "build_write_view" => out.push(("H3:build_write_view".into(), k.clone())),
                 "stmt_lvalue" => out.push(("H5:stmt_lvalue".into(), k.clone())),
                 "chunk_written_bits_at" => out.push(("H2:at".into(), k.clone())),
+                // H15v (fix F1): the connection-span assertion's site and its check
+                "check_conn_spans" | "conn_span_violations" => {
+                    out.push((format!("H15v:{}", tx(i)), k.clone()))
+                }
                 "record_geom" | "carry_geom" | "record_row_at" | "wext_unlocated"
                 | "wext_located" | "wext_body_exit" => {
                     out.push((format!("H7:{}", tx(i)), k.clone()))
@@ -1200,6 +1207,14 @@ fn h15_the_node_constructions() {
         (Some(&105), Some(&1), Some(&3), 3),
         "H15 totals (L2)"
     );
+}
+
+/// H15v (§5.2 Q-WEXTPOS fix F1, P5 (i) and (ii)): the connection-span check is called once,
+/// in `wire_ports` after an instance's port rows are pushed, and its two checks live in
+/// `conn_span_violations` (each with a `#[should_panic]` unit in wext.rs's tests).
+#[test]
+fn h15v_the_assert_site() {
+    check("H15v", H15V);
 }
 
 /// H15p (§5.2 Q-WEXTPOS fix F1, L1): the parser's constructions — 104 `Stmt`, of which the
@@ -2632,4 +2647,11 @@ const H15P: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_repeat", 1, "OWN", "the parsed node's own text"),
     ("H15:Stmt:start.to(self.prev_span())", "stmt_ctl.rs", "parse_while", 1, "OWN", "the parsed node's own text"),
     ("H15:Stmt:start.to(self.prev_span())", "sva_seq.rs", "parse_seq_block", 1, "OWN", "the parsed node's own text"),
+];
+
+/// H15v: (rule, file, fn, count, why).
+#[rustfmt::skip]
+const H15V: &[(&str, &str, &str, usize, &str)] = &[
+    ("H15v:check_conn_spans", "ports.rs", "wire_ports", 1, "one instance's located connections, after its port rows (a debug run only)"),
+    ("H15v:conn_span_violations", "wext.rs", "check_conn_spans", 1, "the two checks, asserted empty"),
 ];

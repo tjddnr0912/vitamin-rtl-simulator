@@ -1161,7 +1161,13 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
         std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
-        self.wire_ports(module, binding, &saved_prefix, parent_inst.is_none());
+        self.wire_ports(
+            module,
+            binding,
+            &saved_prefix,
+            parent_inst.is_none(),
+            inst_span,
+        );
         std::mem::swap(&mut self.func_table, &mut saved_funcs);
         std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
         std::mem::swap(&mut self.const_fn_pkg, &mut saved_const_fn_pkg);
