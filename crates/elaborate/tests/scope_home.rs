@@ -1,6 +1,9 @@
-//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, part 1), as home tests: five syntax
-//! censuses of `crates/elaborate/src/**/*.rs`, each computed by `syn` (full) and compared
-//! with a table pinned in this file. A census row is keyed by (file, fn): `fn` is the
+//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, parts 1 and 2), as home tests: twelve
+//! syntax censuses of `crates/elaborate/src/**/*.rs`, each computed by `syn` (full) and
+//! compared with a pinned table. The tables live in ONE data file beside this one,
+//! `scope_home.tables` (moved there in part 2, when this file passed ~4500 lines with them
+//! inline), a section per table ; each table's note there names its rule and its source.
+//! A census row is keyed by (file, fn): `fn` is the
 //! enclosing fn's name, nested fns joined by `::`, a method by its own name (no impl
 //! type), a second fn of the same key in one file suffixed `#2`. Items under
 //! `#[cfg(test)]` and out-of-line `#[cfg(test)] mod` files are not read.
@@ -40,6 +43,28 @@
 //!   whose declared return type is such a collection ; and the 26 readers' collections
 //!   (g2b REPORT:70-75), each found by syntax where the list says it is.
 //!
+//! Part 2 (a second visitor, `Pass2`, reads a macro as g3's census did: a `matches!` with
+//! its guard, else the arguments as an expression list, else the first expression):
+//!
+//! - HM the mints of scope-qualified text (386 = 375 by syntax + 11 derived-fn rows, HAND):
+//!   a mint fn call, a `format!` / `write!` glue literal, `.join(".")`, a separator push,
+//!   a `cur_prefix.clone()` ; a mint inside a `matches!` guard counts (strings.rs). TAG
+//!   (hand) = key / scope / segment / display / spelling.
+//! - HS the key scans (32 = 30 by syntax + 2 HAND): an iteration over a `String`-keyed
+//!   map / set field of `Elaborator` (the store set, HS_STORES, is itself computed and
+//!   pinned) ; KIND and ENTRY (the disposition, g4 entries.tsv) are hand columns.
+//! - HH the current-prefix reads (59): a probe of a store whose key is an `fq` mint, role
+//!   whole / composite. It PINS today's sites ; it does not close the door: a read through
+//!   a key the syntax does not see as minted from `cur_prefix` is not counted.
+//! - HSEG the segment-text tests (99): a text test whose literal holds `.` `$` `[` `::`, any
+//!   `strip_prefix`, a non-literal prefix / suffix test, `is_gen_scope_segment` ; TAG and
+//!   UNIT (walk, LS2, LS4, DK1, DK3, DK4, RS1, `-`) are hand columns.
+//! - H5 the name-typed fields (215) with g1's CLASS / CODE and a STORE column (hand).
+//! - HD the display-chain fields' accesses (`block_scope`, `block_scope_root`,
+//!   `cur_class_method`): read / write / init.
+//! - HK the producers' scope kinds: per fn the `cur_prefix` writes (H3's 25 sites), the
+//!   `with_scope` calls and the `elaborate_instance` calls, KIND a hand column.
+//!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
 //! table in the same commit ; a GONE row leaves the table in the commit that removes it.
@@ -57,7 +82,16 @@
 //! The tables' sources (the oracle of each pin, W/scopebind): g1 walkers.tsv, g2b
 //! catchalls.tsv / readers.tsv / composites.tsv / census.locals.tsv / REPORT.txt, g3
 //! askers.tsv / REPORT.txt K5, plan3 walk_sites.txt, u0 t2/T2.txt, plan4 DELTA.txt D1,
-//! at main 87e48d99 ; every census number equals its source's there.
+//! at main 87e48d99 ; every census number equals its source's there. Part 2's: g1
+//! fields.tsv, g3 mints.tsv / scans.tsv / k4_reads.tsv / fields_keyed.tsv /
+//! name_keyed_fields.txt, g4 REPORT.txt (OWED-a, -d, -k, -r) and c/entries.tsv, plan6
+//! DELTA6.txt F1 F2 F5 ; where one differs from the code the code is pinned (LS1 part 2's
+//! REPORT lists the rows: HS's store set, HS's two HAND scans).
+//!
+//! Part 2 does not see: a mint, scan or probe written through a macro other than the
+//! three forms above, through a receiver or a local not spelled as the rule says, or in
+//! a helper the key travels through ; a HAND row is checked only for its fn (HM, HS) or its
+//! fn plus the call (HS).
 //!
 //! Environment (a negative control's door, unset in the gate): `SCOPE_HOME_SRC` reads
 //! another copy of the crate's `src` ; `SCOPE_HOME_DUMP=<dir>` writes each computed
@@ -1702,7 +1736,7 @@ fn h2_the_statement_walkers_are_pinned() {
     let mut want: BTreeMap<String, String> = BTreeMap::new();
     let mut hand: Vec<(String, String, String, String)> = Vec::new();
     let mut msgs = Vec::new();
-    for row in table(tables::H2) {
+    for row in table(&tables::get("H2")) {
         assert_eq!(
             row.len(),
             10,
@@ -1776,10 +1810,10 @@ fn h2_the_statement_walkers_are_pinned() {
         m
     });
     let counts = format!("{classes:?} kinds {kinds:?} models {models:?} roles {roles:?}");
-    if counts != tables::H2_COUNTS {
+    if counts != tables::get("H2_COUNTS") {
         msgs.push(format!(
             "H2 COUNTS table [{}] now [{counts}] — set H2_COUNTS with the row change that moved it",
-            tables::H2_COUNTS
+            tables::get("H2_COUNTS")
         ));
     }
     finish("H2", &msgs);
@@ -1847,7 +1881,7 @@ fn h3_the_writes_of_cur_prefix_are_pinned() {
     let mut msgs = Vec::new();
     let mut by_kind: BTreeMap<String, usize> = BTreeMap::new();
     let mut total = 0usize;
-    for row in table(tables::H3) {
+    for row in table(&tables::get("H3")) {
         assert_eq!(
             row.len(),
             5,
@@ -1879,10 +1913,10 @@ fn h3_the_writes_of_cur_prefix_are_pinned() {
         "a write of `cur_prefix` is gone: name the unit, remove the row",
     ));
     let counts = format!("sites {total} {by_kind:?}");
-    if counts != tables::H3_COUNTS {
+    if counts != tables::get("H3_COUNTS") {
         msgs.push(format!(
             "H3 COUNTS table [{}] now [{counts}]",
-            tables::H3_COUNTS
+            tables::get("H3_COUNTS")
         ));
     }
     finish("H3", &msgs);
@@ -1987,7 +2021,7 @@ fn h6_the_walk_call_sites_are_pinned() {
         &dumped,
     );
     let mut want = BTreeMap::new();
-    for row in table(tables::H6) {
+    for row in table(&tables::get("H6")) {
         assert_eq!(
             row.len(),
             7,
@@ -2021,10 +2055,10 @@ fn h6_the_walk_call_sites_are_pinned() {
         texts.len(),
         sets.len()
     );
-    if counts != tables::H6_COUNTS {
+    if counts != tables::get("H6_COUNTS") {
         msgs.push(format!(
             "H6 COUNTS table [{}] now [{counts}]",
-            tables::H6_COUNTS
+            tables::get("H6_COUNTS")
         ));
     }
     finish("H6", &msgs);
@@ -2110,7 +2144,7 @@ fn h6c_the_composites_are_pinned() {
     dump("H6c", "file\tfn\tline\ttier", &dumped);
     let mut want = BTreeMap::new();
     let mut classes: BTreeMap<String, usize> = BTreeMap::new();
-    for row in table(tables::H6C) {
+    for row in table(&tables::get("H6C")) {
         assert_eq!(
             row.len(),
             4,
@@ -2129,10 +2163,10 @@ fn h6c_the_composites_are_pinned() {
         "a composite is gone: name the unit, remove the row",
     );
     let counts = format!("rows {} {classes:?}", want.len());
-    if counts != tables::H6C_COUNTS {
+    if counts != tables::get("H6C_COUNTS") {
         msgs.push(format!(
             "H6c COUNTS table [{}] now [{counts}]",
-            tables::H6C_COUNTS
+            tables::get("H6C_COUNTS")
         ));
     }
     finish("H6c", &msgs);
@@ -2190,7 +2224,7 @@ fn h7_the_fn_local_name_collections_are_pinned() {
     let mut want = BTreeMap::new();
     let mut want_b = BTreeMap::new();
     let mut lets = 0usize;
-    for row in table(tables::H7) {
+    for row in table(&tables::get("H7")) {
         assert_eq!(
             row.len(),
             4,
@@ -2214,7 +2248,7 @@ fn h7_the_fn_local_name_collections_are_pinned() {
     msgs.extend(diff_rows("H7-untyped", &got_b, &want_b, new_row, gone_row));
     // (c) the 26 readers' collections, each where the list says
     let mut n26 = 0usize;
-    for row in table(tables::H7_READERS) {
+    for row in table(&tables::get("H7_READERS")) {
         assert_eq!(
             row.len(),
             4,
@@ -2244,10 +2278,10 @@ fn h7_the_fn_local_name_collections_are_pinned() {
         want.len(),
         want_b.len()
     );
-    if counts != tables::H7_COUNTS {
+    if counts != tables::get("H7_COUNTS") {
         msgs.push(format!(
             "H7 COUNTS table [{}] now [{counts}]",
-            tables::H7_COUNTS
+            tables::get("H7_COUNTS")
         ));
     }
     assert!(
@@ -2259,446 +2293,1579 @@ fn h7_the_fn_local_name_collections_are_pinned() {
 }
 
 // =====================================================================================
+// Part 2: a second pass (census_g3's reading of macros) for HM HS HH HSEG HD HK, and the
+// struct reach for H5 and HS's store set
+// =====================================================================================
+
+/// HM: the mint fns (g3 census_g3.rs MINTS / link.py CALLS).
+const MINT_CALLS: &[&str] = &[
+    "fq",
+    "child_prefix",
+    "walk_scopes_key",
+    "walk_scopes_key_shadowed",
+    "walk_scopes_key_from",
+    "walk_scopes_key_inner",
+    "walk_out_from",
+    "scoped_key_at_or_above",
+    "walk_rtn_scopes",
+    "hier_resolve",
+    "hier_key_within",
+    "singleton_scope_key",
+    "indexed_gen_singleton",
+    "decl_probe_key",
+    "gen_rtn_key",
+    "walk_scopes",
+];
+/// HM: a glue literal that starts so is a temp name (link.py TEMP).
+const MINT_TEMP: &[&str] = &[
+    "$ia_",
+    "$dyn_tmp",
+    "$repeat_cnt",
+    "$sinit",
+    "$sfmt_tmp",
+    "$popsink",
+    "__outpack",
+    "__houtpack",
+    "{}$sae",
+    "{}$sad",
+    "$unp$",
+    "$ia_ret",
+];
+/// HM: the fns whose every `push_str` is a mint piece (link.py).
+const MINT_PUSH_STR_FNS: &[&str] = &["display_of", "walk_out_from", "gen_rtn_key"];
+/// HS: an iteration over a store (census_g3 SCAN).
+const SCAN_METHODS: &[&str] = &[
+    "iter",
+    "keys",
+    "values",
+    "range",
+    "retain",
+    "iter_mut",
+    "into_iter",
+    "drain",
+    "values_mut",
+];
+/// HS / HD: a receiver that is the `Elaborator` (scans.py's window).
+const RECV2: &[&str] = &["self", "s", "me", "this"];
+/// HS: the map / set types a store set is keyed by.
+const KEYED_COLL: &[&str] = &[
+    "BTreeMap", "HashMap", "BTreeSet", "HashSet", "IndexMap", "IndexSet",
+];
+/// HH: a probe of a store (k4.py READ less the compiler-only ops).
+const HH_READ: &[&str] = &["get", "contains_key", "contains", "range", "get_mut"];
+/// HH: the walks that make a read a composite step (k4.py WALK).
+const HH_WALK: &[&str] = &[
+    "walk_scopes_key",
+    "walk_scopes_key_shadowed",
+    "walk_scopes_key_from",
+    "scoped_key_at_or_above",
+    "walk_scopes",
+    "walk_rtn_scopes",
+    "hier_resolve",
+];
+/// HSEG: the text-test methods.
+const SEG_METHODS: &[&str] = &[
+    "split",
+    "rsplit",
+    "split_once",
+    "rsplit_once",
+    "splitn",
+    "rsplitn",
+    "split_terminator",
+    "find",
+    "rfind",
+    "starts_with",
+    "ends_with",
+    "strip_prefix",
+    "strip_suffix",
+    "contains",
+    "trim_start_matches",
+    "trim_end_matches",
+];
+/// HSEG: the methods whose non-literal argument is a text-ancestry test or cut.
+const SEG_DYN: &[&str] = &["starts_with", "strip_prefix", "ends_with", "strip_suffix"];
+/// HD: the display-chain fields (DELTA6 F1).
+const DISPLAY_FIELDS: &[&str] = &["block_scope", "block_scope_root", "cur_class_method"];
+/// HD: a method that mutates its receiver (census_fields.rs MUT).
+const HD_MUT: &[&str] = &[
+    "push",
+    "extend",
+    "insert",
+    "append",
+    "truncate",
+    "clear",
+    "retain",
+    "remove",
+    "get_mut",
+    "iter_mut",
+    "last_mut",
+    "first_mut",
+    "swap",
+    "drain",
+    "pop",
+    "resize",
+    "extend_from_slice",
+    "splice",
+    "swap_remove",
+    "split_off",
+    "sort",
+    "sort_by",
+    "sort_by_key",
+    "sort_unstable",
+    "dedup",
+    "reverse",
+    "fill",
+    "clone_from",
+    "as_mut",
+    "entry",
+    "or_insert",
+    "or_default",
+    "or_insert_with",
+    "values_mut",
+    "take",
+    "replace",
+    "set",
+    "borrow_mut",
+    "push_str",
+    "push_back",
+    "push_front",
+    "pop_back",
+    "pop_front",
+    "retain_mut",
+    "get_or_insert_with",
+    "insert",
+];
+/// HK: the scope-entry callees whose callers know the kind.
+const HK_CALLEES: &[&str] = &["with_scope", "elaborate_instance"];
+/// H5: a type ident that makes a field name-typed (census_fields.rs NAME_TYPES).
+const NAME_TYPES: &[&str] = &["String", "str", "Symbol", "Ident"];
+
+/// What the second pass records per fn.
+#[derive(Default)]
+struct Fn2 {
+    file: String,
+    qual: String,
+    simple: String,
+    line: usize,
+    /// HM: (mint kind, name)
+    mints: Vec<(String, String)>,
+    /// HS: (field, method) of an iteration over `<recv>.<field>`
+    scans: Vec<(String, String)>,
+    /// HH: the `let` bindings holding an `fq` mint (the latest binding of a name)
+    fq_locals: BTreeMap<String, String>,
+    /// HH: (store, op, mint) — mint = `let:<name>@<n>` or `call<n>`, n the fq call's ordinal
+    reads: Vec<(String, String, String)>,
+    fq_calls: usize,
+    /// every called name (method or path)
+    calls: BTreeSet<String>,
+    /// HSEG: (method, argument)
+    segs: Vec<(String, String)>,
+    /// HD: (field, access)
+    disp: Vec<(String, String)>,
+    /// HK: the scope-entry calls
+    entries: Vec<String>,
+}
+
+struct Pass2<'a> {
+    file: String,
+    stack: Vec<usize>,
+    out: &'a mut Vec<Fn2>,
+    write_nodes: BTreeSet<usize>,
+}
+
+/// Through `&`, `( )`, `.borrow()` / `.borrow_mut()`: the `(base, field)` of a field access.
+fn field_of2(e: &Expr) -> Option<(&Expr, String)> {
+    match e {
+        Expr::Field(f) => match &f.member {
+            syn::Member::Named(i) => Some((&f.base, i.to_string())),
+            syn::Member::Unnamed(_) => None,
+        },
+        Expr::Reference(r) => field_of2(&r.expr),
+        Expr::Paren(p) => field_of2(&p.expr),
+        Expr::MethodCall(m) if m.method == "borrow" || m.method == "borrow_mut" => {
+            field_of2(&m.receiver)
+        }
+        _ => None,
+    }
+}
+
+fn is_recv2(e: &Expr) -> bool {
+    matches!(single_path(e), Some(n) if RECV2.contains(&n.as_str()))
+}
+
+/// Through `&`, `( )` and a value-keeping method: the expression a key argument is.
+fn strip_key(e: &Expr) -> &Expr {
+    match e {
+        Expr::Reference(r) => strip_key(&r.expr),
+        Expr::Paren(p) => strip_key(&p.expr),
+        Expr::MethodCall(m)
+            if matches!(
+                m.method.to_string().as_str(),
+                "clone" | "as_str" | "as_ref" | "to_string" | "to_owned" | "as_deref"
+            ) =>
+        {
+            strip_key(&m.receiver)
+        }
+        _ => e,
+    }
+}
+
+/// `<x>.fq(..)` or `fq(..)`.
+fn is_fq_call(e: &Expr) -> bool {
+    match strip_key(e) {
+        Expr::MethodCall(m) => m.method == "fq",
+        Expr::Call(c) => {
+            matches!(&*c.func, Expr::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "fq"))
+        }
+        _ => false,
+    }
+}
+
+/// A `"…"` literal of glue: letters, digits, `_ [ ] $ .` and `{…}` holes (link.py GLUE).
+fn is_glue(lit: &str) -> bool {
+    let b = lit.as_bytes();
+    if b.len() < 2 || b[0] != b'"' || b[b.len() - 1] != b'"' {
+        return false;
+    }
+    let inner = &b[1..b.len() - 1];
+    let mut i = 0;
+    while i < inner.len() {
+        let c = inner[i];
+        if c.is_ascii_alphanumeric() || matches!(c, b'_' | b'[' | b']' | b'$' | b'.') {
+            i += 1;
+        } else if c == b'{' {
+            let mut j = i + 1;
+            while j < inner.len() && inner[j] != b'}' && inner[j] != b'{' {
+                j += 1;
+            }
+            if j >= inner.len() || inner[j] != b'}' {
+                return false;
+            }
+            i = j + 1;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+/// HM: the kind of a `format!` / `write!` glue literal, if it is a mint.
+fn glue_kind(lit: &str) -> Option<&'static str> {
+    if !is_glue(lit) || !(lit.contains('.') || lit.contains('$')) {
+        return None;
+    }
+    let inner = &lit[1..lit.len() - 1];
+    let scoped = ["$blk$", "$func$", "$pkg$", "$class$", "$itask$"]
+        .iter()
+        .any(|p| inner.contains(p))
+        || inner.contains('.');
+    if MINT_TEMP.iter().any(|p| inner.starts_with(p)) || !scoped {
+        Some("fmt-tempname")
+    } else {
+        Some("fmt")
+    }
+}
+
+/// HSEG: a literal argument's source text and value.
+fn lit_arg(e: &Expr) -> Option<(String, String)> {
+    match e {
+        Expr::Lit(l) => match &l.lit {
+            syn::Lit::Str(s) => Some((s.token().to_string(), s.value())),
+            syn::Lit::Char(c) => Some((c.token().to_string(), c.value().to_string())),
+            _ => None,
+        },
+        Expr::Reference(r) => lit_arg(&r.expr),
+        Expr::Paren(p) => lit_arg(&p.expr),
+        _ => None,
+    }
+}
+
+impl Pass2<'_> {
+    fn cur(&mut self) -> Option<&mut Fn2> {
+        let i = *self.stack.last()?;
+        Some(&mut self.out[i])
+    }
+
+    fn push_fn(&mut self, attrs: &[syn::Attribute], sig: &syn::Signature) -> bool {
+        if has_cfg_test(attrs) {
+            return false;
+        }
+        let simple = sig.ident.to_string();
+        let qual = match self.stack.last() {
+            Some(&o) => format!("{}::{}", self.out[o].qual, simple),
+            None => simple.clone(),
+        };
+        self.out.push(Fn2 {
+            file: self.file.clone(),
+            qual,
+            simple,
+            ..Default::default()
+        });
+        self.stack.push(self.out.len() - 1);
+        true
+    }
+
+    fn mint(&mut self, kind: &str, name: &str) {
+        if let Some(c) = self.cur() {
+            c.mints.push((kind.to_string(), name.to_string()));
+        }
+    }
+
+    fn called(&mut self, name: &str) {
+        if let Some(c) = self.cur() {
+            c.calls.insert(name.to_string());
+            if HK_CALLEES.contains(&name) {
+                c.entries.push(name.to_string());
+            }
+        }
+        if MINT_CALLS.contains(&name) {
+            self.mint("call", name);
+        }
+        if name == "is_gen_scope_segment" {
+            if let Some(c) = self.cur() {
+                c.segs.push((name.to_string(), "-".to_string()));
+            }
+        }
+    }
+
+    /// HH: a store probe whose key is an `fq` mint, directly or through a `let`.
+    fn key_read(&mut self, store: &str, op: &str, arg: &Expr) {
+        let k = strip_key(arg);
+        let mint = if is_fq_call(k) {
+            let Some(c) = self.cur() else { return };
+            // the fq call itself is counted when the argument is visited
+            format!("call{}", c.fq_calls + 1)
+        } else if let Some(n) = single_path(k) {
+            match self.cur().and_then(|c| c.fq_locals.get(&n)) {
+                Some(id) => id.clone(),
+                None => return,
+            }
+        } else {
+            return;
+        };
+        if let Some(c) = self.cur() {
+            c.reads.push((store.to_string(), op.to_string(), mint));
+        }
+    }
+
+    fn mark_place(&mut self, e: &Expr) {
+        match e {
+            Expr::Field(f) => {
+                self.write_nodes.insert(f as *const _ as usize);
+                self.mark_place(&f.base);
+            }
+            Expr::Index(i) => self.mark_place(&i.expr),
+            Expr::Paren(p) => self.mark_place(&p.expr),
+            Expr::Unary(u) if matches!(u.op, syn::UnOp::Deref(_)) => self.mark_place(&u.expr),
+            Expr::MethodCall(m)
+                if [
+                    "borrow_mut",
+                    "get_mut",
+                    "last_mut",
+                    "first_mut",
+                    "iter_mut",
+                    "entry",
+                    "as_mut",
+                    "values_mut",
+                ]
+                .contains(&m.method.to_string().as_str()) =>
+            {
+                self.mark_place(&m.receiver)
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_macro_args(&mut self, mac: &syn::Macro) {
+        if mac.path.is_ident("matches") {
+            let parser = |input: ParseStream| -> syn::Result<(Expr, Option<Expr>)> {
+                let e: Expr = input.parse()?;
+                input.parse::<Token![,]>()?;
+                let _ = Pat::parse_multi_with_leading_vert(input)?;
+                let g = if input.peek(Token![if]) {
+                    input.parse::<Token![if]>()?;
+                    Some(input.parse::<Expr>()?)
+                } else {
+                    None
+                };
+                let _ = input.parse::<Option<Token![,]>>()?;
+                Ok((e, g))
+            };
+            if let Ok((e, g)) = parser.parse2(mac.tokens.clone()) {
+                self.visit_expr(&e);
+                if let Some(g) = g {
+                    self.visit_expr(&g);
+                }
+                return;
+            }
+        }
+        if let Ok(list) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(mac.tokens.clone())
+        {
+            for e in &list {
+                self.visit_expr(e);
+            }
+            return;
+        }
+        // census_g3: the first expression only
+        let first = |input: ParseStream| -> syn::Result<Expr> {
+            let e: Expr = input.parse()?;
+            let _: proc_macro2::TokenStream = input.parse()?;
+            Ok(e)
+        };
+        if let Ok(e) = first.parse2(mac.tokens.clone()) {
+            self.visit_expr(&e);
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for Pass2<'_> {
+    fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+        if self.push_fn(&f.attrs, &f.sig) {
+            visit::visit_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+        if self.push_fn(&f.attrs, &f.sig) {
+            visit::visit_impl_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_trait_item_fn(&mut self, f: &'ast syn::TraitItemFn) {
+        if self.push_fn(&f.attrs, &f.sig) {
+            visit::visit_trait_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        if !has_cfg_test(&i.attrs) {
+            visit::visit_item_impl(self, i);
+        }
+    }
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        if !has_cfg_test(&m.attrs) {
+            visit::visit_item_mod(self, m);
+        }
+    }
+    fn visit_local(&mut self, l: &'ast syn::Local) {
+        if let Some(init) = &l.init {
+            let mut names = Vec::new();
+            pat_names(&l.pat, &mut names);
+            let single = matches!(&l.pat, Pat::Ident(_) | Pat::Type(_)) && names.len() == 1;
+            if let Some(c) = self.cur() {
+                if single && init.diverge.is_none() && is_fq_call(&init.expr) {
+                    // the initializer's fq call is the next one counted
+                    let id = format!("let:{}@{}", names[0], c.fq_calls + 1);
+                    c.fq_locals.insert(names[0].clone(), id);
+                } else {
+                    // a rebinding of the name holds no fq key
+                    for n in &names {
+                        c.fq_locals.remove(n);
+                    }
+                }
+            }
+        }
+        visit::visit_local(self, l);
+    }
+    fn visit_expr_method_call(&mut self, m: &'ast syn::ExprMethodCall) {
+        let meth = m.method.to_string();
+        if HD_MUT.contains(&meth.as_str()) {
+            self.mark_place(&m.receiver);
+        }
+        // HM: `<recv>.cur_prefix.clone()` (the receiver the field itself)
+        if meth == "clone"
+            && matches!(&*m.receiver, Expr::Field(f) if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix"))
+        {
+            self.mint("curp", "cur_prefix.clone()");
+        }
+        self.visit_expr(&m.receiver);
+        self.called(&meth);
+        if meth == "fq" {
+            if let Some(c) = self.cur() {
+                c.fq_calls += 1;
+            }
+        }
+        // HM: join(".") and the accumulator pushes
+        if meth == "join"
+            && m.args
+                .first()
+                .and_then(lit_arg)
+                .is_some_and(|(t, _)| t == "\".\"")
+        {
+            self.mint("join", "join");
+        }
+        if meth == "push" || meth == "push_str" {
+            let dot = meth == "push"
+                && m.args
+                    .first()
+                    .and_then(lit_arg)
+                    .is_some_and(|(t, _)| t == "'.'" || t == "'$'");
+            let simple = self.cur().map(|c| c.simple.clone()).unwrap_or_default();
+            if dot || (meth == "push_str" && MINT_PUSH_STR_FNS.contains(&simple.as_str())) {
+                self.mint("push", &meth);
+            }
+        }
+        // HS
+        if SCAN_METHODS.contains(&meth.as_str()) {
+            if let Some((base, f)) = field_of2(&m.receiver) {
+                if is_recv2(base) {
+                    if let Some(c) = self.cur() {
+                        c.scans.push((f, meth.clone()));
+                    }
+                }
+            }
+        }
+        // HH
+        if HH_READ.contains(&meth.as_str()) {
+            // a field of any receiver, or a fn-local table
+            let store = field_of2(&m.receiver).map(|(_, f)| f).or_else(|| {
+                single_path(strip_key(&m.receiver)).filter(|n| !RECV2.contains(&n.as_str()))
+            });
+            if let (Some(store), Some(a)) = (store, m.args.first()) {
+                self.key_read(&store, &meth, a);
+            }
+        }
+        // HSEG
+        if SEG_METHODS.contains(&meth.as_str()) {
+            if let Some(a) = m.args.first() {
+                let row = match lit_arg(a) {
+                    Some((t, v)) => {
+                        (v.contains(['.', '$', '[']) || v.contains("::") || meth == "strip_prefix")
+                            .then_some(t)
+                    }
+                    None => SEG_DYN
+                        .contains(&meth.as_str())
+                        .then(|| format!("<{}>", red(a))),
+                };
+                if let (Some(t), Some(c)) = (row, self.cur()) {
+                    c.segs.push((meth.clone(), t));
+                }
+            }
+        }
+        for a in &m.args {
+            self.visit_expr(a);
+        }
+    }
+    fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+        if let Expr::Path(p) = &*c.func {
+            if let Some(last) = p.path.segments.last() {
+                let n = last.ident.to_string();
+                self.called(&n);
+                if n == "fq" {
+                    if let Some(r) = self.cur() {
+                        r.fq_calls += 1;
+                    }
+                }
+            }
+        }
+        visit::visit_expr_call(self, c);
+    }
+    fn visit_expr_index(&mut self, i: &'ast syn::ExprIndex) {
+        if let Some((_, store)) = field_of2(&i.expr) {
+            self.key_read(&store, "index", &i.index);
+        }
+        visit::visit_expr_index(self, i);
+    }
+    fn visit_expr_for_loop(&mut self, fl: &'ast syn::ExprForLoop) {
+        if let Some((base, f)) = field_of2(&fl.expr) {
+            if is_recv2(base) {
+                if let Some(c) = self.cur() {
+                    c.scans.push((f, "for".to_string()));
+                }
+            }
+        }
+        visit::visit_expr_for_loop(self, fl);
+    }
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        let n = mac
+            .path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
+        if n == "format" || n == "write" {
+            let lit = mac.tokens.clone().into_iter().find_map(|t| match t {
+                proc_macro2::TokenTree::Literal(x) => {
+                    let s = x.to_string();
+                    (s.starts_with('"') || s.starts_with("r\"") || s.starts_with("r#")).then_some(s)
+                }
+                _ => None,
+            });
+            if let Some(kind) = lit.as_deref().and_then(glue_kind) {
+                self.mint(kind, &n);
+            }
+        }
+        self.visit_macro_args(mac);
+    }
+    fn visit_expr_assign(&mut self, a: &'ast syn::ExprAssign) {
+        self.mark_place(&a.left);
+        visit::visit_expr_assign(self, a);
+    }
+    fn visit_expr_binary(&mut self, b: &'ast syn::ExprBinary) {
+        if matches!(
+            b.op,
+            syn::BinOp::AddAssign(_)
+                | syn::BinOp::SubAssign(_)
+                | syn::BinOp::MulAssign(_)
+                | syn::BinOp::DivAssign(_)
+                | syn::BinOp::RemAssign(_)
+                | syn::BinOp::BitXorAssign(_)
+                | syn::BinOp::BitAndAssign(_)
+                | syn::BinOp::BitOrAssign(_)
+                | syn::BinOp::ShlAssign(_)
+                | syn::BinOp::ShrAssign(_)
+        ) {
+            self.mark_place(&b.left);
+        }
+        visit::visit_expr_binary(self, b);
+    }
+    fn visit_expr_reference(&mut self, r: &'ast syn::ExprReference) {
+        if r.mutability.is_some() {
+            self.mark_place(&r.expr);
+        }
+        visit::visit_expr_reference(self, r);
+    }
+    fn visit_expr_field(&mut self, f: &'ast syn::ExprField) {
+        if let syn::Member::Named(i) = &f.member {
+            let n = i.to_string();
+            if DISPLAY_FIELDS.contains(&n.as_str()) {
+                let acc = if self.write_nodes.contains(&(f as *const _ as usize)) {
+                    "write"
+                } else {
+                    "read"
+                };
+                if let Some(c) = self.cur() {
+                    c.disp.push((n, acc.to_string()));
+                }
+            }
+        }
+        visit::visit_expr_field(self, f);
+    }
+    fn visit_expr_struct(&mut self, s: &'ast syn::ExprStruct) {
+        for fv in &s.fields {
+            if let syn::Member::Named(i) = &fv.member {
+                let n = i.to_string();
+                if DISPLAY_FIELDS.contains(&n.as_str()) {
+                    if let Some(c) = self.cur() {
+                        c.disp.push((n, "init".to_string()));
+                    }
+                }
+            }
+        }
+        visit::visit_expr_struct(self, s);
+    }
+}
+
+/// A struct the crate declares: its file and fields (name, type).
+struct StructInfo {
+    file: String,
+    fields: Vec<(String, syn::Type)>,
+}
+
+/// census_fields.rs's struct collector: every struct outside a `#[cfg(test)]` mod, and the
+/// type aliases.
+struct StructV<'a> {
+    file: String,
+    out: &'a mut BTreeMap<String, Vec<StructInfo>>,
+    aliases: &'a mut BTreeMap<String, syn::Type>,
+}
+
+impl<'ast> Visit<'ast> for StructV<'_> {
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        if !has_cfg_test(&m.attrs) {
+            visit::visit_item_mod(self, m);
+        }
+    }
+    fn visit_item_type(&mut self, t: &'ast syn::ItemType) {
+        self.aliases.insert(t.ident.to_string(), (*t.ty).clone());
+    }
+    fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
+        if has_cfg_test(&s.attrs) {
+            return;
+        }
+        let fields = s
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let n = f
+                    .ident
+                    .as_ref()
+                    .map(|i| i.to_string())
+                    .unwrap_or_else(|| i.to_string());
+                (n, f.ty.clone())
+            })
+            .collect();
+        self.out
+            .entry(s.ident.to_string())
+            .or_default()
+            .push(StructInfo {
+                file: self.file.clone(),
+                fields,
+            });
+    }
+}
+
+/// census_fields.rs's type text.
+fn type_str(t: &syn::Type) -> String {
+    match t {
+        syn::Type::Path(p) => p
+            .path
+            .segments
+            .iter()
+            .map(|seg| {
+                let mut s = seg.ident.to_string();
+                if let syn::PathArguments::AngleBracketed(a) = &seg.arguments {
+                    let args: Vec<String> = a
+                        .args
+                        .iter()
+                        .filter_map(|g| match g {
+                            syn::GenericArgument::Type(t) => Some(type_str(t)),
+                            syn::GenericArgument::Lifetime(l) => Some(format!("'{}", l.ident)),
+                            _ => None,
+                        })
+                        .collect();
+                    write!(s, "<{}>", args.join(", ")).expect("write");
+                }
+                s
+            })
+            .collect::<Vec<_>>()
+            .join("::"),
+        syn::Type::Reference(r) => format!(
+            "&{}{}",
+            if r.mutability.is_some() { "mut " } else { "" },
+            type_str(&r.elem)
+        ),
+        syn::Type::Slice(r) => format!("[{}]", type_str(&r.elem)),
+        syn::Type::Array(r) => format!("[{}; N]", type_str(&r.elem)),
+        syn::Type::Tuple(tt) => format!(
+            "({})",
+            tt.elems.iter().map(type_str).collect::<Vec<_>>().join(", ")
+        ),
+        syn::Type::Paren(r) => type_str(&r.elem),
+        _ => "?".into(),
+    }
+}
+
+/// The second pass over the crate, and the struct reach.
+struct Census2 {
+    fns: Vec<Fn2>,
+    structs: BTreeMap<String, Vec<StructInfo>>,
+    aliases: BTreeMap<String, syn::Type>,
+}
+
+fn run_census2() -> Census2 {
+    let srcs = load_src();
+    let mut fns = Vec::new();
+    let mut structs = BTreeMap::new();
+    let mut aliases = BTreeMap::new();
+    for s in &srcs {
+        let mut recs = Vec::new();
+        Pass2 {
+            file: s.rel.clone(),
+            stack: Vec::new(),
+            out: &mut recs,
+            write_nodes: BTreeSet::new(),
+        }
+        .visit_file(&s.file);
+        StructV {
+            file: s.rel.clone(),
+            out: &mut structs,
+            aliases: &mut aliases,
+        }
+        .visit_file(&s.file);
+        let blanked = blank(&s.text);
+        let mut cursor = 0usize;
+        for r in &mut recs {
+            if let Some(p) = find_fn(&blanked, cursor, &r.simple) {
+                r.line = s.text.as_bytes()[..p]
+                    .iter()
+                    .filter(|&&c| c == b'\n')
+                    .count()
+                    + 1;
+                cursor = p + 2;
+            }
+        }
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        for r in &mut recs {
+            let n = seen.entry(r.qual.clone()).or_default();
+            *n += 1;
+            if *n > 1 {
+                r.qual = format!("{}#{}", r.qual, n);
+            }
+        }
+        fns.extend(recs);
+    }
+    Census2 {
+        fns,
+        structs,
+        aliases,
+    }
+}
+
+impl Census2 {
+    /// A type's idents with the crate's type aliases expanded (census_fields.rs).
+    fn expand(&self, ty: &syn::Type) -> Vec<String> {
+        let mut ids = type_idents(ty);
+        let mut k = 0;
+        while k < ids.len() && ids.len() < 400 {
+            if let Some(t) = self.aliases.get(&ids[k]) {
+                ids.extend(type_idents(t));
+            }
+            k += 1;
+        }
+        ids
+    }
+
+    /// The structs reached from `Elaborator` and `ConstFrame` through field types, in
+    /// census_fields.rs's order.
+    fn reached(&self) -> Vec<String> {
+        let mut order = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut queue = vec!["ConstFrame".to_string(), "Elaborator".to_string()];
+        while let Some(sn) = queue.pop() {
+            if !seen.insert(sn.clone()) {
+                continue;
+            }
+            order.push(sn.clone());
+            for si in self.structs.get(&sn).map(Vec::as_slice).unwrap_or(&[]) {
+                for (_, ty) in &si.fields {
+                    for id in self.expand(ty) {
+                        if self.structs.contains_key(&id) && !seen.contains(&id) {
+                            queue.push(id);
+                        }
+                    }
+                }
+            }
+        }
+        order
+    }
+
+    /// HS's store set: the `Elaborator` fields whose type is a map / set keyed by `String`.
+    fn keyed_stores(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for si in self
+            .structs
+            .get("Elaborator")
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+        {
+            for (n, ty) in &si.fields {
+                if string_keyed(ty) {
+                    out.insert(n.clone());
+                }
+            }
+        }
+        out
+    }
+
+    fn has_fn(&self, file: &str, simple: &str) -> bool {
+        self.fns
+            .iter()
+            .any(|r| r.file == file && r.simple == simple)
+    }
+}
+
+/// A map / set type (through `Option`, `RefCell`, `Rc`, `Box`, `Bound`) whose first type
+/// argument is `String`.
+fn string_keyed(ty: &syn::Type) -> bool {
+    let syn::Type::Path(p) = ty else { return false };
+    let Some(last) = p.path.segments.last() else {
+        return false;
+    };
+    let syn::PathArguments::AngleBracketed(a) = &last.arguments else {
+        return false;
+    };
+    let first = a.args.iter().find_map(|g| match g {
+        syn::GenericArgument::Type(t) => Some(t),
+        _ => None,
+    });
+    let Some(first) = first else { return false };
+    let id = last.ident.to_string();
+    if KEYED_COLL.contains(&id.as_str()) {
+        return matches!(first, syn::Type::Path(fp) if fp.path.is_ident("String"));
+    }
+    matches!(id.as_str(), "Option" | "RefCell" | "Rc" | "Box" | "Bound") && string_keyed(first)
+}
+
+/// A pinned hand column `a=2+b=1` (or one word for every site of the row): its words, each
+/// counted, checked against the row's count.
+fn hand_words(col: &str, n: usize) -> Result<Vec<(String, usize)>, String> {
+    if !col.contains('=') {
+        return Ok(vec![(col.to_string(), n)]);
+    }
+    let mut out = Vec::new();
+    for part in col.split('+') {
+        let Some((w, k)) = part.split_once('=') else {
+            return Err(format!("`{part}` has no `=<count>`"));
+        };
+        let k: usize = k.parse().map_err(|_| format!("`{part}`: count"))?;
+        out.push((w.to_string(), k));
+    }
+    let sum: usize = out.iter().map(|(_, k)| k).sum();
+    if sum != n {
+        return Err(format!("the words count {sum}, the row {n}"));
+    }
+    Ok(out)
+}
+
+fn dbg_counts(m: &BTreeMap<String, usize>) -> String {
+    format!("{m:?}")
+}
+
+// =====================================================================================
+// HM the mints of scope-qualified text
+// =====================================================================================
+
+fn hm_rows(c: &Census2) -> Vec<(String, String, usize)> {
+    let mut agg: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for r in &c.fns {
+        for (kind, name) in &r.mints {
+            let e = agg
+                .entry(format!("{}\t{}\t{kind}\t{name}", r.file, r.qual))
+                .or_insert((0, r.line));
+            e.0 += 1;
+        }
+    }
+    agg.into_iter()
+        .map(|(k, (n, line))| (k, n.to_string(), line))
+        .collect()
+}
+
+#[test]
+fn hm_the_mints_of_scope_text_are_pinned() {
+    // the pass sees a mint inside a `matches!` guard (strings.rs:139, the row census_g3
+    // missed), a glue literal, a `join(".")`, a `cur_prefix.clone()` and a temp name
+    let probe = syn::parse_file(
+        "impl E { fn m(&self, b: &X) -> bool { let a = format!(\"{}.{}\", self.cur_prefix, 1); \
+         let t = format!(\"$ia_tmp${}\", 2); let p = self.cur_prefix.clone(); let j = v.join(\".\"); \
+         matches!(&b.kind, K::I(p) if self.walk_scopes_key_shadowed(&p.n, |k| self.s.contains_key(k)).is_some()) } }",
+    )
+    .expect("probe parses");
+    let mut recs = Vec::new();
+    Pass2 {
+        file: "probe".into(),
+        stack: Vec::new(),
+        out: &mut recs,
+        write_nodes: BTreeSet::new(),
+    }
+    .visit_file(&probe);
+    assert_eq!(
+        recs[0].mints,
+        [
+            ("fmt".to_string(), "format".to_string()),
+            ("fmt-tempname".into(), "format".into()),
+            ("curp".into(), "cur_prefix.clone()".into()),
+            ("join".into(), "join".into()),
+            ("call".into(), "walk_scopes_key_shadowed".into()),
+        ],
+        "HM's pass no longer reads a glue literal, a temp name, a clone, a join or a `matches!` guard"
+    );
+
+    let c = run_census2();
+    let rows = hm_rows(&c);
+    let mut got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, v, _)| (k.clone(), v.clone()))
+        .collect();
+    let dumped: Vec<String> = rows
+        .iter()
+        .map(|(k, v, l)| format!("{k}\t{l}\t{v}"))
+        .collect();
+    dump("HM", "file\tfn\tkind\tname\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut msgs = Vec::new();
+    let mut by_kind: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_tag: BTreeMap<String, usize> = BTreeMap::new();
+    let mut total = 0usize;
+    for row in table(&tables::get("HM")) {
+        assert_eq!(
+            row.len(),
+            6,
+            "HM table row has {} columns, not 6: {row:?}",
+            row.len()
+        );
+        let k = row[..4].join("\t");
+        let n: usize = row[4].parse().expect("count");
+        if row[2] == "derived-fn" {
+            // HAND: a fn returning text its body mints (G3's compile probe named it ; no
+            // syntax sees "returns key / prefix text")
+            if !c.has_fn(&row[0], &row[3]) {
+                msgs.push(format!(
+                    "HM HAND ROW GONE {} — the derived mint fn is not in the file: name the unit, remove the row",
+                    k.replace('\t', " · ")
+                ));
+            }
+            got.insert(k.clone(), n.to_string());
+        }
+        match hand_words(&row[5], n) {
+            Ok(ws) => {
+                for (w, k) in ws {
+                    *by_tag.entry(w).or_default() += k;
+                }
+            }
+            Err(e) => msgs.push(format!(
+                "HM TAG {} [{}]: {e}",
+                k.replace('\t', " · "),
+                row[5]
+            )),
+        }
+        *by_kind.entry(row[2].clone()).or_default() += n;
+        total += n;
+        want.insert(k, n.to_string());
+    }
+    msgs.extend(diff_rows(
+        "HM",
+        &got,
+        &want,
+        "a new mint of scope-qualified text (or a mint moved fn): name the unit that adds it (Q-DECLKEY DK1 takes \
+         every mint into lexscope), read what the text is and tag it (key / scope / segment / display / spelling), \
+         add the row",
+        "a mint is gone: name the unit, remove the row",
+    ));
+    let counts = format!(
+        "mints {total} kinds {} tags {}",
+        dbg_counts(&by_kind),
+        dbg_counts(&by_tag)
+    );
+    if counts != tables::get("HM_COUNTS") {
+        msgs.push(format!(
+            "HM COUNTS table [{}] now [{counts}]",
+            tables::get("HM_COUNTS")
+        ));
+    }
+    finish("HM", &msgs);
+}
+
+// =====================================================================================
+// HS the key scans
+// =====================================================================================
+
+#[test]
+fn hs_the_key_scans_are_pinned() {
+    let c = run_census2();
+    // the store set: Elaborator fields keyed by `String`, pinned by name
+    let stores = c.keyed_stores();
+    let pinned: BTreeSet<String> = tables::get("HS_STORES")
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    dump(
+        "HS_STORES",
+        "store",
+        &stores.iter().cloned().collect::<Vec<_>>(),
+    );
+    let mut msgs = Vec::new();
+    for s in stores.difference(&pinned) {
+        msgs.push(format!(
+            "HS NEW STORE {s} — an Elaborator field keyed by String: name the unit, add it to HS_STORES (its scans \
+             join the census)"
+        ));
+    }
+    for s in pinned.difference(&stores) {
+        msgs.push(format!(
+            "HS GONE STORE {s} — no longer an Elaborator field keyed by String: name the unit (a retype to a key \
+             record is LS3 / DK1's), remove it from HS_STORES"
+        ));
+    }
+    let mut agg: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for r in &c.fns {
+        for (f, m) in &r.scans {
+            if stores.contains(f) {
+                let e = agg
+                    .entry(format!("{}\t{}\t{f}\t{m}", r.file, r.qual))
+                    .or_insert((0, r.line));
+                e.0 += 1;
+            }
+        }
+    }
+    let mut got: BTreeMap<String, String> = agg
+        .iter()
+        .map(|(k, (n, _))| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = agg
+        .iter()
+        .map(|(k, (n, l))| format!("{k}\t{l}\t{n}"))
+        .collect();
+    dump("HS", "file\tfn\tstore\tmethod\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut by_kind: BTreeMap<String, usize> = BTreeMap::new();
+    let mut total = 0usize;
+    for row in table(&tables::get("HS")) {
+        assert_eq!(
+            row.len(),
+            7,
+            "HS table row has {} columns, not 7: {row:?}",
+            row.len()
+        );
+        let k = row[..4].join("\t");
+        let n: usize = row[4].parse().expect("count");
+        if row[5].starts_with("HAND:") {
+            // a scan the store set does not hold (a Vec field, a parameter): the fn must
+            // still call the method on that receiver
+            let found = c.fns.iter().any(|r| {
+                r.file == row[0]
+                    && r.qual == row[1]
+                    && (r.scans.iter().any(|(f, m)| f == &row[2] && m == &row[3])
+                        || r.calls.contains(&row[3]))
+            });
+            if !found {
+                msgs.push(format!(
+                    "HS HAND ROW GONE {} — re-read the fn: the scan moved or left, fix or remove the row",
+                    k.replace('\t', " · ")
+                ));
+            }
+            got.insert(k.clone(), n.to_string());
+        }
+        match hand_words(row[5].trim_start_matches("HAND:"), n) {
+            Ok(ws) => {
+                for (w, k) in ws {
+                    *by_kind.entry(w).or_default() += k;
+                }
+            }
+            Err(e) => msgs.push(format!(
+                "HS KIND {} [{}]: {e}",
+                k.replace('\t', " · "),
+                row[5]
+            )),
+        }
+        total += n;
+        want.insert(k, n.to_string());
+    }
+    msgs.extend(diff_rows(
+        "HS",
+        &got,
+        &want,
+        "a new iteration over a String-keyed store: name the unit that adds it, read whether it reads the key text \
+         (TEXT-SCAN-ANSWERS / PRINT/DUMP / KEY-BLIND) and its lexscope entry (g4/c/entries.tsv's SCAN rows), add the row",
+        "a key scan is gone: name the unit, remove the row",
+    ));
+    let counts = format!(
+        "stores {} scans {total} kinds {}",
+        pinned.len(),
+        dbg_counts(&by_kind)
+    );
+    if counts != tables::get("HS_COUNTS") {
+        msgs.push(format!(
+            "HS COUNTS table [{}] now [{counts}]",
+            tables::get("HS_COUNTS")
+        ));
+    }
+    finish("HS", &msgs);
+}
+
+// =====================================================================================
+// HH the current-prefix reads
+// =====================================================================================
+
+#[test]
+fn hh_the_current_prefix_reads_are_pinned() {
+    // the reader: an fq key as the argument, through a `let`, and an index
+    let probe = syn::parse_file(
+        "impl E { fn r(&self, n: &str) { let key = self.fq(n); let _ = self.symbols.get(&key); \
+         let _ = self.params.contains_key(&self.fq(n).clone()); let _ = &self.wide[&key]; \
+         let _ = self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); } }",
+    )
+    .expect("probe parses");
+    let mut recs = Vec::new();
+    Pass2 {
+        file: "probe".into(),
+        stack: Vec::new(),
+        out: &mut recs,
+        write_nodes: BTreeSet::new(),
+    }
+    .visit_file(&probe);
+    assert_eq!(
+        recs[0].reads,
+        [
+            (
+                "symbols".to_string(),
+                "get".to_string(),
+                "let:key@1".to_string()
+            ),
+            ("params".into(), "contains_key".into(), "call2".into()),
+            ("wide".into(), "index".into(), "let:key@1".into()),
+        ],
+        "HH's reader no longer links an fq key through a `let`, a direct argument or an index"
+    );
+
+    let c = run_census2();
+    let mut agg: BTreeMap<String, (BTreeMap<String, usize>, usize)> = BTreeMap::new();
+    for r in &c.fns {
+        let walks = HH_WALK.iter().any(|w| r.calls.contains(*w));
+        for (store, op, mint) in &r.reads {
+            let others = r.reads.iter().any(|(s, _, m)| m == mint && s != store);
+            let role = if walks || others {
+                "composite"
+            } else {
+                "whole"
+            };
+            let e = agg
+                .entry(format!("{}\t{}\t{store}\t{role}", r.file, r.qual))
+                .or_insert((BTreeMap::new(), r.line));
+            *e.0.entry(op.clone()).or_default() += 1;
+        }
+    }
+    let fmt_ops = |m: &BTreeMap<String, usize>| {
+        m.iter()
+            .map(|(o, n)| format!("{o}={n}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let got: BTreeMap<String, String> = agg
+        .iter()
+        .map(|(k, (ops, _))| (k.clone(), fmt_ops(ops)))
+        .collect();
+    let dumped: Vec<String> = agg
+        .iter()
+        .map(|(k, (ops, l))| format!("{k}\t{l}\t{}", fmt_ops(ops)))
+        .collect();
+    dump("HH", "file\tfn\tstore\trole\tline\tops", &dumped);
+    let mut want = BTreeMap::new();
+    let mut by_role: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_store: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("HH")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HH table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        let n: usize = row[4]
+            .split(',')
+            .map(|p| p.split_once('=').map_or(0, |(_, k)| k.parse().unwrap_or(0)))
+            .sum();
+        *by_role.entry(row[3].clone()).or_default() += n;
+        *by_store.entry(row[2].clone()).or_default() += n;
+        want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    let mut msgs = diff_rows(
+        "HH",
+        &got,
+        &want,
+        "a new read of a store by a current-prefix key (`fq`, no walk): name the unit that adds it — this table PINS \
+         today's sites and does not close the door (premise2 B3: a key entry called with the current scope is an \
+         fq this rule does not see) — and add the row",
+        "a current-prefix read is gone: name the unit, remove the row",
+    );
+    let total: usize = by_role.values().sum();
+    let counts = format!(
+        "reads {total} roles {} stores {}",
+        dbg_counts(&by_role),
+        dbg_counts(&by_store)
+    );
+    if counts != tables::get("HH_COUNTS") {
+        msgs.push(format!(
+            "HH COUNTS table [{}] now [{counts}]",
+            tables::get("HH_COUNTS")
+        ));
+    }
+    finish("HH", &msgs);
+}
+
+// =====================================================================================
+// HSEG the segment-text tests
+// =====================================================================================
+
+#[test]
+fn hseg_the_segment_text_tests_are_pinned() {
+    let c = run_census2();
+    let mut agg: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for r in &c.fns {
+        for (m, a) in &r.segs {
+            let e = agg
+                .entry(format!("{}\t{}\t{m}\t{a}", r.file, r.qual))
+                .or_insert((0, r.line));
+            e.0 += 1;
+        }
+    }
+    let got: BTreeMap<String, String> = agg
+        .iter()
+        .map(|(k, (n, _))| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = agg
+        .iter()
+        .map(|(k, (n, l))| format!("{k}\t{l}\t{n}"))
+        .collect();
+    dump("HSEG", "file\tfn\tmethod\targ\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut msgs = Vec::new();
+    let mut by_tag: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_unit: BTreeMap<String, usize> = BTreeMap::new();
+    let mut total = 0usize;
+    for row in table(&tables::get("HSEG")) {
+        assert_eq!(
+            row.len(),
+            7,
+            "HSEG table row has {} columns, not 7: {row:?}",
+            row.len()
+        );
+        let k = row[..4].join("\t");
+        let n: usize = row[4].parse().expect("count");
+        for (col, map) in [(&row[5], &mut by_tag), (&row[6], &mut by_unit)] {
+            match hand_words(col, n) {
+                Ok(ws) => {
+                    for (w, k) in ws {
+                        *map.entry(w).or_default() += k;
+                    }
+                }
+                Err(e) => msgs.push(format!("HSEG {} [{col}]: {e}", k.replace('\t', " · "))),
+            }
+        }
+        total += n;
+        want.insert(k, n.to_string());
+    }
+    msgs.extend(diff_rows(
+        "HSEG",
+        &got,
+        &want,
+        "a new test of segment text (`.` / `$` / `[` / `::` in a cut or a test, a non-literal prefix test, \
+         is_gen_scope_segment): name the unit that adds it, read whether it tests a scope path, a key, a spelling or \
+         display text, give it the unit that owns it (walk / LS4 / DK3 / DK4 / RS1 / none), add the row",
+        "a segment-text test is gone: name the unit, remove the row",
+    ));
+    let counts = format!(
+        "tests {total} tags {} units {}",
+        dbg_counts(&by_tag),
+        dbg_counts(&by_unit)
+    );
+    if counts != tables::get("HSEG_COUNTS") {
+        msgs.push(format!(
+            "HSEG COUNTS table [{}] now [{counts}]",
+            tables::get("HSEG_COUNTS")
+        ));
+    }
+    finish("HSEG", &msgs);
+}
+
+// =====================================================================================
+// H5 the name-typed fields
+// =====================================================================================
+
+#[test]
+fn h5_the_name_typed_fields_are_classified() {
+    let c = run_census2();
+    let mut got: BTreeMap<String, String> = BTreeMap::new();
+    let mut dumped = Vec::new();
+    for sn in c.reached() {
+        for si in c.structs.get(&sn).map(Vec::as_slice).unwrap_or(&[]) {
+            for (f, ty) in &si.fields {
+                let ids = c.expand(ty);
+                if ids.iter().any(|i| NAME_TYPES.contains(&i.as_str())) {
+                    let k = format!("{sn}\t{}\t{f}", si.file);
+                    let t = type_str(ty);
+                    dumped.push(format!("{k}\t{t}"));
+                    got.insert(k, t);
+                }
+            }
+        }
+    }
+    dump("H5", "struct\tfile\tfield\ttype", &dumped);
+    let mut want = BTreeMap::new();
+    let mut msgs = Vec::new();
+    let mut by_class: BTreeMap<String, usize> = BTreeMap::new();
+    let mut by_store: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("H5")) {
+        assert_eq!(
+            row.len(),
+            7,
+            "H5 table row has {} columns, not 7: {row:?}",
+            row.len()
+        );
+        let k = row[..3].join("\t");
+        if row[4].is_empty() || row[4] == "-" || row[5].is_empty() || row[5] == "-" {
+            msgs.push(format!(
+                "H5 UNCLASSIFIED {} — give it a class (G1: BINDING / NOT) and its code by reading",
+                k.replace('\t', " · ")
+            ));
+        }
+        *by_class
+            .entry(format!("{}:{}", row[4], row[5]))
+            .or_default() += 1;
+        *by_store.entry(row[6].clone()).or_default() += 1;
+        want.insert(k, row[3].clone());
+    }
+    msgs.extend(diff_rows(
+        "H5",
+        &got,
+        &want,
+        "a new name-typed field (a String / str / Symbol / Ident in its type, on a struct the Elaborator reaches): \
+         name the unit that adds it, classify it (BINDING code V R T S, or NOT code D CTX I INPUT COPY DEF G CHK X) \
+         and give it its store class (g3 fields_keyed.tsv / G4: KEYED-*, ROUTINE, SCOPE, DISPLAY, OUTPUT, KEY, -), \
+         add the row — no unclassified name-typed field",
+        "a name-typed field is gone (or no longer name-typed: a retype to a key / scope record names its unit): \
+         remove the row",
+    ));
+    let counts = format!(
+        "fields {} classes {} stores {}",
+        want.len(),
+        dbg_counts(&by_class),
+        dbg_counts(&by_store)
+    );
+    if counts != tables::get("H5_COUNTS") {
+        msgs.push(format!(
+            "H5 COUNTS table [{}] now [{counts}]",
+            tables::get("H5_COUNTS")
+        ));
+    }
+    finish("H5", &msgs);
+}
+
+// =====================================================================================
+// HD the display-chain fields' writers and readers
+// =====================================================================================
+
+#[test]
+fn hd_the_display_chain_accesses_are_pinned() {
+    let c = run_census2();
+    let mut agg: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for r in &c.fns {
+        for (f, a) in &r.disp {
+            let e = agg
+                .entry(format!("{}\t{}\t{f}\t{a}", r.file, r.qual))
+                .or_insert((0, r.line));
+            e.0 += 1;
+        }
+    }
+    let got: BTreeMap<String, String> = agg
+        .iter()
+        .map(|(k, (n, _))| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = agg
+        .iter()
+        .map(|(k, (n, l))| format!("{k}\t{l}\t{n}"))
+        .collect();
+    dump("HD", "file\tfn\tfield\taccess\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("HD")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HD table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        let n: usize = row[4].parse().expect("count");
+        *by.entry(format!("{}:{}", row[2], row[3])).or_default() += n;
+        want.insert(row[..4].join("\t"), n.to_string());
+    }
+    let mut msgs = diff_rows(
+        "HD",
+        &got,
+        &want,
+        "a new access of a display-chain field (block_scope, block_scope_root, cur_class_method): name the unit — \
+         LS2-d makes the three private to lexscope ; a reader that feeds a store key or a compare is PM20's \
+         falsifier — add the row",
+        "a display-chain access is gone: name the unit, remove the row",
+    );
+    let counts = dbg_counts(&by);
+    if counts != tables::get("HD_COUNTS") {
+        msgs.push(format!(
+            "HD COUNTS table [{}] now [{counts}]",
+            tables::get("HD_COUNTS")
+        ));
+    }
+    finish("HD", &msgs);
+}
+
+// =====================================================================================
+// HK the producers' scope kinds
+// =====================================================================================
+
+#[test]
+fn hk_the_scope_entry_kinds_are_pinned() {
+    let c = run_census();
+    let c2 = run_census2();
+    let mut got: BTreeMap<String, String> = BTreeMap::new();
+    let mut dumped = Vec::new();
+    // the 25 writes of cur_prefix (H3's sites, per fn)
+    for (k, v, l) in h3_rows(&c) {
+        let sites = v.split('\t').nth(1).unwrap_or("0").to_string();
+        dumped.push(format!("{k}\tcur_prefix\t{l}\t{sites}"));
+        got.insert(format!("{k}\tcur_prefix"), sites);
+    }
+    // the callers of with_scope / elaborate_instance
+    let mut agg: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for r in &c2.fns {
+        for e in &r.entries {
+            let x = agg
+                .entry(format!("{}\t{}\t{e}", r.file, r.qual))
+                .or_insert((0, r.line));
+            x.0 += 1;
+        }
+    }
+    for (k, (n, l)) in &agg {
+        dumped.push(format!("{k}\t{l}\t{n}"));
+        got.insert(k.clone(), n.to_string());
+    }
+    dump("HK", "file\tfn\twhat\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut msgs = Vec::new();
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("HK")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HK table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        let k = row[..3].join("\t");
+        let n: usize = row[3].parse().expect("count");
+        match hand_words(&row[4], n) {
+            Ok(ws) => {
+                for (w, k) in ws {
+                    *by.entry(format!("{}:{w}", row[2])).or_default() += k;
+                }
+            }
+            Err(e) => msgs.push(format!(
+                "HK KIND {} [{}]: {e}",
+                k.replace('\t', " · "),
+                row[4]
+            )),
+        }
+        want.insert(k, n.to_string());
+    }
+    msgs.extend(diff_rows(
+        "HK",
+        &got,
+        &want,
+        "a new scope entry (a write of cur_prefix, a with_scope or elaborate_instance call): name the unit, read the \
+         kind its PRODUCER knows (G4 OWED-k ; DELTA6 F2's 13 kinds ; LS2 passes it to `enter`), add the row",
+        "a scope entry is gone: name the unit, remove the row",
+    ));
+    let counts = dbg_counts(&by);
+    if counts != tables::get("HK_COUNTS") {
+        msgs.push(format!(
+            "HK COUNTS table [{}] now [{counts}]",
+            tables::get("HK_COUNTS")
+        ));
+    }
+    finish("HK", &msgs);
+}
+
+// =====================================================================================
 // The pinned tables
 // =====================================================================================
 
 mod tables {
-    /// H2: 62 rows by syntax + `blocks` (HAND: no `ast::Stmt` pattern of its own ; it
-    /// reaches every nested block through `gather_nested_block_locals` and `actions`, the
-    /// calls the row pins ; T2 counted it). KIND g2b catchalls.tsv, MODEL g2b readers.tsv,
-    /// ROLE g3 askers.tsv (29) / DELTA D1 (9 LEXICAL) / BINDER (2).
-    pub const H2: &str = r#"file	fn	class	arms	catch_all	calls_FENS	carriers_to_catch_all	KIND	MODEL	ROLE
-ast_query.rs	collect_callee_stmt	WALKER-OWN	Block,Blocking,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,NonBlocking,Repeat,Return,SysTaskCall,UserTaskCall,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	Flat	COLLECTOR
-block_local/hoist.rs	hoist_block_local_nets	WALKER-FENS	Block,Fork	_1 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	-	LEXICAL	LEX-PRODUCER
-block_local/mod.rs	collect_block_local_decls_outside_timing	WALKER-FENS	Block,Fork	n	y	-	-	Flat	COLLECTOR
-block_local/mod.rs	collect_block_local_decls_spanned	WALKER-FENS	Block,Fork	_1 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	-	LEXICAL	LEX-COLLECTOR
-block_local/mod.rs	for_each_nested_stmt	THE-DESCENT	ALL	n	n	-	-	-	-
-block_local/mod.rs	gather_nested_block_locals	WALKER-FENS	Block,Fork	n	y	-	-	LEXICAL	LEX-COLLECTOR
-block_local/mod.rs	stmts_defer_read::walk	WALKER-FENS	SysTaskCall	n	y	-	-	Flat	ONE-DECL
-block_local/mod.rs	stmts_may_suspend::walk	WALKER-FENS	Blocking,DelayCtrl,EventCtrl,NonBlocking,UserTaskCall,Wait,WaitFork	_1 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,Block,Fork,DeferredAssert,ConcurrentAssert	-	-	-
-block_local/proofs.rs	inout_copy_in_is_dead	WALKER-OWN	Block	_1 bind1 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	DESCEND	Flat	ONE-DECL
-block_local/proofs.rs	stmt_redeclares	WALKER-OWN	ALL	n	n	-	-	Flat	ONE-DECL
-block_local/timed_task.rs	timing_nested_decls::walk	WALKER-FENS	Block,Fork	n	y	-	-	-	-
-block_local_class.rs	compute_per_entry_block_locals::walk	WALKER-FENS	Block,Fork	_1 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	-	Flat	COLLECTOR+MEMBERSHIP
-block_local_class.rs	compute_timed_blocks::walk	WALKER-FENS	Block,Fork,WaitFork	_2 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	-	Flat	COLLECTOR+MEMBERSHIP
-classes.rs	body_calls_super_new	WALKER-OWN	Block,UserTaskCall	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-const_bound.rs	const_stmt_width_safe	WALKER-OWN	Block,Blocking,For,If,Null,Repeat,Return,While	_1 bind0 guarded0	n	Case,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	-	-
-const_fn.rs	exec_const_stmt	WALKER-OWN	Block,Blocking,For,If,Null,Repeat,Return,While	_1 bind0 guarded0	n	Case,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	BINDER
-const_level_header.rs	body_suspend_blocker	WALKER-OWN	ALL	n	n	-	-	-	-
-da/loops.rs	stmt_cannot_escape	WALKER-OWN	ALL	n	n	-	-	-	-
-da/mod.rs	da_stmt	WALKER-OWN	Block,Blocking,Case,DelayCtrl,Disable,EventCtrl,For,Forever,Fork,If,NonBlocking,Repeat,Return,UserTaskCall,Wait,While	_1 bind0 guarded1	n	DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	ONE-DECL
-da/mod.rs	stmt_advances_time	WALKER-OWN	Block,Blocking,Case,ConcurrentAssert,DeferredAssert,DelayCtrl,EventCtrl,For,Forever,Fork,If,NonBlocking,Repeat,UserTaskCall,Wait,WaitFork,While	_1 bind0 guarded0	n	none	LEAF-ONLY	-	-
-da/reads.rs	stmt_contains_block_span	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-da/reads.rs	stmt_no_ref_deep	WALKER-OWN	Block,Blocking,Case,DelayCtrl,Disable,EventCtrl,For,Forever,Fork,If,NonBlocking,Null,Repeat,Return,SysTaskCall,UserTaskCall,Wait,WaitFork,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	ONE-DECL
-da/reads.rs	stmt_reads_ident	WALKER-OWN	Assign,Block,Blocking,Case,DelayCtrl,EventCtrl,For,Force,Forever,Fork,If,NonBlocking,RandomizeWith,Repeat,Return,SysTaskCall,UserTaskCall,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	Flat	ONE-DECL
-da/reads.rs	stmt_refs_ident_outside	WALKER-OWN	Block,Blocking,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,NonBlocking,RandomizeWith,Repeat,Return,SysTaskCall,UserTaskCall,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	LEXICAL	LEX-COMPARER
-da/writes.rs	stmt_may_write_or_observe	WALKER-OWN	ALL	n	n	-	-	Flat	ONE-DECL
-decl_collide.rs	collect_item	WALKER-OWN	Block,Fork	n	n	-	-	Flat	COLLECTOR
-dynarr.rs	body_readonly_dyn_ok	WALKER-OWN	Block,Blocking,Null,Return	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	MEMBERSHIP
-expr_ctx.rs	assign_needs_context_width	WALKER-OWN	Block,Blocking	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	GATED	FlatLastWins	MEMBERSHIP
-ff_timing.rs	ff_walk	WALKER-OWN	ALL	n	n	-	-	-	-
-frames_classify.rs	ast_has_repeat_with_timing	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-frames_classify.rs	ast_stmt_has_timing	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,WaitFork,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-frames_classify.rs	body_has_return	WALKER-OWN	Block,Case,For,Forever,Fork,If,Repeat,Return,While	_1 bind0 guarded0	n	DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-frames_classify.rs	body_needs_frame	WALKER-OWN	Block,Blocking,Null	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	-	-
-frames_classify.rs	stmt_has_timing	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,WaitFork,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-frames_classify.rs	stmt_reads_only_locals	WALKER-OWN	Block,Blocking	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	MEMBERSHIP
-frames_classify.rs	stmt_selects_name	WALKER-OWN	Block,Blocking	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	GATED	Flat	MEMBERSHIP
-frames_classify.rs	walk_straight_line	WALKER-OWN	Block,Blocking,Null	_0 bind1 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	GATED	-	-
-frames_classify_write.rs	stmt_enables_task	WALKER-OWN	ALL	n	n	-	-	-	-
-frames_classify_write.rs	stmt_writes_outside_name	WALKER-OWN	ALL	n	n	-	-	Flat	MEMBERSHIP
-frames_concat.rs	collect_concat_assign_spans	WALKER-OWN	Block,Blocking,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	-	-
-frames_reserve.rs	collect_case_spans	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	-	-
-frames_reserve.rs	collect_runtime_repeat_spans	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	-	-
-frames_reserve.rs	gather_auto_block_locals	WALKER-FENS	Block	n	y	-	-	LEXICAL	LEX-COLLECTOR
-hier.rs	collect_hier_task_stmt	WALKER-OWN	Block,Case,DeferredAssert,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,UserTaskCall,Wait,While	_1 bind0 guarded0	n	ConcurrentAssert	COLLECTOR-SKIP	-	-
-hier.rs	stmt_disables_label	WALKER-OWN	Block,Case,DelayCtrl,Disable,EventCtrl,For,Forever,Fork,If,Repeat,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	Flat	ONE-DECL
-hoist/mod.rs	stmt_has_observable_effect	WALKER-OWN	Block,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,SysTaskCall,UserTaskCall,Wait,While	_1 bind0 guarded0	n	DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	-	-
-inline_fold.rs	fold_straight_line	WALKER-OWN	Block,Blocking,Null,Return	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	BINDER
-inline_ret_select.rs	body_writes_ret_select	WALKER-OWN	Block,Blocking	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	GATED	Flat	ONE-DECL
-inline_ret_select.rs	stmt	WALKER-OWN	Block,Blocking,Null	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	LEXICAL	LEX-COMPARER
-multidriver.rs	declares_local_named	WALKER-FENS	Block,ConcurrentAssert,DeferredAssert,Fork	_2 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,DelayCtrl,EventCtrl,Wait	-	Flat	ONE-DECL
-multidriver.rs	stmt_writes_whole_ident	WALKER-OWN	ALL	n	n	-	-	Flat	ONE-DECL
-multidriver.rs	top_level_call_writes_whole	WALKER-OWN	Block,Blocking,UserTaskCall	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	INTENDED	Flat	ONE-DECL
-package.rs	pkg_stmt_pure_orig	WALKER-OWN	Block,Blocking,Return	_1 bind0 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-DECLINE	Flat	MEMBERSHIP
-package.rs	pkg_stmt_pure_with	WALKER-VIA-HELPER(pkg_stmt_pure_orig)	Case,For,If,Repeat,UserTaskCall,While	_1 bind0 guarded0	n	Forever,Block,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	-	Flat	MEMBERSHIP
-pkg_scoped_frames.rs	decl_scopes	WALKER-FENS	Block,Fork	n	y	-	-	LEXICAL	LEX-COLLECTOR
-pkg_scoped_frames.rs	return_var_read_before_write	WALKER-OWN	Block	_0 bind1 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	DESCEND	Flat	ONE-DECL
-pkg_scoped_frames.rs	static_local_read_before_write	WALKER-OWN	Block	_0 bind1 guarded0	n	If,Case,For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	DESCEND	LEXICAL	LEX-COMPARER
-ports.rs	collect_vif_bindings	WALKER-OWN	Block,Blocking,Case,DelayCtrl,EventCtrl,For,Forever,Fork,If,Repeat,While	_1 bind0 guarded0	n	Wait,DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	Flat	COLLECTOR+ONE-DECL
-proc_builder.rs	stmt_disables_name	WALKER-OWN	Block,Case,Disable,For,Forever,Fork,If,Repeat,While	_1 bind0 guarded0	n	DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	PREDICATE-PERMISSIVE	Flat	ONE-DECL
-select_scope.rs	actions	WALKER-FENS	ConcurrentAssert,DeferredAssert	_1 bind0 guarded0	y	If,Case,For,While,Repeat,Forever,Block,Fork,DelayCtrl,EventCtrl,Wait	-	Flat	COLLECTOR
-select_scope.rs	blocks	HAND	gather_nested_block_locals,actions	-	-	-	-	Flat	COLLECTOR
-stmt_main.rs	lower_stmt_inner	WALKER-OWN	ALL	n	n	-	-	LEXICAL	LEX-PRODUCER
-sva_decl.rs	rewrite_sampled_stmt	WALKER-OWN	Block,Blocking,Case,If,NonBlocking,SysTaskCall,UserTaskCall	_0 bind1 guarded0	n	For,While,Repeat,Forever,Fork,DelayCtrl,EventCtrl,Wait,DeferredAssert,ConcurrentAssert	COLLECTOR-SKIP	-	-
-"#;
-    pub const H2_COUNTS: &str = "{\"HAND\": 1, \"THE-DESCENT\": 1, \"WALKER-FENS\": 13, \"WALKER-OWN\": 47, \"WALKER-VIA-HELPER\": 1} kinds {\"COLLECTOR-SKIP\": 7, \"DESCEND\": 3, \"GATED\": 4, \"INTENDED\": 1, \"LEAF-ONLY\": 1, \"PREDICATE-DECLINE\": 10, \"PREDICATE-PERMISSIVE\": 11} models {\"Flat\": 30, \"FlatLastWins\": 1, \"LEXICAL\": 9} roles {\"BINDER\": 2, \"COLLECTOR\": 5, \"COLLECTOR+MEMBERSHIP\": 2, \"COLLECTOR+ONE-DECL\": 1, \"LEX-COLLECTOR\": 4, \"LEX-COMPARER\": 3, \"LEX-PRODUCER\": 2, \"MEMBERSHIP\": 7, \"ONE-DECL\": 14}";
-    /// H3: the 25 sites of u0 T2.txt:281-315 (kinds in source order of the sites ;
-    /// DEFINITION = driver.rs run's per-definition census pass, T2 "definition context" ;
-    /// CONSTRUCTOR = the initial value).
-    pub const H3: &str = r#"file	fn	forms	sites	kinds
-cont_array.rs	check_whole_array_sole_writer	assign=2,take=1	1	DIAGNOSTIC
-cont_var.rs	check_var_cont_assign_sole_writer	assign=3,take=1	1	DIAGNOSTIC
-cover_synth.rs	materialize_cover	assign=1,replace=1	1	RE-ENTRY
-dead_arm.rs	settle_dead_arm	assign=1,replace=1	1	DIAGNOSTIC
-driver.rs	new	init=1	1	CONSTRUCTOR
-driver.rs	run	assign=2,replace=2	2	DEFINITION+SCOPE-ENTRY
-edge_gate.rs	report_at	assign=1,replace=1	1	DIAGNOSTIC
-edge_gate.rs	edge_backstop	assign=1,take=1	1	DIAGNOSTIC
-frames_reserve.rs	with_rtn_decl_scope	assign=1,replace=1	1	SCOPE-ENTRY
-generate.rs	with_scope	assign=1,replace=1	1	SCOPE-ENTRY
-held.rs	report_clk_refused	assign=1,replace=1	1	DIAGNOSTIC
-hier_defer/write.rs	resolve_pending_fill_widths	assign=1,replace=1	1	RE-ENTRY
-iface_inst.rs	elaborate_iface_instances	assign=2,replace=2	2	SCOPE-ENTRY+SCOPE-ENTRY
-instance.rs	elaborate_instance	assign=1,replace=1	1	SCOPE-ENTRY
-package.rs	elaborate_package	assign=1,replace=1	1	SCOPE-ENTRY
-ports.rs	bind_iface_port	assign=1,replace=1	1	LOOKUP
-ports.rs	wire_array_port	assign=3,replace=1	1	PARENT-SIDE
-ports.rs	wire_ports	assign=6,replace=1	2	PARENT-SIDE+PARENT-SIDE
-readmem_assoc.rs	check_readmem_assoc_waits	assign=2	1	DIAGNOSTIC
-scope.rs	default_binding_matches_decl_scope	assign=1,replace=1	1	LOOKUP
-sva_check.rs	materialize_sva_checkers	assign=1,replace=1	1	RE-ENTRY
-var_init.rs	flush_block_local_inits	assign=1,replace=1	1	RE-ENTRY
-"#;
-    pub const H3_COUNTS: &str = "sites 25 {\"CONSTRUCTOR\": 1, \"DEFINITION\": 1, \"DIAGNOSTIC\": 7, \"LOOKUP\": 2, \"PARENT-SIDE\": 3, \"RE-ENTRY\": 4, \"SCOPE-ENTRY\": 7}";
-    /// H6: SITE = plan3/walk_sites.txt's 51 (= g2a m_hits_calls.tsv less scope.rs:35 :77
-    /// :145) ; HIER / RTN / PROBE = the three the 51 lack (g3 REPORT K5 N1) ; INTERNAL =
-    /// the walk's own body.
-    pub const H6: &str = r#"file	fn	entry	hit_text	class	hit_set	calls
-array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
-block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
-bound/read.rs	name_meta	walk_scopes	param_meta	SITE	param_meta	1
-bound/read.rs	name_real	walk_scopes	real_param_val	SITE	real_param_val	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	array_const_vals|params|symbols	SITE	array_const_vals+params+symbols	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
-const_bound.rs	unfoldable_reason_in	walk_scopes_key	hit_any_const	SITE	params+real_param_val+str_param_raw+wide_param_bits	1
-const_decl_width.rs	narrow_param_decl_width	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-const_eval.rs	array_param_init_pattern	walk_scopes_key	symbols	SITE	symbols	1
-const_eval.rs	wide_param_name_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-const_fn_width/fold_x.rs	names_real_binding	walk_scopes_key	real_param_val|params|symbols	SITE	params+real_param_val+symbols	1
-const_str.rs	const_str_at	walk_scopes_key	str_param_raw|real_param_val|params|wide_param_bits|symbols	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-const_wide.rs	narrow_param_bits	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-const_wide.rs	wide_name_bits	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
-decl_collide.rs	modport_call_refused	walk_scopes_key	iface_insts	SITE	iface_insts	1
-dynarr.rs	dyn_handle	walk_scopes_key_shadowed	fixed_string_dyn_key	SITE	fixed_string_dyn_key	1
-edge_gate.rs	binding_encloses	walk_scopes_key	hit_value	SITE	params	1
-edge_gate.rs	binding_encloses	walk_scopes_key	params|other_kind()	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-edge_gate.rs	variable_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-edge_gate.rs	wide_lsb_range_of	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
-edge_gate.rs	wide_param_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-expr_special.rs	bits_of_view	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-frames_static_init.rs	admitted_local_keys	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	declined_local_keys	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	emit_frame_static_prologue	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	expr_reads_admitted	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	symbols	SITE	symbols	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_loop_labels	SITE	gen_loop_labels	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_singleton_labels	SITE	gen_singleton_labels	1
-held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused()	SITE	clk_refused+symbols	1
-hier.rs	hier_lookup	hier_resolve	symbols	HIER	symbols	1
-hier.rs	hier_lookup_param	hier_resolve	hier_params	HIER	hier_params	1
-hier.rs	hier_lookup_param_meta	hier_resolve	param_meta	HIER	param_meta	1
-hier.rs	hier_lookup_wide_param	hier_resolve	wide_param_bits	HIER	wide_param_bits	1
-hier_defer/bits.rs	build_hier_param_select	hier_resolve	hier_param_range	HIER	hier_param_range	1
-hier_defer/func_call.rs	resolve_deferred_hier_func_call_one	hier_resolve	hier_funcs	HIER	hier_funcs	1
-hier_defer/read.rs	resolve_deferred_hier_call	hier_resolve	hier_funcs	HIER	hier_funcs	1
-hier_defer/read.rs	resolve_deferred_hier_call	scoped_key_at_or_above	enum_label_types	SITE	enum_label_types	1
-hier_defer/read.rs	resolve_one_deferred_hier_sel	hier_resolve	fixed_string_dyn_key	HIER	fixed_string_dyn_key	1
-hier_defer/task_call.rs	resolve_deferred_hier_task_call	hier_resolve	hier_tasks	HIER	hier_tasks	1
-hier_defer/write.rs	every_name_resolves	walk_scopes_key	symbols|params	SITE	params+symbols	1
-hier_defer/write.rs	resolve_deferred_hier_sel_write	hier_resolve	fixed_string_dyn_key	HIER	fixed_string_dyn_key	1
-ident_route.rs	ast_reads_guessed_param	walk_scopes_key	hit_value	SITE	params	1
-ident_route.rs	bare_ident_route	walk_scopes_key	hit_any_const_or_net	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-ident_route.rs	bare_ident_route	walk_scopes_key	hit_value	SITE	params	1
-lvalue.rs	collect_lval_chunks	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	genvar_decls	SITE	genvar_decls	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	symbols	SITE	symbols	1
-package.rs	dotted_hit_is_pkg_alias	walk_scopes_key	symbols	SITE	symbols	1
-package.rs	resolve_rtn_key	walk_rtn_scopes	func_table|task_table	RTN	func_table+task_table	1
-param_query.rs	real_param_is_non_integral	walk_scopes_key	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
-param_query.rs	real_param_lowers_real	walk_scopes_key	real_param_val|params|symbols	SITE	params+real_param_val+symbols	1
-params.rs	param_sel_range	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-ports.rs	bind_iface_port	walk_scopes_key	iface_insts	SITE	iface_insts	1
-ports.rs	check_modport_write	walk_scopes_key	symbols	SITE	symbols	1
-ports.rs	wire_ports	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	check_decl_precedes_use	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	lookup_net_scoped	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	lookup_scoped	walk_scopes	params	SITE	params	1
-scope.rs	walk_scopes	walk_scopes_key	table	INTERNAL	table	1
-scope.rs	walk_scopes_key	walk_scopes_key_inner	hit	INTERNAL	hit	1
-scope.rs	walk_scopes_key_from	walk_out_from	hit	INTERNAL	hit	1
-scope.rs	walk_scopes_key_inner	decl_probe_key	hit	PROBE	hit	1
-scope.rs	walk_scopes_key_inner	walk_out_from	hit	INTERNAL	hit	1
-scope.rs	walk_scopes_key_shadowed	walk_scopes_key_inner	hit	INTERNAL	hit	1
-strings.rs	is_string_array_base	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-strings.rs	string_array_elem_net	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-struct_arm.rs	struct_arm_rhs	walk_scopes_key	symbols	SITE	symbols	1
-"#;
-    pub const H6_COUNTS: &str = "{\"HIER\": 10, \"INTERNAL\": 5, \"PROBE\": 1, \"RTN\": 1, \"SITE\": 51} site_texts 25 site_sets 20";
-    /// H6c: g2b composites.tsv (103 ; class codes in g2b/tools/mk_composites.py).
-    pub const H6C: &str = r#"file	fn	tier	class
-arrays.rs	expr_array_chain	D	SAME
-arrays.rs	lval_array_chain	D	SAME
-arrays.rs	lval_array_view	D	WBIND
-arrays.rs	whole_name_net	D	OWN
-ast_query.rs	count_reads_runtime_net	D	OWN
-block_local/gate.rs	deny_static_init_reading_per_entry	A/C	PLACE
-block_local/hoist.rs	hoist_one_block_local	D	PLACE
-block_local/hoist.rs	hoist_block_local_nets	D	PLACE
-bound/frame.rs	is_empty	A/C	COPY
-bound/frame.rs	is_local	D	FRAME
-bound/frame.rs	is_local_w	D	FRAME
-class_lower.rs	resolve_class_member	D	OWN
-class_lower.rs	lower_class_method_body	A/C	COPY
-class_lower.rs	try_class_method_call	A/C	XKIND
-classes.rs	ast_handle_kind	A/C	XKIND
-cond_names.rs	cond_names_ok	A/C	OWN
-const_array.rs	const_array_ref_of_base	D	OWN
-const_bound.rs	ast_mentions_substituted_name	D	OWN
-const_bound.rs	unfoldable_reason_in	A/C	OWN
-const_decl_width.rs	narrow_param_decl_width	D	OWN
-const_eval.rs	nonconst_bound_reason	D	OWN
-const_fn.rs	const_placement_wide	D	FRAME
-const_fn.rs	const_fn_def	D	RNS
-const_level_header.rs	task_enable_blocker	A/C	RNS
-const_real.rs	const_eval_real_in_scope	D	OWN
-const_select.rs	const_select_base	D	OWN
-const_wide.rs	narrow_param_bits	D	OWN
-cover.rs	register_cover_instance	A/C	PLACE
-decl_scope.rs	decl_body_win	A/C	COPY
-driver.rs	run	A/C	COPY
-dynarr.rs	dyn_handle	D	OWN
-dynarr.rs	dyn_array_actual_net	D	OWN
-edge_gate.rs	binding_encloses	A/C	OWN
-edge_gate.rs	variable_named_in	D	OWN
-edge_gate.rs	wide_lsb_param_in	D	OWN
-events.rs	sens_event_net	D	OWN
-expr_main.rs	lower_expr_ungated	D	SAME
-expr_size_ctx.rs	ctx_signed_impl	D	OWN
-expr_size_ctx.rs	select_chain	D	SAME
-expr_size_ctx.rs	size_ctx_self_width	D	OWN
-expr_size_hier.rs	facts_have_body_write_funcs	A/C	COPY
-expr_special.rs	bits_of_view	D	OWN
-frames_body.rs	seed_subroutine_routes	A/C	COPY
-frames_body.rs	lower_frame_funcs	D	RNS
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	A/C	COPY
-frames_call/emit.rs	emit_frame_dyn_formal_markers	D	RNS
-frames_classify.rs	build_task_frame_set	A/C	RNS
-frames_reserve.rs	with_rtn_decl_scope	D	RNS
-frames_static_init.rs	frame_init_name_is_local_or_const	D	OWN
-hoist/mod.rs	inout_call_target	D	RNS
-hoist/mod.rs	dyn_formal_call_target	D	RNS
-ident_route.rs	bare_ident_route	D	R5
-ident_route.rs	lookup_net_unshadowed	D	SAME
-ident_route.rs	bare_const_shadows_net	D	SAME
-iface_inst.rs	elaborate_iface_instances	D	RNS
-iface_rtn_scope.rs	tables	A/C	COPY
-iface_rtn_scope.rs	take_routine_scope	A/C	COPY
-iface_rtn_scope.rs	live_rtn_tables	A/C	COPY
-iface_rtn_scope.rs	adopt_static_scoped_frames	A/C	COPY
-iface_rtn_scope.rs	restore_routine_scope	A/C	COPY
-inline_body_ctx.rs	rhs_has_real_domain	D	SAME
-inline_fn.rs	inline_function	D	RNS
-inline_fn.rs	reduce_function_body	A/C	COPY
-inline_task.rs	inline_task	D	RNS
-inline_task.rs	inline_static_task	A/C	OWN
-instance.rs	elaborate_instance	A/C	COPY
-instance_array.rs	elaborate_instance_array	A/C	OWN
-lvalue.rs	collect_lval_chunks	D	WBIND
-md_return.rs	md_return_callee	D	XKIND
-net_util.rs	net_is_undeclared	D	OWN
-package.rs	bare_hit_is_shadowed_pkg_alias	D	OWN
-package.rs	resolve_rtn_key	D	RNS
-package.rs	apply_import_routines	D	RNS
-packed.rs	expr_packed_chain	D	SAME
-packed_lval.rs	bound_by_inline_formal	D	OWN
-packed_lval.rs	lval_packed_chain	D	SAME
-packed_pattern.rs	integral_operand	D	SAME
-packed_pattern.rs	integral_select_base	D	SAME
-params.rs	param_sel_range	D	OWN
-pkg_body_scope.rs	imported_routine_bodies	D	RNS
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	D	RNS
-pkg_scoped_frames.rs	scoped_reachable_callees	D	RNS
-ports.rs	wire_ports	A/C	OWN
-scope.rs	default_binding_matches_decl_scope	D	OWN
-scope.rs	lookup_dotted_net	D	OWN
-scope.rs	check_decl_precedes_use	D	OWN
-scope.rs	resolve_net	D	R5TAIL
-scope.rs	lookup_net_scoped	D	R5TAIL
-scope.rs	resolve_intro_net	D	SAME
-select_scope.rs	select_base_is_packed	D	OWN
-select_scope.rs	signing_operand_admitted	D	OWN
-static_array_method.rs	static_array_recv	D	OWN
-stmt_main.rs	lower_stmt_inner	D	RNS
-strings.rs	expr_is_string_ast	D	OWN
-struct_arm.rs	struct_arm_rhs	D	OWN
-struct_arm.rs	struct_arm_context	A/C	COPY
-sva_clocking.rs	lower_clocking_blocks	A/C	PLACE
-sva_decl.rs	is_property_name	D	XKIND
-sva_prop.rs	flatten_prop_consequent	D	XKIND
-sva_prop.rs	chain_consequent_property	D	XKIND
-sva_prop.rs	flatten_overlap_property	D	XKIND
-sva_prop.rs	prop_bool_operand	D	RNS
-sva_prop.rs	sva_prev_for	D	SAME
-"#;
-    pub const H6C_COUNTS: &str = "rows 103 {\"COPY\": 15, \"FRAME\": 3, \"OWN\": 37, \"PLACE\": 5, \"R5\": 1, \"R5TAIL\": 2, \"RNS\": 18, \"SAME\": 13, \"WBIND\": 2, \"XKIND\": 7}";
-    /// H7: (a) per fn, the typed `let`s of a String / str collection (170 in 89 fns = g2b
-    /// census.locals.tsv's rows with a `String` / `str` type token) ; (b) UNTYPED:
-    /// `binding=callee` for a `let` with no type whose initializer calls a crate fn
-    /// returning such a collection.
-    pub const H7: &str = r#"file	fn	lets	bindings
-block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
-block_local/hoist.rs	hoist_block_local_nets	2	seen,pushed
-block_local/mod.rs	gather_decl_positions	1	pos
-block_local/mod.rs	gather_nested_block_locals	1	names
-block_local/timed_task.rs	refuse_timing_block_local_hazard	1	names
-block_local_class.rs	block_local_scope_prefix	1	segs
-block_local_class.rs	classify_scoped_block_locals	2	cand,out
-block_local_class.rs	compute_coalesced_block_locals	2	per_name,blocks
-block_local_class.rs	compute_scoped_block_locals	UNTYPED	map=classify_scoped_block_locals
-block_local_class.rs	compute_timed_blocks	1	path
-block_local_class.rs	gather_scoped_one	1	before
-block_local_feed.rs	feed_scoped_block_locals	UNTYPED	shadow_names=names_with_pkg_var_aliases,joint=classify_scoped_block_locals
-classes.rs	assign_vtables	1	slots
-classes.rs	assign_vtables	UNTYPED	chain=class_chain_rootfirst
-classes.rs	register_classes	2	own,chain
-cont_array.rs	check_whole_array_sole_writer	1	refused
-cover_bins.rs	resolve_crosses	1	by_name
-crv.rs	class_constraints_for	4	rand_names,randc_names,map,plain_rand
-crv.rs	class_constraints_for	UNTYPED	dist_names=dist_field_names
-crv.rs	class_dist_for	2	rand_names,map
-crv.rs	class_rand_for	2	rand_names,bounds
-crv.rs	class_randc_for	1	randc_names
-crv.rs	fold_inline_with	5	rand_names,randc_names,map,bounds,plain_rand
-crv.rs	fold_inline_with	UNTYPED	dist_names=dist_field_names
-decl_collide.rs	check_decl_name_collisions	1	declared
-decl_collide.rs	check_decl_name_collisions	UNTYPED	stems=carrier_stems
-decl_collide.rs	report_decl_collisions	1	by_name
-decl_scope.rs	decl_keep_snapshot	1	keys
-driver.rs	run	5	seen,bind_checkers,names,cli_used,unmatched
-edge_gate.rs	decide_late_edges	1	reported
-expr_size_hier.rs	build_module_facts	1	out
-expr_size_hier.rs	child_env	1	bound
-expr_size_hier.rs	module_facts	1	seen
-expr_size_hier_exact.rs	env_exact	1	bound
-expr_size_hier_exact.rs	hier_leaf_width_exact	1	exact
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	UNTYPED	declared=rtn_declared_names,saved_labels=push_body_enum_labels
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	UNTYPED	declared=rtn_declared_names,saved_labels=push_body_enum_labels
-frames_body.rs	lower_frame_funcs	UNTYPED	frame_set=build_frame_set,task_set=build_task_frame_set
-frames_body.rs	seed_subroutine_routes	2	fnames,tnames
-frames_call/emit.rs	emit_frame_task_call	1	out_array_unpacks
-frames_classify.rs	body_duplicates_a_non_repeatable_local	1	pending
-frames_classify.rs	body_reads_only_locals	1	locals
-frames_classify.rs	body_selects_mdpacked_local	1	names
-frames_classify.rs	build_frame_set	3	set,func_widths,edges
-frames_classify.rs	build_task_frame_set	1	edges
-frames_classify_write.rs	ast_func_body_writes_outside	UNTYPED	own=rtn_declared_names
-frames_static_init.rs	block_wrap_prefix	1	segs
-frames_static_init.rs	emit_frame_static_prologue	3	cands,formals,admitted_keys
-gen_enum.rs	gen_carried_typedefs	UNTYPED	names=scope_names
-gen_enum.rs	scope_names	1	names
-gen_scope_name.rs	key_spells_indexed_singleton	1	segs
-generate.rs	display_of	1	out
-held.rs	clk_refused_path	1	names
-held.rs	deny_refused_clocking_input_arg	1	joined
-hier.rs	hier_resolve	1	segs
-hier.rs	lval_hier_sel_chain	UNTYPED	path=lval_hier_chain
-hier_defer/func_call.rs	emit_deferred_hier_func_call	1	path
-hier_defer/write.rs	resolve_deferred_hier_sel_write	2	patch,force_release_paths
-hier_leaf_shape.rs	record_hier_call_shape	1	names
-hier_leaf_shape.rs	record_hier_net_shape	1	names
-hier_leaf_shape.rs	record_hier_sel_shape	1	names
-hoist/general.rs	hoist_inout_general_seq	1	snaps
-hoist/general.rs	hoist_inout_general_seq	UNTYPED	roots=order_plan
-iface_inst.rs	elaborate_iface_instances	6	saved_params,local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
-iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,sp=bind_params,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
-iface_rtn_scope.rs	move_static_scoped	UNTYPED	keys=static_scoped_keys
-inline_fn.rs	body_needs_context_width	2	widths,unknown_bv
-inline_fn.rs	inline_pkg_function	1	pkg_rtn_names
-inline_fn.rs	inline_pkg_function	UNTYPED	pkg_const_names=pkg_scope_names,refused=inject_pkg_callees
-inline_fn.rs	inline_resolved_func_in_pkg	1	dyn_binds
-inline_fn.rs	inline_resolved_func_in_pkg	UNTYPED	declared=rtn_declared_names
-inline_fn.rs	reduce_function_body	6	decl_consts,seen,local_dims,two_state,writable,non_bv
-inline_fn.rs	reduce_function_body	UNTYPED	saved_labels=push_body_enum_labels
-inline_ret_select.rs	body_binding_hazard	2	owner,formals
-inline_ret_select.rs	expr_bound	1	names
-inline_task.rs	inline_static_task	1	dyn_binds
-inline_task.rs	inline_static_task	UNTYPED	saved_labels=push_body_enum_labels,declared=rtn_declared_names
-inline_task_locals.rs	hoist_inline_task_locals	1	hoisted_here
-instance.rs	elaborate_instance	7	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,saved_params,wc_rtn,explicit_rtn
-instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
-instance_array.rs	elaborate_instance_array	1	port_widths
-instance_array.rs	elaborate_instance_array	UNTYPED	saved=bind_params
-multidriver.rs	check_multidriver_processes	2	rule_a_fires,via_call_writers
-multidriver.rs	multidriver_vars	2	body_decls,declared
-net_util.rs	declare_implicit_nets	2	iface_insts,want
-net_util.rs	push_body_enum_labels	1	block_local_names
-package.rs	apply_import_consts	3	pkg_labels,wides,vars
-package.rs	apply_import_routines	1	wildcard_roots
-package.rs	apply_import_routines	UNTYPED	<pat>=inject_pkg_callees,<pat>=inject_pkg_callees
-package.rs	elaborate_package	22	saved,saved_meta,saved_real,saved_str,saved_wide,consts,real_vals,str_vals,wide_vals,param_names,enum_labels,const_meta,const_range,saved_range,vars,array_vals,array_meta,funcs,tasks,types,pkg_local_names,pkg_conflict_names
-package.rs	inject_pkg_callees	4	rtn_names,refused,want,seen
-package.rs	inject_pkg_callees	UNTYPED	const_names=pkg_scope_names
-package.rs	pkg_func_self_contained	2	names,read_names
-package.rs	push_pkg_consts_scoped	UNTYPED	skip=rtn_declared_names
-package.rs	push_pkg_consts_skipping	1	wides
-package.rs	push_pkg_consts_task	UNTYPED	skip=rtn_declared_names
-package.rs	task_self_contained_impl	2	names,read_names
-param_dup.rs	check_duplicate_param_decls_in	2	first,reports
-param_dup.rs	check_duplicate_param_decls_in	UNTYPED	stems=carrier_stems
-params.rs	resolve_param_overrides	1	dim_arity_reported
-pkg_body_scope.rs	imported_routine_bodies	1	keys
-pkg_body_scope.rs	rtn_declared_names	1	names
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	2	late,cands
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	UNTYPED	frame_set=build_frame_set,reachable=scoped_reachable_callees
-pkg_scoped_frames.rs	scoped_reachable_callees	3	want,seen,keys
-ports.rs	bind_iface_port	2	mp_dirs,aliases
-ports.rs	elaborate_virtual_iface	1	bound
-ports.rs	elaborate_virtual_iface	UNTYPED	members=iface_member_names
-ports.rs	wire_ports	1	wildcard_conns
-ports.rs	wire_ports	UNTYPED	ports=port_list_dirs
-proc_builder.rs	reaches	2	stack,seen
-stmt_main.rs	lower_stmt_inner	UNTYPED	map=sva_formal_map
-sva_check.rs	synth_local_var_assert	2	captures,data_chain
-sva_clocking.rs	synth_crossclock	1	handoffs
-sva_fsm.rs	consec_run_fsm	1	regs
-sva_fsm.rs	goto_fsm	1	regs
-toplevel.rs	pick_roots	1	added
-toplevel.rs	pick_roots	UNTYPED	instantiated=collect_instantiated
-var_init.rs	assert_block_local_inits_drained	1	keys
-var_init.rs	flush_block_local_inits	3	keys,all,runs
-wext.rs	check_conn_spans	UNTYPED	v=conn_span_violations
-"#;
-    /// H7: the 26 readers' name collections of g2b REPORT:70-75 (5 inside the 40 readers,
-    /// 21 in a direct caller) ; a field row's owner is the fn holding the struct (`-` =
-    /// module level).
-    pub const H7_READERS: &str = r#"file	fn_or_owner	form	binding
-block_local/mod.rs	gather_nested_block_locals	let	names
-block_local/hoist.rs	hoist_block_local_nets	let	seen
-block_local/hoist.rs	hoist_block_local_nets	let	pushed
-block_local_class.rs	compute_timed_blocks::walk	let	names
-select_scope.rs	blocks	let	out
-inline_fn.rs	body_needs_context_width	let	widths
-inline_fn.rs	body_needs_context_width	let	unknown_bv
-frames_classify.rs	body_reads_only_locals	let	locals
-frames_classify.rs	body_selects_mdpacked_local	let	names
-frames_classify_write.rs	ast_func_body_writes_outside	let	own
-inline_ret_select.rs	body_binding_hazard	let	owner
-inline_ret_select.rs	body_binding_hazard	let	formals
-inline_ret_select.rs	-	field:BindWalk	assigned
-package.rs	pkg_func_self_contained	let	names
-package.rs	pkg_func_self_contained	let	read_names
-package.rs	task_self_contained_impl	let	names
-package.rs	task_self_contained_impl	let	read_names
-inline_fn.rs	reduce_function_body	let	decl_consts
-inline_fn.rs	reduce_function_body	let	seen
-inline_fn.rs	reduce_function_body	let	local_dims
-inline_fn.rs	reduce_function_body	let	two_state
-inline_fn.rs	reduce_function_body	let	writable
-inline_fn.rs	reduce_function_body	let	non_bv
-block_local_class.rs	compute_timed_blocks	let	path
-block_local_class.rs	compute_timed_blocks	field:Acc	sharers
-block_local_class.rs	compute_timed_blocks	field:Acc	scoped
-"#;
-    pub const H7_COUNTS: &str = "lets 170 fns 89 untyped 32 readers 26";
+    //! The tables live in ONE data file beside this test, `scope_home.tables` (moved out of
+    //! this file in LS1 part 2, when it passed ~4500 lines): a section per table.
+    const DATA: &str = include_str!("scope_home.tables");
+
+    /// The section `name`, its `#` note lines left out.
+    pub fn get(name: &str) -> String {
+        let open = format!("== {name}");
+        let mut lines = DATA.lines().skip_while(|l| l.trim_end() != open);
+        assert!(
+            lines.next().is_some(),
+            "scope_home.tables has no section `{name}`"
+        );
+        lines
+            .take_while(|l| !l.starts_with("== "))
+            .filter(|l| !l.starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string()
+    }
 }
