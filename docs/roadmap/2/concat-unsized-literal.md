@@ -1,0 +1,4 @@
+(§2 concat-unsized-literal · RECORD · in Size cast / signedness) (an unbased unsized literal in a concatenation (`{'1}`) is accepted):
+* symptom: RAISED, an IEEE ambiguity with no verdict: `{'1}` and `{2{'1}}` are accepted at 1 bit and 2 bits, as both oracles do; IEEE 1800-2017 §11.4.12 (l.11976) says "Unsized constant numbers shall not be allowed in concatenations." and §5.7.1 (l.3017-3020) defines `'0 '1 'x 'z` as unsized single-bit values; whether the second is the first's "unsized constant number" is not settled here; PRE == POST (batch 6's differential lens round 3, W/batch6/lens3-diff/REPORT.txt O4; cells W/batch6/lens3-diff/cells/P0/hc_cat, hc_rep, h_rep2)
+* note: if the clause applies, the accept is illegal (IEEE first, owner 2026-11-17) and this entry becomes OPEN with that reading quoted
+* status: RECORD

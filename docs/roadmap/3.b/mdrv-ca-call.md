@@ -8,3 +8,4 @@
 * carry `call_body_writes_whole`, the hierarchical lvalue and the system-task destinations into `cont_assign_var_conflict`
 * oracles: iverilog + IEEE §6.5
 * status: OPEN
+* note (2026-11-20, second park): §5.2 Q-MDRVMIX was built again in batch 6 (303088c7 rule X, 779ecae1 rule Y, 6bc9babc the widening) and pulled out by 17703a0c, parked behind §5.2 Q-SCOPEBIND (owner, 2026-11-20); no rule of it is in `crates/`, so the lines above that say so for 2026-11-17 hold again

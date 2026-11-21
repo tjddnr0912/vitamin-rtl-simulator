@@ -13,3 +13,6 @@
 * silent-wrong, pre-existing
 * witness (2026-11-05, Q-DECLTYPE grounding g1/let_formal_typed): `let f(logic [3:0] x) = x + 1'b1;` `$display("R f=%0d", f(5'h1E));` PRE `R f=31` at exit 0, hand-IEEE 15 (§11.12, ieee1800-2017.txt:12999: the actual is cast to the formal's type, 5'h1E -> 4'hE), iverilog `t.sv:2: sorry: let declarations (f) are not currently supported.`, sv2v `` t.sv:2:3: Parse error: missing expected `endmodule` ``, verilator `%Error-UNSUPPORTED: t.sv:2:9: Unsupported: let typed ports`
 * note: Q-DECLTYPE's S12 leaves `let` formals out (`LetDecl` formals are names only), each fill moves values, so it stays this row's
+* note (2026-11-19, §5.2 Q-LOSSYSPELL's grounding F7, a correction of the T′ line above, kept as filed): `LetDecl` is at `hdl-ast/src/lib.rs:485` at bcd5afec (line drift only; the two `sva_seq.rs` lines stand)
+* note (2026-11-19, D-RETIRE of Q-LOSSYSPELL.md): §5.2 Q-LOSSYSPELL's `let_any` bit (any `let` declaration) retires when this row and §2 let-fill are both right
+  * note (2026-11-21): the record named in the line above (as built in batch 6, pulled out with the row's park on 2026-11-21: nothing of it is on main; its re-entry after §5.2 Q-FILLCTX re-plans the bits, Q-LOSSYSPELL.md)

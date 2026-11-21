@@ -146,3 +146,6 @@
 * and 0 with an x / z literal initializer, 0 typed by a 2-state typedef, 2 typed class value parameters (one source, two copies) (G5)
 * status: silent-wrong, pre-existing
 * source: row 29 page half PLAN3b F-UNS / O7 (x30_gtnegt), r3 lens-sound B1 (f01–f08)
+* note (2026-11-19, §5.2 Q-LOSSYSPELL's grounding F4, a correction of the "parser keeps one bool" line above, kept as filed): on the tree the parser records the keyword, `ParamDecl.dtype.signing` via `param_dtype` (`hdl-parser/src/params.rs`); the binder still reads `parameter unsigned N` as `parameter N` (`elaborate/src/params.rs` `param_decl_width_opt`, its untyped tail); Q-LOSSYSPELL's `sign_kw_param` is noted inside `param_dtype` (batch 6 branch, U1 01223718)
+* note (2026-11-19, D-RETIRE of Q-LOSSYSPELL.md): S1v-V, this row's binder half, retires §5.2 Q-LOSSYSPELL's `sign_kw_param` bit and its note in `param_dtype`
+  * note (2026-11-21): the record named in the line above (as built in batch 6, pulled out with the row's park on 2026-11-21: nothing of it is on main; its re-entry after §5.2 Q-FILLCTX re-plans the bits, Q-LOSSYSPELL.md)

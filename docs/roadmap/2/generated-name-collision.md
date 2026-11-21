@@ -14,3 +14,4 @@
 * note: two paths or more make a CLASS (D8), so it is filed as one entry, and the structure review (D14) decides whether it becomes a structural row: one funnel for generated names whose spelling no identifier can take (ER §5.1)
 * note: the owner's decision O1 presented it, not decided (W/qsymmix/replan3/PLAN.txt OWNER DECISIONS)
 * status: OPEN
+* note (2026-11-20): the class is §5.2 Q-SCOPEBIND's (a name is bound to a declaration the source's scopes do not give it), which absorbs this entry's root (door (2), a parser-minted or generated name); the fix is that row's plan

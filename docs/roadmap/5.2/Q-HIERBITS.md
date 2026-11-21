@@ -10,3 +10,4 @@
 * when it lands: face 2's cells are right (§2 bits-hier-placeholder), a design of the lens-sound a1 shape gets its decided extent (a4 becomes loud under Q-MDRVMIX's rule), and Q-WEXTPOS's flag has no producer, so its stand-down is deleted
 * note: §5.2 75 (DH, the deferred hierarchical reference funnel) takes the `$bits(u.X)` placeholder only if its census shows the same producer (75.md); this row is that placeholder alone
 * source: W/wrext/fix1/PLAN.txt parts 1 and 3, premise/REPORT.txt K5, K9; §2 bits-hier-placeholder
+* note (2026-11-20, batch 6): Q-WEXTPOS's stand-down flag is built in batch 6 (adf7656e, `WextRecords::provisional`; on main since batch 6 landed, §4.5.655), design-wide by design (Q-WEXTPOS.md, NB-1); the line above's "loud under Q-MDRVMIX's rule" waits on that row, parked again 2026-11-20 behind §5.2 Q-SCOPEBIND

@@ -8,3 +8,4 @@
 * note: the two oracles differ in the separator (`::` against `.`) and agree on the scope, the routine's package or `$unit`; §5.2 Q-PCTM is `%m` after a suspension in an automatic task, another cause; §5.2 Q-MDRVWHO needs the declaring-scope fact this lacks (absent for a `$unit` or package routine)
 * oracles: 2 oracles
 * status: OPEN
+* note (2026-11-20): the class is §5.2 Q-SCOPEBIND's (a name is bound to a declaration the source's scopes do not give it), which absorbs this entry's root (door (3)'s placement read by `%m`); the fix is that row's plan

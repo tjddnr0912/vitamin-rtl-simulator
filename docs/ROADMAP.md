@@ -42,8 +42,9 @@ Not goals, each trigger-gated in §7: a wider design set (verilog-pcie, row 63; 
 ### State
 > The one statement of now; HANDOFF and LOOPROMPT point here, and the update rule says who rewrites it.
 
-2026-11-18: goal G-EH1 is current. Batch 5 landed on main (§4.5.654): PARSE-1's provenance piece and Q-WREXT, each structure only; Q-MDRVMIX, parked on
-2026-11-17 (owner) behind the structural row Q-WEXTPOS, left the batch before its boundary (§4.5.652). The chain's next row is Q-WEXTPOS (batch 6).
+2026-11-21: goal G-EH1 is current. Batch 6 landed on main (§4.5.655): Q-WEXTPOS alone, structure only. Q-MDRVMIX (owner, 2026-11-20) is parked behind
+the new structural row Q-SCOPEBIND and Q-LOSSYSPELL (owner, 2026-11-21) behind the new structural row Q-FILLCTX; both left the batch. The chain's next row is
+the structural row Q-SCOPEBIND, then Q-MDRVMIX, Q-FILLCTX and Q-LOSSYSPELL (batch 7; main, by guide (RULINGS L2-78); the owner told at the landing).
 
 ### Order rules
 > How the next row is chosen without asking: precedence P1–P5, then rules O1–O9, with the owner's answers of 2026-11-17 written in.
@@ -89,9 +90,9 @@ and it returns only on a design that spells one of its producers or a landed rec
 
 O5 BATCH. Chain rows stack on the integration branch. A boundary is run at five rows, at the goal's last row, and before a row that has parked before
 when two or more finished rows are stacked under it. A row that bumps a format or schema hash starts a batch, alone.
-G-EH1's cut by O5 on its chain of 2026-11-17 (8 rows; the owner's Q1 (a) cut was made for 6, so it is re-read at batch 6's start): batch 6 = Q-WEXTPOS, Q-MDRVMIX,
-Q-LOSSYSPELL (a boundary before 24, which parked before, three rows stacked); batch 7 = 24 (EH1 cut), Q-OVRXPLANE, Q-LITLANE (a boundary before 29's page half);
-batch 8 = 29 (page half), 31 (the goal's last row). Before Q-MDRVMIX, which parked before, one finished row is stacked, so no boundary there.
+G-EH1's cut by O5 on its chain of 2026-11-21 (10 rows): batch 6 = Q-WEXTPOS (landed); batch 7 = Q-SCOPEBIND, Q-MDRVMIX, Q-FILLCTX, Q-LOSSYSPELL (4 rows; main, by guide
+(RULINGS L2-78); the owner told at the landing); batch 8 on = 24 (EH1 cut), Q-OVRXPLANE, Q-LITLANE (a boundary before 29's page half); then 29 (page half),
+31 (the goal's last row), re-cut at batch 7's landing. Q-SELBOUND, filed at batch 6's landing, joined Q-LITLANE (L2-78 (a)).
 
 O6 GOAL ORDER. Goals run in ladder order. Main proposes a re-order to the owner when: a chain has grown past 1.5x its listed rows; two rows of the chain
 are parked at once; a row goes DORMANT on the chain; or a goal's entry census shows another goal opens more designs per row. Until the owner answers,
@@ -116,20 +117,24 @@ Retired (owner Q6 (a), 2026-11-17): the Summary count table (roadmap/history/) a
 ### Current chain
 > The current goal's rows in run order, then the next goal's; the goal doc says why each row stands where it does.
 
-G-EH1, after batch 5 (PARSE-1's provenance piece, Q-WREXT; landed, §4.5.654); batch 6 = rows 1–3, batch 7 = rows 4–6, batch 8 = rows 7–8 (O5, re-read at batch 6's start):
+G-EH1, after batch 5 (landed, §4.5.654); batch 6 = row 1 (landed, §4.5.655); batch 7 = rows 2–5 (main, by guide, RULINGS L2-78); batch 8 on = rows 6–10, re-cut at batch 7's landing (O5):
 
 | # | id | title | state |
 |---|---|---|---|
-| 1 | Q-WEXTPOS | the write view's stand-down on a provisional constant and each write's position | OPEN |
-| 2 | Q-MDRVMIX | overlapping partial and mixed writes of a packed variable are not refused | PARKED Q-WEXTPOS |
-| 3 | Q-LOSSYSPELL | which lossy constant producers a design spells, recorded once per design | OPEN |
-| 4 | 24 (EH1 cut) | struct member part-selects with named bounds, as reads and write targets | PARKED Q-LOSSYSPELL, Q-MDRVMIX |
-| 5 | Q-OVRXPLANE (typed lane) | an override's sized x / z literal loses its unknown plane | OPEN |
-| 6 | Q-LITLANE | `const_eval_u32` reads a sized signed literal as its unsigned pattern | OPEN |
-| 7 | 29 (page half) | element selects nested in a write target are refused | PARKED Q-LOSSYSPELL, Q-OVRXPLANE, Q-LITLANE |
-| 8 | 31 | VeeR EH1 corpus row: the hello_world test passes on unmodified RTL | WAITS 24, 29 |
+| 1 | Q-WEXTPOS | the write view's stand-down on a provisional constant and each write's position | LANDED |
+| 2 | Q-SCOPEBIND | a name is bound to a declaration the source's scopes do not give it | OPEN |
+| 3 | Q-MDRVMIX | overlapping partial and mixed writes of a packed variable are not refused | PARKED Q-SCOPEBIND |
+| 4 | Q-FILLCTX | a fill is sized from a context no one record holds, so each door sizes its own | OPEN |
+| 5 | Q-LOSSYSPELL | which lossy constant producers a design spells, recorded once per design | PARKED Q-FILLCTX |
+| 6 | 24 (EH1 cut) | struct member part-selects with named bounds, as reads and write targets | PARKED Q-LOSSYSPELL, Q-SCOPEBIND, Q-MDRVMIX |
+| 7 | Q-OVRXPLANE (typed lane) | an override's sized x / z literal loses its unknown plane | OPEN |
+| 8 | Q-LITLANE | `const_eval_u32` reads a sized signed literal as its unsigned pattern | OPEN |
+| 9 | 29 (page half) | element selects nested in a write target are refused | PARKED Q-LOSSYSPELL, Q-OVRXPLANE, Q-LITLANE |
+| 10 | 31 | VeeR EH1 corpus row: the hello_world test passes on unmodified RTL | WAITS 24, 29 |
 
 The State line, the O5 cut and this chain as they stood before Q-MDRVMIX's park: [the G-EH1 chain before Q-MDRVMIX's park](roadmap/history/mdrv-park-2026-11-17.md).
+The same, as they stood before its second park (2026-11-20): [the G-EH1 chain before Q-MDRVMIX's second park](roadmap/history/mdrv-park-2026-11-20.md).
+The lines that said Q-LOSSYSPELL was built, before its park (2026-11-21): [the G-EH1 chain before Q-LOSSYSPELL's park](roadmap/history/lossy-park-2026-11-21.md).
 
 G-PATTGEN, next (a prerequisite goes directly before its reader):
 
@@ -290,6 +295,10 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - body-typedef-sym-mix — [a function-body symbolic struct over mixed-sign parameters is laid out wrong](roadmap/2/body-typedef-sym-mix.md) · OPEN
 - specparam-data-type — [a `specparam` with a data type, or outside a module, is accepted](roadmap/2/specparam-data-type.md) · OPEN
 - typeparam-value-signing — [a type-parameter value with a second or misplaced signing is accepted](roadmap/2/typeparam-value-signing.md) · OPEN
+- let-fill — [a fill as a whole `let` body or a `let` argument loses its context width](roadmap/2/let-fill.md) · OPEN
+- call-argument-fill — [a fill passed as a call argument lowers at one bit](roadmap/2/call-argument-fill.md) · OPEN
+- hier-concat-fill — [a fill into a concatenation with hierarchical targets sizes the first only](roadmap/2/hier-concat-fill.md) · OPEN
+- concat-unsized-literal — [an unbased unsized literal in a concatenation (`{'1}`) is accepted](roadmap/2/concat-unsized-literal.md) · RECORD
 
 ### Constant domain (i64)
 > The i64 constant folder's limits: wraps, masked overflow, unset variables read as 0, replication counts; mostly open, a few held by design
@@ -375,6 +384,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - real-param-int-view — [a real parameter's integer view answers in the integer domain](roadmap/2/real-param-int-view.md) · OPEN
 - imported-real-twin — [a package real imported by name reads its i64 twin](roadmap/2/imported-real-twin.md) · OPEN
 - exact-real-divides — [an exact-integer real parameter divides as an integer](roadmap/2/exact-real-divides.md) · OPEN
+- real-dyn-elem-fill — [a fill into a `real` dynamic-array element is sized at 64 bits](roadmap/2/real-dyn-elem-fill.md) · OPEN
+- real-pattern-port-fill — [a fill in a `real` array pattern, port or formal is sized at 64 bits](roadmap/2/real-pattern-port-fill.md) · OPEN
 
 ### Ranges / bounds / selects
 > Select widths, replication counts and associative arrays that bind or read wrong, from late-folding widths to key types; mostly open
@@ -428,6 +439,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - negated-min-bound-one-bit — [a range bound over a negated 64-bit minimum takes 1 bit](roadmap/2/negated-min-bound-one-bit.md) · OPEN
 - unpacked-size-div0-dropped — [an unpacked size dimension that divides by zero is dropped](roadmap/2/unpacked-size-div0-dropped.md) · OPEN
 - range-bound-real-operand — [a real or string operand of `!` or `?:` in a range bound takes 1 bit](roadmap/2/range-bound-real-operand.md) · OPEN
+- fill-over-u32-width — [a fill on a select over 2^32 bits wide writes one bit](roadmap/2/fill-over-u32-width.md) · RECORD
 
 ### Class fields
 > Class property bounds, defaults and name binding inside a class body; open, one blocked on field-key normalisation
@@ -441,6 +453,9 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - md-class-property-select — [a packed multi-dimensional class property select reads the flat bit](roadmap/2/md-class-property-select.md) · OPEN
 - extends-other-module — [a class extending a class declared in another module is accepted](roadmap/2/extends-other-module.md) · OPEN
 - class-field-x-actual — [a class field's range over an x parameter actual is silent](roadmap/2/class-field-x-actual.md) · OPEN
+- class-param-collide — [a class specialization whose actual spells `?` takes another one's value](roadmap/2/class-param-collide.md) · OPEN
+- class-prop-concat-native — [a class property in a concatenation target is written into its handle](roadmap/2/class-prop-concat-native.md) · OPEN
+- nba-class-handle-time — [an NBA to a class property reads the handle when applied, not when scheduled](roadmap/2/nba-class-handle-time.md) · OPEN
 
 ### Scoping / imports / block-locals
 > Names bound in the wrong scope: type names, imports, package routines, inlined bodies, block-locals; the largest area, mostly open
@@ -515,6 +530,7 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - loop-var-const-shadow — [a loop variable does not shadow a parse-time constant in a range](roadmap/2/loop-var-const-shadow.md) · OPEN
 - bind-actual-lexical-layout — [a `bind` actual's struct member takes the bind scope's layout, not the target's](roadmap/2/bind-actual-lexical-layout.md) · OPEN
 - pctm-unit-routine — [`%m` in a `$unit` or package routine prints the calling instance](roadmap/2/pctm-unit-routine.md) · OPEN
+- assert-action-local — [an assertion action block's local binds the module variable of its name](roadmap/2/assert-action-local.md) · OPEN
 
 ### Delays / events
 > Event, wait and delay scheduling: assertion control, heap-container waits, time-0 order, delay rounding; mostly open, wake order blocked
@@ -543,6 +559,8 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - ca-time-scale — [a continuous assign in another time unit reads `$time` at the wrong scale](roadmap/2/ca-time-scale.md) · OPEN
 - ca-hop-after-batch — [a continuous-assign hop lands after the whole batch](roadmap/2/ca-hop-after-batch.md) · BLOCKED
 - edge-wait-earlier-edge — [an in-body edge wait sees an earlier edge of its batch](roadmap/2/edge-wait-earlier-edge.md) · OPEN
+- event-control-unsized-fill — [an unsized literal after an intra-assignment event control loses its width](roadmap/2/event-control-unsized-fill.md) · OPEN
+- udp-decl-init-t0 — [a sequential UDP whose inputs are declaration-initialized misses time 0](roadmap/2/udp-decl-init-t0.md) · OPEN
 
 ### Diagnostics / artifacts
 > Wrong or missing messages and artifacts: panics, misleading refusal reasons, waveform scope names, `run.json`; open or recorded
@@ -572,6 +590,9 @@ FROZEN (owner direction): synthetic-probe rows stay out of §5.2; the re-entry r
 - param-range-net-name-text — [a localparam's range naming a net calls it an undefined name](roadmap/2/param-range-net-name-text.md) · OPEN
 - wide-name-concat-cause — [a wide name inside a concatenation in a range bound is called undefined](roadmap/2/wide-name-concat-cause.md) · OPEN
 - profile-var-init-position — [a declaration initializer's profile row names its scope's first initializer](roadmap/2/profile-var-init-position.md) · RECORD
+- mcu-velab-varies — [a multi-unit work-library `.velab` differs run to run on one binary](roadmap/2/mcu-velab-varies.md) · OPEN
+- port-named-twice — [a port connected twice by name is accepted](roadmap/2/port-named-twice.md) · RECORD
+- over-limit-width-text — [an over-limit width refusal prints a saturated width](roadmap/2/over-limit-width-text.md) · OPEN
 
 ### Performance (open, recorded)
 > Correct but slow paths: repeated continuous-assign calls, per-bit coercion, triple tree walks, `==?` chains; recorded, one blocked
@@ -705,6 +726,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 
 - bits-select-edge — [`$bits` of a select inside a part-select bound does not fold](roadmap/3.b/bits-select-edge.md) · OPEN
 - late-target-capture — [fills and delayed captures into a target whose width folds after elaboration](roadmap/3.b/late-target-capture.md) · OPEN
+- ca-late-fill-position — [a late fill at a continuous assignment is refused at the module header](roadmap/3.b/ca-late-fill-position.md) · OPEN
 - over-max-width — [a computed part-select width above 2^20 bits is refused](roadmap/3.b/over-max-width.md) · OPEN
 
 **Parser accept**
@@ -748,6 +770,15 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - empty-positional-argument — [an empty positional argument `f(1, , 3)` is a parse error](roadmap/3.b/empty-positional-argument.md) · OPEN
 - gate-instance-array — [a primitive instance array (`and g[3:0] (...)`) is a parse error](roadmap/3.b/gate-instance-array.md) · OPEN
 - pkg-scoped-lvalue — [a package-scoped variable as a write target (`p::pv[3:0] =`) is a parse error](roadmap/3.b/pkg-scoped-lvalue.md) · OPEN
+- class-param-signing — [a class value parameter with a `signed` keyword is a parse error](roadmap/3.b/class-param-signing.md) · OPEN
+- let-decl-scopes — [a `let` declared outside a module body is refused](roadmap/3.b/let-decl-scopes.md) · OPEN
+- signed-unbased-literal — [a signed unbased unsized literal (`'s1`, `'sx`) is accepted](roadmap/3.b/signed-unbased-literal.md) · OPEN
+- gate-delay-based-literal — [a based literal as a gate delay (`#1'bx`) is accepted](roadmap/3.b/gate-delay-based-literal.md) · OPEN
+- udp-unnamed-instance — [an unnamed UDP instance is a parse error](roadmap/3.b/udp-unnamed-instance.md) · OPEN
+- udp-ansi-header — [a UDP header with ANSI port declarations is a parse error](roadmap/3.b/udp-ansi-header.md) · OPEN
+- module-const-decl — [a module-level `const` declaration is a parse error](roadmap/3.b/module-const-decl.md) · OPEN
+- var-type-op-decl — [a declaration typed by the type operator (`var type(a) b`) is refused](roadmap/3.b/var-type-op-decl.md) · OPEN
+- for-header-lists — [a `for` header with a list or an empty step is a parse error](roadmap/3.b/for-header-lists.md) · OPEN
 
 **Constants / parameters**
 
@@ -829,6 +860,10 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - const-fn-wide-local-return — [a constant function's local or return over 64 bits declines](roadmap/3.b/const-fn-wide-local-return.md) · OPEN
 - const-fn-init-div-zero — [a loop local initialised by a division by zero declines](roadmap/3.b/const-fn-init-div-zero.md) · OPEN
 - const-fn-first-init-bits — [a zero-formal constant function's first `$bits` initializer declines](roadmap/3.b/const-fn-first-init-bits.md) · OPEN
+- hier-array-query — [`$size` and `$left` of a hierarchical name are refused](roadmap/3.b/hier-array-query.md) · OPEN
+- named-block-hier-var — [a named block's static variable read by a hierarchical name is E3010](roadmap/3.b/named-block-hier-var.md) · OPEN
+- ustruct-cont-assign — [a continuous assignment to a whole unpacked struct is refused or made a net](roadmap/3.b/ustruct-cont-assign.md) · OPEN
+- mdrv-kind-word — [Rule B names a module-level assertion's write `initial`](roadmap/3.b/mdrv-kind-word.md) · OPEN
 
 **Subroutine / frame**
 
@@ -866,6 +901,8 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - frame-local-array-default — [`'{default: v}` onto a function-local unpacked array is refused](roadmap/3.b/frame-local-array-default.md) · OPEN
 - ca-fn-retvar-select — [a function in a continuous assign that select-writes its return variable](roadmap/3.b/ca-fn-retvar-select.md) · OPEN
 - escaped-name-dot — [an escaped name holding `.` is read as a hierarchical path (E3010)](roadmap/3.b/escaped-name-dot.md) · OPEN
+- task-output-select-write — [a select write to a task's output formal is E3010, undeclared](roadmap/3.b/task-output-select-write.md) · OPEN
+- unit-routine-bare-name — [a `$unit` routine's bare name binds the including module's variable](roadmap/3.b/unit-routine-bare-name.md) · OPEN
 
 **System tasks & file I/O**
 
@@ -908,6 +945,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - dead-arm-select-residue — [a reversed select in a never-taken `if` arm, by condition shape](roadmap/3.b/dead-arm-select-residue.md) · OPEN
 - hier-unpacked-array-write — [a hierarchical write of a whole unpacked array is refused](roadmap/3.b/hier-unpacked-array-write.md) · DEFERRED
 - nested-lval-select — [a refused nested lvalue leaves a chunk that fakes a second writer](roadmap/3.b/nested-lval-select.md) · OPEN
+- iff-loop-variable — [an `iff` guard reading a for-loop variable is E3010, undeclared](roadmap/3.b/iff-loop-variable.md) · OPEN
 
 **Loud shapes surfaced by §4.5.493–495**
 
@@ -946,6 +984,7 @@ The workload corpus has no refused row; the row-9 census's roots on the new desi
 - dyn-md-elem-select — [selects into a multi-dimensional element of a dynamic container](roadmap/3.b/dyn-md-elem-select.md) · OPEN
 - class-field-select — [a part-select of a class field is refused](roadmap/3.b/class-field-select.md) · OPEN
 - class-handle-decl-init — [a class-handle declaration initializer (`c o = new;`) is refused](roadmap/3.b/class-handle-decl-init.md) · OPEN
+- string-integral-assign-no-cast — [an integral value is assigned to a `string` without a cast](roadmap/3.b/string-integral-assign-no-cast.md) · OPEN
 
 **VCD / real conversion**
 
@@ -1052,9 +1091,11 @@ The real-design program (its scope, the page-cut order, the T′ / V′ / B′ s
 | Q-OVRXPLANE | R7.4 · L1 | [an override's sized x / z literal loses its unknown plane](roadmap/5.2/Q-OVRXPLANE.md) | ① |
 | Q-LITLANE | R7.5 · L1 | [`const_eval_u32` reads a sized signed literal as its unsigned pattern](roadmap/5.2/Q-LITLANE.md) | — F |
 | Q-WREXT | R8.1 · L1 (landed) | [one write-extent view over the finished IR](roadmap/5.2/Q-WREXT.md) | — F |
-| Q-WEXTPOS | R8.1 · L1 | [the write view's stand-down on a provisional constant and each write's position](roadmap/5.2/Q-WEXTPOS.md) | — F |
+| Q-WEXTPOS | R8.1 · L1 (landed) | [the write view's stand-down on a provisional constant and each write's position](roadmap/5.2/Q-WEXTPOS.md) | — F |
 | Q-MDRVMIX | R8.1 · L1 (PARKED) | [overlapping partial and mixed writes of a packed variable are not refused](roadmap/5.2/Q-MDRVMIX.md) | ① F |
-| Q-LOSSYSPELL | R8.1 · L1 | [which lossy constant producers a design spells, recorded once per design](roadmap/5.2/Q-LOSSYSPELL.md) | — F |
+| Q-LOSSYSPELL | R8.1 · L1 (PARKED) | [which lossy constant producers a design spells, recorded once per design](roadmap/5.2/Q-LOSSYSPELL.md) | — F |
+| Q-SCOPEBIND | R8.1 · L1 | [a name is bound to a declaration the source's scopes do not give it](roadmap/5.2/Q-SCOPEBIND.md) | ① F |
+| Q-FILLCTX | R8.1 · L1 | [a fill is sized from a context no one record holds, so each door sizes its own](roadmap/5.2/Q-FILLCTX.md) | ① F |
 | 24 | R8.1 · L1 (PARKED) | [struct member part-selects with named bounds, as reads and write targets](roadmap/5.2/24.md) | ② F |
 | 29 | R8.2 · L1 (PARKED) | [element selects nested in a write target are refused](roadmap/5.2/29.md) | ② F |
 | 31 | R8.3 · L1 | [VeeR EH1 corpus row: the hello_world test passes on unmodified RTL](roadmap/5.2/31.md) | — C |

@@ -33,3 +33,4 @@
 * note: the decline readers (P-f): R1 R2 R3 R5 R6 to BIND-2, R7 R8 to VAL-3, R4 and N1–N12 REVIEW-ONLY; TW-LATCH is replaced by E5 failing, since no named latch question is built
 * note: filed (W/val2/plan/PLAN.txt F1–F4): F1 w0_local joins §2 const-fn-local-unbound-width; F2 §2 pkg-param-no-cause; F3 §2 override-recovery-reread; F4 s5_body joins §2 🆕 H
 * source: W/program/reorder2-2026-11-09/PLAN.txt G2 VAL-2
+* note (2026-11-20, batch 6's extra review read, W/batch6/agy1/REPORT.txt F7, NON-BLOCKING, outside batch 6's diffs; RULINGS L2-3): `elaborate/tests/value_entry_home.rs` walks `crates/elaborate/src/tests/**` (it does not skip `src/tests/` as `wext_home.rs` does; it passes because those files hold no E1–E7 hit), and its `is_cfg_test` skips only through the first `{}` or `;`

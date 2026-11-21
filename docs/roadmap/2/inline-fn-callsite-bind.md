@@ -19,3 +19,4 @@
 * page cells (2026-11-09, row 46 plan F4): entropy_src keeps 2 E3009 from a package routine's locals, `prim_mubi_pkg.sv:114:12` `undefined name MuBi4Width` … `[in entropy_src.u_entropy_src_core.$func$prim_mubi_pkg::mubi4_and]` and `:88:12` the same for mubi4_or (W/row46/plan/PLAN.txt Q1)
 * note: so the 16 prim_mubi local hunks stay in the row-9 overlay until this lands (only entropy_src needs them)
 * status: OPEN
+* note (2026-11-20): the class is §5.2 Q-SCOPEBIND's (a name is bound to a declaration the source's scopes do not give it), which absorbs this entry's root (door (3), the caller-prefix binding of an inlined routine); the fix is that row's plan

@@ -11,3 +11,4 @@
 * note (2026-11-17, Q-MDRVMIX's park): rules X and Y are not on main (Q-MDRVMIX parked, a33df0e0), so the quiet pins above are gone and k7_arr_whole and y_q_word run as PRE does (`A m0=0c one=0c`, `A m0=10100101`); the `Word` reading stands for the view and for Q-MDRVMIX when it returns
 * note (2026-11-17): the re-point of the checkers onto the view is hosted by §5.2 Q-MDCONSTOFF (one host for the three checkers); comparing word extents is this row's on top of it
 * status: pre-existing
+* note (2026-11-20, second park): §5.2 Q-MDRVMIX was built again in batch 6 (303088c7 rule X, 779ecae1 rule Y, 6bc9babc the widening) and pulled out by 17703a0c, parked behind §5.2 Q-SCOPEBIND (owner, 2026-11-20); no rule of it is in `crates/`, so the lines above that say so for 2026-11-17 hold again

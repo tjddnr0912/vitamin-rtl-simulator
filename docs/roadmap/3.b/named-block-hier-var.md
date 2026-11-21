@@ -1,0 +1,4 @@
+(§3.b named-block-hier-var · OPEN · in Constants / parameters) (a named block's static variable read by a hierarchical name is E3010):
+* symptom: a static variable declared in a named block (`initial begin : nb logic [3:0] q; ... end`) read from outside by its hierarchical name `nb.q` is refused E3010 `undeclared hierarchical name `nb.q` (no such cross-instance net or parameter)`, where IEEE 1800-2017 §9.3.4 and §23.6 allow the name; loud; PRE == POST (cell d37, W/batch6/lens-diff/cells/D/d37_named_block_var: vita `t.sv:1:135: error[VITA-E3010] ...`; iverilog 13.0 and verilator 5.054 `v=03`; batch 6's differential lens, W/batch6/lens-diff/REPORT.txt D4 G10; RULINGS L1-13)
+* note: the manual (003, 006) names only `automatic` block-locals; a neighbour of §5.2 Q-SCOPEBIND's door (1) (block-locals are hoisted to module nets, not kept as a scope); whether that is the cause here is not measured
+* status: OPEN

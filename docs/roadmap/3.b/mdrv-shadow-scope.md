@@ -4,3 +4,4 @@
 * scope the guard to the declaring block (writes outside it count)
 * oracles: 2 oracles
 * status: OPEN
+* note (2026-11-20): the class is §5.2 Q-SCOPEBIND's (a name is bound to a declaration the source's scopes do not give it), which absorbs this entry's root (door (1), the block-local flatten); the fix is that row's plan

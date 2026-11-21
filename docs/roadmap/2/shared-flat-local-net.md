@@ -4,3 +4,4 @@
 * a pair with a plain block or a process's top block keeps the old behaviour (p23 `s=99`, p24 `w=7`, p25 `a=bb`; all three `s=7`, `w=99`, `a=aa`)
 * 3 oracles
 * OPEN
+* note (2026-11-20): the class is §5.2 Q-SCOPEBIND's (a name is bound to a declaration the source's scopes do not give it), which absorbs this entry's root (door (1), the block-local flatten); the fix is that row's plan

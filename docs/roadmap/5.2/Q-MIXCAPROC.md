@@ -15,3 +15,4 @@
 * note (2026-11-17, Q-MDRVMIX's park): rule X is not on main: Q-MDRVMIX is parked behind §5.2 Q-WEXTPOS and C1 0da863d1 was pulled out of batch 5 (a33df0e0), so this row's eight cells run as this row's witnesses say (PRE's text) and the re-measure is owed when Q-MDRVMIX returns, on its re-planned text; this row keeps its cells until then
 * status: pre-existing, loud on no backend
 * source: Q-RELDELAY r5 lens-diff N3 (k_proc_var_ca_str, k_proc_var_ca_num, k_proc_var_ca_sp, k_proc_var_ca_disj_num); row 24 r3 probe s2t (logic_pca_pa, logic_port_pa, mem_ca_pa_lit, mem_ca_blk_lit)
+* note (2026-11-20, second park): §5.2 Q-MDRVMIX was built again in batch 6 (303088c7 rule X, 779ecae1 rule Y, 6bc9babc the widening) and pulled out by 17703a0c, parked behind §5.2 Q-SCOPEBIND (owner, 2026-11-20); no rule of it is in `crates/`, so the lines above that say so for 2026-11-17 hold again

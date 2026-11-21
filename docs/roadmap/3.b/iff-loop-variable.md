@@ -1,0 +1,5 @@
+(§3.b iff-loop-variable · OPEN · in Nets / timing) (an `iff` guard reading a for-loop variable is E3010, undeclared):
+* symptom: an in-body event control whose `iff` guard reads the enclosing `for` loop's variable (`initial for (int j = 0; j < 4; j++) begin @(posedge clk iff (en ^ j[0])) q = d; end`) is refused "undeclared", a false reason, where IEEE 1800-2017 §12.7.1 (l.14014-14017: a variable declared in the for-initialization is local to the loop's implicit block) and §9.4.2.3 (l.9641-9642, the `iff` qualifier) make it legal; loud; PRE == POST (batch 6's differential lens round 3, W/batch6/lens3-diff/REPORT.txt O2)
+* witness: c16_loopvar_guard (W/batch6/lens3-diff/cells/D2c2/c16_loopvar_guard), and D2c/c15_nested_loop: vita "t.sv:13:63: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `t.j` [in t]"; verilator 5.054 runs it (`C:q10=00000000 C:o10=00000001 C:c10=0 | C:q20=00100001 ...`); iverilog 13.0 has no `iff` in an event control
+* note: the guard is split into a wait loop by §5.2 Q-WEXTPOS fix S's `lower_event_iff_wait`, PRE == POST here; the scope it is lowered in is a name-binding question near §5.2 Q-SCOPEBIND
+* status: OPEN

@@ -1,0 +1,3 @@
+(§3.b var-type-op-decl · OPEN · in Parser accept) (a declaration typed by the type operator (`var type(a) b`) is refused):
+* symptom: `var type(a) b = 'x;` in a procedural block is refused E2002 `t.sv:3:21: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found identifier 'type'`, where IEEE 1800-2017 §6.23 allows a type operator as a data type and verilator 5.054 runs it `000000 6` (iverilog 13.0 `t.sv:3: syntax error`); loud; PRE == POST (cell s17, W/batch6/lens2-diff/cells/S/s17_type_op_decl; batch 6's differential lens round 2, W/batch6/lens2-diff/REPORT.txt RG5; RULINGS L2-6 FI5)
+* status: OPEN

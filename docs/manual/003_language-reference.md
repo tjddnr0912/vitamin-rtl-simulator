@@ -489,7 +489,7 @@ concatenation element, an unknown method or arity, `string'(real)`,
 | Function | Status | Notes |
 |---|---|---|
 | `$bits` | Supported | A variable, a type name, `pkg::T`, or a hierarchical net or parameter. In a constant position in the module's own top level (a parameter value, a range, an override, a top-level generate condition or loop header, an unpacked dimension) also a bit-, part- or indexed part-select of a packed vector or ANSI port, a packed-struct member, and a concatenation of them, over a name no nested scope of the module declares; inside a generate block, a routine, a begin-block, an interface or a package function, and for a select of a multi-dimensional packed array, a string, an unpacked-array slice or a hierarchical name, it is Loud there (`VITA-E3009`). |
-| `$size` `$left` `$right` `$low` `$high` `$increment` | Supported | `$low` is `min(left,right)`, `$high` is `max`, `$size` is `abs(left−right)+1`. |
+| `$size` `$left` `$right` `$low` `$high` `$increment` | Partial | `$low` is `min(left,right)`, `$high` is `max`, `$size` is `abs(left−right)+1`. A hierarchical name as the argument (`$size(u.v)`) is refused, E3009 `unsupported system function in expression` (§3.b hier-array-query). |
 | `$dimensions` `$unpacked_dimensions` | Supported | No dimension argument. |
 | `$typename` | Supported | |
 | `$isunbounded` | Supported | |

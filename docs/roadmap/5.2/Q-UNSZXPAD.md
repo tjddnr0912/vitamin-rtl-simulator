@@ -11,3 +11,5 @@
 * PRE 9d60771d
 * silent-wrong, pre-existing
 * source: Q-DECLSELBOUND plan 3 T2
+* note (2026-11-19, D-RETIRE of Q-LOSSYSPELL.md): this row retires §5.2 Q-LOSSYSPELL's `unsized_xz` bit (an unsized based literal with an x / z digit that is not a fill)
+  * note (2026-11-21): the record named in the line above (as built in batch 6, pulled out with the row's park on 2026-11-21: nothing of it is on main; its re-entry after §5.2 Q-FILLCTX re-plans the bits, Q-LOSSYSPELL.md)

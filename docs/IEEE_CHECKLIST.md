@@ -16,21 +16,27 @@ How it is kept: a landing's docs commit re-reads the lines of the clauses its ro
 recomputed then, from the boxes of this file. General, overview, informative and example subclauses carry no leaf;
 3.3–3.11, Annex A and Annex F carry none either, since their leaves are in the clauses they name. Batch 5
 (PARSE-1's piece, Q-WREXT) landed on 2026-11-18 (§4.5.654), structure only: its re-read of the 5.7.1, 6.5, 6.20, 9.2.2.2,
-10.3, 10.4, 23.3.3.2 and 26.3 lines moved no box. Q-MDRVMIX is parked (2026-11-17): an item only it completes stays empty.
+10.3, 10.4, 23.3.3.2 and 26.3 lines moved no box. Batch 6's docs (§4.5.655, 2026-11-21) re-read 3.12.1, 5.7.1, 6.5, 6.16,
+6.19, 6.20.6, 6.23, 8.25, 9.2.2.2–9.2.2.4, 9.3.1, 9.4.5, 10.3.2, 10.6.1, 10.6.2, 11.12, 13.3, 20.7, 23.3.2, 23.9 and 29,
+then 6.9.1, 6.12, 7.5, 8.4, 8.5, 9.4.2.3, 10.4.2, 10.9.1, 11.3.1, 11.4.12, 11.5.1, 12.7.1 and 23.3.2.2: ten boxes emptied
+on PRE == POST filings' cells (9.4.5, 11.12, 29.3.1, 29.7, 29.8, 6.19.1, 8.25, 13.3, 10.4.2, 10.9.1), none checked.
+Batch 6 (Q-WEXTPOS alone) landed on 2026-11-21 (§4.5.655), structure only; Q-MDRVMIX (2026-11-20, behind Q-SCOPEBIND) and Q-LOSSYSPELL (2026-11-21, behind
+Q-FILLCTX) are parked: an item only one of them completes stays empty. 23.3.2.2 and 28.3.3 stay checked, each with a reason line
+naming its illegal accept (an accept is neither a refusal nor a wrong value; main, W/batch6/RULINGS.txt L2-78 (e)).
 
 | clause | title | checked / leaves |
 |---|---|---|
 | 3 | Design and verification building blocks | 2 / 12 |
 | 4 | Scheduling semantics | 13 / 26 |
 | 5 | Lexical conventions | 16 / 29 |
-| 6 | Data types | 33 / 116 |
+| 6 | Data types | 32 / 116 |
 | 7 | Aggregate data types | 22 / 69 |
-| 8 | Classes | 9 / 30 |
-| 9 | Processes | 20 / 49 |
-| 10 | Assignment statements | 8 / 25 |
-| 11 | Operators and expressions | 23 / 57 |
+| 8 | Classes | 8 / 30 |
+| 9 | Processes | 19 / 49 |
+| 10 | Assignment statements | 6 / 25 |
+| 11 | Operators and expressions | 22 / 57 |
 | 12 | Procedural programming statements | 12 / 26 |
-| 13 | Tasks and functions (subroutines) | 5 / 20 |
+| 13 | Tasks and functions (subroutines) | 4 / 20 |
 | 14 | Clocking blocks | 3 / 15 |
 | 15 | Interprocess synchronization and communication | 2 / 8 |
 | 16 | Assertions | 11 / 64 |
@@ -46,7 +52,7 @@ recomputed then, from the boxes of this file. General, overview, informative and
 | 26 | Packages | 3 / 15 |
 | 27 | Generate constructs | 3 / 9 |
 | 28 | Gate-level and switch-level modeling | 6 / 21 |
-| 29 | User-defined primitives | 13 / 14 |
+| 29 | User-defined primitives | 10 / 14 |
 | 30 | Specify blocks | 0 / 5 |
 | 31 | Timing checks | 0 / 7 |
 | 32 | Backannotation using the standard delay format | 0 / 6 |
@@ -60,7 +66,7 @@ recomputed then, from the boxes of this file. General, overview, informative and
 | 40 | Code coverage control and API | 0 / 3 |
 | 41 | Data read API | 0 / 1 |
 | Annex | Annexes | 0 / 12 |
-| total | | 274 / 898 |
+| total | | 264 / 898 |
 
 ## 3 Design and verification building blocks
 
@@ -69,7 +75,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 
 **3.12 Compilation and elaboration**
 - [ ] 3.12.1 Compilation-unit scope declarations — unit variables, forward constants; §3.a ⑤ⓝ
-- [ ] 3.12.1 Compilation-unit routines — fold at the calling module; §2 🆕 AF, §5.2 4
+- [ ] 3.12.1 Compilation-unit routines — fold at the calling module; §2 🆕 AF, §5.2 4, §3.b unit-routine-bare-name
 - [ ] 3.12.1 `$unit::` scope prefix — absent; §3.a ⑤ⓝ
 - [ ] 3.12.1 Compilation-unit and module imports — one import scope; §2 unit-module-import-scope
 
@@ -144,7 +150,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 5.7.1 Sized based literals
 - [ ] 5.7.1 White space inside a based literal — `64'sh FFFF` refused; §3.b based-ws
 - [ ] 5.7.1 Unsized based literals — x / z not extended past 32 bits; §5.2 Q-UNSZXPAD
-- [ ] 5.7.1 Unbased unsized `'0 '1 'x 'z` — widths in some positions; §2 🆕 J, §2 🆕 M
+- [ ] 5.7.1 Unbased unsized `'0 '1 'x 'z` — widths in some positions; `'s1` accepted; §2 🆕 J, §2 🆕 M, §3.b signed-unbased-literal
 - [x] 5.7.1 Unsized decimal literals
 - [x] 5.7.1 `x`, `z` and `?` digits
 - [ ] 5.7.1 Underscore separators — one reader keeps them; §2 sized-literal-separator-read
@@ -234,7 +240,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 6.15 Class handle type — two routes skip the handle check; §5.2 Q-HANDLERET
 
 **6.16 String data type**
-- [ ] 6.16 String variables: declare, assign, compare — interior NUL kept; §5.2 Q-STRNUL
+- [ ] 6.16 String variables: declare, assign, compare — interior NUL kept; integral taken without a cast; §5.2 Q-STRNUL, §3.b string-integral-assign-no-cast
 - [ ] 6.16 String concatenation and replication — §5.2 Q-NESTCAT, §5.2 Q-STRREPNC, §5.2 Q-STRREPEVAL
 - [ ] 6.16 String `?:` — not typed as a string; §5.2 Q-STRTERN
 - [ ] 6.16 String ports and arrays — §5.2 Q-STRPORT, §3.b string-array
@@ -266,7 +272,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 
 **6.19 Enumerations**
 - [x] 6.19.1 Enum with the default base type
-- [x] 6.19.1 Enum with an explicit 4-state base
+- [ ] 6.19.1 Enum with an explicit 4-state base — a label with an x / z digit refused; §3.b enum-label-domain
 - [ ] 6.19.1 Enum with a 2-state base — stored 4-state; §5.2 8, §2 enum-bit-four-state
 - [ ] 6.19.1 Enum base wider than 2^64 bits — runs with a wrapped width; §2 enum-base-overflow-silent
 - [ ] 6.19.1 Label wider than its base — §3.b enum-label, §5.2 49
@@ -294,7 +300,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 6.20.4 `localparam` at module and package scope — typed of unfolded width unconverted; §5.2 Q-TLPCONV
 - [ ] 6.20.4 `localparam` in a procedural block or task body — refused at parse; §2 🆕 Q, §3.b tf-localparam
 - [ ] 6.20.5 Specify parameters — parsed as localparam anywhere; §2 specparam-data-type
-- [ ] 6.20.6 Const constants — status not recorded
+- [ ] 6.20.6 Const constants — a module-level `const` refused; §3.b module-const-decl
 
 **6.21 Scope and lifetime**
 - [x] 6.21 Static variables at module scope
@@ -311,7 +317,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 6.22.6 Matching nettypes — no nettypes; not filed
 
 **6.23–6.25 Type operator, casting, parameterized types**
-- [ ] 6.23 Type operator `type(…)` — status not recorded
+- [ ] 6.23 Type operator `type(…)` — `var type(x)` declaration refused; §3.b var-type-op-decl
 - [ ] 6.24.1 Primitive type casts (`int'`, `byte'`, …) — constant folds; §5.2 Q-PRIMCAST, §2 byte-cast-type-width
 - [ ] 6.24.1 Size casts `N'(e)` — §2 Call-leaf sign, §2 Double call, §2 Nested cast
 - [x] 6.24.1 Signedness casts `signed'`, `unsigned'`
@@ -359,7 +365,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 7.5.1 New[ ] in other positions, in a function — refused; §3.b V2A/V5
 - [x] 7.5.2 Size()
 - [x] 7.5.3 Delete()
-- [ ] 7.5 Dynamic array element read and write — out-of-range 2-state reads x; §2 dyn-oob-reads-x, §2 queue-dyn-index-unsealed
+- [ ] 7.5 Dynamic array element read and write — out-of-range 2-state reads x; a fill into a `real` element; §2 dyn-oob-reads-x, §2 queue-dyn-index-unsealed, §2 real-dyn-elem-fill
 
 **7.6–7.7 Array assignments and arguments**
 - [x] 7.6 Array assignments between fixed-size arrays
@@ -416,7 +422,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 **8.3–8.12 Class basics**
 - [ ] 8.3 Class declaration — body names bind where parsed; §2 class-scope forward use
 - [ ] 8.4 Objects (handles, null, identity) — §5.2 Q-HANDLERET
-- [ ] 8.5 Object properties — integral only; §3.b class-real-members, §2 class-field-default-width
+- [ ] 8.5 Object properties — integral only; in a concatenation target; §3.b class-real-members, §2 class-field-default-width, §2 class-prop-concat-native
 - [ ] 8.6 Object methods — class-typed return is one bit; §5.2 Q-CLSRET
 - [x] 8.7 Constructors
 - [ ] 8.8 Typed constructor calls — status not recorded
@@ -441,7 +447,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 8.24 Out-of-block declarations (`extern`) — refused at parse; not filed
 
 **8.25–8.29 Parameterized classes and the rest**
-- [x] 8.25 Parameterized classes: value parameters
+- [ ] 8.25 Parameterized classes: value parameters — a `signed` value parameter refused; §3.b class-param-signing
 - [ ] 8.25 Value-parameter override not converted to its type — §5.2 Q-CLSPARAMTYPE
 - [ ] 8.25 Parameterized classes: type parameters — refused; not filed
 - [ ] 8.25.1 Class scope resolution for parameterized classes — status not recorded
@@ -468,7 +474,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 
 **9.3 Block statements**
 - [x] 9.3.1 Sequential blocks
-- [ ] 9.3.1 Block-local declarations — share flattened nets; §2 shared-flat-local-net, §2 blk-scope-name-leak
+- [ ] 9.3.1 Block-local declarations — share flattened nets; §2 shared-flat-local-net, §2 blk-scope-name-leak, §5.2 Q-SCOPEBIND
 - [ ] 9.3.2 Parallel blocks (`fork … join`, `join_any`, `join_none`) — §5.2 Q-FORKARM-HIDDEN, §5.2 Q-ARMWRITE
 - [ ] 9.3.2 Nested fork, fork-arm declarations — refused or hoisted; §2 fork-declarations-flatten
 - [x] 9.3.3 Statement block start and finish times
@@ -488,14 +494,14 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 9.4.2.1 Event OR operator
 - [ ] 9.4.2.1 Mixed level and edge terms — level wakes on bit 0; §5.2 Q-MIX, §2 level-edge-bit0-wake
 - [ ] 9.4.2.2 Implicit event_expression list `@*` — §5.2 Q-FRAMESTAR, §2 at-star-dyn-handle
-- [ ] 9.4.2.3 Conditional event controls (`iff`) — §5.2 ENG-4
+- [ ] 9.4.2.3 Conditional event controls (`iff`) — a loop variable read E3010; §5.2 ENG-4, §3.b iff-loop-variable
 - [ ] 9.4.2.4 Sequence events — status not recorded
 - [x] 9.4.3 Level-sensitive `wait` on integral expressions
 - [ ] 9.4.3 `wait` on strings and heap containers — never wakes; §5.2 Q-STRWAIT, §5.2 Q-WAITDYN, §2 wait-heap-container
 - [ ] 9.4.4 Level-sensitive sequence controls — status not recorded
 - [x] 9.4.5 Intra-assignment delay (`= #d`, `<= #d`) in module processes
 - [ ] 9.4.5 Intra-assignment delay in overlapping automatic task activations — §5.2 Q-CAPLIFE
-- [x] 9.4.5 Intra-assignment event control (`= @(ev)`, `<= @(ev)`)
+- [ ] 9.4.5 Intra-assignment event control (`= @(ev)`, `<= @(ev)`) — a lone unsized literal loses its width; §2 event-control-unsized-fill
 - [ ] 9.4.5 `repeat (n) @(ev)` with a run-time count — refused; not filed
 - [ ] 9.4.5 Intra-assignment delay on a string concatenation — §5.2 Q-DLYCAT
 
@@ -515,20 +521,20 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 10.3.2 Continuous assignment to a whole net or a constant select
 - [ ] 10.3.2 Target with a non-constant select — accepted; §5.2 Q-CALHSEL, §2 net-variable-select-assign
 - [ ] 10.3.2 Right side calling a function — re-evaluated per settle; §2 ca-function-reruns, §3.b real-cont-assign
-- [ ] 10.3.2 Continuous assignment to a variable — partly; §3.b cont-var-partial, §3.b cont-var-gate
+- [ ] 10.3.2 Continuous assignment to a variable — partly; §3.b cont-var-partial, §3.b cont-var-gate, §3.b ustruct-cont-assign
 - [ ] 10.3.3 Continuous assignment delays — §5.2 Q-DCASETTLE, §5.2 Q-DCAPARTX, §5.2 N-R01, §2 multidriven-delay-dropped
 - [ ] 10.3.4 Continuous assignment strengths — refused at parse; §3.b decl-var-net-kw
 
 **10.4 Procedural assignments**
 - [x] 10.4.1 Blocking procedural assignments
-- [x] 10.4.2 Nonblocking procedural assignments
+- [ ] 10.4.2 Nonblocking procedural assignments — a class property's handle read when applied; §2 nba-class-handle-time
 
 **10.5 Variable declaration assignment**
 - [x] 10.5 Initializer of a module-scope variable
 - [ ] 10.5 Initializer in a subroutine or block — §2 static-local-runtime-init, §5.2 Q-PKGBLKLEAK
 
 **10.6 Procedural continuous assignments**
-- [ ] 10.6.1 `assign` and `deassign` — deassign over a continuous assign accepted; §5.2 Q-DEASSIGNCA
+- [ ] 10.6.1 `assign` and `deassign` — deassign over a continuous assign accepted; a concatenation target refused; §5.2 Q-DEASSIGNCA, §3.b deep
 - [ ] 10.6.2 `force` — samples once; §5.2 Q-FORCEDYN, §5.2 Q-FORCEPORT, §5.2 Q-FORCEAUTO
 - [ ] 10.6.2 `release` — §5.2 Q-RELIMM, §5.2 Q-RELUNDRV, §5.2 Q-RELZERODLY
 - [ ] 10.6.2 Force or release of a select — refused; §3.b deep
@@ -538,7 +544,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 10.8 Assignment-like contexts — status not recorded
 
 **10.9 Assignment patterns**
-- [x] 10.9.1 Array patterns: positional and `default:` on fixed-size arrays
+- [ ] 10.9.1 Array patterns: positional and `default:` on fixed-size arrays — a fill element of a `real` array 64 bits; §2 real-pattern-port-fill
 - [ ] 10.9.1 Replication, index keys and type keys — refused at parse; §5.2 35
 - [ ] 10.9.1 Patterns into multi-dimensional packed arrays — §5.2 69, §3.b md-packed-pattern
 - [x] 10.9.2 Structure patterns: positional, named, `default:` on a packed struct
@@ -556,7 +562,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 11.2.2 Aggregate expressions — whole unpacked arrays have no value; not filed
 
 **11.3 Operators**
-- [ ] 11.3.1 Operators with real operands — §2 signed-of-real-accepted, §0 8ⓔ
+- [ ] 11.3.1 Operators with real operands — a `real` concatenation target accepted; §2 signed-of-real-accepted, §0 8ⓔ, §5.2 Q-CAREALCAT
 - [x] 11.3.2 Operator precedence
 - [x] 11.3.3 Using integer literals in expressions
 - [x] 11.3.4 Operations on 4-state and 2-state types
@@ -580,7 +586,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 11.4.10 Shift operators
 - [x] 11.4.11 Conditional operator over integral operands
 - [ ] 11.4.11 Conditional operator over string, real or aggregate arms — §5.2 Q-XNONINT, §5.2 Q-STRTERN
-- [ ] 11.4.12 Concatenation operators — unsized operand accepted; §2 unsized-concat-operand
+- [ ] 11.4.12 Concatenation operators — unsized operand accepted; a fill into hierarchical pieces; §2 unsized-concat-operand, §2 hier-concat-fill, §2 concat-unsized-literal
 - [ ] 11.4.12.1 Replication operator — zero-count rule; §5.2 Q-ZEROREPL, §2 nested-zero-replication
 - [ ] 11.4.12.2 String concatenation — §5.2 Q-NESTCAT, §5.2 Q-STRCATSEL
 - [x] 11.4.13 Set membership `inside` at run time with constant elements
@@ -595,7 +601,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 **11.5 Operands**
 - [x] 11.5.1 Constant bit-select and part-select in range
 - [x] 11.5.1 Indexed part-select `+:` `-:`
-- [ ] 11.5.1 Select partly or wholly out of range — refused or wrong; §5.2 Q-PSELOOR, §5.2 Q-VMSELSHIFT, §2 packed-element-overhang
+- [ ] 11.5.1 Select partly or wholly out of range — refused or wrong; §5.2 Q-PSELOOR, §5.2 Q-VMSELSHIFT, §2 packed-element-overhang, §5.2 Q-LITLANE, §2 fill-over-u32-width
 - [ ] 11.5.1 Indexed width 0, negative or over 2^20 — §2 zero-width-part-select, §2 dead-arm-zero-width, §3.b over-max-width
 - [ ] 11.5.1 Bit-select of a scalar — folds; §5.2 Q-SCALARSEL
 - [ ] 11.5.1 Nested selects in a write target — refused; §5.2 29
@@ -617,7 +623,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 11.10.2 String literal value padding
 - [ ] 11.10.3 Empty string literal handling — 1 bit wide; §5.2 Q-STRWIDTH, §5.2 Q-STREMPTY
 - [ ] 11.11 Min, typical, and maximum delay expressions — typ always taken; not filed
-- [x] 11.12 Let construct with untyped formals and an integral body
+- [ ] 11.12 Let construct with untyped formals and an integral body — a lone unsized body loses its width; outside a module refused; §2 let-fill, §3.b let-decl-scopes
 - [ ] 11.12 Let with typed formals or a string body — §5.2 Q-LETCAST, §5.2 Q-LETSTR
 
 ## 12 Procedural programming statements
@@ -643,7 +649,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 
 **12.7 Loop statements**
 - [x] 12.7.1 The for-loop with one init and one step
-- [ ] 12.7.1 Comma-separated for-init or step — refused at parse; not filed
+- [ ] 12.7.1 Comma-separated for-init or step, or an empty step — refused at parse; §3.b for-header-lists
 - [ ] 12.7.1 Loop variable shadowing a constant — §2 loop-var-const-shadow
 - [x] 12.7.2 The repeat loop
 - [x] 12.7.3 The foreach-loop over fixed, dynamic and queue arrays
@@ -661,7 +667,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 ## 13 Tasks and functions (subroutines)
 
 **13.3 Tasks**
-- [x] 13.3 Task declaration and enable
+- [ ] 13.3 Task declaration and enable — a select write to an output formal refused; §3.b task-output-select-write
 - [ ] 13.3.1 Static tasks — input substituted over the body; §2 static-task-arg-subst, §2 static-task-auto-local
 - [ ] 13.3.1 Automatic tasks — §5.2 Q-PTAIL, §5.2 Q-FRAMEWAKE
 - [ ] 13.3.2 Task memory usage and concurrent activation — §5.2 Q-STATICFRAME-WAIT
@@ -918,7 +924,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 20.6.1 `$typename` — enums and structs as their base; §3.b $typename
 - [ ] 20.6.2 `$bits` — sized from a folded value; §5.2 Q-BITSTYPE, §3.b dyn-bits-count
 - [x] 20.6.3 `$isunbounded`
-- [ ] 20.7 Array query functions — `$size` with a dimension argument; §2 size-dim-arg, §3.b dyn-size-spellings
+- [ ] 20.7 Array query functions — `$size` with a dimension argument, of a hierarchical name; §2 size-dim-arg, §3.b dyn-size-spellings, §3.b hier-array-query
 - [ ] 20.7.1 Queries over multiple variable dimensions — §2 size-dim-arg
 
 **20.8–20.11 Math, bit vector, severity, elaboration tasks**
@@ -1037,7 +1043,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 23.3.1 Top-level modules
 - [ ] 23.3.1 `$root` — status not recorded
 - [x] 23.3.2.1 Connecting ports by ordered list
-- [x] 23.3.2.2 Connecting ports by name
+- [x] 23.3.2.2 Connecting ports by name — stays checked by the box rule (an illegal accept is neither a refusal nor a wrong value): §2 port-named-twice, RECORD
 - [x] 23.3.2.3 Implicit named port connections `.name`
 - [x] 23.3.2.4 Wildcard named port connections `.*`
 - [ ] 23.3.3.1 Port coercion — status not recorded
@@ -1064,7 +1070,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [ ] 23.7.1 Package or class scope prefixes — §3.b pkg-scoped-task, §5.2 Q-PKGPMEMB
 - [x] 23.8 Upwards name referencing
 - [ ] 23.8.1 Task and function name resolution — status not recorded
-- [ ] 23.9 Scope rules — names bound in the wrong scope; §2 declaration-order-accept, §2 struct-binding-by-name
+- [ ] 23.9 Scope rules — names bound in the wrong scope; §2 declaration-order-accept, §2 struct-binding-by-name, §5.2 Q-SCOPEBIND
 
 **23.10–23.11 Overriding parameters, bind**
 - [ ] 23.10.1 `defparam` — direct child, constant only; §8 defparam-depth, §0 14-b, §3.b defparam-iface
@@ -1143,7 +1149,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 **28.3–28.10 Gates and switches**
 - [x] 28.3.1 Gate type specification
 - [ ] 28.3.2 Drive strength specification — refused at parse; not filed
-- [x] 28.3.3 Delay specification
+- [x] 28.3.3 Delay specification — stays checked by the box rule (an illegal accept is neither a refusal nor a wrong value): `#1'bx` accepted, §3.b gate-delay-based-literal
 - [x] 28.3.4 Primitive instance identifier
 - [ ] 28.3.5 Range specification (gate instance arrays) — status not recorded
 - [x] 28.3.6 Primitive instance connection list
@@ -1168,7 +1174,7 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 ## 29 User-defined primitives
 
 **29.3–29.10**
-- [x] 29.3.1 UDP header
+- [ ] 29.3.1 UDP header — ANSI port declarations refused; §3.b udp-ansi-header
 - [x] 29.3.2 UDP port declarations
 - [x] 29.3.3 Sequential UDP initial statement
 - [x] 29.3.4 UDP state table
@@ -1178,8 +1184,8 @@ subroutines 13, packages 26, configurations 33, hierarchy 23)
 - [x] 29.4 Combinational UDPs
 - [x] 29.5 Level-sensitive sequential UDPs
 - [x] 29.6 Edge-sensitive sequential UDPs
-- [x] 29.7 Sequential UDP initialization
-- [x] 29.8 UDP instances
+- [ ] 29.7 Sequential UDP initialization — time 0 missed with declaration-initialized inputs; §2 udp-decl-init-t0
+- [ ] 29.8 UDP instances — an unnamed instance refused; §3.b udp-unnamed-instance
 - [x] 29.9 Mixing level-sensitive and edge-sensitive descriptions
 - [x] 29.10 Level-sensitive dominance
 

@@ -1,0 +1,5 @@
+(§2 port-named-twice · RECORD · in Diagnostics / artifacts) (a port connected twice by name is accepted):
+* symptom: an instance that connects one port twice by name (`ch u(.a(x), .a(y), .b(y), .o(o));`) gets no diagnostic, where IEEE 1800-2017 §23.3.2.2 (l.32625-32629) says "Multiple module instance port connections are not allowed." and calls `A ia ( .i (a), .i (b), …` illegal; PRE == POST (batch 6's soundness lens round 3, W/batch6/lens3-sound/REPORT.txt O-2, observation)
+* witness: h25 (W/batch6/lens3-sound/cells/h25/t.sv): PRE prints only the other error of the cell, `t.sv:6:6: error[VITA-E3002] E-ELAB-PORT-MISMATCH: instance of `ch` has 4 positional connection(s) but the module declares 3 port(s) [in top.u2]`, nothing for `u`; the double connection alone was not run and no oracle was run (UNVERIFIED as an accept, so RECORD)
+* note: §5.2 Q-WEXTPOS's debug check H15v (i) keys a port's connection by its node, so two different nodes on one port fire it (Q-WEXTPOS.md, fix S); a refusal here would make that check's case illegal
+* status: RECORD

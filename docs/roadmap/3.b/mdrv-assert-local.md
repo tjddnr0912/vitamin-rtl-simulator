@@ -6,3 +6,4 @@
 * pins: pins in `cont_assign_variable_drivers.rs`
 * oracles: 2 oracles
 * status: OPEN
+* note (2026-11-20): the root, a concurrent assertion's action-block local bound to the module variable of its name, is filed as §2 assert-action-local, and the class is §5.2 Q-SCOPEBIND's (door (1)), which this entry waits on

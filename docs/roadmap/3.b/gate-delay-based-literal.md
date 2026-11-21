@@ -1,0 +1,3 @@
+(§3.b gate-delay-based-literal · OPEN · in Parser accept) (a based literal as a gate delay (`#1'bx`) is accepted):
+* symptom: `buf #1'bx b0 (w, a);` is accepted and runs `w=1` (cell c89, W/batch6/lens-diff/cells/B2/c89_gate_delay_x), where IEEE 1800-2017 A.2.2.3 gives `delay_value ::= unsigned_number | real_number | ps_identifier | time_literal | 1step` (a based literal is not one); iverilog 13.0 `t.sv:1: syntax error`; verilator 5.054 `%Error: t.sv:1:38: syntax error, unexpected INTEGER NUMBER, expecting '('`; an illegal text accepted; PRE == POST (batch 6's differential lens, W/batch6/lens-diff/REPORT.txt D4 G13; RULINGS L1-13)
+* status: OPEN
