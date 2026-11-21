@@ -1,4 +1,4 @@
-//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, parts 1 and 2), as home tests: twelve
+//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, parts 1 to 3), as home tests: thirteen
 //! syntax censuses of `crates/elaborate/src/**/*.rs`, each computed by `syn` (full) and
 //! compared with a pinned table. The tables live in ONE data file beside this one,
 //! `scope_home.tables` (moved there in part 2, when this file passed ~4500 lines with them
@@ -64,6 +64,20 @@
 //!   `cur_class_method`): read / write / init.
 //! - HK the producers' scope kinds: per fn the `cur_prefix` writes (H3's 25 sites), the
 //!   `with_scope` calls and the `elaborate_instance` calls, KIND a hand column.
+//!
+//! Part 3 (a third walk, `HfWalk`, with positions as statement paths, and a path pass,
+//! `HfFlow`, over each opener's block):
+//!
+//! - HF the shape of each `cur_prefix` write site (H3's 25, plan8 H3 / H5): per site the
+//!   form, the saved binding, the ARG tokens, the opener's block and statement, each
+//!   restore's and re-point's position, whether every restore sits in the opener's block,
+//!   the exits between the opener and the last restore (leaving the region or local),
+//!   every path's restore count where it leaves (the end of the block, a `return`, a `?`,
+//!   a `break` / `continue` out of it), and the calls in between of fns that write the
+//!   prefix or of a parameter / local ; PLAN8's class and a READ column are hand columns.
+//!   HF_CALLS pins the `with_scope` / `elaborate_instance` calls by their scope argument.
+//!   HF does not see a panic other than the four diverging macros, nor a write through a
+//!   `&mut String` bound earlier.
 //!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
@@ -3841,6 +3855,1400 @@ fn hk_the_scope_entry_kinds_are_pinned() {
         ));
     }
     finish("HK", &msgs);
+}
+
+// =====================================================================================
+// HF the shape of each `cur_prefix` write site (LS1 part 3)
+// =====================================================================================
+
+/// HF: a position — the statement index in a block (index, block length) or a control
+/// construct entered (`then`, `else`, `arm<j>`, `for`, `while`, `loop`, `blk`,
+/// `closure`, `letelse`). Expressions that are not control constructs add no step.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Step {
+    S(usize, usize),
+    C(String),
+}
+
+fn path_text(p: &[Step]) -> String {
+    if p.is_empty() {
+        return "body".into();
+    }
+    p.iter()
+        .map(|s| match s {
+            Step::S(i, _) => format!("s{i}"),
+            Step::C(c) => c.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// A position inside the block `b`: its first step counted back from the block's last
+/// statement (`e0` = the last), deeper steps from their block's first.
+fn rel_text(b: &[Step], p: &[Step]) -> String {
+    if !p.starts_with(b) || p.len() == b.len() {
+        return format!("^{}", path_text(p));
+    }
+    let mut v = Vec::new();
+    for (k, s) in p[b.len()..].iter().enumerate() {
+        v.push(match (k, s) {
+            (0, Step::S(i, n)) => format!("e{}", n - 1 - i),
+            (_, Step::S(i, _)) => format!("s{i}"),
+            (_, Step::C(c)) => c.clone(),
+        });
+    }
+    v.join("/")
+}
+
+/// The token text of an expression, for an ARG column (this test has no `quote`).
+fn tx(e: &Expr) -> String {
+    let list = |v: &Punctuated<Expr, Token![,]>| v.iter().map(tx).collect::<Vec<_>>().join(", ");
+    let path = |p: &syn::Path| {
+        p.segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect::<Vec<_>>()
+            .join("::")
+    };
+    match e {
+        Expr::Path(p) => path(&p.path),
+        Expr::Field(f) => match &f.member {
+            syn::Member::Named(i) => format!("{}.{i}", tx(&f.base)),
+            syn::Member::Unnamed(i) => format!("{}.{}", tx(&f.base), i.index),
+        },
+        Expr::MethodCall(m) => format!("{}.{}({})", tx(&m.receiver), m.method, list(&m.args)),
+        Expr::Call(c) => format!("{}({})", tx(&c.func), list(&c.args)),
+        Expr::Macro(m) => {
+            match Punctuated::<Expr, Token![,]>::parse_terminated.parse2(m.mac.tokens.clone()) {
+                Ok(l) => format!("{}!({})", path(&m.mac.path), list(&l)),
+                Err(_) => format!("{}!({})", path(&m.mac.path), m.mac.tokens),
+            }
+        }
+        Expr::Lit(l) => match &l.lit {
+            syn::Lit::Str(s) => format!("{:?}", s.value()),
+            syn::Lit::Int(i) => i.base10_digits().to_string(),
+            syn::Lit::Bool(b) => b.value.to_string(),
+            syn::Lit::Char(c) => format!("{:?}", c.value()),
+            _ => "lit".into(),
+        },
+        Expr::Reference(r) => format!(
+            "&{}{}",
+            if r.mutability.is_some() { "mut " } else { "" },
+            tx(&r.expr)
+        ),
+        Expr::Paren(p) => format!("({})", tx(&p.expr)),
+        Expr::Unary(u) => {
+            let op = match u.op {
+                syn::UnOp::Deref(_) => "*",
+                syn::UnOp::Not(_) => "!",
+                syn::UnOp::Neg(_) => "-",
+                _ => "?",
+            };
+            format!("{op}{}", tx(&u.expr))
+        }
+        Expr::Index(i) => format!("{}[{}]", tx(&i.expr), tx(&i.index)),
+        Expr::Tuple(t) => format!("({})", list(&t.elems)),
+        Expr::Array(a) => format!("[{}]", list(&a.elems)),
+        Expr::Cast(c) => format!("{} as _", tx(&c.expr)),
+        Expr::Try(t) => format!("{}?", tx(&t.expr)),
+        Expr::Closure(_) => "|..| ..".into(),
+        _ => "{..}".into(),
+    }
+}
+
+/// A macro's arguments as expressions (Pass2's reading: a comma list, else the first).
+fn mac_exprs(mac: &syn::Macro) -> Vec<Expr> {
+    if let Ok(l) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(mac.tokens.clone()) {
+        return l.into_iter().collect();
+    }
+    let first = |input: ParseStream| -> syn::Result<Expr> {
+        let e: Expr = input.parse()?;
+        let _: proc_macro2::TokenStream = input.parse()?;
+        Ok(e)
+    };
+    first.parse2(mac.tokens.clone()).into_iter().collect()
+}
+
+const DIVERGE_MACROS: &[&str] = &["panic", "unreachable", "todo", "unimplemented"];
+
+/// `std::mem::{replace, take, swap}(&mut <recv>.cur_prefix, ..)`: (form, ARG).
+fn opener_call(e: &Expr) -> Option<(&'static str, String)> {
+    match e {
+        Expr::Call(c) => opener_of(c),
+        _ => None,
+    }
+}
+
+fn opener_of(c: &syn::ExprCall) -> Option<(&'static str, String)> {
+    let Expr::Path(p) = &*c.func else { return None };
+    let form = match p.path.segments.last()?.ident.to_string().as_str() {
+        "replace" => "replace",
+        "take" => "take",
+        "swap" => "swap",
+        _ => return None,
+    };
+    if !c.args.first().is_some_and(is_mut_prefix_ref) {
+        return None;
+    }
+    Some((
+        form,
+        c.args.iter().nth(1).map(tx).unwrap_or_else(|| "-".into()),
+    ))
+}
+
+/// `<recv>.cur_prefix.clone()`.
+fn is_prefix_clone(e: &Expr) -> bool {
+    matches!(e, Expr::MethodCall(m) if m.method == "clone" && m.args.is_empty() && is_prefix_field(&m.receiver))
+}
+
+/// One HF event of a fn body, in source order.
+enum HfEv<'a> {
+    /// a `mem::*` opener ; `bind` the `let` it initializes ; `region` its block and index
+    Open {
+        form: &'static str,
+        arg: String,
+        bind: Option<String>,
+        region: Option<(&'a [syn::Stmt], usize)>,
+    },
+    /// `let <bind> = <recv>.cur_prefix.clone()` (a save the fn may restore from)
+    Clone {
+        bind: String,
+        region: Option<(&'a [syn::Stmt], usize)>,
+    },
+    /// `<recv>.cur_prefix = <rhs>` ; `ident` when the right side is one name
+    Assign { rhs: String, ident: Option<String> },
+    /// `cur_prefix: <arg>` in a struct literal
+    Init { arg: String },
+    /// any other write: a `&mut` not a `mem::*` opener, a compound assignment, a
+    /// mutating method
+    Other { form: &'static str },
+    /// `return`, `?`, `break`, `continue` ; `target` the loop (or labeled block) a
+    /// `break` / `continue` leaves, `None` for the fn (or the closure, `closure` > 0)
+    Exit {
+        kind: &'static str,
+        target: Option<Vec<Step>>,
+    },
+    /// a method call on the Elaborator (`self` / `s` / `me` / `this`), or `dyn:<name>` a
+    /// call of a parameter or a local
+    Call { name: String },
+    /// a `with_scope` / `elaborate_instance` call and its scope argument
+    Entry { name: String, arg: String },
+}
+
+struct HfAt<'a> {
+    pos: Vec<Step>,
+    closure: usize,
+    ev: HfEv<'a>,
+}
+
+/// The HF walk of one fn body (nested fns are their own rows).
+struct HfWalk<'a> {
+    path: Vec<Step>,
+    /// (label, path of the construct's body, a loop rather than a labeled block)
+    loops: Vec<(Option<String>, Vec<Step>, bool)>,
+    closure: usize,
+    names: BTreeSet<String>,
+    block: Vec<(&'a [syn::Stmt], usize)>,
+    evs: Vec<HfAt<'a>>,
+}
+
+impl<'a> HfWalk<'a> {
+    fn push(&mut self, ev: HfEv<'a>) {
+        self.evs.push(HfAt {
+            pos: self.path.clone(),
+            closure: self.closure,
+            ev,
+        });
+    }
+    fn region(&self) -> Option<(&'a [syn::Stmt], usize)> {
+        self.block.last().copied()
+    }
+    fn body_block(&mut self, b: &'a syn::Block) {
+        for (i, s) in b.stmts.iter().enumerate() {
+            self.path.push(Step::S(i, b.stmts.len()));
+            self.block.push((&b.stmts, i));
+            self.visit_stmt(s);
+            self.block.pop();
+            self.path.pop();
+        }
+    }
+    fn body_expr(&mut self, e: &'a Expr) {
+        match e {
+            Expr::Block(b) if b.label.is_none() => self.body_block(&b.block),
+            _ => self.visit_expr(e),
+        }
+    }
+    fn jump(&mut self, kind: &'static str, label: Option<&syn::Lifetime>) {
+        let target = match label {
+            Some(l) => {
+                let n = l.ident.to_string();
+                self.loops
+                    .iter()
+                    .rev()
+                    .find(|(lb, _, _)| lb.as_deref() == Some(n.as_str()))
+            }
+            None => self.loops.iter().rev().find(|(_, _, is_loop)| *is_loop),
+        }
+        .map(|(_, p, _)| p.clone());
+        self.push(HfEv::Exit { kind, target });
+    }
+    fn in_loop(&mut self, label: &Option<syn::Label>, name: &str, body: &'a syn::Block) {
+        self.path.push(Step::C(name.into()));
+        self.loops.push((
+            label.as_ref().map(|l| l.name.ident.to_string()),
+            self.path.clone(),
+            true,
+        ));
+        self.body_block(body);
+        self.loops.pop();
+        self.path.pop();
+    }
+}
+
+impl<'a> Visit<'a> for HfWalk<'a> {
+    fn visit_item(&mut self, _: &'a syn::Item) {}
+    fn visit_block(&mut self, b: &'a syn::Block) {
+        self.path.push(Step::C("blk".into()));
+        self.body_block(b);
+        self.path.pop();
+    }
+    fn visit_local(&mut self, l: &'a syn::Local) {
+        let region = self.region();
+        if let Some(init) = &l.init {
+            let mut binds = Vec::new();
+            pat_names(&l.pat, &mut binds);
+            if let Some((form, arg)) = opener_call(&init.expr) {
+                let bind = match &l.pat {
+                    Pat::Ident(i) => Some(i.ident.to_string()),
+                    _ => None,
+                };
+                self.push(HfEv::Open {
+                    form,
+                    arg,
+                    bind,
+                    region,
+                });
+                if let Expr::Call(c) = &*init.expr {
+                    for a in c.args.iter().skip(1) {
+                        self.visit_expr(a);
+                    }
+                }
+            } else {
+                let pairs: Vec<(&Pat, &Expr)> = match (&l.pat, &*init.expr) {
+                    (Pat::Tuple(p), Expr::Tuple(t)) if p.elems.len() == t.elems.len() => {
+                        p.elems.iter().zip(t.elems.iter()).collect()
+                    }
+                    (p, e) => vec![(p, e)],
+                };
+                for (p, e) in pairs {
+                    if let (Pat::Ident(i), true) = (p, is_prefix_clone(e)) {
+                        self.push(HfEv::Clone {
+                            bind: i.ident.to_string(),
+                            region,
+                        });
+                    }
+                }
+                self.visit_expr(&init.expr);
+            }
+            if let Some((_, els)) = &init.diverge {
+                self.path.push(Step::C("letelse".into()));
+                self.body_expr(els);
+                self.path.pop();
+            }
+            self.names.extend(binds);
+        }
+    }
+    fn visit_expr_call(&mut self, c: &'a syn::ExprCall) {
+        if let Some((form, arg)) = opener_of(c) {
+            let region = self.region();
+            self.push(HfEv::Open {
+                form,
+                arg,
+                bind: None,
+                region,
+            });
+            for a in c.args.iter().skip(1) {
+                self.visit_expr(a);
+            }
+            return;
+        }
+        if let Some(n) = single_path(&c.func) {
+            if self.names.contains(&n) {
+                self.push(HfEv::Call {
+                    name: format!("dyn:{n}"),
+                });
+            }
+        }
+        visit::visit_expr_call(self, c);
+    }
+    fn visit_expr_method_call(&mut self, m: &'a syn::ExprMethodCall) {
+        let meth = m.method.to_string();
+        if STRING_MUT.contains(&meth.as_str()) && is_prefix_field(&m.receiver) {
+            self.push(HfEv::Other { form: "method" });
+        }
+        self.visit_expr(&m.receiver);
+        for a in &m.args {
+            self.visit_expr(a);
+        }
+        let at = match meth.as_str() {
+            "with_scope" => Some(0),
+            "elaborate_instance" => Some(1),
+            _ => None,
+        };
+        if let Some(k) = at {
+            let arg = m.args.iter().nth(k).map(tx).unwrap_or_else(|| "-".into());
+            self.push(HfEv::Entry {
+                name: meth.clone(),
+                arg,
+            });
+        }
+        if matches!(&*m.receiver, Expr::Path(p) if p.path.segments.len() == 1 && RECV2.contains(&p.path.segments[0].ident.to_string().as_str()))
+        {
+            self.push(HfEv::Call { name: meth });
+        }
+    }
+    fn visit_expr_reference(&mut self, r: &'a syn::ExprReference) {
+        if r.mutability.is_some() && is_prefix_field(&r.expr) {
+            self.push(HfEv::Other { form: "mutref" });
+        }
+        visit::visit_expr_reference(self, r);
+    }
+    fn visit_expr_assign(&mut self, a: &'a syn::ExprAssign) {
+        if is_prefix_field(&a.left) {
+            self.visit_expr(&a.right);
+            self.push(HfEv::Assign {
+                rhs: tx(&a.right),
+                ident: single_path(&a.right),
+            });
+            return;
+        }
+        visit::visit_expr_assign(self, a);
+    }
+    fn visit_expr_binary(&mut self, b: &'a syn::ExprBinary) {
+        let compound = matches!(
+            b.op,
+            syn::BinOp::AddAssign(_)
+                | syn::BinOp::SubAssign(_)
+                | syn::BinOp::MulAssign(_)
+                | syn::BinOp::DivAssign(_)
+                | syn::BinOp::RemAssign(_)
+                | syn::BinOp::BitXorAssign(_)
+                | syn::BinOp::BitAndAssign(_)
+                | syn::BinOp::BitOrAssign(_)
+                | syn::BinOp::ShlAssign(_)
+                | syn::BinOp::ShrAssign(_)
+        );
+        if compound && is_prefix_field(&b.left) {
+            self.push(HfEv::Other { form: "opassign" });
+        }
+        visit::visit_expr_binary(self, b);
+    }
+    fn visit_expr_struct(&mut self, s: &'a syn::ExprStruct) {
+        for f in &s.fields {
+            if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix") {
+                self.push(HfEv::Init { arg: tx(&f.expr) });
+            }
+        }
+        visit::visit_expr_struct(self, s);
+    }
+    fn visit_expr_closure(&mut self, c: &'a syn::ExprClosure) {
+        let loops = std::mem::take(&mut self.loops);
+        self.closure += 1;
+        self.path.push(Step::C("closure".into()));
+        self.body_expr(&c.body);
+        self.path.pop();
+        self.closure -= 1;
+        self.loops = loops;
+    }
+    fn visit_expr_if(&mut self, i: &'a syn::ExprIf) {
+        self.visit_expr(&i.cond);
+        self.path.push(Step::C("then".into()));
+        self.body_block(&i.then_branch);
+        self.path.pop();
+        if let Some((_, e)) = &i.else_branch {
+            self.path.push(Step::C("else".into()));
+            self.body_expr(e);
+            self.path.pop();
+        }
+    }
+    fn visit_expr_match(&mut self, m: &'a syn::ExprMatch) {
+        self.visit_expr(&m.expr);
+        for (j, a) in m.arms.iter().enumerate() {
+            self.path.push(Step::C(format!("arm{j}")));
+            if let Some((_, g)) = &a.guard {
+                self.visit_expr(g);
+            }
+            self.body_expr(&a.body);
+            self.path.pop();
+        }
+    }
+    fn visit_expr_for_loop(&mut self, f: &'a syn::ExprForLoop) {
+        self.visit_expr(&f.expr);
+        self.in_loop(&f.label, "for", &f.body);
+    }
+    fn visit_expr_while(&mut self, w: &'a syn::ExprWhile) {
+        self.visit_expr(&w.cond);
+        self.in_loop(&w.label, "while", &w.body);
+    }
+    fn visit_expr_loop(&mut self, l: &'a syn::ExprLoop) {
+        self.in_loop(&l.label, "loop", &l.body);
+    }
+    fn visit_expr_block(&mut self, b: &'a syn::ExprBlock) {
+        self.path.push(Step::C("blk".into()));
+        let labeled = b.label.is_some();
+        if let Some(l) = &b.label {
+            self.loops
+                .push((Some(l.name.ident.to_string()), self.path.clone(), false));
+        }
+        self.body_block(&b.block);
+        if labeled {
+            self.loops.pop();
+        }
+        self.path.pop();
+    }
+    fn visit_expr_return(&mut self, r: &'a syn::ExprReturn) {
+        visit::visit_expr_return(self, r);
+        self.push(HfEv::Exit {
+            kind: "return",
+            target: None,
+        });
+    }
+    fn visit_expr_try(&mut self, t: &'a syn::ExprTry) {
+        visit::visit_expr_try(self, t);
+        self.push(HfEv::Exit {
+            kind: "?",
+            target: None,
+        });
+    }
+    fn visit_expr_break(&mut self, b: &'a syn::ExprBreak) {
+        visit::visit_expr_break(self, b);
+        self.jump("break", b.label.as_ref());
+    }
+    fn visit_expr_continue(&mut self, c: &'a syn::ExprContinue) {
+        self.jump("continue", c.label.as_ref());
+    }
+    fn visit_macro(&mut self, mac: &'a syn::Macro) {
+        // the parsed arguments are owned by this call: a sub-walk, whose events keep no
+        // region (an opener inside a macro is a row with no paths)
+        let es = mac_exprs(mac);
+        let mut w = HfWalk {
+            path: self.path.clone(),
+            loops: self.loops.clone(),
+            closure: self.closure,
+            names: self.names.clone(),
+            block: Vec::new(),
+            evs: Vec::new(),
+        };
+        for e in &es {
+            w.visit_expr(e);
+        }
+        for a in w.evs {
+            let ev = match a.ev {
+                HfEv::Open {
+                    form, arg, bind, ..
+                } => HfEv::Open {
+                    form,
+                    arg,
+                    bind,
+                    region: None,
+                },
+                HfEv::Clone { bind, .. } => HfEv::Clone { bind, region: None },
+                HfEv::Assign { rhs, ident } => HfEv::Assign { rhs, ident },
+                HfEv::Init { arg } => HfEv::Init { arg },
+                HfEv::Other { form } => HfEv::Other { form },
+                HfEv::Exit { kind, target } => HfEv::Exit { kind, target },
+                HfEv::Call { name } => HfEv::Call { name },
+                HfEv::Entry { name, arg } => HfEv::Entry { name, arg },
+            };
+            self.evs.push(HfAt {
+                pos: a.pos,
+                closure: a.closure,
+                ev,
+            });
+        }
+    }
+}
+
+/// HF's path state at a point after the opener: (the prefix differs from the saved
+/// value, restores so far saturated at 2).
+type HfSt = (bool, u8);
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum HfJump {
+    Ret,
+    Try,
+    Panic,
+    Brk(Option<String>),
+    Cont(Option<String>),
+}
+
+#[derive(Default)]
+struct HfOut {
+    fall: BTreeSet<HfSt>,
+    jumps: BTreeSet<(HfJump, HfSt)>,
+}
+
+/// The paths from an opener to the end of its block: each `cur_prefix = <bind>` a
+/// restore, each other assignment a re-point, unless its right side is another site's
+/// saved binding (that site's own restore). A closure body is not entered (its exits
+/// leave the closure) ; a write inside one is counted in `closure_writes`.
+struct HfFlow<'s> {
+    bind: &'s str,
+    others: &'s BTreeSet<String>,
+    closure_writes: usize,
+}
+
+impl HfFlow<'_> {
+    fn stmts(&mut self, ss: &[syn::Stmt], ins: &BTreeSet<HfSt>) -> HfOut {
+        let mut out = HfOut::default();
+        let mut cur = ins.clone();
+        for s in ss {
+            if cur.is_empty() {
+                break;
+            }
+            let o = self.stmt(s, &cur);
+            out.jumps.extend(o.jumps);
+            cur = o.fall;
+        }
+        out.fall = cur;
+        out
+    }
+    fn stmt(&mut self, s: &syn::Stmt, ins: &BTreeSet<HfSt>) -> HfOut {
+        match s {
+            syn::Stmt::Local(l) => match &l.init {
+                Some(init) => {
+                    let mut o = self.expr(&init.expr, ins);
+                    if let Some((_, els)) = &init.diverge {
+                        let e = self.expr(els, &o.fall);
+                        o.jumps.extend(e.jumps);
+                    }
+                    o
+                }
+                None => HfOut {
+                    fall: ins.clone(),
+                    ..Default::default()
+                },
+            },
+            syn::Stmt::Item(_) => HfOut {
+                fall: ins.clone(),
+                ..Default::default()
+            },
+            syn::Stmt::Expr(e, _) => self.expr(e, ins),
+            syn::Stmt::Macro(m) => self.mac(&m.mac, ins),
+        }
+    }
+    fn seq<'e>(&mut self, es: impl Iterator<Item = &'e Expr>, ins: &BTreeSet<HfSt>) -> HfOut {
+        let mut out = HfOut::default();
+        let mut cur = ins.clone();
+        for e in es {
+            let o = self.expr(e, &cur);
+            out.jumps.extend(o.jumps);
+            cur = o.fall;
+        }
+        out.fall = cur;
+        out
+    }
+    fn mac(&mut self, mac: &syn::Macro, ins: &BTreeSet<HfSt>) -> HfOut {
+        let es = mac_exprs(mac);
+        let mut o = self.seq(es.iter(), ins);
+        let name = mac
+            .path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
+        if DIVERGE_MACROS.contains(&name.as_str()) {
+            for st in std::mem::take(&mut o.fall) {
+                o.jumps.insert((HfJump::Panic, st));
+            }
+        }
+        o
+    }
+    fn block(&mut self, b: &syn::Block, ins: &BTreeSet<HfSt>) -> HfOut {
+        self.stmts(&b.stmts, ins)
+    }
+    /// a loop: `head` the states at each iteration's start, to a fixpoint
+    fn lp(
+        &mut self,
+        label: &Option<syn::Label>,
+        cond: Option<&Expr>,
+        body: &syn::Block,
+        entry: &BTreeSet<HfSt>,
+        may_skip: bool,
+    ) -> HfOut {
+        let lb = label.as_ref().map(|l| l.name.ident.to_string());
+        let mine = |l: &Option<String>| l.is_none() || *l == lb;
+        let mut head = entry.clone();
+        let mut out = HfOut::default();
+        loop {
+            let enter = match cond {
+                Some(c) => {
+                    let o = self.expr(c, &head);
+                    out.jumps.extend(o.jumps);
+                    out.fall.extend(o.fall.iter().copied());
+                    o.fall
+                }
+                None => {
+                    if may_skip {
+                        out.fall.extend(head.iter().copied());
+                    }
+                    head.clone()
+                }
+            };
+            let o = self.block(body, &enter);
+            let mut next = head.clone();
+            next.extend(o.fall.iter().copied());
+            for (j, st) in o.jumps {
+                match &j {
+                    HfJump::Cont(l) if mine(l) => {
+                        next.insert(st);
+                    }
+                    HfJump::Brk(l) if mine(l) => {
+                        out.fall.insert(st);
+                    }
+                    _ => {
+                        out.jumps.insert((j, st));
+                    }
+                }
+            }
+            if next == head {
+                break;
+            }
+            head = next;
+        }
+        out
+    }
+    fn expr(&mut self, e: &Expr, ins: &BTreeSet<HfSt>) -> HfOut {
+        let pass = |ins: &BTreeSet<HfSt>| HfOut {
+            fall: ins.clone(),
+            ..Default::default()
+        };
+        match e {
+            Expr::Assign(a) if is_prefix_field(&a.left) => {
+                let mut o = self.expr(&a.right, ins);
+                let id = single_path(&a.right);
+                if id.as_deref() == Some(self.bind) {
+                    o.fall = o
+                        .fall
+                        .iter()
+                        .map(|&(_, n)| (false, (n + 1).min(2)))
+                        .collect();
+                } else if !id.is_some_and(|i| self.others.contains(&i)) {
+                    o.fall = o.fall.iter().map(|&(_, n)| (true, n)).collect();
+                }
+                o
+            }
+            Expr::If(i) => {
+                let c = self.expr(&i.cond, ins);
+                let t = self.block(&i.then_branch, &c.fall);
+                let mut out = match &i.else_branch {
+                    Some((_, eb)) => self.expr(eb, &c.fall),
+                    None => pass(&c.fall),
+                };
+                out.fall.extend(t.fall);
+                out.jumps.extend(t.jumps);
+                out.jumps.extend(c.jumps);
+                out
+            }
+            Expr::Let(l) => self.expr(&l.expr, ins),
+            Expr::Match(m) => {
+                let s = self.expr(&m.expr, ins);
+                let mut out = HfOut {
+                    jumps: s.jumps.clone(),
+                    ..Default::default()
+                };
+                for a in &m.arms {
+                    let g = match &a.guard {
+                        Some((_, g)) => self.expr(g, &s.fall),
+                        None => pass(&s.fall),
+                    };
+                    let b = self.expr(&a.body, &g.fall);
+                    out.jumps.extend(g.jumps);
+                    out.jumps.extend(b.jumps);
+                    out.fall.extend(b.fall);
+                }
+                out
+            }
+            Expr::ForLoop(f) => {
+                let it = self.expr(&f.expr, ins);
+                let mut o = self.lp(&f.label, None, &f.body, &it.fall, true);
+                o.jumps.extend(it.jumps);
+                o
+            }
+            Expr::While(w) => self.lp(&w.label, Some(&w.cond), &w.body, ins, false),
+            Expr::Loop(l) => self.lp(&l.label, None, &l.body, ins, false),
+            Expr::Block(b) => {
+                let mut o = self.block(&b.block, ins);
+                if let Some(l) = &b.label {
+                    let n = Some(l.name.ident.to_string());
+                    let (mine, rest): (BTreeSet<_>, BTreeSet<_>) = o
+                        .jumps
+                        .into_iter()
+                        .partition(|(j, _)| matches!(j, HfJump::Brk(x) if *x == n));
+                    o.fall.extend(mine.into_iter().map(|(_, st)| st));
+                    o.jumps = rest;
+                }
+                o
+            }
+            Expr::Unsafe(b) => self.block(&b.block, ins),
+            Expr::Const(b) => self.block(&b.block, ins),
+            Expr::Closure(c) => {
+                let mut w = HfWalk {
+                    path: Vec::new(),
+                    loops: Vec::new(),
+                    closure: 0,
+                    names: BTreeSet::new(),
+                    block: Vec::new(),
+                    evs: Vec::new(),
+                };
+                w.visit_expr(&c.body);
+                self.closure_writes += w
+                    .evs
+                    .iter()
+                    .filter(|a| {
+                        matches!(
+                            a.ev,
+                            HfEv::Open { .. }
+                                | HfEv::Assign { .. }
+                                | HfEv::Other { .. }
+                                | HfEv::Init { .. }
+                        )
+                    })
+                    .count();
+                pass(ins)
+            }
+            Expr::Return(r) => {
+                let o = match &r.expr {
+                    Some(x) => self.expr(x, ins),
+                    None => pass(ins),
+                };
+                let mut out = HfOut {
+                    jumps: o.jumps,
+                    ..Default::default()
+                };
+                out.jumps
+                    .extend(o.fall.into_iter().map(|st| (HfJump::Ret, st)));
+                out
+            }
+            Expr::Try(t) => {
+                let mut o = self.expr(&t.expr, ins);
+                o.jumps.extend(o.fall.iter().map(|&st| (HfJump::Try, st)));
+                o
+            }
+            Expr::Break(b) => {
+                let o = match &b.expr {
+                    Some(x) => self.expr(x, ins),
+                    None => pass(ins),
+                };
+                let l = b.label.as_ref().map(|l| l.ident.to_string());
+                let mut out = HfOut {
+                    jumps: o.jumps,
+                    ..Default::default()
+                };
+                out.jumps
+                    .extend(o.fall.into_iter().map(|st| (HfJump::Brk(l.clone()), st)));
+                out
+            }
+            Expr::Continue(c) => {
+                let l = c.label.as_ref().map(|l| l.ident.to_string());
+                HfOut {
+                    jumps: ins
+                        .iter()
+                        .map(|&st| (HfJump::Cont(l.clone()), st))
+                        .collect(),
+                    ..Default::default()
+                }
+            }
+            Expr::Macro(m) => self.mac(&m.mac, ins),
+            Expr::Binary(b) if matches!(b.op, syn::BinOp::And(_) | syn::BinOp::Or(_)) => {
+                let l = self.expr(&b.left, ins);
+                let r = self.expr(&b.right, &l.fall);
+                let mut out = HfOut {
+                    fall: l.fall,
+                    jumps: l.jumps,
+                };
+                out.fall.extend(r.fall);
+                out.jumps.extend(r.jumps);
+                out
+            }
+            Expr::Binary(b) => self.seq([&*b.left, &*b.right].into_iter(), ins),
+            Expr::MethodCall(m) => {
+                self.seq(std::iter::once(&*m.receiver).chain(m.args.iter()), ins)
+            }
+            Expr::Call(c) => self.seq(std::iter::once(&*c.func).chain(c.args.iter()), ins),
+            Expr::Assign(a) => self.seq([&*a.left, &*a.right].into_iter(), ins),
+            Expr::Unary(u) => self.expr(&u.expr, ins),
+            Expr::Field(f) => self.expr(&f.base, ins),
+            Expr::Index(i) => self.seq([&*i.expr, &*i.index].into_iter(), ins),
+            Expr::Reference(r) => self.expr(&r.expr, ins),
+            Expr::Paren(p) => self.expr(&p.expr, ins),
+            Expr::Group(g) => self.expr(&g.expr, ins),
+            Expr::Cast(c) => self.expr(&c.expr, ins),
+            Expr::Await(a) => self.expr(&a.base, ins),
+            Expr::Tuple(t) => self.seq(t.elems.iter(), ins),
+            Expr::Array(a) => self.seq(a.elems.iter(), ins),
+            Expr::Repeat(r) => self.expr(&r.expr, ins),
+            Expr::Struct(s) => self.seq(
+                s.fields.iter().map(|f| &f.expr).chain(s.rest.as_deref()),
+                ins,
+            ),
+            Expr::Range(r) => self.seq(r.start.as_deref().into_iter().chain(r.end.as_deref()), ins),
+            _ => pass(ins),
+        }
+    }
+}
+
+fn st_text(st: &HfSt) -> String {
+    let n = match st.1 {
+        2 => "2+".to_string(),
+        n => n.to_string(),
+    };
+    format!("r{n}{}", if st.0 { "!" } else { "" })
+}
+
+/// One fn body for HF, keyed as the census keys it.
+struct HfFn<'a> {
+    file: String,
+    qual: String,
+    simple: String,
+    line: usize,
+    params: BTreeSet<String>,
+    body: Option<&'a syn::Block>,
+}
+
+struct Pass3<'a, 'b> {
+    file: String,
+    stack: Vec<usize>,
+    out: &'b mut Vec<HfFn<'a>>,
+}
+
+impl<'a> Pass3<'a, '_> {
+    fn push(
+        &mut self,
+        attrs: &[syn::Attribute],
+        sig: &syn::Signature,
+        body: Option<&'a syn::Block>,
+    ) -> bool {
+        if has_cfg_test(attrs) {
+            return false;
+        }
+        let simple = sig.ident.to_string();
+        let qual = match self.stack.last() {
+            Some(&o) => format!("{}::{}", self.out[o].qual, simple),
+            None => simple.clone(),
+        };
+        let mut ps = Vec::new();
+        for a in &sig.inputs {
+            if let syn::FnArg::Typed(t) = a {
+                pat_names(&t.pat, &mut ps);
+            }
+        }
+        self.out.push(HfFn {
+            file: self.file.clone(),
+            qual,
+            simple,
+            line: 0,
+            params: ps.into_iter().collect(),
+            body,
+        });
+        self.stack.push(self.out.len() - 1);
+        true
+    }
+}
+
+impl<'a> Visit<'a> for Pass3<'a, '_> {
+    fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
+        if self.push(&f.attrs, &f.sig, Some(&f.block)) {
+            visit::visit_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+        if self.push(&f.attrs, &f.sig, Some(&f.block)) {
+            visit::visit_impl_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_trait_item_fn(&mut self, f: &'a syn::TraitItemFn) {
+        if self.push(&f.attrs, &f.sig, f.default.as_ref()) {
+            visit::visit_trait_item_fn(self, f);
+            self.stack.pop();
+        }
+    }
+    fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+        if !has_cfg_test(&i.attrs) {
+            visit::visit_item_impl(self, i);
+        }
+    }
+    fn visit_item_mod(&mut self, m: &'a syn::ItemMod) {
+        if !has_cfg_test(&m.attrs) {
+            visit::visit_item_mod(self, m);
+        }
+    }
+}
+
+fn hf_fns(srcs: &[Src]) -> Vec<HfFn<'_>> {
+    let mut fns = Vec::new();
+    for s in srcs {
+        let mut recs = Vec::new();
+        Pass3 {
+            file: s.rel.clone(),
+            stack: Vec::new(),
+            out: &mut recs,
+        }
+        .visit_file(&s.file);
+        let blanked = blank(&s.text);
+        let mut cursor = 0usize;
+        for r in &mut recs {
+            if let Some(p) = find_fn(&blanked, cursor, &r.simple) {
+                r.line = s.text.as_bytes()[..p]
+                    .iter()
+                    .filter(|&&c| c == b'\n')
+                    .count()
+                    + 1;
+                cursor = p + 2;
+            }
+        }
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        for r in &mut recs {
+            let n = seen.entry(r.qual.clone()).or_default();
+            *n += 1;
+            if *n > 1 {
+                r.qual = format!("{}#{}", r.qual, n);
+            }
+        }
+        fns.extend(recs);
+    }
+    fns
+}
+
+/// HF's rows: per site (key = file, fn, site ordinal) the computed columns, and per
+/// (file, fn, callee, ARG) the count of `with_scope` / `elaborate_instance` calls.
+struct HfCensus {
+    sites: Vec<(String, String, usize)>,
+    calls: BTreeMap<String, (usize, usize)>,
+}
+
+fn hf_census() -> HfCensus {
+    let srcs = load_src();
+    let fns = hf_fns(&srcs);
+    let mut walks = Vec::new();
+    for f in &fns {
+        let Some(body) = f.body else { continue };
+        let mut w = HfWalk {
+            path: Vec::new(),
+            loops: Vec::new(),
+            closure: 0,
+            names: f.params.clone(),
+            block: Vec::new(),
+            evs: Vec::new(),
+        };
+        w.body_block(body);
+        walks.push((f, w.evs));
+    }
+    // the fns that write cur_prefix (a call of one inside a region is a NEST)
+    let writers: BTreeSet<&str> = walks
+        .iter()
+        .filter(|(_, evs)| {
+            evs.iter().any(|a| {
+                matches!(
+                    a.ev,
+                    HfEv::Open { .. }
+                        | HfEv::Assign { .. }
+                        | HfEv::Init { .. }
+                        | HfEv::Other { .. }
+                )
+            })
+        })
+        .map(|(f, _)| f.simple.as_str())
+        .collect();
+    let mut sites = Vec::new();
+    let mut calls: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for (f, evs) in &walks {
+        for a in evs {
+            if let HfEv::Entry { name, arg } = &a.ev {
+                let x = calls
+                    .entry(format!("{}\t{}\t{name}\t{arg}", f.file, f.qual))
+                    .or_insert((0, f.line));
+                x.0 += 1;
+            }
+        }
+        sites.extend(hf_sites(f, evs, &writers));
+    }
+    HfCensus { sites, calls }
+}
+
+/// The sites of one fn: a `mem::*` opener, a clone-save some assignment restores, a
+/// struct-literal init, and one site for the writes no region covers.
+fn hf_sites(
+    f: &HfFn<'_>,
+    evs: &[HfAt<'_>],
+    writers: &BTreeSet<&str>,
+) -> Vec<(String, String, usize)> {
+    struct Site<'a> {
+        ev: usize,
+        form: &'static str,
+        arg: String,
+        bind: Option<String>,
+        region: Option<(&'a [syn::Stmt], usize)>,
+        bpath: Vec<Step>,
+        at: usize,
+    }
+    let restored: BTreeSet<&str> = evs
+        .iter()
+        .filter_map(|a| match &a.ev {
+            HfEv::Assign { ident: Some(i), .. } => Some(i.as_str()),
+            _ => None,
+        })
+        .collect();
+    let mut sites: Vec<Site<'_>> = Vec::new();
+    for (k, a) in evs.iter().enumerate() {
+        let (form, arg, bind, region) = match &a.ev {
+            HfEv::Open {
+                form,
+                arg,
+                bind,
+                region,
+            } => (*form, arg.clone(), bind.clone(), *region),
+            HfEv::Clone { bind, region } if restored.contains(bind.as_str()) => {
+                ("clone", "-".to_string(), Some(bind.clone()), *region)
+            }
+            HfEv::Init { arg } => ("init", arg.clone(), None, None),
+            _ => continue,
+        };
+        let (bpath, at) = match a.pos.split_last() {
+            Some((Step::S(i, _), rest)) if region.is_some() => (rest.to_vec(), *i),
+            _ => (a.pos.clone(), 0),
+        };
+        sites.push(Site {
+            ev: k,
+            form,
+            arg,
+            bind,
+            region,
+            bpath,
+            at,
+        });
+    }
+    // is the event at `pos` inside the site's region (its block, after the opener)?
+    let inside = |s: &Site<'_>, pos: &[Step]| -> bool {
+        s.region.is_some()
+            && pos.len() > s.bpath.len()
+            && pos.starts_with(&s.bpath)
+            && matches!(pos[s.bpath.len()], Step::S(j, _) if j > s.at)
+    };
+    let binds: BTreeSet<String> = sites.iter().filter_map(|s| s.bind.clone()).collect();
+    let mut owner: Vec<Option<usize>> = vec![None; evs.len()];
+    let mut stray = Vec::new();
+    for (k, a) in evs.iter().enumerate() {
+        let HfEv::Assign { ident, .. } = &a.ev else {
+            if matches!(a.ev, HfEv::Other { .. }) {
+                stray.push(k);
+            }
+            continue;
+        };
+        // the innermost region holding it: a restore names its binding ; a re-point
+        // belongs to the innermost region
+        let own = sites
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.ev < k && inside(s, &a.pos))
+            .filter(|(_, s)| match ident {
+                Some(i) if binds.contains(i) => s.bind.as_ref() == Some(i),
+                _ => true,
+            })
+            .map(|(n, _)| n)
+            .next_back();
+        match own {
+            Some(n) => owner[k] = Some(n),
+            None => stray.push(k),
+        }
+    }
+    let mut rows = Vec::new();
+    for (n, s) in sites.iter().enumerate() {
+        let mine: Vec<usize> = (0..evs.len()).filter(|&k| owner[k] == Some(n)).collect();
+        let is_restore = |k: usize| matches!(&evs[k].ev, HfEv::Assign { ident: Some(i), .. } if s.bind.as_ref() == Some(i));
+        let restores: Vec<usize> = mine.iter().copied().filter(|&k| is_restore(k)).collect();
+        let repoints: Vec<usize> = mine.iter().copied().filter(|&k| !is_restore(k)).collect();
+        let last = restores.last().copied().unwrap_or(s.ev);
+        let rel = |k: usize| rel_text(&s.bpath, &evs[k].pos);
+        let list = |v: Vec<String>| {
+            if v.is_empty() {
+                "-".to_string()
+            } else {
+                v.join(",")
+            }
+        };
+        let restores_t = list(restores.iter().map(|&k| rel(k)).collect());
+        let repoints_t = list(
+            repoints
+                .iter()
+                .map(|&k| match &evs[k].ev {
+                    HfEv::Assign { rhs, .. } => format!("{rhs}@{}", rel(k)),
+                    _ => unreachable!(),
+                })
+                .collect(),
+        );
+        let same = if restores.is_empty() {
+            "-"
+        } else if restores
+            .iter()
+            .all(|&k| evs[k].pos.len() == s.bpath.len() + 1)
+        {
+            "yes"
+        } else {
+            "no"
+        };
+        // exits and calls between the opener and the last restore, inside the region
+        let mut outs = Vec::new();
+        let mut locals: BTreeMap<String, usize> = BTreeMap::new();
+        let mut nest: BTreeMap<String, usize> = BTreeMap::new();
+        for (k, a) in evs.iter().enumerate().take(last).skip(s.ev + 1) {
+            if !inside(s, &a.pos) {
+                continue;
+            }
+            match &a.ev {
+                HfEv::Exit { kind, target } => {
+                    let local = if a.closure > 0 {
+                        Some("closure")
+                    } else {
+                        match target {
+                            Some(t) if inside(s, t) => Some("local"),
+                            _ => None,
+                        }
+                    };
+                    match local {
+                        Some(w) => *locals.entry(format!("{kind}({w})")).or_default() += 1,
+                        None => outs.push(format!("{kind}@{}", rel(k))),
+                    }
+                }
+                HfEv::Call { name }
+                    if name.starts_with("dyn:") || writers.contains(name.as_str()) =>
+                {
+                    *nest.entry(name.clone()).or_default() += 1;
+                }
+                _ => {}
+            }
+        }
+        let mut exits = outs;
+        exits.extend(locals.iter().map(|(k, n)| format!("{k}x{n}")));
+        let exits_t = list(exits);
+        let nest_t = list(
+            nest.iter()
+                .map(|(k, n)| {
+                    if *n == 1 {
+                        k.clone()
+                    } else {
+                        format!("{k}x{n}")
+                    }
+                })
+                .collect(),
+        );
+        let (paths_t, region_t, opener_t) = match (&s.region, &s.bind) {
+            (Some((ss, i)), Some(b)) => {
+                let others: BTreeSet<String> = binds.iter().filter(|x| *x != b).cloned().collect();
+                let mut fl = HfFlow {
+                    bind: b,
+                    others: &others,
+                    closure_writes: 0,
+                };
+                let start: HfSt = (s.form != "clone", 0);
+                let o = fl.stmts(&ss[i + 1..], &BTreeSet::from([start]));
+                let mut by: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+                for st in &o.fall {
+                    by.entry("end").or_default().insert(st_text(st));
+                }
+                for (j, st) in &o.jumps {
+                    let w = match j {
+                        HfJump::Ret => "return",
+                        HfJump::Try => "?",
+                        HfJump::Panic => "panic",
+                        HfJump::Brk(_) => "break",
+                        HfJump::Cont(_) => "continue",
+                    };
+                    by.entry(w).or_default().insert(st_text(st));
+                }
+                let mut p = by
+                    .iter()
+                    .map(|(w, v)| {
+                        format!("{w}={}", v.iter().cloned().collect::<Vec<_>>().join("|"))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(";");
+                if fl.closure_writes > 0 {
+                    let _ = write!(p, ";closure-writes={}", fl.closure_writes);
+                }
+                (p, path_text(&s.bpath), format!("s{}", s.at))
+            }
+            (Some(_), None) => (
+                "no-binding".into(),
+                path_text(&s.bpath),
+                format!("s{}", s.at),
+            ),
+            _ => ("-".into(), "-".into(), "-".into()),
+        };
+        rows.push((
+            format!("{}\t{}\t{}", f.file, f.qual, n + 1),
+            [
+                s.form.to_string(),
+                s.bind.clone().unwrap_or_else(|| "-".into()),
+                s.arg.clone(),
+                region_t,
+                opener_t,
+                restores_t,
+                repoints_t,
+                same.to_string(),
+                exits_t,
+                paths_t,
+                nest_t,
+            ]
+            .join("\t"),
+            f.line,
+        ));
+    }
+    if !stray.is_empty() {
+        let forms = stray
+            .iter()
+            .map(|&k| match &evs[k].ev {
+                HfEv::Assign { rhs, .. } => format!("{rhs}@{}", path_text(&evs[k].pos)),
+                HfEv::Other { form } => format!("{form}@{}", path_text(&evs[k].pos)),
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        rows.push((
+            format!("{}\t{}\tstray", f.file, f.qual),
+            ["stray", "-", "-", "-", "-", "-", &forms, "-", "-", "-", "-"].join("\t"),
+            f.line,
+        ));
+    }
+    rows
+}
+
+#[test]
+fn hf_the_write_sites_shapes_are_pinned() {
+    let c = hf_census();
+    let got: BTreeMap<String, String> = c
+        .sites
+        .iter()
+        .map(|(k, v, _)| (k.clone(), v.clone()))
+        .collect();
+    let dumped: Vec<String> = c
+        .sites
+        .iter()
+        .map(|(k, v, l)| format!("{k}\t{l}\t{v}"))
+        .collect();
+    dump(
+        "HF",
+        "file\tfn\tsite\tline\tform\tbind\targ\tblock\topener\trestores\trepoints\tsame\texits\tpaths\tnest",
+        &dumped,
+    );
+    let calls_got: BTreeMap<String, String> = c
+        .calls
+        .iter()
+        .map(|(k, (n, _))| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = c
+        .calls
+        .iter()
+        .map(|(k, (n, l))| format!("{k}\t{l}\t{n}"))
+        .collect();
+    dump("HF_CALLS", "file\tfn\tcallee\targ\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut msgs = Vec::new();
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("HF")) {
+        assert_eq!(
+            row.len(),
+            16,
+            "HF table row has {} columns, not 16: {row:?}",
+            row.len()
+        );
+        let k = row[..3].join("\t");
+        let v = row[3..14].join("\t");
+        let (form, same, exits, paths, nest, plan8, hand) = (
+            &row[3], &row[10], &row[11], &row[12], &row[13], &row[14], &row[15],
+        );
+        let ctor = form == "init";
+        let exit_class = if ctor {
+            "-"
+        } else if exits == "-" {
+            "none"
+        } else if exits.contains('@') {
+            "out"
+        } else {
+            "local"
+        };
+        let once = if ctor {
+            "-"
+        } else if paths
+            .split(';')
+            .all(|p| p.split_once('=').is_some_and(|(_, s)| s == "r1"))
+        {
+            "yes"
+        } else {
+            "no"
+        };
+        // a row the syntax leaves open needs its hand reading
+        let open = form == "clone"
+            || nest.contains("dyn:")
+            || exit_class == "out"
+            || once == "no"
+            || form == "stray";
+        if open && hand == "-" {
+            msgs.push(format!(
+                "HF HAND {}: the row has a clone save, a dyn call, an exit out of the region or a path that does not \
+                 restore once, and no HAND reading — read the site and write what the syntax does not decide",
+                k.replace('\t', " · ")
+            ));
+        }
+        for (col, val) in [
+            ("same-block", same.as_str()),
+            ("exit-between", exit_class),
+            ("every-path-once", once),
+            ("plan8", plan8.as_str()),
+        ] {
+            *by.entry(format!("{col}:{val}")).or_default() += 1;
+        }
+        want.insert(k, v);
+    }
+    msgs.extend(diff_rows(
+        "HF",
+        &got,
+        &want,
+        "a new write site of `cur_prefix` (or a site whose opener moved fn / ordinal): name the unit that adds it (LS2's \
+         funnel takes every write), read what it sets the prefix to and whether every path restores it once, give it \
+         its PLAN8 class and HAND reading, add the row (and H3's / HK's)",
+        "a write site of `cur_prefix` is gone: name the unit, remove the row",
+    ));
+    let mut cwant = BTreeMap::new();
+    for row in table(&tables::get("HF_CALLS")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HF_CALLS table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        *by.entry(format!("calls:{}", row[2])).or_default() +=
+            row[4].parse::<usize>().expect("count");
+        cwant.insert(row[..4].join("\t"), row[4].clone());
+    }
+    msgs.extend(diff_rows(
+        "HF_CALLS",
+        &calls_got,
+        &cwant,
+        "a new `with_scope` / `elaborate_instance` call, or a call's scope argument changed: name the unit, read the \
+         argument's text (the scope it enters), add the row (and HK's)",
+        "a `with_scope` / `elaborate_instance` call is gone or its argument changed: name the unit, remove the row",
+    ));
+    let counts = format!("sites {} {}", got.len(), dbg_counts(&by));
+    if counts != tables::get("HF_COUNTS") {
+        msgs.push(format!(
+            "HF COUNTS table [{}] now [{counts}]",
+            tables::get("HF_COUNTS")
+        ));
+    }
+    finish("HF", &msgs);
 }
 
 // =====================================================================================

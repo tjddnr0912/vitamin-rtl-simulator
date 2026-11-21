@@ -1236,3 +1236,72 @@ instance_array.rs	elaborate_instance_array	elaborate_instance	1	INSTANCE-ARRAY-E
 stmt_main.rs	lower_stmt_inner	with_scope	1	BLOCK
 == HK_COUNTS
 {"cur_prefix:BY-CALLER": 2, "cur_prefix:DEFINITION": 1, "cur_prefix:EMPTY": 2, "cur_prefix:INTERFACE-INSTANCE": 2, "cur_prefix:PACKAGE": 2, "cur_prefix:RECORDED": 16, "elaborate_instance:INSTANCE": 1, "elaborate_instance:INSTANCE-ARRAY-ELEM": 1, "elaborate_instance:ROOT-INSTANCE": 1, "with_scope:BLOCK": 3, "with_scope:BLOCK-CHAIN": 9, "with_scope:CLASS-METHOD": 2, "with_scope:FRAME-ROUTINE": 4, "with_scope:GEN-LOOP": 1, "with_scope:GEN-SINGLETON": 1, "with_scope:INLINE-TASK": 1}
+== HF
+# HF: the shape of each write site of `cur_prefix` (H3's 25), by (file, fn, site = the site's ordinal in the fn in
+# source order). A site is a `mem::replace` / `take` / `swap` opener, a clone save (`let b = <recv>.cur_prefix.clone()`
+# that some `cur_prefix = b` restores), a struct-literal init, or `stray` (a write no region holds). Computed: FORM,
+# BIND (the saved binding), ARG (the opener's text argument, as tokens), BLOCK (the opener's block: a path from the fn
+# body, `s<i>` a statement from the block's first, a construct then / else / arm<j> / for / while / loop / blk /
+# closure / letelse), OPENER (`s<i>` in BLOCK), RESTORES (each `cur_prefix = BIND` in the region = BLOCK after the
+# opener ; its first step `e<k>` counted back from BLOCK's last statement, e0 = the last), REPOINTS (`<rhs>@<pos>`,
+# any other assignment there), SAME (every restore a statement of BLOCK itself), EXITS (the `return` / `?` / `break` /
+# `continue` between the opener and the last restore: `@<pos>` when it leaves the region, `(local)` / `(closure)`
+# counted when its target is inside), PATHS (every path from the opener to the region's end or out of it, by where it
+# leaves, with its state: r<n> = n restores, `!` = cur re-pointed and not restored), NEST (calls between the opener
+# and the last restore of a fn that writes cur, `dyn:<name>` a call of a parameter or local). HAND: PLAN8 (plan8
+# H3's class: FIT / NOT-FIT / CTOR) and READ (what the syntax leaves to a reader: a dyn call's body, a clone save, an
+# exit out of the region, a path that is not r1 ; the test requires it there). Not seen: a panic (only the four
+# diverging macros end a path), a write through a `&mut String` bound earlier, a macro that does not parse.
+file	fn	site	form	bind	arg	block	opener	restores	repoints	same	exits	paths	nest	PLAN8	READ
+cont_array.rs	check_whole_array_sole_writer	1	take	saved	-	body	s11	e0	prefix@e1/for/s0	yes	-	end=r1	-	NOT-FIT	-
+cont_var.rs	check_var_cont_assign_sole_writer	1	take	saved	-	body	s10	e0	a.prefix.clone()@e3/for/s2,a.prefix.clone()@e1/for/s1/then/s1	yes	continue(local)x1	end=r1	-	NOT-FIT	-
+cover_synth.rs	materialize_cover	1	replace	saved_prefix	cov.scope.clone()	s1/for	s0	e0	-	yes	-	end=r1	-	FIT	-
+dead_arm.rs	settle_dead_arm	1	replace	prefix	d.prefix	s4/for	s2	e0	-	yes	-	end=r1	-	FIT	-
+driver.rs	new	1	init	-	String::new()	-	-	-	-	-	-	-	-	CTOR	-
+driver.rs	run	1	replace	saved	m.name.name.clone()	s8/for	s0	e0	-	yes	-	end=r1	-	FIT	-
+driver.rs	run	2	replace	saved	format!("$pkg${}", pm.name.name)	s10/for/s1/then/s0/else	s0	e1	-	yes	-	end=r1	-	FIT	-
+edge_gate.rs	report_at	1	replace	saved_prefix	prefix.to_string()	body	s2	e0	-	yes	-	end=r1	-	FIT	-
+edge_gate.rs	edge_backstop	1	take	prefix	-	s3/then	s1	e0	-	yes	-	end=r1	-	FIT	-
+frames_reserve.rs	with_rtn_decl_scope	1	replace	saved	scope	body	s1	e1	-	yes	-	end=r1	dyn:f	FIT	dyn:f is the caller's closure: a write in any closure is a row of its own fn here and there is none, so f moves cur only through the rows it reaches ; the early `return f(self)` is before the opener
+generate.rs	with_scope	1	replace	saved	new_prefix	body	s1	e1	-	yes	-	end=r1	dyn:f	FIT	dyn:f is the caller's closure (HF_CALLS' 21 lines): a write in any closure is a row of its own fn here and there is none, so f moves cur only through the rows it reaches
+held.rs	report_clk_refused	1	replace	saved	prefix.to_string()	body	s4	e0	-	yes	-	end=r1	-	FIT	-
+hier_defer/write.rs	resolve_pending_fill_widths	1	replace	saved_prefix	p.prefix.clone()	s2/for	s5	e1	-	yes	-	end=r1	-	FIT	-
+iface_inst.rs	elaborate_iface_instances	1	replace	saved_prefix	path.clone()	s6/for/s2/then	s0	e1	-	yes	continue(local)x1	end=r1	dyn:site_ofx2	FIT	dyn:site_of is this fn's local closure (`let site_of = |i, imp| ..`), which does not capture self: it cannot write cur
+iface_inst.rs	elaborate_iface_instances	2	replace	saved_prefix	path.clone()	s6/for/s3/then/s3/then	s1	e0	-	yes	-	end=r1	wire_ports	FIT	-
+instance.rs	elaborate_instance	1	replace	saved_prefix	inst_path.to_string()	body	s7	e13	-	yes	continue(local)x7	end=r1	dyn:is_header_importx2,dyn:site_ofx2,elaborate_iface_instances,flush_block_local_inits,materialize_cover,materialize_sva_checkers,wire_ports	FIT	dyn:is_header_import and dyn:site_of are this fn's local closures, neither captures self (the first calls `Self::import_precedes_header` with no receiver): they cannot write cur
+package.rs	elaborate_package	1	replace	saved_prefix	format!("$pkg${pkg}")	body	s1	e13	-	yes	continue(local)x3	end=r1	-	FIT	-
+ports.rs	bind_iface_port	1	replace	saved_for_lookup	parent_prefix.to_string()	body	s1	e8	-	yes	-	end=r1;return=r1	-	FIT	-
+ports.rs	wire_array_port	1	replace	saved	parent_prefix.to_string()	body	s0	e16/then/s0/then/s1,e14/letelse/s0,e6	-	no	return@e16/then/s0/then/s3,return@e14/letelse/s2	end=r1;return=r1	-	NOT-FIT	one opener, three restores on exclusive paths: two inside the early-out branches, each followed by its `return` (paths: return=r1), one at the end ; PLAN8's NOT-FIT reason
+ports.rs	wire_ports	1	replace	saved	parent_prefix.to_string()	s2/arm0	s0	e2	-	yes	continue(local)x1	end=r1	-	FIT	-
+ports.rs	wire_ports	2	clone	child_prefix	-	s3/for	s5	e1/then/s1,e0/arm0/s5,e0/arm1/s2	parent_prefix.to_string()@e0/arm0/s1,parent_prefix.to_string()@e0/arm1/s0	no	continue@e1/then/s2	continue=r1;end=r0|r1	wire_array_port	NOT-FIT	the save is a clone, taken while cur is the child scope (the per-port loop body) ; the Internal arm neither re-points nor restores (end=r0: cur still equals the clone, so nothing is owed, but no restore runs) ; the `continue` leaves after its restore ; wire_array_port (NEST) restores its own write (its row), so the first restore re-sets what is already there
+readmem_assoc.rs	check_readmem_assoc_waits	1	clone	prefix	-	body	s3	e0	s.prefix.clone()@e2/for/s3	yes	continue(local)x1	end=r1	-	NOT-FIT	the save is a clone (beside cur_span) ; the loop re-points per site, one restore after the loop ; the `continue` stays in the loop ; PLAN8's NOT-FIT reason (a re-point per iteration)
+scope.rs	default_binding_matches_decl_scope	1	replace	saved	self.tf_decl_scope.clone()	body	s5	e1	-	yes	-	end=r1	-	FIT	-
+sva_check.rs	materialize_sva_checkers	1	replace	saved_prefix	sva.scope.clone()	s3/for	s0	e0	-	yes	-	end=r1	-	FIT	-
+var_init.rs	flush_block_local_inits	1	replace	saved	key	s15/for	s0	e0	-	yes	-	end=r1	-	FIT	-
+== HF_COUNTS
+sites 25 {"calls:elaborate_instance": 3, "calls:with_scope": 21, "every-path-once:-": 1, "every-path-once:no": 1, "every-path-once:yes": 23, "exit-between:-": 1, "exit-between:local": 6, "exit-between:none": 16, "exit-between:out": 2, "plan8:CTOR": 1, "plan8:FIT": 19, "plan8:NOT-FIT": 5, "same-block:-": 1, "same-block:no": 2, "same-block:yes": 22}
+== HF_CALLS
+# HF_CALLS: the `with_scope` / `elaborate_instance` calls (HK's 21 + 3 lines) by (file, fn, callee, ARG = the
+# scope argument's tokens: with_scope's first, elaborate_instance's second), with a count. The 9 chain lines are HK's
+# BLOCK-CHAIN rows among them (frames_blocal.rs, frames_static_init.rs, inline_task_locals.rs).
+file	fn	callee	arg	count
+block_local/hoist.rs	hoist_block_local_nets	with_scope	&seg	1
+block_local/hoist.rs	hoist_one_block_local	with_scope	&seg	1
+class_lower.rs	lower_class_method_body	with_scope	&scope_seg	1
+classes.rs	reserve_class_method	with_scope	&scope_seg	1
+driver.rs	run	elaborate_instance	&top_path	1
+frames_blocal.rs	reserve_frame_block_locals	with_scope	&seg	1
+frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_scope	&scope_seg	1
+frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_scope	&scope_seg	1
+frames_reserve.rs	reserve_frame_func	with_scope	&scope_seg	1
+frames_reserve.rs	reserve_frame_task	with_scope	&scope_seg	1
+frames_static_init.rs	emit_frame_static_prologue	with_scope	&seg	2
+frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
+generate.rs	elaborate_gen_item	with_scope	&block_prefix	1
+generate.rs	elaborate_gen_scoped	with_scope	&seg	1
+inline_task.rs	inline_static_task	with_scope	&scope	1
+inline_task_locals.rs	emit_inline_local_inits	with_scope	&seg	1
+inline_task_locals.rs	hoist_inline_task_locals	with_scope	&sg	2
+instance.rs	elaborate_child_instances_inner	elaborate_instance	&child_path	1
+instance_array.rs	elaborate_instance_array	elaborate_instance	&child_path	1
+stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
