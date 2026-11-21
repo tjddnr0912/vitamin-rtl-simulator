@@ -1305,3 +1305,81 @@ inline_task_locals.rs	hoist_inline_task_locals	with_scope	&sg	2
 instance.rs	elaborate_child_instances_inner	elaborate_instance	&child_path	1
 instance_array.rs	elaborate_instance_array	elaborate_instance	&child_path	1
 stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
+== HOUT
+# HOUT: where display / child-prefix text goes (LS1 part 4 ; DELTA9 J4 + DELTA10 L5) — by (file, fn, what,
+# arg, sink) with a count: every call of display_prefix / display_of / scope_chain_abs / frame_path /
+# frame_path_of / cur_context / child_prefix / enter_frame_scope_root (arg = the arguments' tokens) ; the
+# `ProcIdent {` / `InstanceInfo {` / `CovgInstMeta {` literals (arg = the scope field's initializer) ; the
+# saves of the three display fields (`mem::take` / `mem::replace` of `&mut <recv>.F`, `<recv>.F.replace(..)`,
+# and `via f(..)`: a call of a fn whose save is its return, enter_frame_scope_root) and their restores
+# (`<recv>.F = <a local a save bound>`) ; push_func's `m_path` argument (`local <- its let initializer`) ; the
+# `reported` set's `let` and parameters (`BTreeSet<(u32, u32, String)>`). SINK = the first consumer above
+# the value (`&`, `( )`, `?`, a cast, Some / Ok / Err / Box::new and .clone / .to_string / .to_owned / .into /
+# .unwrap_or_default see through): LOCAL:<name>#<the identifier's tokens in the fn>, FIELD:<Struct.field>,
+# ARG:<callee> (a method's receiver tokens + name), RECV:.<method>, ASSIGN:<lhs>, RET, MAC:<macro>><outer>,
+# CLOSURE><outer>, BIN / COND / STMT / OTHER. Equal on T to copies.tsv's H01-H13, H28, H30 destinations, the
+# 9 saves and 9 restores of DELTA10 L2, push_func's 3 producers, the set's 3 lines (LS1 part 4 REPORT).
+file	fn	what	arg	sink	count
+class_lower.rs	lower_class_method_body	RESTORE:block_scope	= saved_block_scope	-	1
+class_lower.rs	lower_class_method_body	RESTORE:block_scope_root	= saved_root	-	1
+class_lower.rs	lower_class_method_body	RESTORE:cur_class_method	= saved_cm	-	1
+class_lower.rs	lower_class_method_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
+class_lower.rs	lower_class_method_body	SAVE:block_scope_root	.replace(String::new())	LOCAL:saved_root#2	1
+class_lower.rs	lower_class_method_body	SAVE:cur_class_method	.replace(format!("{cname}.{}", method.name))	LOCAL:saved_cm#2	1
+classes.rs	reserve_class_method	push_func.m_path	format!("{cname}.{}", method.name)	LOCAL:pushed#2	1
+cover.rs	register_cover_instance	LIT:CovgInstMeta	inst=key	ARG:self.coverage_manifest.push	1
+driver.rs	cur_context	display_prefix	-	LOCAL:p#3	1
+driver.rs	error	cur_context	-	LOCAL:context#2	1
+driver.rs	note_at	cur_context	-	LOCAL:context#2	1
+driver.rs	record_stmt_loc	scope_chain_abs	-	LOCAL:s#3	1
+driver.rs	warn_code	cur_context	-	LOCAL:context#2	1
+driver.rs	warn_code_at	cur_context	-	LOCAL:context#2	1
+edge_gate.rs	decide_late_edges	SET	let reported	-	1
+edge_gate.rs	report_at	SET	param reported	-	1
+edge_gate.rs	verify_use_recs	SET	param reported	-	1
+elab_task.rs	elab_task_message	display_prefix	-	LOCAL:scope#2	1
+elab_task.rs	rtl_diag	cur_context	-	LOCAL:context#2	1
+expr_ctx.rs	push_expr	scope_chain_abs	-	ARG:self.expr_scopes.insert	1
+frames_body.rs	enter_frame_scope_root	SAVE:block_scope_root	.replace(root)	RET	1
+frames_body.rs	enter_frame_scope_root	frame_path	name	LOCAL:fp#3	1
+frames_body.rs	lower_frame_func_body	RESTORE:block_scope	= saved_block_scope	-	1
+frames_body.rs	lower_frame_func_body	RESTORE:block_scope_root	= saved_root	-	1
+frames_body.rs	lower_frame_func_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
+frames_body.rs	lower_frame_func_body	SAVE:block_scope_root	via enter_frame_scope_root(name)	LOCAL:saved_root#2	1
+frames_body.rs	lower_frame_func_body	enter_frame_scope_root	name	LOCAL:saved_root#2	1
+frames_body.rs	lower_frame_task_body	RESTORE:block_scope	= saved_block_scope	-	1
+frames_body.rs	lower_frame_task_body	RESTORE:block_scope_root	= saved_root	-	1
+frames_body.rs	lower_frame_task_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
+frames_body.rs	lower_frame_task_body	SAVE:block_scope_root	via enter_frame_scope_root(name)	LOCAL:saved_root#2	1
+frames_body.rs	lower_frame_task_body	enter_frame_scope_root	name	LOCAL:saved_root#2	1
+frames_reserve.rs	frame_path	display_of	&self.inst_prefix	LOCAL:inst#2	1
+frames_reserve.rs	frame_path	display_of	scope	LOCAL:d#2	1
+frames_reserve.rs	frame_path_of	frame_path	bare	RET	1
+frames_reserve.rs	frame_path_of	frame_path	key	RET	1
+frames_reserve.rs	reserve_frame_func	frame_path_of	name, &func.name.name	LOCAL:fp#2	1
+frames_reserve.rs	reserve_frame_func	push_func.m_path	fp <- self.frame_path_of(name, &func.name.name)	LOCAL:pushed#2	1
+frames_reserve.rs	reserve_frame_task	frame_path_of	name, &task.name.name	LOCAL:fp#2	1
+frames_reserve.rs	reserve_frame_task	push_func.m_path	fp <- self.frame_path_of(name, &task.name.name)	LOCAL:pushed#2	1
+generate.rs	display_prefix	display_of	&self.cur_prefix	RET	1
+generate.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
+iface_inst.rs	elaborate_iface_instances	child_prefix	&item.name.name	LOCAL:path#7	1
+inline_task.rs	inline_static_task	RESTORE:block_scope	= saved_scope	-	1
+inline_task.rs	inline_static_task	RESTORE:block_scope_root	= saved_root	-	1
+inline_task.rs	inline_static_task	SAVE:block_scope	mem::replace(&mut self.block_scope, vec!(tname.to_string()))	LOCAL:saved_scope#2	1
+inline_task.rs	inline_static_task	SAVE:block_scope_root	.replace(decl_root)	LOCAL:saved_root#2	1
+inline_task.rs	inline_static_task	display_of	&self.inst_prefix	LOCAL:decl_root#2	1
+instance.rs	elaborate_child_instances_inner	child_prefix	&item.name.name	LOCAL:child_path#2	1
+instance.rs	elaborate_instance	LIT:InstanceInfo	path=inst_path.to_string()	ARG:self.instances_info.push	1
+instance_array.rs	elaborate_instance_array	child_prefix	&format!("{iname}[{idx}]")	LOCAL:child_path#2	1
+net_util.rs	net_name_table	display_of	fq	ASSIGN:*slot	1
+ports.rs	elaborate_virtual_iface	child_prefix	&inst	LOCAL:inst_path#2	1
+proc_ident.rs	push_cont_assign	LIT:ProcIdent	scope=self.cur_prefix.clone()	ARG:self.ca_idents.push	1
+stmt_flow.rs	lower_proc_block	LIT:ProcIdent	scope=self.cur_prefix.clone()	ASSIGN:self.pending_proc_ident	1
+stmt_flow.rs	push_process	LIT:ProcIdent	scope=self.cur_prefix.clone()	CLOSURE>ARG:self.pending_proc_ident.take().unwrap_or_else	1
+stmt_flow.rs	push_process	display_of	&self.inst_prefix	ARG:self.proc_inst_scopes.push	1
+stmt_flow.rs	push_process	display_prefix	-	ARG:self.proc_scopes.push	1
+stmt_flow.rs	push_stmt	scope_chain_abs	-	ARG:self.stmt_scopes.insert	1
+stmt_main.rs	lower_stmt_inner	cur_context	-	FIELD:StarSite.ctx	1
+== HOUT_COUNTS
+# SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET)
+{"LIT": 5, "RESTORE": 9, "SAVE": 10, "SET": 3, "child_prefix": 4, "cur_context": 6, "display_of": 6, "display_prefix": 4, "enter_frame_scope_root": 2, "frame_path": 3, "frame_path_of": 2, "push_func.m_path": 3, "scope_chain_abs": 3}

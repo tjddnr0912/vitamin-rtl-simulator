@@ -1,0 +1,452 @@
+# The fixture modules of scope_surface.rs (HT-SURF, §5.2 Q-LEXSCOPE LS1 part 4): small crates
+# parsed by `syn`, never compiled. `== CLEAN` is a whole `src` (files opened by `--- <path>`):
+# a lexscope module whose surface passes I-SURF, its pins in scope_surface.tables (FIX_*).
+# Every other section is CLEAN with planted hunks (`@@ <path>`, `- ` lines replaced by the
+# `+ ` lines, or `+ ` lines appended when there is no `- ` line) and must fail with exactly
+# the (item, position, rule) set FIX_EXPECT pins for it. NS1-NS22 are DELTA10 L1's negative
+# controls ; NB1-NB8 are this unit's own (P29's doors and the stricter readings).
+== CLEAN
+--- lib.rs
+mod lexscope;
+
+pub(crate) struct Elaborator<'s> {
+    src: &'s str,
+    cur_prefix: String,
+    lex: lexscope::Scopes,
+    shown: Option<lexscope::Shown>,
+    names: Vec<String>,
+}
+--- lexscope/mod.rs
+//! a clean lexscope surface
+mod inner;
+
+pub(crate) use inner::ScopeRef;
+
+pub(crate) struct Scopes {
+    cur: String,
+    marks: Vec<String>,
+}
+
+pub(crate) struct Shown(String);
+
+pub(crate) struct ShownCtx {
+    frames: Vec<String>,
+}
+
+pub(crate) struct Saved {
+    text: String,
+}
+
+pub(crate) struct ScopeKeyed<V> {
+    map: std::collections::BTreeMap<String, V>,
+}
+
+pub(crate) enum Mark {
+    Inst,
+    Gen,
+}
+
+pub(crate) trait Outgoing {
+    type Plain;
+    fn plain(self) -> Self::Plain;
+}
+
+impl Outgoing for Shown {
+    type Plain = String;
+    fn plain(self) -> String {
+        self.0
+    }
+}
+
+impl Outgoing for ShownCtx {
+    type Plain = Vec<diag::Frame>;
+    fn plain(self) -> Vec<diag::Frame> {
+        Vec::new()
+    }
+}
+
+impl Clone for Shown {
+    fn clone(&self) -> Self {
+        Shown(self.0.clone())
+    }
+}
+
+impl Default for Saved {
+    fn default() -> Self {
+        Saved { text: String::new() }
+    }
+}
+
+impl std::fmt::Debug for Shown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Shown(..)")
+    }
+}
+
+macro_rules! zn {
+    ($t:ty) => {};
+}
+
+zn!(Shown);
+
+pub(crate) fn scope_out<T: Outgoing>(x: T) -> T::Plain {
+    x.plain()
+}
+
+pub(crate) fn shown_from_spelling(s: String) -> Shown {
+    Shown(s)
+}
+
+fn wrap_shown(s: String) -> Shown {
+    Shown(s)
+}
+
+impl Scopes {
+    pub(crate) fn is_top(&self) -> bool {
+        self.cur.is_empty()
+    }
+
+    fn enter(&mut self, seg: &str) -> Saved {
+        let text = std::mem::replace(&mut self.cur, seg.to_string());
+        Saved { text }
+    }
+
+    fn restore(&mut self, s: Saved) {
+        self.cur = s.text;
+    }
+}
+
+impl<V> ScopeKeyed<V> {
+    pub(crate) fn entry_under_cur(&mut self, lex: &Scopes, name: &str) -> &mut V
+    where
+        V: Default,
+    {
+        self.map.entry(format!("{}.{name}", lex.cur)).or_default()
+    }
+
+    pub(crate) fn drain_keys_shown(&mut self) -> Vec<Shown> {
+        std::mem::take(&mut self.map).into_keys().map(Shown).collect()
+    }
+}
+
+impl crate::Elaborator<'_> {
+    pub(crate) fn with_scope<R>(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R {
+        let saved = self.lex.enter(seg);
+        let r = f(self);
+        self.lex.restore(saved);
+        r
+    }
+
+    pub(crate) fn disp_here(&self) -> Shown {
+        wrap_shown(self.disp_here_text())
+    }
+
+    fn disp_here_text(&self) -> String {
+        self.lex.cur.clone()
+    }
+
+    pub(crate) fn cur_shown_all(&self, out: &mut Vec<Shown>) {
+        out.push(self.disp_here());
+    }
+
+    pub(crate) fn names_are_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    pub(crate) fn key_under(&self, n: &str) -> String {
+        format!("{}.{n}", self.lex.cur)
+    }
+
+    pub(crate) fn scope_hold(&mut self) -> Saved {
+        self.lex.enter("")
+    }
+
+    pub(crate) fn scope_carry(&self) -> ScopeRef {
+        inner::carry(&self.lex)
+    }
+
+    pub(crate) fn mark_is(&self, m: Mark) -> bool {
+        matches!(m, Mark::Inst) && self.lex.marks.is_empty()
+    }
+}
+--- lexscope/inner.rs
+pub(crate) struct ScopeRef {
+    id: u32,
+}
+
+pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
+    ScopeRef {
+        id: lex.marks.len() as u32,
+    }
+}
+== NS1
+@@ lexscope/mod.rs
++ impl crate::Elaborator<'_> {
++     pub(crate) fn ns1(&mut self, n: &str) -> Option<String> {
++         None
++     }
++ }
+== NS2
+@@ lexscope/mod.rs
++ pub(crate) fn ns2() -> Option<(Shown, String)> {
++     None
++ }
+== NS3a
+@@ lexscope/mod.rs
++ type K = String;
++ pub(crate) fn ns3a() -> K {
++     String::new()
++ }
+== NS3b
+@@ lexscope/mod.rs
++ use std::string::String as Label;
++ pub(crate) fn ns3b() -> Label {
++     Label::new()
++ }
+== NS4
+@@ lexscope/mod.rs
++ pub(crate) fn ns4() -> impl Iterator<Item = char> {
++     "".chars()
++ }
+== NS5a
+@@ lexscope/mod.rs
++ pub(crate) fn ns5a(out: &mut Vec<String>) {
++     out.clear();
++ }
+== NS5b
+@@ lexscope/mod.rs
++ pub(crate) fn ns5b(w: &mut impl std::fmt::Write) {
++     let _ = w;
++ }
+== NS6a
+@@ lexscope/mod.rs
++ pub(crate) fn ns6a(hit: impl Fn(&str) -> bool) -> bool {
++     hit("")
++ }
+== NS6b
+@@ lexscope/mod.rs
++ pub(crate) fn ns6b(f: &mut dyn FnMut(String)) {
++     f(String::new())
++ }
+== NS6c
+@@ lexscope/mod.rs
++ pub(crate) fn ns6c(f: fn(&str)) {
++     f("")
++ }
+== NS7a
+@@ lexscope/mod.rs
+- pub(crate) struct Saved {
+-     text: String,
+- }
++ pub(crate) struct Saved {
++     pub(crate) text: String,
++ }
+== NS7b
+@@ lexscope/mod.rs
+- pub(crate) enum Mark {
+-     Inst,
+-     Gen,
+- }
++ pub(crate) enum Mark {
++     Inst,
++     Gen,
++     Named(String),
++ }
+== NS8a
+@@ lexscope/mod.rs
++ impl std::fmt::Display for Shown {
++     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++         f.write_str(&self.0)
++     }
++ }
+== NS8b
+@@ lexscope/mod.rs
++ impl PartialEq<str> for Shown {
++     fn eq(&self, o: &str) -> bool {
++         self.0 == o
++     }
++ }
+== NS8c
+@@ lexscope/mod.rs
++ impl From<Shown> for String {
++     fn from(s: Shown) -> String {
++         s.0
++     }
++ }
+== NS9
+@@ lexscope/mod.rs
++ pub(crate) const ROOT: &str = "";
+== NS10
+@@ lexscope/mod.rs
++ pub(super) fn ns10_root() -> String {
++     String::new()
++ }
+@@ lexscope/inner.rs
++ pub(super) fn ns10_child() -> String {
++     String::new()
++ }
++ impl crate::Elaborator<'_> {
++     pub(crate) fn ns10_method(&self) -> String {
++         String::new()
++     }
++ }
+== NS11
+@@ lexscope/mod.rs
++ pub(crate) fn ns11_f<T: From<String>>() -> T {
++     T::from(String::new())
++ }
++ pub(crate) fn ns11_g<V>(x: Option<V>) -> Option<V> {
++     x
++ }
+== NS12
+@@ lexscope/mod.rs
++ macro_rules! mk {
++     () => {
++         pub(crate) fn made() -> String {
++             String::new()
++         }
++     };
++ }
++ mk!();
+== NS13a
+@@ lexscope/mod.rs
++ #[path = "../x.rs"]
++ mod x;
+== NS13b
+@@ lexscope/mod.rs
++ include!("../x.rs");
+== NS14
+@@ lexscope/mod.rs
++ pub(crate) use inner::*;
+== NS15a
+@@ lexscope/mod.rs
++ pub(crate) fn ns15a() -> usize {
++     0
++ }
+== NS15b
+@@ lexscope/mod.rs
++ pub(crate) fn ns15b() -> u64 {
++     0
++ }
+== NS16
+@@ lexscope/mod.rs
++ struct ScopeId(u32);
++ pub(crate) fn ns16() -> ScopeId {
++     ScopeId(0)
++ }
+== NS17a
+@@ lexscope/mod.rs
+-     pub(crate) fn scope_hold(&mut self) -> Saved {
+-         self.lex.enter("")
+-     }
++     pub(crate) fn scope_hold(&mut self) -> Saved {
++         self.cur_prefix = String::new();
++         self.lex.enter("")
++     }
+== NS17b
+@@ lexscope/mod.rs
+-         format!("{}.{n}", self.lex.cur)
++         format!("{}${n}", self.lex.cur)
+== NS18
+@@ lexscope/mod.rs
++ pub(crate) trait Texty {
++     fn text(&self) -> String;
++ }
+== NS19
+@@ lexscope/mod.rs
++ pub(crate) fn ns19() -> Box<dyn Fn() -> String> {
++     Box::new(String::new)
++ }
+== NS20
+@@ lexscope/mod.rs
++ impl Outgoing for Saved {
++     type Plain = String;
++     fn plain(self) -> String {
++         self.text
++     }
++ }
+== NS21
+@@ lexscope/mod.rs
+-     pub(crate) fn disp_here(&self) -> Shown {
+-         wrap_shown(self.disp_here_text())
+-     }
++     pub(crate) fn disp_here(&self) -> Shown {
++         let _x = 0;
++         wrap_shown(self.disp_here_text())
++     }
+== NS22
+@@ lexscope/mod.rs
++ pub(crate) enum Pick {
++     A(Shown),
++ }
+== NB1
+# an impl written inside a fn body (P29, redo 2): judged as any other
+@@ lexscope/mod.rs
++ fn hidden() {
++     impl crate::Elaborator<'_> {
++         pub(crate) fn nb1(&self) -> String {
++             String::new()
++         }
++     }
++ }
+== NB2
+# an impl inside a `const _` block
+@@ lexscope/mod.rs
++ const _: () = {
++     impl Shown {
++         pub(crate) fn nb2(&self) -> String {
++             self.0.clone()
++         }
++     }
++ };
+== NB3
+# `cfg_attr` (it can carry `path`): off the attribute list
+@@ lexscope/mod.rs
++ #[cfg_attr(test, path = "x.rs")]
++ mod inner2 {}
+== NB4
+# a macro in type position
+@@ lexscope/mod.rs
++ pub(crate) fn nb4() -> ty!() {
++     todo!()
++ }
+== NB5
+# an inherent impl of a lexscope type outside the module
+@@ lib.rs
++ impl lexscope::Shown {
++     pub(crate) fn text(&self) -> String {
++         String::new()
++     }
++ }
+== NB6
+# a derive off the list, and a Debug that prints the text
+@@ lexscope/mod.rs
+- pub(crate) struct Shown(String);
++ #[derive(PartialEq)]
++ pub(crate) struct Shown(String);
+@@ lexscope/mod.rs
+-         f.write_str("Shown(..)")
++         f.write_str(&self.0)
+== NB7
+# `T: Copy` (a bound outside Sized / Clone / Default) and an interior-mutable parameter
+@@ lexscope/mod.rs
++ pub(crate) fn nb7<T: Copy>(x: Option<T>) -> Option<T> {
++     x
++ }
++ pub(crate) fn nb7b(c: &std::cell::RefCell<Vec<Shown>>) {
++     let _ = c;
++ }
+== NB8
+# a free fn taking the Elaborator, and a local alias of `self` in a tier-E body
+@@ lexscope/mod.rs
++ pub(crate) fn nb8(e: &mut crate::Elaborator<'_>) -> bool {
++     e.names_are_empty()
++ }
+@@ lexscope/mod.rs
+-     pub(crate) fn names_are_empty(&self) -> bool {
+-         self.names.is_empty()
+-     }
++     pub(crate) fn names_are_empty(&self) -> bool {
++         let me = &*self;
++         self.names.is_empty()
++     }

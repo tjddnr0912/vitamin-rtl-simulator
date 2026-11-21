@@ -1,4 +1,4 @@
-//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, parts 1 to 3), as home tests: thirteen
+//! The scope censuses of §5.2 Q-LEXSCOPE (unit LS1, parts 1 to 4), as home tests: fourteen
 //! syntax censuses of `crates/elaborate/src/**/*.rs`, each computed by `syn` (full) and
 //! compared with a pinned table. The tables live in ONE data file beside this one,
 //! `scope_home.tables` (moved there in part 2, when this file passed ~4500 lines with them
@@ -78,6 +78,18 @@
 //!   HF_CALLS pins the `with_scope` / `elaborate_instance` calls by their scope argument.
 //!   HF does not see a panic other than the four diverging macros, nor a write through a
 //!   `&mut String` bound earlier.
+//!
+//! Part 4 (a fourth walk, `HoutW`, that carries each value's consumer down the tree ;
+//! HT-SURF, the module-surface test of the same part, is `scope_surface.rs`):
+//!
+//! - HOUT where display / child-prefix text goes (DELTA9 J4, DELTA10 L5): every call of the
+//!   display fns, `child_prefix` and `enter_frame_scope_root`, the `ProcIdent` /
+//!   `InstanceInfo` / `CovgInstMeta` literals, the 9 saves and 9 restores of the three
+//!   display fields, push_func's `m_path` producers and the `reported` set's lines, by
+//!   (file, fn, what, arg, SINK) — SINK the first consumer above the value. It is HC's seed
+//!   and LS2-d's prediction. It does not see a value carried through a helper fn's return
+//!   (a sink is one level) nor an implicit format capture (`{name}` inside a literal does not
+//!   count in LOCAL's uses).
 //!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
@@ -5254,6 +5266,624 @@ fn hf_the_write_sites_shapes_are_pinned() {
 // =====================================================================================
 // The pinned tables
 // =====================================================================================
+
+// =====================================================================================
+// HOUT where the display text and the child prefix go (LS1 part 4: DELTA9 J4, DELTA10 L5)
+// =====================================================================================
+
+/// The fns whose result is display / child-prefix text (DELTA9 J4 + DELTA10 L5's
+/// `enter_frame_scope_root`).
+const HOUT_CALLEES: &[&str] = &[
+    "display_prefix",
+    "display_of",
+    "scope_chain_abs",
+    "frame_path",
+    "frame_path_of",
+    "cur_context",
+    "child_prefix",
+    "enter_frame_scope_root",
+];
+/// The struct literals whose scope field is pinned, with that field.
+const HOUT_LITS: &[(&str, &str)] = &[
+    ("ProcIdent", "scope"),
+    ("InstanceInfo", "path"),
+    ("CovgInstMeta", "inst"),
+];
+/// A method that hands its receiver's value on unchanged: the sink is read through it.
+const HOUT_THROUGH: &[&str] = &[
+    "clone",
+    "to_string",
+    "to_owned",
+    "into",
+    "unwrap_or_default",
+];
+/// The `reported` set's type (edge_gate.rs, N-a).
+const HOUT_SET: &str = "BTreeSet<(u32, u32, String)>";
+
+/// Where a value goes: the first consumer above it (`&`, `( )`, `?`, a cast and the
+/// HOUT_THROUGH methods are see-through).
+#[derive(Clone)]
+enum Sk {
+    Local(String),
+    Field(String),
+    Arg(String),
+    Recv(String),
+    Assign(String),
+    Ret,
+    Mac(String, Box<Sk>),
+    Bin(String),
+    Stmt,
+    Cond,
+    Closure(Box<Sk>),
+    Other(&'static str),
+}
+
+fn sk_text(s: &Sk, uses: &BTreeMap<String, usize>) -> String {
+    match s {
+        Sk::Local(n) => format!("LOCAL:{n}#{}", uses.get(n).copied().unwrap_or(0)),
+        Sk::Field(f) => format!("FIELD:{f}"),
+        Sk::Arg(c) => format!("ARG:{c}"),
+        Sk::Recv(m) => format!("RECV:.{m}"),
+        Sk::Assign(l) => format!("ASSIGN:{l}"),
+        Sk::Ret => "RET".into(),
+        Sk::Mac(m, outer) => format!("MAC:{m}>{}", sk_text(outer, uses)),
+        Sk::Bin(op) => format!("BIN:{op}"),
+        Sk::Stmt => "STMT".into(),
+        Sk::Cond => "COND".into(),
+        Sk::Closure(outer) => format!("CLOSURE>{}", sk_text(outer, uses)),
+        Sk::Other(k) => format!("OTHER:{k}"),
+    }
+}
+
+/// The direct child expressions of an expression (statements of its blocks included).
+struct Kids<'a>(Vec<&'a Expr>);
+impl<'a> Visit<'a> for Kids<'a> {
+    fn visit_expr(&mut self, e: &'a Expr) {
+        self.0.push(e);
+    }
+    fn visit_item(&mut self, _: &'a syn::Item) {}
+}
+
+/// An argument list's token text, `-` when empty.
+fn hout_args<'a>(args: impl Iterator<Item = &'a Expr>) -> String {
+    let v: Vec<String> = args.map(tx).collect();
+    if v.is_empty() {
+        "-".into()
+    } else {
+        v.join(", ")
+    }
+}
+
+/// One fn's HOUT walk: its key, raw rows, display-field assigns, identifier counts.
+type HoutFn = (
+    String,
+    Vec<HoutRaw>,
+    Vec<(String, String)>,
+    BTreeMap<String, usize>,
+);
+
+/// One HOUT row before its sink is rendered: (what, arg, sink).
+type HoutRaw = (String, String, Sk);
+
+struct HoutW {
+    rows: Vec<HoutRaw>,
+    /// `<recv>.<display field> = <ident>`: (field, ident)
+    assigns: Vec<(String, String)>,
+    /// `let <ident> = <init>` (the init's token text)
+    lets: BTreeMap<String, String>,
+    m_path_idx: Option<usize>,
+}
+
+fn display_field_of(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Field(f) if is_recv(&f.base) => match &f.member {
+            syn::Member::Named(n) if DISPLAY_FIELDS.contains(&n.to_string().as_str()) => {
+                Some(n.to_string())
+            }
+            _ => None,
+        },
+        Expr::Paren(p) => display_field_of(&p.expr),
+        _ => None,
+    }
+}
+
+fn mut_display_field(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Reference(r) if r.mutability.is_some() => display_field_of(&r.expr),
+        _ => None,
+    }
+}
+
+impl HoutW {
+    fn block(&mut self, b: &syn::Block, ctx: &Sk) {
+        let n = b.stmts.len();
+        for (i, st) in b.stmts.iter().enumerate() {
+            match st {
+                syn::Stmt::Local(l) => self.local(l),
+                syn::Stmt::Expr(e, semi) => {
+                    let c = if semi.is_none() && i + 1 == n {
+                        ctx.clone()
+                    } else {
+                        Sk::Stmt
+                    };
+                    self.expr(e, &c);
+                }
+                syn::Stmt::Macro(m) => {
+                    let name = m
+                        .mac
+                        .path
+                        .segments
+                        .last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default();
+                    for a in mac_exprs(&m.mac) {
+                        self.expr(&a, &Sk::Mac(name.clone(), Box::new(Sk::Stmt)));
+                    }
+                }
+                syn::Stmt::Item(_) => {}
+            }
+        }
+    }
+
+    fn local(&mut self, l: &syn::Local) {
+        let Some(init) = &l.init else { return };
+        let pat = match &l.pat {
+            Pat::Type(t) => &*t.pat,
+            p => p,
+        };
+        match (pat, &*init.expr) {
+            (Pat::Ident(i), e) => {
+                self.lets.insert(i.ident.to_string(), tx(e));
+                self.expr(e, &Sk::Local(i.ident.to_string()));
+            }
+            (Pat::Tuple(pt), Expr::Tuple(et)) if pt.elems.len() == et.elems.len() => {
+                for (p, e) in pt.elems.iter().zip(et.elems.iter()) {
+                    match p {
+                        Pat::Ident(i) => {
+                            self.lets.insert(i.ident.to_string(), tx(e));
+                            self.expr(e, &Sk::Local(i.ident.to_string()));
+                        }
+                        _ => self.expr(e, &Sk::Other("let-pattern")),
+                    }
+                }
+            }
+            (_, e) => self.expr(e, &Sk::Other("let-pattern")),
+        }
+        if let Some((_, d)) = &init.diverge {
+            self.expr(d, &Sk::Other("let-else"));
+        }
+    }
+
+    fn expr(&mut self, e: &Expr, ctx: &Sk) {
+        match e {
+            Expr::MethodCall(m) => {
+                let name = m.method.to_string();
+                let args = hout_args(m.args.iter());
+                if HOUT_CALLEES.contains(&name.as_str()) {
+                    self.rows.push((name.clone(), args.clone(), ctx.clone()));
+                }
+                if let Some(f) = display_field_of(&m.receiver) {
+                    if name == "replace" || name == "take" {
+                        self.rows.push((
+                            format!("SAVE:{f}"),
+                            format!(".{name}({args})"),
+                            ctx.clone(),
+                        ));
+                    }
+                }
+                if name == "push_func" {
+                    let arg = self
+                        .m_path_idx
+                        .and_then(|i| m.args.iter().nth(i))
+                        .map(|a| {
+                            let t = tx(a);
+                            match self.lets.get(&t) {
+                                Some(init) => format!("{t} <- {init}"),
+                                None => t,
+                            }
+                        })
+                        .unwrap_or_else(|| "?".into());
+                    self.rows
+                        .push(("push_func.m_path".into(), arg, ctx.clone()));
+                }
+                let rc = if HOUT_THROUGH.contains(&name.as_str()) {
+                    ctx.clone()
+                } else {
+                    Sk::Recv(name.clone())
+                };
+                self.expr(&m.receiver, &rc);
+                let ac = Sk::Arg(format!("{}.{name}", tx(&m.receiver)));
+                for a in &m.args {
+                    self.expr(a, &ac);
+                }
+            }
+            Expr::Call(c) => {
+                let callee = tx(&c.func);
+                let last = callee.rsplit("::").next().unwrap_or("").to_string();
+                let args = hout_args(c.args.iter());
+                if HOUT_CALLEES.contains(&last.as_str()) {
+                    self.rows.push((last.clone(), args.clone(), ctx.clone()));
+                }
+                if (last == "take" || last == "replace") && callee.contains("mem") {
+                    if let Some(f) = c.args.first().and_then(mut_display_field) {
+                        self.rows.push((
+                            format!("SAVE:{f}"),
+                            format!("mem::{last}({args})"),
+                            ctx.clone(),
+                        ));
+                    }
+                }
+                self.expr(&c.func, &Sk::Other("callee"));
+                // a wrapper constructor hands its argument on: the sink is read through it
+                let through = matches!(callee.as_str(), "Some" | "Ok" | "Err" | "Box::new");
+                for a in &c.args {
+                    if through {
+                        self.expr(a, ctx);
+                    } else {
+                        self.expr(a, &Sk::Arg(callee.clone()));
+                    }
+                }
+            }
+            Expr::Struct(s) => {
+                let name = s
+                    .path
+                    .segments
+                    .last()
+                    .map(|x| x.ident.to_string())
+                    .unwrap_or_default();
+                if let Some((_, field)) = HOUT_LITS.iter().find(|(n, _)| *n == name) {
+                    let init = s
+                        .fields
+                        .iter()
+                        .find(|fv| matches!(&fv.member, syn::Member::Named(i) if i == field))
+                        .map(|fv| format!("{field}={}", tx(&fv.expr)))
+                        .unwrap_or_else(|| format!("{field}=?"));
+                    self.rows.push((format!("LIT:{name}"), init, ctx.clone()));
+                }
+                for fv in &s.fields {
+                    let m = match &fv.member {
+                        syn::Member::Named(i) => i.to_string(),
+                        syn::Member::Unnamed(i) => i.index.to_string(),
+                    };
+                    self.expr(&fv.expr, &Sk::Field(format!("{name}.{m}")));
+                }
+                if let Some(r) = &s.rest {
+                    self.expr(r, &Sk::Other("struct-base"));
+                }
+            }
+            Expr::Macro(m) => {
+                let name = m
+                    .mac
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default();
+                for a in mac_exprs(&m.mac) {
+                    self.expr(&a, &Sk::Mac(name.clone(), Box::new(ctx.clone())));
+                }
+            }
+            Expr::Assign(a) => {
+                if let (Some(f), Expr::Path(p)) = (display_field_of(&a.left), &*a.right) {
+                    if p.path.segments.len() == 1 {
+                        self.assigns.push((f, tx(&a.right)));
+                    }
+                }
+                self.expr(&a.left, &Sk::Other("lhs"));
+                self.expr(&a.right, &Sk::Assign(tx(&a.left)));
+            }
+            Expr::Reference(r) => self.expr(&r.expr, ctx),
+            Expr::Paren(p) => self.expr(&p.expr, ctx),
+            Expr::Group(g) => self.expr(&g.expr, ctx),
+            Expr::Try(t) => self.expr(&t.expr, ctx),
+            Expr::Cast(c) => self.expr(&c.expr, ctx),
+            Expr::Binary(b) => {
+                let op = match b.op {
+                    syn::BinOp::Eq(_) => "==",
+                    syn::BinOp::Ne(_) => "!=",
+                    syn::BinOp::Add(_) | syn::BinOp::AddAssign(_) => "+",
+                    syn::BinOp::And(_) => "&&",
+                    syn::BinOp::Or(_) => "||",
+                    _ => "op",
+                };
+                self.expr(&b.left, &Sk::Bin(op.into()));
+                self.expr(&b.right, &Sk::Bin(op.into()));
+            }
+            Expr::Block(b) => self.block(&b.block, ctx),
+            Expr::Unsafe(b) => self.block(&b.block, ctx),
+            Expr::If(i) => {
+                self.expr(&i.cond, &Sk::Cond);
+                self.block(&i.then_branch, ctx);
+                if let Some((_, el)) = &i.else_branch {
+                    self.expr(el, ctx);
+                }
+            }
+            Expr::Match(m) => {
+                self.expr(&m.expr, &Sk::Cond);
+                for arm in &m.arms {
+                    if let Some((_, g)) = &arm.guard {
+                        self.expr(g, &Sk::Cond);
+                    }
+                    self.expr(&arm.body, ctx);
+                }
+            }
+            Expr::Let(l) => self.expr(&l.expr, &Sk::Cond),
+            Expr::Return(r) => {
+                if let Some(x) = &r.expr {
+                    self.expr(x, &Sk::Ret);
+                }
+            }
+            Expr::Closure(c) => self.expr(&c.body, &Sk::Closure(Box::new(ctx.clone()))),
+            Expr::Field(f) => self.expr(
+                &f.base,
+                &Sk::Recv(format!(
+                    "field {}",
+                    match &f.member {
+                        syn::Member::Named(i) => i.to_string(),
+                        syn::Member::Unnamed(i) => i.index.to_string(),
+                    }
+                )),
+            ),
+            Expr::ForLoop(f) => {
+                self.expr(&f.expr, &Sk::Other("for-iter"));
+                self.block(&f.body, &Sk::Stmt);
+            }
+            Expr::While(w) => {
+                self.expr(&w.cond, &Sk::Cond);
+                self.block(&w.body, &Sk::Stmt);
+            }
+            Expr::Loop(l) => self.block(&l.body, &Sk::Stmt),
+            Expr::Tuple(t) => {
+                for x in &t.elems {
+                    self.expr(x, &Sk::Other("tuple"));
+                }
+            }
+            other => {
+                let mut k = Kids(Vec::new());
+                visit::visit_expr(&mut k, other);
+                for x in k.0 {
+                    self.expr(x, &Sk::Other("expr"));
+                }
+            }
+        }
+    }
+}
+
+/// Every identifier's token count in a body (expression paths, bindings, macro tokens).
+struct IdentCount(BTreeMap<String, usize>);
+impl<'a> Visit<'a> for IdentCount {
+    fn visit_expr_path(&mut self, p: &'a syn::ExprPath) {
+        if let Some(i) = p.path.get_ident() {
+            *self.0.entry(i.to_string()).or_default() += 1;
+        }
+        visit::visit_expr_path(self, p);
+    }
+    fn visit_pat_ident(&mut self, p: &'a syn::PatIdent) {
+        *self.0.entry(p.ident.to_string()).or_default() += 1;
+        visit::visit_pat_ident(self, p);
+    }
+    fn visit_macro(&mut self, m: &'a syn::Macro) {
+        fn walk(ts: proc_macro2::TokenStream, out: &mut BTreeMap<String, usize>) {
+            for t in ts {
+                match t {
+                    proc_macro2::TokenTree::Ident(i) => *out.entry(i.to_string()).or_default() += 1,
+                    proc_macro2::TokenTree::Group(g) => walk(g.stream(), out),
+                    _ => {}
+                }
+            }
+        }
+        walk(m.tokens.clone(), &mut self.0);
+    }
+    fn visit_item(&mut self, _: &'a syn::Item) {}
+}
+
+/// HOUT's census: (file, fn, what, arg, sink) -> count, and the line of each fn.
+fn hout_census() -> (BTreeMap<String, usize>, BTreeMap<String, usize>) {
+    let srcs = load_src();
+    let fns = hf_fns(&srcs);
+    // push_func's `m_path` position among its arguments (from its definition)
+    let mut m_path_idx = None;
+    for s in &srcs {
+        struct Def<'o>(&'o mut Option<usize>);
+        impl<'a> Visit<'a> for Def<'_> {
+            fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+                if f.sig.ident == "push_func" {
+                    *self.0 = f
+                        .sig
+                        .inputs
+                        .iter()
+                        .filter(|a| matches!(a, syn::FnArg::Typed(_)))
+                        .position(|a| match a {
+                            syn::FnArg::Typed(t) => {
+                                matches!(&*t.pat, Pat::Ident(i) if i.ident == "m_path")
+                            }
+                            _ => false,
+                        });
+                }
+            }
+        }
+        Def(&mut m_path_idx).visit_file(&s.file);
+    }
+    assert!(
+        m_path_idx.is_some(),
+        "HOUT: push_func's `m_path` parameter is not found"
+    );
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    let mut lines: BTreeMap<String, usize> = BTreeMap::new();
+    let mut ret_savers: BTreeMap<String, String> = BTreeMap::new();
+    let mut per_fn: Vec<HoutFn> = Vec::new();
+    for f in &fns {
+        let Some(body) = f.body else { continue };
+        let mut w = HoutW {
+            rows: Vec::new(),
+            assigns: Vec::new(),
+            lets: BTreeMap::new(),
+            m_path_idx,
+        };
+        w.block(body, &Sk::Ret);
+        let mut ic = IdentCount(BTreeMap::new());
+        ic.visit_block(body);
+        let k = format!("{}\t{}", f.file, f.qual);
+        for (what, _, sk) in &w.rows {
+            if let (Some(fl), Sk::Ret) = (what.strip_prefix("SAVE:"), sk) {
+                ret_savers.insert(f.simple.clone(), fl.to_string());
+            }
+        }
+        lines.insert(k.clone(), f.line);
+        per_fn.push((k, w.rows, w.assigns, ic.0));
+    }
+    for (k, raw, assigns, uses) in &per_fn {
+        let mut bound: BTreeMap<String, String> = BTreeMap::new();
+        let mut out: Vec<(String, String, String)> = Vec::new();
+        for (what, arg, sk) in raw {
+            out.push((what.clone(), arg.clone(), sk_text(sk, uses)));
+            let field = match what.strip_prefix("SAVE:") {
+                Some(f) => Some(f.to_string()),
+                None => ret_savers.get(what).map(|f| {
+                    out.push((
+                        format!("SAVE:{f}"),
+                        format!("via {what}({arg})"),
+                        sk_text(sk, uses),
+                    ));
+                    f.clone()
+                }),
+            };
+            if let (Some(f), Sk::Local(n)) = (field, sk) {
+                bound.insert(n.clone(), f);
+            }
+        }
+        for (f, ident) in assigns {
+            if let Some(from) = bound.get(ident) {
+                let form = if from == f {
+                    format!("= {ident}")
+                } else {
+                    format!("= {ident} (saved from {from})")
+                };
+                out.push((format!("RESTORE:{f}"), form, "-".into()));
+            }
+        }
+        for (what, arg, sink) in out {
+            *rows
+                .entry(format!("{k}\t{what}\t{arg}\t{sink}"))
+                .or_default() += 1;
+        }
+    }
+    // the `reported` set's declarations: a `let` or a parameter of its type
+    for f in &fns {
+        let k = format!("{}\t{}", f.file, f.qual);
+        let Some(body) = f.body else { continue };
+        struct Sets(Vec<(String, String)>);
+        impl<'a> Visit<'a> for Sets {
+            fn visit_local(&mut self, l: &'a syn::Local) {
+                if let Pat::Type(t) = &l.pat {
+                    if type_str(&t.ty) == HOUT_SET {
+                        let mut n = Vec::new();
+                        pat_names(&t.pat, &mut n);
+                        self.0.push(("let".into(), n.join(",")));
+                    }
+                }
+                visit::visit_local(self, l);
+            }
+            fn visit_item(&mut self, _: &'a syn::Item) {}
+        }
+        let mut s = Sets(Vec::new());
+        s.visit_block(body);
+        for (kind, name) in s.0 {
+            *rows
+                .entry(format!("{k}\tSET\t{kind} {name}\t-"))
+                .or_default() += 1;
+        }
+    }
+    for s in &srcs {
+        struct Params<'o> {
+            file: &'o str,
+            out: &'o mut BTreeMap<String, usize>,
+            fns: &'o [HfFn<'o>],
+        }
+        impl<'a> Visit<'a> for Params<'_> {
+            fn visit_signature(&mut self, sig: &'a syn::Signature) {
+                for a in &sig.inputs {
+                    if let syn::FnArg::Typed(t) = a {
+                        let ty = type_str(&t.ty);
+                        let bare = ty.trim_start_matches("&mut ").trim_start_matches('&');
+                        if bare == HOUT_SET {
+                            let mut n = Vec::new();
+                            pat_names(&t.pat, &mut n);
+                            let quals: Vec<&HfFn<'_>> = self
+                                .fns
+                                .iter()
+                                .filter(|f| f.file == self.file && sig.ident == f.simple)
+                                .collect();
+                            let q = match quals.as_slice() {
+                                [one] => one.qual.clone(),
+                                _ => sig.ident.to_string(),
+                            };
+                            *self
+                                .out
+                                .entry(format!("{}\t{q}\tSET\tparam {}\t-", self.file, n.join(",")))
+                                .or_default() += 1;
+                        }
+                    }
+                }
+            }
+        }
+        Params {
+            file: &s.rel,
+            out: &mut rows,
+            fns: &fns,
+        }
+        .visit_file(&s.file);
+    }
+    (rows, lines)
+}
+
+#[test]
+fn hout_the_display_outputs_are_pinned() {
+    let (rows, lines) = hout_census();
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows
+        .iter()
+        .map(|(k, n)| {
+            let fk: String = k.split('\t').take(2).collect::<Vec<_>>().join("\t");
+            format!("{k}\t{}\t{n}", lines.get(&fk).copied().unwrap_or(0))
+        })
+        .collect();
+    dump("HOUT", "file\tfn\twhat\targ\tsink\tline\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for row in table(&tables::get("HOUT")) {
+        assert_eq!(
+            row.len(),
+            6,
+            "HOUT table row has {} columns, not 6: {row:?}",
+            row.len()
+        );
+        let n: usize = row[5].parse().expect("count");
+        let what = row[2].split(':').next().unwrap_or("").to_string();
+        *by.entry(what).or_default() += n;
+        want.insert(row[..5].join("\t"), n.to_string());
+    }
+    let mut msgs = diff_rows(
+        "HOUT",
+        &got,
+        &want,
+        "a new place display / child-prefix text goes (a call, a literal, a save or restore of a display field, a \
+         push_func `m_path`, the `reported` set): name the unit — LS2-d / LS3 retype these sinks, HC's SINK column \
+         takes the row — and add it",
+        "a display output is gone: name the unit that removed it, remove the row",
+    );
+    let counts = dbg_counts(&by);
+    if counts != tables::get("HOUT_COUNTS") {
+        msgs.push(format!(
+            "HOUT COUNTS table [{}] now [{counts}]",
+            tables::get("HOUT_COUNTS")
+        ));
+    }
+    finish("HOUT", &msgs);
+}
 
 mod tables {
     //! The tables live in ONE data file beside this test, `scope_home.tables` (moved out of
