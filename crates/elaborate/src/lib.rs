@@ -162,6 +162,7 @@ mod pkg_scoped_frames;
 mod ports;
 mod proc_builder;
 mod proc_ident;
+use proc_ident::ProcIdentRow;
 mod rtn_decl;
 mod scope;
 mod single_mention;
@@ -1770,9 +1771,9 @@ struct Elaborator<'s> {
     // (`lower_proc_block`) hands its identity to the ONE append point
     // (`push_process`): every other producer synthesizes a body and leaves it
     // `None`, which is what makes the `synth` default honest rather than a guess.
-    proc_idents: Vec<ProcIdent>,
-    ca_idents: Vec<ProcIdent>,
-    pending_proc_ident: Option<ProcIdent>,
+    proc_idents: Vec<ProcIdentRow>,
+    ca_idents: Vec<ProcIdentRow>,
+    pending_proc_ident: Option<ProcIdentRow>,
     // §5.2 Q-WREXT (`wext.rs`): the write-extent view, built once in the end phase
     // (`build_write_view`, before the whole-net multidriver check) and handed to
     // `Sidecars::write_view`; no production reader yet (first reader planned: §5.2
@@ -1803,7 +1804,7 @@ struct Elaborator<'s> {
     /// writes and wipes them. §4.5.265: this was a `bool` (inside a generate body or not),
     /// which cannot separate two NESTED generate scopes that both share a prefix — the rank
     /// path can, and is stable across the elaboration phases by construction.
-    pending_scoped_presize: BTreeMap<String, Vec<PresizeEntry>>,
+    pending_scoped_presize: ScopeKeyed<Vec<PresizeEntry>>,
     /// §4.5.254: EVERY block-local declaration initializer, keyed by the FULL prefix it
     /// lives under — the instance/generate prefix for a flattened one, plus a `$blk$<lo>`
     /// segment for one that earned its own scope. `u32` is the declaring name's source
@@ -1817,7 +1818,7 @@ struct Elaborator<'s> {
     /// landed ahead of every module-scope init; and holding only the STRING ones back (what
     /// r19 did) reordered a block against its own non-string declarations.
     /// `Vec<u32>` = the OWNING scope's rank path (see `pending_scoped_presize`).
-    pending_block_local_inits: BTreeMap<String, Vec<BlockLocalInit>>,
+    pending_block_local_inits: ScopeKeyed<Vec<BlockLocalInit>>,
     /// Is the walk currently inside a generate body? A generate body is a scope to
     /// iverilog even when vita mints no prefix segment for it (`case` arms and unlabeled
     /// `if`/`begin` bodies share the enclosing prefix), and its initializers run BEFORE

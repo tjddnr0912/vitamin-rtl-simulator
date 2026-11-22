@@ -408,18 +408,14 @@ impl Elaborator<'_> {
             // resolves outward from `cur_prefix`, so the other declaration can live in a
             // generate scope or an enclosing instance, and saying "module scope" sent the
             // reader to the wrong place.
-            let scope = if self.lex.cur_prefix_text().is_empty() {
-                "the enclosing scope".to_string()
-            } else {
-                format!("`{}`", self.lex.cur_prefix_text())
-            };
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "a block-local `{nm}` collides with a string ARRAY of the same name \
-                     visible in {scope}; v1 flattens block-locals into the enclosing \
+                     visible in {}; v1 flattens block-locals into the enclosing \
                      namespace and cannot give this one its own scope (the two would \
                      alias) — rename it",
+                    scope_out(self.lex.cur_shown_quoted_or("the enclosing scope")),
                 ),
             );
         }

@@ -264,6 +264,8 @@ const ADD: &[&str] = &[
     "entry",
     "push_back",
     "extend_from_slice",
+    // §5.2 Q-LEXSCOPE LS3b-2: a scope-keyed store's add at the current scope (`ScopeKeyed`).
+    "push_here",
 ];
 const STORE: [&str; 4] = ["BlockingAssign", "NonblockingAssign", "Force", "Release"];
 
@@ -749,12 +751,15 @@ fn hits(src: &str) -> Vec<(String, String)> {
             out.push(("H11b:undecided_placeholders.insert".into(), k.clone()));
         }
         // H11c the producer lists: `. <recv> . <add verb> (` for a receiver `deferred_<x>`,
-        // `pending_<x>`, `late_<x>`, `provisional_<x>` or `<x>_placeholders`
+        // `pending_<x>`, `late_<x>`, `provisional_<x>` or `<x>_placeholders` ; also through a
+        // newtype's inner map, `. <recv> . 0 . <add verb> (` (§5.2 Q-LEXSCOPE LS3b-2: the two
+        // block-local stores are `ScopeKeyed`, read inside lexscope by their field path)
+        let inner = usize::from(tx(i + 2) == "." && tx(i + 3) == "0");
         if tx(i) == "."
             && t.get(i + 1).is_some_and(|x| x.kind == Kind::Id)
-            && tx(i + 2) == "."
-            && ADD.contains(&tx(i + 3))
-            && tx(i + 4) == "("
+            && tx(i + 2 + 2 * inner) == "."
+            && ADD.contains(&tx(i + 3 + 2 * inner))
+            && tx(i + 4 + 2 * inner) == "("
         {
             let r = tx(i + 1);
             if ["deferred_", "pending_", "late_", "provisional_"]
@@ -762,7 +767,7 @@ fn hits(src: &str) -> Vec<(String, String)> {
                 .any(|p| r.starts_with(p))
                 || r.ends_with("_placeholders")
             {
-                out.push((format!("H11c:{r}:{}", tx(i + 3)), k.clone()));
+                out.push((format!("H11c:{r}:{}", tx(i + 3 + 2 * inner)), k.clone()));
             }
         }
         if id && tx(i + 1) == "(" && (i == 0 || tx(i - 1) != "fn") {
@@ -2713,6 +2718,22 @@ fn walker_controls() {
     assert_eq!(
         count(
             "H11c",
+            "fn f(&mut self) { self.pending_q.0.entry(k); self.pending_r.0.insert(k, v); self.pending_s.push_here(&l, x); }"
+        ),
+        3,
+        "H11c a newtype's inner map and the scope-keyed add (§5.2 Q-LEXSCOPE LS3b-2)"
+    );
+    assert_eq!(
+        count(
+            "H11c",
+            "fn f(&mut self) { self.pending_q.0.len(); self.pending_r.0 .get(k); }"
+        ),
+        0,
+        "H11c a newtype's inner map read"
+    );
+    assert_eq!(
+        count(
+            "H11c",
             "fn f(&mut self) { self.deferred_hier.len(); self.pending_y.drain(..); self.deferredx.push(x); }"
         ),
         0,
@@ -3534,23 +3555,23 @@ const H11C: &[(&str, &str, &str, usize, &str, &str)] = &[
     ("H11c:deferred_hier_write:push", "hier_defer/write.rs", "defer_hier_write", 1, "no slot", "-"),
     ("H11c:error_placeholders:insert", "expr_ctx.rs", "placeholder_expr", 1, "y", "no: a Const 0 after an error only (had_error latched: no fact, the reader's guard)"),
     ("H11c:error_placeholders:insert", "packed.rs", "lower_index_expr_inner", 2, "y", "no: a Const 0 index after an error only (had_error latched: no fact, the reader's guard)"),
-    ("H11c:pending_block_local_inits:entry", "var_init.rs", "push_block_local_init", 1, "no slot", "-"),
-    ("H11c:pending_block_local_inits:insert", "var_init.rs", "flush_block_local_inits", 1, "no slot", "-"),
+    ("H11c:pending_block_local_inits:entry", "lexscope/elab.rs", "push_block_local_init", 1, "no slot", "-"),
+    ("H11c:pending_block_local_inits:insert", "lexscope/elab.rs", "flush_block_local_inits", 1, "no slot", "-"),
     ("H11c:pending_calls:push", "read_set.rs", "note_call_site_mark", 1, "no slot", "-"),
     ("H11c:pending_cover:push", "stmt_main.rs", "lower_stmt_inner", 1, "no slot", "-"),
     ("H11c:pending_fill_width:push", "expr_ctx.rs", "resize_rhs_for_lvalue", 1, "y", "no: an rhs, repointed by resolve_pending_fill_widths, never patched in its slot ; no lvalue chunk reads it"),
     ("H11c:pending_fork_modes:push", "instance.rs", "record_fork_mode", 1, "no slot", "-"),
     ("H11c:pending_hier_task_calls:push", "hier_defer/func_call.rs", "emit_deferred_hier_func_call", 1, "no slot", "-"),
     ("H11c:pending_hier_task_calls:push", "inline_task.rs", "inline_task", 1, "no slot", "-"),
-    ("H11c:pending_scoped_presize:entry", "string_array_route.rs", "route_fixed_string_array", 1, "no slot", "-"),
-    ("H11c:pending_scoped_presize:insert", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
+    ("H11c:pending_scoped_presize:push_here", "string_array_route.rs", "route_fixed_string_array", 1, "no slot", "-"),
+    ("H11c:pending_scoped_presize:insert", "lexscope/elab.rs", "drain_scoped_presize", 1, "no slot", "-"),
     ("H11c:pending_sva:push", "stmt_main.rs", "lower_stmt_inner", 4, "no slot", "-"),
     ("H11c:pending_task_calls:push", "frames_call/emit.rs", "emit_frame_func_out_call", 1, "no slot", "-"),
     ("H11c:pending_task_calls:push", "frames_call/emit.rs", "emit_frame_task_call", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:extend", "lexscope/elab.rs", "flush_block_local_inits", 1, "no slot", "-"),
     ("H11c:pending_var_inits:extend", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
-    ("H11c:pending_var_inits:extend", "var_init.rs", "flush_block_local_inits", 1, "no slot", "-"),
     ("H11c:pending_var_inits:push", "var_init.rs", "collect_var_init_drivers", 1, "no slot", "-"),
-    ("H11c:pending_var_inits:splice", "var_init.rs", "drain_scoped_presize", 1, "no slot", "-"),
+    ("H11c:pending_var_inits:splice", "lexscope/elab.rs", "drain_scoped_presize", 1, "no slot", "-"),
     ("H11c:undecided_placeholders:insert", "wext.rs", "register_provisional_const", 1, "y", "y"),
 ];
 

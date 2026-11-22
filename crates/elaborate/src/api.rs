@@ -214,8 +214,26 @@ pub fn elaborate_located_params(
             .into_iter()
             .map(scope_out)
             .collect(),
-        proc_idents: std::mem::take(&mut el.proc_idents),
-        ca_idents: std::mem::take(&mut el.ca_idents),
+        proc_idents: std::mem::take(&mut el.proc_idents)
+            .into_iter()
+            .map(|r| ProcIdent {
+                kind: r.kind,
+                file: r.file,
+                line: r.line,
+                col: r.col,
+                scope: scope_out(r.scope),
+            })
+            .collect(),
+        ca_idents: std::mem::take(&mut el.ca_idents)
+            .into_iter()
+            .map(|r| ProcIdent {
+                kind: r.kind,
+                file: r.file,
+                line: r.line,
+                col: r.col,
+                scope: scope_out(r.scope),
+            })
+            .collect(),
         write_view: std::mem::take(&mut el.wext),
         assign_ranks: std::mem::take(&mut el.assign_ranks),
         queue_bounds: std::mem::take(&mut el.queue_bounds),

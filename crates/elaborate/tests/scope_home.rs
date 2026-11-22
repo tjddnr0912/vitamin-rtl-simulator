@@ -5469,6 +5469,9 @@ const HOUT_CALLEES: &[&str] = &[
     "stmt_loc_instance",
     "shown_from_spelling",
     "scope_out",
+    // LS3b-2 (DELTA9 J4 (2)): the current scope as display / output text, and its message form.
+    "cur_shown",
+    "cur_shown_quoted_or",
 ];
 /// LS2-d: the entries whose return is a SAVE of a display field (`SavedChain` / `SavedRoot`
 /// / `SavedMethod`), with the field, and the restore entries, with theirs.
@@ -5488,6 +5491,8 @@ const HOUT_RESTORE_ENTRIES: &[(&str, &str)] = &[
 /// The struct literals whose scope field is pinned, with that field.
 const HOUT_LITS: &[(&str, &str)] = &[
     ("ProcIdent", "scope"),
+    // LS3b-2: the elaborating row of `ProcIdent` (its scope a `Shown`).
+    ("ProcIdentRow", "scope"),
     ("InstanceInfo", "path"),
     ("CovgInstMeta", "inst"),
 ];

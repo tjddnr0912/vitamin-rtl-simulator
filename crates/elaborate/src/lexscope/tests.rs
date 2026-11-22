@@ -329,3 +329,39 @@ fn fb_scope_keyed_take_put_entry_drain() {
     assert!(m.drain_keys_shown().is_empty());
     s.scope_restore(a);
 }
+
+/// LS3b-2: `cur_shown` is the current scope's raw text (a profile row's scope), the empty
+/// path included ; `cur_shown_quoted_or` backquotes it, or gives its argument under the empty
+/// path ; `Shown::default()` is the empty text.
+#[test]
+fn fb_cur_shown_and_quoted_or() {
+    let mut s = Scopes::new();
+    assert_eq!(scope_out(s.cur_shown()), "");
+    assert_eq!(
+        scope_out(s.cur_shown_quoted_or("the enclosing scope")),
+        "the enclosing scope"
+    );
+    let a = s.scope_swap_text("top.g[0].$blk$12".to_string());
+    assert_eq!(scope_out(s.cur_shown()), s.cur_prefix_text());
+    assert_eq!(scope_out(s.cur_shown_quoted_or("x")), "`top.g[0].$blk$12`");
+    s.scope_restore(a);
+    assert_eq!(scope_out(super::Shown::default()), "");
+}
+
+/// LS3b-2: `push_here` appends to the list stored at the CURRENT scope's text (the empty
+/// path's key is ``), the store keeps text order.
+#[test]
+fn fb_scope_keyed_push_here() {
+    let mut s = Scopes::new();
+    let mut m: ScopeKeyed<Vec<u32>> = ScopeKeyed::new();
+    m.push_here(&s, 1);
+    let a = s.scope_swap_text("top".to_string());
+    m.push_here(&s, 2);
+    m.push_here(&s, 3);
+    let here = s.scope_carry();
+    assert_eq!(m.take_at(&s, &here), Some(vec![2, 3]));
+    s.scope_restore(a);
+    let top = s.scope_carry();
+    assert_eq!(m.take_at(&s, &top), Some(vec![1]));
+    assert!(m.drain_keys_shown().is_empty());
+}

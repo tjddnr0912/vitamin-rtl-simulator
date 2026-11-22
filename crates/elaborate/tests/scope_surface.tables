@@ -96,7 +96,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=4 rows=115 out_types=22 e_fns=24 text_flows=35
+present=present files=4 rows=126 out_types=22 e_fns=29 text_flows=42
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -113,10 +113,17 @@ lexscope/disp.rs	E	FN	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	IN:key	&str	ENTER:to-display	-
 lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	RET	String	LEAVE:L4	-
 lexscope/disp.rs	E	FN	Elaborator::stmt_loc_instance	RET	Shown	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::assert_block_local_inits_drained	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
+lexscope/elab.rs	E	FN	Elaborator::flush_block_local_inits	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	IN:name	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	RET	bool	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lhs	ast::Lvalue	ENTER:carried	-
+lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lo	u32	ENTER:carried	-
+lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:rhs	ast::Expr	ENTER:carried	-
+lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:scope	Option<&str>	ENTER:to-scope	-
+lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	ARG:reported	ReportedAt	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	IN:msg	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	IN:span	Option<ast::Span>	ENTER:index	-
@@ -159,6 +166,7 @@ lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the s
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	RET	&mut V	PASS	REF
 lexscope/mod.rs	K	FN	ScopeKeyed::new	RET	ScopeKeyed<V>	PASS	-
+lexscope/mod.rs	K	FN	ScopeKeyed::push_here	RET	()	PASS	-
 lexscope/mod.rs	K	FN	ScopeKeyed::put_at	RET	()	PASS	-
 lexscope/mod.rs	K	FN	ScopeKeyed::take_at	RET	Option<V>	CARD:hit:a value stored at the carried scope	-
 lexscope/mod.rs	K	FN	Scopes::class_method_is_none	RET	bool	PASS	-
@@ -166,6 +174,9 @@ lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top_or_synth_below	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_tf_decl	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
+lexscope/mod.rs	K	FN	Scopes::cur_shown	RET	Shown	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	IN:none	&str	ENTER:to-display	-
+lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	RET	Shown	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_is_empty	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_pop	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_push	IN:label	String	ENTER:to-display	-
@@ -282,6 +293,11 @@ Scopes::gen_binding_encloses	name	lookup	TEXT str
 Scopes::gen_binding_encloses	at	index	NUMBER hdl_ast::Span.lo -> u32
 Elaborator::walk_hits_decl_pos	name	lookup	TEXT str
 Elaborator::hoisted_at_decl_pos	name	lookup	TEXT str
+Elaborator::push_block_local_init	scope	to-scope	TEXT str
+Elaborator::push_block_local_init	lo	carried	NUMBER u32
+Elaborator::push_block_local_init	lhs	carried	TEXT hdl_ast::Lvalue::Ident.0 -> hdl_ast::HierPath.segments -> hdl_ast::Ident.name -> String
+Elaborator::push_block_local_init	rhs	carried	TEXT hdl_ast::Expr.kind -> hdl_ast::ExprKind::IntLit.raw -> String
+Scopes::cur_shown_quoted_or	none	to-display	TEXT str
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -304,6 +320,17 @@ ShownCtx	Vec<diag::Frame>
 # E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
 item	kind	name	count	flow
+Elaborator::assert_block_local_inits_drained	FN	-	-	-
+Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.cloned	1	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.collect	1	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.error	1	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.join	1	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.keys	2	text:error
+Elaborator::assert_block_local_inits_drained	OUT-C	.len	3	in
+Elaborator::assert_block_local_inits_drained	OUT-F	pending_block_local_inits	2	in
+Elaborator::assert_block_local_inits_drained	OUT-F	pending_scoped_presize	2	in
+Elaborator::assert_block_local_inits_drained	OUT-M	format	1	text:error
 Elaborator::ctx_here	FN	-	-	-
 Elaborator::cur_context	FN	-	-	-
 Elaborator::cur_context	OUT-C	.cur_prefix_text	1	in
@@ -349,11 +376,59 @@ Elaborator::display_of	OUT-M	format	1	in
 Elaborator::display_of_key_text	FN	-	-	-
 Elaborator::display_prefix	FN	-	-	-
 Elaborator::display_prefix	OUT-C	.cur_prefix_text	1	in
+Elaborator::drain_scoped_presize	FN	-	-	-
+Elaborator::drain_scoped_presize	OUT-C	.cur_prefix_text	2	in
+Elaborator::drain_scoped_presize	OUT-C	.insert	1	in
+Elaborator::drain_scoped_presize	OUT-C	.into_iter	2	in
+Elaborator::drain_scoped_presize	OUT-C	.is_empty	1	in
+Elaborator::drain_scoped_presize	OUT-C	.map	1	in
+Elaborator::drain_scoped_presize	OUT-C	.partition	1	in
+Elaborator::drain_scoped_presize	OUT-C	.remove	1	in
+Elaborator::drain_scoped_presize	OUT-C	.splice	1	payload
+Elaborator::drain_scoped_presize	OUT-C	.to_string	1	in
+Elaborator::drain_scoped_presize	OUT-F	pending_scoped_presize	2	in
+Elaborator::drain_scoped_presize	OUT-F	pending_var_inits	1	payload
+Elaborator::drain_scoped_presize	OUT-F	rank_path	1	in
 Elaborator::enter_frame_scope_root	FN	-	-	-
 Elaborator::enter_frame_scope_root	OUT-C	.replace	1	text:SavedRoot
 Elaborator::enter_frame_scope_root	OUT-C	.strip_prefix	1	text:SavedRoot
 Elaborator::enter_frame_scope_root	OUT-C	.to_string	1	text:SavedRoot
 Elaborator::enter_frame_scope_root	OUT-C	.unwrap_or	1	text:SavedRoot
+Elaborator::flush_block_local_inits	FN	-	-	-
+Elaborator::flush_block_local_inits	OUT-C	.all	1	in
+Elaborator::flush_block_local_inits	OUT-C	.clone	3	in
+Elaborator::flush_block_local_inits	OUT-C	.cloned	1	in
+Elaborator::flush_block_local_inits	OUT-C	.collect	1	in
+Elaborator::flush_block_local_inits	OUT-C	.cur_prefix_text	1	in
+Elaborator::flush_block_local_inits	OUT-C	.extend	2	payload
+Elaborator::flush_block_local_inits	OUT-C	.filter	1	in
+Elaborator::flush_block_local_inits	OUT-C	.first	1	in
+Elaborator::flush_block_local_inits	OUT-C	.flush_ranked	2	in
+Elaborator::flush_block_local_inits	OUT-C	.insert	1	in
+Elaborator::flush_block_local_inits	OUT-C	.into_iter	2	in
+Elaborator::flush_block_local_inits	OUT-C	.is_empty	2	in
+Elaborator::flush_block_local_inits	OUT-C	.is_some_and	2	in
+Elaborator::flush_block_local_inits	OUT-C	.keys	1	in
+Elaborator::flush_block_local_inits	OUT-C	.last_mut	1	in
+Elaborator::flush_block_local_inits	OUT-C	.map	1	in
+Elaborator::flush_block_local_inits	OUT-C	.partition	1	in
+Elaborator::flush_block_local_inits	OUT-C	.push	2	in
+Elaborator::flush_block_local_inits	OUT-C	.remove	2	in
+Elaborator::flush_block_local_inits	OUT-C	.scope_restore	1	in
+Elaborator::flush_block_local_inits	OUT-C	.scope_swap_text	1	in
+Elaborator::flush_block_local_inits	OUT-C	.sort_by_key	1	in
+Elaborator::flush_block_local_inits	OUT-C	.split	1	in
+Elaborator::flush_block_local_inits	OUT-C	.starts_with	1	in
+Elaborator::flush_block_local_inits	OUT-C	.strip_prefix	1	in
+Elaborator::flush_block_local_inits	OUT-C	.to_string	1	in
+Elaborator::flush_block_local_inits	OUT-C	String::new	1	in
+Elaborator::flush_block_local_inits	OUT-C	Vec::new	2	in
+Elaborator::flush_block_local_inits	OUT-C	is_here	1	in
+Elaborator::flush_block_local_inits	OUT-F	pending_block_local_inits	3	in
+Elaborator::flush_block_local_inits	OUT-F	pending_var_inits	2	payload
+Elaborator::flush_block_local_inits	OUT-F	rank_path	1	in
+Elaborator::flush_block_local_inits	OUT-M	format	1	in
+Elaborator::flush_block_local_inits	OUT-M	vec	1	in
 Elaborator::frame_path	FN	-	-	-
 Elaborator::frame_path	OUT-C	.get	1	in
 Elaborator::frame_path	OUT-C	.is_empty	2	in
@@ -369,6 +444,13 @@ Elaborator::frame_path_of	OUT-F	rtn_decl_scope	1	in
 Elaborator::hoisted_at_decl_pos	FN	-	-	-
 Elaborator::hoisted_at_decl_pos	OUT-C	.contains_key	1	in
 Elaborator::hoisted_at_decl_pos	OUT-F	hoisted_block_local	1	in
+Elaborator::push_block_local_init	FN	-	-	-
+Elaborator::push_block_local_init	OUT-C	.clone	1	in
+Elaborator::push_block_local_init	OUT-C	.entry	1	in
+Elaborator::push_block_local_init	OUT-C	.or_default	1	in
+Elaborator::push_block_local_init	OUT-C	.push	1	in
+Elaborator::push_block_local_init	OUT-F	pending_block_local_inits	1	in
+Elaborator::push_block_local_init	OUT-F	rank_path	1	in
 Elaborator::report_at	FN	-	-	-
 Elaborator::report_at	OUT-C	.error	1	in
 Elaborator::report_at	OUT-C	.error_at	1	in
@@ -388,6 +470,11 @@ Elaborator::scope_chain_abs	OUT-C	.join	2	text:Shown
 Elaborator::scope_chain_abs	OUT-C	.split	1	text:Shown
 Elaborator::scope_chain_abs	OUT-C	.starts_with	1	in
 Elaborator::scope_chain_abs	OUT-M	format	2	text:Shown
+Elaborator::scoped_init_key	FN	-	-	-
+Elaborator::scoped_init_key	OUT-C	.cur_prefix_text	3	in
+Elaborator::scoped_init_key	OUT-C	.is_empty	1	in
+Elaborator::scoped_init_key	OUT-C	.to_string	2	in
+Elaborator::scoped_init_key	OUT-M	format	1	in
 Elaborator::stmt_loc_instance	FN	-	-	-
 Elaborator::stmt_loc_instance	OUT-C	.strip_prefix	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
@@ -448,11 +535,16 @@ lexscope/disp.rs	Elaborator::frame_path	e91364f500b060fe9902849d65b4f0fc49205c03
 lexscope/disp.rs	Elaborator::frame_path_of	823ba84312a47cec1fe5a422c8df2b42892f809d0260fc0afa30738ac77e0fde
 lexscope/disp.rs	Elaborator::scope_chain_abs	08982b08354d4fb83357eabf54dbc92cddca5f06e42670a29e43f9780fc2ee90
 lexscope/disp.rs	Elaborator::stmt_loc_instance	f5718abbc8b5d0b5e42c9ea74827a1b2eb61a9a44cb49e060b86a1e0d1546614
+lexscope/elab.rs	Elaborator::assert_block_local_inits_drained	e16e5a4ed7f2cbdc6a5709fc2ed990679578f16652d7f73bfbdd4803892bf162
 lexscope/elab.rs	Elaborator::cur_gen_rtn_key	145f90e1aed58635660a165acea00147262cac1991617b27de0d3efabe088e5f
 lexscope/elab.rs	Elaborator::decl_pos_key	3bc7904fe805e472cb04f21a6f926a345fc405663a001a94066c87d779d7b940
+lexscope/elab.rs	Elaborator::drain_scoped_presize	00f2579cfe53586a10ef357797c63a237275c3722bbb5388f11bc992f4e961d9
+lexscope/elab.rs	Elaborator::flush_block_local_inits	96c4c9ddde4eecdfa18217565a61f91ac3321e519e413d1c12eb404fd203d0d9
 lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
 lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	407e99498c85a245fc330096f3b447ba861712defbf503ecf488a5a91602f058
+lexscope/elab.rs	Elaborator::push_block_local_init	1e7349e2e3b8b72df1ad90ee701abf9bb7dfa53afd8107b2839f67a2558d4601
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
+lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd780656be45d5940d1b66b359beddf
 lexscope/elab.rs	Elaborator::walk_hits_decl_pos	36e74b0024550514d01207a2f8ca0946ca109825b976aa6efbb236e9ea13867b
 lexscope/elab.rs	Elaborator::walk_rtn_scopes	44fd92b502bfa8291ad8e714834d29e3c82538eb6c192aeea87dc975e16fb5fe
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
@@ -468,6 +560,7 @@ lexscope/mod.rs	Outgoing for ShownCtx::plain	1e7c1e733228338213e5eb2c03ee8ada834
 lexscope/mod.rs	ScopeKeyed::drain_keys_shown	0a0f8767e2f8a8b96f92f2eb63fce8197fa9541d5ee38d0c6ca963fe39152402
 lexscope/mod.rs	ScopeKeyed::entry_under_cur	3b6dc8799638f6ae744a2055b1d0ca3c1463d88f0303ebacd686f038cb1e079b
 lexscope/mod.rs	ScopeKeyed::new	c63024e38d9219ddab995712a52cebadc746a0a4e6d9487404bbab285e7af4f1
+lexscope/mod.rs	ScopeKeyed::push_here	62e3ca480e7c7cfcf94288511464d22d2c8552401f8c3576bc4cbab4d60f038b
 lexscope/mod.rs	ScopeKeyed::put_at	419d56c0d471bd73b86acd02959fb47d1c328c7679d1ecbaa4b6eaf252ba266f
 lexscope/mod.rs	ScopeKeyed::take_at	52542cac8ebff1a8bb6bf0d22c480e91c417ac37cb3fb80b58239651e0372bcb
 lexscope/mod.rs	Scopes::c_path	690613c0dbbe24a2f5be83640a12468db1af2e077b6ab42575b6fe6996f0b7c4
@@ -477,6 +570,8 @@ lexscope/mod.rs	Scopes::cur_is_inst_top	aed9b197ccf907dbd57bbc32c044c5528941c481
 lexscope/mod.rs	Scopes::cur_is_inst_top_or_synth_below	778d24f792090c5e951b336441f4610089f5c323351e5d805d9e2223ea38f06e
 lexscope/mod.rs	Scopes::cur_is_tf_decl	53bccf374494aa6edbd29d9882ef10efb77f9186552a89edbf3fc62b0176ac09
 lexscope/mod.rs	Scopes::cur_prefix_text	880389ff624cd8b3c0dc19c579c104ffc4c7b13e29b5f56f6a2728be46cd4575
+lexscope/mod.rs	Scopes::cur_shown	2224140711fb6c469d88b5634d80ee4722f8cf32aef9e438e58c16456fef4a75
+lexscope/mod.rs	Scopes::cur_shown_quoted_or	c1b32131759d978de054a79663600be2bcc4d56278b4527462f38f3a727eb394
 lexscope/mod.rs	Scopes::disp_chain_is_empty	926c0636bda1ac8c49609703bf4575fad5bd9be3412116f94fd61e30b9830c5b
 lexscope/mod.rs	Scopes::disp_chain_pop	2f2a3a4a41d7e784f1574a6e3368eb71d5f1389da219d82378c84d2d1f0331c7
 lexscope/mod.rs	Scopes::disp_chain_push	9b16853c803eb5b2a82859952c0e1494d2b615ef7bbc7455e4a90228e441fb03
@@ -520,6 +615,7 @@ lexscope/mod.rs	wrap_ctx	12c3d43da0a4fe4699c4ec3a25824e28c4c665d4b1a01260f32b759
 lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500a67372696c
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 lexscope/tests.rs	fb_cur_is_inst_top_or_synth_below_truth_table	e58b73778279550c946409caf27937b7af95ef2fb1fa1e20079c194b2cd23307
+lexscope/tests.rs	fb_cur_shown_and_quoted_or	db87cbfc7b8a236be569f82de1df932c8e188f7d9a05ff444f7f7621b526961d
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
 lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2dc91cdcc2c946c5eb768296c3a60e80c2b98107
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
@@ -529,6 +625,7 @@ lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
 lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
 lexscope/tests.rs	fb_scope_child_text_and_reentry	c46e0ebdbeb76c7adaa70b7b28559f1dfb503d1ef00519e5495834733ce2e777
+lexscope/tests.rs	fb_scope_keyed_push_here	c9f10efeef1201cd95ec9eb5a141bc86d58da0e6142f2d73c3bd7932d4f88b83
 lexscope/tests.rs	fb_scope_keyed_take_put_entry_drain	cde9d37047a61a4db1bda00aafd5137939a5d10beb88547b0d079d90255369e9
 lexscope/tests.rs	fb_scope_swap_reenters_the_carried_scope_without_interning	e020af4bc7413eefaa1be64efe714cf1aaeb080245d2df82ec6227f5476c9ec4
 lexscope/tests.rs	fb_scope_text_of_carry_is_the_current_text_after_each_opener	2d7a4a802ecaea60fbba28f17f97dc45c58d2815897bc8833b8084fdf1920d7c
@@ -577,11 +674,11 @@ LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option
 LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
 LS2a	walk_rtn_scopes	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
 LS2a	with_scope	lexscope/elab.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self)); IN:f=INTERIOR(Self = Elaborator -> Elaborator.const_call_fn -> RefCell)	seg
-LS3	assert_block_local_inits_drained	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
-LS3	drain_scoped_presize	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
-LS3	flush_block_local_inits	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
-LS3	push_block_local_init	var_init.rs	pub(crate)	E	(&mut self, scope: Option<&str>, lo: u32, lhs: ast::Lvalue, rhs: ast::Expr)	PASS	-	scope,lo,lhs,rhs
-LS3	scoped_init_key	var_init.rs	pub(crate)	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
+LS3	assert_block_local_inits_drained	lexscope/elab.rs	pub(crate)	E	(&mut self)	PASS	-	-
+LS3	drain_scoped_presize	lexscope/elab.rs	-	E	(&mut self)	PASS	-	-
+LS3	flush_block_local_inits	lexscope/elab.rs	pub(crate)	E	(&mut self)	PASS	-	-
+LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Option<&str>, lo: u32, lhs: ast::Lvalue, rhs: ast::Expr)	PASS	-	scope,lo,lhs,rhs
+LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
 fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=1 card=16 cb=8 interior=1 enter=39 enter_number=6 in_unknown=0

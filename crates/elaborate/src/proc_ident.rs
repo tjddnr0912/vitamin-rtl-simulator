@@ -11,6 +11,18 @@
 
 use super::*;
 
+/// R14: a profile identity row while elaborating (the row of `proc_idents`, `ca_idents` and
+/// `pending_proc_ident`): [`ProcIdent`]'s fields with the instance scope held as `Shown` ;
+/// it becomes a `ProcIdent` at the hand-off (`api.rs`, through `scope_out`).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProcIdentRow {
+    pub(crate) kind: &'static str,
+    pub(crate) file: String,
+    pub(crate) line: u32,
+    pub(crate) col: u32,
+    pub(crate) scope: Shown,
+}
+
 impl Elaborator<'_> {
     /// Resolve an AST span to a display `file:line:col`, independent of
     /// `cur_span`. ⚠️ `cur_span` during module elaboration is the MODULE HEADER
@@ -49,12 +61,12 @@ impl Elaborator<'_> {
             Some(sp) => self.span_file_line_col(sp),
             None => (String::new(), 0, 0),
         };
-        self.ca_idents.push(ProcIdent {
+        self.ca_idents.push(ProcIdentRow {
             kind,
             file,
             line,
             col,
-            scope: self.lex.cur_prefix_text().to_string(),
+            scope: self.lex.cur_shown(),
         });
         self.cont_assigns.push(ca);
         self.record_row_at(at);

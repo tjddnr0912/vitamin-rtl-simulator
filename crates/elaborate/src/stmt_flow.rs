@@ -57,11 +57,14 @@ impl Elaborator<'_> {
         // not a case: it exists so a future append site that forgets to label
         // itself produces a visibly-unlabelled row instead of inheriting some
         // other body's `file:line`.
-        let ident = self.pending_proc_ident.take().unwrap_or_else(|| ProcIdent {
-            kind: "synth",
-            scope: self.lex.cur_prefix_text().to_string(),
-            ..ProcIdent::default()
-        });
+        let ident = self
+            .pending_proc_ident
+            .take()
+            .unwrap_or_else(|| ProcIdentRow {
+                kind: "synth",
+                scope: self.lex.cur_shown(),
+                ..ProcIdentRow::default()
+            });
         self.proc_idents.push(ident);
         self.processes.push(p);
         debug_assert_eq!(
@@ -417,7 +420,7 @@ impl Elaborator<'_> {
              mis-attached to the next process"
         );
         let (file, line, col) = self.span_file_line_col(p.span);
-        self.pending_proc_ident = Some(ProcIdent {
+        self.pending_proc_ident = Some(ProcIdentRow {
             kind: match p.kind {
                 ast::ProcKind::Initial => "initial",
                 ast::ProcKind::Always => "always",
@@ -429,7 +432,7 @@ impl Elaborator<'_> {
             file,
             line,
             col,
-            scope: self.lex.cur_prefix_text().to_string(),
+            scope: self.lex.cur_shown(),
         });
         // Reset the nesting guard at every top-level body entry (a process body is
         // never lowered while already inside a fork child of another process).

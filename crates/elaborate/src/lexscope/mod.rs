@@ -117,7 +117,9 @@ pub(crate) struct ScopeWitness {
 }
 
 /// Display / output text made from a scope (a `%m` path, an `[in …]` label, a frame's
-/// path): opaque. It leaves as plain text only through [`scope_out`].
+/// path): opaque. It leaves as plain text only through [`scope_out`]. `Default` is the
+/// empty text (a profile row's fail-safe default, `ProcIdentRow`).
+#[derive(Default)]
 pub(crate) struct Shown(String);
 
 /// The diagnostic context of "here" (the `[in …]` frames): opaque. It leaves only through
@@ -482,6 +484,22 @@ impl Scopes {
         Shown(self.names[at.0 .0 as usize].clone())
     }
 
+    /// The current scope as display / output text (its raw path, no display spelling: a
+    /// profile row's instance scope, `ProcIdentRow`).
+    pub(crate) fn cur_shown(&self) -> Shown {
+        Shown(self.cur_prefix.clone())
+    }
+
+    /// The current scope for a message: its raw path in backquotes, or `none` when the
+    /// current scope is the empty path.
+    pub(crate) fn cur_shown_quoted_or(&self, none: &str) -> Shown {
+        if self.cur_prefix.is_empty() {
+            Shown(none.to_string())
+        } else {
+            Shown(format!("`{}`", self.cur_prefix))
+        }
+    }
+
     /// The slot of mark `m`.
     fn mark_slot(&mut self, m: Mark) -> &mut ScopeId {
         match m {
@@ -655,5 +673,12 @@ impl<V> ScopeKeyed<V> {
         let keys = self.0.keys().cloned().map(Shown).collect();
         self.0.clear();
         keys
+    }
+}
+
+impl<T> ScopeKeyed<Vec<T>> {
+    /// `item` joins the list stored at the current scope (made empty on first use).
+    pub(crate) fn push_here(&mut self, s: &Scopes, item: T) {
+        self.0.entry(s.cur_prefix.clone()).or_default().push(item);
     }
 }

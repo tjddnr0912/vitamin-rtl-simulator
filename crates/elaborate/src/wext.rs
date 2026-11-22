@@ -638,9 +638,9 @@ pub(crate) struct WextSource<'a> {
     pub(crate) exprs: &'a [ir::Expr],
     pub(crate) consts: &'a [ir::ConstVal],
     pub(crate) cont_assigns: &'a [ir::ContAssign],
-    pub(crate) ca_idents: &'a [ProcIdent],
+    pub(crate) ca_idents: &'a [ProcIdentRow],
     pub(crate) processes: &'a [ir::Process],
-    pub(crate) proc_idents: &'a [ProcIdent],
+    pub(crate) proc_idents: &'a [ProcIdentRow],
     pub(crate) stmts: &'a [ir::Stmt],
     pub(crate) blocks: &'a [ir::BasicBlock],
     pub(crate) funcs: &'a [ir::FuncDef],
@@ -1280,7 +1280,7 @@ mod tests {
                 delay: None,
             },
         ];
-        let ids = vec![ProcIdent::default(), ProcIdent::default()];
+        let ids = vec![ProcIdentRow::default(), ProcIdentRow::default()];
         let v = build_view(&WextSource {
             nets: &nets,
             exprs: &[],
@@ -1381,7 +1381,7 @@ mod tests {
                 delay: None,
             }])
             .collect();
-        let ids = vec![ProcIdent::default(); 3];
+        let ids = vec![ProcIdentRow::default(); 3];
         let ext = |provisional: bool| -> Vec<Extent> {
             build_view(&WextSource {
                 nets: &nets,
@@ -1435,7 +1435,7 @@ mod tests {
                 delay: None,
             })
             .collect();
-        let ids = vec![ProcIdent::default(); 3];
+        let ids = vec![ProcIdentRow::default(); 3];
         let row_at = vec![Some(ast::Span::new(7, 9)), None];
         let v = build_view(&WextSource {
             nets: &nets,
