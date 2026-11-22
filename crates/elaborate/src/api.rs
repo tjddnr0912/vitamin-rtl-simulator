@@ -270,7 +270,14 @@ pub fn elaborate_located_params(
         ca_delays: std::mem::take(&mut el.ca_delays),
         ca_delay_exprs: std::mem::take(&mut el.ca_delay_exprs),
         net_names: el.net_name_table(), // BEFORE finish() consumes `el`
-        instances_info: std::mem::take(&mut el.instances_info),
+        instances_info: std::mem::take(&mut el.instances_info)
+            .into_iter()
+            .map(|r| InstanceInfo {
+                path: scope_out(r.path),
+                module: r.module,
+                parent: r.parent,
+            })
+            .collect(),
         // Last: the class tables and the tables above can still run the interpreter.
         const_seed_reads: el.const_seed_reads.take(),
     };

@@ -87,19 +87,19 @@ dead_arm.rs	settle_dead_arm	scope_restore=1,scope_swap=1	1	DIAGNOSTIC
 driver.rs	new	init=1	1	CONSTRUCTOR
 driver.rs	run	scope_restore=2,scope_swap_pkg=1,scope_swap_text=1	2	DEFINITION+SCOPE-ENTRY
 edge_gate.rs	edge_backstop	scope_restore=1,scope_swap_empty=1	1	DIAGNOSTIC
-frames_reserve.rs	with_rtn_decl_scope	scope_restore=1,scope_swap_text=1	1	SCOPE-ENTRY
+frames_reserve.rs	with_rtn_decl_scope	scope_restore=1,scope_swap=1	1	SCOPE-ENTRY
 lexscope/elab.rs	report_at	scope_restore=1,scope_swap=1	1	DIAGNOSTIC
 lexscope/elab.rs	with_scope	scope_enter=1,scope_restore=1	1	SCOPE-ENTRY
 held.rs	report_clk_refused	scope_restore=1,scope_swap=1	1	DIAGNOSTIC
 hier_defer/write.rs	resolve_pending_fill_widths	scope_restore=1,scope_swap=1	1	RE-ENTRY
-iface_inst.rs	elaborate_iface_instances	scope_restore=2,scope_swap_text=2	2	SCOPE-ENTRY+SCOPE-ENTRY
-instance.rs	elaborate_instance	scope_restore=1,scope_swap_text=1	1	SCOPE-ENTRY
+iface_inst.rs	elaborate_iface_instances	scope_restore=2,scope_swap=2	2	SCOPE-ENTRY+SCOPE-ENTRY
+instance.rs	elaborate_instance	scope_restore=1,scope_swap=1	1	SCOPE-ENTRY
 package.rs	elaborate_package	scope_restore=1,scope_swap_pkg=1	1	SCOPE-ENTRY
 ports.rs	bind_iface_port	scope_restore=1,scope_swap_text=1	1	LOOKUP
 ports.rs	wire_array_port	scope_restore=3,scope_swap_text=1	1	PARENT-SIDE
 ports.rs	wire_ports	scope_restore=3,scope_swap_text=3	3	PARENT-SIDE+PARENT-SIDE+PARENT-SIDE
 readmem_assoc.rs	check_readmem_assoc_waits	scope_hold=1,scope_repoint=1,scope_restore=1	1	DIAGNOSTIC
-scope.rs	default_binding_matches_decl_scope	scope_restore=1,scope_swap_text=1	1	LOOKUP
+scope.rs	default_binding_matches_decl_scope	scope_restore=1,swap_to_mark=1	1	LOOKUP
 sva_check.rs	materialize_sva_checkers	scope_restore=1,scope_swap=1	1	RE-ENTRY
 var_init.rs	flush_block_local_inits	scope_restore=1,scope_swap_text=1	1	RE-ENTRY
 == H3_COUNTS
@@ -154,6 +154,7 @@ hier_defer/write.rs	resolve_deferred_hier_sel_write	hier_resolve	fixed_string_dy
 ident_route.rs	ast_reads_guessed_param	walk_scopes_key	hit_value	SITE	params	1
 ident_route.rs	bare_ident_route	walk_scopes_key	hit_any_const_or_net	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
 ident_route.rs	bare_ident_route	walk_scopes_key	hit_value	SITE	params	1
+lexscope/elab.rs	walk_hits_decl_pos	walk_scopes_key	symbols	SITE	symbols	1
 lvalue.rs	collect_lval_chunks	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
 package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	genvar_decls	SITE	genvar_decls	1
 package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	symbols	SITE	symbols	1
@@ -165,7 +166,6 @@ params.rs	param_sel_range	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
 ports.rs	bind_iface_port	walk_scopes_key	iface_insts	SITE	iface_insts	1
 ports.rs	check_modport_write	walk_scopes_key	symbols	SITE	symbols	1
 ports.rs	wire_ports	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	check_decl_precedes_use	walk_scopes_key	symbols	SITE	symbols	1
 scope.rs	lookup_net_scoped	walk_scopes_key	symbols	SITE	symbols	1
 scope.rs	lookup_scoped	walk_scopes	params	SITE	params	1
 scope.rs	walk_scopes	walk_scopes_key	table	INTERNAL	table	1
@@ -214,7 +214,6 @@ decl_scope.rs	decl_body_win	A/C	COPY
 driver.rs	run	A/C	COPY
 dynarr.rs	dyn_handle	D	OWN
 dynarr.rs	dyn_array_actual_net	D	OWN
-edge_gate.rs	binding_encloses	A/C	OWN
 edge_gate.rs	variable_named_in	D	OWN
 edge_gate.rs	wide_lsb_param_in	D	OWN
 events.rs	sens_event_net	D	OWN
@@ -286,7 +285,7 @@ sva_prop.rs	flatten_overlap_property	D	XKIND
 sva_prop.rs	prop_bool_operand	D	RNS
 sva_prop.rs	sva_prev_for	D	SAME
 == H6C_COUNTS
-rows 103 {"COPY": 15, "FRAME": 3, "OWN": 37, "PLACE": 5, "R5": 1, "R5TAIL": 2, "RNS": 18, "SAME": 13, "WBIND": 2, "XKIND": 7}
+rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "RNS": 18, "SAME": 13, "WBIND": 2, "XKIND": 7}
 == H7
 # H7: (a) per fn, the typed `let`s of a String / str collection (170 in 89 fns = g2b
 # census.locals.tsv's rows with a `String` / `str` type token) ; (b) UNTYPED:
@@ -320,7 +319,7 @@ decl_collide.rs	check_decl_name_collisions	1	declared
 decl_collide.rs	check_decl_name_collisions	UNTYPED	stems=carrier_stems
 decl_collide.rs	report_decl_collisions	1	by_name
 decl_scope.rs	decl_keep_snapshot	1	keys
-driver.rs	run	5	seen,bind_checkers,names,cli_used,unmatched
+driver.rs	run	4	seen,bind_checkers,names,cli_used
 expr_size_hier.rs	build_module_facts	1	out
 expr_size_hier.rs	child_env	1	bound
 expr_size_hier.rs	module_facts	1	seen
@@ -444,7 +443,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 168 fns 87 untyped 32 readers 26
+lets 167 fns 87 untyped 32 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -546,12 +545,8 @@ gen_scope_name.rs	key_spells_indexed_singleton	derived-fn	key_spells_indexed_sin
 gen_scope_name.rs	key_spells_indexed_singleton	join	join	1	key
 gen_scope_name.rs	singleton_scope_key	fmt	format	1	key
 generate.rs	elaborate_gen_item	call	fq	2	key
-generate.rs	elaborate_gen_item	curp	cur_prefix_text().to_string()	1	scope
 generate.rs	elaborate_gen_scoped	call	fq	1	key
-generate.rs	elaborate_gen_scoped	curp	cur_prefix_text().to_string()	1	scope
 generate.rs	lower_gen_module_item	call	fq	3	key
-generate.rs	register_gen_func	curp	cur_prefix_text().to_string()	1	scope
-generate.rs	register_gen_task	curp	cur_prefix_text().to_string()	1	scope
 held.rs	clk_refused_at	call	walk_scopes_key_from	1	key
 held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
@@ -559,7 +554,6 @@ held.rs	fresh_capture_for	fmt-tempname	format	1	spelling
 held.rs	record_deferred_capture	join	join	2	spelling
 held.rs	refuse_clocking_item	call	fq	1	key
 held.rs	refuse_clocking_item	fmt	format	1	spelling
-hier.rs	child_prefix	fmt	format	1	scope
 hier.rs	hier_chain	join	join	1	spelling
 hier.rs	hier_key_within	call	indexed_gen_singleton	1	key
 hier.rs	hier_key_within	call	singleton_scope_key	2	key
@@ -602,18 +596,14 @@ hoist/general.rs	fresh_bool_temp	fmt-tempname	format	1	spelling
 hoist/special.rs	fresh_rhs_only_tmp	fmt-tempname	format	1	spelling
 ident_route.rs	ast_reads_guessed_param	call	walk_scopes_key	1	key
 ident_route.rs	bare_ident_route	call	walk_scopes_key	2	key
-iface_inst.rs	elaborate_iface_instances	call	child_prefix	1	scope
-iface_inst.rs	elaborate_iface_instances	call	fq	1	key
+iface_inst.rs	elaborate_iface_instances	call	fq	2	key
 iface_inst.rs	elaborate_iface_instances	curp	cur_prefix_text().to_string()	1	scope
 inline_task.rs	inline_static_task	fmt	format	1	segment
 inline_task_locals.rs	hoist_inline_task_locals	call	fq	1	key
 inline_task_locals.rs	hoist_one_inline_local	call	fq	1	key
 instance.rs	bind_enum_labels_of	call	fq	1	key
-instance.rs	elaborate_child_instances_inner	call	child_prefix	1	scope
 instance.rs	elaborate_instance	call	fq	8	key
-instance.rs	elaborate_instance	curp	cur_prefix_text().to_string()	3	scope
-instance.rs	elaborate_instance	fmt	format	1	key
-instance_array.rs	elaborate_instance_array	call	child_prefix	1	scope
+instance.rs	elaborate_instance	curp	cur_prefix_text().to_string()	1	scope
 instance_array.rs	elaborate_instance_array	call	fq	1	key
 lexscope/disp.rs	display_of	derived-fn	display_of	1	display
 lexscope/disp.rs	display_of	fmt	format	1	display
@@ -629,10 +619,15 @@ lexscope/disp.rs	scope_chain_abs	join	join	2	display
 lexscope/disp.rs	stmt_loc_instance	fmt	format	1	display
 lexscope/elab.rs	cur_gen_rtn_key	call	gen_rtn_key	1	key
 lexscope/elab.rs	cur_gen_rtn_key	derived-fn	cur_gen_rtn_key	1	key
+lexscope/elab.rs	decl_pos_key	fmt	format	1	key
 lexscope/elab.rs	gen_rtn_key	push	push	1	key
 lexscope/elab.rs	gen_rtn_key	push	push_str	2	key
+lexscope/elab.rs	walk_hits_decl_pos	call	walk_scopes_key	1	key
 lexscope/elab.rs	walk_rtn_scopes	call	gen_rtn_key	1	key
+lexscope/mod.rs	child_prefix	fmt	format	1	scope
+lexscope/mod.rs	entry_under_cur	fmt	format	1	key
 lexscope/mod.rs	key_under	fmt	format	1	key
+lexscope/mod.rs	scope_child	call	child_prefix	1	scope
 lexscope/mod.rs	scope_enter	push	push	1	scope
 lexscope/mod.rs	scope_swap_pkg	fmt	format	1	scope
 lvalue.rs	collect_lval_chunks	call	walk_scopes_key_shadowed	1	key
@@ -666,16 +661,13 @@ ports.rs	bind_iface_port	fmt	format	2	scope
 ports.rs	check_modport_write	call	walk_scopes_key	1	key
 ports.rs	check_modport_write	join	join	1	spelling
 ports.rs	elaborate_ports	call	fq	6	key
-ports.rs	elaborate_virtual_iface	call	child_prefix	1	scope
-ports.rs	elaborate_virtual_iface	call	fq	2	key
+ports.rs	elaborate_virtual_iface	call	fq	3	key
 ports.rs	elaborate_virtual_iface	fmt	format	2	key
 ports.rs	iface_member_net	join	join	1	spelling
 ports.rs	wire_ports	call	fq	1	key
 ports.rs	wire_ports	call	walk_scopes_key	1	key
 proc_ident.rs	push_cont_assign	curp	cur_prefix_text().to_string()	1	scope
 readmem_assoc.rs	readmem_assoc_target	join	join	1	spelling
-scope.rs	check_decl_precedes_use	call	walk_scopes_key	1	key
-scope.rs	check_decl_precedes_use	fmt	format	1	key
 scope.rs	fq	fmt	format	1	key
 scope.rs	lookup_dotted_net	join	join	1	spelling
 scope.rs	lookup_net_scoped	call	walk_scopes_key	1	key
@@ -720,12 +712,12 @@ var_init.rs	scoped_init_key	derived-fn	scoped_init_key	1	scope
 var_init.rs	scoped_init_key	fmt	format	1	scope
 wide_param_range.rs	bind_wide_param_decl	call	fq	1	key
 == HM_COUNTS
-mints 360 kinds {"call": 168, "curp": 15, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 187, "scope": 31, "segment": 17, "spelling": 105}
+mints 353 kinds {"call": 167, "curp": 9, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 189, "scope": 22, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
 # `std` (a tool artifact) and two u32-keyed maps of name sets, plus two `pkg_array_const_*`.
-all_clocking_names array_const_meta array_const_vals  array_param_overrides bind_targets bits_prescan body_write_func_names class_table  clocking_events coalesced_block_locals cond_census const_fn_pkg const_func_table  cover_insts cover_types cross_insts decl_block_locals decl_pos defparams  dyn_formal_func_names enum_label_prepass enum_label_types fixed_string_dyn_key  frame_idx frame_nonhoistable func_table gen_enum_carried gen_loop_labels  gen_singleton_labels genvar_decls hier_called_task_names hier_funcs hier_param_range  hier_params hier_tasks hoisted_block_local iface_insts iface_static_scoped ifaces  implicit_nets inout_func_names let_table local_decl_names md_return_fns mod_prec_exp  mod_unit_exp modport_readonly module_facts param_meta param_range param_type_guessed  params pending_block_local_inits pending_scoped_presize per_entry_in_scope  pkg_array_const_meta pkg_array_const_vals pkg_const_meta pkg_const_range pkg_consts  pkg_enum_labels pkg_funcs pkg_own_funcs pkg_own_tasks pkg_real_val pkg_str_raw  pkg_tasks pkg_types pkg_var_aliases pkg_vars pkg_wide_bits prop_table real_param_val  rtn_decl_genvars rtn_decl_scope rtn_pkg seq_table str_param_raw string_array_elems  symbols task_arg_locals task_frame_idx task_table vif_handles wide_param_bits
+all_clocking_names array_const_meta array_const_vals  array_param_overrides bind_targets bits_prescan body_write_func_names class_table  clocking_events coalesced_block_locals cond_census const_fn_pkg const_func_table  cover_insts cover_types cross_insts decl_block_locals decl_pos  dyn_formal_func_names enum_label_prepass enum_label_types fixed_string_dyn_key  frame_idx frame_nonhoistable func_table gen_enum_carried gen_loop_labels  gen_singleton_labels genvar_decls hier_called_task_names hier_funcs hier_param_range  hier_params hier_tasks hoisted_block_local iface_insts ifaces  implicit_nets inout_func_names let_table local_decl_names md_return_fns mod_prec_exp  mod_unit_exp modport_readonly module_facts param_meta param_range param_type_guessed  params pending_block_local_inits pending_scoped_presize per_entry_in_scope  pkg_array_const_meta pkg_array_const_vals pkg_const_meta pkg_const_range pkg_consts  pkg_enum_labels pkg_funcs pkg_own_funcs pkg_own_tasks pkg_real_val pkg_str_raw  pkg_tasks pkg_types pkg_var_aliases pkg_vars pkg_wide_bits prop_table real_param_val  rtn_decl_genvars rtn_decl_scope rtn_pkg seq_table str_param_raw string_array_elems  symbols task_arg_locals task_frame_idx task_table vif_handles wide_param_bits
 == HS
 # HS: the key scans — an iteration (SCAN_METHODS, or `for _ in &<recv>.<f>`) over `<recv>.<store>`, the
 # receiver self / s / me / this, the store in HS_STORES ; by (file, fn, store, method) with a count. 30 by
@@ -738,7 +730,6 @@ classes.rs	register_classes	class_table	iter	1	KEY-BLIND	Z2-values
 cont_var.rs	cont_var_name	symbols	iter	1	PRINT/DUMP	DK4-show
 decl_scope.rs	decl_keep_snapshot	keys	iter	1	HAND:TEXT-SCAN-ANSWERS	X19
 driver.rs	run	bind_targets	values	1	KEY-BLIND	Z2-values
-driver.rs	run	defparams	keys	1	PRINT/DUMP	DK4-show
 dynarr.rs	dyn_blocking_special	symbols	iter	1	TEXT-SCAN-ANSWERS	X12
 expr_size_hier.rs	facts_have_body_write_funcs	module_facts	values	1	KEY-BLIND	Z2-values
 frames_body.rs	seed_subroutine_routes	func_table	iter	1	KEY-BLIND	Z2-values
@@ -764,7 +755,7 @@ var_init.rs	assert_block_local_inits_drained	pending_block_local_inits	keys	1	PR
 var_init.rs	assert_block_local_inits_drained	pending_scoped_presize	keys	1	PRINT/DUMP	DK4-show
 var_init.rs	flush_block_local_inits	pending_block_local_inits	keys	1	TEXT-SCAN-ANSWERS	X7
 == HS_COUNTS
-stores 85 scans 32 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 7, "TEXT-SCAN-ANSWERS": 12}
+stores 83 scans 31 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 6, "TEXT-SCAN-ANSWERS": 12}
 == HH
 # HH: the current-prefix reads (g3 k4_reads.tsv, 59) — a probe (get / contains_key / contains / range /
 # get_mut, or an index) of a field or a fn-local table whose key argument is an `fq` call or a `let` holding
@@ -781,6 +772,7 @@ frames_blocal.rs	reserve_block_local_decl	symbols	whole	get=1
 frames_call/mod.rs	is_net_or_const_arg	symbols	whole	contains_key=1
 generate.rs	elaborate_gen_item	param_range	composite	get=1
 generate.rs	elaborate_gen_item	params	composite	get=1
+iface_inst.rs	elaborate_iface_instances	iface_insts	whole	contains_key=1
 iface_inst.rs	elaborate_iface_instances	params	whole	get=1
 inline_task_locals.rs	hoist_one_inline_local	symbols	whole	contains_key=1,get=1
 instance.rs	elaborate_instance	symbols	whole	contains_key=1,get=3
@@ -799,12 +791,13 @@ package.rs	elaborate_pkg_netvar	symbols	whole	get=1
 packed_pattern.rs	record_packed_default_target	symbols	whole	get=1
 params.rs	param_decl_width_opt	param_meta	whole	get=1
 ports.rs	elaborate_ports	symbols	whole	get=6
+ports.rs	elaborate_virtual_iface	iface_insts	whole	get=1
 ports.rs	wire_ports	symbols	composite	get=1
 stmt_main.rs	lower_stmt_inner	vif_handles	whole	contains=1
 string_array_route.rs	has_fixed_string_array_storage	string_array_elems	whole	contains_key=1
 struct_arm.rs	record_pattern_target	symbols	whole	get=1
 == HH_COUNTS
-reads 59 roles {"composite": 20, "whole": 39} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "explicit_imports": 5, "implicit_nets": 1, "param_meta": 1, "param_range": 2, "params": 5, "pkg_var_aliases": 3, "string_array_elems": 1, "symbols": 35, "vif_handles": 1, "wc_origin": 2}
+reads 61 roles {"composite": 20, "whole": 41} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "explicit_imports": 5, "iface_insts": 2, "implicit_nets": 1, "param_meta": 1, "param_range": 2, "params": 5, "pkg_var_aliases": 3, "string_array_elems": 1, "symbols": 35, "vif_handles": 1, "wc_origin": 2}
 == HSEG
 # HSEG: the segment-text tests — a text method (SEG_METHODS) whose literal argument holds `.` `$` `[` or `::`,
 # every `strip_prefix` (g4 OWED-d's domain), a `starts_with` / `strip_prefix` / `ends_with` / `strip_suffix`
@@ -833,16 +826,10 @@ decl_collide.rs	carrier_stems	strip_suffix	"$w"	1	spelling	-
 decl_collide.rs	internal_name	starts_with	'$'	1	spelling	-
 decl_scope.rs	decl_keep_snapshot	starts_with	<mine>	2	key	DK3
 dynarr.rs	dyn_blocking_special	rsplit	'.'	1	key	DK3
-edge_gate.rs	binding_encloses	strip_suffix	'.'	1	key	DK3
-edge_gate.rs	binding_encloses	strip_suffix	<name>	1	key	DK3
 edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
 events.rs	lower_delay	contains	'.'	1	spelling	-
 expr_main.rs	lower_expr_ungated	starts_with	"$__vita_stream_"	1	spelling	-
-expr_size_hier.rs	hier_leaf_scope	split	'.'	1	scope	LS4
-expr_size_hier.rs	hier_leaf_scope	starts_with	'$'	1	scope	LS4
-expr_size_hier.rs	hier_leaf_scope	strip_prefix	'.'	1	scope	LS4
-expr_size_hier.rs	hier_leaf_scope	strip_prefix	<inst_prefix>	1	scope	LS4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	rsplit	'.'	1	scope	LS4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$func$"	1	scope	LS4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$itask$"	1	scope	LS4
@@ -882,6 +869,12 @@ lexscope/elab.rs	gen_rtn_key	starts_with	'$'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	rfind	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	RS1
+lexscope/mod.rs	cur_is_inst_top_or_synth_below	split	'.'	1	scope	B3k
+lexscope/mod.rs	cur_is_inst_top_or_synth_below	starts_with	'$'	1	scope	B3k
+lexscope/mod.rs	cur_is_inst_top_or_synth_below	strip_prefix	'.'	1	scope	B3k
+lexscope/mod.rs	cur_is_inst_top_or_synth_below	strip_prefix	<self.mark_text()>	1	scope	B3k
+lexscope/mod.rs	gen_binding_encloses	strip_suffix	'.'	1	key	DK3
+lexscope/mod.rs	gen_binding_encloses	strip_suffix	<name>	1	key	DK3
 literal.rs	unescape_str_literal_reporting	strip_prefix	'"'	1	spelling	-
 package.rs	rtn_key_pkg	split_once	"::"	1	key	RS1
 params.rs	resolve_param_overrides	split_once	"$d"	1	spelling	-
@@ -910,7 +903,7 @@ var_init.rs	flush_block_local_inits	strip_prefix	<dot>	1	scope	LS4
 var_init.rs	in_block_local_scope	rsplit	'.'	1	scope	LS4
 var_init.rs	in_block_local_scope	starts_with	"$blk$"	1	scope	LS4
 == HSEG_COUNTS
-tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 27, "DK1": 2, "DK3": 15, "DK4": 6, "LS2": 3, "LS4": 18, "RS1": 19, "walk": 9}
+tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 27, "B3k": 4, "DK1": 2, "DK3": 15, "DK4": 6, "LS2": 3, "LS4": 14, "RS1": 19, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -951,13 +944,14 @@ Elaborator	lib.rs	task_arg_locals	std::collections::HashMap<String, Vec<u32>>	BI
 Elaborator	lib.rs	array_iter	Option<String>	BINDING	V	-
 Elaborator	lib.rs	ifaces	BTreeMap<String, ast::ModuleDecl>	NOT	DEF	-
 Elaborator	lib.rs	iface_insts	BTreeMap<String, String>	BINDING	S	KEYED-PLAN26
-Elaborator	lib.rs	iface_static_scoped	BTreeMap<String, iface_rtn_scope::StaticScopedCarry>	NOT	COPY	-
 Elaborator	lib.rs	vif_handles	std::collections::BTreeSet<String>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	modport_readonly	BTreeSet<String>	BINDING	V	KEYED-PLAN26
+InstanceRow	driver.rs	module	String	NOT	D	-
+ScopeKeyed	lexscope/mod.rs	0	BTreeMap<String, V>	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	cur_prefix	String	NOT	CTX	SCOPE
+Scopes	lexscope/mod.rs	gen_text	Vec<(ScopeId, hdl_ast::Span, Option<String>)>	BINDING	S	SCOPE
 Scopes	lexscope/mod.rs	names	Vec<String>	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	ids	HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>	NOT	CTX	SCOPE
-Elaborator	lib.rs	inst_prefix	String	NOT	CTX	SCOPE
 Elaborator	lib.rs	cur_module	String	NOT	CTX	-
 Elaborator	lib.rs	module_facts	BTreeMap<String, ModuleFacts>	BINDING	V	-
 Elaborator	lib.rs	params	Bound<BTreeMap<String, i64>>	BINDING	V	KEYED-PLAN26
@@ -979,7 +973,7 @@ Elaborator	lib.rs	hier_called_task_names	std::collections::BTreeSet<String>	BIND
 Elaborator	lib.rs	md_return_fns	std::collections::BTreeSet<String>	BINDING	R	-
 Elaborator	lib.rs	gen_enum_carried	BTreeMap<String, std::collections::BTreeSet<(u32, u32)>>	NOT	DEF	-
 Elaborator	lib.rs	cond_census	BTreeMap<String, cond_names::CondCensus>	BINDING	V	-
-Elaborator	lib.rs	defparams	BTreeMap<String, Vec<DefparamOverride>>	NOT	INPUT	KEYED-OTHER
+Elaborator	lib.rs	defparams	ScopeKeyed<Vec<DefparamOverride>>	NOT	INPUT	KEYED-OTHER
 Elaborator	lib.rs	inst_stack	Vec<String>	NOT	G	-
 Elaborator	lib.rs	func_table	BTreeMap<String, ast::FunctionDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	const_func_table	BTreeMap<String, ast::FunctionDef>	BINDING	R	ROUTINE
@@ -988,15 +982,12 @@ Elaborator	lib.rs	const_call_pkg	std::cell::RefCell<Option<String>>	NOT	CTX	-
 Elaborator	lib.rs	decl_wins	std::cell::RefCell<BTreeMap<(String, String, decl_scope::RtnKind), std::rc::Rc<decl_scope::DeclWin>>>	BINDING	V	-
 Elaborator	lib.rs	task_table	BTreeMap<String, ast::TaskDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_pkg	BTreeMap<String, String>	BINDING	R	ROUTINE
-Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, String>	BINDING	R	ROUTINE
+Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, ScopeRef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(String, i64)>>	BINDING	R	ROUTINE
 Elaborator	lib.rs	gen_genvars	Vec<(String, i64)>	NOT	CTX	KEYED-OTHER
-Elaborator	lib.rs	gen_text_scopes	Vec<(String, ast::Span, Option<String>)>	BINDING	S	SCOPE
 Elaborator	lib.rs	decl_pos	BTreeMap<String, u32>	BINDING	V	KEYED-OTHER
-Elaborator	lib.rs	decl_pos_scope	String	NOT	CTX	SCOPE
 Elaborator	lib.rs	decl_block_locals	std::collections::BTreeSet<String>	BINDING	V	-
 Elaborator	lib.rs	wide_param_bits	Bound<BTreeMap<String, ir::ConstVal>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	tf_decl_scope	String	NOT	CTX	SCOPE
 Elaborator	lib.rs	inout_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	body_write_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	dyn_formal_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
@@ -1113,12 +1104,10 @@ TimedBlocks	block_local_class.rs	captured	BTreeMap<(u32, String), String>	NOT	D	
 ScopedGather	block_local_feed.rs	per_name	BTreeMap<String, Vec<(u32, u32, AdmitReason)>>	BINDING	V	-
 SelectScope	select_scope.rs	names	std::collections::BTreeSet<String>	BINDING	V	-
 SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BINDING	V	-
-InstanceInfo	tables.rs	path	String	NOT	D	-
-InstanceInfo	tables.rs	module	String	NOT	D	-
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 196 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 63, "NOT:CHK": 2, "NOT:COPY": 8, "NOT:CTX": 15, "NOT:D": 35, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 12, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 130, "DISPLAY": 4, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "OUTPUT": 1, "ROUTINE": 14, "SCOPE": 9}
+fields 192 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 63, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 13, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 12, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "OUTPUT": 1, "ROUTINE": 14, "SCOPE": 7}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
@@ -1227,14 +1216,14 @@ driver.rs	new	1	init	-	lexscope::Scopes::new()	-	-	-	-	-	-	-	-	CTOR	-
 driver.rs	run	1	scope_swap_text	saved	m.name.name.clone()	s8/for	s0	e0	-	yes	-	end=r1	-	FIT	-
 driver.rs	run	2	scope_swap_pkg	saved	&pm.name.name	s10/for/s1/then/s0/else	s0	e1	-	yes	-	end=r1	-	FIT	-
 edge_gate.rs	edge_backstop	1	scope_swap_empty	prefix	-	s3/then	s1	e0	-	yes	-	end=r1	-	FIT	-
-frames_reserve.rs	with_rtn_decl_scope	1	scope_swap_text	saved	scope	body	s1	e1	-	yes	-	end=r1	dyn:f	FIT	dyn:f is the caller's closure: a write in any closure is a row of its own fn here and there is none, so f moves cur only through the rows it reaches ; the early `return f(self)` is before the opener
+frames_reserve.rs	with_rtn_decl_scope	1	scope_swap	saved	&scope	body	s1	e1	-	yes	-	end=r1	dyn:f	FIT	dyn:f is the caller's closure: a write in any closure is a row of its own fn here and there is none, so f moves cur only through the rows it reaches ; the early `return f(self)` is before the opener
 lexscope/elab.rs	report_at	1	scope_swap	saved_prefix	prefix	body	s2	e0	-	yes	-	end=r1	-	FIT	-
 lexscope/elab.rs	with_scope	1	scope_enter	saved	seg	body	s0	e1	-	yes	-	end=r1	dyn:f	FIT	dyn:f is the caller's closure (HF_CALLS' 21 lines): a write in any closure is a row of its own fn here and there is none, so f moves cur only through the rows it reaches
 held.rs	report_clk_refused	1	scope_swap	saved	prefix	body	s4	e0	-	yes	-	end=r1	-	FIT	-
 hier_defer/write.rs	resolve_pending_fill_widths	1	scope_swap	saved_prefix	&p.prefix	s2/for	s5	e1	-	yes	-	end=r1	-	FIT	-
-iface_inst.rs	elaborate_iface_instances	1	scope_swap_text	saved_prefix	path.clone()	s6/for/s2/then	s0	e1	-	yes	continue(local)x1	end=r1	dyn:site_ofx2	FIT	dyn:site_of is this fn's local closure (`let site_of = |i, imp| ..`), which does not capture self: it cannot write cur
-iface_inst.rs	elaborate_iface_instances	2	scope_swap_text	saved_prefix	path.clone()	s6/for/s3/then/s3/then	s2	e0	-	yes	-	end=r1	wire_ports	FIT	-
-instance.rs	elaborate_instance	1	scope_swap_text	saved_prefix	inst_path.to_string()	body	s8	e13	-	yes	continue(local)x7	end=r1	dyn:is_header_importx2,dyn:site_ofx2,elaborate_iface_instances,flush_block_local_inits,materialize_cover,materialize_sva_checkers,wire_ports	FIT	dyn:is_header_import and dyn:site_of are this fn's local closures, neither captures self (the first calls `Self::import_precedes_header` with no receiver): they cannot write cur
+iface_inst.rs	elaborate_iface_instances	1	scope_swap	saved_prefix	&path	s6/for/s3/then	s0	e1	-	yes	continue(local)x1	end=r1	dyn:site_ofx2	FIT	dyn:site_of is this fn's local closure (`let site_of = |i, imp| ..`), which does not capture self: it cannot write cur
+iface_inst.rs	elaborate_iface_instances	2	scope_swap	saved_prefix	&path	s6/for/s4/then/s3/then	s2	e0	-	yes	-	end=r1	wire_ports	FIT	-
+instance.rs	elaborate_instance	1	scope_swap	saved_prefix	inst_path	body	s8	e13	-	yes	continue(local)x7	end=r1	dyn:is_header_importx2,dyn:site_ofx2,elaborate_iface_instances,flush_block_local_inits,materialize_cover,materialize_sva_checkers,wire_ports	FIT	dyn:is_header_import and dyn:site_of are this fn's local closures, neither captures self (the first calls `Self::import_precedes_header` with no receiver): they cannot write cur
 package.rs	elaborate_package	1	scope_swap_pkg	saved_prefix	&pkg	body	s1	e13	-	yes	continue(local)x3	end=r1	-	FIT	-
 ports.rs	bind_iface_port	1	scope_swap_text	saved_for_lookup	parent_prefix.to_string()	body	s1	e8	-	yes	-	end=r1;return=r1	-	FIT	-
 ports.rs	wire_array_port	1	scope_swap_text	saved	parent_prefix.to_string()	body	s0	e16/then/s0/then/s1,e14/letelse/s0,e6	-	no	return@e16/then/s0/then/s3,return@e14/letelse/s2	end=r1;return=r1	-	NOT-FIT	one opener, three restores on exclusive paths: two inside the early-out branches, each followed by its `return` (paths: return=r1), one at the end ; PLAN8's NOT-FIT reason
@@ -1242,7 +1231,7 @@ ports.rs	wire_ports	1	scope_swap_text	saved	parent_prefix.to_string()	s2/arm0	s0
 ports.rs	wire_ports	2	scope_swap_text	saved	parent_prefix.to_string()	s3/for/s8/arm0	s2	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
 ports.rs	wire_ports	3	scope_swap_text	saved	parent_prefix.to_string()	s3/for/s8/arm1	s1	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
 readmem_assoc.rs	check_readmem_assoc_waits	1	scope_hold	prefix	-	body	s3	e0	&s.prefix@e2/for/s3	yes	continue(local)x1	end=r1	-	NOT-FIT	the save is a clone (beside cur_span) ; the loop re-points per site, one restore after the loop ; the `continue` stays in the loop ; PLAN8's NOT-FIT reason (a re-point per iteration)
-scope.rs	default_binding_matches_decl_scope	1	scope_swap_text	saved	self.tf_decl_scope.clone()	body	s5	e1	-	yes	-	end=r1	-	FIT	-
+scope.rs	default_binding_matches_decl_scope	1	swap_to_mark	saved	Mark::TfDecl	body	s5	e1	-	yes	-	end=r1	-	FIT	-
 sva_check.rs	materialize_sva_checkers	1	scope_swap	saved_prefix	&sva.scope	s3/for	s0	e0	-	yes	-	end=r1	-	FIT	-
 var_init.rs	flush_block_local_inits	1	scope_swap_text	saved	key	s15/for	s0	e0	-	yes	-	end=r1	-	FIT	-
 == HF_COUNTS
@@ -1292,10 +1281,12 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 # disp_root_swap_decl_inst / disp_class_method_swap) and a RESTORE a disp_*_restore(<local>) ; the display fields
 # are read as `<recv>.lex.F` too (disp_chain / disp_root / disp_method).
 file	fn	what	arg	sink	count
+api.rs	elaborate_located_params	LIT:InstanceInfo	path=scope_out(r.path)	CLOSURE>ARG:std::mem::take(&mut el.instances_info).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.frame_func_names).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_inst_scopes).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_scopes).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	instance	FIELD:StmtLoc.instance	1
+api.rs	elaborate_located_params	scope_out	r.path	FIELD:InstanceInfo.path	1
 api.rs	elaborate_located_params	scope_out	s	OTHER:tuple	2
 class_lower.rs	lower_class_method_body	RESTORE:disp_chain	= saved_block_scope	-	1
 class_lower.rs	lower_class_method_body	RESTORE:disp_method	= saved_cm	-	1
@@ -1311,6 +1302,7 @@ driver.rs	error	scope_out	self.ctx_here()	LOCAL:context#2	1
 driver.rs	note_at	ctx_here	-	ARG:scope_out	1
 driver.rs	note_at	scope_out	self.ctx_here()	LOCAL:context#2	1
 driver.rs	record_stmt_loc	stmt_loc_instance	-	FIELD:StmtLocRow.instance	1
+driver.rs	run	scope_out	fq	MAC:format>ARG:self.warn	1
 driver.rs	warn_code	ctx_here	-	ARG:scope_out	1
 driver.rs	warn_code	scope_out	self.ctx_here()	LOCAL:context#2	1
 driver.rs	warn_code_at	ctx_here	-	ARG:scope_out	1
@@ -1332,14 +1324,10 @@ frames_reserve.rs	reserve_frame_func	disp_frame_path_of	name, &func.name.name	LO
 frames_reserve.rs	reserve_frame_func	push_func.m_path	fp <- self.disp_frame_path_of(name, &func.name.name)	LOCAL:pushed#2	1
 frames_reserve.rs	reserve_frame_task	disp_frame_path_of	name, &task.name.name	LOCAL:fp#2	1
 frames_reserve.rs	reserve_frame_task	push_func.m_path	fp <- self.disp_frame_path_of(name, &task.name.name)	LOCAL:pushed#2	1
-iface_inst.rs	elaborate_iface_instances	child_prefix	&item.name.name	LOCAL:path#7	1
 inline_task.rs	inline_static_task	RESTORE:disp_chain	= saved_scope	-	1
 inline_task.rs	inline_static_task	RESTORE:disp_root	= saved_root	-	1
 inline_task.rs	inline_static_task	SAVE:disp_chain	.disp_chain_swap_single(&tname)	LOCAL:saved_scope#2	1
 inline_task.rs	inline_static_task	SAVE:disp_root	.disp_root_swap_decl_inst(-)	LOCAL:saved_root#2	1
-instance.rs	elaborate_child_instances_inner	child_prefix	&item.name.name	LOCAL:child_path#2	1
-instance.rs	elaborate_instance	LIT:InstanceInfo	path=inst_path.to_string()	ARG:self.instances_info.push	1
-instance_array.rs	elaborate_instance_array	child_prefix	&format!("{iname}[{idx}]")	LOCAL:child_path#2	1
 lexscope/disp.rs	ctx_here	cur_context	-	ARG:wrap_ctx	1
 lexscope/disp.rs	cur_context	display_prefix	-	LOCAL:p#3	1
 lexscope/disp.rs	disp_chain_abs	scope_chain_abs	-	ARG:wrap_shown	1
@@ -1348,15 +1336,15 @@ lexscope/disp.rs	disp_enter_frame_root	enter_frame_scope_root	name	ARG:wrap_root
 lexscope/disp.rs	disp_frame_path_of	frame_path_of	key, bare	ARG:wrap_shown	1
 lexscope/disp.rs	disp_here	display_prefix	-	ARG:wrap_shown	1
 lexscope/disp.rs	disp_inst_top	disp_inst_top_text	-	ARG:wrap_shown	1
-lexscope/disp.rs	disp_inst_top_text	display_of	&self.inst_prefix	RET	1
+lexscope/disp.rs	disp_inst_top_text	display_of	self.lex.mark_text(Mark::Inst)	RET	1
 lexscope/disp.rs	disp_root_swap_decl_inst	SAVE:disp_root	.replace(decl_root)	ARG:SavedRoot	1
-lexscope/disp.rs	disp_root_swap_decl_inst	display_of	&self.inst_prefix	LOCAL:decl_root#2	1
+lexscope/disp.rs	disp_root_swap_decl_inst	display_of	self.lex.mark_text(Mark::Inst)	LOCAL:decl_root#2	1
 lexscope/disp.rs	display_of_key_text	display_of	key	RET	1
 lexscope/disp.rs	display_prefix	display_of	self.lex.cur_prefix_text()	RET	1
 lexscope/disp.rs	enter_frame_scope_root	SAVE:disp_root	.replace(root)	RET	1
 lexscope/disp.rs	enter_frame_scope_root	frame_path	name	LOCAL:fp#3	1
-lexscope/disp.rs	frame_path	display_of	&self.inst_prefix	LOCAL:inst#2	1
-lexscope/disp.rs	frame_path	display_of	scope	LOCAL:d#2	1
+lexscope/disp.rs	frame_path	display_of	self.lex.mark_text(Mark::Inst)	LOCAL:inst#2	1
+lexscope/disp.rs	frame_path	display_of	self.lex.scope_text(scope)	LOCAL:d#2	1
 lexscope/disp.rs	frame_path_of	frame_path	bare	RET	1
 lexscope/disp.rs	frame_path_of	frame_path	key	RET	1
 lexscope/disp.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
@@ -1365,9 +1353,9 @@ lexscope/mod.rs	disp_chain_swap_single	SAVE:disp_chain	mem::replace(&mut self.di
 lexscope/mod.rs	disp_chain_take	SAVE:disp_chain	mem::take(&mut self.disp_chain)	ARG:SavedChain	1
 lexscope/mod.rs	disp_class_method_swap	SAVE:disp_method	.replace(method)	ARG:SavedMethod	1
 lexscope/mod.rs	disp_root_swap_empty	SAVE:disp_root	.replace(String::new())	ARG:SavedRoot	1
+lexscope/mod.rs	scope_child	child_prefix	inst_name	LOCAL:text#2	1
 lexscope/mod.rs	scope_out	plain	-	RET	1
 net_util.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
-ports.rs	elaborate_virtual_iface	child_prefix	&inst	LOCAL:inst_path#2	1
 proc_ident.rs	push_cont_assign	LIT:ProcIdent	scope=self.lex.cur_prefix_text().to_string()	ARG:self.ca_idents.push	1
 read_set.rs	recompute_in_body_star_sites	scope_out	s.ctx.clone()	FIELD:Diagnostic.context	1
 stmt_flow.rs	lower_proc_block	LIT:ProcIdent	scope=self.lex.cur_prefix_text().to_string()	ASSIGN:self.pending_proc_ident	1
@@ -1381,7 +1369,7 @@ stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
 # enter_frame_scope_root, disp_root_swap_decl_inst, and disp_enter_frame_root's `via`) ; scope_out 13 = 5 LOCAL
 # (HC_LOCAL) + 3 fn-value + 2 tuple + 1 FIELD StmtLoc.instance + 1 FIELD Diagnostic.context + 1 RECV .as_bytes
-{"LIT": 5, "RESTORE": 9, "SAVE": 16, "child_prefix": 4, "ctx_here": 6, "cur_context": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 13, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+{"LIT": 5, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 15, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1404,37 +1392,26 @@ block_local/hoist.rs	hoist_one_block_local	cur_prefix_text	MAC:format>LOCAL:scop
 block_local/hoist.rs	hoist_one_block_local	cur_prefix_text	RECV:.is_empty	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	BIN:==	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	RECV:.is_empty	1
-expr_size_hier.rs	hier_leaf_scope	cur_prefix_text	RECV:.strip_prefix	1
 frames_call/emit.rs	emit_dyn_formal_markers_nested	cur_prefix_text	RECV:.rsplit	1
 frames_reserve.rs	reserve_frame_func	cur_prefix_text	MAC:format>LOCAL:key#2	1
 frames_reserve.rs	reserve_frame_func	cur_prefix_text	RECV:.is_empty	1
 frames_reserve.rs	reserve_frame_task	cur_prefix_text	MAC:format>LOCAL:key#2	1
 frames_reserve.rs	reserve_frame_task	cur_prefix_text	RECV:.is_empty	1
-generate.rs	elaborate_gen_item	cur_prefix_text	OTHER:tuple	1
-generate.rs	elaborate_gen_scoped	cur_prefix_text	OTHER:tuple	1
 generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
-generate.rs	register_gen_func	cur_prefix_text	ARG:self.rtn_decl_scope.insert	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
-generate.rs	register_gen_task	cur_prefix_text	ARG:self.rtn_decl_scope.insert	1
-hier.rs	child_prefix	cur_prefix_text	MAC:format>RET	1
-hier.rs	child_prefix	cur_prefix_text	RECV:.is_empty	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
 hoist/general_query.rs	hier_path_is_self	cur_prefix_text	RECV:.split	1
 iface_inst.rs	elaborate_iface_instances	cur_prefix_text	LOCAL:parent#2	1
-instance.rs	elaborate_instance	cur_prefix_text	ARG:std::mem::replace	2
 instance.rs	elaborate_instance	cur_prefix_text	LOCAL:parent_prefix#2	1
-instance.rs	elaborate_instance	cur_prefix_text	MAC:format>LOCAL:fq#2	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
 proc_ident.rs	push_cont_assign	cur_prefix_text	FIELD:ProcIdent.scope	1
-scope.rs	default_binding_matches_decl_scope	cur_prefix_text	BIN:==	1
 scope.rs	fq	cur_prefix_text	MAC:format>RET	1
 scope.rs	fq	cur_prefix_text	RECV:.is_empty	1
 scope.rs	scoped_key_at_or_above	scope_text	LOCAL:prefix#3	1
 scope.rs	walk_scopes_key_from	scope_text	ARG:self.walk_out_from	1
 scope.rs	walk_scopes_key_inner	cur_prefix_text	ARG:self.walk_out_from	1
-select_scope.rs	folding_in_module_scope	cur_prefix_text	BIN:==	1
 stmt_flow.rs	lower_proc_block	cur_prefix_text	FIELD:ProcIdent.scope	1
 stmt_flow.rs	push_process	cur_prefix_text	FIELD:ProcIdent.scope	1
 string_array_route.rs	route_fixed_string_array	cur_prefix_text	LOCAL:scope#2	1
@@ -1450,7 +1427,7 @@ net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
 # + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 40, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
+{"cur_gen_rtn_key": 2, "cur_prefix_text": 28, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1464,6 +1441,7 @@ cont_array.rs	check_whole_array_sole_writer	scope_repoint	&prefix	1
 cont_var.rs	check_var_cont_assign_sole_writer	scope_repoint	&a.prefix	2
 cover_synth.rs	materialize_cover	scope_swap	&cov.scope	1
 dead_arm.rs	settle_dead_arm	scope_swap	&d.prefix	1
+driver.rs	run	scope_child	&top.name.name	1
 driver.rs	run	scope_swap_pkg	&pm.name.name	1
 driver.rs	run	scope_swap_text	m.name.name.clone()	1
 edge_gate.rs	decide_late_edges	report_at	&prefix	1
@@ -1473,7 +1451,7 @@ frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_scope	&scope_se
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_scope	&scope_seg	1
 frames_reserve.rs	reserve_frame_func	with_scope	&scope_seg	1
 frames_reserve.rs	reserve_frame_task	with_scope	&scope_seg	1
-frames_reserve.rs	with_rtn_decl_scope	scope_swap_text	scope	1
+frames_reserve.rs	with_rtn_decl_scope	scope_swap	&scope	1
 frames_static_init.rs	emit_frame_static_prologue	with_scope	&seg	2
 frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
 generate.rs	elaborate_gen_item	with_scope	&block_prefix	1
@@ -1482,29 +1460,50 @@ held.rs	report_clk_refused	scope_swap	prefix	1
 hier.rs	hier_resolve	scope_text	prefix	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	&d.prefix	1
 hier_defer/write.rs	resolve_pending_fill_widths	scope_swap	&p.prefix	1
-iface_inst.rs	elaborate_iface_instances	scope_swap_text	path.clone()	2
+iface_inst.rs	elaborate_iface_instances	mark_put	saved_dpos_scope	1
+iface_inst.rs	elaborate_iface_instances	mark_swap	&path	1
+iface_inst.rs	elaborate_iface_instances	scope_child	&item.name.name	1
+iface_inst.rs	elaborate_iface_instances	scope_swap	&path	2
+iface_rtn_scope.rs	adopt_static_scoped_frames	put_at	parent	1
+iface_rtn_scope.rs	adopt_static_scoped_frames	take_at	parent	1
+iface_rtn_scope.rs	release_static_scoped_frames	put_at	parent	1
+iface_rtn_scope.rs	release_static_scoped_frames	take_at	parent	1
+iface_rtn_scope.rs	restore_routine_scope	mark_put	s.inst_prefix	1
+iface_rtn_scope.rs	restore_routine_scope	mark_put	s.tf_decl_scope	1
+iface_rtn_scope.rs	take_routine_scope	mark_swap	decl_scope	2
 inline_task.rs	inline_static_task	with_scope	&scope	1
 inline_task_locals.rs	emit_inline_local_inits	with_scope	&seg	1
 inline_task_locals.rs	hoist_inline_task_locals	with_scope	&sg	2
-instance.rs	elaborate_instance	scope_swap_text	inst_path.to_string()	1
+instance.rs	elaborate_child_instances_inner	scope_child	&item.name.name	1
+instance.rs	elaborate_instance	entry_under_cur	&path.segments[0].name	1
+instance.rs	elaborate_instance	mark_exchange	&mut saved_dpos_scope	2
+instance.rs	elaborate_instance	mark_put	saved_decl_scope	1
+instance.rs	elaborate_instance	mark_put	saved_dpos_scope	1
+instance.rs	elaborate_instance	mark_put	saved_inst_prefix	1
+instance.rs	elaborate_instance	mark_swap	inst_path	1
+instance.rs	elaborate_instance	scope_shown	inst_path	1
+instance.rs	elaborate_instance	scope_swap	inst_path	1
+instance.rs	elaborate_instance	take_at	inst_path	1
+instance_array.rs	elaborate_instance_array	scope_child	&format!("{iname}[{idx}]")	1
+lexscope/disp.rs	frame_path	scope_text	scope	1
 lexscope/elab.rs	report_at	scope_swap	prefix	1
 lexscope/elab.rs	report_at	scope_text	prefix	1
 lexscope/mod.rs	scope_enter	scope_swap_text	new_prefix	1
 lexscope/mod.rs	scope_swap_empty	scope_swap_text	String::new()	1
 lexscope/mod.rs	scope_swap_pkg	scope_swap_text	format!("$pkg${pkg}")	1
+lexscope/mod.rs	swap_to_mark	scope_swap	&at	1
 package.rs	elaborate_package	scope_swap_pkg	&pkg	1
 ports.rs	bind_iface_port	scope_swap_text	parent_prefix.to_string()	1
 ports.rs	wire_array_port	scope_swap_text	parent_prefix.to_string()	1
 ports.rs	wire_ports	scope_swap_text	parent_prefix.to_string()	3
 readmem_assoc.rs	check_readmem_assoc_waits	scope_repoint	&s.prefix	1
-scope.rs	default_binding_matches_decl_scope	scope_swap_text	self.tf_decl_scope.clone()	1
 scope.rs	scoped_key_at_or_above	scope_text	prefix	1
 scope.rs	walk_scopes_key_from	scope_text	prefix	1
 stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
 var_init.rs	flush_block_local_inits	scope_swap_text	key	1
 == HC_ARGS_COUNTS
-{"key_under": 1, "report_at": 2, "scope_repoint": 4, "scope_swap": 6, "scope_swap_pkg": 2, "scope_swap_text": 15, "scope_text": 4, "with_scope": 21}
+{"entry_under_cur": 1, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 11, "scope_swap_pkg": 2, "scope_swap_text": 10, "scope_text": 5, "take_at": 3, "with_scope": 21}
 == HC_LOCAL
 # HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
 # scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called
@@ -1525,6 +1524,8 @@ expr_ctx.rs	resize_rhs_for_lvalue	scope_carry	FIELD:PendingFillWidth.prefix	1
 expr_main.rs	lower_expr_ungated	scope_carry	FIELD:DeferredHier.prefix	1
 expr_main.rs	lower_expr_ungated	scope_carry	FIELD:DeferredHierSelect.prefix	3
 expr_special.rs	lower_bits_fold	scope_carry	FIELD:DeferredHierBits.prefix	1
+generate.rs	register_gen_func	scope_carry	ARG:self.rtn_decl_scope.insert	1
+generate.rs	register_gen_task	scope_carry	ARG:self.rtn_decl_scope.insert	1
 held.rs	clk_refused_path	scope_carry	ARG:self.clk_refused_at	1
 hier_defer/func_call.rs	emit_deferred_hier_func_call	scope_carry	FIELD:DeferredHierTaskCall.prefix	1
 hier_defer/write.rs	defer_hier_sel_write	scope_carry	FIELD:DeferredHierSelWrite.prefix	1
@@ -1536,7 +1537,7 @@ stmt_main.rs	lower_stmt_inner	scope_carry	ARG:self.report_clk_refused	2
 stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingCover.scope	1
 stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingSva.scope	4
 == HC_CARRY_COUNTS
-sites=26 local=0
+sites=28 local=0
 == HOLDERS
 # HOLDERS (LS2-d ; DELTA9 J1 (3), J4): every struct field, enum variant field and fn signature
 # position (IN:<param>, RET) in crates/elaborate/src whose type names a lexscope type (Scopes,
@@ -1548,6 +1549,7 @@ cont_array.rs	WholeArrayCa.prefix	FIELD	crate::ScopeRef	1
 cont_var.rs	VarContAssign.prefix	FIELD	crate::ScopeRef	1
 cover.rs	PendingCover.scope	FIELD	crate::ScopeRef	1
 dead_arm.rs	DeadSelect.prefix	FIELD	crate::ScopeRef	1
+driver.rs	InstanceRow.path	FIELD	Shown	1
 driver.rs	StmtLocRow.instance	FIELD	Shown	1
 edge_gate.rs	EdgeRec.prefix	FIELD	crate::ScopeRef	1
 edge_gate.rs	Elaborator::verify_use_recs	IN:reported	&mut crate::ReportedAt	1
@@ -1571,6 +1573,13 @@ hier_defer/mod.rs	DeferredHierSelect.prefix	FIELD	crate::ScopeRef	1
 hier_defer/mod.rs	DeferredHierTaskCall.prefix	FIELD	crate::ScopeRef	1
 hier_defer/mod.rs	DeferredHierWrite.prefix	FIELD	crate::ScopeRef	1
 hier_defer/mod.rs	PendingFillWidth.prefix	FIELD	crate::ScopeRef	1
+iface_rtn_scope.rs	Elaborator::adopt_static_scoped_frames	IN:parent	&ScopeRef	1
+iface_rtn_scope.rs	Elaborator::release_static_scoped_frames	IN:parent	&ScopeRef	1
+iface_rtn_scope.rs	Elaborator::take_routine_scope	IN:decl_scope	&ScopeRef	1
+iface_rtn_scope.rs	RoutineScope.inst_prefix	FIELD	ScopeRef	1
+iface_rtn_scope.rs	RoutineScope.rtn_decl_scope	FIELD	BTreeMap<String, ScopeRef>	1
+iface_rtn_scope.rs	RoutineScope.tf_decl_scope	FIELD	ScopeRef	1
+instance.rs	Elaborator::elaborate_instance	IN:inst_path	&ScopeRef	1
 lexscope/disp.rs	Elaborator::ctx_here	RET	ShownCtx	1
 lexscope/disp.rs	Elaborator::disp_chain_abs	RET	Shown	1
 lexscope/disp.rs	Elaborator::disp_enter_frame_root	RET	SavedRoot	1
@@ -1581,6 +1590,13 @@ lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	1
 lexscope/disp.rs	Elaborator::stmt_loc_instance	RET	Shown	1
 lexscope/elab.rs	Elaborator::report_at	IN:prefix	&ScopeRef	1
 lexscope/elab.rs	Elaborator::report_at	IN:reported	&mut ReportedAt	1
+lexscope/mod.rs	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	1
+lexscope/mod.rs	ScopeKeyed::entry_under_cur	IN:s	&Scopes	1
+lexscope/mod.rs	ScopeKeyed::new	RET	ScopeKeyed<V>	1
+lexscope/mod.rs	ScopeKeyed::put_at	IN:at	&ScopeRef	1
+lexscope/mod.rs	ScopeKeyed::put_at	IN:s	&Scopes	1
+lexscope/mod.rs	ScopeKeyed::take_at	IN:at	&ScopeRef	1
+lexscope/mod.rs	ScopeKeyed::take_at	IN:s	&Scopes	1
 lexscope/mod.rs	Scopes::disp_restore_chain	IN:saved	SavedChain	1
 lexscope/mod.rs	Scopes::disp_chain_swap_single	RET	SavedChain	1
 lexscope/mod.rs	Scopes::disp_chain_take	RET	SavedChain	1
@@ -1589,12 +1605,20 @@ lexscope/mod.rs	Scopes::disp_restore_method	IN:saved	SavedMethod	1
 lexscope/mod.rs	Scopes::disp_restore_root	IN:saved	SavedRoot	1
 lexscope/mod.rs	Scopes::disp_root_swap_empty	RET	SavedRoot	1
 lexscope/mod.rs	Scopes::key_under	IN:at	&ScopeRef	1
+lexscope/mod.rs	Scopes::mark_exchange	IN:at	&mut ScopeRef	1
+lexscope/mod.rs	Scopes::mark_put	IN:at	ScopeRef	1
+lexscope/mod.rs	Scopes::mark_swap	IN:at	&ScopeRef	1
+lexscope/mod.rs	Scopes::mark_swap	RET	ScopeRef	1
+lexscope/mod.rs	Scopes::mark_swap_here	RET	ScopeRef	1
 lexscope/mod.rs	Scopes::new	RET	Scopes	1
 lexscope/mod.rs	Scopes::scope_carry	RET	ScopeRef	1
+lexscope/mod.rs	Scopes::scope_child	RET	ScopeRef	1
 lexscope/mod.rs	Scopes::scope_enter	RET	Saved	1
 lexscope/mod.rs	Scopes::scope_hold	RET	Saved	1
 lexscope/mod.rs	Scopes::scope_repoint	IN:at	&ScopeRef	1
 lexscope/mod.rs	Scopes::scope_restore	IN:saved	Saved	1
+lexscope/mod.rs	Scopes::scope_shown	IN:at	&ScopeRef	1
+lexscope/mod.rs	Scopes::scope_shown	RET	Shown	1
 lexscope/mod.rs	Scopes::scope_swap	IN:at	&ScopeRef	1
 lexscope/mod.rs	Scopes::scope_swap	RET	Saved	1
 lexscope/mod.rs	Scopes::scope_swap_empty	RET	Saved	1
@@ -1603,15 +1627,19 @@ lexscope/mod.rs	Scopes::scope_swap_text	RET	Saved	1
 lexscope/mod.rs	Scopes::scope_text	IN:at	&ScopeRef	1
 lexscope/mod.rs	Scopes::scope_witness	RET	ScopeWitness	1
 lexscope/mod.rs	Scopes::scope_witness_check	IN:w	&ScopeWitness	1
+lexscope/mod.rs	Scopes::swap_to_mark	RET	Saved	1
 lexscope/mod.rs	shown_from_spelling	RET	Shown	1
 lexscope/mod.rs	wrap_ctx	RET	ShownCtx	1
 lexscope/mod.rs	wrap_root	RET	SavedRoot	1
 lexscope/mod.rs	wrap_shown	RET	Shown	1
+lib.rs	Elaborator.defparams	FIELD	ScopeKeyed<Vec<DefparamOverride>>	1
 lib.rs	Elaborator.expr_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
 lib.rs	Elaborator.frame_func_names	FIELD	Vec<lexscope::Shown>	1
+lib.rs	Elaborator.iface_static_scoped	FIELD	ScopeKeyed<iface_rtn_scope::StaticScopedCarry>	1
 lib.rs	Elaborator.lex	FIELD	lexscope::Scopes	1
 lib.rs	Elaborator.proc_inst_scopes	FIELD	Vec<lexscope::Shown>	1
 lib.rs	Elaborator.proc_scopes	FIELD	Vec<lexscope::Shown>	1
+lib.rs	Elaborator.rtn_decl_scope	FIELD	BTreeMap<String, ScopeRef>	1
 lib.rs	Elaborator.stmt_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
 read_set.rs	StarSite.ctx	FIELD	ShownCtx	1
 readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1

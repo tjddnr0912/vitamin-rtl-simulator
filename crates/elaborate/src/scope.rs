@@ -406,10 +406,7 @@ impl Elaborator<'_> {
         // Identical scope, no formal substitution in flight ⇒ the two lowerings are the
         // same lowering. Covers every call that is not inside another subroutine, a
         // generate block, or a scoped block — i.e. almost all of them, byte-identically.
-        if self.lex.cur_prefix_text() == self.tf_decl_scope
-            && self.subst.is_empty()
-            && self.out_subst.is_empty()
-        {
+        if self.lex.cur_is_tf_decl() && self.subst.is_empty() && self.out_subst.is_empty() {
             return true;
         }
         if Self::default_is_scope_safe(def) {
@@ -428,7 +425,7 @@ impl Elaborator<'_> {
         {
             return false;
         }
-        let saved = self.lex.scope_swap_text(self.tf_decl_scope.clone());
+        let saved = self.lex.swap_to_mark(Mark::TfDecl);
         let there: Vec<(Option<u32>, Option<i64>)> = names
             .iter()
             .map(|n| (self.lookup_net_scoped(n), self.lookup_scoped(n)))
@@ -523,16 +520,7 @@ impl Elaborator<'_> {
         // The hit must be THIS module's own binding. A function formal or a
         // generate-block local with the same name is a different object that
         // happens to share a spelling, and flagging it would be a false reject.
-        let own_key = if self.decl_pos_scope.is_empty() {
-            name.to_string()
-        } else {
-            format!("{}.{}", self.decl_pos_scope, name)
-        };
-        if self
-            .walk_scopes_key(name, |k| self.symbols.contains_key(k))
-            .as_deref()
-            != Some(own_key.as_str())
-        {
+        if !self.walk_hits_decl_pos(name) {
             return;
         }
         // ⚠️ …and that test is VACUOUS for a plain-static BLOCK-LOCAL. vita's v1
@@ -546,8 +534,7 @@ impl Elaborator<'_> {
         // any body is lowered. Skipping under-detects a real use-before-declaration of
         // a name that is ALSO a block-local; that is the safe direction, since the
         // alternative rejects legal code.
-        if self.hoisted_block_local.contains_key(&own_key) || self.decl_block_locals.contains(name)
-        {
+        if self.hoisted_at_decl_pos(name) || self.decl_block_locals.contains(name) {
             return;
         }
         self.error(

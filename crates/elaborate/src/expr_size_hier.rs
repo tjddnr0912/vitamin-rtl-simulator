@@ -575,16 +575,7 @@ impl Elaborator<'_> {
         if !self.bind_targets.is_empty() || self.in_generate_body {
             return None;
         }
-        let rest = self
-            .lex
-            .cur_prefix_text()
-            .strip_prefix(self.inst_prefix.as_str())?;
-        if !rest.is_empty()
-            && !rest
-                .strip_prefix('.')?
-                .split('.')
-                .all(|s| s.starts_with('$'))
-        {
+        if !self.lex.cur_is_inst_top_or_synth_below() {
             return None;
         }
         let mut f = self.module_facts.get(&self.cur_module)?;

@@ -1,7 +1,7 @@
 //! FB: the funnel's own unit tests (§5.2 Q-LEXSCOPE LS2a): every entry keeps the legacy text
 //! rule and the id agrees with the text after each call.
 
-use super::{scope_out, shown_from_spelling, wrap_ctx, Scopes};
+use super::{scope_out, shown_from_spelling, wrap_ctx, Mark, ScopeKeyed, Scopes};
 
 #[test]
 fn fb_new_is_the_empty_path() {
@@ -184,4 +184,148 @@ fn fb_shown_ctx_debug_writes_no_text() {
     let out = scope_out(a);
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].label, "top.u");
+}
+
+/// DELTA13 D3's truth table for `hier_leaf_scope`'s guard (expr_size_hier.rs:579-590 on
+/// ffc2171f): `cur_is_inst_top_or_synth_below` over (cur, the instance mark).
+#[test]
+fn fb_cur_is_inst_top_or_synth_below_truth_table() {
+    let rows: [(&str, &str, bool); 7] = [
+        ("top.u1", "top.u1", true),
+        ("top.u1", "top.u1.$blk$a.$func$f", true),
+        ("top.u1", "top.u1.g[0]", false),
+        ("top.u1", "top.u10", false),
+        ("top.u1", "top.x", false),
+        ("", "", true),
+        ("", "$func$f", false),
+    ];
+    for (mark, cur, want) in rows {
+        let mut s = Scopes::new();
+        let m0 = s.scope_swap_text(mark.to_string());
+        let old = s.mark_swap_here(Mark::Inst);
+        let c0 = s.scope_swap_text(cur.to_string());
+        assert_eq!(
+            s.cur_is_inst_top_or_synth_below(),
+            want,
+            "mark `{mark}` cur `{cur}`"
+        );
+        s.scope_restore(c0);
+        s.mark_put(Mark::Inst, old);
+        s.scope_restore(m0);
+    }
+}
+
+/// The marks: a swap returns what the mark held, a put restores it, the tests read the
+/// mark's text, `swap_to_mark` re-enters it.
+#[test]
+fn fb_marks_swap_put_exchange_and_ask() {
+    let mut s = Scopes::new();
+    assert!(
+        !s.cur_is_inst_top(),
+        "the empty instance mark is never the top"
+    );
+    assert!(s.cur_is_tf_decl(), "both empty");
+    let a = s.scope_swap_text("top.u".to_string());
+    let u = s.scope_carry();
+    let old_inst = s.mark_swap_here(Mark::Inst);
+    let old_tf = s.mark_swap(Mark::TfDecl, &u);
+    assert!(s.cur_is_inst_top());
+    assert!(s.cur_is_tf_decl());
+    let g = s.scope_swap_text("top.u.g[0]".to_string());
+    assert!(!s.cur_is_inst_top());
+    assert!(!s.cur_is_tf_decl());
+    let back = s.swap_to_mark(Mark::TfDecl);
+    assert_eq!(s.cur_prefix_text(), "top.u");
+    s.scope_restore(back);
+    assert_eq!(s.cur_prefix_text(), "top.u.g[0]");
+    let mut other = s.scope_carry();
+    s.mark_exchange(Mark::Inst, &mut other);
+    assert!(s.cur_is_inst_top(), "the mark now holds top.u.g[0]");
+    s.mark_exchange(Mark::Inst, &mut other);
+    assert_eq!(s.scope_text(&other), "top.u.g[0]");
+    s.scope_restore(g);
+    s.mark_put(Mark::TfDecl, old_tf);
+    s.mark_put(Mark::Inst, old_inst);
+    assert!(!s.cur_is_inst_top());
+    s.scope_restore(a);
+}
+
+/// `scope_child` is `child_prefix`'s text (a child of the empty scope is its name), and a
+/// re-entry of it interns nothing new.
+#[test]
+fn fb_scope_child_text_and_reentry() {
+    let mut s = Scopes::new();
+    let top = s.scope_child("top");
+    assert_eq!(s.scope_text(&top), "top");
+    let a = s.scope_swap(&top);
+    let u = s.scope_child("u[3]");
+    assert_eq!(s.scope_text(&u), "top.u[3]");
+    let n = s.names.len();
+    let again = s.scope_child("u[3]");
+    assert_eq!(s.names.len(), n);
+    assert_eq!(scope_out(s.scope_shown(&again)), "top.u[3]");
+    s.scope_restore(a);
+}
+
+/// The open generate scopes: a binding is enclosed by the genvar's construct, by the
+/// instance's own scope, or by an open scope whose construct holds the position.
+#[test]
+fn fb_gen_binding_encloses() {
+    let sp = |lo, hi| hdl_ast::Span { lo, hi };
+    let mut s = Scopes::new();
+    let a = s.scope_swap_text("top".to_string());
+    let old = s.mark_swap_here(Mark::Inst);
+    assert!(
+        s.gen_binding_encloses("top.P", "P", sp(5, 6)),
+        "the instance's own scope"
+    );
+    let b = s.scope_swap_text("top.g[0]".to_string());
+    s.gen_text_push(sp(10, 20), Some("top.i".to_string()));
+    assert!(
+        s.gen_binding_encloses("top.i", "i", sp(12, 13)),
+        "the genvar, inside"
+    );
+    assert!(
+        !s.gen_binding_encloses("top.i", "i", sp(30, 31)),
+        "the genvar, outside"
+    );
+    assert!(
+        s.gen_binding_encloses("top.g[0].K", "K", sp(11, 12)),
+        "the open scope"
+    );
+    assert!(!s.gen_binding_encloses("top.g[0].K", "K", sp(25, 26)));
+    assert!(
+        !s.gen_binding_encloses("top.h[0].K", "K", sp(11, 12)),
+        "no such open scope"
+    );
+    s.gen_text_pop();
+    assert!(
+        !s.gen_binding_encloses("top.g[0].K", "K", sp(11, 12)),
+        "closed"
+    );
+    s.scope_restore(b);
+    s.mark_put(Mark::Inst, old);
+    s.scope_restore(a);
+}
+
+/// ScopeKeyed: keyed by the scope's text, the instance-name slot is `<cur>.<name>` even
+/// under the empty scope, the drain is in text order and leaves the store empty.
+#[test]
+fn fb_scope_keyed_take_put_entry_drain() {
+    let mut s = Scopes::new();
+    let mut m: ScopeKeyed<Vec<u32>> = ScopeKeyed::new();
+    m.entry_under_cur(&s, "u").push(1);
+    let a = s.scope_swap_text("top".to_string());
+    m.entry_under_cur(&s, "v").push(2);
+    m.entry_under_cur(&s, "v").push(3);
+    let v = s.scope_child("v");
+    assert_eq!(m.take_at(&s, &v), Some(vec![2, 3]));
+    assert_eq!(m.take_at(&s, &v), None);
+    m.put_at(&s, &v, vec![4]);
+    let b = s.scope_child("b");
+    m.put_at(&s, &b, vec![5]);
+    let keys: Vec<String> = m.drain_keys_shown().into_iter().map(scope_out).collect();
+    assert_eq!(keys, [".u", "top.b", "top.v"]);
+    assert!(m.drain_keys_shown().is_empty());
+    s.scope_restore(a);
 }

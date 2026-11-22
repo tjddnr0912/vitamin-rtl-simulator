@@ -174,7 +174,7 @@ impl F2Ctx {
 }
 
 /// Does source range `outer` hold `inner`?
-fn span_holds(outer: ast::Span, inner: ast::Span) -> bool {
+pub(crate) fn span_holds(outer: ast::Span, inner: ast::Span) -> bool {
     inner.lo >= outer.lo && inner.hi <= outer.hi
 }
 
@@ -659,22 +659,7 @@ impl Elaborator<'_> {
         if other_kind(&key) || innermost.as_deref() != Some(key.as_str()) {
             return false;
         }
-        let scopes = &self.gen_text_scopes;
-        if let Some((_, text, _)) = scopes.iter().rev().find(|s| s.2.as_deref() == Some(&key)) {
-            return span_holds(*text, at);
-        }
-        let scope = key
-            .strip_suffix(name)
-            .map(|s| s.strip_suffix('.').unwrap_or(s))
-            .unwrap_or_default();
-        if scope == self.inst_prefix {
-            return true;
-        }
-        scopes
-            .iter()
-            .rev()
-            .find(|s| s.0 == scope)
-            .is_some_and(|(_, text, _)| span_holds(*text, at))
+        self.lex.gen_binding_encloses(&key, name, at)
     }
 
     fn zero_count_text() -> String {

@@ -75,15 +75,15 @@ pub(crate) struct RoutineScope {
     func_table: BTreeMap<String, ast::FunctionDef>,
     task_table: BTreeMap<String, ast::TaskDef>,
     rtn_pkg: BTreeMap<String, String>,
-    rtn_decl_scope: BTreeMap<String, String>,
+    rtn_decl_scope: BTreeMap<String, ScopeRef>,
     rtn_decl_genvars: BTreeMap<String, Vec<(String, i64)>>,
-    tf_decl_scope: String,
+    tf_decl_scope: ScopeRef,
     /// The instance whose routines the tables describe (`%m`, the OBS
     /// `subroutine_calls[].name`, the relative-scope walks). Round 1 of the review
     /// measured it left at the PARENT's path: `%m` inside an imported routine
     /// called from `top.u` printed `top.g`, dropping the instance segment the
     /// module lane keeps (`top.w.g`).
-    pub(crate) inst_prefix: String,
+    pub(crate) inst_prefix: ScopeRef,
     /// The `module_facts` key of the body being lowered — the interface's own row
     /// (`build_module_facts` files interfaces too). With the PARENT's name still live
     /// after the `inst_prefix` swap above, `hier_leaf_scope` (`expr_size_hier.rs`)
@@ -277,7 +277,7 @@ impl Elaborator<'_> {
     /// measured reason.
     pub(crate) fn take_routine_scope(
         &mut self,
-        decl_scope: String,
+        decl_scope: &ScopeRef,
         iface_name: String,
         imports: Vec<ast::ImportDecl>,
     ) -> RoutineScope {
@@ -287,8 +287,8 @@ impl Elaborator<'_> {
             rtn_pkg: std::mem::take(&mut self.rtn_pkg),
             rtn_decl_scope: std::mem::take(&mut self.rtn_decl_scope),
             rtn_decl_genvars: std::mem::take(&mut self.rtn_decl_genvars),
-            tf_decl_scope: std::mem::replace(&mut self.tf_decl_scope, decl_scope.clone()),
-            inst_prefix: std::mem::replace(&mut self.inst_prefix, decl_scope),
+            tf_decl_scope: self.lex.mark_swap(Mark::TfDecl, decl_scope),
+            inst_prefix: self.lex.mark_swap(Mark::Inst, decl_scope),
             cur_module: std::mem::replace(&mut self.cur_module, iface_name),
             inout_func_names: std::mem::take(&mut self.inout_func_names),
             body_write_func_names: std::mem::take(&mut self.body_write_func_names),
@@ -336,8 +336,8 @@ impl Elaborator<'_> {
     /// A HIT needs no callee closure: `inline_pkg_function` returns the carried
     /// FuncId and emits the call, so no body is lowered here and no sibling name is
     /// looked up.
-    pub(crate) fn adopt_static_scoped_frames(&mut self, parent: &str) {
-        let Some(mut carry) = self.iface_static_scoped.remove(parent) else {
+    pub(crate) fn adopt_static_scoped_frames(&mut self, parent: &ScopeRef) {
+        let Some(mut carry) = self.iface_static_scoped.take_at(&self.lex, parent) else {
             return;
         };
         let to = self.live_rtn_tables();
@@ -345,17 +345,20 @@ impl Elaborator<'_> {
         // Whatever this window already defined stays in the carry for the next
         // sibling (see `move_static_scoped`).
         if !carry.func_table.is_empty() || !carry.task_table.is_empty() {
-            self.iface_static_scoped.insert(parent.to_string(), carry);
+            self.iface_static_scoped.put_at(&self.lex, parent, carry);
         }
     }
 
     /// Put this window's static scoped frames into `parent`'s
     /// [`StaticScopedCarry`], for the next sibling instance to hit.
-    pub(crate) fn release_static_scoped_frames(&mut self, parent: &str) {
-        let mut carry = self.iface_static_scoped.remove(parent).unwrap_or_default();
+    pub(crate) fn release_static_scoped_frames(&mut self, parent: &ScopeRef) {
+        let mut carry = self
+            .iface_static_scoped
+            .take_at(&self.lex, parent)
+            .unwrap_or_default();
         let from = self.live_rtn_tables();
         move_static_scoped(from, carry.tables());
-        self.iface_static_scoped.insert(parent.to_string(), carry);
+        self.iface_static_scoped.put_at(&self.lex, parent, carry);
     }
 
     /// Put the enclosing module's [`RoutineScope`] back. All of it or none: every
@@ -368,8 +371,8 @@ impl Elaborator<'_> {
         self.rtn_pkg = s.rtn_pkg;
         self.rtn_decl_scope = s.rtn_decl_scope;
         self.rtn_decl_genvars = s.rtn_decl_genvars;
-        self.tf_decl_scope = s.tf_decl_scope;
-        self.inst_prefix = s.inst_prefix;
+        self.lex.mark_put(Mark::TfDecl, s.tf_decl_scope);
+        self.lex.mark_put(Mark::Inst, s.inst_prefix);
         self.cur_module = s.cur_module;
         self.inout_func_names = s.inout_func_names;
         self.body_write_func_names = s.body_write_func_names;

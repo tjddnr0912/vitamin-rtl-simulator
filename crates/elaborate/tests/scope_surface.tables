@@ -96,7 +96,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=4 rows=83 out_types=18 e_fns=21 text_flows=35
+present=present files=4 rows=115 out_types=22 e_fns=24 text_flows=35
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -115,10 +115,14 @@ lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	RET	String	LEAVE:L4	-
 lexscope/disp.rs	E	FN	Elaborator::stmt_loc_instance	RET	Shown	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
+lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	IN:name	&str	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	RET	bool	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	ARG:reported	ReportedAt	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	IN:msg	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	IN:span	Option<ast::Span>	ENTER:index	-
 lexscope/elab.rs	E	FN	Elaborator::report_at	RET	()	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::walk_hits_decl_pos	IN:name	&str	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::walk_hits_decl_pos	RET	bool	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit	impl Fn(&str) -> bool	CB:probe:the routine tables for one composed key	-
 lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit.0	&str	LEAVE:L2	REF
 lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	IN:bare	&str	ENTER:lookup	-
@@ -128,6 +132,7 @@ lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	IN
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	RET	R	PASS	-
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
+lexscope/mod.rs	-	ENUM	Mark	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Clone for ScopeRef	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Clone for Shown	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Clone for ShownCtx	-	-	PASS	-
@@ -143,13 +148,23 @@ lexscope/mod.rs	-	TYPE	Saved	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	SavedChain	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	SavedMethod	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	SavedRoot	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	ScopeKeyed	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ScopeRef	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ScopeWitness	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
+lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the scopes still holding a value	-
+lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	RET	&mut V	PASS	REF
+lexscope/mod.rs	K	FN	ScopeKeyed::new	RET	ScopeKeyed<V>	PASS	-
+lexscope/mod.rs	K	FN	ScopeKeyed::put_at	RET	()	PASS	-
+lexscope/mod.rs	K	FN	ScopeKeyed::take_at	RET	Option<V>	CARD:hit:a value stored at the carried scope	-
 lexscope/mod.rs	K	FN	Scopes::class_method_is_none	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top_or_synth_below	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_is_tf_decl	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
 lexscope/mod.rs	K	FN	Scopes::disp_chain_is_empty	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_pop	RET	()	PASS	-
@@ -164,13 +179,29 @@ lexscope/mod.rs	K	FN	Scopes::disp_restore_chain	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_restore_method	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_restore_root	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_root_swap_empty	RET	SavedRoot	PASS	-
+lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:at	hdl_ast::Span	ENTER:index	-
+lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:key	&str	ENTER:lookup	-
+lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:name	&str	ENTER:lookup	-
+lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::gen_text_pop	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::gen_text_push	IN:gv_key	Option<String>	ENTER:carried	-
+lexscope/mod.rs	K	FN	Scopes::gen_text_push	IN:text	hdl_ast::Span	ENTER:carried	-
+lexscope/mod.rs	K	FN	Scopes::gen_text_push	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::key_under	IN:name	&str	ENTER:lookup	-
 lexscope/mod.rs	K	FN	Scopes::key_under	RET	String	LEAVE:L5	-
+lexscope/mod.rs	K	FN	Scopes::mark_exchange	ARG:at	ScopeRef	PASS	-
+lexscope/mod.rs	K	FN	Scopes::mark_exchange	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::mark_put	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::mark_swap	RET	ScopeRef	PASS	-
+lexscope/mod.rs	K	FN	Scopes::mark_swap_here	RET	ScopeRef	PASS	-
 lexscope/mod.rs	K	FN	Scopes::new	RET	Scopes	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_carry	RET	ScopeRef	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_child	IN:inst_name	&str	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	Scopes::scope_child	RET	ScopeRef	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_hold	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_repoint	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_restore	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_shown	RET	Shown	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_swap	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_swap_empty	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_swap_pkg	IN:pkg	&str	ENTER:to-scope	-
@@ -180,21 +211,25 @@ lexscope/mod.rs	K	FN	Scopes::scope_swap_text	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_text	RET	&str	LEAVE:L6	REF
 lexscope/mod.rs	K	FN	Scopes::scope_witness	RET	ScopeWitness	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_witness_check	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::swap_to_mark	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
 lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
+&mut V
 &str
 ()
 Option<String>
+Option<V>
 R
 ReportedAt
 Saved
 SavedChain
 SavedMethod
 SavedRoot
+ScopeKeyed<V>
 ScopeRef
 ScopeWitness
 Scopes
@@ -203,6 +238,7 @@ Shown
 ShownCtx
 String
 T::Plain
+Vec<Shown>
 bool
 == SURF_LEAVE
 # LEAVE: text out, counted, each with its closing unit (DELTA10 L1: L0 BOUNDARY, L1-L5 ; DELTA13 D2: L6) — empty
@@ -237,9 +273,19 @@ shown_from_spelling	s	to-display	TEXT String
 Scopes::key_under	name	lookup	TEXT str
 Elaborator::report_at	span	index	NUMBER hdl_ast::Span.lo -> u32
 Elaborator::report_at	msg	lookup	TEXT str
+Scopes::scope_child	inst_name	to-scope	TEXT str
+ScopeKeyed::entry_under_cur	name	to-scope	TEXT str
+Scopes::gen_text_push	text	carried	NUMBER hdl_ast::Span.lo -> u32
+Scopes::gen_text_push	gv_key	carried	TEXT String
+Scopes::gen_binding_encloses	key	lookup	TEXT str
+Scopes::gen_binding_encloses	name	lookup	TEXT str
+Scopes::gen_binding_encloses	at	index	NUMBER hdl_ast::Span.lo -> u32
+Elaborator::walk_hits_decl_pos	name	lookup	TEXT str
+Elaborator::hoisted_at_decl_pos	name	lookup	TEXT str
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
+Mark
 == SURF_SHIMS
 # RT-a shims (DELTA10 L2): shim, the private fn it wraps, the wrapper
 shim	private	wrapper
@@ -267,22 +313,26 @@ Elaborator::cur_context	OUT-C	.to_string	1	text:ShownCtx
 Elaborator::cur_context	OUT-C	Vec::new	1	text:ShownCtx
 Elaborator::cur_context	OUT-M	vec	1	text:ShownCtx
 Elaborator::cur_gen_rtn_key	FN	-	-	-
-Elaborator::cur_gen_rtn_key	OUT-C	.as_str	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.cur_prefix_text	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.is_empty	1	in
+Elaborator::cur_gen_rtn_key	OUT-C	.mark_text	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.strip_prefix	2	text:LEAVE-L3
-Elaborator::cur_gen_rtn_key	OUT-F	inst_prefix	1	in
+Elaborator::decl_pos_key	FN	-	-	-
+Elaborator::decl_pos_key	OUT-C	.is_empty	1	in
+Elaborator::decl_pos_key	OUT-C	.mark_text	1	in
+Elaborator::decl_pos_key	OUT-C	.to_string	1	in
+Elaborator::decl_pos_key	OUT-M	format	1	in
 Elaborator::disp_chain_abs	FN	-	-	-
 Elaborator::disp_enter_frame_root	FN	-	-	-
 Elaborator::disp_frame_path_of	FN	-	-	-
 Elaborator::disp_here	FN	-	-	-
 Elaborator::disp_inst_top	FN	-	-	-
 Elaborator::disp_inst_top_text	FN	-	-	-
-Elaborator::disp_inst_top_text	OUT-F	inst_prefix	1	in
+Elaborator::disp_inst_top_text	OUT-C	.mark_text	1	in
 Elaborator::disp_root_swap_decl_inst	FN	-	-	-
+Elaborator::disp_root_swap_decl_inst	OUT-C	.mark_text	1	in
 Elaborator::disp_root_swap_decl_inst	OUT-C	.replace	1	text:SavedRoot
 Elaborator::disp_root_swap_decl_inst	OUT-C	SavedRoot	1	text:SavedRoot
-Elaborator::disp_root_swap_decl_inst	OUT-F	inst_prefix	1	in
 Elaborator::display_of	FN	-	-	-
 Elaborator::display_of	OUT-C	.contains	2	in
 Elaborator::display_of	OUT-C	.is_empty	2	in
@@ -307,14 +357,18 @@ Elaborator::enter_frame_scope_root	OUT-C	.unwrap_or	1	text:SavedRoot
 Elaborator::frame_path	FN	-	-	-
 Elaborator::frame_path	OUT-C	.get	1	in
 Elaborator::frame_path	OUT-C	.is_empty	2	in
+Elaborator::frame_path	OUT-C	.mark_text	1	in
+Elaborator::frame_path	OUT-C	.scope_text	1	in
 Elaborator::frame_path	OUT-C	.to_string	2	text:Shown+SavedRoot
 Elaborator::frame_path	OUT-C	Self::rtn_key_bare	1	text:Shown+SavedRoot
-Elaborator::frame_path	OUT-F	inst_prefix	1	in
 Elaborator::frame_path	OUT-F	rtn_decl_scope	1	in
 Elaborator::frame_path	OUT-M	format	2	text:Shown+SavedRoot
 Elaborator::frame_path_of	FN	-	-	-
 Elaborator::frame_path_of	OUT-C	.contains_key	1	in
 Elaborator::frame_path_of	OUT-F	rtn_decl_scope	1	in
+Elaborator::hoisted_at_decl_pos	FN	-	-	-
+Elaborator::hoisted_at_decl_pos	OUT-C	.contains_key	1	in
+Elaborator::hoisted_at_decl_pos	OUT-F	hoisted_block_local	1	in
 Elaborator::report_at	FN	-	-	-
 Elaborator::report_at	OUT-C	.error	1	in
 Elaborator::report_at	OUT-C	.error_at	1	in
@@ -340,16 +394,22 @@ Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	.unwrap_or	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	Shown	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-M	format	1	text:Shown
+Elaborator::walk_hits_decl_pos	FN	-	-	-
+Elaborator::walk_hits_decl_pos	OUT-C	.as_deref	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	.as_str	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	.contains_key	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	.walk_scopes_key	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	Some	1	in
+Elaborator::walk_hits_decl_pos	OUT-F	symbols	1	in
 Elaborator::walk_rtn_scopes	FN	-	-	-
 Elaborator::walk_rtn_scopes	OUT-C	.and_then	1	in
-Elaborator::walk_rtn_scopes	OUT-C	.as_str	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.cur_prefix_text	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.is_empty	2	in
+Elaborator::walk_rtn_scopes	OUT-C	.mark_text	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.rfind	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.strip_prefix	2	text:LEAVE-L2
 Elaborator::walk_rtn_scopes	OUT-C	Some	1	text:LEAVE-L2
 Elaborator::walk_rtn_scopes	OUT-C	hit	1	text:LEAVE-L2
-Elaborator::walk_rtn_scopes	OUT-F	inst_prefix	1	in
 Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.scope_enter	1	in
 Elaborator::with_scope	OUT-C	.scope_restore	1	in
@@ -359,6 +419,8 @@ Elaborator::with_scope	OUT-C	f	1	payload
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
 # a row matching no position is STALE. First rows at LS2a.
 item	position	type	means
+ScopeKeyed::take_at	RET	Option<V>	hit:a value stored at the carried scope
+ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	list:the scopes still holding a value
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
@@ -376,20 +438,23 @@ lexscope/disp.rs	Elaborator::disp_enter_frame_root	bbffd147962106f60c750214b61cb
 lexscope/disp.rs	Elaborator::disp_frame_path_of	2cb2148a0cbeae4e511e11543e4e7d10265a8bcdc34a8a4a4e1b323310ecaa0f
 lexscope/disp.rs	Elaborator::disp_here	1ee2032b88277ba2e36f27d3099725baaa0b2188ddf13260932a8b93480cb236
 lexscope/disp.rs	Elaborator::disp_inst_top	e7fa5092b3a0e0395180a2b3d872be82faa428687963f53e427511901fb62d73
-lexscope/disp.rs	Elaborator::disp_inst_top_text	9f5f8b1387df57595b3ea2fbce99b84403df3fb0d07cfbf8e2f79ffd4ffc89ea
-lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	a484ed796cefe954cf761d5251637c9f1a86d3a40a5cd131ca8e2391a8b74f60
+lexscope/disp.rs	Elaborator::disp_inst_top_text	518ff0dbb94b491b6c9c97700b81a0ce572af220ca47b539b41fff24f9783813
+lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	9dd2851342ce8a8990d3ecef6ad30f4eb2e2e3c3318189205e4beab888cc55fd
 lexscope/disp.rs	Elaborator::display_of	211c051c8cffded84dcc192a2d8c2ae1970ec9221b794203ce74e686f723f7d7
 lexscope/disp.rs	Elaborator::display_of_key_text	433111e369e73d8544a55faa18429c94dff41a87877114f4f063d88ce93fb22c
 lexscope/disp.rs	Elaborator::display_prefix	b8f0d3020e9b4c149da08ca57d00c95e420da3a7c67288a88a649ee241eb1393
 lexscope/disp.rs	Elaborator::enter_frame_scope_root	0c3429c08abc678bd1233a3c442c45dad19994c59d1cfe484b012f126542eeac
-lexscope/disp.rs	Elaborator::frame_path	25414c9f5824d6131f9c17289fe3ac971af0a304137135436be23b524e709632
+lexscope/disp.rs	Elaborator::frame_path	e91364f500b060fe9902849d65b4f0fc49205c03ec3a45653579e9fa6515760a
 lexscope/disp.rs	Elaborator::frame_path_of	823ba84312a47cec1fe5a422c8df2b42892f809d0260fc0afa30738ac77e0fde
 lexscope/disp.rs	Elaborator::scope_chain_abs	08982b08354d4fb83357eabf54dbc92cddca5f06e42670a29e43f9780fc2ee90
 lexscope/disp.rs	Elaborator::stmt_loc_instance	f5718abbc8b5d0b5e42c9ea74827a1b2eb61a9a44cb49e060b86a1e0d1546614
-lexscope/elab.rs	Elaborator::cur_gen_rtn_key	cc813dcf7953b1c2c676e50838bb7ebce8dd2155031f96c85ff4afb1528a4e38
+lexscope/elab.rs	Elaborator::cur_gen_rtn_key	145f90e1aed58635660a165acea00147262cac1991617b27de0d3efabe088e5f
+lexscope/elab.rs	Elaborator::decl_pos_key	3bc7904fe805e472cb04f21a6f926a345fc405663a001a94066c87d779d7b940
 lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
+lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	407e99498c85a245fc330096f3b447ba861712defbf503ecf488a5a91602f058
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
-lexscope/elab.rs	Elaborator::walk_rtn_scopes	1602cf1f290a6e68901fa001815e42dede6dc9563e41fc9c8b90493860c0a5ee
+lexscope/elab.rs	Elaborator::walk_hits_decl_pos	36e74b0024550514d01207a2f8ca0946ca109825b976aa6efbb236e9ea13867b
+lexscope/elab.rs	Elaborator::walk_rtn_scopes	44fd92b502bfa8291ad8e714834d29e3c82538eb6c192aeea87dc975e16fb5fe
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
 lexscope/mod.rs	Clone for ScopeRef::clone	7fd1561b40a3600a688648719080f1f686e9201a41061e730a9f1708a7b4277f
 lexscope/mod.rs	Clone for Shown::clone	6ab72e6f44542598375aadaf3d72fe227221b7278a9fcb72ce16822e765f1e41
@@ -400,8 +465,17 @@ lexscope/mod.rs	Debug for ShownCtx::fmt	f6e4316443c0f2233f7aee0a1ad46810d5d4b79f
 lexscope/mod.rs	Drop for Saved::drop	6a394d1e16270dfc9e728c1016f56f251e855d210c1e0ae7d18975bf5b89113a
 lexscope/mod.rs	Outgoing for Shown::plain	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
 lexscope/mod.rs	Outgoing for ShownCtx::plain	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
+lexscope/mod.rs	ScopeKeyed::drain_keys_shown	0a0f8767e2f8a8b96f92f2eb63fce8197fa9541d5ee38d0c6ca963fe39152402
+lexscope/mod.rs	ScopeKeyed::entry_under_cur	3b6dc8799638f6ae744a2055b1d0ca3c1463d88f0303ebacd686f038cb1e079b
+lexscope/mod.rs	ScopeKeyed::new	c63024e38d9219ddab995712a52cebadc746a0a4e6d9487404bbab285e7af4f1
+lexscope/mod.rs	ScopeKeyed::put_at	419d56c0d471bd73b86acd02959fb47d1c328c7679d1ecbaa4b6eaf252ba266f
+lexscope/mod.rs	ScopeKeyed::take_at	52542cac8ebff1a8bb6bf0d22c480e91c417ac37cb3fb80b58239651e0372bcb
 lexscope/mod.rs	Scopes::c_path	690613c0dbbe24a2f5be83640a12468db1af2e077b6ab42575b6fe6996f0b7c4
+lexscope/mod.rs	Scopes::child_prefix	3f7671b7c7f0efbd45a382d7fa9f51f4e5b655f00da2510a5ba0422ab2f7c739
 lexscope/mod.rs	Scopes::class_method_is_none	34f193b7f753d897a3404f88609b7811d19a3ffa03cd65c86826c9776272c008
+lexscope/mod.rs	Scopes::cur_is_inst_top	aed9b197ccf907dbd57bbc32c044c5528941c4813f70897e4f19f04972870e9b
+lexscope/mod.rs	Scopes::cur_is_inst_top_or_synth_below	778d24f792090c5e951b336441f4610089f5c323351e5d805d9e2223ea38f06e
+lexscope/mod.rs	Scopes::cur_is_tf_decl	53bccf374494aa6edbd29d9882ef10efb77f9186552a89edbf3fc62b0176ac09
 lexscope/mod.rs	Scopes::cur_prefix_text	880389ff624cd8b3c0dc19c579c104ffc4c7b13e29b5f56f6a2728be46cd4575
 lexscope/mod.rs	Scopes::disp_chain_is_empty	926c0636bda1ac8c49609703bf4575fad5bd9be3412116f94fd61e30b9830c5b
 lexscope/mod.rs	Scopes::disp_chain_pop	2f2a3a4a41d7e784f1574a6e3368eb71d5f1389da219d82378c84d2d1f0331c7
@@ -413,14 +487,25 @@ lexscope/mod.rs	Scopes::disp_restore_chain	babf12ea807f46c94beb2d10d30dd1b7af35b
 lexscope/mod.rs	Scopes::disp_restore_method	94a47a39e3c75bb15aaface99e8a60cbfd83e1e0a921f587e40ddb06c9ca6c7e
 lexscope/mod.rs	Scopes::disp_restore_root	9576ac55f8c3ee3c799b75e32e7306a0553dc1f2a361a88199a8fed610dc6699
 lexscope/mod.rs	Scopes::disp_root_swap_empty	01551ae34e4a43b8840e7b8f315b30a95d247084c7a7856db9c0858c49dbc29f
+lexscope/mod.rs	Scopes::gen_binding_encloses	11db9d3360b1e2455fe4a28b7ffe1f9f39a3e97dc5de077e9721d11b6d93d7d2
+lexscope/mod.rs	Scopes::gen_text_pop	c21babe48fc175ba3e9e912ebc24eaf0ea9c09f5300178e9ac81df50643db3c6
+lexscope/mod.rs	Scopes::gen_text_push	bcce813d63962bb5c66e4ab3b9c79bee56e739a0e14fbec2e16a8d303ba1e416
 lexscope/mod.rs	Scopes::intern	fecd02a5146d6bad133240e6847fce451c0b09fc6919a710bde50afc5a688fe3
 lexscope/mod.rs	Scopes::key_under	2ba1117f22b8e0b9ffd2143cd6cb5465b17131b68c690c3da55a5497e870ebd3
-lexscope/mod.rs	Scopes::new	193a6024e4a46302081aaa5677add1f6eca45d60db7b19443a09d61b90f29207
+lexscope/mod.rs	Scopes::mark_exchange	75c5330808e2ae2ccdfaad4f2eea9fc105f9724b7d037e6624e03c81ba514dbb
+lexscope/mod.rs	Scopes::mark_put	f34db2a396fd8e107d5c147d80da9edc5310ca8c2cefa4eb1dcdcc36717dab03
+lexscope/mod.rs	Scopes::mark_slot	683627baa3317595c969b42a170698e5cdc5d27d87cc2ab276f759dbac21c8b3
+lexscope/mod.rs	Scopes::mark_swap	7ba8b8fdb13ff7e82cd43fd19b545d5fdd0f7ee7e70dcadb81353a8a485f0fa0
+lexscope/mod.rs	Scopes::mark_swap_here	3a03ddaa891c451641b77a3fcd938b1547e3fad2e95fbc20041ec871ce92672a
+lexscope/mod.rs	Scopes::mark_text	78c23c67df92ddab42aaf5f87c999caf899cc4ebc8ec7f2f2e0ea0b15698972e
+lexscope/mod.rs	Scopes::new	e8efd52b9bd6015ec7e5c769c9207eef5e79978fc218a6d670883bc89456a1b9
 lexscope/mod.rs	Scopes::scope_carry	10b714212bc5e8580fc057ae919c10539d9e71fc73949dcdc451ca2c249dae7c
+lexscope/mod.rs	Scopes::scope_child	738a082979d1fc9eed3d4ca1f2cdbc871332c23549360f65b9db13543dbe4f3e
 lexscope/mod.rs	Scopes::scope_enter	4711a72fd88fe19f2aafc9f270bc104d1bf87988459b9bcb1255d7f641df7e35
 lexscope/mod.rs	Scopes::scope_hold	d2827bbf6bddcbf033565328e4d61e72c2c8f2e0347af0618249e3d5bf5cc859
 lexscope/mod.rs	Scopes::scope_repoint	34c343702aafd49f42070d5252c9f320af3b5be58457d4c1c786243ccb4e602e
 lexscope/mod.rs	Scopes::scope_restore	6c033eeb05cf872b581755513143cd39c267f1f27e666eaf5e4a60d0082ff55c
+lexscope/mod.rs	Scopes::scope_shown	67756b69828af1cdbe288b2ee12d610fb520a4193eac788b13255257200f079b
 lexscope/mod.rs	Scopes::scope_swap	83facd7b9cce487cfea310401942166ac5f97a141d54af407c5f9d7d2d250941
 lexscope/mod.rs	Scopes::scope_swap_empty	7b7034bb08fcc8e5766d792f378f9f2ea6cb1b26f77c71b6676dcc7980870327
 lexscope/mod.rs	Scopes::scope_swap_pkg	a4f3f3c1e3b1977c2cf1dbcbcce5e6b7d56e85d0e27030d8f7bdc2cdb8d045da
@@ -428,17 +513,23 @@ lexscope/mod.rs	Scopes::scope_swap_text	1d914669c406cecbc352b566240bebd0e26ab457
 lexscope/mod.rs	Scopes::scope_text	9a8686c48f59bc7ca18bc40c4ac97f4d361051c70fec1da39f10618bddd411ff
 lexscope/mod.rs	Scopes::scope_witness	1b6764c6195f85e0fcc1355ede6916d2ee8cdb2712abcd4a763f571a0453aea8
 lexscope/mod.rs	Scopes::scope_witness_check	38bf5e20d1466566c6a256b981410763393bed3f4b42c9e8c79da6b740e2da97
+lexscope/mod.rs	Scopes::swap_to_mark	1daffce1a1e02f70228a1917d5fa827a0668545997a8911f19b00e2dfd3c9966
 lexscope/mod.rs	scope_out	7d3c2d0a93015dd44fd496aaa5e5a00a1daffecd45c017666592ce5f6db29886
 lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 lexscope/mod.rs	wrap_ctx	12c3d43da0a4fe4699c4ec3a25824e28c4c665d4b1a01260f32b759f17d6627d
 lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500a67372696c
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/tests.rs	fb_cur_is_inst_top_or_synth_below_truth_table	e58b73778279550c946409caf27937b7af95ef2fb1fa1e20079c194b2cd23307
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
 lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2dc91cdcc2c946c5eb768296c3a60e80c2b98107
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
+lexscope/tests.rs	fb_gen_binding_encloses	591af388d4185cdf74c5aeb9b80b0f57a412d1bd26ea5a9a5fb0b73ab1f341fe
 lexscope/tests.rs	fb_key_under_and_scope_debug	00900245fa2304ac8583b74cfeeffff4a468794f14d180fa117cb4798f4be78b
+lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356ba0678954ee25d43285534e0f0ab39e7f0a34
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
 lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
+lexscope/tests.rs	fb_scope_child_text_and_reentry	c46e0ebdbeb76c7adaa70b7b28559f1dfb503d1ef00519e5495834733ce2e777
+lexscope/tests.rs	fb_scope_keyed_take_put_entry_drain	cde9d37047a61a4db1bda00aafd5137939a5d10beb88547b0d079d90255369e9
 lexscope/tests.rs	fb_scope_swap_reenters_the_carried_scope_without_interning	e020af4bc7413eefaa1be64efe714cf1aaeb080245d2df82ec6227f5476c9ec4
 lexscope/tests.rs	fb_scope_text_of_carry_is_the_current_text_after_each_opener	2d7a4a802ecaea60fbba28f17f97dc45c58d2815897bc8833b8084fdf1920d7c
 lexscope/tests.rs	fb_shown_ctx_debug_writes_no_text	1a63fa8319d5be06cf3207ebc60c43395b9a7c3a100411f640545ebe6aaa729d
@@ -481,7 +572,7 @@ LS2-d	enter_frame_scope_root	lexscope/disp.rs	-	E	(&mut self, name: &str) -> Opt
 LS2-d	frame_path	lexscope/disp.rs	-	E	(&self, name: &str) -> String	FAIL	RET=TEXT(String)	name
 LS2-d	frame_path_of	lexscope/disp.rs	-	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
 LS2-d	scope_chain_abs	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
-LS2a	child_prefix	hier.rs	pub(crate)	E	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
+LS2a	child_prefix	lexscope/mod.rs	-	K	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
 LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
 LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
 LS2a	walk_rtn_scopes	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare

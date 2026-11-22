@@ -3,7 +3,7 @@
 //! here with their bodies (§5.2 Q-LEXSCOPE LS2a) ; and `report_at`, a refusal reported in the
 //! carried scope it was lowered in, once per (span, scope) (LS3).
 
-use super::{ReportedAt, ScopeRef};
+use super::{Mark, ReportedAt, ScopeRef};
 use crate::Elaborator;
 use diag::MsgCode;
 use hdl_ast as ast;
@@ -22,7 +22,7 @@ impl Elaborator<'_> {
     /// The routine-table key this generate scope gives `bare`, or `None` when the
     /// current position is not inside a generate scope of this module instance.
     pub(crate) fn cur_gen_rtn_key(&self, bare: &str) -> Option<String> {
-        let inst = self.inst_prefix.as_str();
+        let inst = self.lex.mark_text(Mark::Inst);
         let cur = self.lex.cur_prefix_text();
         let rel = if inst.is_empty() {
             cur
@@ -73,7 +73,7 @@ impl Elaborator<'_> {
     /// out of relative scope (returning `None`) is what hands the module-level key
     /// back to the caller.
     pub(crate) fn walk_rtn_scopes(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
-        let inst = self.inst_prefix.as_str();
+        let inst = self.lex.mark_text(Mark::Inst);
         let cur = self.lex.cur_prefix_text();
         let mut rel: &str = if inst.is_empty() {
             cur
@@ -98,6 +98,33 @@ impl Elaborator<'_> {
                 Some(i) => &rel[..i],
                 None => "",
             };
+        }
+    }
+
+    /// The use-before-declaration check's own-binding test (`check_decl_precedes_use`): is
+    /// the outward walk's hit for `name` the key `name` forms under the scope `decl_pos`
+    /// describes (mark [`Mark::DeclPos`])?
+    pub(crate) fn walk_hits_decl_pos(&self, name: &str) -> bool {
+        let own_key = self.decl_pos_key(name);
+        self.walk_scopes_key(name, |k| self.symbols.contains_key(k))
+            .as_deref()
+            == Some(own_key.as_str())
+    }
+
+    /// The same check's block-local exemption: is the key `name` forms under the scope
+    /// `decl_pos` describes a hoisted block-local (`hoisted_block_local`)?
+    pub(crate) fn hoisted_at_decl_pos(&self, name: &str) -> bool {
+        self.hoisted_block_local
+            .contains_key(&self.decl_pos_key(name))
+    }
+
+    /// The key `name` forms under the scope `decl_pos` describes (mark [`Mark::DeclPos`]).
+    fn decl_pos_key(&self, name: &str) -> String {
+        let decl_pos_scope = self.lex.mark_text(Mark::DeclPos);
+        if decl_pos_scope.is_empty() {
+            name.to_string()
+        } else {
+            format!("{}.{}", decl_pos_scope, name)
         }
     }
 

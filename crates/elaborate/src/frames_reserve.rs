@@ -1068,7 +1068,7 @@ impl Elaborator<'_> {
         let Some(scope) = self.rtn_decl_scope.get(name).cloned() else {
             return f(self);
         };
-        let saved = self.lex.scope_swap_text(scope);
+        let saved = self.lex.scope_swap(&scope);
         // Replay this declaration's genvar bindings (see `rtn_decl_genvars`): they
         // were unbound when the generate walk left the iteration, and the body is
         // lowered here, afterwards.

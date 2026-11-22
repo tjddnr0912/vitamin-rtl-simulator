@@ -353,7 +353,7 @@ impl Elaborator<'_> {
     /// Is the fold running in the module's own scope — the current prefix the
     /// instance's, not a generate block's or a routine's below it?
     fn folding_in_module_scope(&self) -> bool {
-        !self.inst_prefix.is_empty() && self.lex.cur_prefix_text() == self.inst_prefix
+        self.lex.cur_is_inst_top()
     }
 
     /// May the signing arms size `$signed(op)` / `$unsigned(op)` at `use_span`? At

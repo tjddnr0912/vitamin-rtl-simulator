@@ -300,7 +300,7 @@ impl Elaborator<'_> {
     pub(crate) fn elaborate_instance(
         &mut self,
         module: &ast::ModuleDecl,
-        inst_path: &str,
+        inst_path: &ScopeRef,
         parent_inst: Option<u32>,
         param_overrides: &[ResolvedOverride],
         binding: PortBinding<'_>,
@@ -339,16 +339,16 @@ impl Elaborator<'_> {
         });
         // Design-structure export sidecar (parallel to `instances`): the module name and
         // full dotted path this instance elaborates, for `--hier-tree` / `--inst-paths`.
-        self.instances_info.push(InstanceInfo {
-            path: inst_path.to_string(),
+        self.instances_info.push(driver::InstanceRow {
+            path: self.lex.scope_shown(inst_path),
             module: module.name.name.clone(),
             parent: parent_inst,
         });
 
         // Enter this instance's scope (restored before returning).
         let parent_prefix = self.lex.cur_prefix_text().to_string();
-        let saved_prefix = self.lex.scope_swap_text(inst_path.to_string());
-        let saved_inst_prefix = std::mem::replace(&mut self.inst_prefix, inst_path.to_string());
+        let saved_prefix = self.lex.scope_swap(inst_path);
+        let saved_inst_prefix = self.lex.mark_swap(Mark::Inst, inst_path);
         // The key into `module_facts` for this body's hierarchical leaves
         // (`expr_size_hier`) — the module being lowered, not the instance path.
         let saved_module = std::mem::replace(&mut self.cur_module, module.name.name.clone());
@@ -407,7 +407,7 @@ impl Elaborator<'_> {
         // already produces here).
         let dp_overrides: Vec<ResolvedOverride> = self
             .defparams
-            .remove(inst_path)
+            .take_at(&self.lex, inst_path)
             .map(|dps| {
                 dps.into_iter()
                     .map(|(param, v, fill, sg, smeta, sval, obits, text, real)| {
@@ -627,10 +627,7 @@ impl Elaborator<'_> {
         // IEEE §6.10 ordering — see the `decl_pos` field doc. Same walk as `names`.
         let dpos = self.gather_decl_positions(module);
         let mut saved_decl_pos = std::mem::replace(&mut self.decl_pos, dpos);
-        let mut saved_dpos_scope = std::mem::replace(
-            &mut self.decl_pos_scope,
-            self.lex.cur_prefix_text().to_string(),
-        );
+        let mut saved_dpos_scope = self.lex.mark_swap_here(Mark::DeclPos);
         let mut saved_dpos_range =
             std::mem::replace(&mut self.decl_pos_range, (module.span.lo, module.span.hi));
         let dbl = self.gather_block_local_names(module);
@@ -838,10 +835,7 @@ impl Elaborator<'_> {
         // R19-X1: these two tables' contents are declared HERE, at this instance's own
         // prefix. Record it so a filled default-argument value can be checked against
         // the scope IEEE evaluates it in (see `default_binding_matches_decl_scope`).
-        let saved_decl_scope = std::mem::replace(
-            &mut self.tf_decl_scope,
-            self.lex.cur_prefix_text().to_string(),
-        );
+        let saved_decl_scope = self.lex.mark_swap_here(Mark::TfDecl);
         // R5-B: the inout-function set is module-local too (it is rebuilt by this
         // module's `lower_frame_funcs`), so a nested child instance elaborated in the
         // middle of this module must not clobber it — save/restore alongside func_table.
@@ -1164,7 +1158,7 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.rtn_decl_scope, &mut saved_rtn_dscope);
         std::mem::swap(&mut self.rtn_decl_genvars, &mut saved_rtn_dgv);
         std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
-        std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
+        self.lex.mark_exchange(Mark::DeclPos, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
         std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
         self.wire_ports(
@@ -1183,7 +1177,7 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.rtn_decl_scope, &mut saved_rtn_dscope);
         std::mem::swap(&mut self.rtn_decl_genvars, &mut saved_rtn_dgv);
         std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
-        std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
+        self.lex.mark_exchange(Mark::DeclPos, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
         std::mem::swap(&mut self.decl_block_locals, &mut saved_dbl);
 
@@ -1323,8 +1317,6 @@ impl Elaborator<'_> {
                         // `defparam u.P = $signed(8'hFF);` was E3009 where `#(.P(…))`
                         // on the same target binds 8 signed bits (both oracles).
                         let v = self.const_eval_in_scope(value);
-                        let fq =
-                            format!("{}.{}", self.lex.cur_prefix_text(), path.segments[0].name);
                         let param = path.segments[1].name.clone();
                         // A fill literal is carried verbatim ALONGSIDE the fold above:
                         // its width is the TARGET's declared width, which is not known
@@ -1396,7 +1388,9 @@ impl Elaborator<'_> {
                             continue;
                         }
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
-                        let entry = self.defparams.entry(fq).or_default();
+                        let entry = self
+                            .defparams
+                            .entry_under_cur(&self.lex, &path.segments[0].name);
                         entry.retain(|(p, _, _, _, _, _, _, _, _)| p != &param);
                         entry.push((param, v, fill, sg, smeta, sval, obits, text, real));
                     }
@@ -1474,7 +1468,7 @@ impl Elaborator<'_> {
         self.timed_blocks = saved_overlapping;
         self.coalesced_block_locals = saved_coalesced;
         self.func_table = saved_funcs;
-        self.tf_decl_scope = saved_decl_scope;
+        self.lex.mark_put(Mark::TfDecl, saved_decl_scope);
         self.const_func_table = saved_const_funcs;
         self.const_fn_pkg = saved_const_fn_pkg;
         self.task_table = saved_tasks;
@@ -1482,7 +1476,7 @@ impl Elaborator<'_> {
         self.rtn_decl_scope = saved_rtn_dscope;
         self.rtn_decl_genvars = saved_rtn_dgv;
         self.decl_pos = saved_decl_pos;
-        self.decl_pos_scope = saved_dpos_scope;
+        self.lex.mark_put(Mark::DeclPos, saved_dpos_scope);
         self.decl_pos_range = saved_dpos_range;
         self.decl_block_locals = saved_dbl;
         self.inout_func_names = saved_inout_funcs; // R5-B
@@ -1494,7 +1488,7 @@ impl Elaborator<'_> {
         self.prop_table = saved_props;
         self.let_table = saved_lets;
         self.lex.scope_restore(saved_prefix);
-        self.inst_prefix = saved_inst_prefix;
+        self.lex.mark_put(Mark::Inst, saved_inst_prefix);
         self.cur_module = saved_module;
         self.cur_module_span = saved_module_span;
         self.cur_span = saved_span;
@@ -1744,7 +1738,7 @@ impl Elaborator<'_> {
                 self.elaborate_instance_array(child, item, &overrides, parent_inst, map);
                 continue;
             }
-            let child_path = self.child_prefix(&item.name.name);
+            let child_path = self.lex.scope_child(&item.name.name);
             let binding = match &item.conns {
                 ast::PortConnList::Named(v, wc) => PortBinding::Named(v, *wc),
                 ast::PortConnList::Positional(v) => PortBinding::Positional(v),

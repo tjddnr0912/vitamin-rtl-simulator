@@ -748,15 +748,6 @@ impl Elaborator<'_> {
                 .is_some_and(|(k, _)| hit(k))
     }
 
-    /// Child prefix = current prefix + child instance name.
-    pub(crate) fn child_prefix(&self, inst_name: &str) -> String {
-        if self.lex.cur_prefix_text().is_empty() {
-            inst_name.to_string()
-        } else {
-            format!("{}.{}", self.lex.cur_prefix_text(), inst_name)
-        }
-    }
-
     // ── multi-dim unpacked-array access (read/write, (a)-flattening) ─────────
     //
     // A `base[i0][i1]…[ik]` selection parses as a left-nested BitSelect chain. If

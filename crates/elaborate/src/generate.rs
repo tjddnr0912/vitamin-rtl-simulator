@@ -269,14 +269,9 @@ impl Elaborator<'_> {
                     // binding of THIS iteration — see `rtn_decl_genvars`.
                     self.gen_genvars.push((gv_key.clone(), iter_val));
                     self.with_scope(&block_prefix, |me| {
-                        let open = (
-                            me.lex.cur_prefix_text().to_string(),
-                            *for_span,
-                            Some(gv_key.clone()),
-                        );
-                        me.gen_text_scopes.push(open);
+                        me.lex.gen_text_push(*for_span, Some(gv_key.clone()));
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
-                        me.gen_text_scopes.pop();
+                        me.lex.gen_text_pop();
                     });
                     self.gen_genvars.pop();
                     self.gen_ctr = saved_gen_ctr;
@@ -442,7 +437,7 @@ impl Elaborator<'_> {
     /// only syntax. A labeled body is a scope either way.
     ///
     /// `text` is the source range of the construct that opened the scope, recorded for
-    /// the scope's lifetime in `gen_text_scopes`.
+    /// the scope's lifetime in the lexscope's open generate scopes (`gen_text_push`).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_gen_scoped(
         &mut self,
@@ -468,10 +463,9 @@ impl Elaborator<'_> {
                 // its constructs count from 1.
                 let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
                 self.with_scope(&seg, |me| {
-                    me.gen_text_scopes
-                        .push((me.lex.cur_prefix_text().to_string(), text, None));
+                    me.lex.gen_text_push(text, None);
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
-                    me.gen_text_scopes.pop();
+                    me.lex.gen_text_pop();
                 });
                 self.gen_ctr = saved_gen_ctr;
             }
@@ -890,8 +884,7 @@ impl Elaborator<'_> {
         }
         self.rtn_decl_genvars
             .insert(key.clone(), self.gen_genvars.clone());
-        self.rtn_decl_scope
-            .insert(key, self.lex.cur_prefix_text().to_string());
+        self.rtn_decl_scope.insert(key, self.lex.scope_carry());
     }
 
     pub(crate) fn register_gen_task(&mut self, t: &ast::TaskDef) {
@@ -910,8 +903,7 @@ impl Elaborator<'_> {
         }
         self.rtn_decl_genvars
             .insert(key.clone(), self.gen_genvars.clone());
-        self.rtn_decl_scope
-            .insert(key, self.lex.cur_prefix_text().to_string());
+        self.rtn_decl_scope.insert(key, self.lex.scope_carry());
     }
 
     /// Collect `sequence`/`property` declarations from a generate block into the

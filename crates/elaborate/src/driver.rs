@@ -14,6 +14,15 @@ pub(crate) struct StmtLocRow {
     pub(crate) instance: Shown,
 }
 
+/// An instance's design-structure row while elaborating (the row of
+/// `Elaborator.instances_info`): [`InstanceInfo`]'s fields with the path held as `Shown` ;
+/// it becomes an `InstanceInfo` at the hand-off (`api.rs`, through `scope_out`).
+pub(crate) struct InstanceRow {
+    pub(crate) path: Shown,
+    pub(crate) module: String,
+    pub(crate) parent: Option<u32>,
+}
+
 impl<'s> Elaborator<'s> {
     pub(crate) fn new(sink: &'s dyn LogSink) -> Self {
         Self {
@@ -157,11 +166,10 @@ impl<'s> Elaborator<'s> {
             array_iter_index_base: 0,
             ifaces: BTreeMap::new(),
             iface_insts: BTreeMap::new(),
-            iface_static_scoped: BTreeMap::new(),
+            iface_static_scoped: ScopeKeyed::new(),
             vif_handles: std::collections::BTreeSet::new(),
             modport_readonly: BTreeSet::new(),
             lex: lexscope::Scopes::new(),
-            inst_prefix: String::new(),
             cur_module: String::new(),
             cur_module_span: None,
             module_facts: BTreeMap::new(),
@@ -200,7 +208,7 @@ impl<'s> Elaborator<'s> {
             hier_task_port_dirs: BTreeMap::new(),
             hier_body_write_callers: BTreeMap::new(),
             hier_body_write_refused: std::collections::BTreeSet::new(),
-            defparams: BTreeMap::new(),
+            defparams: ScopeKeyed::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
             func_table: BTreeMap::new(),
@@ -217,14 +225,11 @@ impl<'s> Elaborator<'s> {
             rtn_decl_scope: BTreeMap::new(),
             rtn_decl_genvars: BTreeMap::new(),
             gen_genvars: Vec::new(),
-            gen_text_scopes: Vec::new(),
             cur_rtn_pkg: Vec::new(),
             decl_pos: BTreeMap::new(),
-            decl_pos_scope: String::new(),
             decl_pos_range: (0, 0),
             decl_block_locals: std::collections::BTreeSet::new(),
             wide_param_bits: Bound::new_empty(),
-            tf_decl_scope: String::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             body_write_func_names: std::collections::BTreeSet::new(),
             body_write_fids: std::collections::BTreeSet::new(),
@@ -897,7 +902,7 @@ impl<'s> Elaborator<'s> {
         // once, after the loop, so `-G` on a two-root design does not report twice.
         let mut cli_used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for (idx, top) in roots.iter().enumerate() {
-            let top_path = top.name.name.clone();
+            let top_path = self.lex.scope_child(&top.name.name);
             let cli_ovr = self.cli_overrides_for(top, &mut cli_used);
             // §4.5.261: a root's key is its POSITION IN THE ROOT LIST, not its source
             // offset. `--top zz --top aa` elaborates in the order given, and `-L` library
@@ -931,14 +936,14 @@ impl<'s> Elaborator<'s> {
         // index. iverilog warns ("Scope of <path> not found") and the target keeps
         // its default; mirror that with a warning rather than a silent no-op (the
         // default value is already what an unconsumed override leaves in place).
-        let unmatched: Vec<String> = self.defparams.keys().cloned().collect();
+        let unmatched: Vec<Shown> = self.defparams.drain_keys_shown();
         for fq in unmatched {
             self.warn(&format!(
-                "defparam target `{fq}` matched no instance — override ignored \
-                 (the parameter keeps its default)"
+                "defparam target `{}` matched no instance — override ignored \
+                 (the parameter keeps its default)",
+                scope_out(fq)
             ));
         }
-        self.defparams.clear();
 
         // §4.5.166 HIER twin: a hierarchical read/write in an implicit
         // `@(*)`/`always_comb`/`always_latch` lowers behind a placeholder expr / sentinel

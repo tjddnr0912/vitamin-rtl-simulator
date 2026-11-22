@@ -148,9 +148,10 @@ impl Elaborator<'_> {
                 );
                 continue;
             }
-            let path = self.child_prefix(&item.name.name);
-            if !self.iface_insts.contains_key(&path) {
-                let saved_prefix = self.lex.scope_swap_text(path.clone());
+            let path = self.lex.scope_child(&item.name.name);
+            let path_key = self.fq(&item.name.name);
+            if !self.iface_insts.contains_key(&path_key) {
+                let saved_prefix = self.lex.scope_swap(&path);
                 let saved_module_span = self.cur_module_span.replace(decl.span);
                 // params (header `#(...)` then body localparams) BEFORE nets
                 // so `[W-1:0]` folds — mirroring module passes (3)/(3b).
@@ -187,11 +188,8 @@ impl Elaborator<'_> {
                 // (`frames_body.rs`) key the OBS `subroutines[]` rows on
                 // `inst_stack.last()`: without the push an interface's routines would
                 // be filed under the parent module's name.
-                let saved_rtn = self.take_routine_scope(
-                    path.clone(),
-                    iface_name.clone(),
-                    iface_imports.clone(),
-                );
+                let saved_rtn =
+                    self.take_routine_scope(&path, iface_name.clone(), iface_imports.clone());
                 self.inst_stack.push(iface_name.clone());
                 let local_names = self.gather_local_decl_names(&decl);
                 // The five block-local classifier maps, computed from THIS INTERFACE and
@@ -397,7 +395,7 @@ impl Elaborator<'_> {
                 // Nothing between the two lines below resolves a name.
                 let dpos = self.gather_decl_positions(&decl);
                 let saved_decl_pos = std::mem::replace(&mut self.decl_pos, dpos);
-                let saved_dpos_scope = std::mem::replace(&mut self.decl_pos_scope, path.clone());
+                let saved_dpos_scope = self.lex.mark_swap(Mark::DeclPos, &path);
                 let saved_dpos_range =
                     std::mem::replace(&mut self.decl_pos_range, (decl.span.lo, decl.span.hi));
                 // No select census in an interface body: `$bits` of a select and of a
@@ -773,12 +771,13 @@ impl Elaborator<'_> {
                         }
                     }
                 }
-                self.iface_insts.insert(path.clone(), iface_name.clone());
+                self.iface_insts
+                    .insert(path_key.clone(), iface_name.clone());
                 // Below the Logic loop, not between the two passes: the maps have to
                 // answer the same way in both, which is the half of the prerequisite
                 // that is about POSITION rather than about the maps themselves.
                 self.decl_pos = saved_decl_pos;
-                self.decl_pos_scope = saved_dpos_scope;
+                self.lex.mark_put(Mark::DeclPos, saved_dpos_scope);
                 self.decl_pos_range = saved_dpos_range;
                 self.select_scope = saved_select_scope;
                 self.decl_block_locals = saved_dbl;
@@ -826,7 +825,7 @@ impl Elaborator<'_> {
                         ast::PortConnList::Positional(v) => PortBinding::Positional(v),
                     };
                     let parent = self.lex.cur_prefix_text().to_string();
-                    let saved_prefix = self.lex.scope_swap_text(path.clone());
+                    let saved_prefix = self.lex.scope_swap(&path);
                     self.wire_ports(&decl, binding, &parent, false, Some(item.span));
                     self.lex.scope_restore(saved_prefix);
                 }

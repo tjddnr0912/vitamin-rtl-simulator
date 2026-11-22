@@ -312,7 +312,7 @@ impl Elaborator<'_> {
                     }
                 })
                 .collect();
-            let child_path = self.child_prefix(&format!("{iname}[{idx}]"));
+            let child_path = self.lex.scope_child(&format!("{iname}[{idx}]"));
             self.elaborate_instance(
                 child,
                 &child_path,

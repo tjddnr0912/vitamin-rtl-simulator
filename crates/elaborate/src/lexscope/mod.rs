@@ -16,8 +16,10 @@
 //! from a scope is a [`Shown`] / [`ShownCtx`], opaque, and leaves as plain data only through
 //! [`scope_out`] (the door's one text exit, its sinks counted by the home tests).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, DefaultHasher};
+
+use crate::edge_gate::span_holds;
 
 mod disp;
 mod elab;
@@ -51,7 +53,43 @@ pub(crate) struct Scopes {
     /// diagnostic context (`record_stmt_loc`) of a statement inside it, stored with
     /// a leading `.` so the engine prefixes the calling process's scope.
     disp_method: Option<String>,
+    /// §4.5.435: the path of the module INSTANCE being elaborated — the current scope
+    /// without the generate-scope segments `with_scope` appends inside it. A subroutine is
+    /// declared by the module, so `%m` in its body names this (IEEE §21.2.1), whatever
+    /// generate scope or frame chain called it (mark [`Mark::Inst`] ; LS3b).
+    mark_inst: ScopeId,
+    /// R19-X1: the scope in force when `func_table` / `task_table` were collected — the
+    /// scope every function / task in them is DECLARED in (mark [`Mark::TfDecl`]). Read
+    /// only by `default_binding_matches_decl_scope` (IEEE 1800 §13.5.4).
+    mark_tf_decl: ScopeId,
+    /// The instance scope `decl_pos` describes (mark [`Mark::DeclPos`]): the use-before-
+    /// declaration check fires only when a name resolved to THAT scope's binding.
+    mark_decl_pos: ScopeId,
+    /// The generate scopes the walk has open, innermost last: each one's scope, the source
+    /// range of the construct that opened it (the `if` / `case` / `for` / block), and for a
+    /// generate-for iteration the genvar key it binds — which sits at the ENCLOSING
+    /// scope's key, shadowing a same-named constant there. Read only by the §11.5.1
+    /// zero-width claim ([`Self::gen_binding_encloses`]), to tell whether a name binds
+    /// where the select's own text does.
+    gen_text: Vec<(ScopeId, hdl_ast::Span, Option<String>)>,
 }
+
+/// One of the three scalar marks of [`Scopes`] (LS3b): a scope remembered beside the current
+/// one, written and read only through the `mark_*` entries.
+pub(crate) enum Mark {
+    /// The module instance being elaborated (`inst_prefix`).
+    Inst,
+    /// The scope the routine tables were collected in (`tf_decl_scope`).
+    TfDecl,
+    /// The scope `decl_pos` describes (`decl_pos_scope`).
+    DeclPos,
+}
+
+/// A store keyed by a scope (LS3b): the map is private and ordered by the scope's TEXT (a
+/// `BTreeMap<String, V>`), so an order it is drained in is the text order it always was ;
+/// no method returns or takes a key text but [`Self::entry_under_cur`]'s instance name and
+/// the drained keys as [`Shown`].
+pub(crate) struct ScopeKeyed<V>(BTreeMap<String, V>);
 
 /// A re-entry token: the scope that was current before an opener. Move-only ; consumed by
 /// [`Scopes::scope_restore`] ; dropping one unrestored is a debug assertion.
@@ -223,6 +261,8 @@ zn!(ShownCtx: PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Displ
 zn!(ScopeRef: Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, Default,
     AsRef<str>, core::borrow::Borrow<str>, core::ops::Deref<Target = str>, Into<String>);
 zn!(ReportedAt: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug);
+zn!(ScopeKeyed<()>: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default,
+    IntoIterator);
 
 impl Scopes {
     /// The empty current scope (the Elaborator's initial value).
@@ -235,7 +275,12 @@ impl Scopes {
             disp_chain: Vec::new(),
             disp_root: None,
             disp_method: None,
+            mark_inst: ScopeId(0),
+            mark_tf_decl: ScopeId(0),
+            mark_decl_pos: ScopeId(0),
+            gen_text: Vec::new(),
         };
+        // The empty text is id 0: the three marks start at the empty scope.
         s.cur = s.intern("");
         s.c_path();
         s
@@ -416,6 +461,140 @@ impl Scopes {
         self.disp_method = saved.0;
     }
 
+    /// The child scope `inst_name` of the current scope (a child instance's path),
+    /// interned: `child_prefix`'s text.
+    pub(crate) fn scope_child(&mut self, inst_name: &str) -> ScopeRef {
+        let text = self.child_prefix(inst_name);
+        ScopeRef(self.intern(&text))
+    }
+
+    /// Child prefix = current prefix + child instance name.
+    fn child_prefix(&self, inst_name: &str) -> String {
+        if self.cur_prefix.is_empty() {
+            inst_name.to_string()
+        } else {
+            format!("{}.{}", self.cur_prefix, inst_name)
+        }
+    }
+
+    /// A carried scope as display / output text (its raw path, no display spelling).
+    pub(crate) fn scope_shown(&self, at: &ScopeRef) -> Shown {
+        Shown(self.names[at.0 .0 as usize].clone())
+    }
+
+    /// The slot of mark `m`.
+    fn mark_slot(&mut self, m: Mark) -> &mut ScopeId {
+        match m {
+            Mark::Inst => &mut self.mark_inst,
+            Mark::TfDecl => &mut self.mark_tf_decl,
+            Mark::DeclPos => &mut self.mark_decl_pos,
+        }
+    }
+
+    /// The text of mark `m` (read inside the module only).
+    fn mark_text(&self, m: Mark) -> &str {
+        let id = match m {
+            Mark::Inst => &self.mark_inst,
+            Mark::TfDecl => &self.mark_tf_decl,
+            Mark::DeclPos => &self.mark_decl_pos,
+        };
+        &self.names[id.0 as usize]
+    }
+
+    /// Mark `m` becomes the carried scope `at` ; the scope it held is returned.
+    pub(crate) fn mark_swap(&mut self, m: Mark, at: &ScopeRef) -> ScopeRef {
+        ScopeRef(std::mem::replace(self.mark_slot(m), at.0.clone()))
+    }
+
+    /// Mark `m` becomes the current scope ; the scope it held is returned.
+    pub(crate) fn mark_swap_here(&mut self, m: Mark) -> ScopeRef {
+        let here = self.cur.clone();
+        ScopeRef(std::mem::replace(self.mark_slot(m), here))
+    }
+
+    /// Mark `m` becomes `at` (a restore of what a swap returned).
+    pub(crate) fn mark_put(&mut self, m: Mark, at: ScopeRef) {
+        *self.mark_slot(m) = at.0;
+    }
+
+    /// Mark `m` and `at` exchange their scopes.
+    pub(crate) fn mark_exchange(&mut self, m: Mark, at: &mut ScopeRef) {
+        std::mem::swap(self.mark_slot(m), &mut at.0);
+    }
+
+    /// Opener: re-enter the scope mark `m` holds ; the scope that was current is returned.
+    /// No interner probe (the mark's id, its text written in place).
+    pub(crate) fn swap_to_mark(&mut self, m: Mark) -> Saved {
+        let at = ScopeRef(match m {
+            Mark::Inst => self.mark_inst.clone(),
+            Mark::TfDecl => self.mark_tf_decl.clone(),
+            Mark::DeclPos => self.mark_decl_pos.clone(),
+        });
+        self.scope_swap(&at)
+    }
+
+    /// Is the current scope the module instance's own — not a generate block's or a
+    /// routine's below it (and not the empty scope)?
+    pub(crate) fn cur_is_inst_top(&self) -> bool {
+        let inst = self.mark_text(Mark::Inst);
+        !inst.is_empty() && self.cur_prefix == inst
+    }
+
+    /// Is the current scope the one the routine tables were collected in?
+    pub(crate) fn cur_is_tf_decl(&self) -> bool {
+        self.cur_prefix == self.mark_text(Mark::TfDecl)
+    }
+
+    /// Is the current scope the module instance's own, or under it only through
+    /// SYNTHESIZED segments (`$func$…`, `$blk$…`, a class method's: each one starting with
+    /// `$`)? (`hier_leaf_scope`'s guard, `expr_size_hier.rs`.)
+    pub(crate) fn cur_is_inst_top_or_synth_below(&self) -> bool {
+        let Some(rest) = self.cur_prefix.strip_prefix(self.mark_text(Mark::Inst)) else {
+            return false;
+        };
+        if rest.is_empty() {
+            return true;
+        }
+        let Some(rest) = rest.strip_prefix('.') else {
+            return false;
+        };
+        rest.split('.').all(|s| s.starts_with('$'))
+    }
+
+    /// A generate scope opens: the current scope, the source range `text` of the construct
+    /// that opened it, and the genvar key a generate-for iteration binds.
+    pub(crate) fn gen_text_push(&mut self, text: hdl_ast::Span, gv_key: Option<String>) {
+        self.gen_text.push((self.cur.clone(), text, gv_key));
+    }
+
+    /// The innermost open generate scope closes.
+    pub(crate) fn gen_text_pop(&mut self) {
+        self.gen_text.pop();
+    }
+
+    /// §11.5.1 zero-width claim: does the binding `key` (the innermost binding of `name`)
+    /// lie where the source position `at` does — the genvar of an open generate-for whose
+    /// construct holds `at`, the module instance's own scope, or an open generate scope
+    /// whose construct holds `at`?
+    pub(crate) fn gen_binding_encloses(&self, key: &str, name: &str, at: hdl_ast::Span) -> bool {
+        let scopes = &self.gen_text;
+        if let Some((_, text, _)) = scopes.iter().rev().find(|s| s.2.as_deref() == Some(key)) {
+            return span_holds(*text, at);
+        }
+        let scope = key
+            .strip_suffix(name)
+            .map(|s| s.strip_suffix('.').unwrap_or(s))
+            .unwrap_or_default();
+        if scope == self.mark_text(Mark::Inst) {
+            return true;
+        }
+        scopes
+            .iter()
+            .rev()
+            .find(|s| self.names[s.0 .0 as usize] == scope)
+            .is_some_and(|(_, text, _)| span_holds(*text, at))
+    }
+
     /// The id of `text`, interned on first sight (ids are never freed).
     fn intern(&mut self, text: &str) -> ScopeId {
         let id = match self.ids.get(text) {
@@ -438,5 +617,43 @@ impl Scopes {
             self.names[self.cur.0 as usize], self.cur_prefix,
             "C-PATH: the current id and the current text"
         );
+    }
+}
+
+impl<V> ScopeKeyed<V> {
+    /// The empty store.
+    pub(crate) fn new() -> ScopeKeyed<V> {
+        ScopeKeyed(BTreeMap::new())
+    }
+
+    /// The value stored at the carried scope `at`, taken out.
+    pub(crate) fn take_at(&mut self, s: &Scopes, at: &ScopeRef) -> Option<V> {
+        self.0.remove(&s.names[at.0 .0 as usize])
+    }
+
+    /// `v` is stored at the carried scope `at`.
+    pub(crate) fn put_at(&mut self, s: &Scopes, at: &ScopeRef, v: V) {
+        self.0.insert(s.names[at.0 .0 as usize].clone(), v);
+    }
+
+    /// The slot of the instance `name` declared in the current scope, made empty on first
+    /// use. The key is `<cur>.<name>` UNCONDITIONALLY (not `scope_child`'s text, which differs
+    /// when the current scope is empty): a defparam's target, printed as it was keyed when
+    /// it matches no instance.
+    pub(crate) fn entry_under_cur(&mut self, s: &Scopes, name: &str) -> &mut V
+    where
+        V: Default,
+    {
+        self.0
+            .entry(format!("{}.{}", s.cur_prefix, name))
+            .or_default()
+    }
+
+    /// Every scope still holding a value, in text order, as display text ; the store is
+    /// left empty.
+    pub(crate) fn drain_keys_shown(&mut self) -> Vec<Shown> {
+        let keys = self.0.keys().cloned().map(Shown).collect();
+        self.0.clear();
+        keys
     }
 }

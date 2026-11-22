@@ -198,7 +198,7 @@ impl Elaborator<'_> {
                 }
             };
             // resolve the bound instance + verify its interface type.
-            let inst_path = self.child_prefix(&inst);
+            let inst_path = self.fq(&inst);
             let Some(actual_iface) = self.iface_insts.get(&inst_path).cloned() else {
                 self.error(
                     MsgCode::ElabUnsupported,

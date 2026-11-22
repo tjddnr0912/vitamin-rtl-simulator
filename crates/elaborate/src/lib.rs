@@ -133,7 +133,9 @@ mod inline_task_locals;
 mod instance;
 mod instance_array;
 mod lexscope;
-use lexscope::{scope_out, shown_from_spelling, ReportedAt, ScopeRef, Shown, ShownCtx};
+use lexscope::{
+    scope_out, shown_from_spelling, Mark, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
+};
 mod limits;
 mod lvalue;
 mod multidriver;
@@ -348,7 +350,7 @@ struct Elaborator<'s> {
     instances: Vec<ir::Instance>,
     /// Static per-instance hierarchy info (path/module/parent) for the design-structure
     /// exports (`--hier-tree` / `--inst-paths`). Parallel to `instances`, index-aligned.
-    instances_info: Vec<InstanceInfo>,
+    instances_info: Vec<driver::InstanceRow>,
 
     // ── v2: procedural lowering arenas ──
     // `processes` is one Process per ProceduralBlock (module-body order).
@@ -762,7 +764,7 @@ struct Elaborator<'s> {
     /// §3.b: the STATIC package routines framed inside an interface instance's
     /// window, carried from one instance to the next sibling of the SAME parent
     /// (key = the parent's instance path). See `iface_rtn_scope::StaticScopedCarry`.
-    iface_static_scoped: BTreeMap<String, iface_rtn_scope::StaticScopedCarry>,
+    iface_static_scoped: ScopeKeyed<iface_rtn_scope::StaticScopedCarry>,
     /// ⓑ-breadth (§25.9): fully-qualified names of `virtual interface` handles, so
     /// the static binding assignment `vif = inst;` is skipped at statement lowering
     /// (the binding is resolved to a member alias at net-elaboration time).
@@ -778,11 +780,6 @@ struct Elaborator<'s> {
     // `cur_prefix + "." + local`, so `tb.q` and `tb.dut.q` never collide. Empty
     // only transiently (the top is always given its module name as the root path).
     lex: lexscope::Scopes,
-    /// §4.5.435: the path of the module INSTANCE being elaborated — `cur_prefix`
-    /// without the generate-scope segments `with_scope` appends inside it. A
-    /// subroutine is declared by the module, so `%m` in its body names this
-    /// (IEEE §21.2.1), whatever generate scope or frame chain called it.
-    inst_prefix: String,
     /// The NAME of the module whose body is being lowered — the key into
     /// [`Self::module_facts`]. Saved/restored around each `elaborate_instance`,
     /// like `cur_prefix`; empty outside a module body (an interface, a package).
@@ -1041,7 +1038,7 @@ struct Elaborator<'s> {
     // its fold: `defparam u.K = '1` installed `0000_0000_ffff_ffff` in a 64-bit
     // parameter while `#(.K('1))` on the same declaration installed all ones —
     // silently, in one design.
-    defparams: BTreeMap<String, Vec<DefparamOverride>>,
+    defparams: ScopeKeyed<Vec<DefparamOverride>>,
     // module names on the active instantiation path — the recursion cycle guard.
     inst_stack: Vec<String>,
     // Instance id of the instance whose body is currently being lowered. Set in
@@ -1114,7 +1111,7 @@ struct Elaborator<'s> {
     // `lower_frame_funcs` restores around the reserve+lower of that body (so it reads
     // the generate scope's nets and its iteration's genvar) and what `frame_path`
     // spells for `%m`. Saved/restored with `func_table`.
-    rtn_decl_scope: BTreeMap<String, String>,
+    rtn_decl_scope: BTreeMap<String, ScopeRef>,
     // The GENVAR bindings in force where a §27.3 generate-scoped routine was
     // registered, keyed like `rtn_decl_scope`: `[(t.u.i, 1)]` for the `gl[1]`
     // iteration. A genvar binding is transient — it lives only for the duration of
@@ -1128,13 +1125,6 @@ struct Elaborator<'s> {
     // Pushed per ITERATION by the generate-for arm, so it is what a registration
     // inside that iteration's body copies out.
     gen_genvars: Vec<(String, i64)>,
-    // The generate scopes the walk has open, innermost last: each one's full prefix,
-    // the source range of the construct that opened it (the `if` / `case` / `for` /
-    // block), and for a generate-for iteration the genvar key it binds — which sits at
-    // the ENCLOSING scope's key, shadowing a same-named constant there. Read only by the
-    // §11.5.1 zero-width claim (`edge_gate.rs`), to tell whether a name binds where the
-    // select's own text does.
-    gen_text_scopes: Vec<(String, ast::Span, Option<String>)>,
     // The declaring package of the routine whose BODY is being lowered right now
     // (a stack — a package routine may call another). `resolve_rtn_key` consults it
     // so a bare callee inside that body finds its own package's sibling (injected as
@@ -1155,10 +1145,6 @@ struct Elaborator<'s> {
     // is spent. Saved/restored per module, and swapped with the routine tables around
     // `wire_ports` (a port connection is a PARENT expression).
     decl_pos: BTreeMap<String, u32>,
-    // The instance prefix `decl_pos` describes. The check fires only when a name
-    // resolved to THAT scope's binding — a function formal or generate-block local
-    // that shadows a later module net is a different object and must not be flagged.
-    decl_pos_scope: String,
     // Source range of the module `decl_pos` was gathered from. A use position is only
     // comparable against it if it came from the SAME text: `.*` expands to paths that
     // reuse the CHILD module's port identifiers, whose spans sit wherever that module
@@ -1179,12 +1165,6 @@ struct Elaborator<'s> {
     // a bound or a generate condition must stay LOUD rather than silently truncate to
     // its low 64 bits, so only the expression reader consults this.
     wide_param_bits: Bound<BTreeMap<String, ir::ConstVal>>,
-    // R19-X1: the scope prefix in force when `func_table`/`task_table` were collected —
-    // i.e. the scope in which every function/task in them is DECLARED. Saved/restored
-    // with those tables. Read only by `default_binding_matches_decl_scope`: a filled
-    // DEFAULT argument value is lowered in the CALLER's scope, but IEEE 1800 §13.5.4
-    // evaluates it in the subroutine's own, and the two can name different objects.
-    tf_decl_scope: String,
     // R5-B: names of FRAME functions that have an output/inout formal. A call to
     // one carries copy-out (like a task) plus a return value, so it is lowered as a
     // `Terminator::Call` (statement context) via `emit_frame_func_out_call` rather

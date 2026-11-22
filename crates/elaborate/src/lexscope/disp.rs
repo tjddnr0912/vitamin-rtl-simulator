@@ -5,7 +5,7 @@
 //! `display_of_key_text` (L4, text in and out, closing at DK4) and the two entries cut from
 //! call-site fragments (`stmt_loc_instance`, `disp_root_swap_decl_inst`).
 
-use super::{wrap_ctx, wrap_root, wrap_shown, SavedRoot, Shown, ShownCtx};
+use super::{wrap_ctx, wrap_root, wrap_shown, Mark, SavedRoot, Shown, ShownCtx};
 use crate::Elaborator;
 
 impl Elaborator<'_> {
@@ -145,7 +145,7 @@ impl Elaborator<'_> {
         // §21.2.1 describes, with `display_of` doing the singleton `[0]` strip a
         // generate-if block already gets everywhere else.
         if let Some(scope) = self.rtn_decl_scope.get(name) {
-            let d = self.display_of(scope);
+            let d = self.display_of(self.lex.scope_text(scope));
             let bare = Self::rtn_key_bare(name);
             return if d.is_empty() {
                 bare.to_string()
@@ -153,7 +153,7 @@ impl Elaborator<'_> {
                 format!(".{d}.{bare}")
             };
         }
-        let inst = self.display_of(&self.inst_prefix);
+        let inst = self.display_of(self.lex.mark_text(Mark::Inst));
         if inst.is_empty() {
             name.to_string()
         } else {
@@ -194,9 +194,9 @@ impl Elaborator<'_> {
     }
 
     /// `display_of` of the instance mark (DELTA11 N-1: the shim's private fn ; it reads the
-    /// mark `inst_prefix` until LS3 takes the mark in).
+    /// mark [`Mark::Inst`] inside the module, LS3b).
     fn disp_inst_top_text(&self) -> String {
-        self.display_of(&self.inst_prefix)
+        self.display_of(self.lex.mark_text(Mark::Inst))
     }
 
     /// SHIM: the absolute `%m` scope of the statement being lowered (`scope_chain_abs`).
@@ -229,7 +229,7 @@ impl Elaborator<'_> {
     /// An inlined task body's display root: the DECLARING instance (display spelling) ; the
     /// root that was in effect is saved (§4.5.435).
     pub(crate) fn disp_root_swap_decl_inst(&mut self) -> SavedRoot {
-        let decl_root = self.display_of(&self.inst_prefix);
+        let decl_root = self.display_of(self.lex.mark_text(Mark::Inst));
         SavedRoot(self.lex.disp_root.replace(decl_root))
     }
 

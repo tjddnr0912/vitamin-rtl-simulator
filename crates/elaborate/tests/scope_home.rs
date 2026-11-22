@@ -891,7 +891,7 @@ impl Pass<'_> {
 /// The funnel's openers (LS2a, §5.2 Q-LEXSCOPE): `<recv>.lex.<entry>(..)` moves the current
 /// scope and returns its `Saved` ; after LS2 a write site is the same row with the entry's
 /// name as its form (PLAN8 H5 LS1 part 2). LS3 adds `scope_swap`, the re-entry of a carried
-/// scope (`&ScopeRef`).
+/// scope (`&ScopeRef`) ; LS3b `swap_to_mark`, the re-entry of a mark's scope.
 const LEX_OPENERS: &[&str] = &[
     "scope_swap_text",
     "scope_swap_empty",
@@ -899,6 +899,7 @@ const LEX_OPENERS: &[&str] = &[
     "scope_enter",
     "scope_hold",
     "scope_swap",
+    "swap_to_mark",
 ];
 /// The funnel's closer and its re-point (inside an open pair).
 const LEX_CLOSERS: &[&str] = &["scope_restore", "scope_repoint"];
