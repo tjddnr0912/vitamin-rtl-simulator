@@ -649,7 +649,7 @@ lexscope/elab.rs	cur_gen_rtn_key	derived-fn	cur_gen_rtn_key	1	key
 lexscope/elab.rs	gen_rtn_key	push	push	1	key
 lexscope/elab.rs	gen_rtn_key	push	push_str	2	key
 lexscope/elab.rs	walk_rtn_scopes	call	gen_rtn_key	1	key
-lexscope/mod.rs	scope_enter	fmt	format	1	scope
+lexscope/mod.rs	scope_enter	push	push	1	scope
 lexscope/mod.rs	scope_swap_pkg	fmt	format	1	scope
 lvalue.rs	collect_lval_chunks	call	walk_scopes_key_shadowed	1	key
 lvalue.rs	collect_lval_chunks	join	join	2	spelling
@@ -738,7 +738,7 @@ var_init.rs	scoped_init_key	derived-fn	scoped_init_key	1	scope
 var_init.rs	scoped_init_key	fmt	format	1	scope
 wide_param_range.rs	bind_wide_param_decl	call	fq	1	key
 == HM_COUNTS
-mints 385 kinds {"call": 168, "curp": 40, "derived-fn": 11, "fmt": 48, "fmt-tempname": 25, "join": 87, "push": 6} tags {"display": 20, "key": 187, "scope": 56, "segment": 17, "spelling": 105}
+mints 385 kinds {"call": 168, "curp": 40, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 187, "scope": 56, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -975,7 +975,7 @@ Elaborator	lib.rs	vif_handles	std::collections::BTreeSet<String>	BINDING	V	KEYED
 Elaborator	lib.rs	modport_readonly	BTreeSet<String>	BINDING	V	KEYED-PLAN26
 Scopes	lexscope/mod.rs	cur_prefix	String	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	names	Vec<String>	NOT	CTX	SCOPE
-Scopes	lexscope/mod.rs	ids	BTreeMap<String, ScopeId>	NOT	CTX	SCOPE
+Scopes	lexscope/mod.rs	ids	HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>	NOT	CTX	SCOPE
 Elaborator	lib.rs	inst_prefix	String	NOT	CTX	SCOPE
 Elaborator	lib.rs	cur_module	String	NOT	CTX	-
 Elaborator	lib.rs	module_facts	BTreeMap<String, ModuleFacts>	BINDING	V	-

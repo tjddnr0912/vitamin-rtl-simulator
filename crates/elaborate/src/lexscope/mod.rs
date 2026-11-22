@@ -10,7 +10,8 @@
 //! check two things with `debug_assert*!` and nothing else: C-INTERN (the interner is a
 //! bijection) and C-PATH (after every entry the id's text is `cur_prefix`).
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, DefaultHasher};
 
 mod elab;
 #[cfg(test)]
@@ -25,7 +26,10 @@ pub(crate) struct Scopes {
     cur_prefix: String,
     cur: ScopeId,
     names: Vec<String>,
-    ids: BTreeMap<String, ScopeId>,
+    /// The text -> id half of the interner. A hash map, not a `BTreeMap`: it is probed
+    /// once per scope entry and never iterated, so no order of it can reach output ; the
+    /// hasher has fixed keys, so a probe does the same work on every run.
+    ids: HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>,
 }
 
 /// A re-entry token: the scope that was current before an opener. Move-only ; consumed by
@@ -82,7 +86,7 @@ impl Scopes {
             cur_prefix: String::new(),
             cur: ScopeId(0),
             names: Vec::new(),
-            ids: BTreeMap::new(),
+            ids: HashMap::default(),
         };
         s.cur = s.intern("");
         s.c_path();
@@ -117,13 +121,16 @@ impl Scopes {
     }
 
     /// Opener: enter the child segment `seg` of the current scope (with_scope's rule: a
-    /// segment of the empty path is the segment itself).
+    /// segment of the empty path is the segment itself, else `<cur>.<seg>`). The child text
+    /// is formed in the current text's own buffer, which the restore overwrites in place: no
+    /// String per entry (the buffer grows only past its longest text so far ; a text new to
+    /// the interner is copied into it).
     fn scope_enter(&mut self, seg: &str) -> Saved {
-        let new_prefix = if self.cur_prefix.is_empty() {
-            seg.to_string()
-        } else {
-            format!("{}.{}", self.cur_prefix, seg)
-        };
+        let mut new_prefix = std::mem::take(&mut self.cur_prefix);
+        if !new_prefix.is_empty() {
+            new_prefix.push('.');
+        }
+        new_prefix.push_str(seg);
         self.scope_swap_text(new_prefix)
     }
 
