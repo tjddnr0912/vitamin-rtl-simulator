@@ -4,7 +4,10 @@
 # Every other section is CLEAN with planted hunks (`@@ <path>`, `- ` lines replaced by the
 # `+ ` lines, or `+ ` lines appended when there is no `- ` line) and must fail with exactly
 # the (item, position, rule) set FIX_EXPECT pins for it. NS1-NS22 are DELTA10 L1's negative
-# controls ; NB1-NB8 are this unit's own (P29's doors and the stricter readings).
+# controls ; NB1-NB8 are LS1 part 4's own (P29's doors and the stricter readings) ; NS23-NS31
+# and NB9-NB13 are DELTA11 R2's (LS1 part 5: CARD, CB, MACRO-BODY, BODY-ALL, ALIAS-SELF+, and
+# premise judge round 6's exact shapes). BODY-ALL pins every fn body of CLEAN, so a fixture
+# that adds or edits a fn also fails BODY for that fn.
 == CLEAN
 --- lib.rs
 mod lexscope;
@@ -450,3 +453,132 @@ pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
 +         let me = &*self;
 +         self.names.is_empty()
 +     }
+== NS23
+# CARD: the text as bits (S-VECBOOL, elaborate/src/packed.rs:2310)
+@@ lexscope/mod.rs
++ pub(crate) fn ns23() -> Vec<bool> {
++     Vec::new()
++ }
+== NS24
+# CARD: None at the root answers "is cur the empty path" (S-OPTRET-NONTEXT)
+@@ lexscope/mod.rs
++ pub(crate) fn ns24() -> Option<Shown> {
++     None
++ }
+== NS25
+# CARD: a list of nothing carries its length (NP-1)
+@@ lexscope/mod.rs
++ pub(crate) fn ns25() -> Vec<()> {
++     Vec::new()
++ }
+== NS26
+# CARD: a list of defaults carries its length (NP-2)
+@@ lexscope/mod.rs
++ pub(crate) fn ns26<V: Default>() -> Vec<V> {
++     Vec::new()
++ }
+== NS27
+# CARD: two bools are two bits (S-BOOLTUPLE-ONLY, elaborate/src/const_select.rs:68)
+@@ lexscope/mod.rs
++ pub(crate) fn ns27() -> (bool, bool) {
++     (false, false)
++ }
+== NS28
+# CB: a call count (S-CB0)
+@@ lexscope/mod.rs
++ pub(crate) fn ns28(mut f: impl FnMut()) {
++     f()
++ }
+== NS29
+# CB: bits through the argument (S-CBMULTI by a type name)
+@@ lexscope/mod.rs
++ pub(crate) fn ns29(mut f: impl FnMut(bool)) {
++     f(false)
++ }
+== NS30
+# MACRO-BODY: one token of zn's body changed
+@@ lexscope/mod.rs
+-     ($t:ty) => {};
++     ($t:path) => {};
+== NS31
+# BODY-ALL: one token of a tier-K fn's body changed
+@@ lexscope/mod.rs
+-         self.cur.is_empty()
++         self.marks.is_empty()
+== NB9
+# premise judge round 6 B-1 (a): an interior-mutable parameter, the judge's exact items
+@@ lexscope/mod.rs
++ impl crate::Elaborator<'_> {
++     pub(crate) fn cur_index_into(&self, out: &std::cell::Cell<usize>) {
++         out.set(0)
++     }
++     pub(crate) fn nb9b<W: Extend<char>>(&self, w: &std::cell::RefCell<W>) {
++         let _ = w;
++     }
++     pub(crate) fn nb9c(&self, out: &std::cell::RefCell<Vec<bool>>) {
++         let _ = out;
++     }
++ }
+== NB10
+# premise judge round 6 B-2: NB1's impl inside NB2's `const _` block
+@@ lexscope/mod.rs
++ const _: () = {
++     impl crate::Elaborator<'_> {
++         pub(crate) fn nb10(&self) -> String {
++             String::new()
++         }
++     }
++ };
+== NB11
+# premise judge round 6 B-3: a private free fn, a fn nested in a body and a private method of a
+# lexscope type, each taking `&mut Elaborator`
+@@ lexscope/mod.rs
++ fn nb11a(e: &mut crate::Elaborator<'_>) {
++     e.names.push(String::new());
++ }
++ fn nb11_outer() {
++     fn nb11b(e: &mut crate::Elaborator<'_>) {
++         e.names.push(String::new());
++     }
++ }
++ impl Scopes {
++     fn nb11c(&self, e: &mut crate::Elaborator<'_>) {
++         e.names.push(self.cur.clone());
++     }
++ }
+== NB12
+# premise judge round 6 B-3: a destructured self in a `let`
+@@ lexscope/mod.rs
+-     pub(crate) fn names_are_empty(&self) -> bool {
+-         self.names.is_empty()
+-     }
++     pub(crate) fn names_are_empty(&self) -> bool {
++         let Self { names, .. } = self;
++         names.is_empty()
++     }
+== NB12b
+# ALIAS-SELF+: the same struct pattern in a `match` arm
+@@ lexscope/mod.rs
+-     pub(crate) fn names_are_empty(&self) -> bool {
+-         self.names.is_empty()
+-     }
++     pub(crate) fn names_are_empty(&self) -> bool {
++         match self {
++             Self { names, .. } => names.is_empty(),
++         }
++     }
+== NB12c
+# ALIAS-SELF+: the same struct pattern as a closure's parameter
+@@ lexscope/mod.rs
+-     pub(crate) fn names_are_empty(&self) -> bool {
+-         self.names.is_empty()
+-     }
++     pub(crate) fn names_are_empty(&self) -> bool {
++         (|Self { names, .. }: &Self| names.is_empty())(self)
++     }
+== NB13
+# premise judge round 6 N-4: a Debug body that takes self apart and prints the text
+@@ lexscope/mod.rs
+-         f.write_str("Shown(..)")
++         let Self(id) = self;
++         f.write_str(id)

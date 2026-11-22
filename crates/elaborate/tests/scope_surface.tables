@@ -2,7 +2,9 @@
 # section per table: a line `== NAME` opens it ; `#` lines are notes ; a table is tab-separated,
 # its first line a header ; a COUNTS / PRESENT section is one line compared verbatim.
 # SURF_* = the real crate's (`crate::lexscope`) ; FIX_* = the fixture modules'
-# (scope_surface.fixtures). SURF_VOCAB / SURF_TRAITS / SURF_MACROS are the vocabulary both use.
+# (scope_surface.fixtures). SURF_VOCAB / SURF_TRAITS are the vocabulary both use. LS1 part 5
+# (DELTA11 R2) adds the counted lists CARD, CB, BODY and the hash column of MACROS, each with
+# its FIX_ twin ; with the module absent every SURF_ list is empty (a row is STALE).
 == SURF_VOCAB
 # HT's table of opaque lexscope types: plan10/g/surface.tsv's 12 TYPE rows (DELTA10 L1 I-SURF's
 # list: ScopeRef, Saved, the witness = ScopeWitness (DELTA9's name, not yet checked by names.py),
@@ -32,9 +34,11 @@ Keyed	struct
 name
 Outgoing
 == SURF_MACROS
-# item-position macros allowed in the file set (DELTA10 L1: `zn`)
-name
-zn
+# MACRO-BODY (DELTA11 R2): every `macro_rules!` the file set defines, or the rest of the crate
+# defines and the file set calls, with the sha256 of its token tree ; also the item-position
+# macros allowed. Empty until the module exists (a row with no definition is STALE): `zn`'s row
+# and hash come with LS2a (DELTA11 R6), read by its delta judge (NP-5).
+name	sha256
 == SURF_PRESENT
 absent
 == SURF_COUNTS
@@ -62,39 +66,53 @@ shim	private	wrapper
 # the boundary's impls (pinned 2 from LS2-d: Shown -> String, ShownCtx -> Vec<diag::Frame>)
 type	plain
 == SURF_E
-# E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count), BODY (sha256 of the
-# body tokens) ; FLOW (hand) in / payload / text:<sink>
+# E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
+# payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
 item	kind	name	count	flow
+== SURF_CARD
+# CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
+# `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
+# a row matching no position is STALE. First rows at LS2a.
+item	position	type	means
+== SURF_CB
+# CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
+# argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
+item	param	kind	args	calls
+== SURF_BODY
+# BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
+# First rows at LS2a ; each unit's verify prints the rows that changed.
+file	fn	sha256
 == SURF_PLAN
 # SURF-PLAN: the 30 fns of plan10/g/moved.tsv (DELTA10 L2), judged by I-SURF on today's signature
 # (vis, tier, the normalised signature, verdict, the failing positions, the text IN parameters) ;
-# + report_at (L2's LS3 row, N-a), which moved.tsv does not list: 31 rows.
+# + report_at (L2's LS3 row, N-a), which moved.tsv does not list: 31 rows. LS1 part 5 (DELTA11
+# R2): CARD and CB judge them too, with no list consulted (as LEAVE is not): 16 CARD, 8 CB.
 unit	fn	file	vis	tier	signature	verdict	fails	in_text
-DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit.0=TEXT(str)	name
+DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
 DK1	fq	scope.rs	pub(crate)	E	(&self, local: &str) -> String	FAIL	RET=TEXT(String)	local
-DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=TEXT(String)	base,rest
-DK1	hier_resolve	hier.rs	pub(crate)	E	(&self, prefix: &str, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	PASS	-	prefix,path,table
-DK1	indexed_gen_singleton	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=TEXT(String)	level,seg
-DK1	scoped_key_at_or_above	scope.rs	pub(crate)	E	(&self, prefix: &str, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	prefix,name
-DK1	singleton_scope_key	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=TEXT(String)	level,seg
-DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &BTreeMap<String, T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy)	name,table
-DK1	walk_scopes_key	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	name
-DK1	walk_scopes_key_from	scope.rs	pub(crate)	E	(&self, prefix: &str, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	prefix,name
-DK1	walk_scopes_key_inner	scope.rs	-	E	(&self, name: &str, hit: impl Fn(&str) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	name
-DK1	walk_scopes_key_shadowed	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	name
-DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=TEXT(String)	-
-LS2-d	cur_context	driver.rs	pub(crate)	E	(&self) -> Vec<diag::Frame>	FAIL	RET=UNKNOWN(named type of another module diag::Frame)	-
+DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
+DK1	hier_resolve	hier.rs	pub(crate)	E	(&self, prefix: &str, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	FAIL	RET=CARD(Option in Option<V>)	prefix,path,table
+DK1	indexed_gen_singleton	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
+DK1	scoped_key_at_or_above	scope.rs	pub(crate)	E	(&self, prefix: &str, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
+DK1	singleton_scope_key	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
+DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &BTreeMap<String, T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy); RET=CARD(Option in Option<T>)	name,table
+DK1	walk_scopes_key	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key_from	scope.rs	pub(crate)	E	(&self, prefix: &str, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
+DK1	walk_scopes_key_inner	scope.rs	-	E	(&self, name: &str, hit: impl Fn(&str) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key_shadowed	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
+LS2-d	cur_context	driver.rs	pub(crate)	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	generate.rs	pub(crate)	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
 LS2-d	display_prefix	generate.rs	pub(crate)	E	(&self) -> String	FAIL	RET=TEXT(String)	-
-LS2-d	enter_frame_scope_root	frames_body.rs	-	E	(&mut self, name: &str) -> Option<String>	FAIL	RET=TEXT(String)	name
+LS2-d	enter_frame_scope_root	frames_body.rs	-	E	(&mut self, name: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	name
 LS2-d	frame_path	frames_reserve.rs	pub(crate)	E	(&self, name: &str) -> String	FAIL	RET=TEXT(String)	name
 LS2-d	frame_path_of	frames_reserve.rs	pub(crate)	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
 LS2-d	scope_chain_abs	generate.rs	pub(crate)	E	(&self) -> String	FAIL	RET=TEXT(String)	-
 LS2a	child_prefix	hier.rs	pub(crate)	E	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
-LS2a	cur_gen_rtn_key	generate.rs	-	E	(&self, bare: &str) -> Option<String>	FAIL	RET=TEXT(String)	bare
-LS2a	gen_rtn_key	scope.rs	pub(crate)	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=TEXT(String)	scope,bare
-LS2a	walk_rtn_scopes	scope.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit.0=TEXT(str); RET=TEXT(String)	bare
-LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	PASS	-	seg
+LS2a	cur_gen_rtn_key	generate.rs	-	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
+LS2a	gen_rtn_key	scope.rs	pub(crate)	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
+LS2a	walk_rtn_scopes	scope.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
+LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self))	seg
 LS3	assert_block_local_inits_drained	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	drain_scoped_presize	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	flush_block_local_inits	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
@@ -102,7 +120,7 @@ LS3	push_block_local_init	var_init.rs	pub(crate)	E	(&mut self, scope: Option<&st
 LS3	scoped_init_key	var_init.rs	pub(crate)	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	edge_gate.rs	-	E	(&mut self, span: Option<ast::Span>, prefix: &str, msg: &str, reported: &mut BTreeSet<(u32, u32, String)>)	FAIL	ARG:reported=NUMBER(u32); ARG:reported=TEXT(String); ARG:reported=UNKNOWN(BTreeSet<(u32, u32, String)>)	prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=6 fail=25 ret_fail=23 ret_text=21 callback_text=7 mut_text=2
+fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=2 card=16 cb=8
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent
@@ -126,33 +144,65 @@ Shown	String
 ShownCtx	Vec<diag::Frame>
 == FIX_E
 item	kind	name	count	flow
-Elaborator::cur_shown_all	BODY	70b07229c2f9e416bb930f5a3d2d0acc9284dbacaaebead9468b130637df5139	1	-
 Elaborator::cur_shown_all	FN	-	-	-
 Elaborator::cur_shown_all	OUT-C	.push	1	payload
 Elaborator::disp_here	FN	-	-	-
-Elaborator::disp_here_text	BODY	7dfb7600b808f8f2f145ffc131fbc639b073ef9654cf29cb9a0983f9909cd0ac	1	-
 Elaborator::disp_here_text	FN	-	-	-
 Elaborator::disp_here_text	OUT-C	.clone	1	in
-Elaborator::key_under	BODY	6d8092a3df723f98d444dd0243dd1cb338a3bc4779699db670483eb6b9d83dc8	1	-
 Elaborator::key_under	FN	-	-	-
 Elaborator::key_under	OUT-M	format	1	text:LEAVE-L5
-Elaborator::mark_is	BODY	97c7c933c035c64c924925be7e0371332f7c73bd9e78d0b9e528d1aec07e19c0	1	-
 Elaborator::mark_is	FN	-	-	-
 Elaborator::mark_is	OUT-C	.is_empty	1	in
 Elaborator::mark_is	OUT-M	matches	1	in
-Elaborator::names_are_empty	BODY	96ef4088596115c4064a98f84afd13894db86eeb6aa91e768ed2a163f8b192cc	1	-
 Elaborator::names_are_empty	FN	-	-	-
 Elaborator::names_are_empty	OUT-C	.is_empty	1	in
 Elaborator::names_are_empty	OUT-F	names	1	in
 Elaborator::scope_carry	FN	-	-	-
-Elaborator::scope_hold	BODY	77b7a6f5322bf0f091751cda38c9924d4ff6f190ef86a2a2ec2bad1eca01fa0a	1	-
 Elaborator::scope_hold	FN	-	-	-
 Elaborator::scope_hold	OUT-C	.enter	1	in
-Elaborator::with_scope	BODY	2b4b446c76c5bd6f94aea7356f59b69e3168cd805c62798e8f90363c72773afe	1	-
 Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.enter	1	in
 Elaborator::with_scope	OUT-C	.restore	1	in
 Elaborator::with_scope	OUT-C	f	1	payload
+== FIX_CARD
+# the CLEAN module's CARD rows (the positive control of CARD)
+item	position	type	means
+Elaborator::cur_shown_all	ARG:out	Vec<Shown>	list:shown
+ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	list:keys
+== FIX_CB
+# the CLEAN module's CB rows (the positive control of CB)
+item	param	kind	args	calls
+Elaborator::with_scope	f	FnOnce	&mut Self	once
+== FIX_BODY
+# BODY-ALL on the CLEAN module: every fn with a body
+file	fn	sha256
+lexscope/inner.rs	carry	cdd2b73eafdeec9d2e6dcbc32951a8a2770ee8331cf75cb5388158f9b5af0d2e
+lexscope/mod.rs	Clone for Shown::clone	6ab72e6f44542598375aadaf3d72fe227221b7278a9fcb72ce16822e765f1e41
+lexscope/mod.rs	Debug for Shown::fmt	0151a2ac2f05b73155f22055ddea1c605f95d075ee3021cf7b31a0e751da5ede
+lexscope/mod.rs	Default for Saved::default	22614259fca572d52b8183fe1d28c706d0884f3c9e67c6ce6d0ef7a7bba1ec12
+lexscope/mod.rs	Elaborator::cur_shown_all	70b07229c2f9e416bb930f5a3d2d0acc9284dbacaaebead9468b130637df5139
+lexscope/mod.rs	Elaborator::disp_here	3b7f00c3b6d2f134fdde5a79d1296ff90267f4f7b33f9e34012c29ff576c3ab3
+lexscope/mod.rs	Elaborator::disp_here_text	7dfb7600b808f8f2f145ffc131fbc639b073ef9654cf29cb9a0983f9909cd0ac
+lexscope/mod.rs	Elaborator::key_under	6d8092a3df723f98d444dd0243dd1cb338a3bc4779699db670483eb6b9d83dc8
+lexscope/mod.rs	Elaborator::mark_is	97c7c933c035c64c924925be7e0371332f7c73bd9e78d0b9e528d1aec07e19c0
+lexscope/mod.rs	Elaborator::names_are_empty	96ef4088596115c4064a98f84afd13894db86eeb6aa91e768ed2a163f8b192cc
+lexscope/mod.rs	Elaborator::scope_carry	39d1e0ab2636465f3d7e378e8e020254ef1fb5bb05e731ba81c9cecca6e694ed
+lexscope/mod.rs	Elaborator::scope_hold	77b7a6f5322bf0f091751cda38c9924d4ff6f190ef86a2a2ec2bad1eca01fa0a
+lexscope/mod.rs	Elaborator::with_scope	2b4b446c76c5bd6f94aea7356f59b69e3168cd805c62798e8f90363c72773afe
+lexscope/mod.rs	Outgoing for Shown::plain	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
+lexscope/mod.rs	Outgoing for ShownCtx::plain	93164ee4b8985284e190fcfc2b4027adb69e60c566cb128953ec7397a79bc460
+lexscope/mod.rs	ScopeKeyed::drain_keys_shown	758737fe5d93c517426c29ae4e38a1030d2ca1d1f825216a6d6db47a661904cd
+lexscope/mod.rs	ScopeKeyed::entry_under_cur	c6c27e4d3f33b78b41b85b3c3ed5a465a05386bfaec054d17af8fdbfc3747b5e
+lexscope/mod.rs	Scopes::enter	c823f327b4c77e358e05662a0ac4dc2262f2f2815bb5e9b8ca41215065c76ec8
+lexscope/mod.rs	Scopes::is_top	fa78a02ab17eced69d7a58ccda2d08182d3eecc792d0d55f12c9f1d669102f87
+lexscope/mod.rs	Scopes::restore	2273afafccc032f2a27ce8aa38754f383e7ffaf33814ede3b766768ee3832cac
+lexscope/mod.rs	scope_out	c52b656b6bfdb5ea06a9d9f3a445e2a407c16f88e5853f7fa2a290cc43ee0c97
+lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+== FIX_MACROS
+# MACRO-BODY on the CLEAN module
+name	sha256
+zn	ace1bde33200f9bbda498a51ff456b950f101b543385d74622db55634f09d16e
 == FIX_ROWS
 file	tier	kind	item	position	type	verdict
 lexscope/inner.rs	-	TYPE	ScopeRef	-	-	PASS
@@ -170,7 +220,7 @@ lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS
 lexscope/mod.rs	-	TYPE	Shown	-	-	PASS
 lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS
 lexscope/mod.rs	-	USE	inner::ScopeRef	-	-	PASS
-lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	ARG:out	Vec<Shown>	PASS
+lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	ARG:out	Vec<Shown>	CARD:list:shown
 lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	RET	()	PASS
 lexscope/mod.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS
 lexscope/mod.rs	E	FN	Elaborator::key_under	IN:n	&str	ENTER:lookup
@@ -179,10 +229,11 @@ lexscope/mod.rs	E	FN	Elaborator::mark_is	RET	bool	PASS
 lexscope/mod.rs	E	FN	Elaborator::names_are_empty	RET	bool	PASS
 lexscope/mod.rs	E	FN	Elaborator::scope_carry	RET	ScopeRef	PASS
 lexscope/mod.rs	E	FN	Elaborator::scope_hold	RET	Saved	PASS
+lexscope/mod.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once
 lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope
 lexscope/mod.rs	E	FN	Elaborator::with_scope	RET	R	PASS
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0
-lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	PASS
+lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:keys
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	RET	&mut V	PASS
 lexscope/mod.rs	K	FN	Scopes::is_top	RET	bool	PASS
@@ -203,41 +254,98 @@ T::Plain
 Vec<Shown>
 bool
 == FIX_EXPECT
+# BODY-ALL (LS1 part 5): a fixture that adds or edits a fn also fails `<fn> BODY BODY`
 fixture	item	position	rule
 NB1	Elaborator::nb1	BODY	BODY
 NB1	Elaborator::nb1	FN	E-LIST
 NB1	Elaborator::nb1	OUT-C	OUT-C
 NB1	Elaborator::nb1	RET	TEXT
+NB1	hidden	BODY	BODY
+NB10	Elaborator::nb10	BODY	BODY
+NB10	Elaborator::nb10	FN	E-LIST
+NB10	Elaborator::nb10	OUT-C	OUT-C
+NB10	Elaborator::nb10	RET	TEXT
+NB11	Scopes::nb11c	BODY	BODY
+NB11	Scopes::nb11c	SIG	ELAB-PARAM
+NB11	nb11_outer	BODY	BODY
+NB11	nb11a	BODY	BODY
+NB11	nb11a	SIG	ELAB-PARAM
+NB11	nb11b	BODY	BODY
+NB11	nb11b	SIG	ELAB-PARAM
+NB12	Elaborator::names_are_empty	BODY	ALIAS-SELF
+NB12	Elaborator::names_are_empty	BODY	BODY
+NB12	Elaborator::names_are_empty	OUT-F	OUT-F
+NB12b	Elaborator::names_are_empty	BODY	ALIAS-SELF
+NB12b	Elaborator::names_are_empty	BODY	BODY
+NB12b	Elaborator::names_are_empty	OUT-F	OUT-F
+NB12c	Elaborator::names_are_empty	BODY	ALIAS-SELF
+NB12c	Elaborator::names_are_empty	BODY	BODY
+NB12c	Elaborator::names_are_empty	OUT-C	OUT-C
+NB12c	Elaborator::names_are_empty	OUT-F	OUT-F
+NB13	Debug for Shown	IMPL	DEBUG-OPAQUE
+NB13	Debug for Shown::fmt	BODY	BODY
+NB2	Shown::nb2	BODY	BODY
 NB2	Shown::nb2	RET	TEXT
 NB3	inner2	ATTR	ATTR
+NB4	nb4	BODY	BODY
 NB4	nb4	RET	UNKNOWN
 NB4	ty!	MACRO	MACRO
 NB5	Shown	IMPL	INHERENT-OUTSIDE
 NB6	Debug for Shown	IMPL	DEBUG-OPAQUE
+NB6	Debug for Shown::fmt	BODY	BODY
 NB6	Shown	ATTR	DERIVE
+NB7	nb7	BODY	BODY
 NB7	nb7	IN:x	IN-TRAIT
 NB7	nb7	RET	BOUND
+NB7	nb7	RET	CARD
+NB7	nb7b	ARG:c	CARD
 NB7	nb7b	ARG:c	UNKNOWN
+NB7	nb7b	BODY	BODY
 NB8	Elaborator::names_are_empty	BODY	ALIAS-SELF
 NB8	Elaborator::names_are_empty	BODY	BODY
 NB8	nb8	ARG:e	UNKNOWN
+NB8	nb8	BODY	BODY
 NB8	nb8	IN:e	ELAB-PARAM
+NB9	Elaborator::cur_index_into	ARG:out	NUMBER
+NB9	Elaborator::cur_index_into	ARG:out	UNKNOWN
+NB9	Elaborator::cur_index_into	BODY	BODY
+NB9	Elaborator::cur_index_into	FN	E-LIST
+NB9	Elaborator::cur_index_into	OUT-C	OUT-C
+NB9	Elaborator::nb9b	ARG:w	BOUND
+NB9	Elaborator::nb9b	ARG:w	UNKNOWN
+NB9	Elaborator::nb9b	BODY	BODY
+NB9	Elaborator::nb9b	FN	E-LIST
+NB9	Elaborator::nb9c	ARG:out	CARD
+NB9	Elaborator::nb9c	ARG:out	UNKNOWN
+NB9	Elaborator::nb9c	BODY	BODY
+NB9	Elaborator::nb9c	FN	E-LIST
+NS1	Elaborator::ns1	BODY	BODY
 NS1	Elaborator::ns1	FN	E-LIST
 NS1	Elaborator::ns1	IN:n	ENTER
+NS1	Elaborator::ns1	RET	CARD
 NS1	Elaborator::ns1	RET	TEXT
 NS10	Elaborator::ns10_method	BODY	BODY
 NS10	Elaborator::ns10_method	FN	E-LIST
 NS10	Elaborator::ns10_method	OUT-C	OUT-C
 NS10	Elaborator::ns10_method	RET	TEXT
+NS10	ns10_child	BODY	BODY
+NS10	ns10_root	BODY	BODY
 NS10	ns10_root	RET	TEXT
+NS11	ns11_f	BODY	BODY
 NS11	ns11_f	RET	BOUND
+NS11	ns11_g	BODY	BODY
+NS11	ns11_g	RET	CARD
+NS12	mk	MACRO-DEF	MACRO-BODY
 NS12	mk!	MACRO	MACRO
 NS13a	x	ATTR	PATH-ATTR
 NS13a	x	MOD	PATH-ATTR
 NS13b	include!	MACRO	INCLUDE
 NS14	inner::*	USE	GLOB-USE
+NS15a	ns15a	BODY	BODY
 NS15a	ns15a	RET	NUMBER
+NS15b	ns15b	BODY	BODY
 NS15b	ns15b	RET	NUMBER
+NS16	ns16	BODY	BODY
 NS16	ns16	RET	UNKNOWN
 NS17a	Elaborator::scope_hold	BODY	BODY
 NS17a	Elaborator::scope_hold	OUT-C	OUT-C
@@ -245,26 +353,62 @@ NS17a	Elaborator::scope_hold	OUT-F	OUT-F
 NS17b	Elaborator::key_under	BODY	BODY
 NS18	Texty	-	TRAIT-UNLISTED
 NS18	Texty::text	RET	TEXT
+NS19	ns19	BODY	BODY
 NS19	ns19	RET	OPAQUE
+NS2	ns2	BODY	BODY
+NS2	ns2	RET	CARD
 NS2	ns2	RET	TEXT
 NS20	Outgoing for Saved	IMPL	OUTGOING
+NS20	Outgoing for Saved::plain	BODY	BODY
+NS21	Elaborator::disp_here	BODY	BODY
 NS21	Elaborator::disp_here	SHIM	SHIM
 NS22	Pick	-	ENUM
 NS22	Pick::A	VARIANT:0	ENUM-PAYLOAD
+NS23	ns23	BODY	BODY
+NS23	ns23	RET	CARD
+NS24	ns24	BODY	BODY
+NS24	ns24	RET	CARD
+NS25	ns25	BODY	BODY
+NS25	ns25	RET	CARD
+NS26	ns26	BODY	BODY
+NS26	ns26	RET	CARD
+NS27	ns27	BODY	BODY
+NS27	ns27	RET	CARD
+NS28	ns28	BODY	BODY
+NS28	ns28	CB:f	CB
+NS29	ns29	BODY	BODY
+NS29	ns29	CB:f	CB
+NS30	zn	MACRO-DEF	MACRO-BODY
+NS31	Scopes::is_top	BODY	BODY
+NS3a	ns3a	BODY	BODY
 NS3a	ns3a	RET	TEXT
+NS3b	ns3b	BODY	BODY
 NS3b	ns3b	RET	UNKNOWN
+NS4	ns4	BODY	BODY
 NS4	ns4	RET	OPAQUE
+NS5a	ns5a	ARG:out	CARD
 NS5a	ns5a	ARG:out	TEXT
+NS5a	ns5a	BODY	BODY
 NS5b	ns5b	ARG:w	OPAQUE
+NS5b	ns5b	BODY	BODY
+NS6a	ns6a	BODY	BODY
+NS6a	ns6a	CB:hit	CB
 NS6a	ns6a	CB:hit.0	TEXT
 NS6b	ns6b	ARG:f	OPAQUE
+NS6b	ns6b	BODY	BODY
+NS6b	ns6b	CB:f	CB
+NS6c	ns6c	BODY	BODY
+NS6c	ns6c	CB:f	CB
 NS6c	ns6c	CB:f.0	TEXT
 NS7a	Saved.text	FIELD	TEXT
 NS7a	Saved.text	FIELD	VIS-FIELD
 NS7b	Mark::Named	VARIANT:0	ENUM-PAYLOAD
 NS7b	Mark::Named	VARIANT:0	TEXT
 NS8a	Display for Shown	IMPL	IMPL-TRAIT
+NS8a	Display for Shown::fmt	BODY	BODY
 NS8b	PartialEq for Shown	IMPL	IMPL-TRAIT
+NS8b	PartialEq for Shown::eq	BODY	BODY
 NS8c	From for String	IMPL	IMPL-FOREIGN-SELF
 NS8c	From for String	IMPL	IMPL-TRAIT
+NS8c	From for String::from	BODY	BODY
 NS9	ROOT	CONST	TEXT

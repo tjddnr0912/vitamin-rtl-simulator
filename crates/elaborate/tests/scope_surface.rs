@@ -17,8 +17,29 @@
 //! I-OUT. Every lexscope fn that takes the Elaborator (a receiver in `impl Elaborator`, or
 //! `Self` in a callback) is on the list E, its body pinned by OUT-F (`self.<field>` whose
 //! field type is not a lexscope type), OUT-C (calls of fns not defined in lexscope), OUT-M
-//! (macro calls) by (fn, name, count) and, when it has one such row, BODY (the sha256 of its
-//! body tokens) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column.
+//! (macro calls) by (fn, name, count) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column.
+//!
+//! The rules DELTA11 R2 adds (LS1 part 5), each a counted list whose missing row FAILS:
+//! CARD — an OUT position whose type holds a cardinality constructor at any depth (Option,
+//! Vec, a slice, an array, two or more `bool` ; an alias of the file set is followed) is not
+//! PASS by the vocabulary: its verdict is its row of CARD (item, position, type, MEANS: hand,
+//! `caller` | `hit:<question>` | `list:<what>`), else FAIL CARD ; a LEAVE row exempts it.
+//! CB — every callback a surface item's parameter holds (`impl Fn*`, `dyn Fn*`, `fn(..)`, a
+//! type parameter bounded by `Fn*`, at any depth of the parameter's type) is a row of CB
+//! (item, parameter, Fn | FnMut | FnOnce | fn, argument types, CALLS: hand, `once` (FnOnce
+//! only) | `per:<what>` | `probe:<what>`), else FAIL CB ; its argument types stay OUT.
+//! MACRO-BODY — every `macro_rules!` the file set defines, or the rest of the crate defines and
+//! the file set calls, is a row of MACROS with the sha256 of its token tree ; a definition off
+//! the list or a changed hash FAILS, a row with no such definition is STALE.
+//! BODY-ALL — every fn of the file set with a body (free, nested in a body, inherent, trait
+//! impl, trait default ; tier K and tier E alike) is a row of BODY (file, fn, sha256 of its
+//! body tokens) ; a new, changed or gone body FAILS. (BODY left E.)
+//! ALIAS-SELF+ — in a tier-E body every pattern is read (a `let`, a `match` arm, `if let`, a
+//! closure parameter): a struct or tuple-struct pattern named `Self` / `Elaborator` fails, and
+//! so does a `match` or a `let` pattern whose scrutinee is `self`.
+//! ELAB-PARAM, extended here (DELTA11 NB11): a fn of the file set whose parameter names the
+//! Elaborator fails whatever its visibility and wherever it sits (a private method of a
+//! lexscope type, a trait impl's or a trait's method included).
 //!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
@@ -46,12 +67,17 @@
 //! whose callee is an outside fn sharing a lexscope fn's name is counted, but a path call
 //! `T::f` is matched by name only ; what a body does with a value (FLOW is a hand column,
 //! frozen by BODY) ; the body of a macro invocation (`zn!`: the callers are pinned, not
-//! what it expands to) ; a proc-macro attribute's output (refused, not read) ; the identity
-//! of a name through a glob `use` of another module (a vocabulary name must be defined in
-//! the file set, a non-vocabulary name fails as unknown).
+//! what it expands to: MACRO-BODY pins its tokens, not its expansion) ; a macro call inside
+//! another macro's tokens ; a macro defined in another crate (no definition to hash) ; a
+//! proc-macro attribute's output (refused, not read) ; the identity of a name through a glob
+//! `use` of another module (a vocabulary name must be defined in the file set, a
+//! non-vocabulary name fails as unknown in an OUT position) ; an IN parameter of a type
+//! defined outside the file set, or renamed by a `use .. as` / an alias, that holds interior
+//! mutability (the interior-mutable test reads the names the parameter's type spells) ; what
+//! a body that passes its BODY pin does at run time (the hash is loud, not a refusal).
 //!
 //! Three tests: the engine on fixtures (one clean module that passes with its whole surface
-//! pinned, NS1-NS22 and the NB controls each failing with the pinned (item, position, rule)
+//! pinned, NS1-NS31 and the NB controls each failing with the pinned (item, position, rule)
 //! set) ; the real crate, where `SURF_PRESENT` pins `absent` and the computed surface must
 //! be empty until LS2a flips it (the code computes the whole surface the day the module
 //! appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
@@ -122,6 +148,12 @@ const ALLOWED_DERIVES: &[&str] = &["Clone", "Default"];
 const ALLOWED_IMPLS: &[&str] = &["Clone", "Default", "Debug", "Drop", BOUNDARY_TRAIT];
 const STD_ROOTS: &[&str] = &["std", "core", "alloc"];
 const FLOWS: &[&str] = &["in", "payload"];
+/// CARD's named constructors (a slice, an array and two or more `bool` are the others).
+const CARD_CTORS: &[&str] = &["Option", "Vec"];
+/// CARD's MEANS values: `caller`, or one of these prefixes with a non-empty rest.
+const MEANS_PREFIXES: &[&str] = &["hit:", "list:"];
+/// CB's CALLS values: `once` (an FnOnce), or one of these prefixes with a non-empty rest.
+const CALLS_PREFIXES: &[&str] = &["per:", "probe:"];
 
 // =====================================================================================
 // The source set: relative path -> text
@@ -323,9 +355,16 @@ struct Cfg {
     /// vocabulary name -> kind (`struct` | `enum`)
     vocab: BTreeMap<String, String>,
     traits: BTreeSet<String>,
-    macros: BTreeSet<String>,
+    /// MACROS: name -> sha256 of its definition's token tree
+    macros: BTreeMap<String, String>,
     /// id, item, position, type, closes
     leave: Vec<Vec<String>>,
+    /// CARD: item, position, type, means
+    card: Vec<Vec<String>>,
+    /// CB: item, param, kind, args, calls
+    cb: Vec<Vec<String>>,
+    /// BODY: file, fn, sha256
+    body: Vec<Vec<String>>,
     /// item, param, role
     enter: Vec<Vec<String>>,
     enums: BTreeSet<String>,
@@ -364,8 +403,14 @@ fn cfg(prefix: &str) -> Cfg {
     Cfg {
         vocab,
         traits: one("SURF_TRAITS"),
-        macros: one("SURF_MACROS"),
+        macros: rows_of(&tables::get(&format!("{prefix}_MACROS")), 2, "MACROS")
+            .into_iter()
+            .map(|r| (r[0].clone(), r[1].clone()))
+            .collect(),
         leave: rows_of(&tables::get(&format!("{prefix}_LEAVE")), 5, "LEAVE"),
+        card: rows_of(&tables::get(&format!("{prefix}_CARD")), 4, "CARD"),
+        cb: rows_of(&tables::get(&format!("{prefix}_CB")), 5, "CB"),
+        body: rows_of(&tables::get(&format!("{prefix}_BODY")), 3, "BODY"),
         enter: rows_of(&tables::get(&format!("{prefix}_ENTER")), 3, "ENTER"),
         enums: one(&format!("{prefix}_ENUMS")),
         shims: rows_of(&tables::get(&format!("{prefix}_SHIMS")), 3, "SHIMS"),
@@ -945,6 +990,71 @@ impl J<'_> {
             }
         }
     }
+
+    /// CB: every callback a parameter's type holds, at any depth: (kind, argument types).
+    fn callbacks(&self, t: &Type, out: &mut Vec<(String, Vec<Type>)>, depth: usize) {
+        if depth > 16 {
+            return;
+        }
+        match t {
+            Type::Reference(x) => self.callbacks(&x.elem, out, depth),
+            Type::Paren(x) => self.callbacks(&x.elem, out, depth),
+            Type::Group(x) => self.callbacks(&x.elem, out, depth),
+            Type::Ptr(x) => self.callbacks(&x.elem, out, depth),
+            Type::Slice(x) => self.callbacks(&x.elem, out, depth),
+            Type::Array(x) => self.callbacks(&x.elem, out, depth),
+            Type::Tuple(x) => {
+                for e in &x.elems {
+                    self.callbacks(e, out, depth);
+                }
+            }
+            Type::BareFn(f) => {
+                out.push(("fn".into(), f.inputs.iter().map(|a| a.ty.clone()).collect()))
+            }
+            Type::ImplTrait(i) => Self::cb_bounds(i.bounds.iter(), out),
+            Type::TraitObject(o) => Self::cb_bounds(o.bounds.iter(), out),
+            Type::Path(p) => {
+                if let Some(q) = &p.qself {
+                    self.callbacks(&q.ty, out, depth + 1);
+                }
+                if p.path.segments.len() == 1 {
+                    if let Some(bs) = self.gen.get(&last_name(&p.path)) {
+                        Self::cb_bounds(bs.iter(), out);
+                    }
+                }
+                for s in &p.path.segments {
+                    if let syn::PathArguments::AngleBracketed(a) = &s.arguments {
+                        for g in &a.args {
+                            if let syn::GenericArgument::Type(x) = g {
+                                self.callbacks(x, out, depth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn cb_bounds<'b>(
+        bounds: impl Iterator<Item = &'b TypeParamBound>,
+        out: &mut Vec<(String, Vec<Type>)>,
+    ) {
+        for b in bounds {
+            let TypeParamBound::Trait(tb) = b else {
+                continue;
+            };
+            let last = tb.path.segments.last().expect("a segment");
+            let name = last.ident.to_string();
+            if FN_TRAITS.contains(&name.as_str()) {
+                let args = match &last.arguments {
+                    syn::PathArguments::Parenthesized(pa) => pa.inputs.iter().cloned().collect(),
+                    _ => Vec::new(),
+                };
+                out.push((name, args));
+            }
+        }
+    }
 }
 
 fn gen_arg_text(g: &syn::GenericArgument) -> String {
@@ -1077,45 +1187,153 @@ impl<'ast> Visit<'ast> for EVis<'_> {
                 self.alias.push("a local bound to self".into());
             }
         }
-        struct P(bool);
-        impl<'p> Visit<'p> for P {
-            fn visit_pat_struct(&mut self, s: &'p syn::PatStruct) {
-                let n = last_name(&s.path);
-                if n == "Self" || n == ELAB {
-                    self.0 = true;
-                }
-                visit::visit_pat_struct(self, s);
-            }
-        }
-        let mut p = P(false);
-        p.visit_pat(&l.pat);
-        if p.0 {
+        visit::visit_local(self, l);
+    }
+
+    // ALIAS-SELF+: every pattern of the body, not only a `let`'s (a `match` arm, `if let`,
+    // `while let`, a closure's or a nested fn's parameter).
+    fn visit_pat_struct(&mut self, s: &'ast syn::PatStruct) {
+        let n = last_name(&s.path);
+        if n == "Self" || n == ELAB {
             self.alias.push("a `Self { .. }` pattern".into());
         }
-        visit::visit_local(self, l);
+        visit::visit_pat_struct(self, s);
+    }
+
+    fn visit_pat_tuple_struct(&mut self, s: &'ast syn::PatTupleStruct) {
+        let n = last_name(&s.path);
+        if n == "Self" || n == ELAB {
+            self.alias.push("a `Self(..)` pattern".into());
+        }
+        visit::visit_pat_tuple_struct(self, s);
+    }
+
+    fn visit_expr_match(&mut self, e: &'ast syn::ExprMatch) {
+        if is_self_alias(&e.expr) {
+            self.alias.push("a match on self".into());
+        }
+        visit::visit_expr_match(self, e);
+    }
+
+    fn visit_expr_let(&mut self, e: &'ast syn::ExprLet) {
+        if is_self_alias(&e.expr) {
+            self.alias.push("a `let` pattern on self".into());
+        }
+        visit::visit_expr_let(self, e);
     }
 }
 
-/// The token text of every body of a `fn <name>` in a file, in order.
-fn fn_bodies(ts: TokenStream, name: &str, out: &mut Vec<String>) {
+/// BODY-ALL's token side: (simple name, body token text) of every `fn <name> .. { body }` in a
+/// token stream, in pre-order (a fn before the fns nested in it), skipping a macro call's
+/// group (`m!(..)`) and a `macro_rules! m { .. }` definition, which `syn` does not parse as
+/// items either. `bodies_check` pairs this list with `FnNames`' and fails BODY-MAP when the
+/// two simple-name sequences differ.
+fn token_fn_bodies(ts: TokenStream, out: &mut Vec<(String, String)>) {
     let toks: Vec<TokenTree> = ts.into_iter().collect();
-    for (i, tok) in toks.iter().enumerate() {
-        if let TokenTree::Group(g) = tok {
-            fn_bodies(g.stream(), name, out);
-        }
-        let is_fn = matches!(tok, TokenTree::Ident(id) if id == "fn");
-        let named = matches!(toks.get(i + 1), Some(TokenTree::Ident(n)) if n == name);
-        if is_fn && named {
-            for t in &toks[i + 2..] {
-                match t {
-                    TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
-                        out.push(g.stream().to_string());
-                        break;
-                    }
-                    TokenTree::Punct(p) if p.as_char() == ';' => break,
-                    _ => {}
+    let bang = |t: Option<&TokenTree>| matches!(t, Some(TokenTree::Punct(p)) if p.as_char() == '!');
+    let mut i = 0;
+    while i < toks.len() {
+        if let TokenTree::Ident(id) = &toks[i] {
+            if bang(toks.get(i + 1)) {
+                if matches!(toks.get(i + 2), Some(TokenTree::Group(_))) {
+                    i += 3;
+                    continue;
+                }
+                if id == "macro_rules"
+                    && matches!(toks.get(i + 2), Some(TokenTree::Ident(_)))
+                    && matches!(toks.get(i + 3), Some(TokenTree::Group(_)))
+                {
+                    i += 4;
+                    continue;
                 }
             }
+        }
+        match &toks[i] {
+            TokenTree::Group(g) => token_fn_bodies(g.stream(), out),
+            TokenTree::Ident(id) if id == "fn" => {
+                if let Some(TokenTree::Ident(n)) = toks.get(i + 1) {
+                    for t in &toks[i + 2..] {
+                        match t {
+                            TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                                out.push((n.to_string(), g.stream().to_string()));
+                                break;
+                            }
+                            TokenTree::Punct(p) if p.as_char() == ';' => break,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+/// BODY-ALL's `syn` side: (simple name, item name) of every fn with a body, in pre-order. The
+/// item name is the engine's: `f` (free, or nested in a body), `Ty::f` (inherent), `Tr for
+/// Ty::f` (trait impl), `Tr::f` (a trait's default body).
+struct FnNames {
+    ctx: Option<String>,
+    out: Vec<(String, String)>,
+}
+
+impl FnNames {
+    fn push(&mut self, ident: &syn::Ident) {
+        let s = ident.to_string();
+        let item = match &self.ctx {
+            Some(c) => format!("{c}::{s}"),
+            None => s.clone(),
+        };
+        self.out.push((s, item));
+    }
+}
+
+impl<'ast> Visit<'ast> for FnNames {
+    fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+        self.push(&f.sig.ident);
+        let saved = self.ctx.take();
+        visit::visit_item_fn(self, f);
+        self.ctx = saved;
+    }
+    fn visit_item_impl(&mut self, im: &'ast syn::ItemImpl) {
+        let ty = impl_self_name(&im.self_ty);
+        let name = match &im.trait_ {
+            Some((_, p, _)) => format!("{} for {ty}", last_name(p)),
+            None => ty,
+        };
+        let saved = self.ctx.replace(name);
+        visit::visit_item_impl(self, im);
+        self.ctx = saved;
+    }
+    fn visit_item_trait(&mut self, t: &'ast syn::ItemTrait) {
+        let saved = self.ctx.replace(t.ident.to_string());
+        visit::visit_item_trait(self, t);
+        self.ctx = saved;
+    }
+    fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+        self.push(&f.sig.ident);
+        let saved = self.ctx.take();
+        visit::visit_impl_item_fn(self, f);
+        self.ctx = saved;
+    }
+    fn visit_trait_item_fn(&mut self, f: &'ast syn::TraitItemFn) {
+        if f.default.is_some() {
+            self.push(&f.sig.ident);
+        }
+        let saved = self.ctx.take();
+        visit::visit_trait_item_fn(self, f);
+        self.ctx = saved;
+    }
+}
+
+/// The names of the macros a file calls (any position ; `macro_rules` itself excluded).
+struct MacroCalls(BTreeSet<String>);
+impl<'ast> Visit<'ast> for MacroCalls {
+    fn visit_macro(&mut self, m: &'ast syn::Macro) {
+        let n = last_name(&m.path);
+        if n != "macro_rules" {
+            self.0.insert(n);
         }
     }
 }
@@ -1207,6 +1425,10 @@ struct Surface {
     /// item, kind, name, count
     e_rows: Vec<(String, String, String, String)>,
     out_types: BTreeSet<String>,
+    /// BODY-ALL: file, fn, sha256
+    bodies: Vec<(String, String, String)>,
+    /// MACRO-BODY: name, sha256
+    macro_hashes: Vec<(String, String)>,
 }
 
 /// A fn of the file set, for the shim check.
@@ -1222,11 +1444,107 @@ struct Eng<'a> {
     s: Surface,
     leave_used: BTreeSet<usize>,
     enter_used: BTreeSet<usize>,
+    card_used: BTreeSet<usize>,
+    cb_used: BTreeSet<usize>,
     enums_seen: BTreeSet<String>,
     plan: bool,
 }
 
 impl Eng<'_> {
+    fn fresh(cfg: &Cfg, plan: bool) -> Eng<'_> {
+        Eng {
+            cfg,
+            defs: Defs::default(),
+            s: Surface::default(),
+            leave_used: BTreeSet::new(),
+            enter_used: BTreeSet::new(),
+            card_used: BTreeSet::new(),
+            cb_used: BTreeSet::new(),
+            enums_seen: BTreeSet::new(),
+            plan,
+        }
+    }
+
+    /// CARD: the cardinality constructors `t` holds at any depth (an alias of the file set
+    /// followed), or None.
+    fn card_of(&self, t: &Type) -> Option<String> {
+        let mut found = BTreeSet::new();
+        let mut bools = 0usize;
+        self.card_walk(t, &mut found, &mut bools, 0);
+        if bools >= 2 {
+            found.insert(format!("{bools} bool"));
+        }
+        if found.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "{} in {}",
+                found.into_iter().collect::<Vec<_>>().join(", "),
+                nt(t)
+            ))
+        }
+    }
+
+    fn card_walk(&self, t: &Type, found: &mut BTreeSet<String>, bools: &mut usize, depth: usize) {
+        if depth > 16 {
+            found.insert("alias recursion".into());
+            return;
+        }
+        match t {
+            Type::Reference(x) => self.card_walk(&x.elem, found, bools, depth),
+            Type::Paren(x) => self.card_walk(&x.elem, found, bools, depth),
+            Type::Group(x) => self.card_walk(&x.elem, found, bools, depth),
+            Type::Ptr(x) => self.card_walk(&x.elem, found, bools, depth),
+            Type::Tuple(x) => {
+                for e in &x.elems {
+                    self.card_walk(e, found, bools, depth);
+                }
+            }
+            Type::Slice(x) => {
+                found.insert("slice".into());
+                self.card_walk(&x.elem, found, bools, depth);
+            }
+            Type::Array(x) => {
+                found.insert("array".into());
+                self.card_walk(&x.elem, found, bools, depth);
+            }
+            Type::Path(p) => {
+                if let Some(q) = &p.qself {
+                    self.card_walk(&q.ty, found, bools, depth + 1);
+                }
+                let last = last_name(&p.path);
+                let single = p.path.segments.len() == 1;
+                if single && last == "bool" {
+                    *bools += 1;
+                }
+                if CARD_CTORS.contains(&last.as_str()) {
+                    found.insert(last.clone());
+                }
+                if single {
+                    if let Some((ty, _)) = self.defs.aliases.get(&last) {
+                        self.card_walk(ty, found, bools, depth + 1);
+                    }
+                }
+                for s in &p.path.segments {
+                    if let syn::PathArguments::AngleBracketed(a) = &s.arguments {
+                        for g in &a.args {
+                            match g {
+                                syn::GenericArgument::Type(x) => {
+                                    self.card_walk(x, found, bools, depth + 1)
+                                }
+                                syn::GenericArgument::AssocType(a) => {
+                                    self.card_walk(&a.ty, found, bools, depth + 1)
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn fail(&mut self, file: &str, item: &str, pos: &str, rule: &str, detail: impl Into<String>) {
         self.s.fails.insert(Fail {
             file: file.into(),
@@ -1246,24 +1564,50 @@ impl Eng<'_> {
         item: &str,
         pos: &str,
         ty: String,
-        reasons: Reasons,
+        mut reasons: Reasons,
+        card: Option<String>,
     ) {
-        let verdict = if reasons.is_empty() {
+        // CARD: a cardinality constructor makes the position a row of CARD (or a LEAVE row)
+        // even where the vocabulary passes it ; SURF-PLAN (plan) consults no list.
+        let leave_i = if self.plan || (reasons.is_empty() && card.is_none()) {
+            None
+        } else {
+            self.cfg
+                .leave
+                .iter()
+                .position(|l| l[1] == item && l[2] == pos && l[3] == ty)
+        };
+        let card_i = if self.plan || card.is_none() {
+            None
+        } else {
+            self.cfg
+                .card
+                .iter()
+                .position(|c| c[0] == item && c[1] == pos && c[2] == ty)
+        };
+        let verdict = if reasons.is_empty() && card.is_none() {
             "PASS".to_string()
-        } else if let Some(i) = self
-            .cfg
-            .leave
-            .iter()
-            .position(|l| !self.plan && l[1] == item && l[2] == pos && l[3] == ty)
-        {
+        } else if let Some(i) = leave_i {
             self.leave_used.insert(i);
             format!("LEAVE:{}", self.cfg.leave[i][0])
         } else {
-            let rules: BTreeSet<&str> = reasons.iter().map(|(r, _)| r.as_str()).collect();
-            for (rule, d) in &reasons {
-                self.fail(file, item, pos, rule, d.clone());
+            match (card_i, &card) {
+                (Some(i), _) => {
+                    self.card_used.insert(i);
+                }
+                (None, Some(c)) => reasons.push(("CARD".into(), c.clone())),
+                (None, None) => {}
             }
-            format!("FAIL({})", rules.into_iter().collect::<Vec<_>>().join(","))
+            if reasons.is_empty() {
+                let i = card_i.expect("a CARD row");
+                format!("CARD:{}", self.cfg.card[i][3])
+            } else {
+                let rules: BTreeSet<&str> = reasons.iter().map(|(r, _)| r.as_str()).collect();
+                for (rule, d) in &reasons {
+                    self.fail(file, item, pos, rule, d.clone());
+                }
+                format!("FAIL({})", rules.into_iter().collect::<Vec<_>>().join(","))
+            }
         };
         if ty != "-" {
             self.s.out_types.insert(ty.clone());
@@ -1327,14 +1671,15 @@ impl Eng<'_> {
                 );
             }
         }
-        let (ret_ty, ret_r) = match &sig.output {
-            syn::ReturnType::Default => ("()".to_string(), Vec::new()),
+        let (ret_ty, ret_r, ret_card) = match &sig.output {
+            syn::ReturnType::Default => ("()".to_string(), Vec::new(), None),
             syn::ReturnType::Type(_, t) => (
                 nt(t),
                 self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t),
+                self.card_of(t),
             ),
         };
-        self.position(file, tier, "FN", item, "RET", ret_ty, ret_r);
+        self.position(file, tier, "FN", item, "RET", ret_ty, ret_r, ret_card);
         for (i, a) in sig.inputs.iter().enumerate() {
             let FnArg::Typed(pt) = a else { continue };
             let pname = match &*pt.pat {
@@ -1346,20 +1691,37 @@ impl Eng<'_> {
             if names.contains(ELAB) {
                 self.fail(file, item, &format!("IN:{pname}"), "ELAB-PARAM", nt(&pt.ty));
             }
-            let res = {
+            let (res, cbs) = {
                 let j = self.judge(self_ty.clone(), gen.clone(), in_trait.clone());
-                j.in_param(&pname, &pt.ty)
+                let mut cbs = Vec::new();
+                j.callbacks(&pt.ty, &mut cbs, 0);
+                (j.in_param(&pname, &pt.ty), cbs)
             };
             for (pos, t) in &res.outs {
                 let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
-                self.position(file, tier, "FN", item, pos, nt(t), r);
+                let c = self.card_of(t);
+                self.position(file, tier, "FN", item, pos, nt(t), r, c);
             }
             for (pos, t) in &res.cbs {
                 if is_self_ty(t) && self_ty.as_deref() == Some(ELAB) {
                     continue;
                 }
                 let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
-                self.position(file, tier, "FN", item, pos, nt(t), r);
+                let c = self.card_of(t);
+                self.position(file, tier, "FN", item, pos, nt(t), r, c);
+            }
+            for (k, (kind, args)) in cbs.iter().enumerate() {
+                let param = if cbs.len() == 1 {
+                    pname.clone()
+                } else {
+                    format!("{pname}#{}", k + 1)
+                };
+                let args_txt = if args.is_empty() {
+                    "-".to_string()
+                } else {
+                    args.iter().map(nt).collect::<Vec<_>>().join(", ")
+                };
+                self.cb_row(file, tier, item, &param, &nt(&pt.ty), kind, &args_txt);
             }
             for (rule, d) in &res.fails {
                 self.fail(file, item, &format!("IN:{pname}"), rule, d.clone());
@@ -1396,6 +1758,84 @@ impl Eng<'_> {
                     verdict,
                 });
             }
+        }
+    }
+
+    /// CB: one callback of a surface item's parameter, against its row of CB.
+    #[allow(clippy::too_many_arguments)]
+    fn cb_row(
+        &mut self,
+        file: &str,
+        tier: &str,
+        item: &str,
+        param: &str,
+        ty: &str,
+        kind: &str,
+        args: &str,
+    ) {
+        let pos = format!("CB:{param}");
+        let found = if self.plan {
+            None
+        } else {
+            self.cfg
+                .cb
+                .iter()
+                .position(|r| r[0] == item && r[1] == param)
+        };
+        let verdict = match found {
+            Some(i) => {
+                self.cb_used.insert(i);
+                let r = self.cfg.cb[i].clone();
+                if r[2] == kind && r[3] == args {
+                    format!("CB:{}", r[4])
+                } else {
+                    self.fail(
+                        file,
+                        item,
+                        &pos,
+                        "CB",
+                        format!("pinned {}({}) now {kind}({args})", r[2], r[3]),
+                    );
+                    "FAIL(CB)".to_string()
+                }
+            }
+            None => {
+                self.fail(
+                    file,
+                    item,
+                    &pos,
+                    "CB",
+                    if self.plan {
+                        format!("a callback {kind}({args})")
+                    } else {
+                        format!("a callback {kind}({args}) off CB")
+                    },
+                );
+                "FAIL(CB)".to_string()
+            }
+        };
+        self.s.rows.push(Row {
+            file: file.into(),
+            tier: tier.into(),
+            kind: "FN".into(),
+            item: item.into(),
+            pos,
+            ty: ty.into(),
+            verdict,
+        });
+    }
+
+    /// ELAB-PARAM for a fn the surface rows do not read (private, in a body, a private method
+    /// of any impl, a trait impl's method, a private trait's method).
+    fn elab_param_sig(&mut self, file: &str, item: &str, sig: &syn::Signature, what: &str) {
+        let mut names = BTreeSet::new();
+        for a in &sig.inputs {
+            if let FnArg::Typed(pt) = a {
+                type_names(&pt.ty, &mut names);
+            }
+        }
+        if names.contains(ELAB) {
+            self.fail(file, item, "SIG", "ELAB-PARAM", what);
         }
     }
 
@@ -1541,15 +1981,7 @@ fn file_set(vfs: &Vfs, eng: &mut Eng<'_>) -> Option<Vec<FileRec>> {
 }
 
 fn surface(vfs: &Vfs, cfg: &Cfg) -> Surface {
-    let mut eng = Eng {
-        cfg,
-        defs: Defs::default(),
-        s: Surface::default(),
-        leave_used: BTreeSet::new(),
-        enter_used: BTreeSet::new(),
-        enums_seen: BTreeSet::new(),
-        plan: false,
-    };
+    let mut eng = Eng::fresh(cfg, false);
     let files = file_set(vfs, &mut eng);
     let in_set: BTreeSet<String> = files.iter().flatten().map(|f| f.rel.clone()).collect();
     // the rest of the crate: the declaration, the Elaborator's fields, an inline root
@@ -1699,9 +2131,177 @@ fn surface(vfs: &Vfs, cfg: &Cfg) -> Surface {
     shims_check(&mut eng, &fn_index);
     outgoing_check(&mut eng, &files[0].rel);
     e_compare(&mut eng);
+    macros_check(&mut eng, &files, &ats, &others);
+    bodies_check(&mut eng, &files, vfs);
     stale_checks(&mut eng);
     eng.s.rows.sort();
     eng.s
+}
+
+/// MACRO-BODY: the hash of every `macro_rules!` the file set defines, and of every one the
+/// rest of the crate defines that the file set calls, against MACROS (name -> sha256).
+fn macros_check(
+    eng: &mut Eng<'_>,
+    files: &[FileRec],
+    ats: &[At<'_>],
+    others: &[(String, syn::File)],
+) {
+    let def_of = |it: &Item| -> Option<(String, String)> {
+        match it {
+            Item::Macro(m) if m.mac.path.is_ident("macro_rules") => m
+                .ident
+                .as_ref()
+                .map(|i| (i.to_string(), m.mac.tokens.to_string())),
+            _ => None,
+        }
+    };
+    let mut defs: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
+    for at in ats {
+        if let Some((n, toks)) = def_of(at.item) {
+            defs.entry(n)
+                .or_insert_with(|| (at.file.to_string(), Vec::new()))
+                .1
+                .push(toks);
+        }
+    }
+    let mut calls = MacroCalls(BTreeSet::new());
+    for f in files {
+        calls.visit_file(&f.file);
+    }
+    let mut outside: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
+    for (rel, f) in others {
+        let mut oats = Vec::new();
+        flatten(rel, &f.items, 0, &[], false, &mut oats);
+        for at in &oats {
+            if let Some((n, toks)) = def_of(at.item) {
+                if calls.0.contains(&n) && !defs.contains_key(&n) {
+                    outside
+                        .entry(n)
+                        .or_insert_with(|| (rel.clone(), Vec::new()))
+                        .1
+                        .push(toks);
+                }
+            }
+        }
+    }
+    defs.extend(outside);
+    for (name, (file, toks)) in &defs {
+        let h = sha256(toks.join("\n").as_bytes());
+        eng.s.macro_hashes.push((name.clone(), h.clone()));
+        match eng.cfg.macros.get(name) {
+            None => eng.fail(
+                file,
+                name,
+                "MACRO-DEF",
+                "MACRO-BODY",
+                format!("a macro_rules! definition off MACROS = {h}"),
+            ),
+            Some(w) if *w != h => eng.fail(
+                file,
+                name,
+                "MACRO-DEF",
+                "MACRO-BODY",
+                format!("pinned {w} now {h}"),
+            ),
+            _ => {}
+        }
+    }
+    let want: Vec<String> = eng.cfg.macros.keys().cloned().collect();
+    for name in want {
+        if !defs.contains_key(&name) {
+            eng.fail(
+                "-",
+                &name,
+                "MACRO-DEF",
+                "STALE",
+                "a MACROS row names no definition the file set defines or calls",
+            );
+        }
+    }
+}
+
+/// BODY-ALL: the sha256 of every fn body of the file set against BODY (file, fn, sha256).
+fn bodies_check(eng: &mut Eng<'_>, files: &[FileRec], vfs: &Vfs) {
+    let mut got: BTreeMap<(String, String), String> = BTreeMap::new();
+    for f in files {
+        let mut names = FnNames {
+            ctx: None,
+            out: Vec::new(),
+        };
+        names.visit_file(&f.file);
+        let ts: TokenStream = match vfs[&f.rel].parse() {
+            Ok(t) => t,
+            Err(e) => {
+                eng.fail(&f.rel, &f.rel, "BODY", "BODY-MAP", format!("tokenize: {e}"));
+                continue;
+            }
+        };
+        let mut bodies = Vec::new();
+        token_fn_bodies(ts, &mut bodies);
+        let a: Vec<&str> = names.out.iter().map(|(s, _)| s.as_str()).collect();
+        let b: Vec<&str> = bodies.iter().map(|(s, _)| s.as_str()).collect();
+        if a != b {
+            let at = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+            eng.fail(
+                &f.rel,
+                &f.rel,
+                "BODY",
+                "BODY-MAP",
+                format!(
+                    "syn reads {} fn bodies, the tokens {} ; first difference at #{at}: {:?} / {:?}",
+                    a.len(),
+                    b.len(),
+                    a.get(at),
+                    b.get(at)
+                ),
+            );
+            continue;
+        }
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        for ((_, item), (_, body)) in names.out.iter().zip(&bodies) {
+            let k = seen.entry(item.clone()).or_default();
+            *k += 1;
+            let item = if *k == 1 {
+                item.clone()
+            } else {
+                format!("{item}#{k}")
+            };
+            got.insert((f.rel.clone(), item), sha256(body.as_bytes()));
+        }
+    }
+    let want: BTreeMap<(String, String), String> = eng
+        .cfg
+        .body
+        .iter()
+        .map(|r| ((r[0].clone(), r[1].clone()), r[2].clone()))
+        .collect();
+    for ((file, item), h) in &got {
+        eng.s.bodies.push((file.clone(), item.clone(), h.clone()));
+        match want.get(&(file.clone(), item.clone())) {
+            None => eng.fail(
+                file,
+                item,
+                "BODY",
+                "BODY",
+                format!("a new row {file} · {item} · BODY = {h}"),
+            ),
+            Some(w) if w != h => {
+                eng.fail(file, item, "BODY", "BODY", format!("pinned {w} now {h}"))
+            }
+            _ => {}
+        }
+    }
+    for ((file, item), w) in &want {
+        if !got.contains_key(&(file.clone(), item.clone())) {
+            eng.fail(
+                file,
+                item,
+                "BODY",
+                "BODY",
+                format!("a pinned row gone {file} · {item} · BODY = {w}"),
+            );
+        }
+    }
 }
 
 /// Pass 1: what the file set defines.
@@ -1877,7 +2477,8 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                             format!("a visible field {}", vis_text(&fd.vis)),
                         ),
                     );
-                    eng.position(file, "-", "FIELD", &item, "FIELD", nt(&fd.ty), r);
+                    let c = eng.card_of(&fd.ty);
+                    eng.position(file, "-", "FIELD", &item, "FIELD", nt(&fd.ty), r, c);
                 }
             }
         }
@@ -1920,6 +2521,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                             "a visible variant with a payload".into(),
                         ),
                     );
+                    let c = eng.card_of(&fd.ty);
                     eng.position(
                         file,
                         "-",
@@ -1928,6 +2530,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                         &format!("VARIANT:{i}"),
                         nt(&fd.ty),
                         r,
+                        c,
                     );
                 }
             }
@@ -1940,7 +2543,8 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
             eng.check_attrs(file, &name, &c.attrs);
             if !at.in_body && name != "_" && vis_wider(&c.vis, at.depth) {
                 let r = eng.out_reasons(None, &Gen::new(), None, &c.ty);
-                eng.position(file, "-", "CONST", &name, "CONST", nt(&c.ty), r);
+                let k = eng.card_of(&c.ty);
+                eng.position(file, "-", "CONST", &name, "CONST", nt(&c.ty), r, k);
             }
         }
         Item::Static(s) => {
@@ -1951,7 +2555,8 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
             eng.check_attrs(file, &name, &t.attrs);
             if !at.in_body && vis_wider(&t.vis, at.depth) {
                 let r = eng.out_reasons(None, &Gen::new(), None, &t.ty);
-                eng.position(file, "-", "ALIAS", &name, "ALIAS", nt(&t.ty), r);
+                let k = eng.card_of(&t.ty);
+                eng.position(file, "-", "ALIAS", &name, "ALIAS", nt(&t.ty), r, k);
             }
         }
         Item::Trait(t) => trait_item(eng, at, t),
@@ -1961,7 +2566,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
             eng.check_attrs(file, &name, &m.attrs);
             let mname = last_name(&m.mac.path);
             if mname == "macro_rules" {
-                // a definition: allowed unless exported (the attr check above)
+                // a definition: not exported (the attr check above) and pinned by MACRO-BODY
             } else if mname == "include" {
                 eng.fail(
                     file,
@@ -1978,7 +2583,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                     "STATIC",
                     "a thread_local! (pinned 0)",
                 );
-            } else if !eng.cfg.macros.contains(&mname) {
+            } else if !eng.cfg.macros.contains_key(&mname) {
                 eng.fail(
                     file,
                     &format!("{mname}!"),
@@ -2042,7 +2647,14 @@ fn impl_item<'a>(
         for ii in &im.items {
             match ii {
                 syn::ImplItem::Fn(f) => {
-                    eng.check_attrs(file, &format!("{item}::{}", f.sig.ident), &f.attrs)
+                    let fname = format!("{item}::{}", f.sig.ident);
+                    eng.check_attrs(file, &fname, &f.attrs);
+                    eng.elab_param_sig(
+                        file,
+                        &fname,
+                        &f.sig,
+                        "a trait impl's method taking the Elaborator",
+                    );
                 }
                 syn::ImplItem::Macro(m) => eng.fail(
                     file,
@@ -2123,9 +2735,17 @@ fn impl_item<'a>(
                         None,
                         tier,
                     );
+                } else {
+                    // ELAB-PARAM extended (DELTA11 NB11): a private method of any impl
+                    eng.elab_param_sig(
+                        file,
+                        &item,
+                        &f.sig,
+                        "a private method taking the Elaborator",
+                    );
                 }
                 if tier == "E" {
-                    e_fn(eng, file, &item, &f.sig.ident.to_string(), &f.block);
+                    e_fn(eng, file, &item, &f.block);
                 }
             }
             syn::ImplItem::Const(c) => {
@@ -2133,7 +2753,8 @@ fn impl_item<'a>(
                 eng.check_attrs(file, &item, &c.attrs);
                 if vis_wider(&c.vis, at.depth) {
                     let r = eng.out_reasons(Some(ty.clone()), &gen, None, &c.ty);
-                    eng.position(file, "-", "CONST", &item, "CONST", nt(&c.ty), r);
+                    let k = eng.card_of(&c.ty);
+                    eng.position(file, "-", "CONST", &item, "CONST", nt(&c.ty), r, k);
                 }
             }
             syn::ImplItem::Type(t) => eng.fail(
@@ -2193,6 +2814,17 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
         }
     }
     if !wider {
+        for ti in &t.items {
+            if let syn::TraitItem::Fn(f) = ti {
+                let item = format!("{name}::{}", f.sig.ident);
+                eng.elab_param_sig(
+                    file,
+                    &item,
+                    &f.sig,
+                    "a private trait's method taking the Elaborator",
+                );
+            }
+        }
         return;
     }
     let listed = eng.cfg.traits.contains(&name);
@@ -2253,7 +2885,8 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
                 let item = format!("{name}::{}", c.ident);
                 eng.check_attrs(file, &item, &c.attrs);
                 let r = eng.out_reasons(None, &gen, Some(name.clone()), &c.ty);
-                eng.position(file, "-", "CONST", &item, "CONST", nt(&c.ty), r);
+                let k = eng.card_of(&c.ty);
+                eng.position(file, "-", "CONST", &item, "CONST", nt(&c.ty), r, k);
             }
             syn::TraitItem::Type(ty) => {
                 let item = format!("{name}::{}", ty.ident);
@@ -2264,12 +2897,12 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
                     .filter(|b| !J::pass_bound(b))
                     .map(|b| ("BOUND".to_string(), nbound(b)))
                     .collect();
-                let shown = match &ty.default {
+                let (shown, card) = match &ty.default {
                     Some((_, d)) => {
                         r.extend(eng.out_reasons(None, &gen, Some(name.clone()), d));
-                        nt(d)
+                        (nt(d), eng.card_of(d))
                     }
-                    None => "-".into(),
+                    None => ("-".into(), None),
                 };
                 eng.position(
                     file,
@@ -2279,6 +2912,7 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
                     &format!("ASSOC:{}", ty.ident),
                     shown,
                     r,
+                    card,
                 );
             }
             _ => {}
@@ -2410,7 +3044,7 @@ impl<'ast> Visit<'ast> for GVis<'_, '_> {
                 "STATIC",
                 "a thread_local! (pinned 0)",
             );
-        } else if self.eng.defs.macros.contains(&name) && !self.eng.cfg.macros.contains(&name) {
+        } else if self.eng.defs.macros.contains(&name) && !self.eng.cfg.macros.contains_key(&name) {
             self.eng.fail(
                 &file,
                 &format!("{name}!"),
@@ -2447,7 +3081,7 @@ impl GVis<'_, '_> {
     }
 }
 
-fn e_fn(eng: &mut Eng<'_>, file: &str, item: &str, simple: &str, block: &syn::Block) {
+fn e_fn(eng: &mut Eng<'_>, file: &str, item: &str, block: &syn::Block) {
     let mut v = EVis {
         defs: &eng.defs,
         cfg_vocab: &eng.cfg.vocab,
@@ -2464,23 +3098,13 @@ fn e_fn(eng: &mut Eng<'_>, file: &str, item: &str, simple: &str, block: &syn::Bl
     eng.s
         .e_rows
         .push((item.into(), "FN".into(), "-".into(), "-".into()));
-    let mut n = 0;
+    // BODY is BODY-ALL's (`bodies_check`), for every fn of the file set
     for (kind, map) in [("OUT-F", &f), ("OUT-C", &c), ("OUT-M", &m)] {
         for (name, k) in map {
             eng.s
                 .e_rows
                 .push((item.into(), kind.into(), name.clone(), k.to_string()));
-            n += 1;
         }
-    }
-    if n > 0 {
-        // a placeholder, hashed by `resolve_bodies` from the file's body tokens
-        eng.s.e_rows.push((
-            item.into(),
-            "BODY".into(),
-            format!("@{file}#{simple}"),
-            "1".into(),
-        ));
     }
 }
 
@@ -2655,7 +3279,7 @@ fn outgoing_check(eng: &mut Eng<'_>, file: &str) {
 /// E: the computed (item, kind, name, count) against the pinned rows ; FLOW checked.
 fn e_compare(eng: &mut Eng<'_>) {
     let key = |item: &str, kind: &str, name: &str| -> String {
-        if kind == "BODY" || kind == "FN" {
+        if kind == "FN" {
             format!("{item}\t{kind}")
         } else {
             format!("{item}\t{kind}\t{name}")
@@ -2663,23 +3287,16 @@ fn e_compare(eng: &mut Eng<'_>) {
     };
     let mut got: BTreeMap<String, (String, String, String)> = BTreeMap::new();
     for (item, kind, name, n) in &eng.s.e_rows {
-        let v = if kind == "BODY" {
-            name.clone()
-        } else {
-            n.clone()
-        };
-        got.insert(key(item, kind, name), (item.clone(), kind.clone(), v));
+        got.insert(
+            key(item, kind, name),
+            (item.clone(), kind.clone(), n.clone()),
+        );
     }
     let mut want: BTreeMap<String, (String, String, String, String)> = BTreeMap::new();
     for r in &eng.cfg.e {
-        let v = if r[1] == "BODY" {
-            r[2].clone()
-        } else {
-            r[3].clone()
-        };
         want.insert(
             key(&r[0], &r[1], &r[2]),
-            (r[0].clone(), r[1].clone(), v, r[4].clone()),
+            (r[0].clone(), r[1].clone(), r[3].clone(), r[4].clone()),
         );
     }
     let mut fails = Vec::new();
@@ -2719,7 +3336,7 @@ fn e_compare(eng: &mut Eng<'_>) {
                 format!("a pinned row gone {} = {w}", k.replace('\t', " · ")),
             ));
         }
-        let flow_ok = if kind == "FN" || kind == "BODY" {
+        let flow_ok = if kind == "FN" {
             flow == "-"
         } else {
             FLOWS.contains(&flow.as_str())
@@ -2770,93 +3387,73 @@ fn stale_checks(eng: &mut Eng<'_>) {
             eng.fail("-", &e, "-", "STALE", "an ENUMS row names no visible enum");
         }
     }
+    let card = eng.cfg.card.clone();
+    for (i, c) in card.iter().enumerate() {
+        if !eng.card_used.contains(&i) {
+            eng.fail(
+                "-",
+                &c[0],
+                &c[1],
+                "STALE",
+                format!("a CARD row ({}) matches no position", c[2]),
+            );
+        }
+        let m = c[3].as_str();
+        let ok = m == "caller"
+            || MEANS_PREFIXES
+                .iter()
+                .any(|p| m.strip_prefix(p).is_some_and(|r| !r.is_empty()));
+        if !ok {
+            eng.fail("-", &c[0], &c[1], "MEANS", format!("MEANS `{m}`"));
+        }
+    }
+    let cb = eng.cfg.cb.clone();
+    for (i, c) in cb.iter().enumerate() {
+        let pos = format!("CB:{}", c[1]);
+        if !eng.cb_used.contains(&i) {
+            eng.fail(
+                "-",
+                &c[0],
+                &pos,
+                "STALE",
+                "a CB row matches no callback parameter",
+            );
+        }
+        let calls = c[4].as_str();
+        let ok = (calls == "once" && c[2] == "FnOnce")
+            || CALLS_PREFIXES
+                .iter()
+                .any(|p| calls.strip_prefix(p).is_some_and(|r| !r.is_empty()));
+        if !ok {
+            eng.fail(
+                "-",
+                &c[0],
+                &pos,
+                "CALLS",
+                format!("CALLS `{calls}` ({})", c[2]),
+            );
+        }
+    }
     if !eng.s.present {
-        let n = eng.cfg.shims.len() + eng.cfg.outgoing.len() + eng.cfg.e.len();
+        let n = eng.cfg.shims.len()
+            + eng.cfg.outgoing.len()
+            + eng.cfg.e.len()
+            + eng.cfg.body.len()
+            + eng.cfg.macros.len();
         if n > 0 {
             eng.fail(
                 "-",
                 MODULE,
                 "-",
                 "STALE",
-                format!("{n} SHIMS / OUTGOING / E rows with no module"),
+                format!("{n} SHIMS / OUTGOING / E / BODY / MACROS rows with no module"),
             );
-        }
-    }
-}
-
-/// Resolves the BODY rows' placeholders to the hash of the body tokens (needs the texts).
-fn resolve_bodies(s: &mut Surface, vfs: &Vfs, cfg: &Cfg) {
-    let mut changed = false;
-    for r in &mut s.e_rows {
-        if r.1 != "BODY" {
-            continue;
-        }
-        let Some(rest) = r.2.strip_prefix('@') else {
-            continue;
-        };
-        let (file, simple) = rest.split_once('#').expect("@file#fn");
-        let ts: TokenStream = vfs[file].parse().expect("the file tokenizes");
-        let mut bodies = Vec::new();
-        fn_bodies(ts, simple, &mut bodies);
-        r.2 = sha256(bodies.join("\n").as_bytes());
-        changed = true;
-    }
-    if !changed {
-        return;
-    }
-    // re-run the E compare on the hashes (the placeholders compared as `@..` first)
-    s.fails.retain(|f| f.rule != "BODY");
-    let want: BTreeMap<&str, &str> = cfg
-        .e
-        .iter()
-        .filter(|r| r[1] == "BODY")
-        .map(|r| (r[0].as_str(), r[2].as_str()))
-        .collect();
-    let got: BTreeMap<String, String> = s
-        .e_rows
-        .iter()
-        .filter(|r| r.1 == "BODY")
-        .map(|r| (r.0.clone(), r.2.clone()))
-        .collect();
-    for (item, h) in &got {
-        match want.get(item.as_str()) {
-            None => {
-                s.fails.insert(Fail {
-                    file: "-".into(),
-                    item: item.clone(),
-                    pos: "BODY".into(),
-                    rule: "BODY".into(),
-                    detail: format!("a new row {item} · BODY = {h}"),
-                });
-            }
-            Some(w) if w != h => {
-                s.fails.insert(Fail {
-                    file: "-".into(),
-                    item: item.clone(),
-                    pos: "BODY".into(),
-                    rule: "BODY".into(),
-                    detail: format!("pinned {w} now {h}"),
-                });
-            }
-            _ => {}
-        }
-    }
-    for (item, w) in &want {
-        if !got.contains_key(*item) {
-            s.fails.insert(Fail {
-                file: "-".into(),
-                item: item.to_string(),
-                pos: "BODY".into(),
-                rule: "BODY".into(),
-                detail: format!("a pinned row gone {item} · BODY = {w}"),
-            });
         }
     }
 }
 
 fn run(vfs: &Vfs, cfg: &Cfg) -> Surface {
     let mut s = surface(vfs, cfg);
-    resolve_bodies(&mut s, vfs, cfg);
     s.e_rows.sort();
     s
 }
@@ -3024,6 +3621,18 @@ fn ht_surf_engine_on_fixtures() {
         .map(|(a, b, c, d)| format!("{a}\t{b}\t{c}\t{d}"))
         .collect();
     dump("FIX_E", "item\tkind\tname\tcount", &erows);
+    let bodies: Vec<String> = clean
+        .bodies
+        .iter()
+        .map(|(a, b, c)| format!("{a}\t{b}\t{c}"))
+        .collect();
+    dump("FIX_BODY", "file\tfn\tsha256", &bodies);
+    let mac: Vec<String> = clean
+        .macro_hashes
+        .iter()
+        .map(|(a, b)| format!("{a}\t{b}"))
+        .collect();
+    dump("FIX_MACROS", "name\tsha256", &mac);
 
     // the negative controls: each fixture fails with exactly its pinned (item, position, rule)
     let mut expect: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -3035,6 +3644,7 @@ fn ht_surf_engine_on_fixtures() {
     }
     let mut dumped = Vec::new();
     let mut ns_failing = BTreeSet::new();
+    let mut nb_failing = BTreeSet::new();
     for (name, vfs) in &fx {
         if name == "CLEAN" {
             continue;
@@ -3063,9 +3673,13 @@ fn ht_surf_engine_on_fixtures() {
             for f in &s.fails {
                 msgs.push(format!("    {}", f.line()));
             }
-        } else if let Some(ns) = name.strip_prefix("NS") {
-            let n: String = ns.chars().take_while(char::is_ascii_digit).collect();
-            ns_failing.insert(n.parse::<u32>().expect("NS<n>"));
+        } else {
+            for (pre, set) in [("NS", &mut ns_failing), ("NB", &mut nb_failing)] {
+                if let Some(x) = name.strip_prefix(pre) {
+                    let n: String = x.chars().take_while(char::is_ascii_digit).collect();
+                    set.insert(n.parse::<u32>().expect("NS<n> / NB<n>"));
+                }
+            }
         }
     }
     dump(
@@ -3078,11 +3692,14 @@ fn ht_surf_engine_on_fixtures() {
             msgs.push(format!("FIX_EXPECT names {n}, which is not a fixture"));
         }
     }
-    let missing: Vec<u32> = (1..=22).filter(|n| !ns_failing.contains(n)).collect();
-    if !missing.is_empty() {
-        msgs.push(format!(
-            "negative controls NS{missing:?} do not fail as pinned"
-        ));
+    // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) ; NB1-NB8 (LS1 part 4) + NB9-NB13
+    for (pre, set, last) in [("NS", &ns_failing, 31), ("NB", &nb_failing, 13)] {
+        let missing: Vec<u32> = (1..=last).filter(|n| !set.contains(n)).collect();
+        if !missing.is_empty() {
+            msgs.push(format!(
+                "negative controls {pre}{missing:?} do not fail as pinned"
+            ));
+        }
     }
     assert!(
         msgs.is_empty(),
@@ -3164,7 +3781,13 @@ fn ht_surf_the_lexscope_surface_is_pinned() {
     }
     if !s.present {
         // the explicit absence assertion of LS1 part 4 (flipped by LS2a through SURF_PRESENT)
-        assert!(s.rows.is_empty() && s.out_types.is_empty() && s.e_rows.is_empty());
+        assert!(
+            s.rows.is_empty()
+                && s.out_types.is_empty()
+                && s.e_rows.is_empty()
+                && s.bodies.is_empty()
+                && s.macro_hashes.is_empty()
+        );
     }
     assert!(
         msgs.is_empty(),
@@ -3217,15 +3840,7 @@ fn plan_row(vfs: &Vfs, cfg: &Cfg, file: &str, fname: &str) -> Result<PlanOut, St
         return Err(format!("{} fns named {fname} in {file}", found.len()));
     }
     let (self_ty, gen, sig, vis) = found.pop().expect("one");
-    let mut eng = Eng {
-        cfg,
-        defs: Defs::default(),
-        s: Surface::default(),
-        leave_used: BTreeSet::new(),
-        enter_used: BTreeSet::new(),
-        enums_seen: BTreeSet::new(),
-        plan: true,
-    };
+    let mut eng = Eng::fresh(cfg, true);
     let tier = if self_ty.as_deref() == Some(ELAB) && sig.receiver().is_some() {
         "E"
     } else {
@@ -3270,6 +3885,7 @@ fn ht_surf_plan_today_signatures_are_pinned() {
     let mut msgs = Vec::new();
     let mut got_rows = Vec::new();
     let (mut n_pass, mut ret_fail, mut text_ret, mut cb_text, mut mut_text) = (0, 0, 0, 0, 0);
+    let (mut n_card, mut n_cb) = (0, 0);
     let want = rows_of(&tables::get("SURF_PLAN"), 9, "SURF_PLAN");
     let mut want_map = BTreeMap::new();
     for w in &want {
@@ -3313,6 +3929,8 @@ fn ht_surf_plan_today_signatures_are_pinned() {
                         .iter()
                         .any(|f| f.pos.starts_with("ARG:") && f.rule == "TEXT"),
                 );
+                n_card += usize::from(fails.iter().any(|f| f.rule == "CARD"));
+                n_cb += usize::from(fails.iter().any(|f| f.rule == "CB"));
                 let v = format!(
                     "{vis}\t{tier}\t{sig}\t{verdict}\t{}\t{}",
                     if fails_txt.is_empty() {
@@ -3344,7 +3962,7 @@ fn ht_surf_plan_today_signatures_are_pinned() {
         &got_rows,
     );
     let counts = format!(
-        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text}",
+        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text} card={n_card} cb={n_cb}",
         want.len(),
         want.len() - n_pass
     );
