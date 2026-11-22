@@ -13,7 +13,8 @@
 //! parameter (`impl Fn*`, `dyn Fn*`, `fn(..)`, a type parameter bounded by `Fn*`) ; a visible
 //! field's, variant payload's, const's, alias's and associated type's type ; a visible
 //! trait's items the same ; a parameter naming an interior-mutable type is judged whole.
-//! I-IN. Every text-typed IN parameter of the surface is a row of ENTER with its role.
+//! I-IN. Every text-typed IN parameter of the surface is a row of ENTER with its role
+//! (LS1 part 7 replaces it by IN-TOTAL, below).
 //! I-OUT. Every lexscope fn that takes the Elaborator (a receiver in `impl Elaborator`, or
 //! `Self` in a callback) is on the list E, its body pinned by OUT-F (`self.<field>` whose
 //! field type is not a lexscope type), OUT-C (calls of fns not defined in lexscope), OUT-M
@@ -59,6 +60,47 @@
 //! callback is lent included. A name the crate does not define is not followed (its type
 //! arguments are still read): it stays what the OUT judge makes it.
 //!
+//! The rules LS1 part 7 adds (DELTA12 S1 S2 N-1 N-6):
+//! ADDR — crate-wide (every file of `src`, tests under `src`, macro arguments and `use` items
+//! included ; the module present or not), every token site that turns a reference into an
+//! address: s1 a raw-pointer type `*const` / `*mut` anywhere ; s2 `&raw const` / `&raw mut` ;
+//! s3 a string literal holding a `p` format spec by std::fmt's grammar ; n1 the path segment
+//! `ptr` (`ptr ::`, `:: ptr`, any `use` of it) ; n2 / n3 the names of ADDR_NAMES (n2 an ident
+//! anywhere, n3 `. name (` or `:: name`), read for the toolchain ADDR_TOOLCHAIN pins (the
+//! crate test fails when rust-toolchain.toml moves). Each (file, fn, form) is a row of ADDR
+//! with its count and OPERAND (the token text of each converted expression), else FAIL ADDR ;
+//! a row matching nothing is STALE. CALLS: each fn holding a pinned row has its name's call
+//! tokens crate-wide pinned (its `fn <name>` excluded). ADDR-FN: no fn holding an address
+//! site (pinned or not) holds a token of a surface item one of whose OUT positions is REF
+//! (`&` in its type ; the computed rows' last column).
+//! UNWIND — the tokens catch_unwind, set_hook, take_hook, resume_unwind, panic_any in the
+//! crate's `src`, pinned by ADDR's census pass (empty ; a site off it FAILS).
+//! IN-TOTAL (replaces I-IN) — every name an IN position of a surface item holds gets a
+//! verdict, first match: a type parameter (its bounds) ; TEXT_TYPES -> TEXT ; NUMBER_TYPES ->
+//! NUMBER ; `bool` ; a vocabulary type ; `Self` (its impl's type) ; a name the index defines
+//! -> FOLLOWED, breadth-first through its fields to the shortest TEXT path, else NUMBER ; a
+//! `use .. as` rename (its original) ; IN_CONTAINERS (its arguments judged) ; anything else
+//! FAILS IN-UNKNOWN. The index is INTERIOR's over the crate's `src` and the `src` of every path
+//! dependency its Cargo.toml files name, transitively (a `workspace = true` entry through the
+//! workspace manifest ; a registry crate is not read) ; a written first segment resolves as
+//! `crate` / `self` / `super`, a crate alias (`use hdl_ast as ast;` in lib.rs) or a crate's
+//! name ; any other path by its last name in every crate (D-1: a false hit is loud). A TEXT or
+//! NUMBER position is a row of ENTER (item, parameter, role, holds: the kind and the path),
+//! else FAIL ENTER ; a moved `holds` FAILS ENTER ; a role off to-scope / to-display / lookup /
+//! carried / index FAILS ROLE, `index` on a text position too ; `carried` FAILS WHOLE when the
+//! body reads the parameter (the base of a field, a method call or an index ; a `match` /
+//! `if let` / `while let` / `for` scrutinee ; in a macro's expression list) or has no body.
+//! CARD per item (N-1) — the `bool`s of an item's OUT positions (RET, every `&mut` target,
+//! every callback argument) are summed ; two or more make every position holding one a CARD
+//! position.
+//! What these do not see: a std fn off ADDR_NAMES that reveals or compares an address (M4's
+//! read of std 1.85: `UnsafeCell::get`, `AtomicPtr` fed by a coercion, `Waker::data`) ; an
+//! external crate doing it (serde, not read) ; a reference passed two or more calls deep into
+//! a pinned address fn (CALLS is one level) ; a pin edited to let a site through ; a format
+//! spec assembled by `concat!` ; a foreign type's text reached through a method (an interned
+//! symbol: NP-17) ; a field behind a macro type or an associated type (IN-UNKNOWN, loud) ; a
+//! `carried` parameter read through an alias (`let x = &p; x.f`: WHOLE reads the identifier).
+//!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
 //! blocks, `#[cfg(..)]` twins alike (a cfg'd item counts: fail-closed), and the items
@@ -97,17 +139,20 @@
 //! a body that passes its BODY pin does at run time (the hash is loud, not a refusal).
 //!
 //! Three tests: the engine on fixtures (one clean module that passes with its whole surface
-//! pinned, NS1-NS31, the NB controls and NI1-NI10 each failing with the pinned (item, position, rule)
+//! pinned, NS1-NS32, the NB controls, NI1-NI10, NA1-NA7, NU1 and NT1-NT9 each failing with the pinned (item, position, rule)
 //! set) ; the real crate, where `SURF_PRESENT` pins `absent` and the computed surface must
 //! be empty until LS2a flips it (the code computes the whole surface the day the module
 //! appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
-//! today's signatures and pinned.
+//! today's signatures and pinned (no list consulted: ENTER-NEEDED names every TEXT or NUMBER
+//! parameter IN-TOTAL finds).
 //!
 //! Environment (negative-control doors, unset in the gate): `SCOPE_HOME_SRC` reads another
 //! copy of the crate's `src` ; `SCOPE_SURFACE_FIXTURES` reads another fixture file ;
 //! `SCOPE_SURFACE_DUMP=<dir>` writes each computed table to `<dir>/<name>.tsv` (and, from the
-//! crate test, INTERIOR's census of the crate's types and of every fn parameter: measurements,
-//! not pins).
+//! crate test, INTERIOR's census of the crate's types and of every fn parameter, IN-TOTAL's
+//! index by crate (IN_INDEX) and the foreign names in crate-visible fns' parameters
+//! (IN_FOREIGN): measurements, not pins). A fixture's `@@ table:<NAME>` hunk edits a pin for
+//! that fixture (in CLEAN, for all).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -176,6 +221,27 @@ const CARD_CTORS: &[&str] = &["Option", "Vec"];
 const MEANS_PREFIXES: &[&str] = &["hit:", "list:"];
 /// CB's CALLS values: `once` (an FnOnce), or one of these prefixes with a non-empty rest.
 const CALLS_PREFIXES: &[&str] = &["per:", "probe:"];
+/// IN-TOTAL's containers (DELTA12 S2 r2): an IN position passes through one of these to its
+/// type arguments ; a reference, a slice, an array and a tuple are passed through by syntax.
+const IN_CONTAINERS: &[&str] = &[
+    "Option", "Vec", "Box", "Rc", "Arc", "BTreeMap", "BTreeSet", "HashMap", "HashSet",
+];
+/// ENTER's roles: DELTA10's three and DELTA12's `carried` (WHOLE checked) and `index`.
+const ROLES: &[&str] = &["to-scope", "to-display", "lookup", "carried", "index"];
+/// UNWIND (DELTA12 N-6): the std names that catch, re-raise or hook a panic's payload.
+const UNWIND_NAMES: &[&str] = &[
+    "catch_unwind",
+    "set_hook",
+    "take_hook",
+    "resume_unwind",
+    "panic_any",
+];
+/// The keywords a token-level operand stops at (ADDR's OPERAND column).
+const OPERAND_STOP: &[&str] = &[
+    "as", "let", "return", "in", "if", "else", "while", "match", "for", "loop", "break",
+    "continue", "move", "ref", "mut", "unsafe", "static", "const", "fn", "where", "impl", "type",
+    "use", "mod", "pub", "struct", "enum", "trait", "dyn",
+];
 
 // =====================================================================================
 // The source set: relative path -> text
@@ -215,6 +281,239 @@ fn load_dir(dir: &Path) -> Vfs {
     let mut out = Vfs::new();
     walk(dir, dir, &mut out);
     out
+}
+
+// =====================================================================================
+// The crates the type index reads: the crate's own `src` and its path dependencies
+// =====================================================================================
+
+/// A crate the type index reads: its name as code writes it (`-` -> `_`) and its `src`.
+struct Krate {
+    name: String,
+    src: Vfs,
+}
+
+/// Where manifests and dependency sources are read: the disk (the real crate: its manifest
+/// directory) or a fixture's map, whose keys are relative to the fixture crate's `src` (its
+/// manifest is `../Cargo.toml`, a dependency's files sit under `../../<dep>/`).
+enum Tree<'a> {
+    Disk(String),
+    Map(&'a Vfs),
+}
+
+/// `base` joined with `rel`, `.` and `..` folded (an absolute `rel` replaces `base`).
+fn norm_join(base: &str, rel: &str) -> String {
+    let (abs, start) = if rel.starts_with('/') {
+        (true, "")
+    } else {
+        (base.starts_with('/'), base)
+    };
+    let mut parts: Vec<&str> = Vec::new();
+    for p in start.split('/').chain(rel.split('/')) {
+        match p {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|l| *l != "..") {
+                    parts.pop();
+                } else {
+                    parts.push("..");
+                }
+            }
+            x => parts.push(x),
+        }
+    }
+    let s = parts.join("/");
+    if abs {
+        format!("/{s}")
+    } else {
+        s
+    }
+}
+
+impl Tree<'_> {
+    fn crate_dir(&self) -> String {
+        match self {
+            Tree::Disk(d) => d.clone(),
+            Tree::Map(_) => "..".into(),
+        }
+    }
+    fn read(&self, p: &str) -> Option<String> {
+        match self {
+            Tree::Disk(_) => std::fs::read_to_string(p).ok(),
+            Tree::Map(m) => m.get(p).cloned(),
+        }
+    }
+    /// The `.rs` files under `<dir>/src`, keyed relative to it.
+    fn src_of(&self, dir: &str) -> Vfs {
+        let src = norm_join(dir, "src");
+        match self {
+            Tree::Disk(_) => {
+                let p = Path::new(&src);
+                if p.is_dir() {
+                    load_dir(p)
+                } else {
+                    Vfs::new()
+                }
+            }
+            Tree::Map(m) => {
+                let pre = format!("{src}/");
+                m.iter()
+                    .filter_map(|(k, v)| {
+                        k.strip_prefix(&pre)
+                            .filter(|r| r.ends_with(".rs"))
+                            .map(|r| (r.to_string(), v.clone()))
+                    })
+                    .collect()
+            }
+        }
+    }
+}
+
+/// A Cargo.toml read for what the index needs: `[package] name`, and each `[dependencies]`
+/// entry as (key, `path`, `workspace = true`) ; `[workspace.dependencies]` as (key, `path`).
+#[derive(Default)]
+struct Manifest {
+    name: String,
+    deps: Vec<(String, Option<String>, bool)>,
+    ws_deps: BTreeMap<String, Option<String>>,
+    is_workspace: bool,
+}
+
+/// `key = "v"` inside an inline table `{ .. }` (or a bare `"v"` for key `""`).
+fn inline_get(v: &str, key: &str) -> Option<String> {
+    let unq = |s: &str| s.trim().trim_matches('"').to_string();
+    let inner = v.trim().strip_prefix('{')?.strip_suffix('}')?;
+    for part in inner.split(',') {
+        let Some((k, x)) = part.split_once('=') else {
+            continue;
+        };
+        if k.trim() == key {
+            return Some(unq(x));
+        }
+    }
+    None
+}
+
+fn manifest(text: &str) -> Manifest {
+    let mut m = Manifest::default();
+    let mut sec = String::new();
+    for raw in text.lines() {
+        let l = raw.split('#').next().unwrap_or("").trim();
+        if l.starts_with('[') {
+            sec = l.trim_matches(|c| c == '[' || c == ']').trim().to_string();
+            if sec == "workspace" {
+                m.is_workspace = true;
+            }
+            if let Some(k) = sec.strip_prefix("dependencies.") {
+                m.deps.push((k.to_string(), None, false));
+            }
+            continue;
+        }
+        let Some((k, v)) = l.split_once('=') else {
+            continue;
+        };
+        let (k, v) = (k.trim(), v.trim());
+        let unq = || v.trim_matches('"').to_string();
+        match sec.as_str() {
+            "package" if k == "name" => m.name = unq(),
+            "dependencies" => {
+                if let Some((dep, field)) = k.split_once('.') {
+                    // `dep.path = ".."` / `dep.workspace = true`
+                    let dep = dep.trim().to_string();
+                    if !m.deps.iter().any(|d| d.0 == dep) {
+                        m.deps.push((dep.clone(), None, false));
+                    }
+                    let d = m.deps.iter_mut().find(|d| d.0 == dep).expect("a dep");
+                    match field.trim() {
+                        "path" => d.1 = Some(unq()),
+                        "workspace" => d.2 = v == "true",
+                        _ => {}
+                    }
+                } else {
+                    let ws = inline_get(v, "workspace").is_some_and(|x| x == "true");
+                    m.deps.push((k.to_string(), inline_get(v, "path"), ws));
+                }
+            }
+            "workspace.dependencies" => {
+                m.ws_deps.insert(k.to_string(), inline_get(v, "path"));
+            }
+            s => {
+                if let Some(dep) = s.strip_prefix("dependencies.") {
+                    if let Some(d) = m.deps.iter_mut().find(|d| d.0 == dep) {
+                        match k {
+                            "path" => d.1 = Some(unq()),
+                            "workspace" => d.2 = v == "true",
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    m
+}
+
+/// The crate's name and its path dependencies, transitively (DELTA12 S2 r1: read from the
+/// Cargo.toml files, not listed): a `path =` entry, or a `workspace = true` entry whose
+/// `[workspace.dependencies]` row has a `path` ; a registry crate (serde) is not read.
+fn dep_crates(tree: &Tree<'_>) -> (String, Vec<Krate>) {
+    let own_dir = tree.crate_dir();
+    let own_path = norm_join(&own_dir, "Cargo.toml");
+    let own = manifest(
+        &tree
+            .read(&own_path)
+            .unwrap_or_else(|| panic!("no manifest {own_path}")),
+    );
+    let ws_path = |dir: &str, key: &str| -> Option<String> {
+        let mut up = String::new();
+        for _ in 0..12 {
+            up.push_str("../");
+            let anc = norm_join(dir, &up);
+            if let Some(t) = tree.read(&norm_join(&anc, "Cargo.toml")) {
+                let m = manifest(&t);
+                if m.is_workspace {
+                    return m
+                        .ws_deps
+                        .get(key)
+                        .cloned()
+                        .flatten()
+                        .map(|p| norm_join(&anc, &p));
+                }
+            }
+        }
+        None
+    };
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut queue = vec![(own_dir, own.deps.clone())];
+    while let Some((dir, deps)) = queue.pop() {
+        for (key, path, ws) in deps {
+            let d = match (path, ws) {
+                (Some(p), _) => Some(norm_join(&dir, &p)),
+                (None, true) => ws_path(&dir, &key),
+                _ => None,
+            };
+            let Some(d) = d else { continue };
+            if !seen.insert(d.clone()) {
+                continue;
+            }
+            let mp = norm_join(&d, "Cargo.toml");
+            let m = manifest(&tree.read(&mp).unwrap_or_else(|| panic!("no manifest {mp}")));
+            out.push(Krate {
+                name: key.replace('-', "_"),
+                src: tree.src_of(&d),
+            });
+            queue.push((d, m.deps));
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    (own.name.replace('-', "_"), out)
+}
+
+/// The real crate's tree: its manifest directory (the deps are this crate's whatever
+/// `SCOPE_HOME_SRC` points the `src` at).
+fn crate_tree() -> Tree<'static> {
+    Tree::Disk(env!("CARGO_MANIFEST_DIR").to_string())
 }
 
 // =====================================================================================
@@ -389,8 +688,16 @@ struct Cfg {
     body: Vec<Vec<String>>,
     /// INTERIOR's exemptions: item, position, reaches, why
     interior: Vec<Vec<String>>,
-    /// item, param, role
+    /// item, param, role, holds (the kind and the path IN-TOTAL computes)
     enter: Vec<Vec<String>>,
+    /// ADDR: file, fn, form, count, operand
+    addr: Vec<Vec<String>>,
+    /// ADDR's CALLS: fn, call tokens
+    addr_calls: Vec<Vec<String>>,
+    /// UNWIND: file, fn, name, count
+    unwind: Vec<Vec<String>>,
+    /// ADDR_NAMES: form (n1 | n2 | n3) -> names
+    addr_names: BTreeMap<String, BTreeSet<String>>,
     enums: BTreeSet<String>,
     /// shim, private fn, wrapper
     shims: Vec<Vec<String>>,
@@ -414,36 +721,60 @@ fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
 }
 
 fn cfg(prefix: &str) -> Cfg {
-    let vocab = rows_of(&tables::get("SURF_VOCAB"), 2, "SURF_VOCAB")
+    cfg_with(prefix, &BTreeMap::new())
+}
+
+/// The pins of one prefix, a table of `over` replacing the file's (a fixture's `@@ table:`
+/// hunks: a negative control on a pin without a rebuild).
+fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
+    let get =
+        |name: &str| -> String { over.get(name).cloned().unwrap_or_else(|| tables::get(name)) };
+    let vocab = rows_of(&get("SURF_VOCAB"), 2, "SURF_VOCAB")
         .into_iter()
         .map(|r| (r[0].clone(), r[1].clone()))
         .collect();
     let one = |name: &str| -> BTreeSet<String> {
-        rows_of(&tables::get(name), 1, name)
+        rows_of(&get(name), 1, name)
             .into_iter()
             .map(|r| r[0].clone())
             .collect()
     };
+    let mut addr_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for r in rows_of(&get("ADDR_NAMES"), 2, "ADDR_NAMES") {
+        assert!(
+            ["n1", "n2", "n3"].contains(&r[0].as_str()),
+            "ADDR_NAMES: form {} is not n1 / n2 / n3",
+            r[0]
+        );
+        addr_names
+            .entry(r[0].clone())
+            .or_default()
+            .insert(r[1].clone());
+    }
     Cfg {
         vocab,
         traits: one("SURF_TRAITS"),
-        macros: rows_of(&tables::get(&format!("{prefix}_MACROS")), 2, "MACROS")
+        macros: rows_of(&get(&format!("{prefix}_MACROS")), 2, "MACROS")
             .into_iter()
             .map(|r| (r[0].clone(), r[1].clone()))
             .collect(),
-        leave: rows_of(&tables::get(&format!("{prefix}_LEAVE")), 5, "LEAVE"),
-        card: rows_of(&tables::get(&format!("{prefix}_CARD")), 4, "CARD"),
-        cb: rows_of(&tables::get(&format!("{prefix}_CB")), 5, "CB"),
-        body: rows_of(&tables::get(&format!("{prefix}_BODY")), 3, "BODY"),
-        interior: rows_of(&tables::get(&format!("{prefix}_INTERIOR")), 4, "INTERIOR"),
-        enter: rows_of(&tables::get(&format!("{prefix}_ENTER")), 3, "ENTER"),
+        leave: rows_of(&get(&format!("{prefix}_LEAVE")), 5, "LEAVE"),
+        card: rows_of(&get(&format!("{prefix}_CARD")), 4, "CARD"),
+        cb: rows_of(&get(&format!("{prefix}_CB")), 5, "CB"),
+        body: rows_of(&get(&format!("{prefix}_BODY")), 3, "BODY"),
+        interior: rows_of(&get(&format!("{prefix}_INTERIOR")), 4, "INTERIOR"),
+        enter: rows_of(&get(&format!("{prefix}_ENTER")), 4, "ENTER"),
+        addr: rows_of(&get(&format!("{prefix}_ADDR")), 5, "ADDR"),
+        addr_calls: rows_of(&get(&format!("{prefix}_ADDR_CALLS")), 2, "ADDR_CALLS"),
+        unwind: rows_of(&get(&format!("{prefix}_UNWIND")), 4, "UNWIND"),
+        addr_names,
         enums: one(&format!("{prefix}_ENUMS")),
-        shims: rows_of(&tables::get(&format!("{prefix}_SHIMS")), 3, "SHIMS"),
-        outgoing: rows_of(&tables::get(&format!("{prefix}_OUTGOING")), 2, "OUTGOING")
+        shims: rows_of(&get(&format!("{prefix}_SHIMS")), 3, "SHIMS"),
+        outgoing: rows_of(&get(&format!("{prefix}_OUTGOING")), 2, "OUTGOING")
             .into_iter()
             .map(|r| (r[0].clone(), r[1].clone()))
             .collect(),
-        e: rows_of(&tables::get(&format!("{prefix}_E")), 5, "E"),
+        e: rows_of(&get(&format!("{prefix}_E")), 5, "E"),
     }
 }
 
@@ -534,13 +865,16 @@ struct Row {
     pos: String,
     ty: String,
     verdict: String,
+    /// `REF` when an OUT position's type holds a reference at any depth (ADDR-FN reads it ;
+    /// a column, not a verdict), else `-`
+    refs: String,
 }
 
 impl Row {
     fn line(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.file, self.tier, self.kind, self.item, self.pos, self.ty, self.verdict
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.file, self.tier, self.kind, self.item, self.pos, self.ty, self.verdict, self.refs
         )
     }
 }
@@ -680,7 +1014,10 @@ type Reasons = Vec<(String, String)>;
 
 #[derive(Default)]
 struct InRes {
-    text: Vec<String>,
+    /// IN-TOTAL: (`TEXT` | `NUMBER`, detail) by name or by content
+    enter: Vec<(String, String)>,
+    /// IN-TOTAL: the names the position holds that no list and no index resolves
+    unknown: Vec<String>,
     /// (position, type) judged as OUT: a `&mut` target, an interior-mutable parameter
     outs: Vec<(String, Type)>,
     /// (position, type): a callback's argument
@@ -691,6 +1028,7 @@ struct InRes {
 struct J<'a> {
     defs: &'a Defs,
     cfg: &'a Cfg,
+    tys: &'a TyIdx,
     self_ty: Option<String>,
     gen: Gen,
     in_trait: Option<String>,
@@ -955,6 +1293,8 @@ impl J<'_> {
             Type::Path(p) => {
                 if let Some(q) = &p.qself {
                     self.in_walk(pname, &q.ty, res);
+                    res.unknown.push(format!("an associated type {}", nt(t)));
+                    return;
                 }
                 let segs = seg_names(&p.path);
                 if segs.len() == 1 {
@@ -964,10 +1304,7 @@ impl J<'_> {
                         return;
                     }
                 }
-                let last = segs.last().cloned().unwrap_or_default();
-                if is_text_name(&last) {
-                    res.text.push(nt(t));
-                }
+                self.in_name(&segs, t, res);
                 for s in &p.path.segments {
                     if let syn::PathArguments::AngleBracketed(a) = &s.arguments {
                         for g in &a.args {
@@ -979,6 +1316,40 @@ impl J<'_> {
                 }
             }
             _ => res.fails.push(("UNKNOWN".into(), nt(t))),
+        }
+    }
+
+    /// IN-TOTAL (DELTA12 S2 r2) on one written name of an IN position, first match: a type
+    /// parameter (the caller's) ; a TEXT name ; a NUMBER name ; `bool` ; a vocabulary type of
+    /// the file set ; `Self` (its impl's type) ; a name the index defines, FOLLOWED through its
+    /// fields to text, else to a number ; a `use .. as` rename (its original) ; a container
+    /// of IN_CONTAINERS (its arguments, walked by the caller) ; anything else IN-UNKNOWN.
+    fn in_name(&self, segs: &[String], t: &Type, res: &mut InRes) {
+        let vocab = |n: &str| self.cfg.vocab.contains_key(n) && self.defs.defined_type(n);
+        if segs.len() == 1 && segs[0] == "Self" {
+            match &self.self_ty {
+                Some(s) if vocab(s) => {}
+                Some(s) => {
+                    let ds = self
+                        .tys
+                        .resolve(&["crate".into(), s.clone()], &self.tys.own);
+                    if ds.is_empty() {
+                        res.unknown.push(format!("Self = {s}"));
+                    } else {
+                        let f = self.tys.follow(&ds, &format!("Self = {s}"), &vocab);
+                        f.into_res(res);
+                    }
+                }
+                None => res.unknown.push("Self of a trait".into()),
+            }
+            return;
+        }
+        match self.tys.classify(segs, &self.tys.own, &vocab) {
+            NameIs::Text => res.enter.push(("TEXT".into(), nt(t))),
+            NameIs::Number => res.enter.push(("NUMBER".into(), nt(t))),
+            NameIs::Nothing | NameIs::Container => {}
+            NameIs::Follow(ds) => self.tys.follow(&ds, "", &vocab).into_res(res),
+            NameIs::Unknown => res.unknown.push(nt(t)),
         }
     }
 
@@ -1092,6 +1463,113 @@ fn gen_arg_text(g: &syn::GenericArgument) -> String {
     }
 }
 
+/// CARD's verdict text for one position: its constructors, and its `n` bools when the ITEM
+/// holds two or more over its OUT positions (`total`, DELTA12 N-1: a cardinality is what an
+/// item hands back in one call).
+fn card_text(mut found: BTreeSet<String>, n: usize, total: usize, t: &Type) -> Option<String> {
+    if total >= 2 && n >= 1 {
+        found.insert(if n == total {
+            format!("{n} bool")
+        } else {
+            format!("{n} of {total} bool over the item")
+        });
+    }
+    if found.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "{} in {}",
+            found.into_iter().collect::<Vec<_>>().join(", "),
+            nt(t)
+        ))
+    }
+}
+
+/// WHOLE (DELTA12 S2 r3): where a body uses parameter `p` other than whole — the base of a
+/// field access, a method call or an index ; the scrutinee of a `match`, an `if let` /
+/// `while let` or a `for` (macro arguments read as an expression list, else by token).
+struct WholeUse<'p> {
+    p: &'p str,
+    hits: Vec<String>,
+}
+
+fn base_ident(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Paren(x) => base_ident(&x.expr),
+        Expr::Group(x) => base_ident(&x.expr),
+        Expr::Reference(x) => base_ident(&x.expr),
+        Expr::Unary(u) if matches!(u.op, syn::UnOp::Deref(_)) => base_ident(&u.expr),
+        Expr::Path(p) if p.qself.is_none() && p.path.segments.len() == 1 => {
+            Some(p.path.segments[0].ident.to_string())
+        }
+        _ => None,
+    }
+}
+
+impl WholeUse<'_> {
+    fn is_p(&self, e: &Expr) -> bool {
+        base_ident(e).as_deref() == Some(self.p)
+    }
+}
+
+impl<'ast> Visit<'ast> for WholeUse<'_> {
+    fn visit_expr_field(&mut self, e: &'ast syn::ExprField) {
+        if self.is_p(&e.base) {
+            let m = match &e.member {
+                syn::Member::Named(n) => n.to_string(),
+                syn::Member::Unnamed(i) => i.index.to_string(),
+            };
+            self.hits.push(format!("{}.{m}", self.p));
+        }
+        visit::visit_expr_field(self, e);
+    }
+    fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
+        if self.is_p(&e.receiver) {
+            self.hits.push(format!("{}.{}()", self.p, e.method));
+        }
+        visit::visit_expr_method_call(self, e);
+    }
+    fn visit_expr_index(&mut self, e: &'ast syn::ExprIndex) {
+        if self.is_p(&e.expr) {
+            self.hits.push(format!("{}[..]", self.p));
+        }
+        visit::visit_expr_index(self, e);
+    }
+    fn visit_expr_match(&mut self, e: &'ast syn::ExprMatch) {
+        if self.is_p(&e.expr) {
+            self.hits.push(format!("match {}", self.p));
+        }
+        visit::visit_expr_match(self, e);
+    }
+    fn visit_expr_let(&mut self, e: &'ast syn::ExprLet) {
+        if self.is_p(&e.expr) {
+            self.hits.push(format!("let .. = {}", self.p));
+        }
+        visit::visit_expr_let(self, e);
+    }
+    fn visit_expr_for_loop(&mut self, e: &'ast syn::ExprForLoop) {
+        if self.is_p(&e.expr) {
+            self.hits.push(format!("for .. in {}", self.p));
+        }
+        visit::visit_expr_for_loop(self, e);
+    }
+    fn visit_macro(&mut self, m: &'ast syn::Macro) {
+        match Punctuated::<Expr, Token![,]>::parse_terminated.parse2(m.tokens.clone()) {
+            Ok(list) => {
+                for e in &list {
+                    self.visit_expr(e);
+                }
+            }
+            Err(_) => {
+                if tokens_name(&m.tokens, self.p) {
+                    self.hits
+                        .push(format!("macro {}! names {}", last_name(&m.path), self.p));
+                }
+            }
+        }
+    }
+}
+
 /// A callback argument naming the Elaborator through `Self` (marks tier E, not judged).
 fn is_self_ty(t: &Type) -> bool {
     match t {
@@ -1126,8 +1604,10 @@ fn is_carrier(n: &str) -> bool {
     CARRIERS.contains(&n) || (n.starts_with("Atomic") && n.len() > "Atomic".len())
 }
 
-/// One definition of a type name in the crate's source: its fields as (hop, type).
+/// One definition of a type name in the crate's source or a path dependency's: its fields as
+/// (hop, type) ; a foreign definition's hops carry its crate (`hdl_ast::Ident.name`).
 struct TyDef {
+    krate: String,
     file: String,
     kind: &'static str,
     generics: BTreeSet<String>,
@@ -1135,24 +1615,92 @@ struct TyDef {
 }
 
 /// Every struct / enum / union / type alias the crate's source defines (every file of
-/// `src`, the file set included, items in bodies, inline and `#[cfg]` modules alike), by
-/// name ; and every `use .. as <name>` rename, by the new name.
+/// `src`, the file set included, items in bodies, inline and `#[cfg]` modules alike) and
+/// every one the `src` of its path dependencies defines (DELTA12 S2 r1, read from the
+/// Cargo.toml files), by name ; every `use .. as <name>` rename, by the new name ; and the
+/// crate aliases (`use hdl_ast as ast;`) each crate's `lib.rs` (and the file set) declares.
 #[derive(Default)]
 struct TyIdx {
+    /// the crate under test (`elaborate`, a fixture's `clean`)
+    own: String,
+    /// every crate read: the own crate and its path dependencies
+    krates: BTreeSet<String>,
     defs: BTreeMap<String, Vec<TyDef>>,
     /// new name -> (the original's last name, the use text)
     renames: BTreeMap<String, Vec<(String, String)>>,
+    /// new name -> (the crate the `use` stands in, the original's full path)
+    rename_paths: BTreeMap<String, Vec<(String, Vec<String>)>>,
+    /// crate -> alias -> the aliased crate
+    aliases: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+/// What IN-TOTAL makes of one written name (DELTA12 S2 r2).
+enum NameIs {
+    Text,
+    Number,
+    Nothing,
+    Container,
+    /// the definitions the index gives the name: (name, index into `defs[name]`)
+    Follow(Vec<(String, usize)>),
+    Unknown,
+}
+
+/// IN-TOTAL's walk from a set of definitions through their fields.
+#[derive(Default)]
+struct Followed {
+    text: Option<String>,
+    number: Option<String>,
+    unknown: Vec<String>,
+}
+
+impl Followed {
+    fn into_res(self, res: &mut InRes) {
+        if let Some(t) = self.text {
+            res.enter.push(("TEXT".into(), t));
+        } else if let Some(n) = self.number {
+            res.enter.push(("NUMBER".into(), n));
+        }
+        res.unknown.extend(self.unknown);
+    }
 }
 
 impl TyIdx {
-    fn build(vfs: &Vfs) -> TyIdx {
-        let mut ix = TyIdx::default();
+    fn build(vfs: &Vfs, own: &str, deps: &[Krate]) -> TyIdx {
+        let mut ix = TyIdx {
+            own: own.to_string(),
+            ..TyIdx::default()
+        };
+        ix.krates.insert(own.to_string());
+        for d in deps {
+            ix.krates.insert(d.name.clone());
+        }
+        let crates: Vec<(&str, &Vfs)> = std::iter::once((own, vfs))
+            .chain(deps.iter().map(|d| (d.name.as_str(), &d.src)))
+            .collect();
+        for (krate, files) in crates {
+            ix.index_crate(krate, krate == own, files);
+        }
+        ix
+    }
+
+    fn index_crate(&mut self, krate: &str, is_own: bool, vfs: &Vfs) {
+        let ix = self;
         for (rel, text) in vfs {
             let Ok(f) = syn::parse_file(text) else {
                 continue; // a parse failure is reported by the engine's own read
             };
             let mut ats = Vec::new();
             flatten(rel, &f.items, 0, &[], false, &mut ats);
+            let declares_aliases = rel == "lib.rs"
+                || (is_own && rel.starts_with(&format!("{MODULE}/")))
+                || (is_own && rel == &format!("{MODULE}.rs"));
+            let owner_of = |n: &str| -> String {
+                if is_own {
+                    n.to_string()
+                } else {
+                    format!("{krate}::{n}")
+                }
+            };
             for at in &ats {
                 let gens = |g: &syn::Generics| -> BTreeSet<String> {
                     g.type_params().map(|p| p.ident.to_string()).collect()
@@ -1173,14 +1721,17 @@ impl TyIdx {
                 let (name, def) = match at.item {
                     Item::Struct(s) => {
                         let n = s.ident.to_string();
-                        let fields = fields_of(&n, &s.fields);
+                        let fields = fields_of(&owner_of(&n), &s.fields);
                         (n, ("struct", gens(&s.generics), fields))
                     }
                     Item::Enum(e) => {
                         let n = e.ident.to_string();
                         let mut fields = Vec::new();
                         for v in &e.variants {
-                            fields.extend(fields_of(&format!("{n}::{}", v.ident), &v.fields));
+                            fields.extend(fields_of(
+                                &format!("{}::{}", owner_of(&n), v.ident),
+                                &v.fields,
+                            ));
                         }
                         (n, ("enum", gens(&e.generics), fields))
                     }
@@ -1193,35 +1744,262 @@ impl TyIdx {
                             .map(|fd| {
                                 let l =
                                     fd.ident.as_ref().map(|x| x.to_string()).unwrap_or_default();
-                                (format!("{n}.{l}"), fd.ty.clone())
+                                (format!("{}.{l}", owner_of(&n)), fd.ty.clone())
                             })
                             .collect();
                         (n, ("union", gens(&u.generics), fields))
                     }
                     Item::Type(t) => {
                         let n = t.ident.to_string();
-                        let fields = vec![(format!("type {n}"), (*t.ty).clone())];
+                        let fields = vec![(format!("type {}", owner_of(&n)), (*t.ty).clone())];
                         (n, ("alias", gens(&t.generics), fields))
                     }
                     Item::Use(u) => {
                         let mut v = Vec::new();
                         use_renames(&mut Vec::new(), &u.tree, &mut v);
+                        let mut full = Vec::new();
+                        use_rename_paths(&mut Vec::new(), &u.tree, &mut full);
                         for (new, orig, text) in v {
                             ix.renames.entry(new).or_default().push((orig, text));
+                        }
+                        for (new, path) in full {
+                            if declares_aliases && path.len() == 1 {
+                                ix.aliases
+                                    .entry(krate.to_string())
+                                    .or_default()
+                                    .insert(new.clone(), path[0].clone());
+                            }
+                            ix.rename_paths
+                                .entry(new)
+                                .or_default()
+                                .push((krate.to_string(), path));
                         }
                         continue;
                     }
                     _ => continue,
                 };
                 ix.defs.entry(name).or_default().push(TyDef {
-                    file: rel.clone(),
+                    krate: krate.to_string(),
+                    file: if is_own {
+                        rel.clone()
+                    } else {
+                        format!("{krate}:{rel}")
+                    },
                     kind: def.0,
                     generics: def.1,
                     fields: def.2,
                 });
             }
         }
-        ix
+    }
+
+    /// The definitions a written path names (DELTA12 S2 r1): by its first segment when that
+    /// is `crate` / `self` / `super` (the crate `ctx`), a crate alias `ctx` declares, or a
+    /// crate's own name ; any other path, and a bare name, through every definition of its
+    /// last name in the index (INTERIOR's D-1: a false hit is loud).
+    fn resolve(&self, segs: &[String], ctx: &str) -> Vec<(String, usize)> {
+        let Some(last) = segs.last() else {
+            return Vec::new();
+        };
+        let Some(ds) = self.defs.get(last) else {
+            return Vec::new();
+        };
+        let filter: Option<String> = if segs.len() == 1 {
+            None
+        } else {
+            let first = segs[0].as_str();
+            if matches!(first, "crate" | "self" | "super") {
+                Some(ctx.to_string())
+            } else if let Some(k) = self.aliases.get(ctx).and_then(|m| m.get(first)) {
+                Some(k.clone())
+            } else if self.krates.contains(first) {
+                Some(first.to_string())
+            } else {
+                None
+            }
+        };
+        ds.iter()
+            .enumerate()
+            .filter(|(_, d)| filter.as_ref().is_none_or(|k| &d.krate == k))
+            .map(|(i, _)| (last.clone(), i))
+            .collect()
+    }
+
+    /// IN-TOTAL's verdict on one written name (no type parameter, no `Self`), in the crate
+    /// `ctx`: TEXT, NUMBER, `bool`, a vocabulary name, the index, a rename, a container.
+    fn classify(&self, segs: &[String], ctx: &str, vocab: &dyn Fn(&str) -> bool) -> NameIs {
+        let Some(last) = segs.last() else {
+            return NameIs::Unknown;
+        };
+        if is_text_name(last) {
+            return NameIs::Text;
+        }
+        if is_number_name(last) {
+            return NameIs::Number;
+        }
+        if segs.len() == 1 && last == "bool" {
+            return NameIs::Nothing;
+        }
+        if vocab(last) {
+            return NameIs::Nothing;
+        }
+        let ds = self.resolve(segs, ctx);
+        if !ds.is_empty() {
+            return NameIs::Follow(ds);
+        }
+        if segs.len() == 1 {
+            if let Some(rs) = self.rename_paths.get(last) {
+                // a rename: its original, read in the crate whose `use` renamed it
+                let mut follow = Vec::new();
+                let mut best: Option<NameIs> = None;
+                for (k, orig) in rs {
+                    match self.classify(orig, k, vocab) {
+                        NameIs::Follow(ds) => follow.extend(ds),
+                        NameIs::Text => return NameIs::Text,
+                        other => {
+                            if best.is_none() || matches!(other, NameIs::Number) {
+                                best = Some(other);
+                            }
+                        }
+                    }
+                }
+                if !follow.is_empty() {
+                    return NameIs::Follow(follow);
+                }
+                if let Some(b) = best {
+                    return b;
+                }
+            }
+        }
+        if IN_CONTAINERS.contains(&last.as_str()) {
+            return NameIs::Container;
+        }
+        NameIs::Unknown
+    }
+
+    /// IN-TOTAL's FOLLOWED (DELTA12 S2 r2): a breadth-first walk from `start` through the
+    /// fields of every definition reached (a visited set), each written name judged by
+    /// `classify` in its definition's crate ; the shortest path to a TEXT name, else to a
+    /// NUMBER name, and every name on the way no list and no index resolves (a hop the index
+    /// cannot open: a raw pointer, a `dyn` / `impl` / `fn` type, a macro or associated type).
+    fn follow(
+        &self,
+        start: &[(String, usize)],
+        head: &str,
+        vocab: &dyn Fn(&str) -> bool,
+    ) -> Followed {
+        let mut out = Followed::default();
+        let mut seen: BTreeSet<(String, usize)> = BTreeSet::new();
+        let mut queue: std::collections::VecDeque<((String, usize), Vec<String>)> =
+            std::collections::VecDeque::new();
+        let head: Vec<String> = if head.is_empty() {
+            Vec::new()
+        } else {
+            vec![head.to_string()]
+        };
+        for s in start {
+            if seen.insert(s.clone()) {
+                queue.push_back((s.clone(), head.clone()));
+            }
+        }
+        while let Some(((name, i), path)) = queue.pop_front() {
+            let d = &self.defs[&name][i];
+            for (hop, ft) in &d.fields {
+                let mut p = path.clone();
+                p.push(hop.clone());
+                self.hop(
+                    ft,
+                    &p,
+                    &(name.clone(), i),
+                    vocab,
+                    &mut out,
+                    &mut seen,
+                    &mut queue,
+                );
+            }
+        }
+        out.unknown.sort();
+        out.unknown.dedup();
+        out
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn hop(
+        &self,
+        t: &Type,
+        path: &[String],
+        me: &(String, usize),
+        vocab: &dyn Fn(&str) -> bool,
+        out: &mut Followed,
+        seen: &mut BTreeSet<(String, usize)>,
+        queue: &mut std::collections::VecDeque<((String, usize), Vec<String>)>,
+    ) {
+        let at = |what: String| -> String {
+            let mut p = path.to_vec();
+            p.push(what);
+            p.join(" -> ")
+        };
+        let d = &self.defs[&me.0][me.1];
+        match t {
+            Type::Reference(x) => self.hop(&x.elem, path, me, vocab, out, seen, queue),
+            Type::Paren(x) => self.hop(&x.elem, path, me, vocab, out, seen, queue),
+            Type::Group(x) => self.hop(&x.elem, path, me, vocab, out, seen, queue),
+            Type::Slice(x) => self.hop(&x.elem, path, me, vocab, out, seen, queue),
+            Type::Array(x) => self.hop(&x.elem, path, me, vocab, out, seen, queue),
+            Type::Tuple(x) => {
+                for e in &x.elems {
+                    self.hop(e, path, me, vocab, out, seen, queue);
+                }
+            }
+            Type::Never(_) => {}
+            Type::Path(p) if p.qself.is_none() => {
+                let segs = seg_names(&p.path);
+                let last = segs.last().cloned().unwrap_or_default();
+                let enqueue =
+                    |ds: Vec<(String, usize)>,
+                     seen: &mut BTreeSet<(String, usize)>,
+                     queue: &mut std::collections::VecDeque<_>| {
+                        for x in ds {
+                            if seen.insert(x.clone()) {
+                                queue.push_back((x, path.to_vec()));
+                            }
+                        }
+                    };
+                if segs.len() == 1 && d.generics.contains(&last) {
+                    // the definition's own type parameter: its argument is the use site's
+                } else if segs.len() == 1 && last == "Self" {
+                    enqueue(vec![me.clone()], seen, queue);
+                } else {
+                    match self.classify(&segs, &d.krate, vocab) {
+                        NameIs::Text => {
+                            if out.text.is_none() {
+                                out.text = Some(at(nt(t)));
+                            }
+                        }
+                        NameIs::Number => {
+                            if out.number.is_none() {
+                                out.number = Some(at(nt(t)));
+                            }
+                        }
+                        NameIs::Nothing | NameIs::Container => {}
+                        NameIs::Follow(ds) => enqueue(ds, seen, queue),
+                        NameIs::Unknown => out.unknown.push(at(nt(t))),
+                    }
+                }
+                for s in &p.path.segments {
+                    if let syn::PathArguments::AngleBracketed(a) = &s.arguments {
+                        for g in &a.args {
+                            if let syn::GenericArgument::Type(x) = g {
+                                self.hop(x, path, me, vocab, out, seen, queue);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => out
+                .unknown
+                .push(at(format!("{} (a hop the index cannot open)", nt(t)))),
+        }
     }
 
     /// INTERIOR: the shortest path of names from `t` to a mutable carrier, or None. A name
@@ -1429,6 +2207,110 @@ fn interior_params(vfs: &Vfs, ix: &TyIdx) -> Vec<String> {
     out
 }
 
+/// IN-TOTAL's index, measured (dumped, not pinned): one row per definition of every crate
+/// read, with what FOLLOWED reaches from it alone and how many names on the way are unknown.
+fn in_index_census(ix: &TyIdx) -> Vec<String> {
+    let mut out = Vec::new();
+    for (name, ds) in &ix.defs {
+        for (i, d) in ds.iter().enumerate() {
+            let f = ix.follow(&[(name.clone(), i)], "", &|_: &str| false);
+            let holds = match (&f.text, &f.number) {
+                (Some(t), _) => format!("TEXT {t}"),
+                (None, Some(n)) => format!("NUMBER {n}"),
+                _ => "-".into(),
+            };
+            out.push(format!(
+                "{}\t{name}\t{}\t{}\t{holds}\t{}",
+                d.krate,
+                d.kind,
+                d.file,
+                f.unknown.len()
+            ));
+        }
+    }
+    out
+}
+
+/// IN-TOTAL's foreign names, measured (dumped, not pinned): every written type name in a
+/// typed parameter of a crate-visible fn (a free fn or an inherent method marked `pub` /
+/// `pub(..)`) that the index resolves into a path dependency, by (crate, name), with what
+/// FOLLOWED reaches from that crate's definitions, its uses and its first use.
+fn in_foreign_census(vfs: &Vfs, ix: &TyIdx) -> Vec<String> {
+    struct P(Vec<Vec<String>>);
+    impl<'ast> Visit<'ast> for P {
+        fn visit_type_path(&mut self, p: &'ast syn::TypePath) {
+            if p.qself.is_none() {
+                self.0.push(seg_names(&p.path));
+            }
+            visit::visit_type_path(self, p);
+        }
+    }
+    /// (uses, first use, the definitions reached)
+    type Uses = (usize, String, Vec<(String, usize)>);
+    let mut got: BTreeMap<(String, String), Uses> = BTreeMap::new();
+    for (rel, text) in vfs {
+        let Ok(f) = syn::parse_file(text) else {
+            continue;
+        };
+        let mut ats = Vec::new();
+        flatten(rel, &f.items, 0, &[], false, &mut ats);
+        let mut sigs: Vec<(String, &syn::Signature)> = Vec::new();
+        for at in &ats {
+            match at.item {
+                Item::Fn(x) if !matches!(x.vis, syn::Visibility::Inherited) => {
+                    sigs.push((x.sig.ident.to_string(), &x.sig))
+                }
+                Item::Impl(im) if im.trait_.is_none() => {
+                    for ii in &im.items {
+                        if let syn::ImplItem::Fn(x) = ii {
+                            if !matches!(x.vis, syn::Visibility::Inherited) {
+                                sigs.push((x.sig.ident.to_string(), &x.sig));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (fname, sig) in sigs {
+            for a in &sig.inputs {
+                let FnArg::Typed(pt) = a else { continue };
+                let mut v = P(Vec::new());
+                v.visit_type(&pt.ty);
+                for segs in v.0 {
+                    let NameIs::Follow(ds) = ix.classify(&segs, &ix.own, &|_: &str| false) else {
+                        continue;
+                    };
+                    for (n, i) in ds {
+                        let k = ix.defs[&n][i].krate.clone();
+                        if k == ix.own {
+                            continue;
+                        }
+                        let e = got
+                            .entry((k, n.clone()))
+                            .or_insert_with(|| (0, format!("{rel} {fname}"), Vec::new()));
+                        e.0 += 1;
+                        if !e.2.contains(&(n.clone(), i)) {
+                            e.2.push((n.clone(), i));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    got.into_iter()
+        .map(|((k, n), (uses, first, ds))| {
+            let f = ix.follow(&ds, "", &|_: &str| false);
+            let holds = match (&f.text, &f.number) {
+                (Some(t), _) => format!("TEXT {t}"),
+                (None, Some(x)) => format!("NUMBER {x}"),
+                _ => "-".into(),
+            };
+            format!("{k}\t{n}\t{holds}\t{uses}\t{first}")
+        })
+        .collect()
+}
+
 /// The names a type spells, in syntax order: every type path's last segment (generic
 /// arguments, callback arguments and bounds' arguments included) and `*mut` for a mutable
 /// raw pointer.
@@ -1447,6 +2329,32 @@ fn spelled_names(t: &Type, out: &mut Vec<String>) {
         }
     }
     V(out).visit_type(t);
+}
+
+/// The `use .. as <new>` leaves of a use tree: (new, the original's full path).
+fn use_rename_paths(
+    prefix: &mut Vec<String>,
+    t: &syn::UseTree,
+    out: &mut Vec<(String, Vec<String>)>,
+) {
+    match t {
+        syn::UseTree::Path(p) => {
+            prefix.push(p.ident.to_string());
+            use_rename_paths(prefix, &p.tree, out);
+            prefix.pop();
+        }
+        syn::UseTree::Rename(r) => {
+            let mut v = prefix.clone();
+            v.push(r.ident.to_string());
+            out.push((r.rename.to_string(), v));
+        }
+        syn::UseTree::Group(g) => {
+            for x in &g.items {
+                use_rename_paths(prefix, x, out);
+            }
+        }
+        syn::UseTree::Name(_) | syn::UseTree::Glob(_) => {}
+    }
 }
 
 /// The `use .. as <new>` leaves of a use tree: (new, the original's last name, text).
@@ -1476,6 +2384,575 @@ fn use_renames(
             }
         }
         syn::UseTree::Name(_) | syn::UseTree::Glob(_) => {}
+    }
+}
+
+// =====================================================================================
+// ADDR and UNWIND: a crate-wide census of the tokens (DELTA12 S1, N-6)
+// =====================================================================================
+
+/// ADDR's and UNWIND's census of the crate's tokens (every file of `src`, tests under `src`,
+/// macro arguments and `use` items included ; comments are not tokens).
+#[derive(Default)]
+struct AddrCensus {
+    /// (file, fn, form) -> the OPERAND of each site, in source order
+    sites: BTreeMap<(String, String, String), Vec<String>>,
+    /// (file, fn, name) -> count
+    unwind: BTreeMap<(String, String, String), usize>,
+    /// (file, fn) -> the identifiers its tokens hold (its signature and body)
+    idents: BTreeMap<(String, String), BTreeSet<String>>,
+    /// identifier -> its tokens crate-wide, the name after `fn` excluded (CALLS)
+    calls: BTreeMap<String, usize>,
+    /// files that do not tokenize
+    bad: Vec<(String, String)>,
+}
+
+fn is_punct(t: Option<&TokenTree>, c: char) -> bool {
+    matches!(t, Some(TokenTree::Punct(p)) if p.as_char() == c)
+}
+
+/// `::` ending at `i - 1` (`::` is `:` Joint then `:`).
+fn colons_before(toks: &[TokenTree], i: usize) -> bool {
+    i >= 2 && is_punct(toks.get(i - 2), ':') && is_punct(toks.get(i - 1), ':')
+}
+
+fn colons_after(toks: &[TokenTree], i: usize) -> bool {
+    is_punct(toks.get(i + 1), ':') && is_punct(toks.get(i + 2), ':')
+}
+
+fn tok_text(toks: &[TokenTree]) -> String {
+    let s = toks.iter().cloned().collect::<TokenStream>().to_string();
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn is_paren(t: Option<&TokenTree>) -> bool {
+    matches!(t, Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis)
+}
+
+/// The expression ending at `end` (exclusive), read backwards: a postfix chain (names,
+/// literals, groups, `.`, `::`, `?`, a macro's `!`), then the unary `*` `&` `&mut` `!` `-`
+/// in front of it that no operand precedes ; `-` when empty.
+fn back_expr(toks: &[TokenTree], end: usize) -> String {
+    let stop = |t: &TokenTree| matches!(t, TokenTree::Ident(i) if OPERAND_STOP.contains(&i.to_string().as_str()));
+    let operand_end = |t: Option<&TokenTree>| match t {
+        Some(TokenTree::Ident(_)) => !t.is_some_and(stop),
+        Some(TokenTree::Literal(_)) | Some(TokenTree::Group(_)) => true,
+        Some(TokenTree::Punct(p)) => p.as_char() == '?',
+        None => false,
+    };
+    let mut k = end;
+    while k > 0 {
+        let t = &toks[k - 1];
+        let ok = match t {
+            TokenTree::Group(_) | TokenTree::Literal(_) => true,
+            TokenTree::Ident(_) => !stop(t),
+            TokenTree::Punct(p) => {
+                matches!(p.as_char(), '.' | ':' | '?')
+                    || (p.as_char() == '!' && matches!(toks.get(k), Some(TokenTree::Group(_))))
+            }
+        };
+        if !ok {
+            break;
+        }
+        k -= 1;
+    }
+    while k > 0 {
+        let t = &toks[k - 1];
+        let is_mut = matches!(t, TokenTree::Ident(i) if i == "mut")
+            && k >= 2
+            && is_punct(toks.get(k - 2), '&');
+        let unary =
+            matches!(t, TokenTree::Punct(p) if matches!(p.as_char(), '*' | '&' | '!' | '-'));
+        if !(unary || is_mut) {
+            break;
+        }
+        let b = if is_mut { k - 2 } else { k - 1 };
+        if b > 0 && operand_end(toks.get(b - 1)) {
+            break; // a binary operator
+        }
+        k = b;
+    }
+    if k == end {
+        "-".into()
+    } else {
+        tok_text(&toks[k..end])
+    }
+}
+
+/// The tokens from `from` to the next `,` / `;` (exclusive) ; `-` when empty.
+fn fwd_until_sep(toks: &[TokenTree], from: usize) -> String {
+    let mut j = from;
+    while j < toks.len() && !is_punct(toks.get(j), ',') && !is_punct(toks.get(j), ';') {
+        j += 1;
+    }
+    if j == from {
+        "-".into()
+    } else {
+        tok_text(&toks[from..j])
+    }
+}
+
+/// A string literal holding a `p` format spec (`{:p}`, `{x:p}`, `{:#p}`, `{0:>10p}`) by
+/// std::fmt's grammar: `{` [argument] `:` [[fill]align][sign][`#`][`0`][width][`.`precision]
+/// `p` `}` (a brace pair that is no format spec, `{word:Some, X}` in a doc line, is not a site).
+fn has_p_spec(lit: &str) -> bool {
+    if !(lit.starts_with('"') || lit.starts_with('r')) {
+        return false;
+    }
+    let cs: Vec<char> = lit.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i] == '{' {
+            if cs.get(i + 1) == Some(&'{') {
+                i += 2;
+                continue;
+            }
+            let Some(close) = cs[i..].iter().position(|c| *c == '}') else {
+                break;
+            };
+            let inner: String = cs[i + 1..i + close].iter().collect();
+            if let Some((arg, spec)) = inner.split_once(':') {
+                if is_fmt_arg(arg) && is_p_format_spec(spec) {
+                    return true;
+                }
+            }
+            i += close + 1;
+        } else {
+            i += 1;
+        }
+    }
+    false
+}
+
+fn is_word(s: &str) -> bool {
+    let mut c = s.chars();
+    c.next().is_some_and(|f| f == '_' || f.is_alphabetic())
+        && c.all(|x| x == '_' || x.is_alphanumeric())
+}
+
+/// A format argument: empty, a position, or an identifier.
+fn is_fmt_arg(a: &str) -> bool {
+    a.is_empty() || a.chars().all(|c| c.is_ascii_digit()) || is_word(a)
+}
+
+/// A count of width / precision: digits, or an argument with `$`.
+fn is_fmt_count(c: &str) -> bool {
+    !c.is_empty()
+        && (c.chars().all(|x| x.is_ascii_digit())
+            || c.strip_suffix('$')
+                .is_some_and(|a| !a.is_empty() && is_fmt_arg(a)))
+}
+
+/// std::fmt's format_spec with type `p`.
+fn is_p_format_spec(spec: &str) -> bool {
+    let Some(mut r) = spec.strip_suffix('p') else {
+        return false;
+    };
+    let cs: Vec<char> = r.chars().collect();
+    let align = |c: char| matches!(c, '<' | '^' | '>');
+    if cs.len() >= 2 && align(cs[1]) {
+        r = &r[cs[0].len_utf8() + 1..];
+    } else if cs.first().is_some_and(|c| align(*c)) {
+        r = &r[1..];
+    }
+    r = r.strip_prefix(['+', '-']).unwrap_or(r);
+    r = r.strip_prefix('#').unwrap_or(r);
+    r = r.strip_prefix('0').unwrap_or(r);
+    let (width, prec) = match r.split_once('.') {
+        Some((w, p)) => (w, Some(p)),
+        None => (r, None),
+    };
+    (width.is_empty() || is_fmt_count(width)) && prec.is_none_or(|p| p == "*" || is_fmt_count(p))
+}
+
+struct AddrWalk<'a> {
+    file: &'a str,
+    names: &'a BTreeMap<String, BTreeSet<String>>,
+    out: &'a mut AddrCensus,
+}
+
+impl AddrWalk<'_> {
+    fn has(&self, form: &str, n: &str) -> bool {
+        self.names.get(form).is_some_and(|s| s.contains(n))
+    }
+
+    fn site(&mut self, f: &str, form: String, operand: String) {
+        self.out
+            .sites
+            .entry((self.file.to_string(), f.to_string(), form))
+            .or_default()
+            .push(operand);
+    }
+
+    /// One token list (a file, a group): a `fn <name>` gives its signature and body that
+    /// fn's context (nested fns joined by `::`, a method by its own name) ; a `use` item is
+    /// read whole (every `ptr` in it is an n1 site, the use text its operand).
+    fn walk(&mut self, toks: &[TokenTree], ctx: &[String], in_use: Option<&str>) {
+        let f = if ctx.is_empty() {
+            "-".to_string()
+        } else {
+            ctx.join("::")
+        };
+        let mut i = 0;
+        while i < toks.len() {
+            match &toks[i] {
+                TokenTree::Group(g) => {
+                    let inner: Vec<TokenTree> = g.stream().into_iter().collect();
+                    self.walk(&inner, ctx, in_use);
+                }
+                TokenTree::Ident(id) => {
+                    let s = id.to_string();
+                    if s == "fn" {
+                        if let Some(TokenTree::Ident(n)) = toks.get(i + 1) {
+                            let mut j = i + 2;
+                            while j < toks.len() {
+                                match &toks[j] {
+                                    TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                                        break
+                                    }
+                                    TokenTree::Punct(p) if p.as_char() == ';' => break,
+                                    _ => j += 1,
+                                }
+                            }
+                            let end = j.min(toks.len() - 1);
+                            let mut c = ctx.to_vec();
+                            c.push(n.to_string());
+                            self.walk(&toks[i + 2..=end], &c, in_use);
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                    if s == "use" && in_use.is_none() {
+                        let mut j = i + 1;
+                        while j < toks.len() && !is_punct(toks.get(j), ';') {
+                            j += 1;
+                        }
+                        let text = tok_text(&toks[i..j.min(toks.len())]);
+                        self.ident(&f, &s);
+                        self.walk(&toks[i + 1..j.min(toks.len())], ctx, Some(&text));
+                        i = j + 1;
+                        continue;
+                    }
+                    self.ident(&f, &s);
+                    self.ident_forms(toks, i, &f, &s, in_use);
+                }
+                TokenTree::Punct(p) => {
+                    let c = p.as_char();
+                    let kw = |k: usize| match toks.get(k) {
+                        Some(TokenTree::Ident(x)) => x.to_string(),
+                        _ => String::new(),
+                    };
+                    // s1: a raw-pointer type, `*const` / `*mut`
+                    if c == '*' && matches!(kw(i + 1).as_str(), "const" | "mut") {
+                        let form = format!("s1:*{}", kw(i + 1));
+                        let op = if kw(i.wrapping_sub(1)) == "as" && i >= 1 {
+                            back_expr(toks, i - 1)
+                        } else {
+                            // a `let x: *const T = e` : the expression after `=`
+                            let mut j = i + 2;
+                            let mut op = "-".to_string();
+                            while j < toks.len() {
+                                match &toks[j] {
+                                    TokenTree::Punct(q)
+                                        if q.as_char() == ';' || q.as_char() == ',' =>
+                                    {
+                                        break
+                                    }
+                                    TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                                        break
+                                    }
+                                    TokenTree::Punct(q)
+                                        if q.as_char() == '='
+                                            && q.spacing() == proc_macro2::Spacing::Alone
+                                            && !matches!(toks.get(j - 1), Some(TokenTree::Punct(r)) if r.spacing() == proc_macro2::Spacing::Joint) =>
+                                    {
+                                        op = fwd_until_sep(toks, j + 1);
+                                        break;
+                                    }
+                                    _ => j += 1,
+                                }
+                            }
+                            op
+                        };
+                        self.site(&f, form, op);
+                    }
+                    // s2: the raw-borrow operator `&raw const` / `&raw mut`
+                    if c == '&'
+                        && kw(i + 1) == "raw"
+                        && matches!(kw(i + 2).as_str(), "const" | "mut")
+                    {
+                        let op = fwd_until_sep(toks, i + 3);
+                        self.site(&f, format!("s2:&raw {}", kw(i + 2)), op);
+                    }
+                }
+                TokenTree::Literal(l) => {
+                    if has_p_spec(&l.to_string()) {
+                        let mut j = i + 1;
+                        if is_punct(toks.get(j), ',') {
+                            j += 1;
+                        }
+                        let op = if j < toks.len() {
+                            tok_text(&toks[j..])
+                        } else {
+                            "-".into()
+                        };
+                        self.site(&f, "s3:{:p}".into(), op);
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    fn ident(&mut self, f: &str, s: &str) {
+        *self.out.calls.entry(s.to_string()).or_default() += 1;
+        self.out
+            .idents
+            .entry((self.file.to_string(), f.to_string()))
+            .or_default()
+            .insert(s.to_string());
+        if UNWIND_NAMES.contains(&s) {
+            *self
+                .out
+                .unwind
+                .entry((self.file.to_string(), f.to_string(), s.to_string()))
+                .or_default() += 1;
+        }
+    }
+
+    fn ident_forms(
+        &mut self,
+        toks: &[TokenTree],
+        i: usize,
+        f: &str,
+        s: &str,
+        in_use: Option<&str>,
+    ) {
+        let group_text = |k: usize| -> Option<String> {
+            match toks.get(k) {
+                Some(TokenTree::Group(g)) => {
+                    Some(tok_text(std::slice::from_ref(&TokenTree::Group(g.clone()))))
+                }
+                _ => None,
+            }
+        };
+        // n1: the path segment `ptr` (`ptr ::`, `:: ptr`, or anywhere in a `use`)
+        if self.has("n1", s)
+            && (in_use.is_some() || colons_before(toks, i) || colons_after(toks, i))
+        {
+            let op = if let Some(u) = in_use {
+                u.to_string()
+            } else if colons_after(toks, i)
+                && matches!(toks.get(i + 3), Some(TokenTree::Ident(_)))
+                && is_paren(toks.get(i + 4))
+            {
+                group_text(i + 4).unwrap_or_else(|| "-".into())
+            } else {
+                "-".into()
+            };
+            self.site(f, format!("n1:{s}"), op);
+        }
+        // n2: a name anywhere (a macro's or a call's arguments are its operand)
+        if self.has("n2", s) {
+            let op = if is_punct(toks.get(i + 1), '!') {
+                group_text(i + 2)
+            } else if is_paren(toks.get(i + 1)) {
+                group_text(i + 1)
+            } else {
+                None
+            }
+            .or_else(|| in_use.map(str::to_string))
+            .unwrap_or_else(|| "-".into());
+            self.site(f, format!("n2:{s}"), op);
+        }
+        // n3: a method `. name (` (the receiver is its operand) or a path `:: name`
+        if self.has("n3", s) {
+            let dot = i >= 1
+                && is_punct(toks.get(i - 1), '.')
+                && !(i >= 2 && is_punct(toks.get(i - 2), '.'));
+            if dot && is_paren(toks.get(i + 1)) {
+                let op = back_expr(toks, i - 1);
+                self.site(f, format!("n3:{s}"), op);
+            } else if colons_before(toks, i) || in_use.is_some() {
+                let op = if is_paren(toks.get(i + 1)) {
+                    group_text(i + 1).unwrap_or_else(|| "-".into())
+                } else {
+                    in_use.map(str::to_string).unwrap_or_else(|| "-".into())
+                };
+                self.site(f, format!("n3:{s}"), op);
+            }
+        }
+    }
+}
+
+fn addr_census(vfs: &Vfs, names: &BTreeMap<String, BTreeSet<String>>) -> AddrCensus {
+    let mut out = AddrCensus::default();
+    for (rel, text) in vfs {
+        let ts: TokenStream = match text.parse() {
+            Ok(t) => t,
+            Err(e) => {
+                out.bad.push((rel.clone(), e.to_string()));
+                continue;
+            }
+        };
+        let toks: Vec<TokenTree> = ts.into_iter().collect();
+        let mut w = AddrWalk {
+            file: rel,
+            names,
+            out: &mut out,
+        };
+        w.walk(&toks, &[], None);
+    }
+    out
+}
+
+/// ADDR, its CALLS and UNWIND against the pins (crate-wide ; SURF-PLAN does not run it).
+fn addr_check(eng: &mut Eng<'_>, c: &AddrCensus) {
+    for (rel, e) in &c.bad {
+        eng.fail(rel, rel, "FILE", "ADDR", format!("does not tokenize: {e}"));
+    }
+    let want: BTreeMap<(String, String, String), (String, String)> = eng
+        .cfg
+        .addr
+        .iter()
+        .map(|r| {
+            (
+                (r[0].clone(), r[1].clone(), r[2].clone()),
+                (r[3].clone(), r[4].clone()),
+            )
+        })
+        .collect();
+    let mut listed_fns: BTreeSet<String> = BTreeSet::new();
+    for ((file, f, form), ops) in &c.sites {
+        let (count, op) = (ops.len().to_string(), ops.join(" | "));
+        eng.s
+            .addr_rows
+            .push(format!("{file}\t{f}\t{form}\t{count}\t{op}"));
+        match want.get(&(file.clone(), f.clone(), form.clone())) {
+            None => eng.fail(
+                file,
+                f,
+                form,
+                "ADDR",
+                format!("an address site off ADDR: {count} · {op}"),
+            ),
+            Some((wc, wo)) => {
+                if f != "-" {
+                    listed_fns.insert(f.rsplit("::").next().unwrap_or(f).to_string());
+                }
+                if *wc != count || *wo != op {
+                    eng.fail(
+                        file,
+                        f,
+                        form,
+                        "ADDR",
+                        format!("pinned {wc} · {wo} now {count} · {op}"),
+                    );
+                }
+            }
+        }
+    }
+    for (file, f, form) in want.keys() {
+        if !c
+            .sites
+            .contains_key(&(file.clone(), f.clone(), form.clone()))
+        {
+            eng.fail(file, f, form, "STALE", "an ADDR row matches no site");
+        }
+    }
+    // CALLS (HX's FAN-IN form, one level): each pinned address fn's call tokens
+    let calls_want: BTreeMap<String, String> = eng
+        .cfg
+        .addr_calls
+        .iter()
+        .map(|r| (r[0].clone(), r[1].clone()))
+        .collect();
+    for f in &listed_fns {
+        let got = c.calls.get(f).copied().unwrap_or(0).to_string();
+        eng.s.addr_calls.push(format!("{f}\t{got}"));
+        match calls_want.get(f) {
+            None => eng.fail(
+                "-",
+                f,
+                "CALLS",
+                "ADDR",
+                format!("an address fn with no CALLS row: {got} call tokens"),
+            ),
+            Some(w) if *w != got => {
+                eng.fail("-", f, "CALLS", "ADDR", format!("pinned {w} now {got}"))
+            }
+            _ => {}
+        }
+    }
+    for f in calls_want.keys() {
+        if !listed_fns.contains(f) {
+            eng.fail(
+                "-",
+                f,
+                "CALLS",
+                "STALE",
+                "a CALLS row names no pinned address fn",
+            );
+        }
+    }
+    // UNWIND: pinned empty on the crate
+    let uwant: BTreeMap<(String, String, String), String> = eng
+        .cfg
+        .unwind
+        .iter()
+        .map(|r| ((r[0].clone(), r[1].clone(), r[2].clone()), r[3].clone()))
+        .collect();
+    for ((file, f, n), k) in &c.unwind {
+        eng.s.unwind_rows.push(format!("{file}\t{f}\t{n}\t{k}"));
+        match uwant.get(&(file.clone(), f.clone(), n.clone())) {
+            None => eng.fail(file, f, n, "UNWIND", format!("{k} token(s) off UNWIND")),
+            Some(w) if *w != k.to_string() => {
+                eng.fail(file, f, n, "UNWIND", format!("pinned {w} now {k}"))
+            }
+            _ => {}
+        }
+    }
+    for (file, f, n) in uwant.keys() {
+        if !c.unwind.contains_key(&(file.clone(), f.clone(), n.clone())) {
+            eng.fail(file, f, n, "STALE", "an UNWIND row matches no token");
+        }
+    }
+}
+
+/// ADDR-FN (DELTA12 S1): no fn holding an address site (listed or not: the stricter
+/// reading) holds a token of a surface item one of whose OUT positions is REF.
+fn addr_fn_check(eng: &mut Eng<'_>, c: &AddrCensus) {
+    let refs: BTreeSet<String> = eng
+        .s
+        .rows
+        .iter()
+        .filter(|r| r.refs == "REF")
+        .map(|r| {
+            let n = r.item.rsplit("::").next().unwrap_or(&r.item);
+            n.rsplit('.').next().unwrap_or(n).to_string()
+        })
+        .collect();
+    let fns: BTreeSet<(String, String)> = c
+        .sites
+        .keys()
+        .filter(|(_, f, _)| f != "-")
+        .map(|(file, f, _)| (file.clone(), f.clone()))
+        .collect();
+    for (file, f) in fns {
+        let Some(ids) = c.idents.get(&(file.clone(), f.clone())) else {
+            continue;
+        };
+        for r in &refs {
+            if ids.contains(r) {
+                eng.fail(
+                    &file,
+                    &f,
+                    &format!("CALL:{r}"),
+                    "ADDR-FN",
+                    format!("an address fn names {r}, a surface item with a REF position"),
+                );
+            }
+        }
     }
 }
 
@@ -1831,6 +3308,11 @@ struct Surface {
     bodies: Vec<(String, String, String)>,
     /// MACRO-BODY: name, sha256
     macro_hashes: Vec<(String, String)>,
+    /// ADDR's computed rows (file, fn, form, count, operand), its CALLS (fn, count) and
+    /// UNWIND's (file, fn, name, count): crate-wide, module or not
+    addr_rows: Vec<String>,
+    addr_calls: Vec<String>,
+    unwind_rows: Vec<String>,
 }
 
 /// A fn of the file set, for the shim check.
@@ -1873,23 +3355,19 @@ impl Eng<'_> {
     }
 
     /// CARD: the cardinality constructors `t` holds at any depth (an alias of the file set
-    /// followed), or None.
+    /// followed), or None ; for an item of one OUT position (a field, a variant payload, a
+    /// const, an alias): its bools are the item's.
     fn card_of(&self, t: &Type) -> Option<String> {
+        let (found, bools) = self.card_parts(t);
+        card_text(found, bools, bools, t)
+    }
+
+    /// CARD's parts of one position: the named constructors and the number of `bool`s.
+    fn card_parts(&self, t: &Type) -> (BTreeSet<String>, usize) {
         let mut found = BTreeSet::new();
         let mut bools = 0usize;
         self.card_walk(t, &mut found, &mut bools, 0);
-        if bools >= 2 {
-            found.insert(format!("{bools} bool"));
-        }
-        if found.is_empty() {
-            None
-        } else {
-            Some(format!(
-                "{} in {}",
-                found.into_iter().collect::<Vec<_>>().join(", "),
-                nt(t)
-            ))
-        }
+        (found, bools)
     }
 
     fn card_walk(&self, t: &Type, found: &mut BTreeSet<String>, bools: &mut usize, depth: usize) {
@@ -2019,6 +3497,9 @@ impl Eng<'_> {
         if ty != "-" {
             self.s.out_types.insert(ty.clone());
         }
+        // REF (DELTA12 S1 ADDR-FN): an OUT type that holds a reference at any depth (`&` in
+        // its normalised text: a callback's `&` argument included, the stricter reading)
+        let refs = if ty.contains('&') { "REF" } else { "-" };
         self.s.rows.push(Row {
             file: file.into(),
             tier: tier.into(),
@@ -2027,6 +3508,7 @@ impl Eng<'_> {
             pos: pos.into(),
             ty,
             verdict,
+            refs: refs.into(),
         });
     }
 
@@ -2034,6 +3516,7 @@ impl Eng<'_> {
         J {
             defs: &self.defs,
             cfg: self.cfg,
+            tys: self.tys,
             self_ty,
             gen,
             in_trait,
@@ -2053,13 +3536,14 @@ impl Eng<'_> {
         r
     }
 
-    /// The rows of one fn signature (visible) ; returns whether it is tier E.
+    /// The rows of one fn signature (visible) ; `block` is its body (WHOLE reads it).
     #[allow(clippy::too_many_arguments)]
     fn fn_rows(
         &mut self,
         file: &str,
         item: &str,
         sig: &syn::Signature,
+        block: Option<&syn::Block>,
         self_ty: Option<String>,
         mut gen: Gen,
         in_trait: Option<String>,
@@ -2078,15 +3562,12 @@ impl Eng<'_> {
                 );
             }
         }
-        let (ret_ty, ret_r, ret_card) = match &sig.output {
-            syn::ReturnType::Default => ("()".to_string(), Vec::new(), None),
-            syn::ReturnType::Type(_, t) => (
-                nt(t),
-                self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t),
-                self.card_of(t),
-            ),
+        // the item's OUT positions, judged after the walk so CARD counts bools per ITEM
+        let mut outs: Vec<(String, Type)> = Vec::new();
+        let ret_ty = match &sig.output {
+            syn::ReturnType::Default => None,
+            syn::ReturnType::Type(_, t) => Some((**t).clone()),
         };
-        self.position(file, tier, "FN", item, "RET", ret_ty, ret_r, ret_card);
         for (i, a) in sig.inputs.iter().enumerate() {
             let FnArg::Typed(pt) = a else { continue };
             let pname = match &*pt.pat {
@@ -2117,18 +3598,12 @@ impl Eng<'_> {
                 j.callbacks(&pt.ty, &mut cbs, 0);
                 (j.in_param(&pname, &pt.ty), cbs)
             };
-            for (pos, t) in &res.outs {
-                let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
-                let c = self.card_of(t);
-                self.position(file, tier, "FN", item, pos, nt(t), r, c);
-            }
+            outs.extend(res.outs.iter().cloned());
             for (pos, t) in &res.cbs {
                 if is_self_ty(t) && self_ty.as_deref() == Some(ELAB) {
                     continue;
                 }
-                let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
-                let c = self.card_of(t);
-                self.position(file, tier, "FN", item, pos, nt(t), r, c);
+                outs.push((pos.clone(), t.clone()));
             }
             for (k, (kind, args)) in cbs.iter().enumerate() {
                 let param = if cbs.len() == 1 {
@@ -2146,39 +3621,130 @@ impl Eng<'_> {
             for (rule, d) in &res.fails {
                 self.fail(file, item, &format!("IN:{pname}"), rule, d.clone());
             }
-            if !res.text.is_empty() {
-                let pos = format!("IN:{pname}");
-                let verdict = if self.plan {
-                    "ENTER-NEEDED".to_string()
-                } else if let Some(k) = self
-                    .cfg
-                    .enter
-                    .iter()
-                    .position(|e| e[0] == item && e[1] == pname)
-                {
-                    self.enter_used.insert(k);
-                    format!("ENTER:{}", self.cfg.enter[k][2])
-                } else {
-                    self.fail(
-                        file,
-                        item,
-                        &pos,
-                        "ENTER",
-                        format!("text in: {}", res.text.join(", ")),
-                    );
-                    "FAIL(ENTER)".to_string()
-                };
-                self.s.rows.push(Row {
-                    file: file.into(),
-                    tier: tier.into(),
-                    kind: "FN".into(),
-                    item: item.into(),
-                    pos,
-                    ty: nt(&pt.ty),
-                    verdict,
-                });
+            self.enter_row(file, tier, item, &pname, &pt.ty, &res, block);
+        }
+        // CARD per item (DELTA12 N-1): the bools of every OUT position summed
+        let parts: Vec<(BTreeSet<String>, usize)> = ret_ty
+            .iter()
+            .chain(outs.iter().map(|(_, t)| t))
+            .map(|t| self.card_parts(t))
+            .collect();
+        let total: usize = parts.iter().map(|(_, b)| *b).sum();
+        let mut parts = parts.into_iter();
+        match &ret_ty {
+            None => {
+                self.position(file, tier, "FN", item, "RET", "()".into(), Vec::new(), None);
+            }
+            Some(t) => {
+                let (found, n) = parts.next().expect("RET's parts");
+                let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
+                let c = card_text(found, n, total, t);
+                self.position(file, tier, "FN", item, "RET", nt(t), r, c);
             }
         }
+        for ((pos, t), (found, n)) in outs.iter().zip(parts) {
+            let r = self.out_reasons(self_ty.clone(), &gen, in_trait.clone(), t);
+            let c = card_text(found, n, total, t);
+            self.position(file, tier, "FN", item, pos, nt(t), r, c);
+        }
+    }
+
+    /// IN-TOTAL's row of one parameter (DELTA12 S2 r2, r3): a name no list and no index
+    /// resolves FAILS IN-UNKNOWN ; a position holding text or a number, by name or by
+    /// content, is a row of ENTER (item, parameter, role, holds) else FAIL ENTER ; a moved
+    /// `holds` FAILS ENTER ; `index` on a text position FAILS ROLE ; `carried` is checked by
+    /// WHOLE on the body. SURF-PLAN (plan) consults no list: the row reads ENTER-NEEDED.
+    #[allow(clippy::too_many_arguments)]
+    fn enter_row(
+        &mut self,
+        file: &str,
+        tier: &str,
+        item: &str,
+        pname: &str,
+        ty: &Type,
+        res: &InRes,
+        block: Option<&syn::Block>,
+    ) {
+        let pos = format!("IN:{pname}");
+        if !res.unknown.is_empty() {
+            let mut u = res.unknown.clone();
+            u.sort();
+            u.dedup();
+            self.fail(file, item, &pos, "IN-UNKNOWN", u.join("; "));
+        }
+        let kind = if res.enter.iter().any(|(k, _)| k == "TEXT") {
+            "TEXT"
+        } else if !res.enter.is_empty() {
+            "NUMBER"
+        } else {
+            return;
+        };
+        let mut ds: Vec<String> = Vec::new();
+        for (k, d) in &res.enter {
+            if k == kind && !ds.contains(d) {
+                ds.push(d.clone());
+            }
+        }
+        let holds = format!("{kind} {}", ds.join(", "));
+        let verdict = if self.plan {
+            format!("ENTER-NEEDED:{kind}")
+        } else if let Some(k) = self
+            .cfg
+            .enter
+            .iter()
+            .position(|e| e[0] == item && e[1] == pname)
+        {
+            self.enter_used.insert(k);
+            let row = self.cfg.enter[k].clone();
+            let role = row[2].clone();
+            if row[3] != holds {
+                self.fail(
+                    file,
+                    item,
+                    &pos,
+                    "ENTER",
+                    format!("pinned {} now {holds}", row[3]),
+                );
+            }
+            if role == "index" && kind == "TEXT" {
+                self.fail(file, item, &pos, "ROLE", "`index` on a text position");
+            }
+            if role == "carried" {
+                match block {
+                    None => self.fail(file, item, &pos, "WHOLE", "`carried` with no body to read"),
+                    Some(b) => {
+                        let mut w = WholeUse {
+                            p: pname,
+                            hits: Vec::new(),
+                        };
+                        w.visit_block(b);
+                        if !w.hits.is_empty() {
+                            self.fail(
+                                file,
+                                item,
+                                &pos,
+                                "WHOLE",
+                                format!("`carried` read in the body: {}", w.hits.join(", ")),
+                            );
+                        }
+                    }
+                }
+            }
+            format!("ENTER:{role}")
+        } else {
+            self.fail(file, item, &pos, "ENTER", format!("off ENTER: {holds}"));
+            "FAIL(ENTER)".to_string()
+        };
+        self.s.rows.push(Row {
+            file: file.into(),
+            tier: tier.into(),
+            kind: "FN".into(),
+            item: item.into(),
+            pos,
+            ty: nt(ty),
+            verdict,
+            refs: "-".into(),
+        });
     }
 
     /// CB: one callback of a surface item's parameter, against its row of CB.
@@ -2235,6 +3801,7 @@ impl Eng<'_> {
             }
         };
         self.s.rows.push(Row {
+            refs: "-".into(),
             file: file.into(),
             tier: tier.into(),
             kind: "FN".into(),
@@ -2294,6 +3861,7 @@ impl Eng<'_> {
             }
         };
         self.s.rows.push(Row {
+            refs: "-".into(),
             file: file.into(),
             tier: tier.into(),
             kind: kind.into(),
@@ -2459,9 +4027,12 @@ fn file_set(vfs: &Vfs, eng: &mut Eng<'_>) -> Option<Vec<FileRec>> {
     Some(out)
 }
 
-fn surface(vfs: &Vfs, cfg: &Cfg) -> Surface {
-    let tys = TyIdx::build(vfs);
+fn surface(vfs: &Vfs, cfg: &Cfg, own: &str, deps: &[Krate]) -> Surface {
+    let tys = TyIdx::build(vfs, own, deps);
     let mut eng = Eng::fresh(cfg, &tys, false);
+    // ADDR and UNWIND read the whole crate, module or not
+    let census = addr_census(vfs, &cfg.addr_names);
+    addr_check(&mut eng, &census);
     let files = file_set(vfs, &mut eng);
     let in_set: BTreeSet<String> = files.iter().flatten().map(|f| f.rel.clone()).collect();
     // the rest of the crate: the declaration, the Elaborator's fields, an inline root
@@ -2613,6 +4184,7 @@ fn surface(vfs: &Vfs, cfg: &Cfg) -> Surface {
     e_compare(&mut eng);
     macros_check(&mut eng, &files, &ats, &others);
     bodies_check(&mut eng, &files, vfs);
+    addr_fn_check(&mut eng, &census);
     stale_checks(&mut eng);
     eng.s.rows.sort();
     eng.s
@@ -2890,7 +4462,16 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                 },
             );
             if wider {
-                eng.fn_rows(file, &name, &f.sig, None, Gen::new(), None, "K");
+                eng.fn_rows(
+                    file,
+                    &name,
+                    &f.sig,
+                    Some(&f.block),
+                    None,
+                    Gen::new(),
+                    None,
+                    "K",
+                );
             } else {
                 let mut names = BTreeSet::new();
                 for a in &f.sig.inputs {
@@ -2916,6 +4497,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
             if wider {
                 let listed = eng.cfg.vocab.get(&name).is_some_and(|k| k == "struct");
                 eng.s.rows.push(Row {
+                    refs: "-".into(),
                     file: file.into(),
                     tier: "-".into(),
                     kind: "TYPE".into(),
@@ -2984,6 +4566,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                 let listed = eng.cfg.enums.contains(&name)
                     && eng.cfg.vocab.get(&name).is_some_and(|k| k == "enum");
                 eng.s.rows.push(Row {
+                    refs: "-".into(),
                     file: file.into(),
                     tier: "-".into(),
                     kind: "ENUM".into(),
@@ -3180,6 +4763,7 @@ fn impl_item<'a>(
             }
         }
         eng.s.rows.push(Row {
+            refs: "-".into(),
             file: file.into(),
             tier: "-".into(),
             kind: "IMPL".into(),
@@ -3243,6 +4827,7 @@ fn impl_item<'a>(
                         file,
                         &item,
                         &f.sig,
+                        Some(&f.block),
                         Some(ty.clone()),
                         gen.clone(),
                         None,
@@ -3342,6 +4927,7 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
     }
     let listed = eng.cfg.traits.contains(&name);
     eng.s.rows.push(Row {
+        refs: "-".into(),
         file: file.into(),
         tier: "-".into(),
         kind: "TRAIT".into(),
@@ -3388,6 +4974,7 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
                     file,
                     &item,
                     &f.sig,
+                    f.default.as_ref(),
                     None,
                     gen.clone(),
                     Some(name.clone()),
@@ -3510,6 +5097,7 @@ fn use_item(eng: &mut Eng<'_>, at: &At<'_>, u: &syn::ItemUse) {
                 }
             }
             eng.s.rows.push(Row {
+                refs: "-".into(),
                 file: file.into(),
                 tier: "-".into(),
                 kind: "USE".into(),
@@ -3890,7 +5478,16 @@ fn stale_checks(eng: &mut Eng<'_>) {
                 &e[0],
                 &format!("IN:{}", e[1]),
                 "STALE",
-                "an ENTER row matches no text parameter",
+                "an ENTER row matches no text or number parameter",
+            );
+        }
+        if !ROLES.contains(&e[2].as_str()) {
+            eng.fail(
+                "-",
+                &e[0],
+                &format!("IN:{}", e[1]),
+                "ROLE",
+                format!("role `{}` off {ROLES:?}", e[2]),
             );
         }
     }
@@ -3980,10 +5577,60 @@ fn stale_checks(eng: &mut Eng<'_>) {
     }
 }
 
+/// A fixture tree: its `src` (keys without `../`) and its outer files (`../Cargo.toml`, a
+/// dependency's `../../<dep>/..`), the `table:` hunk keys left out.
+fn split_tree(vfs: &Vfs) -> (Vfs, Vfs) {
+    let mut src = Vfs::new();
+    let mut outer = Vfs::new();
+    for (k, v) in vfs {
+        if k.starts_with("../") {
+            outer.insert(k.clone(), v.clone());
+        } else if !k.starts_with("table:") {
+            src.insert(k.clone(), v.clone());
+        }
+    }
+    (src, outer)
+}
+
+/// The engine on a fixture tree.
 fn run(vfs: &Vfs, cfg: &Cfg) -> Surface {
-    let mut s = surface(vfs, cfg);
+    let (src, outer) = split_tree(vfs);
+    let (own, deps) = dep_crates(&Tree::Map(&outer));
+    let mut s = surface(&src, cfg, &own, &deps);
     s.e_rows.sort();
     s
+}
+
+/// The engine on the real crate (its `src`, or `SCOPE_HOME_SRC`'s copy, with the path
+/// dependencies its Cargo.toml names).
+fn run_crate(vfs: &Vfs, cfg: &Cfg) -> Surface {
+    let (own, deps) = dep_crates(&crate_tree());
+    let mut s = surface(vfs, cfg, &own, &deps);
+    s.e_rows.sort();
+    s
+}
+
+/// A fixture's `table:<NAME>` hunks applied to the pinned table: each `- ` line removes one
+/// row (it must match exactly one), each `+ ` line appends one.
+fn table_overrides(vfs: &Vfs) -> BTreeMap<String, String> {
+    let mut over = BTreeMap::new();
+    for (k, v) in vfs {
+        let Some(name) = k.strip_prefix("table:") else {
+            continue;
+        };
+        let mut lines: Vec<String> = tables::get(name).lines().map(str::to_string).collect();
+        for l in v.lines() {
+            if let Some(x) = l.strip_prefix("- ") {
+                let n = lines.iter().filter(|r| r.as_str() == x).count();
+                assert_eq!(n, 1, "table hunk {name}: `- {x}` must match one row");
+                lines.retain(|r| r.as_str() != x);
+            } else if let Some(x) = l.strip_prefix("+ ") {
+                lines.push(x.to_string());
+            }
+        }
+        over.insert(name.to_string(), lines.join("\n"));
+    }
+    over
 }
 
 // =====================================================================================
@@ -4043,8 +5690,15 @@ fn fixtures() -> BTreeMap<String, Vfs> {
         if let Some(p) = l.strip_prefix("--- ") {
             cur = Some(p.trim().to_string());
             clean.insert(p.trim().to_string(), String::new());
+        } else if let Some(p) = l.strip_prefix("@@ table:") {
+            // a table hunk in CLEAN applies to every fixture (a negative control's door)
+            cur = Some(format!("table:{}", p.trim()));
+            clean.entry(format!("table:{}", p.trim())).or_default();
         } else if let Some(c) = &cur {
             let t = clean.get_mut(c).expect("file");
+            if c.starts_with("table:") && !(l.starts_with("- ") || l.starts_with("+ ")) {
+                continue;
+            }
             t.push_str(l);
             t.push('\n');
         }
@@ -4076,6 +5730,15 @@ fn fixtures() -> BTreeMap<String, Vfs> {
         }
         for (path, minus, plus) in hunks {
             let t = vfs.entry(path.clone()).or_default();
+            if path.starts_with("table:") {
+                for m in &minus {
+                    t.push_str(&format!("- {m}\n"));
+                }
+                for p in &plus {
+                    t.push_str(&format!("+ {p}\n"));
+                }
+                continue;
+            }
             if minus.is_empty() {
                 for p in &plus {
                     t.push_str(p);
@@ -4118,9 +5781,19 @@ fn ht_surf_engine_on_fixtures() {
     let cfg = cfg("FIX");
     let fx = fixtures();
     let mut msgs = Vec::new();
+    // a fixture's `@@ table:` hunks replace pins for that fixture only
+    let cfg_of = |vfs: &Vfs| -> Option<Cfg> {
+        let over = table_overrides(vfs);
+        if over.is_empty() {
+            None
+        } else {
+            Some(cfg_with("FIX", &over))
+        }
+    };
 
     // the positive control: the clean module passes, its surface as pinned
-    let clean = run(&fx["CLEAN"], &cfg);
+    let clean_cfg = cfg_of(&fx["CLEAN"]);
+    let clean = run(&fx["CLEAN"], clean_cfg.as_ref().unwrap_or(&cfg));
     assert!(clean.present, "the CLEAN fixture has no lexscope module");
     for f in &clean.fails {
         msgs.push(format!("CLEAN (must pass) {}", f.line()));
@@ -4128,7 +5801,7 @@ fn ht_surf_engine_on_fixtures() {
     let rows: Vec<String> = clean.rows.iter().map(Row::line).collect();
     dump(
         "FIX_ROWS",
-        "file\ttier\tkind\titem\tposition\ttype\tverdict",
+        "file\ttier\tkind\titem\tposition\ttype\tverdict\trefs",
         &rows,
     );
     let want_rows: Vec<String> = table(&tables::get("FIX_ROWS"))
@@ -4161,6 +5834,12 @@ fn ht_surf_engine_on_fixtures() {
         .map(|(a, b)| format!("{a}\t{b}"))
         .collect();
     dump("FIX_MACROS", "name\tsha256", &mac);
+    dump(
+        "FIX_ADDR",
+        "file\tfn\tform\tcount\toperand",
+        &clean.addr_rows,
+    );
+    dump("FIX_ADDR_CALLS", "fn\tcalls", &clean.addr_calls);
 
     // the negative controls: each fixture fails with exactly its pinned (item, position, rule)
     let mut expect: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -4174,11 +5853,15 @@ fn ht_surf_engine_on_fixtures() {
     let mut ns_failing = BTreeSet::new();
     let mut nb_failing = BTreeSet::new();
     let mut ni_failing = BTreeSet::new();
+    let mut na_failing = BTreeSet::new();
+    let mut nu_failing = BTreeSet::new();
+    let mut nt_failing = BTreeSet::new();
     for (name, vfs) in &fx {
         if name == "CLEAN" {
             continue;
         }
-        let s = run(vfs, &cfg);
+        let cfg_n = cfg_of(vfs);
+        let s = run(vfs, cfg_n.as_ref().unwrap_or(&cfg));
         let got: BTreeSet<String> = s.fails.iter().map(fail_key).collect();
         for f in &s.fails {
             dumped.push(format!(
@@ -4207,10 +5890,13 @@ fn ht_surf_engine_on_fixtures() {
                 ("NS", &mut ns_failing),
                 ("NB", &mut nb_failing),
                 ("NI", &mut ni_failing),
+                ("NA", &mut na_failing),
+                ("NU", &mut nu_failing),
+                ("NT", &mut nt_failing),
             ] {
                 if let Some(x) = name.strip_prefix(pre) {
                     let n: String = x.chars().take_while(char::is_ascii_digit).collect();
-                    set.insert(n.parse::<u32>().expect("NS<n> / NB<n> / NI<n>"));
+                    set.insert(n.parse::<u32>().expect("a prefix and a number"));
                 }
             }
         }
@@ -4225,12 +5911,16 @@ fn ht_surf_engine_on_fixtures() {
             msgs.push(format!("FIX_EXPECT names {n}, which is not a fixture"));
         }
     }
-    // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) ; NB1-NB8 (LS1 part 4) + NB9-NB13 ;
-    // NI1-NI10 (LS1 part 6, INTERIOR)
+    // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) + NS32 (DELTA12 N-1) ; NB1-NB8 (LS1
+    // part 4) + NB9-NB13 ; NI1-NI10 (LS1 part 6, INTERIOR) ; NA1-NA7 (ADDR), NU1 (UNWIND),
+    // NT1-NT9 (IN-TOTAL) (LS1 part 7, DELTA12 S1 S2 S4)
     for (pre, set, last) in [
-        ("NS", &ns_failing, 31),
+        ("NS", &ns_failing, 32),
         ("NB", &nb_failing, 13),
         ("NI", &ni_failing, 10),
+        ("NA", &na_failing, 7),
+        ("NU", &nu_failing, 1),
+        ("NT", &nt_failing, 9),
     ] {
         let missing: Vec<u32> = (1..=last).filter(|n| !set.contains(n)).collect();
         if !missing.is_empty() {
@@ -4265,19 +5955,58 @@ fn diff_lists(what: &str, got: &[String], want: &[String], msgs: &mut Vec<String
 fn ht_surf_the_lexscope_surface_is_pinned() {
     let cfg = cfg("SURF");
     let vfs = load_dir(&src_dir());
-    let s = run(&vfs, &cfg);
+    let s = run_crate(&vfs, &cfg);
     let mut msgs = Vec::new();
+    let (own, deps) = dep_crates(&crate_tree());
+    let tys = TyIdx::build(&vfs, &own, &deps);
     // INTERIOR's census of the crate's types (a measurement for the report, not a pin)
     dump(
         "INTERIOR_CENSUS",
         "file\tkind\tname\tholds_or_reaches\telab\tpath",
-        &interior_census(&TyIdx::build(&vfs)),
+        &interior_census(&tys),
     );
     dump(
         "INTERIOR_PARAMS",
         "file\tfn\tparam\ttype\tpath",
-        &interior_params(&vfs, &TyIdx::build(&vfs)),
+        &interior_params(&vfs, &tys),
     );
+    // IN-TOTAL's census: the index by crate, and the foreign names in parameter positions
+    // of the crate-visible fns (measurements, not pins)
+    dump(
+        "IN_INDEX",
+        "crate\tname\tkind\tfile\tholds\tunknown",
+        &in_index_census(&tys),
+    );
+    dump(
+        "IN_FOREIGN",
+        "crate\tname\tholds\tuses\tfirst_use",
+        &in_foreign_census(&vfs, &tys),
+    );
+    // ADDR / UNWIND: the computed rows (the pins are SURF_ADDR, SURF_ADDR_CALLS, SURF_UNWIND)
+    dump("SURF_ADDR", "file\tfn\tform\tcount\toperand", &s.addr_rows);
+    dump("SURF_ADDR_CALLS", "fn\tcalls", &s.addr_calls);
+    dump("SURF_UNWIND", "file\tfn\tname\tcount", &s.unwind_rows);
+    // ADDR_NAMES was read for one toolchain: a bump re-reads it (its own unit)
+    let tc_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../rust-toolchain.toml");
+    let channel = std::fs::read_to_string(&tc_path)
+        .ok()
+        .and_then(|t| {
+            t.lines().find_map(|l| {
+                l.trim().strip_prefix("channel").map(|x| {
+                    x.trim_start_matches([' ', '='])
+                        .trim()
+                        .trim_matches('"')
+                        .to_string()
+                })
+            })
+        })
+        .unwrap_or_else(|| "-".into());
+    if channel != tables::get("ADDR_TOOLCHAIN") {
+        msgs.push(format!(
+            "ADDR_TOOLCHAIN pinned `{}`, rust-toolchain.toml says `{channel}` — re-read ADDR_NAMES against that toolchain's std",
+            tables::get("ADDR_TOOLCHAIN")
+        ));
+    }
     let state = if s.present { "present" } else { "absent" };
     let pinned = tables::get("SURF_PRESENT");
     if state != pinned {
@@ -4293,7 +6022,7 @@ fn ht_surf_the_lexscope_surface_is_pinned() {
     let rows: Vec<String> = s.rows.iter().map(Row::line).collect();
     dump(
         "SURF_ROWS",
-        "file\ttier\tkind\titem\tposition\ttype\tverdict",
+        "file\ttier\tkind\titem\tposition\ttype\tverdict\trefs",
         &rows,
     );
     let want_rows: Vec<String> = table(&tables::get("SURF_ROWS"))
@@ -4395,7 +6124,7 @@ fn plan_row(vfs: &Vfs, cfg: &Cfg, tys: &TyIdx, file: &str, fname: &str) -> Resul
     } else {
         "K"
     };
-    eng.fn_rows(file, fname, sig, self_ty, gen, None, tier);
+    eng.fn_rows(file, fname, sig, None, self_ty, gen, None, tier);
     let params: Vec<String> = sig
         .inputs
         .iter()
@@ -4431,11 +6160,13 @@ fn plan_row(vfs: &Vfs, cfg: &Cfg, tys: &TyIdx, file: &str, fname: &str) -> Resul
 fn ht_surf_plan_today_signatures_are_pinned() {
     let cfg = cfg("SURF");
     let vfs = load_dir(&src_dir());
-    let tys = TyIdx::build(&vfs);
+    let (own, deps) = dep_crates(&crate_tree());
+    let tys = TyIdx::build(&vfs, &own, &deps);
     let mut msgs = Vec::new();
     let mut got_rows = Vec::new();
     let (mut n_pass, mut ret_fail, mut text_ret, mut cb_text, mut mut_text) = (0, 0, 0, 0, 0);
     let (mut n_card, mut n_cb, mut n_interior) = (0, 0, 0);
+    let (mut n_enter, mut n_enter_num, mut n_unknown) = (0, 0, 0);
     let want = rows_of(&tables::get("SURF_PLAN"), 9, "SURF_PLAN");
     let mut want_map = BTreeMap::new();
     for w in &want {
@@ -4460,9 +6191,15 @@ fn ht_surf_plan_today_signatures_are_pinned() {
                     .collect();
                 let ins: Vec<String> = rows
                     .iter()
-                    .filter(|r| r.verdict == "ENTER-NEEDED")
+                    .filter(|r| r.verdict.starts_with("ENTER-NEEDED"))
                     .map(|r| r.pos.trim_start_matches("IN:").to_string())
                     .collect();
+                n_enter += ins.len();
+                n_enter_num += rows
+                    .iter()
+                    .filter(|r| r.verdict == "ENTER-NEEDED:NUMBER")
+                    .count();
+                n_unknown += usize::from(fails.iter().any(|f| f.rule == "IN-UNKNOWN"));
                 let verdict = if fails.is_empty() { "PASS" } else { "FAIL" };
                 if fails.is_empty() {
                     n_pass += 1;
@@ -4509,11 +6246,11 @@ fn ht_surf_plan_today_signatures_are_pinned() {
     }
     dump(
         "SURF_PLAN",
-        "unit\tfn\tfile\tvis\ttier\tsignature\tverdict\tfails\tin_text",
+        "unit\tfn\tfile\tvis\ttier\tsignature\tverdict\tfails\tin_enter",
         &got_rows,
     );
     let counts = format!(
-        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text} card={n_card} cb={n_cb} interior={n_interior}",
+        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text} card={n_card} cb={n_cb} interior={n_interior} enter={n_enter} enter_number={n_enter_num} in_unknown={n_unknown}",
         want.len(),
         want.len() - n_pass
     );

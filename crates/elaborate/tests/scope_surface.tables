@@ -5,7 +5,57 @@
 # (scope_surface.fixtures). SURF_VOCAB / SURF_TRAITS are the vocabulary both use. LS1 part 5
 # (DELTA11 R2) adds the counted lists CARD, CB, BODY and the hash column of MACROS, each with
 # its FIX_ twin ; LS1 part 6 adds INTERIOR's exemptions (SURF_INTERIOR, empty, and FIX_INTERIOR) ;
-# with the module absent every SURF_ list is empty (a row is STALE).
+# with the module absent every SURF_ list is empty (a row is STALE). LS1 part 7 (DELTA12 S1 S2
+# N-1 N-6) adds ADDR (ADDR_NAMES, SURF_ADDR, SURF_ADDR_CALLS), UNWIND (SURF_UNWIND, empty) and
+# ENTER's `holds` column (IN-TOTAL), each list with its FIX_ twin.
+== ADDR_TOOLCHAIN
+# the toolchain ADDR_NAMES was read against (rust-toolchain.toml's channel ; a bump re-reads it)
+1.85.0
+== ADDR_NAMES
+# ADDR's NAMED forms (DELTA12 S1): n1 the path segment (`ptr ::` / `:: ptr` / any `use` of it) ;
+# n2 an ident anywhere ; n3 a method `. name (` or a path `:: name`. A closed list of std's API
+# for 1.85.0: a std fn off it that takes a reference and reveals its address is not seen (L-8)
+form	name
+n1	ptr
+n2	addr_of
+n2	addr_of_mut
+n2	NonNull
+n2	Pointer
+n2	transmute
+n3	ptr_eq
+n3	as_ptr
+n3	as_mut_ptr
+n3	as_ptr_range
+n3	as_mut_ptr_range
+n3	into_raw
+n3	addr
+n3	expose_provenance
+n3	expose_addr
+n3	element_offset
+n3	subslice_range
+n3	substr_range
+== SURF_ADDR
+# ADDR (DELTA12 S1): every address site of crates/elaborate/src, crate-wide (module or not):
+# file · fn (nested fns joined by `::`, `-` outside a fn) · form · count · OPERAND (the token
+# text of each converted expression, ` | `-joined in source order). A site off it FAILS ADDR ;
+# a row matching nothing is STALE
+file	fn	form	count	operand
+gen_enum.rs	gen_carried_typedefs	n1:ptr	1	(* f , it)
+hoist/general.rs	enclosing_call_cannot_read	n1:ptr	1	(d , * a)
+hoist/general_query.rs	arg_is_input_at	n1:ptr	1	(* a as * const ast :: Expr , target)
+hoist/general_query.rs	arg_is_input_at	s1:*const	2	& args [i] | * a
+ports.rs	wire_ports	s1:*const	1	conn . expr
+== SURF_ADDR_CALLS
+# CALLS: the identifier tokens of each address fn's name crate-wide, the `fn <name>` excluded
+fn	calls
+arg_is_input_at	2
+enclosing_call_cannot_read	1
+gen_carried_typedefs	1
+wire_ports	2
+== SURF_UNWIND
+# UNWIND (DELTA12 N-6): catch_unwind / set_hook / take_hook / resume_unwind / panic_any tokens
+# in crates/elaborate/src ; pinned empty
+file	fn	name	count
 == SURF_VOCAB
 # HT's table of opaque lexscope types: plan10/g/surface.tsv's 12 TYPE rows (DELTA10 L1 I-SURF's
 # list: ScopeRef, Saved, the witness = ScopeWitness (DELTA9's name, not yet checked by names.py),
@@ -46,7 +96,7 @@ absent
 present=absent files=0 rows=0 out_types=0 e_fns=0 text_flows=0
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
-file	tier	kind	item	position	type	verdict
+file	tier	kind	item	position	type	verdict	refs
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
@@ -55,8 +105,9 @@ type
 # until the module exists ; a row matching no failing position fails STALE
 id	item	position	type	closes
 == SURF_ENTER
-# ENTER: text in, by role (to-scope / to-display / lookup)
-item	param	role
+# ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
+# carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
+item	param	role	holds
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -94,8 +145,11 @@ item	position	reaches	why
 # + report_at (L2's LS3 row, N-a), which moved.tsv does not list: 31 rows. LS1 part 5 (DELTA11
 # R2): CARD and CB judge them too, with no list consulted (as LEAVE is not): 16 CARD, 8 CB.
 # LS1 part 6: INTERIOR judges them too, no list consulted: 1 row (with_scope's callback lends
-# `&mut Self`, the Elaborator, which holds a RefCell: lib.rs:555 const_call_fn).
-unit	fn	file	vis	tier	signature	verdict	fails	in_text
+# `&mut Self`, the Elaborator, which holds a RefCell: lib.rs:555 const_call_fn). LS1 part 7
+# (DELTA12 S2): the last column lists every IN parameter IN-TOTAL makes TEXT or NUMBER, by name
+# or by content (ENTER-NEEDED) — push_block_local_init + lo, lhs, rhs ; report_at + span ; and
+# the COUNTS line gains enter (those parameters), enter_number and in_unknown (fns with one).
+unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
 DK1	fq	scope.rs	pub(crate)	E	(&self, local: &str) -> String	FAIL	RET=TEXT(String)	local
 DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
@@ -124,22 +178,33 @@ LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&
 LS3	assert_block_local_inits_drained	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	drain_scoped_presize	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	flush_block_local_inits	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
-LS3	push_block_local_init	var_init.rs	pub(crate)	E	(&mut self, scope: Option<&str>, lo: u32, lhs: ast::Lvalue, rhs: ast::Expr)	PASS	-	scope
+LS3	push_block_local_init	var_init.rs	pub(crate)	E	(&mut self, scope: Option<&str>, lo: u32, lhs: ast::Lvalue, rhs: ast::Expr)	PASS	-	scope,lo,lhs,rhs
 LS3	scoped_init_key	var_init.rs	pub(crate)	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
-LS3	report_at	edge_gate.rs	-	E	(&mut self, span: Option<ast::Span>, prefix: &str, msg: &str, reported: &mut BTreeSet<(u32, u32, String)>)	FAIL	ARG:reported=NUMBER(u32); ARG:reported=TEXT(String); ARG:reported=UNKNOWN(BTreeSet<(u32, u32, String)>)	prefix,msg
+LS3	report_at	edge_gate.rs	-	E	(&mut self, span: Option<ast::Span>, prefix: &str, msg: &str, reported: &mut BTreeSet<(u32, u32, String)>)	FAIL	ARG:reported=NUMBER(u32); ARG:reported=TEXT(String); ARG:reported=UNKNOWN(BTreeSet<(u32, u32, String)>)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=2 card=16 cb=8 interior=1
+fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=2 card=16 cb=8 interior=1 enter=39 enter_number=2 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
 L5	Elaborator::key_under	RET	String	DK1
 == FIX_ENTER
-item	param	role
-Elaborator::with_scope	seg	to-scope
-Elaborator::key_under	n	lookup
-shown_from_spelling	s	to-display
-ScopeKeyed::entry_under_cur	name	to-scope
+item	param	role	holds
+Elaborator::with_scope	seg	to-scope	TEXT str
+Elaborator::key_under	n	lookup	TEXT str
+shown_from_spelling	s	to-display	TEXT String
+ScopeKeyed::entry_under_cur	name	to-scope	TEXT str
+Scopes::park	lhs	carried	TEXT dep::Lvalue.path -> dep::HierPath.segments -> dep::Ident.name -> String
+Scopes::is_under	segs	lookup	TEXT dep::Ident.name -> String
+tally_is_empty	t	lookup	TEXT Tally.seen -> String
+== FIX_ADDR
+file	fn	form	count	operand
+lib.rs	same_actual	n1:ptr	1	(d , a)
+== FIX_ADDR_CALLS
+fn	calls
+same_actual	1
+== FIX_UNWIND
+file	fn	name	count
 == FIX_ENUMS
 name
 Mark
@@ -207,6 +272,8 @@ lexscope/mod.rs	ScopeKeyed::drain_keys_shown	758737fe5d93c517426c29ae4e38a1030d2
 lexscope/mod.rs	ScopeKeyed::entry_under_cur	c6c27e4d3f33b78b41b85b3c3ed5a465a05386bfaec054d17af8fdbfc3747b5e
 lexscope/mod.rs	Scopes::enter	c823f327b4c77e358e05662a0ac4dc2262f2f2815bb5e9b8ca41215065c76ec8
 lexscope/mod.rs	Scopes::is_top	fa78a02ab17eced69d7a58ccda2d08182d3eecc792d0d55f12c9f1d669102f87
+lexscope/mod.rs	Scopes::is_under	37bfb236e93cb85165b0d13f7996e26b3a1e8354259539c081b4d4daada8241a
+lexscope/mod.rs	Scopes::park	3e98a93b8ece46fb747f95ac4a29dcb10c699e668cb6157f5ce47ca4d81e2913
 lexscope/mod.rs	Scopes::restore	2273afafccc032f2a27ce8aa38754f383e7ffaf33814ede3b766768ee3832cac
 lexscope/mod.rs	scope_out	c52b656b6bfdb5ea06a9d9f3a445e2a407c16f88e5853f7fa2a290cc43ee0c97
 lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
@@ -217,44 +284,49 @@ lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e
 name	sha256
 zn	ace1bde33200f9bbda498a51ff456b950f101b543385d74622db55634f09d16e
 == FIX_ROWS
-file	tier	kind	item	position	type	verdict
-lexscope/inner.rs	-	TYPE	ScopeRef	-	-	PASS
-lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS
-lexscope/mod.rs	-	ENUM	Mark	-	-	PASS
-lexscope/mod.rs	-	IMPL	Clone for Shown	-	-	PASS
-lexscope/mod.rs	-	IMPL	Debug for Shown	-	-	PASS
-lexscope/mod.rs	-	IMPL	Default for Saved	-	-	PASS
-lexscope/mod.rs	-	IMPL	Outgoing for Shown	-	-	PASS
-lexscope/mod.rs	-	IMPL	Outgoing for ShownCtx	-	-	PASS
-lexscope/mod.rs	-	TRAIT	Outgoing	-	-	PASS
-lexscope/mod.rs	-	TYPE	Saved	-	-	PASS
-lexscope/mod.rs	-	TYPE	ScopeKeyed	-	-	PASS
-lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS
-lexscope/mod.rs	-	TYPE	Shown	-	-	PASS
-lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS
-lexscope/mod.rs	-	USE	inner::ScopeRef	-	-	PASS
-lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	ARG:out	Vec<Shown>	CARD:list:shown
-lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	RET	()	PASS
-lexscope/mod.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS
-lexscope/mod.rs	E	FN	Elaborator::key_under	IN:n	&str	ENTER:lookup
-lexscope/mod.rs	E	FN	Elaborator::key_under	RET	String	LEAVE:L5
-lexscope/mod.rs	E	FN	Elaborator::mark_is	RET	bool	PASS
-lexscope/mod.rs	E	FN	Elaborator::names_are_empty	RET	bool	PASS
-lexscope/mod.rs	E	FN	Elaborator::scope_carry	RET	ScopeRef	PASS
-lexscope/mod.rs	E	FN	Elaborator::scope_hold	RET	Saved	PASS
-lexscope/mod.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once
-lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback
-lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope
-lexscope/mod.rs	E	FN	Elaborator::with_scope	RET	R	PASS
-lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0
-lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:keys
-lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope
-lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	RET	&mut V	PASS
-lexscope/mod.rs	K	FN	Scopes::is_top	RET	bool	PASS
-lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0
-lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display
-lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS
-lexscope/mod.rs	K	FN	tally_is_empty	RET	bool	PASS
+file	tier	kind	item	position	type	verdict	refs
+lexscope/inner.rs	-	TYPE	ScopeRef	-	-	PASS	-
+lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
+lexscope/mod.rs	-	ENUM	Mark	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Clone for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Debug for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Default for Saved	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Outgoing for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Outgoing for ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	TRAIT	Outgoing	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Saved	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	ScopeKeyed	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	USE	inner::ScopeRef	-	-	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	ARG:out	Vec<Shown>	CARD:list:shown	-
+lexscope/mod.rs	E	FN	Elaborator::cur_shown_all	RET	()	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::key_under	IN:n	&str	ENTER:lookup	-
+lexscope/mod.rs	E	FN	Elaborator::key_under	RET	String	LEAVE:L5	-
+lexscope/mod.rs	E	FN	Elaborator::mark_is	RET	bool	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::names_are_empty	RET	bool	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::scope_carry	RET	ScopeRef	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::scope_hold	RET	Saved	PASS	-
+lexscope/mod.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once	-
+lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
+lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
+lexscope/mod.rs	E	FN	Elaborator::with_scope	RET	R	PASS	-
+lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
+lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:keys	-
+lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	RET	&mut V	PASS	REF
+lexscope/mod.rs	K	FN	Scopes::is_top	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::is_under	IN:segs	&[dep::Ident]	ENTER:lookup	-
+lexscope/mod.rs	K	FN	Scopes::is_under	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::park	IN:lhs	ast::Lvalue	ENTER:carried	-
+lexscope/mod.rs	K	FN	Scopes::park	RET	()	PASS	-
+lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
+lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
+lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
+lexscope/mod.rs	K	FN	tally_is_empty	IN:t	&Tally	ENTER:lookup	-
+lexscope/mod.rs	K	FN	tally_is_empty	RET	bool	PASS	-
 == FIX_OUT_TYPES
 type
 &mut V
@@ -269,8 +341,21 @@ T::Plain
 Vec<Shown>
 bool
 == FIX_EXPECT
-# BODY-ALL (LS1 part 5): a fixture that adds or edits a fn also fails `<fn> BODY BODY`
+# BODY-ALL (LS1 part 5): a fixture that adds or edits a fn also fails `<fn> BODY BODY`.
+# LS1 part 7: ADDR / ADDR-FN / UNWIND rows name the fn holding the site (`-` outside a fn) and
+# the form (or `CALL:<entry>`, `CALLS`, the unwind name) as the position ; NI1-NI7 and NI9 gain
+# IN-TOTAL's ENTER / IN-UNKNOWN (a carrier's text or number, and a cell name no list holds),
+# NI10 gains ADDR (its `*mut u8` is an s1 site outside a fn)
 fixture	item	position	rule
+NA1	na1	CALL:entry_under_cur	ADDR-FN
+NA1	na1	s1:*mut	ADDR
+NA2	na2	CALL:entry_under_cur	ADDR-FN
+NA2	na2	n1:ptr	ADDR
+NA3	na3	s3:{:p}	ADDR
+NA4	-	n1:ptr	ADDR
+NA5	na5	s1:*const	ADDR
+NA6	same_actual	CALL:entry_under_cur	ADDR-FN
+NA7	same_actual	CALLS	ADDR
 NB1	Elaborator::nb1	BODY	BODY
 NB1	Elaborator::nb1	FN	E-LIST
 NB1	Elaborator::nb1	OUT-C	OUT-C
@@ -327,18 +412,56 @@ NB9	Elaborator::cur_index_into	ARG:out	NUMBER
 NB9	Elaborator::cur_index_into	ARG:out	UNKNOWN
 NB9	Elaborator::cur_index_into	BODY	BODY
 NB9	Elaborator::cur_index_into	FN	E-LIST
+NB9	Elaborator::cur_index_into	IN:out	INTERIOR
 NB9	Elaborator::cur_index_into	OUT-C	OUT-C
 NB9	Elaborator::nb9b	ARG:w	BOUND
 NB9	Elaborator::nb9b	ARG:w	UNKNOWN
 NB9	Elaborator::nb9b	BODY	BODY
 NB9	Elaborator::nb9b	FN	E-LIST
+NB9	Elaborator::nb9b	IN:w	INTERIOR
 NB9	Elaborator::nb9c	ARG:out	CARD
 NB9	Elaborator::nb9c	ARG:out	UNKNOWN
 NB9	Elaborator::nb9c	BODY	BODY
 NB9	Elaborator::nb9c	FN	E-LIST
-NB9	Elaborator::cur_index_into	IN:out	INTERIOR
-NB9	Elaborator::nb9b	IN:w	INTERIOR
 NB9	Elaborator::nb9c	IN:out	INTERIOR
+NI1	ni1	BODY	BODY
+NI1	ni1	IN:sink	ENTER
+NI1	ni1	IN:sink	IN-UNKNOWN
+NI1	ni1	IN:sink	INTERIOR
+NI10	-	s1:*mut	ADDR
+NI10	Elaborator::mark_is	IN:m	INTERIOR
+NI10	Mark::Gen	VARIANT:0	ENUM-PAYLOAD
+NI10	Mark::Gen	VARIANT:0	INTERIOR
+NI10	Mark::Gen	VARIANT:0	PTR
+NI2	ni2	BODY	BODY
+NI2	ni2	IN:o	ENTER
+NI2	ni2	IN:o	IN-UNKNOWN
+NI2	ni2	IN:o	INTERIOR
+NI3	ni3	BODY	BODY
+NI3	ni3	IN:h	ENTER
+NI3	ni3	IN:h	IN-UNKNOWN
+NI3	ni3	IN:h	INTERIOR
+NI4	ni4	BODY	BODY
+NI4	ni4	IN:s	ENTER
+NI4	ni4	IN:s	INTERIOR
+NI5	ni5	BODY	BODY
+NI5	ni5	IN:out	ENTER
+NI5	ni5	IN:out	IN-UNKNOWN
+NI5	ni5	IN:out	INTERIOR
+NI6	ni6	BODY	BODY
+NI6	ni6	IN:out	ENTER
+NI6	ni6	IN:out	IN-UNKNOWN
+NI6	ni6	IN:out	INTERIOR
+NI7	Elaborator::ni7	BODY	BODY
+NI7	Elaborator::ni7	FN	E-LIST
+NI7	Elaborator::ni7	IN:other	ENTER
+NI7	Elaborator::ni7	IN:other	IN-UNKNOWN
+NI7	Elaborator::ni7	IN:other	INTERIOR
+NI8	ScopeKeyed::entry_under_cur	IN:lex	INTERIOR
+NI8	Scopes.memo	FIELD	INTERIOR
+NI9	ni9	BODY	BODY
+NI9	ni9	IN:tx	IN-UNKNOWN
+NI9	ni9	IN:tx	INTERIOR
 NS1	Elaborator::ns1	BODY	BODY
 NS1	Elaborator::ns1	FN	E-LIST
 NS1	Elaborator::ns1	IN:n	ENTER
@@ -400,6 +523,9 @@ NS29	ns29	BODY	BODY
 NS29	ns29	CB:f	CB
 NS30	zn	MACRO-DEF	MACRO-BODY
 NS31	Scopes::is_top	BODY	BODY
+NS32	Scopes::ns32	ARG:err	CARD
+NS32	Scopes::ns32	ARG:late	CARD
+NS32	Scopes::ns32	BODY	BODY
 NS3a	ns3a	BODY	BODY
 NS3a	ns3a	RET	TEXT
 NS3b	ns3b	BODY	BODY
@@ -432,26 +558,22 @@ NS8c	From for String	IMPL	IMPL-FOREIGN-SELF
 NS8c	From for String	IMPL	IMPL-TRAIT
 NS8c	From for String::from	BODY	BODY
 NS9	ROOT	CONST	TEXT
-NI1	ni1	BODY	BODY
-NI1	ni1	IN:sink	INTERIOR
-NI10	Elaborator::mark_is	IN:m	INTERIOR
-NI10	Mark::Gen	VARIANT:0	ENUM-PAYLOAD
-NI10	Mark::Gen	VARIANT:0	INTERIOR
-NI10	Mark::Gen	VARIANT:0	PTR
-NI2	ni2	BODY	BODY
-NI2	ni2	IN:o	INTERIOR
-NI3	ni3	BODY	BODY
-NI3	ni3	IN:h	INTERIOR
-NI4	ni4	BODY	BODY
-NI4	ni4	IN:s	INTERIOR
-NI5	ni5	BODY	BODY
-NI5	ni5	IN:out	INTERIOR
-NI6	ni6	BODY	BODY
-NI6	ni6	IN:out	INTERIOR
-NI7	Elaborator::ni7	BODY	BODY
-NI7	Elaborator::ni7	FN	E-LIST
-NI7	Elaborator::ni7	IN:other	INTERIOR
-NI8	ScopeKeyed::entry_under_cur	IN:lex	INTERIOR
-NI8	Scopes.memo	FIELD	INTERIOR
-NI9	ni9	BODY	BODY
-NI9	ni9	IN:tx	INTERIOR
+NT1	nt1	BODY	BODY
+NT1	nt1	IN:segs	ENTER
+NT2	nt2	BODY	BODY
+NT2	nt2	IN:path	ENTER
+NT3	nt3	BODY	BODY
+NT3	nt3	IN:e	ENTER
+NT4	nt4	BODY	BODY
+NT4	nt4	IN:l	ENTER
+NT5	nt5	BODY	BODY
+NT5	nt5	IN:n	ENTER
+NT6	nt6	BODY	BODY
+NT6	nt6	IN:sp	ENTER
+NT7	nt7	BODY	BODY
+NT7	nt7	IN:d	IN-UNKNOWN
+NT8	Scopes::park	BODY	BODY
+NT8	Scopes::park	IN:lhs	WHOLE
+NT9	nt9	BODY	BODY
+NT9	nt9	IN:seg	ROLE
+NU1	nu1	catch_unwind	UNWIND

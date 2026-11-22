@@ -10,10 +10,59 @@
 # that adds or edits a fn also fails BODY for that fn. NI1-NI10 are LS1 part 6's (INTERIOR: a
 # type name of the crate followed through its fields to a mutable carrier). CLEAN's Elaborator
 # holds a RefCell as the crate's does (lib.rs:555), so the receiver's exemption is not vacuous,
-# and CLEAN's Tally / TallyInner are the clean struct INTERIOR follows and passes.
+# and CLEAN's Tally / TallyInner are the clean struct INTERIOR follows and passes. NA1-NA7,
+# NU1, NT1-NT9 and NS32 are LS1 part 7's (DELTA12: ADDR, UNWIND, IN-TOTAL, CARD per item). A
+# path `../<f>` is a file beside the fixture crate's `src` (`../Cargo.toml`, its manifest ; a
+# path dependency's files under `../../dep/`), read by IN-TOTAL's index as the real crate's
+# Cargo.toml files are ; `@@ table:<NAME>` hunks edit a pinned table for one fixture (or, in
+# CLEAN, for every fixture): a negative control's door, not a fixture's.
 == CLEAN
+--- ../Cargo.toml
+[package]
+name = "clean"
+
+[dependencies]
+dep = { path = "../dep" }
+serde = "1"
+--- ../../dep/Cargo.toml
+[package]
+name = "dep"
+--- ../../dep/src/lib.rs
+pub struct Span {
+    pub lo: u32,
+    pub hi: u32,
+}
+
+pub struct Ident {
+    pub name: String,
+    pub span: Span,
+}
+
+pub struct HierPath {
+    pub segments: Vec<Ident>,
+}
+
+pub enum Expr {
+    Lit(u64),
+    Ref(HierPath),
+}
+
+pub struct Lvalue {
+    pub path: HierPath,
+    pub span: Span,
+}
 --- lib.rs
 mod lexscope;
+
+use dep as ast;
+
+fn same_actual(d: &dep::Expr, a: &dep::Expr) -> bool {
+    std::ptr::eq(d, a)
+}
+
+fn default_unread(ds: &[dep::Expr], a: &dep::Expr) -> bool {
+    !ds.iter().any(|d| same_actual(d, a))
+}
 
 pub(crate) struct Elaborator<'s> {
     src: &'s str,
@@ -30,6 +79,7 @@ mod inner;
 pub(crate) use inner::ScopeRef;
 
 pub(crate) struct Scopes {
+    parked: Vec<ast::Lvalue>,
     cur: String,
     marks: Vec<String>,
 }
@@ -131,6 +181,14 @@ impl Scopes {
 
     fn restore(&mut self, s: Saved) {
         self.cur = s.text;
+    }
+
+    pub(crate) fn park(&mut self, lhs: ast::Lvalue) {
+        self.parked.push(lhs);
+    }
+
+    pub(crate) fn is_under(&self, segs: &[dep::Ident]) -> bool {
+        segs.is_empty() && self.cur.is_empty()
     }
 }
 
@@ -688,3 +746,128 @@ pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
 @@ lexscope/mod.rs
 -     Gen,
 +     Gen(*mut u8),
+== NA1
+# ADDR: the judge's (f2) verbatim — an outside caller turns an entry's returned reference into a
+# number ; ADDR-FN: the address fn calls a reference-returning entry
+@@ lib.rs
++ impl Elaborator<'_> {
++     fn na1(&mut self, n: &str) -> usize {
++         self.defparams.entry_under_cur(&self.lex, n) as *mut _ as usize
++     }
++ }
+== NA2
+# ADDR: `std::ptr::eq` on two entry returns (a key identity by address)
+@@ lib.rs
++ fn na2(k: &mut lexscope::ScopeKeyed<u32>, lex: &lexscope::Scopes) -> bool {
++     std::ptr::eq(k.entry_under_cur(lex, "a"), k.entry_under_cur(lex, "b"))
++ }
+== NA3
+# ADDR s3: a reference printed as an address
+@@ lib.rs
++ fn na3(r: &u32) -> String {
++     format!("{:p}", r)
++ }
+== NA4
+# ADDR n1: a renamed import of ptr::eq is seen at its `use` (outside every fn)
+@@ lib.rs
++ use std::ptr::eq as same;
++ fn na4(a: &u32, b: &u32) -> bool {
++     same(a, b)
++ }
+== NA5
+# ADDR s1: a raw-pointer type with no `as` (an implicit coercion at a typed `let`)
+@@ lib.rs
++ fn na5(r: &u32) -> usize {
++     let p: *const u32 = r;
++     p as usize
++ }
+== NA6
+# ADDR-FN: CLEAN's pinned address fn gains a call of a reference-returning entry (its ADDR row
+# and CALLS line unchanged)
+@@ lib.rs
+-     std::ptr::eq(d, a)
++     std::ptr::eq(d, a) && *keyed().entry_under_cur(&lex(), "x") == 0
+== NA7
+# ADDR CALLS: a second caller of CLEAN's pinned address fn
+@@ lib.rs
++ fn na7(x: &dep::Expr) -> bool {
++     same_actual(x, x)
++ }
+== NU1
+# UNWIND: an outside caller wraps an entry in catch_unwind and reads the payload
+@@ lib.rs
++ fn nu1(k: &mut lexscope::ScopeKeyed<u32>, lex: &lexscope::Scopes) -> Option<String> {
++     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| *k.entry_under_cur(lex, "x")));
++     r.err().and_then(|p| p.downcast::<String>().ok()).map(|b| *b)
++ }
+== NT1
+# IN-TOTAL: text by content, one hop into the dependency (`dep::Ident.name -> String`)
+@@ lexscope/mod.rs
++ pub(crate) fn nt1(segs: &[dep::Ident]) -> bool {
++     segs.is_empty()
++ }
+== NT2
+# IN-TOTAL: text by content, two hops, through the crate alias (`ast` = dep)
+@@ lexscope/mod.rs
++ pub(crate) fn nt2(path: &ast::HierPath) -> bool {
++     path.segments.is_empty()
++ }
+== NT3
+# IN-TOTAL: text by content through an enum's payload
+@@ lexscope/mod.rs
++ pub(crate) fn nt3(e: &dep::Expr) -> bool {
++     matches!(e, dep::Expr::Lit(_))
++ }
+== NT4
+# IN-TOTAL: text by content in a struct of lib.rs (outside the file set)
+@@ lib.rs
++ pub(crate) struct Label {
++     text: String,
++ }
+@@ lexscope/mod.rs
++ pub(crate) fn nt4(l: &crate::Label) -> bool {
++     let _ = l;
++     true
++ }
+== NT5
+# IN-TOTAL: a number by name with no ENTER row (main's M1)
+@@ lexscope/mod.rs
++ pub(crate) fn nt5(n: u32) -> bool {
++     n == 0
++ }
+== NT6
+# IN-TOTAL: a number by content (a dependency type holding two u32) with no ENTER row
+@@ lexscope/mod.rs
++ pub(crate) fn nt6(sp: dep::Span) -> bool {
++     let _ = sp;
++     true
++ }
+== NT7
+# IN-TOTAL: a name no list and no index holds (a std type off both lists)
+@@ lexscope/mod.rs
++ pub(crate) fn nt7(d: &std::time::Duration) -> bool {
++     let _ = d;
++     true
++ }
+== NT8
+# WHOLE: a `carried` parameter whose body reads a field of it
+@@ lexscope/mod.rs
+-         self.parked.push(lhs);
++         let _ = lhs.span.lo;
++         self.parked.push(lhs);
+== NT9
+# ROLE: an ENTER row whose role is off the five
+@@ lexscope/mod.rs
++ pub(crate) fn nt9(seg: &str) -> bool {
++     seg.is_empty()
++ }
+@@ table:FIX_ENTER
++ nt9	seg	keyed	TEXT str
+== NS32
+# CARD per item (DELTA12 N-1): two `&mut bool` targets are two bits of one answer
+@@ lexscope/mod.rs
++ impl Scopes {
++     pub(crate) fn ns32(&self, late: &mut bool, err: &mut bool) {
++         let _ = (late, err);
++     }
++ }
