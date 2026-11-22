@@ -60,6 +60,17 @@ pub(crate) struct Saved {
     id: ScopeId,
 }
 
+/// A carried scope (unit LS3): a scope held outside the module — a deferred record's lowering
+/// scope, a parameter that names one. Clone and an opaque Debug, nothing else: it is re-entered
+/// with [`Scopes::scope_swap`] / [`Scopes::scope_repoint`], and its text leaves only through
+/// [`Scopes::scope_text`] (LEAVE L6, closing at DK1) and [`Scopes::key_under`] (LEAVE L5).
+pub(crate) struct ScopeRef(ScopeId);
+
+/// The set of `(span, scope)` pairs [`crate::Elaborator::report_at`] has reported: opaque,
+/// made empty by `Default`, read and written only by that entry.
+#[derive(Default)]
+pub(crate) struct ReportedAt(std::collections::BTreeSet<(u32, u32, String)>);
+
 /// A debug witness of the current scope at one point of a fn, checked later against the
 /// current scope by [`Scopes::scope_witness_check`] (wire_ports' parent / child toggles).
 #[must_use]
@@ -158,6 +169,18 @@ impl std::fmt::Debug for ShownCtx {
     }
 }
 
+impl Clone for ScopeRef {
+    fn clone(&self) -> Self {
+        ScopeRef(self.0.clone())
+    }
+}
+
+impl std::fmt::Debug for ScopeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ScopeRef(..)")
+    }
+}
+
 impl Drop for Saved {
     fn drop(&mut self) {
         debug_assert!(
@@ -197,6 +220,9 @@ zn!(Shown: PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display,
     AsRef<str>, core::borrow::Borrow<str>, core::ops::Deref<Target = str>, Into<String>);
 zn!(ShownCtx: PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, Copy, Default,
     IntoIterator);
+zn!(ScopeRef: Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, Default,
+    AsRef<str>, core::borrow::Borrow<str>, core::ops::Deref<Target = str>, Into<String>);
+zn!(ReportedAt: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug);
 
 impl Scopes {
     /// The empty current scope (the Elaborator's initial value).
@@ -264,11 +290,47 @@ impl Scopes {
         }
     }
 
-    /// Re-point the current scope to `text` inside an open pair (its `Saved` is untouched).
-    pub(crate) fn scope_repoint(&mut self, text: String) {
-        self.cur = self.intern(&text);
-        self.cur_prefix = text;
+    /// Re-point the current scope to the carried scope `at` inside an open pair (its `Saved`
+    /// is untouched). No interner probe: the id is `at`'s, its text written in place.
+    pub(crate) fn scope_repoint(&mut self, at: &ScopeRef) {
+        self.cur = at.0.clone();
+        self.cur_prefix.clone_from(&self.names[self.cur.0 as usize]);
         self.c_path();
+    }
+
+    /// The current scope as a carried value (an id copy, no text).
+    pub(crate) fn scope_carry(&self) -> ScopeRef {
+        ScopeRef(self.cur.clone())
+    }
+
+    /// Opener: re-enter the carried scope `at` ; the scope that was current is returned. No
+    /// interner probe: the id is `at`'s, its text written in place as [`Self::scope_restore`]
+    /// writes it.
+    pub(crate) fn scope_swap(&mut self, at: &ScopeRef) -> Saved {
+        let saved = Saved {
+            id: std::mem::replace(&mut self.cur, at.0.clone()),
+        };
+        self.cur_prefix.clone_from(&self.names[self.cur.0 as usize]);
+        self.c_path();
+        saved
+    }
+
+    /// LEAVE L6 (closes DK1): a carried scope's text, read by the three key-forming bodies that
+    /// stay outside the module until DK1 (hier_resolve, scoped_key_at_or_above,
+    /// walk_scopes_key_from). The interner's id -> text read: no allocation, no probe.
+    pub(crate) fn scope_text(&self, at: &ScopeRef) -> &str {
+        &self.names[at.0 .0 as usize]
+    }
+
+    /// LEAVE L5 (closes DK1): the key `name` forms under the carried scope `at` (the empty
+    /// scope's key is the name itself).
+    pub(crate) fn key_under(&self, at: &ScopeRef, name: &str) -> String {
+        let prefix = &self.names[at.0 .0 as usize];
+        if prefix.is_empty() {
+            name.to_string()
+        } else {
+            format!("{}.{}", prefix, name)
+        }
     }
 
     /// Closer: the scope `saved` was taken from becomes current again.

@@ -64,7 +64,7 @@ pub(crate) struct VarContAssign {
     /// Its row in `cont_assigns`.
     pub(crate) row: usize,
     pub(crate) span: ast::Span,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     /// Its right-hand side calls a function or method ([`calls_a_subroutine`]).
     pub(crate) calls: bool,
     /// A built-in gate's output, which the parser desugars to a continuous assign.
@@ -160,7 +160,7 @@ impl Elaborator<'_> {
                 net,
                 row,
                 span,
-                prefix: self.lex.cur_prefix_text().to_string(),
+                prefix: self.lex.scope_carry(),
                 calls,
                 gate,
             });
@@ -273,7 +273,7 @@ impl Elaborator<'_> {
                      unpacked array once, at a constant index"
                 ),
             };
-            self.lex.scope_repoint(a.prefix.clone());
+            self.lex.scope_repoint(&a.prefix);
             self.error_at(MsgCode::ElabLvalueKind, a.span, &msg);
         }
         // One warning per `assign` statement and variable: a whole-array `assign` is one
@@ -285,7 +285,7 @@ impl Elaborator<'_> {
             }
             if self.cont_var_1364(a.net) && verilog_file(&self.span_file_line_col(a.span).0) {
                 let name = self.cont_var_name(a.net);
-                self.lex.scope_repoint(a.prefix.clone());
+                self.lex.scope_repoint(&a.prefix);
                 self.warn_code_at(
                     MsgCode::ElabContAssignVar1364,
                     a.span,

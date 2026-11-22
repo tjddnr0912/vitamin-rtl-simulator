@@ -131,7 +131,7 @@ impl Elaborator<'_> {
             } else {
                 None
             },
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
             path,
             arg_ids,
             arg_lvals: vec![None; n],

@@ -1,8 +1,12 @@
 //! The lexscope entries that take the Elaborator (tier E): the segment entry `with_scope`
 //! and residue R's two routine-key entries (LEAVE L2 / L3, closing at Q-RTNSCOPE RS1), moved
-//! here with their bodies (§5.2 Q-LEXSCOPE LS2a).
+//! here with their bodies (§5.2 Q-LEXSCOPE LS2a) ; and `report_at`, a refusal reported in the
+//! carried scope it was lowered in, once per (span, scope) (LS3).
 
+use super::{ReportedAt, ScopeRef};
 use crate::Elaborator;
+use diag::MsgCode;
+use hdl_ast as ast;
 
 impl Elaborator<'_> {
     /// Run `f` with `cur_prefix` temporarily extended by `seg` (a gen-block
@@ -95,5 +99,29 @@ impl Elaborator<'_> {
                 None => "",
             };
         }
+    }
+
+    pub(crate) fn report_at(
+        &mut self,
+        span: Option<ast::Span>,
+        prefix: &ScopeRef,
+        msg: &str,
+        reported: &mut ReportedAt,
+    ) {
+        let (lo, hi) = span.map_or((0, 0), |s| (s.lo, s.hi));
+        // One bound lowered twice under one instance (a statement lowered for two routes)
+        // is one defect.
+        if !reported
+            .0
+            .insert((lo, hi, self.lex.scope_text(prefix).to_string()))
+        {
+            return;
+        }
+        let saved_prefix = self.lex.scope_swap(prefix);
+        match span {
+            Some(span) => self.error_at(MsgCode::ElabUnsupported, span, msg),
+            None => self.error(MsgCode::ElabUnsupported, msg),
+        }
+        self.lex.scope_restore(saved_prefix);
     }
 }

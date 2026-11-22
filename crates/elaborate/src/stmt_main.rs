@@ -121,8 +121,7 @@ impl Elaborator<'_> {
                 // ENG-1b: a write to a clocking item that has no holder is refused by
                 // name, before the right-hand side lowers (one error for the one use).
                 if let Some(i) = self.clk_refused_lvalue(lhs) {
-                    let scope_text = self.lex.cur_prefix_text().to_string();
-                    self.report_clk_refused(i, Some(lhs.span()), &scope_text);
+                    self.report_clk_refused(i, Some(lhs.span()), &self.lex.scope_carry());
                     return;
                 }
                 // §6.16.3: a string element write `s[i] = …` is detected FIRST —
@@ -389,8 +388,7 @@ impl Elaborator<'_> {
                 // ENG-1b: a write to a clocking item that has no holder is refused by
                 // name, before the right-hand side lowers (one error for the one use).
                 if let Some(i) = self.clk_refused_lvalue(lhs) {
-                    let scope_text = self.lex.cur_prefix_text().to_string();
-                    self.report_clk_refused(i, Some(lhs.span()), &scope_text);
+                    self.report_clk_refused(i, Some(lhs.span()), &self.lex.scope_carry());
                     return;
                 }
                 // §6.16.3: a string element write `s[i]` has no defined non-blocking
@@ -1501,7 +1499,7 @@ impl Elaborator<'_> {
                             // as `prop_self_name` so `synth_prop_expr` recognises the
                             // legal tail-`|=>` recursion (`… |=> NAME`).
                             self.pending_sva.push(PendingSva {
-                                scope: self.lex.cur_prefix_text().to_string(),
+                                scope: self.lex.scope_carry(),
                                 clock: pd.clock,
                                 disable_iff: pd.disable_iff,
                                 ante: pd.antecedent,
@@ -1543,7 +1541,7 @@ impl Elaborator<'_> {
                             // disable, antecedent, consequent) before scheduling.
                             let map = sva_formal_map(&pd.formals, args);
                             self.pending_sva.push(PendingSva {
-                                scope: self.lex.cur_prefix_text().to_string(),
+                                scope: self.lex.scope_carry(),
                                 clock: subst_sensitivity(&pd.clock, &map),
                                 disable_iff: pd.disable_iff.as_ref().map(|e| subst_expr(e, &map)),
                                 ante: subst_sequence(&pd.antecedent, &map),
@@ -1589,7 +1587,7 @@ impl Elaborator<'_> {
                                 span: name.span,
                             };
                             self.pending_sva.push(PendingSva {
-                                scope: self.lex.cur_prefix_text().to_string(),
+                                scope: self.lex.scope_carry(),
                                 clock: ast::Sensitivity::List(Vec::new()),
                                 disable_iff: None,
                                 ante: ast::Sequence::Boolean(true_lit),
@@ -1636,7 +1634,7 @@ impl Elaborator<'_> {
                     // Inline `assert property(...)`: a `prop_expr` (N2d and/or tree)
                     // has NO self-name (anonymous ⇒ no recursion site).
                     self.pending_sva.push(PendingSva {
-                        scope: self.lex.cur_prefix_text().to_string(),
+                        scope: self.lex.scope_carry(),
                         clock: clock.clone(),
                         disable_iff: disable_iff.clone(),
                         ante: antecedent.clone(),
@@ -1661,7 +1659,7 @@ impl Elaborator<'_> {
                 span,
             } => {
                 self.pending_cover.push(PendingCover {
-                    scope: self.lex.cur_prefix_text().to_string(),
+                    scope: self.lex.scope_carry(),
                     clock: clock.clone(),
                     disable_iff: disable_iff.clone(),
                     seq: seq.clone(),

@@ -26,7 +26,7 @@ pub(crate) struct WholeArrayCa {
     pub(crate) lo: usize,
     pub(crate) hi: usize,
     pub(crate) span: ast::Span,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
 }
 
 /// The first writer [`Elaborator::other_writers`] finds on a net, as a diagnostic names it.
@@ -276,7 +276,7 @@ impl Elaborator<'_> {
             lo,
             hi: self.cont_assigns.len(),
             span,
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
         });
         true
     }
@@ -312,7 +312,7 @@ impl Elaborator<'_> {
         // One diagnostic per variable: a `reg` array's element rows are also recorded for
         // `cont_var.rs`, whose census finds the same other writer.
         self.cont_var.reported.extend(written.iter().copied());
-        let refused: Vec<(ast::Span, String)> = self
+        let refused: Vec<(ast::Span, crate::ScopeRef)> = self
             .whole_array_cas
             .iter()
             .filter(|w| written.contains(&w.net))
@@ -320,7 +320,7 @@ impl Elaborator<'_> {
             .collect();
         let saved = self.lex.scope_swap_empty();
         for (span, prefix) in refused {
-            self.lex.scope_repoint(prefix);
+            self.lex.scope_repoint(&prefix);
             self.error_at(
                 MsgCode::ElabUnsupported,
                 span,

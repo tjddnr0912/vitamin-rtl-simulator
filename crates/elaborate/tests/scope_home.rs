@@ -105,6 +105,11 @@
 //! - HC ARGS for every SURF_ENTER row of role to-scope, the token text of the argument at that
 //!   parameter in every call of the entry, crate-wide, by (file, fn, callee, tokens) with a
 //!   count (DELTA11 R4 N-8, DELTA12 S2 r4) ; the entry's name must be unique in the crate.
+//!   LS3 (PLAN8 H2 (b)): and for every lexscope fn with a parameter whose type names
+//!   `ScopeRef` (computed from lexscope's own signatures, at most one such parameter per fn:
+//!   PLAN8 H2 (4)), the argument at that parameter, the same way.
+//! - HC CARRY (LS3, PLAN8 H2 (c)) every call of `scope_carry` outside lexscope by (file, fn,
+//!   SINK) with a count, SINK as HBR's ; a LOCAL sink (a carry bound by `let`) is pinned 0.
 //!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
@@ -885,13 +890,15 @@ impl Pass<'_> {
 
 /// The funnel's openers (LS2a, §5.2 Q-LEXSCOPE): `<recv>.lex.<entry>(..)` moves the current
 /// scope and returns its `Saved` ; after LS2 a write site is the same row with the entry's
-/// name as its form (PLAN8 H5 LS1 part 2).
+/// name as its form (PLAN8 H5 LS1 part 2). LS3 adds `scope_swap`, the re-entry of a carried
+/// scope (`&ScopeRef`).
 const LEX_OPENERS: &[&str] = &[
     "scope_swap_text",
     "scope_swap_empty",
     "scope_swap_pkg",
     "scope_enter",
     "scope_hold",
+    "scope_swap",
 ];
 /// The funnel's closer and its re-point (inside an open pair).
 const LEX_CLOSERS: &[&str] = &["scope_restore", "scope_repoint"];
@@ -6377,6 +6384,70 @@ fn hbr_the_bridge_reads_are_pinned() {
     finish("HBR", &msgs);
 }
 
+#[test]
+fn hc_carry_the_carried_scope_sinks_are_pinned() {
+    // LS3 (PLAN8 H2 (c)): every call of `scope_carry` outside lexscope by (file, fn, SINK) with a
+    // count ; a carry bound by `let` (SINK LOCAL:..) is pinned 0 whatever the table says (W12)
+    let entries = vec!["scope_carry".to_string()];
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, sink) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows
+            .entry(format!("{file}\t{qual}\t{callee}\t{sink}"))
+            .or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HC_CARRY", "file\tfn\tentry\tsink\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HC_CARRY")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HC_CARRY table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    let mut msgs = diff_rows(
+        "HC_CARRY",
+        &got,
+        &want,
+        "a new carry of the current scope: read where the value goes (SINK: a record field or an argument), name \
+         the unit, add the row",
+        "a carry of the current scope is gone: name the unit, remove the row",
+    );
+    let sites: usize = rows.values().sum();
+    let local: usize = rows
+        .iter()
+        .filter(|(k, _)| {
+            k.split('\t')
+                .nth(3)
+                .is_some_and(|s| s.starts_with("LOCAL:"))
+        })
+        .map(|(_, n)| n)
+        .sum();
+    if local != 0 {
+        msgs.push(format!(
+            "HC_CARRY a `scope_carry` bound by `let` ({local}): LOCAL carry rows are pinned 0 (PLAN8 H2 (c), W12) — \
+             pass the carry as the argument or the field it is for"
+        ));
+    }
+    let counts = format!("sites={sites} local={local}");
+    if counts != tables::get("HC_CARRY_COUNTS") {
+        msgs.push(format!(
+            "HC_CARRY COUNTS table [{}] now [{counts}]",
+            tables::get("HC_CARRY_COUNTS")
+        ));
+    }
+    finish("HC_CARRY", &msgs);
+}
+
 /// The position of `param` among the typed parameters of the lexscope fn `item`.
 fn enter_param_index(item: &str, param: &str) -> usize {
     let (ty, name) = match item.rsplit_once("::") {
@@ -6442,6 +6513,66 @@ fn enter_param_index(item: &str, param: &str) -> usize {
     found[0]
 }
 
+/// Whether a type names `ScopeRef` (a path segment anywhere in it).
+fn names_scope_ref(ty: &syn::Type) -> bool {
+    struct V(bool);
+    impl<'a> Visit<'a> for V {
+        fn visit_path_segment(&mut self, s: &'a syn::PathSegment) {
+            if s.ident == "ScopeRef" {
+                self.0 = true;
+            }
+            visit::visit_path_segment(self, s);
+        }
+    }
+    let mut v = V(false);
+    v.visit_type(ty);
+    v.0
+}
+
+/// LS3: every fn of lexscope's non-test files with a typed parameter whose type names
+/// `ScopeRef`: (simple name, the index of the first such parameter among the typed ones, how
+/// many it has).
+fn carried_params() -> Vec<(String, usize, usize)> {
+    let mut out = Vec::new();
+    for (rel, text) in lexscope_texts() {
+        if rel.ends_with("tests.rs") {
+            continue;
+        }
+        let file = syn::parse_file(&text).unwrap_or_else(|e| panic!("parse {rel}: {e}"));
+        struct Find<'o> {
+            out: &'o mut Vec<(String, usize, usize)>,
+        }
+        impl Find<'_> {
+            fn sig(&mut self, sig: &syn::Signature) {
+                let hits: Vec<usize> = sig
+                    .inputs
+                    .iter()
+                    .filter_map(|a| match a {
+                        syn::FnArg::Typed(t) => Some(t),
+                        syn::FnArg::Receiver(_) => None,
+                    })
+                    .enumerate()
+                    .filter(|(_, t)| names_scope_ref(&t.ty))
+                    .map(|(i, _)| i)
+                    .collect();
+                if let Some(first) = hits.first() {
+                    self.out.push((sig.ident.to_string(), *first, hits.len()));
+                }
+            }
+        }
+        impl<'a> Visit<'a> for Find<'_> {
+            fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+                self.sig(&f.sig);
+            }
+            fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
+                self.sig(&f.sig);
+            }
+        }
+        Find { out: &mut out }.visit_file(&file);
+    }
+    out
+}
+
 #[test]
 fn hc_args_the_to_scope_arguments_are_pinned() {
     // keyed by ENTER's to-scope rows (DELTA12 S2 r4): the argument at that parameter, every call
@@ -6462,6 +6593,20 @@ fn hc_args_the_to_scope_arguments_are_pinned() {
             ));
         }
         at.insert(simple, enter_param_index(&r[0], &r[1]));
+    }
+    for (simple, idx, n) in carried_params() {
+        let defs = fns.iter().filter(|f| f.simple == simple).count();
+        if defs != 1 || n != 1 {
+            msgs.push(format!(
+                "HC ARGS the carried-scope entry `{simple}` is defined {defs} times in the crate and has {n} \
+                 `ScopeRef` parameter(s): a call is matched by its name, and no entry takes two scopes (PLAN8 H2 (4))"
+            ));
+        }
+        if at.insert(simple.clone(), idx).is_some() {
+            msgs.push(format!(
+                "HC ARGS `{simple}` is both a to-scope ENTER row and a carried-scope entry"
+            ));
+        }
     }
     let watch: Vec<String> = at.keys().cloned().collect();
     let mut rows: BTreeMap<String, usize> = BTreeMap::new();

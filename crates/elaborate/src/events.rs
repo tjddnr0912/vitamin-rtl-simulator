@@ -738,8 +738,7 @@ impl Elaborator<'_> {
                 // with `lookup_dotted_net` — `resolve_net`'s own predicate, not a copy.
                 // ENG-1b: a clocking item that has no holder, refused by name.
                 if let Some(i) = self.clk_refused_path(path) {
-                    let scope_text = self.lex.cur_prefix_text().to_string();
-                    self.report_clk_refused(i, Some(path.span), &scope_text);
+                    self.report_clk_refused(i, Some(path.span), &self.lex.scope_carry());
                     return POISON_NET;
                 }
                 if path.segments.len() > 1 && self.lookup_dotted_net(path).is_none() {

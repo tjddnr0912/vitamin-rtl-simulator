@@ -86,10 +86,11 @@ impl Elaborator<'_> {
     /// ambient walk. Diagnostic-only today (V33-3's enum-label receiver test).
     pub(crate) fn scoped_key_at_or_above(
         &self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         name: &str,
         hit: impl Fn(&str) -> bool,
     ) -> Option<String> {
+        let prefix = self.lex.scope_text(prefix);
         let mut scope = prefix;
         loop {
             let key = if scope.is_empty() {
@@ -176,11 +177,17 @@ impl Elaborator<'_> {
     /// function or generate block exactly as `lookup_net_scoped` finds its alias.
     pub(crate) fn walk_scopes_key_from(
         &self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         name: &str,
         hit: impl Fn(&str) -> bool,
     ) -> Option<String> {
-        self.walk_out_from(prefix, name, &hit, false, String::new())
+        self.walk_out_from(
+            self.lex.scope_text(prefix),
+            name,
+            &hit,
+            false,
+            String::new(),
+        )
     }
 
     fn walk_out_from(

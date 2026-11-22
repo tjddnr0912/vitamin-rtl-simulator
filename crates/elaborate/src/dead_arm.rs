@@ -48,7 +48,7 @@ pub(crate) struct DeadSelect {
     /// The `Const` width the select holds.
     edge: u32,
     span: Option<ast::Span>,
-    prefix: String,
+    prefix: crate::ScopeRef,
     msg: &'static str,
 }
 
@@ -183,7 +183,7 @@ impl Elaborator<'_> {
         self.dead_selects.push(DeadSelect {
             edge,
             span: self.cur_span,
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
             msg,
         });
         Some(edge)
@@ -209,7 +209,7 @@ impl Elaborator<'_> {
                 continue;
             }
             let span = std::mem::replace(&mut self.cur_span, d.span);
-            let prefix = self.lex.scope_swap_text(d.prefix);
+            let prefix = self.lex.scope_swap(&d.prefix);
             self.error(MsgCode::ElabUnsupported, d.msg);
             self.cur_span = span;
             self.lex.scope_restore(prefix);

@@ -15,7 +15,11 @@ impl Elaborator<'_> {
     /// for the i64 lane, the wide side map's own const for the >64-bit lane). `None`
     /// when the name is not a parameter; an UNTYPED (value-sized) parameter has no
     /// declared width to select within and declines after a loud message.
-    fn hier_param_const(&mut self, prefix: &str, path: &[String]) -> Option<ir::ConstVal> {
+    fn hier_param_const(
+        &mut self,
+        prefix: &crate::ScopeRef,
+        path: &[String],
+    ) -> Option<ir::ConstVal> {
         if let Some(cv) = self.hier_lookup_wide_param(prefix, path) {
             return Some(cv);
         }

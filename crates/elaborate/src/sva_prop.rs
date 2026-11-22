@@ -42,7 +42,7 @@ pub(crate) struct PendingSva {
     /// its names in THAT scope (§4.5.432 review B: an unnamed block's own net was
     /// resolved at module scope, which the old flattening had made work by
     /// accident; a named block's was loud already).
-    pub(crate) scope: String,
+    pub(crate) scope: crate::ScopeRef,
 }
 
 /// Collected sampled-value state for one concurrent assertion: each distinct

@@ -558,7 +558,7 @@ impl Elaborator<'_> {
                     self.register_provisional_const(eid);
                     self.deferred_hier_bits.push(DeferredHierBits {
                         eid,
-                        prefix: self.lex.cur_prefix_text().to_string(),
+                        prefix: self.lex.scope_carry(),
                         path: p.segments.iter().map(|s| s.name.clone()).collect(),
                         span: Some(arg.span),
                     });

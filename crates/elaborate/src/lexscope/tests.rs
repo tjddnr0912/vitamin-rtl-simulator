@@ -33,14 +33,79 @@ fn fb_swap_take_pkg_repoint_hold() {
     s.scope_restore(c);
     s.scope_restore(b);
     assert_eq!(s.cur_prefix_text(), "top.u");
+    let u = s.scope_carry();
+    let v0 = s.scope_swap_text("top.v".to_string());
+    let v = s.scope_carry();
+    s.scope_restore(v0);
     let h = s.scope_hold();
-    s.scope_repoint("top.v".to_string());
+    s.scope_repoint(&v);
     assert_eq!(s.cur_prefix_text(), "top.v");
-    s.scope_repoint("top.u".to_string());
+    s.scope_repoint(&u);
     s.scope_restore(h);
     assert_eq!(s.cur_prefix_text(), "top.u");
     s.scope_restore(a);
     assert_eq!(s.cur_prefix_text(), "");
+}
+
+// LS3: the carried scope — carry, re-entry, the two text exits.
+
+#[test]
+fn fb_scope_text_of_carry_is_the_current_text_after_each_opener() {
+    let mut s = Scopes::new();
+    let check = |s: &Scopes| assert_eq!(s.scope_text(&s.scope_carry()), s.cur_prefix_text());
+    check(&s);
+    let a = s.scope_enter("top");
+    check(&s);
+    let b = s.scope_swap_text("top.u.g[0]".to_string());
+    check(&s);
+    let c = s.scope_swap_empty();
+    check(&s);
+    let d = s.scope_swap_pkg("p");
+    check(&s);
+    let e = s.scope_hold();
+    check(&s);
+    s.scope_restore(e);
+    s.scope_restore(d);
+    s.scope_restore(c);
+    check(&s);
+    s.scope_restore(b);
+    s.scope_restore(a);
+    check(&s);
+}
+
+#[test]
+fn fb_scope_swap_reenters_the_carried_scope_without_interning() {
+    let mut s = Scopes::new();
+    let a = s.scope_swap_text("top.u".to_string());
+    let u = s.scope_carry();
+    s.scope_restore(a);
+    let n = s.names.len();
+    let b = s.scope_swap(&u);
+    assert_eq!(s.cur_prefix_text(), "top.u");
+    assert_eq!(s.names.len(), n);
+    let c = s.scope_enter("x");
+    let ux = s.scope_carry();
+    s.scope_restore(c);
+    s.scope_restore(b);
+    assert_eq!(s.cur_prefix_text(), "");
+    let d = s.scope_swap(&ux);
+    assert_eq!(s.cur_prefix_text(), "top.u.x");
+    s.scope_restore(d);
+}
+
+#[test]
+fn fb_key_under_and_scope_debug() {
+    let mut s = Scopes::new();
+    let root = s.scope_carry();
+    assert_eq!(s.key_under(&root, "n"), "n");
+    let a = s.scope_swap_text("top.u".to_string());
+    let u = s.scope_carry();
+    s.scope_restore(a);
+    assert_eq!(s.key_under(&u, "n"), "top.u.n");
+    assert_eq!(s.scope_text(&u), "top.u");
+    // Debug writes no text: two different scopes print the same
+    assert_eq!(format!("{root:?}"), format!("{u:?}"));
+    assert_eq!(format!("{u:?}"), "ScopeRef(..)");
 }
 
 #[test]

@@ -704,7 +704,7 @@ impl Elaborator<'_> {
                     expr_id: rhs_id,
                     sentinel,
                     rhs: rhs.clone(),
-                    prefix: self.lex.cur_prefix_text().to_string(),
+                    prefix: self.lex.scope_carry(),
                 });
             }
             // Either way the ctx here would be the bogus 1, so leave `lower_expr`'s IR

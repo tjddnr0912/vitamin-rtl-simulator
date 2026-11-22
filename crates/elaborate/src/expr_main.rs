@@ -424,7 +424,7 @@ impl Elaborator<'_> {
                         self.deferred_hier.push(DeferredHier {
                             span: self.cur_span,
                             eid,
-                            prefix: self.lex.cur_prefix_text().to_string(),
+                            prefix: self.lex.scope_carry(),
                             path: path.segments.iter().map(|s| s.name.clone()).collect(),
                         });
                         return eid;
@@ -676,7 +676,7 @@ impl Elaborator<'_> {
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         span: Some(e.span),
                         eid,
-                        prefix: self.lex.cur_prefix_text().to_string(),
+                        prefix: self.lex.scope_carry(),
                         path,
                         idx_eids,
                         part: None,
@@ -760,7 +760,7 @@ impl Elaborator<'_> {
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         span: Some(e.span),
                         eid,
-                        prefix: self.lex.cur_prefix_text().to_string(),
+                        prefix: self.lex.scope_carry(),
                         path,
                         idx_eids,
                         part: Some(HierPart {
@@ -860,7 +860,7 @@ impl Elaborator<'_> {
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         span: Some(e.span),
                         eid,
-                        prefix: self.lex.cur_prefix_text().to_string(),
+                        prefix: self.lex.scope_carry(),
                         path,
                         idx_eids,
                         part: Some(HierPart {

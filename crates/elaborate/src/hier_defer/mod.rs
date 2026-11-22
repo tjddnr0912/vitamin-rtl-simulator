@@ -10,7 +10,7 @@ use super::*;
 /// segments.
 pub(crate) struct DeferredHier {
     pub(crate) eid: u32,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     /// R17 §4.1: the statement/expression this reference was written in. Resolution
     /// happens long after lowering, in a pass with no ambient `cur_span`, so every
@@ -26,7 +26,7 @@ pub(crate) struct DeferredHier {
 /// the last segment is the function name, the rest resolve to the callee instance scope.
 pub(crate) struct DeferredHierCall {
     pub(crate) eid: u32,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     pub(crate) argc: usize,
     /// The CALL's own span. This pass runs long after lowering, so `cur_span` no
@@ -65,7 +65,7 @@ pub(crate) struct DeferredHierTaskCall {
     /// The block id is process-LOCAL at emit and rebased by `+base` at frame-body finish
     /// (`lower_frame_task_body`), exactly like `pending_task_calls`.
     pub(crate) func_block: Option<u32>,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     pub(crate) arg_ids: Vec<u32>,
     pub(crate) arg_lvals: Vec<Option<ir::Lvalue>>,
@@ -94,7 +94,7 @@ pub(crate) struct DeferredHierTaskCall {
 /// in the statement arena to the real NetId (or `POISON_NET` on error). Whole-net
 /// only — a hierarchical element/part-select write stays a loud follow-on.
 pub(crate) struct DeferredHierWrite {
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     /// R17 §4.1: see [`DeferredHier::span`].
     pub(crate) span: Option<ast::Span>,
@@ -123,11 +123,11 @@ pub(crate) struct PendingFillWidth {
     /// `cur_prefix` at lowering time — the whole of the "scope" a plain name needs,
     /// because resolution is an outward walk from this string over tables that outlive
     /// elaboration. Restored around the re-lowering (§4.5.360).
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
 }
 
 pub(crate) struct DeferredHierSelWrite {
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     /// R17 §4.1: see [`DeferredHier::span`].
     pub(crate) span: Option<ast::Span>,
@@ -153,7 +153,7 @@ pub(crate) struct DeferredHierSelect {
     /// The select expression itself (ENG-1b: a refused clocking item is named at its
     /// use, also in a continuous assignment, where `cur_span` is the module header).
     pub(crate) span: Option<ast::Span>,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     /// Indices in SOURCE order (`grid[i][j]` → `[i, j]`). Length 1 = the N3.1 scalar/
     /// vector/single-dim-array case; ≥2 = a multi-dim unpacked/packed element select.
@@ -171,7 +171,7 @@ pub(crate) struct DeferredHierSelect {
 /// `u.K` defers. The placeholder `Const` at `eid` is patched to the width.
 pub(crate) struct DeferredHierBits {
     pub(crate) eid: u32,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) path: Vec<String>,
     pub(crate) span: Option<ast::Span>,
 }

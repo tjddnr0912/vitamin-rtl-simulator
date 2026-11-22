@@ -84,7 +84,7 @@ pub(crate) struct PendingCover {
     pub(crate) seq: ast::Sequence,
     pub(crate) span: ast::Span,
     /// The scope prefix the cover was collected under (see `PendingSva::scope`).
-    pub(crate) scope: String,
+    pub(crate) scope: crate::ScopeRef,
 }
 
 impl Elaborator<'_> {

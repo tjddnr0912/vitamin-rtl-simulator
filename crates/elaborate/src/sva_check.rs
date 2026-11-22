@@ -66,7 +66,7 @@ impl Elaborator<'_> {
         self.in_assert_synth = true;
         for sva in pending {
             // Resolve the assertion's names in the scope it was written in.
-            let saved_prefix = self.lex.scope_swap_text(sva.scope.clone());
+            let saved_prefix = self.lex.scope_swap(&sva.scope);
             self.materialize_one_sva(sva);
             self.lex.scope_restore(saved_prefix);
         }

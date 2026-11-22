@@ -506,7 +506,7 @@ impl Elaborator<'_> {
     /// walking outward (review N3 HIGH: the old whole-tail outward strip silently
     /// grabbed an unrelated outer net when the leading segment matched an inner scope
     /// whose remainder was invalid, e.g. `b.v` / a local-shadowed `cfg.mode`).
-    pub(crate) fn hier_lookup(&self, prefix: &str, path: &[String]) -> Option<u32> {
+    pub(crate) fn hier_lookup(&self, prefix: &crate::ScopeRef, path: &[String]) -> Option<u32> {
         self.hier_resolve(prefix, path, &self.symbols)
     }
 
@@ -517,7 +517,11 @@ impl Elaborator<'_> {
     /// Folded only in a RUNTIME/expression context — a hierarchical param in a
     /// CONSTANT context (a width / `localparam`) is loud, since the sibling
     /// instance is not yet elaborated when the const-eval needs the value.
-    pub(crate) fn hier_lookup_param(&self, prefix: &str, path: &[String]) -> Option<i64> {
+    pub(crate) fn hier_lookup_param(
+        &self,
+        prefix: &crate::ScopeRef,
+        path: &[String],
+    ) -> Option<i64> {
         self.hier_resolve(prefix, path, &self.hier_params)
     }
 
@@ -528,7 +532,7 @@ impl Elaborator<'_> {
     /// 🆕 G / row 28) — because the resolver consulted the i64 table only.
     pub(crate) fn hier_lookup_wide_param(
         &self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         path: &[String],
     ) -> Option<ir::ConstVal> {
         self.hier_resolve(prefix, path, &self.wide_param_bits)
@@ -541,7 +545,7 @@ impl Elaborator<'_> {
     /// visible after the sibling instance has bound its params.
     pub(crate) fn hier_lookup_param_meta(
         &self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         path: &[String],
     ) -> Option<(u32, bool)> {
         self.hier_resolve(prefix, path, &self.param_meta)
@@ -559,10 +563,11 @@ impl Elaborator<'_> {
     /// scope whose remainder was invalid, e.g. `b.v` / a local-shadowed `cfg.mode`).
     pub(crate) fn hier_resolve<V: Clone>(
         &self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         path: &[String],
         table: &std::collections::BTreeMap<String, V>,
     ) -> Option<V> {
+        let prefix = self.lex.scope_text(prefix);
         // A2b (adversarial sound #2): a hierarchical reference FROM package
         // scope (a `$pkg$…` prefix = the package pre-sweep, the only proc
         // context there) is LRM-illegal (§26.3 — packages see only their own

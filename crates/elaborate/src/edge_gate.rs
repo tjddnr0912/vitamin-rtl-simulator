@@ -106,7 +106,7 @@ pub(crate) struct EdgeRec {
     refusal: Option<Refusal>,
     span: Option<ast::Span>,
     /// The instance prefix the funnel ran under, so a refusal names the instance.
-    prefix: String,
+    prefix: crate::ScopeRef,
     /// The reason read off the bound's source text while it was lowered.
     msg: String,
     /// A hierarchical name in the bound (`gb.L`, `u.W`): resolved by a deferred pass, so
@@ -153,7 +153,7 @@ pub(crate) struct UseRec {
     need: Need,
     kind: UseKind,
     span: Option<ast::Span>,
-    prefix: String,
+    prefix: crate::ScopeRef,
 }
 
 /// The fill context comes from widths not decided yet (F2): each measure with the width
@@ -409,7 +409,7 @@ impl Elaborator<'_> {
             state,
             refusal,
             span: span_of(bounds),
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
             msg,
             hier,
         });
@@ -802,7 +802,7 @@ impl Elaborator<'_> {
             }
         }
         let used = self.used_edges();
-        let mut reported: BTreeSet<(u32, u32, String)> = BTreeSet::new();
+        let mut reported = crate::ReportedAt::default();
         for i in 0..self.edge_recs.len() {
             if self.edge_recs[i].state != State::Refused || !used.contains(&self.edge_recs[i].root)
             {
@@ -892,27 +892,6 @@ impl Elaborator<'_> {
                 r.msg.clone()
             }
         }
-    }
-
-    fn report_at(
-        &mut self,
-        span: Option<ast::Span>,
-        prefix: &str,
-        msg: &str,
-        reported: &mut BTreeSet<(u32, u32, String)>,
-    ) {
-        let (lo, hi) = span.map_or((0, 0), |s| (s.lo, s.hi));
-        // One bound lowered twice under one instance (a statement lowered for two routes)
-        // is one defect.
-        if !reported.insert((lo, hi, prefix.to_string())) {
-            return;
-        }
-        let saved_prefix = self.lex.scope_swap_text(prefix.to_string());
-        match span {
-            Some(span) => self.error_at(MsgCode::ElabUnsupported, span, msg),
-            None => self.error(MsgCode::ElabUnsupported, msg),
-        }
-        self.lex.scope_restore(saved_prefix);
     }
 
     /// The caller lvalues every task call copies its outputs to (`t(a[gb.L-1:0])`): they
@@ -1051,7 +1030,7 @@ impl Elaborator<'_> {
             need,
             kind,
             span: self.cur_span,
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
         });
     }
 
@@ -1262,7 +1241,7 @@ impl Elaborator<'_> {
         }
     }
 
-    fn verify_use_recs(&mut self, reported: &mut BTreeSet<(u32, u32, String)>) {
+    fn verify_use_recs(&mut self, reported: &mut crate::ReportedAt) {
         let recs = std::mem::take(&mut self.use_recs);
         for u in &recs {
             let Some(f) = self.measure_width(&u.measure) else {

@@ -133,7 +133,7 @@ mod inline_task_locals;
 mod instance;
 mod instance_array;
 mod lexscope;
-use lexscope::{scope_out, shown_from_spelling, Shown, ShownCtx};
+use lexscope::{scope_out, shown_from_spelling, ReportedAt, ScopeRef, Shown, ShownCtx};
 mod limits;
 mod lvalue;
 mod multidriver;

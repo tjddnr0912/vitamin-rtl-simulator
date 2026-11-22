@@ -32,7 +32,7 @@ use super::*;
 pub(crate) struct ReadmemAssocSite {
     pub(crate) net: u32,
     pub(crate) span: Option<ast::Span>,
-    pub(crate) prefix: String,
+    pub(crate) prefix: crate::ScopeRef,
     pub(crate) name: String,
 }
 
@@ -93,7 +93,7 @@ impl Elaborator<'_> {
         self.readmem_assoc_sites.push(ReadmemAssocSite {
             net,
             span: self.cur_span,
-            prefix: self.lex.cur_prefix_text().to_string(),
+            prefix: self.lex.scope_carry(),
             name: name.to_string(),
         });
         Some(ir::Expr::SysFunc {
@@ -238,7 +238,7 @@ impl Elaborator<'_> {
                 continue;
             }
             self.cur_span = s.span;
-            self.lex.scope_repoint(s.prefix.clone());
+            self.lex.scope_repoint(&s.prefix);
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(

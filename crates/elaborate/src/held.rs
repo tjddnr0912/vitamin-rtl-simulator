@@ -255,7 +255,11 @@ impl Elaborator<'_> {
     /// (its nets come after lowering, bound by the deferred hierarchical resolver) nor a
     /// generate-local clocking block (it gets no alias): a use meant for that inner
     /// object is refused naming the outer item (Q-CLKSHADOW).
-    pub(crate) fn clk_refused_at(&self, prefix: &str, path: &[String]) -> Option<usize> {
+    pub(crate) fn clk_refused_at(
+        &self,
+        prefix: &crate::ScopeRef,
+        path: &[String],
+    ) -> Option<usize> {
         if self.clk_refused.is_empty() {
             return None;
         }
@@ -272,13 +276,18 @@ impl Elaborator<'_> {
     /// [`Self::clk_refused_at`] for a path written in the current scope.
     pub(crate) fn clk_refused_path(&self, path: &ast::HierPath) -> Option<usize> {
         let names: Vec<String> = path.segments.iter().map(|s| s.name.clone()).collect();
-        self.clk_refused_at(self.lex.cur_prefix_text(), &names)
+        self.clk_refused_at(&self.lex.scope_carry(), &names)
     }
 
     /// Refuse a use of the refused clocking item `i`, at `at` (else the current span),
     /// in the scope `prefix` the use was written in: once per span, so two bare uses in
     /// one statement print one line and each select prints its own.
-    pub(crate) fn report_clk_refused(&mut self, i: usize, at: Option<ast::Span>, prefix: &str) {
+    pub(crate) fn report_clk_refused(
+        &mut self,
+        i: usize,
+        at: Option<ast::Span>,
+        prefix: &crate::ScopeRef,
+    ) {
         let sp = at.or(self.cur_span);
         let Some(r) = self.clk_refused.get_mut(i) else {
             return;
@@ -290,7 +299,7 @@ impl Elaborator<'_> {
             r.reported.push((s.lo, s.hi));
         }
         let msg = r.msg.clone();
-        let saved = self.lex.scope_swap_text(prefix.to_string());
+        let saved = self.lex.scope_swap(prefix);
         match sp {
             Some(s) => self.error_at(MsgCode::ElabUnsupported, s, &msg),
             None => self.error(MsgCode::ElabUnsupported, &msg),

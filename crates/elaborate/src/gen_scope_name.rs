@@ -105,7 +105,11 @@ impl Elaborator<'_> {
     /// committed to, which this pure helper cannot re-derive without repeating the
     /// resolver, so a deeper offender keeps the generic unresolved-name message rather
     /// than risk naming the wrong scope.
-    pub(crate) fn gen_spelling_hint(&self, prefix: &str, path: &[String]) -> Option<String> {
+    pub(crate) fn gen_spelling_hint(
+        &self,
+        prefix: &crate::ScopeRef,
+        path: &[String],
+    ) -> Option<String> {
         let full = path.join(".");
         let head = path.first()?;
         if let Some(label) = Self::gen_seg_label(head) {
@@ -140,7 +144,7 @@ impl Elaborator<'_> {
     /// the same thing about the same name.
     pub(crate) fn error_hier_unresolved(
         &mut self,
-        prefix: &str,
+        prefix: &crate::ScopeRef,
         path: &[String],
         fallback: String,
     ) {

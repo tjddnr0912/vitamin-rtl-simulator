@@ -293,7 +293,7 @@ impl Elaborator<'_> {
                 self.record_hier_call_shape(eid, name);
                 self.deferred_hier_calls.push(DeferredHierCall {
                     eid,
-                    prefix: self.lex.cur_prefix_text().to_string(),
+                    prefix: self.lex.scope_carry(),
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     argc,
                     span: name.span,
