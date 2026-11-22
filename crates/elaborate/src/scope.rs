@@ -6,10 +6,10 @@ impl Elaborator<'_> {
     // ── scope helpers (FQ-name keying) ─────────────────────────────
     /// Fully-qualified key of a LOCAL name within the current instance scope.
     pub(crate) fn fq(&self, local: &str) -> String {
-        if self.cur_prefix.is_empty() {
+        if self.lex.cur_prefix_text().is_empty() {
             local.to_string()
         } else {
-            format!("{}.{}", self.cur_prefix, local)
+            format!("{}.{}", self.lex.cur_prefix_text(), local)
         }
     }
     /// Resolve a bare param/genvar `name` to its value, searching the current
@@ -161,7 +161,13 @@ impl Elaborator<'_> {
         if self.decl_probe_key(name, &mut key, &hit) {
             return Some(key);
         }
-        self.walk_out_from(&self.cur_prefix, name, &hit, stop_at_net_binding, key)
+        self.walk_out_from(
+            self.lex.cur_prefix_text(),
+            name,
+            &hit,
+            stop_at_net_binding,
+            key,
+        )
     }
 
     /// [`Self::walk_scopes_key`]'s outward walk from a SAVED `prefix` (a deferred
@@ -236,33 +242,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// The routine table key a GENERATE scope gives a bare routine name, or `None`
-    /// when `scope` names no generate scope at all (a plain module scope).
-    ///
-    /// `scope` is a prefix RELATIVE to the module instance (`g[0]`,
-    /// `g[0].$func$g[0]$f`, `gl[1].$blk$12_40`). Only the generate-block segments
-    /// contribute: a transparent `$func$…`/`$itask$…`/`$blk$…` segment is skipped,
-    /// so a call made from inside a generate-scoped function body — or from a named
-    /// block nested in the generate block — composes the same key the declaration
-    /// registered. Segments are joined with `$`, never `.` (see `rtn_decl_scope`).
-    pub(crate) fn gen_rtn_key(scope: &str, bare: &str) -> Option<String> {
-        let mut key = String::new();
-        for seg in scope.split('.') {
-            // A `$…$` segment carries a `[` of its own when the routine it names is
-            // itself generate-scoped (`$func$g[0]$f`), so the `$` test comes first.
-            if seg.starts_with('$') || !Self::is_gen_scope_segment(seg) {
-                continue;
-            }
-            key.push_str(seg);
-            key.push('$');
-        }
-        if key.is_empty() {
-            return None;
-        }
-        key.push_str(bare);
-        Some(key)
-    }
-
     /// The bare routine name inside a table key: the tail after the last `$`.
     /// Byte-identical to the input for a module key (no `$`), so callers that hold
     /// either kind can use it unconditionally.
@@ -270,48 +249,6 @@ impl Elaborator<'_> {
         match key.rfind('$') {
             Some(i) => &key[i + 1..],
             None => key,
-        }
-    }
-
-    /// Outward walk over the GENERATE scopes enclosing the current position,
-    /// innermost first, returning the first composed routine key `hit` accepts.
-    ///
-    /// This is the routine-table twin of [`Self::walk_scopes_key`], and it is a
-    /// separate walk for one reason: `func_table` is MODULE-local (taken and
-    /// restored per instance), so its keys are module-relative while `cur_prefix`
-    /// is absolute. The walk therefore runs over `cur_prefix` minus `inst_prefix`
-    /// and never crosses an instance boundary — a child instance elaborates with
-    /// its own tables, so there is nothing outside this module to reach.
-    ///
-    /// Innermost-wins is what makes a generate `f` shadow a module `f`, and running
-    /// out of relative scope (returning `None`) is what hands the module-level key
-    /// back to the caller.
-    pub(crate) fn walk_rtn_scopes(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
-        let inst = self.inst_prefix.as_str();
-        let cur = self.cur_prefix.as_str();
-        let mut rel: &str = if inst.is_empty() {
-            cur
-        } else if cur == inst {
-            return None;
-        } else {
-            // `None` = not under this instance's path at all (a table swapped in
-            // for a parent expression — see the `wire_ports` swap). No generate
-            // scope of THIS position can be claimed; fall back to the module key.
-            cur.strip_prefix(inst).and_then(|r| r.strip_prefix('.'))?
-        };
-        loop {
-            if rel.is_empty() {
-                return None;
-            }
-            if let Some(k) = Self::gen_rtn_key(rel, bare) {
-                if hit(&k) {
-                    return Some(k);
-                }
-            }
-            rel = match rel.rfind('.') {
-                Some(i) => &rel[..i],
-                None => "",
-            };
         }
     }
 
@@ -462,7 +399,7 @@ impl Elaborator<'_> {
         // Identical scope, no formal substitution in flight ⇒ the two lowerings are the
         // same lowering. Covers every call that is not inside another subroutine, a
         // generate block, or a scoped block — i.e. almost all of them, byte-identically.
-        if self.cur_prefix == self.tf_decl_scope
+        if self.lex.cur_prefix_text() == self.tf_decl_scope
             && self.subst.is_empty()
             && self.out_subst.is_empty()
         {
@@ -484,12 +421,12 @@ impl Elaborator<'_> {
         {
             return false;
         }
-        let saved = std::mem::replace(&mut self.cur_prefix, self.tf_decl_scope.clone());
+        let saved = self.lex.scope_swap_text(self.tf_decl_scope.clone());
         let there: Vec<(Option<u32>, Option<i64>)> = names
             .iter()
             .map(|n| (self.lookup_net_scoped(n), self.lookup_scoped(n)))
             .collect();
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
         names
             .iter()
             .zip(there)

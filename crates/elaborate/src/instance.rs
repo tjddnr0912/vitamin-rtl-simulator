@@ -346,7 +346,8 @@ impl Elaborator<'_> {
         });
 
         // Enter this instance's scope (restored before returning).
-        let saved_prefix = std::mem::replace(&mut self.cur_prefix, inst_path.to_string());
+        let parent_prefix = self.lex.cur_prefix_text().to_string();
+        let saved_prefix = self.lex.scope_swap_text(inst_path.to_string());
         let saved_inst_prefix = std::mem::replace(&mut self.inst_prefix, inst_path.to_string());
         // The key into `module_facts` for this body's hierarchical leaves
         // (`expr_size_hier`) — the module being lowered, not the instance path.
@@ -626,8 +627,10 @@ impl Elaborator<'_> {
         // IEEE §6.10 ordering — see the `decl_pos` field doc. Same walk as `names`.
         let dpos = self.gather_decl_positions(module);
         let mut saved_decl_pos = std::mem::replace(&mut self.decl_pos, dpos);
-        let mut saved_dpos_scope =
-            std::mem::replace(&mut self.decl_pos_scope, self.cur_prefix.clone());
+        let mut saved_dpos_scope = std::mem::replace(
+            &mut self.decl_pos_scope,
+            self.lex.cur_prefix_text().to_string(),
+        );
         let mut saved_dpos_range =
             std::mem::replace(&mut self.decl_pos_range, (module.span.lo, module.span.hi));
         let dbl = self.gather_block_local_names(module);
@@ -835,7 +838,10 @@ impl Elaborator<'_> {
         // R19-X1: these two tables' contents are declared HERE, at this instance's own
         // prefix. Record it so a filled default-argument value can be checked against
         // the scope IEEE evaluates it in (see `default_binding_matches_decl_scope`).
-        let saved_decl_scope = std::mem::replace(&mut self.tf_decl_scope, self.cur_prefix.clone());
+        let saved_decl_scope = std::mem::replace(
+            &mut self.tf_decl_scope,
+            self.lex.cur_prefix_text().to_string(),
+        );
         // R5-B: the inout-function set is module-local too (it is rebuilt by this
         // module's `lower_frame_funcs`), so a nested child instance elaborated in the
         // middle of this module must not clobber it — save/restore alongside func_table.
@@ -1164,7 +1170,7 @@ impl Elaborator<'_> {
         self.wire_ports(
             module,
             binding,
-            &saved_prefix,
+            &parent_prefix,
             parent_inst.is_none(),
             inst_span,
         );
@@ -1317,7 +1323,8 @@ impl Elaborator<'_> {
                         // `defparam u.P = $signed(8'hFF);` was E3009 where `#(.P(…))`
                         // on the same target binds 8 signed bits (both oracles).
                         let v = self.const_eval_in_scope(value);
-                        let fq = format!("{}.{}", self.cur_prefix, path.segments[0].name);
+                        let fq =
+                            format!("{}.{}", self.lex.cur_prefix_text(), path.segments[0].name);
                         let param = path.segments[1].name.clone();
                         // A fill literal is carried verbatim ALONGSIDE the fold above:
                         // its width is the TARGET's declared width, which is not known
@@ -1486,7 +1493,7 @@ impl Elaborator<'_> {
         self.seq_table = saved_seqs;
         self.prop_table = saved_props;
         self.let_table = saved_lets;
-        self.cur_prefix = saved_prefix;
+        self.lex.scope_restore(saved_prefix);
         self.inst_prefix = saved_inst_prefix;
         self.cur_module = saved_module;
         self.cur_module_span = saved_module_span;

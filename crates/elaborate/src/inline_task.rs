@@ -190,7 +190,7 @@ impl Elaborator<'_> {
                     } else {
                         None
                     },
-                    prefix: self.cur_prefix.clone(),
+                    prefix: self.lex.cur_prefix_text().to_string(),
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     arg_ids,
                     arg_lvals,

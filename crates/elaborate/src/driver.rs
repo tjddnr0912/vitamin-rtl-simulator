@@ -148,7 +148,7 @@ impl<'s> Elaborator<'s> {
             iface_static_scoped: BTreeMap::new(),
             vif_handles: std::collections::BTreeSet::new(),
             modport_readonly: BTreeSet::new(),
-            cur_prefix: String::new(),
+            lex: lexscope::Scopes::new(),
             inst_prefix: String::new(),
             cur_module: String::new(),
             cur_module_span: None,
@@ -462,7 +462,7 @@ impl<'s> Elaborator<'s> {
     /// — so it is the instance path by construction rather than a second
     /// spelling of one.
     pub(crate) fn cur_context(&self) -> Vec<diag::Frame> {
-        if self.cur_prefix.is_empty() {
+        if self.lex.cur_prefix_text().is_empty() {
             return Vec::new();
         }
         // §4.5.429: the spelling `%m` prints — a singleton generate scope without
@@ -724,14 +724,14 @@ impl<'s> Elaborator<'s> {
             .map(|m| (*m, UnitKind::Module))
             .chain(ifaces.iter().map(|m| (*m, UnitKind::Interface)));
         for (m, kind) in defs {
-            let saved = std::mem::replace(&mut self.cur_prefix, m.name.name.clone());
+            let saved = self.lex.scope_swap_text(m.name.name.clone());
             self.check_duplicate_param_decls(m, kind);
             self.check_decl_name_collisions(m, kind);
             self.gen_enum_carried
                 .insert(m.name.name.clone(), gen_enum::gen_carried_typedefs(m, kind));
             self.cond_census
                 .insert(m.name.name.clone(), cond_names::cond_census(m, kind));
-            self.cur_prefix = saved;
+            self.lex.scope_restore(saved);
         }
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
         // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
@@ -778,10 +778,9 @@ impl<'s> Elaborator<'s> {
                     // at all (census p20_c `RD=49`, p20_i `RD=9`), where both oracles
                     // reject. The parameter half of the rule lives inside
                     // `elaborate_package`, which already walks per DEFINITION.
-                    let saved =
-                        std::mem::replace(&mut self.cur_prefix, format!("$pkg${}", pm.name.name));
+                    let saved = self.lex.scope_swap_pkg(&pm.name.name);
                     self.check_decl_name_collisions(pm, UnitKind::Package);
-                    self.cur_prefix = saved;
+                    self.lex.scope_restore(saved);
                     self.elaborate_package(pm);
                 }
             }

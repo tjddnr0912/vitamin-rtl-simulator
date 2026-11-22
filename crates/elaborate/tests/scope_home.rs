@@ -91,6 +91,21 @@
 //!   (a sink is one level) nor an implicit format capture (`{name}` inside a literal does not
 //!   count in LOCAL's uses).
 //!
+//! LS2a (§5.2 Q-LEXSCOPE, the module `crate::lexscope` and its funnel): H3 / HK / HF read a
+//! funnel entry call `<recv>.lex.<entry>(..)` as the write it replaced, with the entry's name as
+//! its form (`scope_restore(b)` / `scope_repoint(x)` as `cur_prefix = b / x`) ; the field inside
+//! `lexscope/` is `Scopes`' own and is not a site ; HM's `curp` also reads the bridge copy
+//! `<recv>.lex.cur_prefix_text().to_string()`. Three pins of the funnel itself, keyed by the
+//! module's lists in `scope_surface.tables`:
+//!
+//! - HDBG the identifier `debug_assertions` occurs 0 times in lexscope's files ; its
+//!   `debug_assert*!` calls by (file, fn, macro) with a count (DELTA9 N-8, DELTA10 N-g).
+//! - HBR every call of a bridge entry (SURF_LEAVE's items) outside lexscope by (file, fn,
+//!   entry, SINK) with a count, SINK as HOUT's (DELTA10 w1 ; TW-BR: it may only fall).
+//! - HC ARGS for every SURF_ENTER row of role to-scope, the token text of the argument at that
+//!   parameter in every call of the entry, crate-wide, by (file, fn, callee, tokens) with a
+//!   count (DELTA11 R4 N-8, DELTA12 S2 r4) ; the entry's name must be unique in the crate.
+//!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
 //! table in the same commit ; a GONE row leaves the table in the commit that removes it.
@@ -844,6 +859,11 @@ impl Pass<'_> {
         let inner = self.blocks.last().copied().unwrap_or(0);
         let all = self.blocks.clone();
         if let Some(c) = self.cur() {
+            // inside the module the field is `Scopes`' own (LS2a): its writes are the
+            // entries' bodies (HT-SURF's BODY-ALL), not sites ; the entry calls count
+            if in_lexscope(&c.file) && !is_lex_entry_name(form) {
+                return;
+            }
             c.prefix_writes.push((form.to_string(), inner, all));
         }
     }
@@ -861,6 +881,35 @@ impl Pass<'_> {
             c.walk_calls.push((name.to_string(), probes));
         }
     }
+}
+
+/// The funnel's openers (LS2a, §5.2 Q-LEXSCOPE): `<recv>.lex.<entry>(..)` moves the current
+/// scope and returns its `Saved` ; after LS2 a write site is the same row with the entry's
+/// name as its form (PLAN8 H5 LS1 part 2).
+const LEX_OPENERS: &[&str] = &[
+    "scope_swap_text",
+    "scope_swap_empty",
+    "scope_swap_pkg",
+    "scope_enter",
+    "scope_hold",
+];
+/// The funnel's closer and its re-point (inside an open pair).
+const LEX_CLOSERS: &[&str] = &["scope_restore", "scope_repoint"];
+
+fn is_lex_entry_name(n: &str) -> bool {
+    LEX_OPENERS.contains(&n) || LEX_CLOSERS.contains(&n)
+}
+
+/// A file of the module `crate::lexscope`.
+fn in_lexscope(file: &str) -> bool {
+    file.starts_with("lexscope/")
+}
+
+/// `<recv>.lex.<entry>(..)` for a funnel entry: the entry's name.
+fn lex_entry(m: &syn::ExprMethodCall) -> Option<String> {
+    let n = m.method.to_string();
+    let on_lex = matches!(&*m.receiver, Expr::Field(f) if matches!(&f.member, syn::Member::Named(i) if i == "lex"));
+    (on_lex && is_lex_entry_name(&n)).then_some(n)
 }
 
 /// `true` when `e` is `<recv>.cur_prefix`.
@@ -1342,7 +1391,7 @@ impl<'ast> Visit<'ast> for Pass<'_> {
     }
     fn visit_expr_struct(&mut self, s: &'ast syn::ExprStruct) {
         for f in &s.fields {
-            if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix") {
+            if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix" || i == "lex") {
                 self.prefix_write("init");
             }
         }
@@ -1405,6 +1454,9 @@ impl<'ast> Visit<'ast> for Pass<'_> {
         // H3
         if is_prefix_field(&m.receiver) && STRING_MUT.contains(&meth.as_str()) {
             self.prefix_write(&format!("method:{meth}"));
+        }
+        if let Some(e) = lex_entry(m) {
+            self.prefix_write(&e);
         }
         // H6
         let args: Vec<&Expr> = m.args.iter().collect();
@@ -1866,6 +1918,10 @@ fn h3_rows(c: &Census) -> Vec<(String, String, usize)> {
         for (f, inner, all) in &r.prefix_writes {
             match f.as_str() {
                 "replace" | "take" | "swap" => {
+                    openers.push(*inner);
+                    sites += 1;
+                }
+                o if LEX_OPENERS.contains(&o) => {
                     openers.push(*inner);
                     sites += 1;
                 }
@@ -2803,6 +2859,14 @@ impl<'ast> Visit<'ast> for Pass2<'_> {
             && matches!(&*m.receiver, Expr::Field(f) if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix"))
         {
             self.mint("curp", "cur_prefix.clone()");
+        }
+        // HM after LS2a: the bridge's copy `<recv>.lex.cur_prefix_text().to_string()` (the
+        // same mint with the entry's name)
+        if meth == "to_string"
+            && matches!(&*m.receiver, Expr::MethodCall(b) if b.method == "cur_prefix_text"
+                && matches!(&*b.receiver, Expr::Field(f) if matches!(&f.member, syn::Member::Named(i) if i == "lex")))
+        {
+            self.mint("curp", "cur_prefix_text().to_string()");
         }
         self.visit_expr(&m.receiver);
         self.called(&meth);
@@ -3987,8 +4051,16 @@ const DIVERGE_MACROS: &[&str] = &["panic", "unreachable", "todo", "unimplemented
 fn opener_call(e: &Expr) -> Option<(&'static str, String)> {
     match e {
         Expr::Call(c) => opener_of(c),
+        Expr::MethodCall(m) => lex_opener_of(m),
         _ => None,
     }
+}
+
+/// `<recv>.lex.<opener>(..)`: (the entry's name, ARG = its first argument or `-`).
+fn lex_opener_of(m: &syn::ExprMethodCall) -> Option<(&'static str, String)> {
+    let n = lex_entry(m)?;
+    let form = *LEX_OPENERS.iter().find(|o| **o == n)?;
+    Some((form, m.args.first().map(tx).unwrap_or_else(|| "-".into())))
 }
 
 fn opener_of(c: &syn::ExprCall) -> Option<(&'static str, String)> {
@@ -4062,10 +4134,27 @@ struct HfWalk<'a> {
     names: BTreeSet<String>,
     block: Vec<(&'a [syn::Stmt], usize)>,
     evs: Vec<HfAt<'a>>,
+    /// a fn of `crate::lexscope`: the field is `Scopes`' own, its writes are not sites
+    lexmod: bool,
 }
 
 impl<'a> HfWalk<'a> {
     fn push(&mut self, ev: HfEv<'a>) {
+        let field_write = matches!(
+            ev,
+            HfEv::Open { .. }
+                | HfEv::Clone { .. }
+                | HfEv::Assign { .. }
+                | HfEv::Init { .. }
+                | HfEv::Other { .. }
+        );
+        if self.lexmod && field_write {
+            return;
+        }
+        self.push_lex(ev);
+    }
+    /// an event of a funnel entry call (`<recv>.lex.<entry>(..)`), counted in every file
+    fn push_lex(&mut self, ev: HfEv<'a>) {
         self.evs.push(HfAt {
             pos: self.path.clone(),
             closure: self.closure,
@@ -4134,16 +4223,30 @@ impl<'a> Visit<'a> for HfWalk<'a> {
                     Pat::Ident(i) => Some(i.ident.to_string()),
                     _ => None,
                 };
-                self.push(HfEv::Open {
-                    form,
-                    arg,
-                    bind,
-                    region,
-                });
-                if let Expr::Call(c) = &*init.expr {
-                    for a in c.args.iter().skip(1) {
-                        self.visit_expr(a);
+                match &*init.expr {
+                    Expr::Call(c) => {
+                        self.push(HfEv::Open {
+                            form,
+                            arg,
+                            bind,
+                            region,
+                        });
+                        for a in c.args.iter().skip(1) {
+                            self.visit_expr(a);
+                        }
                     }
+                    Expr::MethodCall(m) => {
+                        for a in &m.args {
+                            self.visit_expr(a);
+                        }
+                        self.push_lex(HfEv::Open {
+                            form,
+                            arg,
+                            bind,
+                            region,
+                        });
+                    }
+                    _ => {}
                 }
             } else {
                 let pairs: Vec<(&Pat, &Expr)> = match (&l.pat, &*init.expr) {
@@ -4152,15 +4255,28 @@ impl<'a> Visit<'a> for HfWalk<'a> {
                     }
                     (p, e) => vec![(p, e)],
                 };
+                let mut lex_opened = false;
                 for (p, e) in pairs {
                     if let (Pat::Ident(i), true) = (p, is_prefix_clone(e)) {
                         self.push(HfEv::Clone {
                             bind: i.ident.to_string(),
                             region,
                         });
+                    } else if let (Pat::Ident(i), Some((form, arg))) = (p, opener_call(e)) {
+                        if matches!(e, Expr::MethodCall(_)) {
+                            self.push_lex(HfEv::Open {
+                                form,
+                                arg,
+                                bind: Some(i.ident.to_string()),
+                                region,
+                            });
+                            lex_opened = true;
+                        }
                     }
                 }
-                self.visit_expr(&init.expr);
+                if !lex_opened {
+                    self.visit_expr(&init.expr);
+                }
             }
             if let Some((_, els)) = &init.diverge {
                 self.path.push(Step::C("letelse".into()));
@@ -4201,6 +4317,22 @@ impl<'a> Visit<'a> for HfWalk<'a> {
         self.visit_expr(&m.receiver);
         for a in &m.args {
             self.visit_expr(a);
+        }
+        if let Some((form, arg)) = lex_opener_of(m) {
+            let region = self.region();
+            self.push_lex(HfEv::Open {
+                form,
+                arg,
+                bind: None,
+                region,
+            });
+        } else if lex_entry(m).is_some() {
+            // scope_restore(<bind>) / scope_repoint(<text>): an assignment of the field
+            let x = m.args.first();
+            self.push_lex(HfEv::Assign {
+                rhs: x.map(tx).unwrap_or_else(|| "-".into()),
+                ident: x.and_then(single_path),
+            });
         }
         let at = match meth.as_str() {
             "with_scope" => Some(0),
@@ -4257,7 +4389,7 @@ impl<'a> Visit<'a> for HfWalk<'a> {
     }
     fn visit_expr_struct(&mut self, s: &'a syn::ExprStruct) {
         for f in &s.fields {
-            if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix") {
+            if matches!(&f.member, syn::Member::Named(i) if i == "cur_prefix" || i == "lex") {
                 self.push(HfEv::Init { arg: tx(&f.expr) });
             }
         }
@@ -4350,6 +4482,7 @@ impl<'a> Visit<'a> for HfWalk<'a> {
             names: self.names.clone(),
             block: Vec::new(),
             evs: Vec::new(),
+            lexmod: self.lexmod,
         };
         for e in &es {
             w.visit_expr(e);
@@ -4535,10 +4668,28 @@ impl HfFlow<'_> {
             fall: ins.clone(),
             ..Default::default()
         };
+        // after LS2a `<recv>.lex.scope_restore(x)` / `scope_repoint(x)` is the assignment
+        // `<recv>.cur_prefix = x` with the entry's name
+        let lex_set = match e {
+            Expr::MethodCall(m)
+                if lex_entry(m).is_some_and(|n| LEX_CLOSERS.contains(&n.as_str())) =>
+            {
+                m.args.first()
+            }
+            _ => None,
+        };
         match e {
-            Expr::Assign(a) if is_prefix_field(&a.left) => {
-                let mut o = self.expr(&a.right, ins);
-                let id = single_path(&a.right);
+            Expr::Assign(_) | Expr::MethodCall(_)
+                if lex_set.is_some()
+                    || matches!(e, Expr::Assign(a) if is_prefix_field(&a.left)) =>
+            {
+                let right = match (e, lex_set) {
+                    (_, Some(x)) => x,
+                    (Expr::Assign(a), None) => &*a.right,
+                    _ => unreachable!(),
+                };
+                let mut o = self.expr(right, ins);
+                let id = single_path(right);
                 if id.as_deref() == Some(self.bind) {
                     o.fall = o
                         .fall
@@ -4612,6 +4763,7 @@ impl HfFlow<'_> {
                     names: BTreeSet::new(),
                     block: Vec::new(),
                     evs: Vec::new(),
+                    lexmod: false,
                 };
                 w.visit_expr(&c.body);
                 self.closure_writes += w
@@ -4854,6 +5006,7 @@ fn hf_census() -> HfCensus {
             names: f.params.clone(),
             block: Vec::new(),
             evs: Vec::new(),
+            lexmod: in_lexscope(&f.file),
         };
         w.body_block(body);
         walks.push((f, w.evs));
@@ -5367,6 +5520,10 @@ type HoutRaw = (String, String, Sk);
 
 struct HoutW {
     rows: Vec<HoutRaw>,
+    /// the callees HBR / HC ARGS watch (empty for HOUT)
+    watch: Vec<String>,
+    /// each watched call: (callee, its argument tokens, its sink)
+    watched: Vec<(String, Vec<String>, Sk)>,
     /// `<recv>.<display field> = <ident>`: (field, ident)
     assigns: Vec<(String, String)>,
     /// `let <ident> = <init>` (the init's token text)
@@ -5459,6 +5616,10 @@ impl HoutW {
             Expr::MethodCall(m) => {
                 let name = m.method.to_string();
                 let args = hout_args(m.args.iter());
+                if self.watch.contains(&name) {
+                    self.watched
+                        .push((name.clone(), m.args.iter().map(tx).collect(), ctx.clone()));
+                }
                 if HOUT_CALLEES.contains(&name.as_str()) {
                     self.rows.push((name.clone(), args.clone(), ctx.clone()));
                 }
@@ -5501,6 +5662,10 @@ impl HoutW {
                 let callee = tx(&c.func);
                 let last = callee.rsplit("::").next().unwrap_or("").to_string();
                 let args = hout_args(c.args.iter());
+                if self.watch.contains(&last) {
+                    self.watched
+                        .push((last.clone(), c.args.iter().map(tx).collect(), ctx.clone()));
+                }
                 if HOUT_CALLEES.contains(&last.as_str()) {
                     self.rows.push((last.clone(), args.clone(), ctx.clone()));
                 }
@@ -5716,6 +5881,8 @@ fn hout_census() -> (BTreeMap<String, usize>, BTreeMap<String, usize>) {
         let Some(body) = f.body else { continue };
         let mut w = HoutW {
             rows: Vec::new(),
+            watch: Vec::new(),
+            watched: Vec::new(),
             assigns: Vec::new(),
             lets: BTreeMap::new(),
             m_path_idx,
@@ -5883,6 +6050,364 @@ fn hout_the_display_outputs_are_pinned() {
         ));
     }
     finish("HOUT", &msgs);
+}
+
+// =====================================================================================
+// HDBG, HBR, HC ARGS — the funnel's own pins (§5.2 Q-LEXSCOPE LS2a: DELTA9 J3 N-8, DELTA10
+// N-g / w1, DELTA11 R4 N-8, DELTA12 S2 r4)
+// =====================================================================================
+
+/// The sections of `scope_surface.tables` these three are keyed by (LEAVE, ENTER): the
+/// module's own lists, so an entry added there is watched here with no edit.
+const SURF_DATA: &str = include_str!("scope_surface.tables");
+
+fn surf_rows(name: &str) -> Vec<Vec<String>> {
+    let open = format!("== {name}");
+    let body: Vec<&str> = SURF_DATA
+        .lines()
+        .skip_while(|l| l.trim_end() != open)
+        .skip(1)
+        .take_while(|l| !l.starts_with("== "))
+        .collect();
+    assert!(
+        !body.is_empty(),
+        "scope_surface.tables has no section `{name}`"
+    );
+    table(&body.join("\n"))
+}
+
+/// The simple name of a surface item (`Scopes::scope_swap_text` -> `scope_swap_text`).
+fn item_simple(item: &str) -> String {
+    item.rsplit("::").next().unwrap_or(item).to_string()
+}
+
+/// Every call of a watched name in every fn with a body: (file, fn, callee, args, sink).
+fn watched_calls(watch: &[String]) -> Vec<(String, String, String, Vec<String>, String)> {
+    let srcs = load_src();
+    let fns = hf_fns(&srcs);
+    let mut out = Vec::new();
+    for f in &fns {
+        let Some(body) = f.body else { continue };
+        let mut w = HoutW {
+            rows: Vec::new(),
+            watch: watch.to_vec(),
+            watched: Vec::new(),
+            assigns: Vec::new(),
+            lets: BTreeMap::new(),
+            m_path_idx: None,
+        };
+        w.block(body, &Sk::Ret);
+        let mut ic = IdentCount(BTreeMap::new());
+        ic.visit_block(body);
+        for (callee, args, sk) in w.watched {
+            out.push((
+                f.file.clone(),
+                f.qual.clone(),
+                callee,
+                args,
+                sk_text(&sk, &ic.0),
+            ));
+        }
+    }
+    out
+}
+
+fn lexscope_texts() -> Vec<(String, String)> {
+    let dir = src_dir().join("lexscope");
+    let mut paths = Vec::new();
+    if dir.is_dir() {
+        rs_files(&dir, &mut paths);
+    }
+    paths
+        .iter()
+        .map(|p| {
+            let rel = p.strip_prefix(src_dir()).unwrap_or(p).display().to_string();
+            (rel, std::fs::read_to_string(p).expect("read lexscope file"))
+        })
+        .collect()
+}
+
+fn count_ident(ts: proc_macro2::TokenStream, name: &str) -> usize {
+    ts.into_iter()
+        .map(|t| match t {
+            proc_macro2::TokenTree::Ident(i) => usize::from(i == name),
+            proc_macro2::TokenTree::Group(g) => count_ident(g.stream(), name),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// HDBG: (the identifier `debug_assertions`'s token count in lexscope's files, every file of
+/// the directory, tests included ; the `debug_assert*!` calls by (file, fn, macro)).
+fn hdbg_census() -> (usize, BTreeMap<String, usize>) {
+    let mut idents = 0;
+    for (rel, text) in lexscope_texts() {
+        let ts: proc_macro2::TokenStream = text
+            .parse()
+            .unwrap_or_else(|e| panic!("HDBG cannot lex {rel}: {e}"));
+        idents += count_ident(ts, "debug_assertions");
+    }
+    let srcs = load_src();
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for f in hf_fns(&srcs) {
+        if !in_lexscope(&f.file) {
+            continue;
+        }
+        let Some(body) = f.body else { continue };
+        struct Dbg(BTreeMap<String, usize>);
+        impl<'a> Visit<'a> for Dbg {
+            fn visit_macro(&mut self, m: &'a syn::Macro) {
+                if let Some(l) = m.path.segments.last() {
+                    let n = l.ident.to_string();
+                    if n.starts_with("debug_assert") {
+                        *self.0.entry(n).or_default() += 1;
+                    }
+                }
+            }
+            fn visit_item(&mut self, _: &'a syn::Item) {}
+        }
+        let mut d = Dbg(BTreeMap::new());
+        d.visit_block(body);
+        for (m, n) in d.0 {
+            *rows
+                .entry(format!("{}\t{}\t{m}", f.file, f.qual))
+                .or_default() += n;
+        }
+    }
+    (idents, rows)
+}
+
+#[test]
+fn hdbg_the_debug_only_code_is_pinned() {
+    let (idents, rows) = hdbg_census();
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HDBG", "file\tfn\tmacro\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HDBG")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HDBG table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    let mut msgs = Vec::new();
+    if idents != 0 {
+        msgs.push(format!(
+            "HDBG the identifier `debug_assertions` occurs {idents} time(s) in lexscope's files: lexscope has no \
+             representation or code that differs by profile but `debug_assert*!` statements (DELTA9 N-8)"
+        ));
+    }
+    msgs.extend(diff_rows(
+        "HDBG",
+        &got,
+        &want,
+        "a new `debug_assert*!` in lexscope: read its ARGUMENT for a side effect (no test sees one), add the row",
+        "a `debug_assert*!` of lexscope is gone: name the unit, remove the row",
+    ));
+    let counts = format!("ident=0 asserts={}", rows.values().sum::<usize>());
+    if counts != tables::get("HDBG_COUNTS") {
+        msgs.push(format!(
+            "HDBG COUNTS table [{}] now [{counts}]",
+            tables::get("HDBG_COUNTS")
+        ));
+    }
+    finish("HDBG", &msgs);
+}
+
+#[test]
+fn hbr_the_bridge_reads_are_pinned() {
+    // the bridge entries = LEAVE's items (L1 the text bridge, L2 / L3 residue R)
+    let mut entries: Vec<String> = surf_rows("SURF_LEAVE")
+        .iter()
+        .map(|r| item_simple(&r[1]))
+        .collect();
+    entries.sort();
+    entries.dedup();
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, sink) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows
+            .entry(format!("{file}\t{qual}\t{callee}\t{sink}"))
+            .or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HBR", "file\tfn\tentry\tsink\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HBR")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HBR table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    let mut msgs = diff_rows(
+        "HBR",
+        &got,
+        &want,
+        "a new read through a bridge (LEAVE L1-L3): TW-BR — the bridge may only fall ; name the unit, read where \
+         the text goes (SINK), add the row",
+        "a bridge read is gone: name the unit, remove the row (L1 falls at LS3, 0 at DK1)",
+    );
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for (k, n) in &rows {
+        *by.entry(k.split('\t').nth(2).unwrap_or("").to_string())
+            .or_default() += n;
+    }
+    let counts = dbg_counts(&by);
+    if counts != tables::get("HBR_COUNTS") {
+        msgs.push(format!(
+            "HBR COUNTS table [{}] now [{counts}]",
+            tables::get("HBR_COUNTS")
+        ));
+    }
+    finish("HBR", &msgs);
+}
+
+/// The position of `param` among the typed parameters of the lexscope fn `item`.
+fn enter_param_index(item: &str, param: &str) -> usize {
+    let (ty, name) = match item.rsplit_once("::") {
+        Some((t, n)) => (Some(t.to_string()), n.to_string()),
+        None => (None, item.to_string()),
+    };
+    let mut found = Vec::new();
+    for (rel, text) in lexscope_texts() {
+        let file = syn::parse_file(&text).unwrap_or_else(|e| panic!("parse {rel}: {e}"));
+        struct Find<'o> {
+            ty: Option<String>,
+            name: String,
+            param: String,
+            cur: Option<String>,
+            out: &'o mut Vec<usize>,
+        }
+        impl Find<'_> {
+            fn sig(&mut self, sig: &syn::Signature) {
+                if sig.ident != self.name.as_str() || self.cur != self.ty {
+                    return;
+                }
+                let pos = sig
+                    .inputs
+                    .iter()
+                    .filter(|a| matches!(a, syn::FnArg::Typed(_)))
+                    .position(|a| matches!(a, syn::FnArg::Typed(t) if matches!(&*t.pat, Pat::Ident(i) if i.ident == self.param.as_str())));
+                if let Some(p) = pos {
+                    self.out.push(p);
+                }
+            }
+        }
+        impl<'a> Visit<'a> for Find<'_> {
+            fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+                let saved = self.cur.take();
+                if let syn::Type::Path(p) = &*i.self_ty {
+                    self.cur = p.path.segments.last().map(|s| s.ident.to_string());
+                }
+                visit::visit_item_impl(self, i);
+                self.cur = saved;
+            }
+            fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+                self.sig(&f.sig);
+            }
+            fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
+                self.sig(&f.sig);
+            }
+        }
+        Find {
+            ty: ty.clone(),
+            name: name.clone(),
+            param: param.to_string(),
+            cur: None,
+            out: &mut found,
+        }
+        .visit_file(&file);
+    }
+    assert_eq!(
+        found.len(),
+        1,
+        "HC ARGS: ENTER row {item} · {param} matches {} lexscope fn(s)",
+        found.len()
+    );
+    found[0]
+}
+
+#[test]
+fn hc_args_the_to_scope_arguments_are_pinned() {
+    // keyed by ENTER's to-scope rows (DELTA12 S2 r4): the argument at that parameter, every call
+    let srcs = load_src();
+    let fns = hf_fns(&srcs);
+    let mut at: BTreeMap<String, usize> = BTreeMap::new();
+    let mut msgs = Vec::new();
+    for r in surf_rows("SURF_ENTER")
+        .iter()
+        .filter(|r| r[2] == "to-scope")
+    {
+        let simple = item_simple(&r[0]);
+        let defs = fns.iter().filter(|f| f.simple == simple).count();
+        if defs != 1 {
+            msgs.push(format!(
+                "HC ARGS the to-scope entry `{simple}` is defined {defs} times in the crate: a call is matched by its \
+                 name, so the name must be unique"
+            ));
+        }
+        at.insert(simple, enter_param_index(&r[0], &r[1]));
+    }
+    let watch: Vec<String> = at.keys().cloned().collect();
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, args, _) in watched_calls(&watch) {
+        let arg = args.get(at[&callee]).cloned().unwrap_or_else(|| "?".into());
+        *rows
+            .entry(format!("{file}\t{qual}\t{callee}\t{arg}"))
+            .or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HC_ARGS", "file\tfn\tcallee\targ\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HC_ARGS")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HC_ARGS table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    msgs.extend(diff_rows(
+        "HC_ARGS",
+        &got,
+        &want,
+        "a new call of a to-scope entry, or its scope argument changed: read the text it enters, name the unit, \
+         add the row",
+        "a call of a to-scope entry is gone or its argument changed: name the unit, remove the row",
+    ));
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for (k, n) in &rows {
+        *by.entry(k.split('\t').nth(2).unwrap_or("").to_string())
+            .or_default() += n;
+    }
+    let counts = dbg_counts(&by);
+    if counts != tables::get("HC_ARGS_COUNTS") {
+        msgs.push(format!(
+            "HC_ARGS COUNTS table [{}] now [{counts}]",
+            tables::get("HC_ARGS_COUNTS")
+        ));
+    }
+    finish("HC_ARGS", &msgs);
 }
 
 mod tables {

@@ -649,7 +649,7 @@ impl Elaborator<'_> {
         let pkg = pm.name.name.clone();
         // fold under a synthetic scope so the package's own params resolve
         // while folding later ones (`localparam L2 = W * 2`).
-        let saved_prefix = std::mem::replace(&mut self.cur_prefix, format!("$pkg${pkg}"));
+        let saved_prefix = self.lex.scope_swap_pkg(&pkg);
         let mut saved: Vec<(String, Option<i64>)> = Vec::new();
         // Parallel to `saved`: param_meta entries for THIS package's params, made
         // live during the fold so an intra-package alias/expression resolves a
@@ -1113,7 +1113,7 @@ impl Elaborator<'_> {
         // prefix for the declaring-scope window (`decl_scope.rs`) — snapshot here,
         // re-installed after the unwind below.
         let kept = self.decl_keep_snapshot(
-            &self.cur_prefix,
+            self.lex.cur_prefix_text(),
             saved
                 .iter()
                 .map(|(k, _)| k)
@@ -1157,7 +1157,7 @@ impl Elaborator<'_> {
         for (k, prev) in saved_wide.into_iter().rev() {
             self.put_back_wide(k, prev);
         }
-        self.cur_prefix = saved_prefix;
+        self.lex.scope_restore(saved_prefix);
         self.decl_keep_restore(kept);
         self.pkg_consts.insert(pkg.clone(), consts);
         if !types.is_empty() {

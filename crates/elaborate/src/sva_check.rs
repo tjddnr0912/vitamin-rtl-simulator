@@ -66,9 +66,9 @@ impl Elaborator<'_> {
         self.in_assert_synth = true;
         for sva in pending {
             // Resolve the assertion's names in the scope it was written in.
-            let saved_prefix = std::mem::replace(&mut self.cur_prefix, sva.scope.clone());
+            let saved_prefix = self.lex.scope_swap_text(sva.scope.clone());
             self.materialize_one_sva(sva);
-            self.cur_prefix = saved_prefix;
+            self.lex.scope_restore(saved_prefix);
         }
         self.in_assert_synth = saved_synth;
     }

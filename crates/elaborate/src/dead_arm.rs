@@ -183,7 +183,7 @@ impl Elaborator<'_> {
         self.dead_selects.push(DeadSelect {
             edge,
             span: self.cur_span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
             msg,
         });
         Some(edge)
@@ -209,10 +209,10 @@ impl Elaborator<'_> {
                 continue;
             }
             let span = std::mem::replace(&mut self.cur_span, d.span);
-            let prefix = std::mem::replace(&mut self.cur_prefix, d.prefix);
+            let prefix = self.lex.scope_swap_text(d.prefix);
             self.error(MsgCode::ElabUnsupported, d.msg);
             self.cur_span = span;
-            self.cur_prefix = prefix;
+            self.lex.scope_restore(prefix);
         }
     }
 

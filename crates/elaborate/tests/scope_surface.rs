@@ -140,9 +140,9 @@
 //!
 //! Three tests: the engine on fixtures (one clean module that passes with its whole surface
 //! pinned, NS1-NS32, the NB controls, NI1-NI10, NA1-NA7, NU1 and NT1-NT9 each failing with the pinned (item, position, rule)
-//! set) ; the real crate, where `SURF_PRESENT` pins `absent` and the computed surface must
-//! be empty until LS2a flips it (the code computes the whole surface the day the module
-//! appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
+//! set) ; the real crate, where `SURF_PRESENT` pinned `absent` until LS2a flipped it to
+//! `present` and pinned the computed surface (the code computes the whole surface the day
+//! the module appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
 //! today's signatures and pinned (no list consulted: ENTER-NEEDED names every TEXT or NUMBER
 //! parameter IN-TOTAL finds).
 //!

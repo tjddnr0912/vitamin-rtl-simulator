@@ -408,10 +408,10 @@ impl Elaborator<'_> {
             // resolves outward from `cur_prefix`, so the other declaration can live in a
             // generate scope or an enclosing instance, and saying "module scope" sent the
             // reader to the wrong place.
-            let scope = if self.cur_prefix.is_empty() {
+            let scope = if self.lex.cur_prefix_text().is_empty() {
                 "the enclosing scope".to_string()
             } else {
-                format!("`{}`", self.cur_prefix)
+                format!("`{}`", self.lex.cur_prefix_text())
             };
             self.error(
                 MsgCode::ElabUnsupported,

@@ -443,8 +443,8 @@ impl Elaborator<'_> {
             // are this scope's bare names (a nested instance's alias is not visible
             // here by bare name).
             let bare = match key.rsplit_once('.') {
-                Some((scope, bare)) if scope == self.cur_prefix => bare,
-                None if self.cur_prefix.is_empty() => key.as_str(),
+                Some((scope, bare)) if scope == self.lex.cur_prefix_text() => bare,
+                None if self.lex.cur_prefix_text().is_empty() => key.as_str(),
                 _ => continue,
             };
             out.insert(bare.to_string());

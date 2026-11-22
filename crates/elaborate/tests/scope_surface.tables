@@ -8,6 +8,8 @@
 # with the module absent every SURF_ list is empty (a row is STALE). LS1 part 7 (DELTA12 S1 S2
 # N-1 N-6) adds ADDR (ADDR_NAMES, SURF_ADDR, SURF_ADDR_CALLS), UNWIND (SURF_UNWIND, empty) and
 # ENTER's `holds` column (IN-TOTAL), each list with its FIX_ twin.
+# LS2a (§5.2 Q-LEXSCOPE) flips SURF_PRESENT to `present` and pins the first rows: LEAVE L1-L3, ENTER 6, CB 2,
+# INTERIOR 1, MACROS `zn`, E / BODY / ROWS / OUT_TYPES as computed, SURF_PLAN's 4 LS2a fns at lexscope/elab.rs.
 == ADDR_TOOLCHAIN
 # the toolchain ADDR_NAMES was read against (rust-toolchain.toml's channel ; a bump re-reads it)
 1.85.0
@@ -90,24 +92,69 @@ Outgoing
 # macros allowed. Empty until the module exists (a row with no definition is STALE): `zn`'s row
 # and hash come with LS2a (DELTA11 R6), read by its delta judge (NP-5).
 name	sha256
+zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
-absent
+present
 == SURF_COUNTS
-present=absent files=0 rows=0 out_types=0 e_fns=0 text_flows=0
+present=present files=3 rows=27 out_types=7 e_fns=3 text_flows=4
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
+lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
+lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit	impl Fn(&str) -> bool	CB:probe:the routine tables for one composed key	-
+lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit.0	&str	LEAVE:L2	REF
+lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	IN:bare	&str	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	RET	Option<String>	LEAVE:L2	-
+lexscope/elab.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once	-
+lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
+lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
+lexscope/elab.rs	E	FN	Elaborator::with_scope	RET	R	PASS	-
+lexscope/mod.rs	-	IMPL	Drop for Saved	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Saved	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	ScopeWitness	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
+lexscope/mod.rs	K	FN	Scopes::new	RET	Scopes	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_hold	RET	Saved	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_repoint	IN:text	String	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	Scopes::scope_repoint	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_restore	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_swap_empty	RET	Saved	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_swap_pkg	IN:pkg	&str	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	Scopes::scope_swap_pkg	RET	Saved	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_swap_text	IN:text	String	ENTER:to-scope	-
+lexscope/mod.rs	K	FN	Scopes::scope_swap_text	RET	Saved	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_witness	RET	ScopeWitness	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_witness_check	RET	()	PASS	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
+&str
+()
+Option<String>
+R
+Saved
+ScopeWitness
+Scopes
 == SURF_LEAVE
 # LEAVE: text out, counted, each with its closing unit (DELTA10 L1: L0 BOUNDARY, L1-L5) — empty
 # until the module exists ; a row matching no failing position fails STALE
 id	item	position	type	closes
+L1	Scopes::cur_prefix_text	RET	&str	DK1
+L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
+L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
+L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
 item	param	role	holds
+Elaborator::with_scope	seg	to-scope	TEXT str
+Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
+Elaborator::cur_gen_rtn_key	bare	lookup	TEXT str
+Scopes::scope_swap_text	text	to-scope	TEXT String
+Scopes::scope_repoint	text	to-scope	TEXT String
+Scopes::scope_swap_pkg	pkg	to-scope	TEXT str
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -121,6 +168,26 @@ type	plain
 # E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
 item	kind	name	count	flow
+Elaborator::cur_gen_rtn_key	FN	-	-	-
+Elaborator::cur_gen_rtn_key	OUT-C	.as_str	1	in
+Elaborator::cur_gen_rtn_key	OUT-C	.cur_prefix_text	1	in
+Elaborator::cur_gen_rtn_key	OUT-C	.is_empty	1	in
+Elaborator::cur_gen_rtn_key	OUT-C	.strip_prefix	2	text:LEAVE-L3
+Elaborator::cur_gen_rtn_key	OUT-F	inst_prefix	1	in
+Elaborator::walk_rtn_scopes	FN	-	-	-
+Elaborator::walk_rtn_scopes	OUT-C	.and_then	1	in
+Elaborator::walk_rtn_scopes	OUT-C	.as_str	1	in
+Elaborator::walk_rtn_scopes	OUT-C	.cur_prefix_text	1	in
+Elaborator::walk_rtn_scopes	OUT-C	.is_empty	2	in
+Elaborator::walk_rtn_scopes	OUT-C	.rfind	1	in
+Elaborator::walk_rtn_scopes	OUT-C	.strip_prefix	2	text:LEAVE-L2
+Elaborator::walk_rtn_scopes	OUT-C	Some	1	text:LEAVE-L2
+Elaborator::walk_rtn_scopes	OUT-C	hit	1	text:LEAVE-L2
+Elaborator::walk_rtn_scopes	OUT-F	inst_prefix	1	in
+Elaborator::with_scope	FN	-	-	-
+Elaborator::with_scope	OUT-C	.scope_enter	1	in
+Elaborator::with_scope	OUT-C	.scope_restore	1	in
+Elaborator::with_scope	OUT-C	f	1	payload
 == SURF_CARD
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
@@ -130,15 +197,40 @@ item	position	type	means
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
 item	param	kind	args	calls
+Elaborator::with_scope	f	FnOnce	&mut Self	once
+Elaborator::walk_rtn_scopes	hit	Fn	&str	probe:the routine tables for one composed key
 == SURF_BODY
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
 file	fn	sha256
+lexscope/elab.rs	Elaborator::cur_gen_rtn_key	cc813dcf7953b1c2c676e50838bb7ebce8dd2155031f96c85ff4afb1528a4e38
+lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
+lexscope/elab.rs	Elaborator::walk_rtn_scopes	1602cf1f290a6e68901fa001815e42dede6dc9563e41fc9c8b90493860c0a5ee
+lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
+lexscope/mod.rs	Drop for Saved::drop	6a394d1e16270dfc9e728c1016f56f251e855d210c1e0ae7d18975bf5b89113a
+lexscope/mod.rs	Scopes::c_path	690613c0dbbe24a2f5be83640a12468db1af2e077b6ab42575b6fe6996f0b7c4
+lexscope/mod.rs	Scopes::cur_prefix_text	880389ff624cd8b3c0dc19c579c104ffc4c7b13e29b5f56f6a2728be46cd4575
+lexscope/mod.rs	Scopes::intern	fecd02a5146d6bad133240e6847fce451c0b09fc6919a710bde50afc5a688fe3
+lexscope/mod.rs	Scopes::new	04892f0f61ec6547e20dae0beebcf34340d82806e506ab989a0b21e785960c94
+lexscope/mod.rs	Scopes::scope_enter	bae85b915ec00d55f3c05e4f7fea4062b3d332c0bd63b7a561c280cfcd0f3e3c
+lexscope/mod.rs	Scopes::scope_hold	d2827bbf6bddcbf033565328e4d61e72c2c8f2e0347af0618249e3d5bf5cc859
+lexscope/mod.rs	Scopes::scope_repoint	e3825193fa9d978b472c8fc17779ce879f4e1bd6a4674ab5262f3ca47ea23a73
+lexscope/mod.rs	Scopes::scope_restore	6c033eeb05cf872b581755513143cd39c267f1f27e666eaf5e4a60d0082ff55c
+lexscope/mod.rs	Scopes::scope_swap_empty	7b7034bb08fcc8e5766d792f378f9f2ea6cb1b26f77c71b6676dcc7980870327
+lexscope/mod.rs	Scopes::scope_swap_pkg	a4f3f3c1e3b1977c2cf1dbcbcce5e6b7d56e85d0e27030d8f7bdc2cdb8d045da
+lexscope/mod.rs	Scopes::scope_swap_text	1d914669c406cecbc352b566240bebd0e26ab457fe56a8f5b0af8c464cc1df3d
+lexscope/mod.rs	Scopes::scope_witness	1b6764c6195f85e0fcc1355ede6916d2ee8cdb2712abcd4a763f571a0453aea8
+lexscope/mod.rs	Scopes::scope_witness_check	38bf5e20d1466566c6a256b981410763393bed3f4b42c9e8c79da6b740e2da97
+lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
+lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
+lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
+lexscope/tests.rs	fb_swap_take_pkg_repoint_hold	5cbe70d15539c54c9488e5b095c2b049889559157ed79396d24e8baffa9efd3b
 == SURF_INTERIOR
 # INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
 # item, position, the path of names INTERIOR follows to the carrier, why (hand). A row whose
 # path moved FAILS INTERIOR ; a row matching no position is STALE. Empty.
 item	position	reaches	why
+Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> RefCell	the receiver lent to its callback
 == SURF_PLAN
 # SURF-PLAN: the 30 fns of plan10/g/moved.tsv (DELTA10 L2), judged by I-SURF on today's signature
 # (vis, tier, the normalised signature, verdict, the failing positions, the text IN parameters) ;
@@ -171,10 +263,10 @@ LS2-d	frame_path	frames_reserve.rs	pub(crate)	E	(&self, name: &str) -> String	FA
 LS2-d	frame_path_of	frames_reserve.rs	pub(crate)	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
 LS2-d	scope_chain_abs	generate.rs	pub(crate)	E	(&self) -> String	FAIL	RET=TEXT(String)	-
 LS2a	child_prefix	hier.rs	pub(crate)	E	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
-LS2a	cur_gen_rtn_key	generate.rs	-	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
-LS2a	gen_rtn_key	scope.rs	pub(crate)	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
-LS2a	walk_rtn_scopes	scope.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
-LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self)); IN:f=INTERIOR(Self = Elaborator -> Elaborator.const_call_fn -> RefCell)	seg
+LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
+LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
+LS2a	walk_rtn_scopes	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
+LS2a	with_scope	lexscope/elab.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self)); IN:f=INTERIOR(Self = Elaborator -> Elaborator.const_call_fn -> RefCell)	seg
 LS3	assert_block_local_inits_drained	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	drain_scoped_presize	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	flush_block_local_inits	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-

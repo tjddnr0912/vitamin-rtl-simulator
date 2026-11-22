@@ -34,7 +34,7 @@ impl Elaborator<'_> {
         }
         self.deferred_hier_write.push(DeferredHierWrite {
             span: self.cur_span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
             path: path.segments.iter().map(|s| s.name.clone()).collect(),
         });
         HIER_WRITE_SENTINEL_BASE + idx
@@ -193,7 +193,7 @@ impl Elaborator<'_> {
         }
         self.deferred_hier_sel_write.push(DeferredHierSelWrite {
             span: self.cur_span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
             path,
             idx_eids,
             part,
@@ -451,12 +451,12 @@ impl Elaborator<'_> {
             // a working design LOUD, which is a regression even though the value was
             // wrong. So every name is checked first with the SAME outward walk the
             // lowering uses, and a miss simply leaves `lower_expr`'s IR in place.
-            let saved_prefix = std::mem::replace(&mut self.cur_prefix, p.prefix.clone());
+            let saved_prefix = self.lex.scope_swap_text(p.prefix.clone());
             let resolvable = self.every_name_resolves(&p.rhs);
             // R-SITE: the re-lowered rhs replaces the old rhs root and takes its mark.
             let site = self.mark_of_expr(p.expr_id);
             let new_id = resolvable.then(|| self.with_site(site, |s| s.lower_expr_ctx(&p.rhs, w)));
-            self.cur_prefix = saved_prefix;
+            self.lex.scope_restore(saved_prefix);
             // The old subtree becomes garbage, exactly as a fill-bearing rhs does on the
             // ordinary path (there is no golden to preserve).
             if let Some(new_id) = new_id {

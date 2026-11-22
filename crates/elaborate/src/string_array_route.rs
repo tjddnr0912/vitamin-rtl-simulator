@@ -296,7 +296,7 @@ impl Elaborator<'_> {
             let lo = decl.name.span.lo;
             self.push_block_local_init(None, lo, lhs, rhs);
         } else {
-            let scope = self.cur_prefix.clone();
+            let scope = self.lex.cur_prefix_text().to_string();
             let owner = self.rank_path.clone();
             self.pending_scoped_presize
                 .entry(scope)

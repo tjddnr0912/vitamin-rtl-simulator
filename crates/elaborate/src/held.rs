@@ -272,7 +272,7 @@ impl Elaborator<'_> {
     /// [`Self::clk_refused_at`] for a path written in the current scope.
     pub(crate) fn clk_refused_path(&self, path: &ast::HierPath) -> Option<usize> {
         let names: Vec<String> = path.segments.iter().map(|s| s.name.clone()).collect();
-        self.clk_refused_at(&self.cur_prefix, &names)
+        self.clk_refused_at(self.lex.cur_prefix_text(), &names)
     }
 
     /// Refuse a use of the refused clocking item `i`, at `at` (else the current span),
@@ -290,12 +290,12 @@ impl Elaborator<'_> {
             r.reported.push((s.lo, s.hi));
         }
         let msg = r.msg.clone();
-        let saved = std::mem::replace(&mut self.cur_prefix, prefix.to_string());
+        let saved = self.lex.scope_swap_text(prefix.to_string());
         match sp {
             Some(s) => self.error_at(MsgCode::ElabUnsupported, s, &msg),
             None => self.error(MsgCode::ElabUnsupported, &msg),
         }
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
     }
 
     /// The written root of an assignment target (`cb.q`, `cb.q[0]`, `cb.v[3:0]`).

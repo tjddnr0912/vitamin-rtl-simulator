@@ -232,9 +232,9 @@ impl Elaborator<'_> {
     pub(crate) fn materialize_cover(&mut self) {
         let pending = std::mem::take(&mut self.pending_cover);
         for cov in pending {
-            let saved_prefix = std::mem::replace(&mut self.cur_prefix, cov.scope.clone());
+            let saved_prefix = self.lex.scope_swap_text(cov.scope.clone());
             self.materialize_one_cover(cov);
-            self.cur_prefix = saved_prefix;
+            self.lex.scope_restore(saved_prefix);
         }
     }
 

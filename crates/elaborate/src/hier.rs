@@ -745,10 +745,10 @@ impl Elaborator<'_> {
 
     /// Child prefix = current prefix + child instance name.
     pub(crate) fn child_prefix(&self, inst_name: &str) -> String {
-        if self.cur_prefix.is_empty() {
+        if self.lex.cur_prefix_text().is_empty() {
             inst_name.to_string()
         } else {
-            format!("{}.{}", self.cur_prefix, inst_name)
+            format!("{}.{}", self.lex.cur_prefix_text(), inst_name)
         }
     }
 

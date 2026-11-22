@@ -54,7 +54,7 @@ impl Elaborator<'_> {
             file,
             line,
             col,
-            scope: self.cur_prefix.clone(),
+            scope: self.lex.cur_prefix_text().to_string(),
         });
         self.cont_assigns.push(ca);
         self.record_row_at(at);

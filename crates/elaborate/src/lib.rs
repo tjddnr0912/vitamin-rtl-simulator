@@ -132,6 +132,7 @@ mod inline_task;
 mod inline_task_locals;
 mod instance;
 mod instance_array;
+mod lexscope;
 mod limits;
 mod lvalue;
 mod multidriver;
@@ -775,7 +776,7 @@ struct Elaborator<'s> {
     // lowered ("tb", then "tb.dut", …). The symbol table is keyed by the FQ name
     // `cur_prefix + "." + local`, so `tb.q` and `tb.dut.q` never collide. Empty
     // only transiently (the top is always given its module name as the root path).
-    cur_prefix: String,
+    lex: lexscope::Scopes,
     /// §4.5.435: the path of the module INSTANCE being elaborated — `cur_prefix`
     /// without the generate-scope segments `with_scope` appends inside it. A
     /// subroutine is declared by the module, so `%m` in its body names this

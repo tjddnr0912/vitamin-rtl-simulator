@@ -160,7 +160,7 @@ impl Elaborator<'_> {
                 net,
                 row,
                 span,
-                prefix: self.cur_prefix.clone(),
+                prefix: self.lex.cur_prefix_text().to_string(),
                 calls,
                 gate,
             });
@@ -212,7 +212,7 @@ impl Elaborator<'_> {
                 kept.extend(mine);
             }
         }
-        let saved = std::mem::take(&mut self.cur_prefix);
+        let saved = self.lex.scope_swap_empty();
         for (a, why) in refused {
             let name = self.cont_var_name(a.net);
             let msg = match why {
@@ -273,7 +273,7 @@ impl Elaborator<'_> {
                      unpacked array once, at a constant index"
                 ),
             };
-            self.cur_prefix = a.prefix.clone();
+            self.lex.scope_repoint(a.prefix.clone());
             self.error_at(MsgCode::ElabLvalueKind, a.span, &msg);
         }
         // One warning per `assign` statement and variable: a whole-array `assign` is one
@@ -285,7 +285,7 @@ impl Elaborator<'_> {
             }
             if self.cont_var_1364(a.net) && verilog_file(&self.span_file_line_col(a.span).0) {
                 let name = self.cont_var_name(a.net);
-                self.cur_prefix = a.prefix.clone();
+                self.lex.scope_repoint(a.prefix.clone());
                 self.warn_code_at(
                     MsgCode::ElabContAssignVar1364,
                     a.span,
@@ -297,7 +297,7 @@ impl Elaborator<'_> {
                 );
             }
         }
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
     }
 
     /// `None` when the recorded `assign`s `rows` of `net` drive all of it: one `assign` of

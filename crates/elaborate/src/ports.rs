@@ -272,9 +272,9 @@ impl Elaborator<'_> {
         // walk nets use, so a child inside a generate block binds an iface
         // declared in the enclosing module body. The walk runs in the PARENT
         // scope (cur_prefix is the child's during port binding).
-        let saved_for_lookup = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
+        let saved_for_lookup = self.lex.scope_swap_text(parent_prefix.to_string());
         let found = self.walk_scopes_key(&inst_name, |k| self.iface_insts.contains_key(k));
-        self.cur_prefix = saved_for_lookup;
+        self.lex.scope_restore(saved_for_lookup);
         let Some(parent_fq) = found else {
             self.error(
                 MsgCode::ElabPortMismatch,
@@ -406,7 +406,7 @@ impl Elaborator<'_> {
         conn: ConnSite<'_>,
         parent_prefix: &str,
     ) {
-        let saved = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
+        let saved = self.lex.scope_swap_text(parent_prefix.to_string());
         // §2 🆕 O: `lookup_net_unshadowed` — a bare actual whose name binds a CONSTANT
         // is not the outer array, whatever `lookup_net_scoped` sails out to. Without
         // this `ch u (.p(V))` under `generate begin : g localparam int V = 99;` wired
@@ -419,7 +419,7 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Ident(p) = &conn.expr.kind {
             if p.segments.len() == 1 && self.bare_const_shadows_net(&p.segments[0].name, p.span) {
                 let name = p.segments[0].name.clone();
-                self.cur_prefix = saved;
+                self.lex.scope_restore(saved);
                 self.error_const_shadows_net(
                     &name,
                     "a constant has no unpacked-array value to connect to an array port",
@@ -434,7 +434,7 @@ impl Elaborator<'_> {
             _ => None,
         };
         let Some(actual_id) = actual else {
-            self.cur_prefix = saved;
+            self.lex.scope_restore(saved);
             self.error(
                 MsgCode::ElabPortMismatch,
                 &format!(
@@ -455,7 +455,7 @@ impl Elaborator<'_> {
         let child_dims = self.array_dims.get(&child_id).cloned();
         let actual_desc = self.array_dim_desc.get(&actual_id).cloned();
         let child_desc = self.array_dim_desc.get(&child_id).cloned();
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
         // IEEE 1800 §7.6 makes an unpacked array connection correspond by POSITION,
         // not by index — for `[3:0]` the FIRST element is index 3. This wiring is
         // flat-index to flat-index, which is the same thing only when both sides run
@@ -599,7 +599,7 @@ impl Elaborator<'_> {
                 // Decide each port in the PARENT scope (where a connection actual
                 // resolves). `self.symbols` holds nets/variables only, so a hit
                 // means a real signal — a parameter/enum-label is absent here.
-                let saved = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
+                let saved = self.lex.scope_swap_text(parent_prefix.to_string());
                 let mut synth = Vec::new();
                 let mut missing = Vec::new();
                 for (pname, _) in ports.iter() {
@@ -615,7 +615,7 @@ impl Elaborator<'_> {
                         missing.push(pname.clone());
                     }
                 }
-                self.cur_prefix = saved;
+                self.lex.scope_restore(saved);
                 for pname in missing {
                     self.error(
                         MsgCode::ElabPortMismatch,
@@ -746,7 +746,7 @@ impl Elaborator<'_> {
                 let key = self.fq(pname);
                 *self.symbols.get(&key).unwrap_or(&POISON_NET)
             };
-            let child_prefix = self.cur_prefix.clone();
+            let child_witness = self.lex.scope_witness();
 
             // An UNPACKED ARRAY port connects ELEMENT BY ELEMENT. There is no
             // whole-array value in this IR — a single `ContAssign` over the whole net
@@ -760,7 +760,7 @@ impl Elaborator<'_> {
                 .unwrap_or(1);
             if child_len > 1 {
                 self.wire_array_port(child_id, child_len, *dir, pname, conn, parent_prefix);
-                self.cur_prefix = child_prefix;
+                self.lex.scope_witness_check(&child_witness);
                 continue;
             }
             match dir {
@@ -771,7 +771,8 @@ impl Elaborator<'_> {
                             "inout port `{pname}` approximated as one-directional (parent→child)"
                         ));
                     }
-                    self.cur_prefix = parent_prefix.to_string();
+                    self.lex.scope_witness_check(&child_witness);
+                    let saved = self.lex.scope_swap_text(parent_prefix.to_string());
                     // §11.6: the actual is in the child port's width context, so a
                     // fill grows to it (non-fill ⇒ byte-identical via lower_expr).
                     let pw = self
@@ -785,7 +786,7 @@ impl Elaborator<'_> {
                         // so: the sole-writer check reads this (`cont_array.rs`).
                         self.inout_actual_exprs.push(rhs);
                     }
-                    self.cur_prefix = child_prefix;
+                    self.lex.scope_restore(saved);
                     let lhs = whole_net_lvalue(child_id);
                     self.push_cont_assign_port(
                         ir::ContAssign {
@@ -798,7 +799,8 @@ impl Elaborator<'_> {
                 }
                 // OUTPUT: parent_lval = child_port  (lval lowered in PARENT scope).
                 ir::PortDir::Output => {
-                    self.cur_prefix = parent_prefix.to_string();
+                    self.lex.scope_witness_check(&child_witness);
+                    let saved = self.lex.scope_swap_text(parent_prefix.to_string());
                     let lhs = match expr_to_lvalue(conn.expr) {
                         Some(lv) => self.lower_lvalue(&lv),
                         None => {
@@ -813,7 +815,7 @@ impl Elaborator<'_> {
                             }
                         }
                     };
-                    self.cur_prefix = child_prefix;
+                    self.lex.scope_restore(saved);
                     let rhs = self.push_expr(ir::Expr::Signal {
                         net: child_id,
                         word: None,

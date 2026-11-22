@@ -371,7 +371,7 @@ impl Elaborator<'_> {
         // array and a silently wrong one the moment a level passes a different one, so
         // this is refused outright rather than left to chance. The enclosing frame is
         // the trailing `$func$<name>` / `$itask$<name>` segment of the active prefix.
-        let enclosing = self.cur_prefix.rsplit('.').next().and_then(|s| {
+        let enclosing = self.lex.cur_prefix_text().rsplit('.').next().and_then(|s| {
             s.strip_prefix("$func$")
                 .or_else(|| s.strip_prefix("$itask$"))
         });

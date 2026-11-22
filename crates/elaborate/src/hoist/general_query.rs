@@ -123,7 +123,8 @@ impl Elaborator<'_> {
         let Some(head) = segs.first() else {
             return false;
         };
-        self.cur_prefix
+        self.lex
+            .cur_prefix_text()
             .split('.')
             .map(|c| c.split('[').next().unwrap_or(c))
             .any(|c| c == head.name)

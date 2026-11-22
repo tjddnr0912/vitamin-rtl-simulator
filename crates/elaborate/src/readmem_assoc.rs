@@ -93,7 +93,7 @@ impl Elaborator<'_> {
         self.readmem_assoc_sites.push(ReadmemAssocSite {
             net,
             span: self.cur_span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
             name: name.to_string(),
         });
         Some(ir::Expr::SysFunc {
@@ -231,14 +231,14 @@ impl Elaborator<'_> {
         }
         let read = self.wait_read_nets();
         let sites = std::mem::take(&mut self.readmem_assoc_sites);
-        let (span, prefix) = (self.cur_span, self.cur_prefix.clone());
+        let (span, prefix) = (self.cur_span, self.lex.scope_hold());
         for s in &sites {
             let hit = read.as_ref().is_none_or(|r| r.contains(&s.net));
             if !hit {
                 continue;
             }
             self.cur_span = s.span;
-            self.cur_prefix = s.prefix.clone();
+            self.lex.scope_repoint(s.prefix.clone());
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
@@ -250,6 +250,6 @@ impl Elaborator<'_> {
             );
         }
         self.cur_span = span;
-        self.cur_prefix = prefix;
+        self.lex.scope_restore(prefix);
     }
 }

@@ -276,7 +276,7 @@ impl Elaborator<'_> {
             lo,
             hi: self.cont_assigns.len(),
             span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
         });
         true
     }
@@ -318,9 +318,9 @@ impl Elaborator<'_> {
             .filter(|w| written.contains(&w.net))
             .map(|w| (w.span, w.prefix.clone()))
             .collect();
-        let saved = std::mem::take(&mut self.cur_prefix);
+        let saved = self.lex.scope_swap_empty();
         for (span, prefix) in refused {
-            self.cur_prefix = prefix;
+            self.lex.scope_repoint(prefix);
             self.error_at(
                 MsgCode::ElabUnsupported,
                 span,
@@ -329,7 +329,7 @@ impl Elaborator<'_> {
                  task); v1 lowers a whole-array `assign` only when it is the array's only writer",
             );
         }
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
     }
 
     /// Every writer of a net of `targets` other than its own continuous assigns (`own`:

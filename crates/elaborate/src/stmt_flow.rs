@@ -60,7 +60,7 @@ impl Elaborator<'_> {
         // other body's `file:line`.
         let ident = self.pending_proc_ident.take().unwrap_or_else(|| ProcIdent {
             kind: "synth",
-            scope: self.cur_prefix.clone(),
+            scope: self.lex.cur_prefix_text().to_string(),
             ..ProcIdent::default()
         });
         self.proc_idents.push(ident);
@@ -430,7 +430,7 @@ impl Elaborator<'_> {
             file,
             line,
             col,
-            scope: self.cur_prefix.clone(),
+            scope: self.lex.cur_prefix_text().to_string(),
         });
         // Reset the nesting guard at every top-level body entry (a process body is
         // never lowered while already inside a fork child of another process).

@@ -718,10 +718,10 @@ impl Elaborator<'_> {
                     )
             })
         {
-            let key = if self.cur_prefix.is_empty() {
+            let key = if self.lex.cur_prefix_text().is_empty() {
                 name.to_string()
             } else {
-                format!("{}.{}", self.cur_prefix, name)
+                format!("{}.{}", self.lex.cur_prefix_text(), name)
             };
             self.hier_funcs.insert(key, fid);
         }
@@ -1114,7 +1114,7 @@ impl Elaborator<'_> {
         let Some(scope) = self.rtn_decl_scope.get(name).cloned() else {
             return f(self);
         };
-        let saved = std::mem::replace(&mut self.cur_prefix, scope);
+        let saved = self.lex.scope_swap_text(scope);
         // Replay this declaration's genvar bindings (see `rtn_decl_genvars`): they
         // were unbound when the generate walk left the iteration, and the body is
         // lowered here, afterwards.
@@ -1142,7 +1142,7 @@ impl Elaborator<'_> {
             }
             self.put_back_meta(k, old_meta);
         }
-        self.cur_prefix = saved;
+        self.lex.scope_restore(saved);
         r
     }
 
@@ -1189,10 +1189,10 @@ impl Elaborator<'_> {
                 scalar_ok || fixed_array_ok
             })
         {
-            let key = if self.cur_prefix.is_empty() {
+            let key = if self.lex.cur_prefix_text().is_empty() {
                 name.to_string()
             } else {
-                format!("{}.{}", self.cur_prefix, name)
+                format!("{}.{}", self.lex.cur_prefix_text(), name)
             };
             self.hier_tasks.insert(key, fid);
             self.hier_task_port_dirs

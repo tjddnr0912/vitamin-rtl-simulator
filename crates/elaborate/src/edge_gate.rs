@@ -409,7 +409,7 @@ impl Elaborator<'_> {
             state,
             refusal,
             span: span_of(bounds),
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
             msg,
             hier,
         });
@@ -907,12 +907,12 @@ impl Elaborator<'_> {
         if !reported.insert((lo, hi, prefix.to_string())) {
             return;
         }
-        let saved_prefix = std::mem::replace(&mut self.cur_prefix, prefix.to_string());
+        let saved_prefix = self.lex.scope_swap_text(prefix.to_string());
         match span {
             Some(span) => self.error_at(MsgCode::ElabUnsupported, span, msg),
             None => self.error(MsgCode::ElabUnsupported, msg),
         }
-        self.cur_prefix = saved_prefix;
+        self.lex.scope_restore(saved_prefix);
     }
 
     /// The caller lvalues every task call copies its outputs to (`t(a[gb.L-1:0])`): they
@@ -963,7 +963,7 @@ impl Elaborator<'_> {
         );
         if stray > 0 {
             let span = self.cur_span.take();
-            let prefix = std::mem::take(&mut self.cur_prefix);
+            let prefix = self.lex.scope_swap_empty();
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
@@ -973,7 +973,7 @@ impl Elaborator<'_> {
                 ),
             );
             self.cur_span = span;
-            self.cur_prefix = prefix;
+            self.lex.scope_restore(prefix);
         }
     }
 
@@ -1051,7 +1051,7 @@ impl Elaborator<'_> {
             need,
             kind,
             span: self.cur_span,
-            prefix: self.cur_prefix.clone(),
+            prefix: self.lex.cur_prefix_text().to_string(),
         });
     }
 

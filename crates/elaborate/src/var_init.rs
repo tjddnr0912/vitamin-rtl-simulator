@@ -186,7 +186,10 @@ impl Elaborator<'_> {
     /// prefix, and draining its pre-size here would run `new[n]` in a later process than
     /// the element writes its own flush already emitted — wiping them silently.
     pub(crate) fn drain_scoped_presize(&mut self) {
-        let Some(v) = self.pending_scoped_presize.remove(&self.cur_prefix) else {
+        let Some(v) = self
+            .pending_scoped_presize
+            .remove(self.lex.cur_prefix_text())
+        else {
             return;
         };
         let (mine, theirs): (Vec<_>, Vec<_>) = v
@@ -194,7 +197,7 @@ impl Elaborator<'_> {
             .partition(|(owner, ..)| *owner == self.rank_path);
         if !theirs.is_empty() {
             self.pending_scoped_presize
-                .insert(self.cur_prefix.clone(), theirs);
+                .insert(self.lex.cur_prefix_text().to_string(), theirs);
         }
         self.pending_var_inits
             .splice(0..0, mine.into_iter().map(|(_, l, r)| (l, r)));
@@ -311,7 +314,8 @@ impl Elaborator<'_> {
     /// `flush_block_local_inits` claims, so it is also the test for "this scope's t0 writes
     /// are replayed by that flush, not by the enclosing scope's".
     pub(crate) fn in_block_local_scope(&self) -> bool {
-        self.cur_prefix
+        self.lex
+            .cur_prefix_text()
             .rsplit('.')
             .next()
             .is_some_and(|seg| seg.starts_with("$blk$"))
@@ -373,9 +377,9 @@ impl Elaborator<'_> {
     /// instance prefix, plus the `$blk$<lo>` segment when the declaration has one.
     pub(crate) fn scoped_init_key(&self, scope: Option<&str>) -> String {
         match scope {
-            Some(seg) if self.cur_prefix.is_empty() => seg.to_string(),
-            Some(seg) => format!("{}.{seg}", self.cur_prefix),
-            None => self.cur_prefix.clone(),
+            Some(seg) if self.lex.cur_prefix_text().is_empty() => seg.to_string(),
+            Some(seg) => format!("{}.{seg}", self.lex.cur_prefix_text()),
+            None => self.lex.cur_prefix_text().to_string(),
         }
     }
 
@@ -399,7 +403,7 @@ impl Elaborator<'_> {
         // order. Still spliced to the front of this scope's list, so the pre-size keeps
         // preceding the writes that ride it.
         self.drain_scoped_presize();
-        let here = self.cur_prefix.clone();
+        let here = self.lex.cur_prefix_text().to_string();
         let dot = if here.is_empty() {
             String::new()
         } else {
@@ -481,7 +485,7 @@ impl Elaborator<'_> {
             Self::RANK_MOD_BLOCK_LOCAL
         };
         for (key, v) in runs {
-            let saved = std::mem::replace(&mut self.cur_prefix, key);
+            let saved = self.lex.scope_swap_text(key);
             self.pending_var_inits = v;
             // No pre-size drain here: a `$blk$`-scope pre-size is recorded in THIS list
             // (`route_fixed_string_array`), ahead of the element writes it must precede,
@@ -490,7 +494,7 @@ impl Elaborator<'_> {
             // if one ever appeared, `assert_block_local_inits_drained` reports it loudly
             // rather than letting the array stay length 0.
             self.flush_ranked(bl);
-            self.cur_prefix = saved;
+            self.lex.scope_restore(saved);
         }
     }
 

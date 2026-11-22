@@ -125,7 +125,8 @@ impl Elaborator<'_> {
             && self.subst.is_empty()
             && self.out_subst.is_empty()
             && !self
-                .cur_prefix
+                .lex
+                .cur_prefix_text()
                 .split('.')
                 .any(|s| s.starts_with("$func$") || s.starts_with("$itask$"))
     }

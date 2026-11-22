@@ -58,7 +58,7 @@ impl Elaborator<'_> {
     /// `w` — two elements of one array printed different spellings). A loop block and
     /// an instance-array element keep their index. Storage keys are untouched.
     pub(crate) fn display_prefix(&self) -> String {
-        self.display_of(&self.cur_prefix)
+        self.display_of(self.lex.cur_prefix_text())
     }
 
     /// `display_prefix` of an arbitrary storage path (§4.5.435: the declaring
@@ -130,21 +130,6 @@ impl Elaborator<'_> {
         } else {
             format!(".{root}.{chain}")
         }
-    }
-
-    /// Run `f` with `cur_prefix` temporarily extended by `seg` (a gen-block
-    /// `label[idx]` segment). Restores the prefix on return. Genvar bindings in
-    /// `self.params` are NOT touched here (the caller manages those).
-    pub(crate) fn with_scope<R>(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R {
-        let new_prefix = if self.cur_prefix.is_empty() {
-            seg.to_string()
-        } else {
-            format!("{}.{}", self.cur_prefix, seg)
-        };
-        let saved = std::mem::replace(&mut self.cur_prefix, new_prefix);
-        let r = f(self);
-        self.cur_prefix = saved;
-        r
     }
 
     /// Unroll/select a list of GenItems at elaboration time, in deterministic
@@ -367,7 +352,11 @@ impl Elaborator<'_> {
                     // binding of THIS iteration — see `rtn_decl_genvars`.
                     self.gen_genvars.push((gv_key.clone(), iter_val));
                     self.with_scope(&block_prefix, |me| {
-                        let open = (me.cur_prefix.clone(), *for_span, Some(gv_key.clone()));
+                        let open = (
+                            me.lex.cur_prefix_text().to_string(),
+                            *for_span,
+                            Some(gv_key.clone()),
+                        );
                         me.gen_text_scopes.push(open);
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
                         me.gen_text_scopes.pop();
@@ -562,7 +551,8 @@ impl Elaborator<'_> {
                 // its constructs count from 1.
                 let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
                 self.with_scope(&seg, |me| {
-                    me.gen_text_scopes.push((me.cur_prefix.clone(), text, None));
+                    me.gen_text_scopes
+                        .push((me.lex.cur_prefix_text().to_string(), text, None));
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
                     me.gen_text_scopes.pop();
                 });
@@ -956,18 +946,6 @@ impl Elaborator<'_> {
             _ => {}
         }
     }
-    /// The routine-table key this generate scope gives `bare`, or `None` when the
-    /// current position is not inside a generate scope of this module instance.
-    fn cur_gen_rtn_key(&self, bare: &str) -> Option<String> {
-        let inst = self.inst_prefix.as_str();
-        let cur = self.cur_prefix.as_str();
-        let rel = if inst.is_empty() {
-            cur
-        } else {
-            cur.strip_prefix(inst)?.strip_prefix('.')?
-        };
-        Self::gen_rtn_key(rel, bare)
-    }
 
     /// IEEE 1800-2017 §27.3: register a `function` declared inside a generate block
     /// under this block instance's scope (see `rtn_decl_scope` for the key grammar).
@@ -995,7 +973,8 @@ impl Elaborator<'_> {
         }
         self.rtn_decl_genvars
             .insert(key.clone(), self.gen_genvars.clone());
-        self.rtn_decl_scope.insert(key, self.cur_prefix.clone());
+        self.rtn_decl_scope
+            .insert(key, self.lex.cur_prefix_text().to_string());
     }
 
     pub(crate) fn register_gen_task(&mut self, t: &ast::TaskDef) {
@@ -1014,7 +993,8 @@ impl Elaborator<'_> {
         }
         self.rtn_decl_genvars
             .insert(key.clone(), self.gen_genvars.clone());
-        self.rtn_decl_scope.insert(key, self.cur_prefix.clone());
+        self.rtn_decl_scope
+            .insert(key, self.lex.cur_prefix_text().to_string());
     }
 
     /// Collect `sequence`/`property` declarations from a generate block into the
