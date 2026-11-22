@@ -4,7 +4,8 @@
 # SURF_* = the real crate's (`crate::lexscope`) ; FIX_* = the fixture modules'
 # (scope_surface.fixtures). SURF_VOCAB / SURF_TRAITS are the vocabulary both use. LS1 part 5
 # (DELTA11 R2) adds the counted lists CARD, CB, BODY and the hash column of MACROS, each with
-# its FIX_ twin ; with the module absent every SURF_ list is empty (a row is STALE).
+# its FIX_ twin ; LS1 part 6 adds INTERIOR's exemptions (SURF_INTERIOR, empty, and FIX_INTERIOR) ;
+# with the module absent every SURF_ list is empty (a row is STALE).
 == SURF_VOCAB
 # HT's table of opaque lexscope types: plan10/g/surface.tsv's 12 TYPE rows (DELTA10 L1 I-SURF's
 # list: ScopeRef, Saved, the witness = ScopeWitness (DELTA9's name, not yet checked by names.py),
@@ -82,11 +83,18 @@ item	param	kind	args	calls
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
 file	fn	sha256
+== SURF_INTERIOR
+# INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
+# item, position, the path of names INTERIOR follows to the carrier, why (hand). A row whose
+# path moved FAILS INTERIOR ; a row matching no position is STALE. Empty.
+item	position	reaches	why
 == SURF_PLAN
 # SURF-PLAN: the 30 fns of plan10/g/moved.tsv (DELTA10 L2), judged by I-SURF on today's signature
 # (vis, tier, the normalised signature, verdict, the failing positions, the text IN parameters) ;
 # + report_at (L2's LS3 row, N-a), which moved.tsv does not list: 31 rows. LS1 part 5 (DELTA11
 # R2): CARD and CB judge them too, with no list consulted (as LEAVE is not): 16 CARD, 8 CB.
+# LS1 part 6: INTERIOR judges them too, no list consulted: 1 row (with_scope's callback lends
+# `&mut Self`, the Elaborator, which holds a RefCell: lib.rs:555 const_call_fn).
 unit	fn	file	vis	tier	signature	verdict	fails	in_text
 DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
 DK1	fq	scope.rs	pub(crate)	E	(&self, local: &str) -> String	FAIL	RET=TEXT(String)	local
@@ -112,7 +120,7 @@ LS2a	child_prefix	hier.rs	pub(crate)	E	(&self, inst_name: &str) -> String	FAIL	R
 LS2a	cur_gen_rtn_key	generate.rs	-	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
 LS2a	gen_rtn_key	scope.rs	pub(crate)	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
 LS2a	walk_rtn_scopes	scope.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
-LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self))	seg
+LS2a	with_scope	generate.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self)); IN:f=INTERIOR(Self = Elaborator -> Elaborator.const_call_fn -> RefCell)	seg
 LS3	assert_block_local_inits_drained	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	drain_scoped_presize	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	flush_block_local_inits	var_init.rs	pub(crate)	E	(&mut self)	PASS	-	-
@@ -120,7 +128,7 @@ LS3	push_block_local_init	var_init.rs	pub(crate)	E	(&mut self, scope: Option<&st
 LS3	scoped_init_key	var_init.rs	pub(crate)	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	edge_gate.rs	-	E	(&mut self, span: Option<ast::Span>, prefix: &str, msg: &str, reported: &mut BTreeSet<(u32, u32, String)>)	FAIL	ARG:reported=NUMBER(u32); ARG:reported=TEXT(String); ARG:reported=UNKNOWN(BTreeSet<(u32, u32, String)>)	prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=2 card=16 cb=8
+fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=2 card=16 cb=8 interior=1
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent
@@ -164,6 +172,10 @@ Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.enter	1	in
 Elaborator::with_scope	OUT-C	.restore	1	in
 Elaborator::with_scope	OUT-C	f	1	payload
+== FIX_INTERIOR
+# the CLEAN module's INTERIOR rows (the positive control of the exemption)
+item	position	reaches	why
+Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> RefCell	the receiver lent to its callback
 == FIX_CARD
 # the CLEAN module's CARD rows (the positive control of CARD)
 item	position	type	means
@@ -198,6 +210,7 @@ lexscope/mod.rs	Scopes::is_top	fa78a02ab17eced69d7a58ccda2d08182d3eecc792d0d55f1
 lexscope/mod.rs	Scopes::restore	2273afafccc032f2a27ce8aa38754f383e7ffaf33814ede3b766768ee3832cac
 lexscope/mod.rs	scope_out	c52b656b6bfdb5ea06a9d9f3a445e2a407c16f88e5853f7fa2a290cc43ee0c97
 lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/mod.rs	tally_is_empty	d7bdda7eae7fc8b8f54ba6a84e11a5dd80de898f0b52a4b4c04ce8a006e13212
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 == FIX_MACROS
 # MACRO-BODY on the CLEAN module
@@ -230,6 +243,7 @@ lexscope/mod.rs	E	FN	Elaborator::names_are_empty	RET	bool	PASS
 lexscope/mod.rs	E	FN	Elaborator::scope_carry	RET	ScopeRef	PASS
 lexscope/mod.rs	E	FN	Elaborator::scope_hold	RET	Saved	PASS
 lexscope/mod.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once
+lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback
 lexscope/mod.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope
 lexscope/mod.rs	E	FN	Elaborator::with_scope	RET	R	PASS
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0
@@ -240,6 +254,7 @@ lexscope/mod.rs	K	FN	Scopes::is_top	RET	bool	PASS
 lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0
 lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display
 lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS
+lexscope/mod.rs	K	FN	tally_is_empty	RET	bool	PASS
 == FIX_OUT_TYPES
 type
 &mut V
@@ -301,11 +316,13 @@ NB7	nb7	RET	CARD
 NB7	nb7b	ARG:c	CARD
 NB7	nb7b	ARG:c	UNKNOWN
 NB7	nb7b	BODY	BODY
+NB7	nb7b	IN:c	INTERIOR
 NB8	Elaborator::names_are_empty	BODY	ALIAS-SELF
 NB8	Elaborator::names_are_empty	BODY	BODY
 NB8	nb8	ARG:e	UNKNOWN
 NB8	nb8	BODY	BODY
 NB8	nb8	IN:e	ELAB-PARAM
+NB8	nb8	IN:e	INTERIOR
 NB9	Elaborator::cur_index_into	ARG:out	NUMBER
 NB9	Elaborator::cur_index_into	ARG:out	UNKNOWN
 NB9	Elaborator::cur_index_into	BODY	BODY
@@ -319,6 +336,9 @@ NB9	Elaborator::nb9c	ARG:out	CARD
 NB9	Elaborator::nb9c	ARG:out	UNKNOWN
 NB9	Elaborator::nb9c	BODY	BODY
 NB9	Elaborator::nb9c	FN	E-LIST
+NB9	Elaborator::cur_index_into	IN:out	INTERIOR
+NB9	Elaborator::nb9b	IN:w	INTERIOR
+NB9	Elaborator::nb9c	IN:out	INTERIOR
 NS1	Elaborator::ns1	BODY	BODY
 NS1	Elaborator::ns1	FN	E-LIST
 NS1	Elaborator::ns1	IN:n	ENTER
@@ -412,3 +432,26 @@ NS8c	From for String	IMPL	IMPL-FOREIGN-SELF
 NS8c	From for String	IMPL	IMPL-TRAIT
 NS8c	From for String::from	BODY	BODY
 NS9	ROOT	CONST	TEXT
+NI1	ni1	BODY	BODY
+NI1	ni1	IN:sink	INTERIOR
+NI10	Elaborator::mark_is	IN:m	INTERIOR
+NI10	Mark::Gen	VARIANT:0	ENUM-PAYLOAD
+NI10	Mark::Gen	VARIANT:0	INTERIOR
+NI10	Mark::Gen	VARIANT:0	PTR
+NI2	ni2	BODY	BODY
+NI2	ni2	IN:o	INTERIOR
+NI3	ni3	BODY	BODY
+NI3	ni3	IN:h	INTERIOR
+NI4	ni4	BODY	BODY
+NI4	ni4	IN:s	INTERIOR
+NI5	ni5	BODY	BODY
+NI5	ni5	IN:out	INTERIOR
+NI6	ni6	BODY	BODY
+NI6	ni6	IN:out	INTERIOR
+NI7	Elaborator::ni7	BODY	BODY
+NI7	Elaborator::ni7	FN	E-LIST
+NI7	Elaborator::ni7	IN:other	INTERIOR
+NI8	ScopeKeyed::entry_under_cur	IN:lex	INTERIOR
+NI8	Scopes.memo	FIELD	INTERIOR
+NI9	ni9	BODY	BODY
+NI9	ni9	IN:tx	INTERIOR

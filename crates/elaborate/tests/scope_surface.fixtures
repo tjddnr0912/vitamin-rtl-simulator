@@ -7,7 +7,10 @@
 # controls ; NB1-NB8 are LS1 part 4's own (P29's doors and the stricter readings) ; NS23-NS31
 # and NB9-NB13 are DELTA11 R2's (LS1 part 5: CARD, CB, MACRO-BODY, BODY-ALL, ALIAS-SELF+, and
 # premise judge round 6's exact shapes). BODY-ALL pins every fn body of CLEAN, so a fixture
-# that adds or edits a fn also fails BODY for that fn.
+# that adds or edits a fn also fails BODY for that fn. NI1-NI10 are LS1 part 6's (INTERIOR: a
+# type name of the crate followed through its fields to a mutable carrier). CLEAN's Elaborator
+# holds a RefCell as the crate's does (lib.rs:555), so the receiver's exemption is not vacuous,
+# and CLEAN's Tally / TallyInner are the clean struct INTERIOR follows and passes.
 == CLEAN
 --- lib.rs
 mod lexscope;
@@ -18,6 +21,7 @@ pub(crate) struct Elaborator<'s> {
     lex: lexscope::Scopes,
     shown: Option<lexscope::Shown>,
     names: Vec<String>,
+    const_call_fn: std::cell::RefCell<Option<String>>,
 }
 --- lexscope/mod.rs
 //! a clean lexscope surface
@@ -94,6 +98,17 @@ zn!(Shown);
 
 pub(crate) fn scope_out<T: Outgoing>(x: T) -> T::Plain {
     x.plain()
+}
+
+struct Tally {
+    seen: Vec<String>,
+    inner: TallyInner,
+}
+
+struct TallyInner(std::collections::BTreeMap<String, u32>);
+
+pub(crate) fn tally_is_empty(t: &Tally) -> bool {
+    t.seen.is_empty() && t.inner.0.is_empty()
 }
 
 pub(crate) fn shown_from_spelling(s: String) -> Shown {
@@ -582,3 +597,94 @@ pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
 -         f.write_str("Shown(..)")
 +         let Self(id) = self;
 +         f.write_str(id)
+== NI1
+# INTERIOR, the occurring shape (edge_gate.rs:1598 `struct Collect(RefCell<Vec<String>>)`, :1609
+# `fn errors(sink: &Collect)`): renamed, the body moved, made a surface fn of the module
+@@ lexscope/mod.rs
++ use std::cell::RefCell;
++ struct Collect(RefCell<Vec<String>>);
++ pub(crate) fn ni1(sink: &Collect) -> bool {
++     sink.0.borrow().is_empty()
++ }
+== NI2
+# INTERIOR, the same two levels deep, the types defined outside the file set (lib.rs)
+@@ lib.rs
++ pub(crate) struct Outer {
++     inner: Inner,
++ }
++ pub(crate) struct Inner(std::cell::RefCell<Vec<String>>);
+@@ lexscope/mod.rs
++ pub(crate) fn ni2(o: &crate::Outer) -> bool {
++     let _ = o;
++     true
++ }
+== NI3
+# INTERIOR through an enum variant's payload
+@@ lexscope/mod.rs
++ enum Held {
++     Empty,
++     Some(Inner3),
++ }
++ struct Inner3 {
++     lock: std::sync::Mutex<u32>,
++ }
++ pub(crate) fn ni3(h: &Held) -> bool {
++     let _ = h;
++     true
++ }
+== NI4
+# INTERIOR through a type alias of the file set (to a struct holding an atomic)
+@@ lexscope/mod.rs
++ struct Counter4 {
++     n: std::sync::atomic::AtomicUsize,
++ }
++ type Sink4 = Counter4;
++ pub(crate) fn ni4(s: &Sink4) -> bool {
++     let _ = s;
++     true
++ }
+== NI5
+# INTERIOR through a renamed import (NOT-PROMISED: 0 hits of `use std::cell::.. as` ; refused)
+@@ lexscope/mod.rs
++ use std::cell::Cell as Slot;
++ pub(crate) fn ni5(out: &Slot<usize>) {
++     out.set(0)
++ }
+== NI6
+# INTERIOR through a local alias of a Cell type (NOT-PROMISED: 0 hits of `type .. = ..Cell<` ;
+# refused)
+@@ lexscope/mod.rs
++ type Slot6 = std::cell::Cell<usize>;
++ pub(crate) fn ni6(out: &Slot6) {
++     out.set(0)
++ }
+== NI7
+# INTERIOR on a second Elaborator: only the receiver is exempt ; `other: &Self` is judged (it
+# names no `Elaborator`, so ELAB-PARAM does not see it)
+@@ lexscope/mod.rs
++ impl crate::Elaborator<'_> {
++     pub(crate) fn ni7(&self, other: &Self) -> bool {
++         let _ = other;
++         true
++     }
++ }
+== NI8
+# INTERIOR on a field of a vocabulary type (private), and on a parameter that names that type
+@@ lexscope/mod.rs
+-     marks: Vec<String>,
+- }
++     marks: Vec<String>,
++     memo: std::cell::OnceCell<String>,
++ }
+== NI9
+# INTERIOR on a carrier spelled in a parameter that the interior-mutable test of LS1 part 4 does
+# not name (an mpsc Sender)
+@@ lexscope/mod.rs
++ pub(crate) fn ni9(tx: &std::sync::mpsc::Sender<Shown>) {
++     let _ = tx;
++ }
+== NI10
+# INTERIOR on a vocabulary enum's payload: a raw `*mut`
+@@ lexscope/mod.rs
+-     Gen,
++     Gen(*mut u8),

@@ -41,6 +41,24 @@
 //! Elaborator fails whatever its visibility and wherever it sits (a private method of a
 //! lexscope type, a trait impl's or a trait's method included).
 //!
+//! The rule LS1 part 6 adds (DELTA11 R1's bar on an occurring shape: `edge_gate.rs:1598`
+//! `struct Collect(RefCell<Vec<String>>)`, `:1609` `fn errors(sink: &Collect)`):
+//! INTERIOR — in every parameter of a surface item and every field (or variant payload) of a
+//! vocabulary type, each type name the type spells is followed, by syntax, through the
+//! fields of every definition the crate's `src` gives that name (struct, enum variant, union,
+//! type alias ; any file, items in bodies and `#[cfg]` modules alike), a `use .. as` rename to
+//! the original's name, `Self` to the impl's type, transitively with a visited set ; the
+//! position FAILS when a reached type spells a mutable carrier (Cell, RefCell, OnceCell,
+//! LazyCell, UnsafeCell, Mutex, RwLock, OnceLock, LazyLock, Atomic*, mpsc Sender / SyncSender /
+//! Receiver, by a path's last name, or a `*mut`), the detail being the shortest path of names
+//! followed ; a row of INTERIOR (item, position, that path, why) exempts it, a row whose path
+//! moved fails, an unused row is STALE. The receiver (`&self` / `&mut self`, not a typed
+//! parameter) is exempt by position: in `impl Elaborator` it is the one tier-E receiver, whose
+//! fields OUT-F pins ; elsewhere its type is a vocabulary type, judged by its fields. Every
+//! other parameter is judged, a second Elaborator (`other: &Self`) and the `&mut Self` a
+//! callback is lent included. A name the crate does not define is not followed (its type
+//! arguments are still read): it stays what the OUT judge makes it.
+//!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
 //! blocks, `#[cfg(..)]` twins alike (a cfg'd item counts: fail-closed), and the items
@@ -71,13 +89,15 @@
 //! another macro's tokens ; a macro defined in another crate (no definition to hash) ; a
 //! proc-macro attribute's output (refused, not read) ; the identity of a name through a glob
 //! `use` of another module (a vocabulary name must be defined in the file set, a
-//! non-vocabulary name fails as unknown in an OUT position) ; an IN parameter of a type
-//! defined outside the file set, or renamed by a `use .. as` / an alias, that holds interior
-//! mutability (the interior-mutable test reads the names the parameter's type spells) ; what
+//! non-vocabulary name fails as unknown in an OUT position) ; INTERIOR's limits: a name is
+//! matched by its last segment, so a crate type sharing a foreign type's name is followed and
+//! a carrier inside a type of another crate (hdl-ast, std beyond the listed names) is not ; a
+//! carrier spelled through a macro type or a trait's associated type ; a `&mut` field inside a
+//! crate type passed by value (not a carrier) ; `Self` in a trait's own signature ; what
 //! a body that passes its BODY pin does at run time (the hash is loud, not a refusal).
 //!
 //! Three tests: the engine on fixtures (one clean module that passes with its whole surface
-//! pinned, NS1-NS31 and the NB controls each failing with the pinned (item, position, rule)
+//! pinned, NS1-NS31, the NB controls and NI1-NI10 each failing with the pinned (item, position, rule)
 //! set) ; the real crate, where `SURF_PRESENT` pins `absent` and the computed surface must
 //! be empty until LS2a flips it (the code computes the whole surface the day the module
 //! appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
@@ -85,7 +105,9 @@
 //!
 //! Environment (negative-control doors, unset in the gate): `SCOPE_HOME_SRC` reads another
 //! copy of the crate's `src` ; `SCOPE_SURFACE_FIXTURES` reads another fixture file ;
-//! `SCOPE_SURFACE_DUMP=<dir>` writes each computed table to `<dir>/<name>.tsv`.
+//! `SCOPE_SURFACE_DUMP=<dir>` writes each computed table to `<dir>/<name>.tsv` (and, from the
+//! crate test, INTERIOR's census of the crate's types and of every fn parameter: measurements,
+//! not pins).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -365,6 +387,8 @@ struct Cfg {
     cb: Vec<Vec<String>>,
     /// BODY: file, fn, sha256
     body: Vec<Vec<String>>,
+    /// INTERIOR's exemptions: item, position, reaches, why
+    interior: Vec<Vec<String>>,
     /// item, param, role
     enter: Vec<Vec<String>>,
     enums: BTreeSet<String>,
@@ -411,6 +435,7 @@ fn cfg(prefix: &str) -> Cfg {
         card: rows_of(&tables::get(&format!("{prefix}_CARD")), 4, "CARD"),
         cb: rows_of(&tables::get(&format!("{prefix}_CB")), 5, "CB"),
         body: rows_of(&tables::get(&format!("{prefix}_BODY")), 3, "BODY"),
+        interior: rows_of(&tables::get(&format!("{prefix}_INTERIOR")), 4, "INTERIOR"),
         enter: rows_of(&tables::get(&format!("{prefix}_ENTER")), 3, "ENTER"),
         enums: one(&format!("{prefix}_ENUMS")),
         shims: rows_of(&tables::get(&format!("{prefix}_SHIMS")), 3, "SHIMS"),
@@ -1078,6 +1103,383 @@ fn is_self_ty(t: &Type) -> bool {
 }
 
 // =====================================================================================
+// INTERIOR: a type name of the crate followed through its fields to a mutable carrier
+// =====================================================================================
+
+/// INTERIOR's carriers, by a path's last segment (`Atomic*` by prefix, `*mut` by syntax).
+const CARRIERS: &[&str] = &[
+    "Cell",
+    "RefCell",
+    "OnceCell",
+    "LazyCell",
+    "UnsafeCell",
+    "Mutex",
+    "RwLock",
+    "OnceLock",
+    "LazyLock",
+    "Sender",
+    "SyncSender",
+    "Receiver",
+];
+
+fn is_carrier(n: &str) -> bool {
+    CARRIERS.contains(&n) || (n.starts_with("Atomic") && n.len() > "Atomic".len())
+}
+
+/// One definition of a type name in the crate's source: its fields as (hop, type).
+struct TyDef {
+    file: String,
+    kind: &'static str,
+    generics: BTreeSet<String>,
+    fields: Vec<(String, Type)>,
+}
+
+/// Every struct / enum / union / type alias the crate's source defines (every file of
+/// `src`, the file set included, items in bodies, inline and `#[cfg]` modules alike), by
+/// name ; and every `use .. as <name>` rename, by the new name.
+#[derive(Default)]
+struct TyIdx {
+    defs: BTreeMap<String, Vec<TyDef>>,
+    /// new name -> (the original's last name, the use text)
+    renames: BTreeMap<String, Vec<(String, String)>>,
+}
+
+impl TyIdx {
+    fn build(vfs: &Vfs) -> TyIdx {
+        let mut ix = TyIdx::default();
+        for (rel, text) in vfs {
+            let Ok(f) = syn::parse_file(text) else {
+                continue; // a parse failure is reported by the engine's own read
+            };
+            let mut ats = Vec::new();
+            flatten(rel, &f.items, 0, &[], false, &mut ats);
+            for at in &ats {
+                let gens = |g: &syn::Generics| -> BTreeSet<String> {
+                    g.type_params().map(|p| p.ident.to_string()).collect()
+                };
+                let fields_of = |owner: &str, fs: &syn::Fields| -> Vec<(String, Type)> {
+                    fs.iter()
+                        .enumerate()
+                        .map(|(i, fd)| {
+                            let l = fd
+                                .ident
+                                .as_ref()
+                                .map(|x| x.to_string())
+                                .unwrap_or_else(|| i.to_string());
+                            (format!("{owner}.{l}"), fd.ty.clone())
+                        })
+                        .collect()
+                };
+                let (name, def) = match at.item {
+                    Item::Struct(s) => {
+                        let n = s.ident.to_string();
+                        let fields = fields_of(&n, &s.fields);
+                        (n, ("struct", gens(&s.generics), fields))
+                    }
+                    Item::Enum(e) => {
+                        let n = e.ident.to_string();
+                        let mut fields = Vec::new();
+                        for v in &e.variants {
+                            fields.extend(fields_of(&format!("{n}::{}", v.ident), &v.fields));
+                        }
+                        (n, ("enum", gens(&e.generics), fields))
+                    }
+                    Item::Union(u) => {
+                        let n = u.ident.to_string();
+                        let fields = u
+                            .fields
+                            .named
+                            .iter()
+                            .map(|fd| {
+                                let l =
+                                    fd.ident.as_ref().map(|x| x.to_string()).unwrap_or_default();
+                                (format!("{n}.{l}"), fd.ty.clone())
+                            })
+                            .collect();
+                        (n, ("union", gens(&u.generics), fields))
+                    }
+                    Item::Type(t) => {
+                        let n = t.ident.to_string();
+                        let fields = vec![(format!("type {n}"), (*t.ty).clone())];
+                        (n, ("alias", gens(&t.generics), fields))
+                    }
+                    Item::Use(u) => {
+                        let mut v = Vec::new();
+                        use_renames(&mut Vec::new(), &u.tree, &mut v);
+                        for (new, orig, text) in v {
+                            ix.renames.entry(new).or_default().push((orig, text));
+                        }
+                        continue;
+                    }
+                    _ => continue,
+                };
+                ix.defs.entry(name).or_default().push(TyDef {
+                    file: rel.clone(),
+                    kind: def.0,
+                    generics: def.1,
+                    fields: def.2,
+                });
+            }
+        }
+        ix
+    }
+
+    /// INTERIOR: the shortest path of names from `t` to a mutable carrier, or None. A name
+    /// is followed when the crate defines it (every definition of that name), when it is a
+    /// `use .. as` rename (to the original's name), or `Self` (to `self_ty`) ; a name in
+    /// `skip` (the type parameters in scope) and a name the crate does not define are not
+    /// followed (their type arguments are still read: they are spelled by `t`).
+    fn interior(&self, t: &Type, self_ty: Option<&str>, skip: &BTreeSet<String>) -> Option<String> {
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut queue: std::collections::VecDeque<(String, Vec<String>)> =
+            std::collections::VecDeque::new();
+        if let Some(found) = self.step(t, &[], self_ty, skip, &mut seen, &mut queue) {
+            return Some(found);
+        }
+        while let Some((name, path)) = queue.pop_front() {
+            for d in self.defs.get(&name).into_iter().flatten() {
+                for (hop, ft) in &d.fields {
+                    let mut p = path.clone();
+                    p.push(hop.clone());
+                    if let Some(found) =
+                        self.step(ft, &p, Some(&name), &d.generics, &mut seen, &mut queue)
+                    {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Reads the names `t` spells: a carrier ends the walk ; a followable name is queued.
+    fn step(
+        &self,
+        t: &Type,
+        path: &[String],
+        self_ty: Option<&str>,
+        skip: &BTreeSet<String>,
+        seen: &mut BTreeSet<String>,
+        queue: &mut std::collections::VecDeque<(String, Vec<String>)>,
+    ) -> Option<String> {
+        let mut spelled = Vec::new();
+        spelled_names(t, &mut spelled);
+        for n in spelled {
+            let mut p = path.to_vec();
+            if is_carrier(&n) || n == "*mut" {
+                p.push(n);
+                return Some(p.join(" -> "));
+            }
+            let mut target = n.clone();
+            if n == "Self" {
+                match self_ty {
+                    Some(s) => {
+                        p.push(format!("Self = {s}"));
+                        target = s.to_string();
+                    }
+                    None => continue,
+                }
+            } else if skip.contains(&n) {
+                continue;
+            } else if let Some(rs) = self.renames.get(&n) {
+                // a rename to a carrier ends the walk ; to any other name, that name is followed
+                for (orig, text) in rs {
+                    if is_carrier(orig) {
+                        p.push(format!("use {text}"));
+                        p.push(orig.clone());
+                        return Some(p.join(" -> "));
+                    }
+                }
+                // the name itself when the crate also defines it (both readings followed)
+                if self.defs.contains_key(&n) && seen.insert(n.clone()) {
+                    queue.push_back((n.clone(), p.clone()));
+                }
+                for (orig, text) in rs {
+                    let mut q = p.clone();
+                    q.push(format!("use {text}"));
+                    if self.defs.contains_key(orig) && seen.insert(orig.clone()) {
+                        queue.push_back((orig.clone(), q));
+                    }
+                }
+                continue;
+            }
+            if self.defs.contains_key(&target) && seen.insert(target.clone()) {
+                queue.push_back((target, p));
+            }
+        }
+        None
+    }
+}
+
+/// INTERIOR's census of the crate (dumped, not pinned): one row per definition, with the
+/// path to a carrier it reaches, whether a field of its own spells one, and whether the
+/// Elaborator's fields reach the name.
+fn interior_census(ix: &TyIdx) -> Vec<String> {
+    let mut from_elab: BTreeSet<String> = BTreeSet::new();
+    let mut queue = vec![ELAB.to_string()];
+    while let Some(n) = queue.pop() {
+        if !from_elab.insert(n.clone()) {
+            continue;
+        }
+        for d in ix.defs.get(&n).into_iter().flatten() {
+            for (_, ft) in &d.fields {
+                let mut sp = Vec::new();
+                spelled_names(ft, &mut sp);
+                for m in sp {
+                    let targets: Vec<String> = match ix.renames.get(&m) {
+                        Some(rs) => rs.iter().map(|(o, _)| o.clone()).collect(),
+                        None => vec![m.clone()],
+                    };
+                    for t in targets {
+                        if ix.defs.contains_key(&t) && !d.generics.contains(&t) {
+                            queue.push(t);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (name, ds) in &ix.defs {
+        for d in ds {
+            let ty: Type = syn::parse_str(name).expect("a type name");
+            let Some(path) = ix.interior(&ty, None, &BTreeSet::new()) else {
+                continue;
+            };
+            let direct = d.fields.iter().any(|(_, ft)| {
+                let mut sp = Vec::new();
+                spelled_names(ft, &mut sp);
+                sp.iter().any(|n| is_carrier(n) || n == "*mut")
+            });
+            out.push(format!(
+                "{}\t{}\t{name}\t{}\t{}\t{path}",
+                d.file,
+                d.kind,
+                if direct { "holds" } else { "reaches" },
+                if from_elab.contains(name) {
+                    "elab"
+                } else {
+                    "-"
+                },
+            ));
+        }
+    }
+    out
+}
+
+/// INTERIOR applied to every typed parameter of every fn of the crate (free fns and impl /
+/// trait methods ; a measurement of where the shape occurs, dumped, not pinned).
+fn interior_params(vfs: &Vfs, ix: &TyIdx) -> Vec<String> {
+    let mut out = Vec::new();
+    for (rel, text) in vfs {
+        let Ok(f) = syn::parse_file(text) else {
+            continue;
+        };
+        let mut ats = Vec::new();
+        flatten(rel, &f.items, 0, &[], false, &mut ats);
+        let mut one = |item: String, sig: &syn::Signature, self_ty: Option<String>, g: &Gen| {
+            let mut gen = g.clone();
+            gen_of(&sig.generics, &mut gen);
+            let skip: BTreeSet<String> = gen.keys().cloned().collect();
+            for (i, a) in sig.inputs.iter().enumerate() {
+                let FnArg::Typed(pt) = a else { continue };
+                let pname = match &*pt.pat {
+                    syn::Pat::Ident(pi) => pi.ident.to_string(),
+                    _ => format!("_{i}"),
+                };
+                if let Some(p) = ix.interior(&pt.ty, self_ty.as_deref(), &skip) {
+                    out.push(format!("{rel}\t{item}\t{pname}\t{}\t{p}", nt(&pt.ty)));
+                }
+            }
+        };
+        for at in &ats {
+            match at.item {
+                Item::Fn(x) => one(x.sig.ident.to_string(), &x.sig, None, &Gen::new()),
+                Item::Impl(im) => {
+                    let ty = impl_self_name(&im.self_ty);
+                    let mut g = Gen::new();
+                    gen_of(&im.generics, &mut g);
+                    for ii in &im.items {
+                        if let syn::ImplItem::Fn(x) = ii {
+                            one(
+                                format!("{ty}::{}", x.sig.ident),
+                                &x.sig,
+                                Some(ty.clone()),
+                                &g,
+                            );
+                        }
+                    }
+                }
+                Item::Trait(t) => {
+                    for ti in &t.items {
+                        if let syn::TraitItem::Fn(x) = ti {
+                            one(
+                                format!("{}::{}", t.ident, x.sig.ident),
+                                &x.sig,
+                                None,
+                                &Gen::new(),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// The names a type spells, in syntax order: every type path's last segment (generic
+/// arguments, callback arguments and bounds' arguments included) and `*mut` for a mutable
+/// raw pointer.
+fn spelled_names(t: &Type, out: &mut Vec<String>) {
+    struct V<'o>(&'o mut Vec<String>);
+    impl<'ast> Visit<'ast> for V<'_> {
+        fn visit_type_path(&mut self, p: &'ast syn::TypePath) {
+            self.0.push(last_name(&p.path));
+            visit::visit_type_path(self, p);
+        }
+        fn visit_type_ptr(&mut self, p: &'ast syn::TypePtr) {
+            if p.mutability.is_some() {
+                self.0.push("*mut".into());
+            }
+            visit::visit_type_ptr(self, p);
+        }
+    }
+    V(out).visit_type(t);
+}
+
+/// The `use .. as <new>` leaves of a use tree: (new, the original's last name, text).
+fn use_renames(
+    prefix: &mut Vec<String>,
+    t: &syn::UseTree,
+    out: &mut Vec<(String, String, String)>,
+) {
+    match t {
+        syn::UseTree::Path(p) => {
+            prefix.push(p.ident.to_string());
+            use_renames(prefix, &p.tree, out);
+            prefix.pop();
+        }
+        syn::UseTree::Rename(r) => {
+            let mut v = prefix.clone();
+            v.push(r.ident.to_string());
+            out.push((
+                r.rename.to_string(),
+                r.ident.to_string(),
+                format!("{} as {}", v.join("::"), r.rename),
+            ));
+        }
+        syn::UseTree::Group(g) => {
+            for x in &g.items {
+                use_renames(prefix, x, out);
+            }
+        }
+        syn::UseTree::Name(_) | syn::UseTree::Glob(_) => {}
+    }
+}
+
+// =====================================================================================
 // Tier E: OUT-F / OUT-C / OUT-M / BODY
 // =====================================================================================
 
@@ -1440,26 +1842,31 @@ struct FnInfo<'a> {
 
 struct Eng<'a> {
     cfg: &'a Cfg,
+    /// INTERIOR's index of the crate's type names
+    tys: &'a TyIdx,
     defs: Defs,
     s: Surface,
     leave_used: BTreeSet<usize>,
     enter_used: BTreeSet<usize>,
     card_used: BTreeSet<usize>,
     cb_used: BTreeSet<usize>,
+    interior_used: BTreeSet<usize>,
     enums_seen: BTreeSet<String>,
     plan: bool,
 }
 
 impl Eng<'_> {
-    fn fresh(cfg: &Cfg, plan: bool) -> Eng<'_> {
+    fn fresh<'c>(cfg: &'c Cfg, tys: &'c TyIdx, plan: bool) -> Eng<'c> {
         Eng {
             cfg,
+            tys,
             defs: Defs::default(),
             s: Surface::default(),
             leave_used: BTreeSet::new(),
             enter_used: BTreeSet::new(),
             card_used: BTreeSet::new(),
             cb_used: BTreeSet::new(),
+            interior_used: BTreeSet::new(),
             enums_seen: BTreeSet::new(),
             plan,
         }
@@ -1691,6 +2098,19 @@ impl Eng<'_> {
             if names.contains(ELAB) {
                 self.fail(file, item, &format!("IN:{pname}"), "ELAB-PARAM", nt(&pt.ty));
             }
+            // INTERIOR: every parameter but the receiver (`&self` / `&mut self` is a
+            // receiver, not a typed parameter: the one tier-E receiver is exempt by name)
+            let skip: BTreeSet<String> = gen.keys().cloned().collect();
+            self.interior_pos(
+                file,
+                tier,
+                "FN",
+                item,
+                &format!("IN:{pname}"),
+                &pt.ty,
+                self_ty.as_deref(),
+                &skip,
+            );
             let (res, cbs) = {
                 let j = self.judge(self_ty.clone(), gen.clone(), in_trait.clone());
                 let mut cbs = Vec::new();
@@ -1821,6 +2241,65 @@ impl Eng<'_> {
             item: item.into(),
             pos,
             ty: ty.into(),
+            verdict,
+        });
+    }
+
+    /// INTERIOR on one position (a parameter of a surface item, a field of a vocabulary type):
+    /// a path of names to a mutable carrier fails it, unless a row of INTERIOR names the
+    /// item, the position and the same path (SURF-PLAN consults no list).
+    #[allow(clippy::too_many_arguments)]
+    fn interior_pos(
+        &mut self,
+        file: &str,
+        tier: &str,
+        kind: &str,
+        item: &str,
+        pos: &str,
+        t: &Type,
+        self_ty: Option<&str>,
+        skip: &BTreeSet<String>,
+    ) {
+        let Some(path) = self.tys.interior(t, self_ty, skip) else {
+            return;
+        };
+        let found = if self.plan {
+            None
+        } else {
+            self.cfg
+                .interior
+                .iter()
+                .position(|r| r[0] == item && r[1] == pos)
+        };
+        let verdict = match found {
+            Some(i) if self.cfg.interior[i][2] == path => {
+                self.interior_used.insert(i);
+                format!("INTERIOR:{}", self.cfg.interior[i][3])
+            }
+            Some(i) => {
+                self.interior_used.insert(i);
+                let w = self.cfg.interior[i][2].clone();
+                self.fail(
+                    file,
+                    item,
+                    pos,
+                    "INTERIOR",
+                    format!("pinned {w} now {path}"),
+                );
+                "FAIL(INTERIOR)".to_string()
+            }
+            None => {
+                self.fail(file, item, pos, "INTERIOR", path);
+                "FAIL(INTERIOR)".to_string()
+            }
+        };
+        self.s.rows.push(Row {
+            file: file.into(),
+            tier: tier.into(),
+            kind: kind.into(),
+            item: item.into(),
+            pos: pos.into(),
+            ty: nt(t),
             verdict,
         });
     }
@@ -1981,7 +2460,8 @@ fn file_set(vfs: &Vfs, eng: &mut Eng<'_>) -> Option<Vec<FileRec>> {
 }
 
 fn surface(vfs: &Vfs, cfg: &Cfg) -> Surface {
-    let mut eng = Eng::fresh(cfg, false);
+    let tys = TyIdx::build(vfs);
+    let mut eng = Eng::fresh(cfg, &tys, false);
     let files = file_set(vfs, &mut eng);
     let in_set: BTreeSet<String> = files.iter().flatten().map(|f| f.rel.clone()).collect();
     // the rest of the crate: the declaration, the Elaborator's fields, an inline root
@@ -2468,6 +2948,20 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
                     .unwrap_or_else(|| i.to_string());
                 let item = format!("{name}.{fname}");
                 eng.check_attrs(file, &item, &fd.attrs);
+                if eng.cfg.vocab.contains_key(&name) {
+                    // INTERIOR on every field of a vocabulary type, visible or not
+                    let skip: BTreeSet<String> = gen.keys().cloned().collect();
+                    eng.interior_pos(
+                        file,
+                        "-",
+                        "FIELD",
+                        &item,
+                        "FIELD",
+                        &fd.ty,
+                        Some(&name),
+                        &skip,
+                    );
+                }
                 if wider && vis_wider(&fd.vis, at.depth) {
                     let mut r = eng.out_reasons(Some(name.clone()), &gen, None, &fd.ty);
                     r.insert(
@@ -2509,6 +3003,25 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
             for v in &e.variants {
                 let vname = format!("{name}::{}", v.ident);
                 eng.check_attrs(file, &vname, &v.attrs);
+                if eng.cfg.vocab.contains_key(&name) {
+                    // INTERIOR on every payload of a vocabulary enum
+                    let mut skip = BTreeSet::new();
+                    for g in e.generics.type_params() {
+                        skip.insert(g.ident.to_string());
+                    }
+                    for (i, fd) in v.fields.iter().enumerate() {
+                        eng.interior_pos(
+                            file,
+                            "-",
+                            "VARIANT",
+                            &vname,
+                            &format!("VARIANT:{i}"),
+                            &fd.ty,
+                            Some(&name),
+                            &skip,
+                        );
+                    }
+                }
                 if !wider {
                     continue;
                 }
@@ -3434,6 +3947,21 @@ fn stale_checks(eng: &mut Eng<'_>) {
             );
         }
     }
+    let interior = eng.cfg.interior.clone();
+    for (i, r) in interior.iter().enumerate() {
+        if !eng.interior_used.contains(&i) {
+            eng.fail(
+                "-",
+                &r[0],
+                &r[1],
+                "STALE",
+                format!("an INTERIOR row ({}) matches no position", r[2]),
+            );
+        }
+        if r[3].is_empty() || r[3] == "-" {
+            eng.fail("-", &r[0], &r[1], "WHY", "an INTERIOR row with no reason");
+        }
+    }
     if !eng.s.present {
         let n = eng.cfg.shims.len()
             + eng.cfg.outgoing.len()
@@ -3645,6 +4173,7 @@ fn ht_surf_engine_on_fixtures() {
     let mut dumped = Vec::new();
     let mut ns_failing = BTreeSet::new();
     let mut nb_failing = BTreeSet::new();
+    let mut ni_failing = BTreeSet::new();
     for (name, vfs) in &fx {
         if name == "CLEAN" {
             continue;
@@ -3674,10 +4203,14 @@ fn ht_surf_engine_on_fixtures() {
                 msgs.push(format!("    {}", f.line()));
             }
         } else {
-            for (pre, set) in [("NS", &mut ns_failing), ("NB", &mut nb_failing)] {
+            for (pre, set) in [
+                ("NS", &mut ns_failing),
+                ("NB", &mut nb_failing),
+                ("NI", &mut ni_failing),
+            ] {
                 if let Some(x) = name.strip_prefix(pre) {
                     let n: String = x.chars().take_while(char::is_ascii_digit).collect();
-                    set.insert(n.parse::<u32>().expect("NS<n> / NB<n>"));
+                    set.insert(n.parse::<u32>().expect("NS<n> / NB<n> / NI<n>"));
                 }
             }
         }
@@ -3692,8 +4225,13 @@ fn ht_surf_engine_on_fixtures() {
             msgs.push(format!("FIX_EXPECT names {n}, which is not a fixture"));
         }
     }
-    // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) ; NB1-NB8 (LS1 part 4) + NB9-NB13
-    for (pre, set, last) in [("NS", &ns_failing, 31), ("NB", &nb_failing, 13)] {
+    // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) ; NB1-NB8 (LS1 part 4) + NB9-NB13 ;
+    // NI1-NI10 (LS1 part 6, INTERIOR)
+    for (pre, set, last) in [
+        ("NS", &ns_failing, 31),
+        ("NB", &nb_failing, 13),
+        ("NI", &ni_failing, 10),
+    ] {
         let missing: Vec<u32> = (1..=last).filter(|n| !set.contains(n)).collect();
         if !missing.is_empty() {
             msgs.push(format!(
@@ -3729,6 +4267,17 @@ fn ht_surf_the_lexscope_surface_is_pinned() {
     let vfs = load_dir(&src_dir());
     let s = run(&vfs, &cfg);
     let mut msgs = Vec::new();
+    // INTERIOR's census of the crate's types (a measurement for the report, not a pin)
+    dump(
+        "INTERIOR_CENSUS",
+        "file\tkind\tname\tholds_or_reaches\telab\tpath",
+        &interior_census(&TyIdx::build(&vfs)),
+    );
+    dump(
+        "INTERIOR_PARAMS",
+        "file\tfn\tparam\ttype\tpath",
+        &interior_params(&vfs, &TyIdx::build(&vfs)),
+    );
     let state = if s.present { "present" } else { "absent" };
     let pinned = tables::get("SURF_PRESENT");
     if state != pinned {
@@ -3806,7 +4355,7 @@ struct PlanOut {
     fails: Vec<Fail>,
 }
 
-fn plan_row(vfs: &Vfs, cfg: &Cfg, file: &str, fname: &str) -> Result<PlanOut, String> {
+fn plan_row(vfs: &Vfs, cfg: &Cfg, tys: &TyIdx, file: &str, fname: &str) -> Result<PlanOut, String> {
     let text = vfs.get(file).ok_or_else(|| format!("no file {file}"))?;
     let f = syn::parse_file(text).map_err(|e| format!("{file}: {e}"))?;
     let mut ats = Vec::new();
@@ -3840,7 +4389,7 @@ fn plan_row(vfs: &Vfs, cfg: &Cfg, file: &str, fname: &str) -> Result<PlanOut, St
         return Err(format!("{} fns named {fname} in {file}", found.len()));
     }
     let (self_ty, gen, sig, vis) = found.pop().expect("one");
-    let mut eng = Eng::fresh(cfg, true);
+    let mut eng = Eng::fresh(cfg, tys, true);
     let tier = if self_ty.as_deref() == Some(ELAB) && sig.receiver().is_some() {
         "E"
     } else {
@@ -3882,10 +4431,11 @@ fn plan_row(vfs: &Vfs, cfg: &Cfg, file: &str, fname: &str) -> Result<PlanOut, St
 fn ht_surf_plan_today_signatures_are_pinned() {
     let cfg = cfg("SURF");
     let vfs = load_dir(&src_dir());
+    let tys = TyIdx::build(&vfs);
     let mut msgs = Vec::new();
     let mut got_rows = Vec::new();
     let (mut n_pass, mut ret_fail, mut text_ret, mut cb_text, mut mut_text) = (0, 0, 0, 0, 0);
-    let (mut n_card, mut n_cb) = (0, 0);
+    let (mut n_card, mut n_cb, mut n_interior) = (0, 0, 0);
     let want = rows_of(&tables::get("SURF_PLAN"), 9, "SURF_PLAN");
     let mut want_map = BTreeMap::new();
     for w in &want {
@@ -3893,7 +4443,7 @@ fn ht_surf_plan_today_signatures_are_pinned() {
     }
     for w in &want {
         let (unit, fname, file) = (&w[0], &w[1], &w[2]);
-        match plan_row(&vfs, &cfg, file, fname) {
+        match plan_row(&vfs, &cfg, &tys, file, fname) {
             Err(e) => msgs.push(format!(
                 "SURF_PLAN {fname} ({file}): {e} — the fn moved or was renamed: re-read L2's row"
             )),
@@ -3931,6 +4481,7 @@ fn ht_surf_plan_today_signatures_are_pinned() {
                 );
                 n_card += usize::from(fails.iter().any(|f| f.rule == "CARD"));
                 n_cb += usize::from(fails.iter().any(|f| f.rule == "CB"));
+                n_interior += usize::from(fails.iter().any(|f| f.rule == "INTERIOR"));
                 let v = format!(
                     "{vis}\t{tier}\t{sig}\t{verdict}\t{}\t{}",
                     if fails_txt.is_empty() {
@@ -3962,7 +4513,7 @@ fn ht_surf_plan_today_signatures_are_pinned() {
         &got_rows,
     );
     let counts = format!(
-        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text} card={n_card} cb={n_cb}",
+        "fns={} pass={n_pass} fail={} ret_fail={ret_fail} ret_text={text_ret} callback_text={cb_text} mut_text={mut_text} card={n_card} cb={n_cb} interior={n_interior}",
         want.len(),
         want.len() - n_pass
     );
