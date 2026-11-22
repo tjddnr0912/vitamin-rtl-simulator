@@ -96,10 +96,23 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=3 rows=27 out_types=7 e_fns=3 text_flows=4
+present=present files=4 rows=71 out_types=16 e_fns=20 text_flows=32
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
+lexscope/disp.rs	E	FN	Elaborator::ctx_here	RET	ShownCtx	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_chain_abs	RET	Shown	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_enter_frame_root	IN:name	&str	ENTER:lookup	-
+lexscope/disp.rs	E	FN	Elaborator::disp_enter_frame_root	RET	SavedRoot	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	IN:bare	&str	ENTER:lookup	-
+lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	IN:key	&str	ENTER:lookup	-
+lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	RET	Shown	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_inst_top	RET	Shown	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	PASS	-
+lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	IN:key	&str	ENTER:to-display	-
+lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	RET	String	LEAVE:L4	-
+lexscope/disp.rs	E	FN	Elaborator::stmt_loc_instance	RET	Shown	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
 lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit	impl Fn(&str) -> bool	CB:probe:the routine tables for one composed key	-
@@ -110,11 +123,39 @@ lexscope/elab.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	RET	R	PASS	-
+lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
+lexscope/mod.rs	-	IMPL	Clone for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Clone for ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Debug for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Debug for ShownCtx	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Drop for Saved	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Outgoing for Shown	-	-	PASS	-
+lexscope/mod.rs	-	IMPL	Outgoing for ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	TRAIT	Outgoing	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Saved	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	SavedChain	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	SavedMethod	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	SavedRoot	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ScopeWitness	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
+lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
+lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
+lexscope/mod.rs	K	FN	Scopes::class_method_is_none	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
+lexscope/mod.rs	K	FN	Scopes::disp_chain_is_empty	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_pop	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_push	IN:label	String	ENTER:to-display	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_push	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_swap_single	IN:seg	&str	ENTER:to-display	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_swap_single	RET	SavedChain	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_chain_take	RET	SavedChain	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_class_method_swap	IN:method	String	ENTER:to-display	-
+lexscope/mod.rs	K	FN	Scopes::disp_class_method_swap	RET	SavedMethod	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_restore_chain	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_restore_method	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_restore_root	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::disp_root_swap_empty	RET	SavedRoot	PASS	-
 lexscope/mod.rs	K	FN	Scopes::new	RET	Scopes	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_hold	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_repoint	IN:text	String	ENTER:to-scope	-
@@ -127,6 +168,9 @@ lexscope/mod.rs	K	FN	Scopes::scope_swap_text	IN:text	String	ENTER:to-scope	-
 lexscope/mod.rs	K	FN	Scopes::scope_swap_text	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_witness	RET	ScopeWitness	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_witness_check	RET	()	PASS	-
+lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
+lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
+lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
@@ -135,8 +179,17 @@ type
 Option<String>
 R
 Saved
+SavedChain
+SavedMethod
+SavedRoot
 ScopeWitness
 Scopes
+Self::Plain
+Shown
+ShownCtx
+String
+T::Plain
+bool
 == SURF_LEAVE
 # LEAVE: text out, counted, each with its closing unit (DELTA10 L1: L0 BOUNDARY, L1-L5) — empty
 # until the module exists ; a row matching no failing position fails STALE
@@ -145,6 +198,9 @@ L1	Scopes::cur_prefix_text	RET	&str	DK1
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
 L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
 L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
+L0	scope_out	RET	T::Plain	permanent
+L0	Outgoing::plain	RET	Self::Plain	permanent
+L4	Elaborator::display_of_key_text	RET	String	DK4
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
@@ -155,25 +211,108 @@ Elaborator::cur_gen_rtn_key	bare	lookup	TEXT str
 Scopes::scope_swap_text	text	to-scope	TEXT String
 Scopes::scope_repoint	text	to-scope	TEXT String
 Scopes::scope_swap_pkg	pkg	to-scope	TEXT str
+Elaborator::disp_frame_path_of	key	lookup	TEXT str
+Elaborator::disp_frame_path_of	bare	lookup	TEXT str
+Elaborator::disp_enter_frame_root	name	lookup	TEXT str
+Elaborator::display_of_key_text	key	to-display	TEXT str
+Scopes::disp_chain_push	label	to-display	TEXT String
+Scopes::disp_chain_swap_single	seg	to-display	TEXT str
+Scopes::disp_class_method_swap	method	to-display	TEXT String
+shown_from_spelling	s	to-display	TEXT String
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
 == SURF_SHIMS
 # RT-a shims (DELTA10 L2): shim, the private fn it wraps, the wrapper
 shim	private	wrapper
+Elaborator::disp_here	Elaborator::display_prefix	wrap_shown
+Elaborator::disp_inst_top	Elaborator::disp_inst_top_text	wrap_shown
+Elaborator::disp_chain_abs	Elaborator::scope_chain_abs	wrap_shown
+Elaborator::ctx_here	Elaborator::cur_context	wrap_ctx
+Elaborator::disp_frame_path_of	Elaborator::frame_path_of	wrap_shown
+Elaborator::disp_enter_frame_root	Elaborator::enter_frame_scope_root	wrap_root
 == SURF_OUTGOING
 # the boundary's impls (pinned 2 from LS2-d: Shown -> String, ShownCtx -> Vec<diag::Frame>)
 type	plain
+Shown	String
+ShownCtx	Vec<diag::Frame>
 == SURF_E
 # E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
 item	kind	name	count	flow
+Elaborator::ctx_here	FN	-	-	-
+Elaborator::cur_context	FN	-	-	-
+Elaborator::cur_context	OUT-C	.cur_prefix_text	1	in
+Elaborator::cur_context	OUT-C	.is_empty	1	in
+Elaborator::cur_context	OUT-C	.strip_prefix	1	text:ShownCtx
+Elaborator::cur_context	OUT-C	.to_string	1	text:ShownCtx
+Elaborator::cur_context	OUT-C	Vec::new	1	text:ShownCtx
+Elaborator::cur_context	OUT-M	vec	1	text:ShownCtx
 Elaborator::cur_gen_rtn_key	FN	-	-	-
 Elaborator::cur_gen_rtn_key	OUT-C	.as_str	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.cur_prefix_text	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.is_empty	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.strip_prefix	2	text:LEAVE-L3
 Elaborator::cur_gen_rtn_key	OUT-F	inst_prefix	1	in
+Elaborator::disp_chain_abs	FN	-	-	-
+Elaborator::disp_enter_frame_root	FN	-	-	-
+Elaborator::disp_frame_path_of	FN	-	-	-
+Elaborator::disp_here	FN	-	-	-
+Elaborator::disp_inst_top	FN	-	-	-
+Elaborator::disp_inst_top_text	FN	-	-	-
+Elaborator::disp_inst_top_text	OUT-F	inst_prefix	1	in
+Elaborator::disp_root_swap_decl_inst	FN	-	-	-
+Elaborator::disp_root_swap_decl_inst	OUT-C	.replace	1	text:SavedRoot
+Elaborator::disp_root_swap_decl_inst	OUT-C	SavedRoot	1	text:SavedRoot
+Elaborator::disp_root_swap_decl_inst	OUT-F	inst_prefix	1	in
+Elaborator::display_of	FN	-	-	-
+Elaborator::display_of	OUT-C	.contains	2	in
+Elaborator::display_of	OUT-C	.is_empty	2	in
+Elaborator::display_of	OUT-C	.join	1	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	.push	2	in
+Elaborator::display_of	OUT-C	.push_str	1	in
+Elaborator::display_of	OUT-C	.split	1	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	.strip_suffix	1	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	.to_string	4	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	String::new	1	in
+Elaborator::display_of	OUT-C	Vec::new	1	in
+Elaborator::display_of	OUT-F	gen_singleton_labels	1	in
+Elaborator::display_of	OUT-M	format	1	in
+Elaborator::display_of_key_text	FN	-	-	-
+Elaborator::display_prefix	FN	-	-	-
+Elaborator::display_prefix	OUT-C	.cur_prefix_text	1	in
+Elaborator::enter_frame_scope_root	FN	-	-	-
+Elaborator::enter_frame_scope_root	OUT-C	.replace	1	text:SavedRoot
+Elaborator::enter_frame_scope_root	OUT-C	.strip_prefix	1	text:SavedRoot
+Elaborator::enter_frame_scope_root	OUT-C	.to_string	1	text:SavedRoot
+Elaborator::enter_frame_scope_root	OUT-C	.unwrap_or	1	text:SavedRoot
+Elaborator::frame_path	FN	-	-	-
+Elaborator::frame_path	OUT-C	.get	1	in
+Elaborator::frame_path	OUT-C	.is_empty	2	in
+Elaborator::frame_path	OUT-C	.to_string	2	text:Shown+SavedRoot
+Elaborator::frame_path	OUT-C	Self::rtn_key_bare	1	text:Shown+SavedRoot
+Elaborator::frame_path	OUT-F	inst_prefix	1	in
+Elaborator::frame_path	OUT-F	rtn_decl_scope	1	in
+Elaborator::frame_path	OUT-M	format	2	text:Shown+SavedRoot
+Elaborator::frame_path_of	FN	-	-	-
+Elaborator::frame_path_of	OUT-C	.contains_key	1	in
+Elaborator::frame_path_of	OUT-F	rtn_decl_scope	1	in
+Elaborator::scope_chain_abs	FN	-	-	-
+Elaborator::scope_chain_abs	OUT-C	.clone	1	text:Shown
+Elaborator::scope_chain_abs	OUT-C	.collect	1	text:Shown
+Elaborator::scope_chain_abs	OUT-C	.contains	1	in
+Elaborator::scope_chain_abs	OUT-C	.filter	1	text:Shown
+Elaborator::scope_chain_abs	OUT-C	.is_empty	2	in
+Elaborator::scope_chain_abs	OUT-C	.join	2	text:Shown
+Elaborator::scope_chain_abs	OUT-C	.split	1	text:Shown
+Elaborator::scope_chain_abs	OUT-C	.starts_with	1	in
+Elaborator::scope_chain_abs	OUT-M	format	2	text:Shown
+Elaborator::stmt_loc_instance	FN	-	-	-
+Elaborator::stmt_loc_instance	OUT-C	.strip_prefix	1	text:Shown
+Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
+Elaborator::stmt_loc_instance	OUT-C	.unwrap_or	1	text:Shown
+Elaborator::stmt_loc_instance	OUT-C	Shown	1	text:Shown
+Elaborator::stmt_loc_instance	OUT-M	format	1	text:Shown
 Elaborator::walk_rtn_scopes	FN	-	-	-
 Elaborator::walk_rtn_scopes	OUT-C	.and_then	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.as_str	1	in
@@ -203,15 +342,49 @@ Elaborator::walk_rtn_scopes	hit	Fn	&str	probe:the routine tables for one compose
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
 file	fn	sha256
+lexscope/disp.rs	Elaborator::ctx_here	69e9d6c0bf32d6a9ce1037ddff1a4ca8c9de14874b6204b5e55e34f914f6cb9d
+lexscope/disp.rs	Elaborator::cur_context	5c5a9d16421bd37235f37aed01f89d7e4e82e43fa2f0dd65cde5a39e24f627f8
+lexscope/disp.rs	Elaborator::disp_chain_abs	78096cf7518eceb55d353eabf6655279895d966df1511044d5ffec028609cbf9
+lexscope/disp.rs	Elaborator::disp_enter_frame_root	bbffd147962106f60c750214b61cb83ed9dd25a7ef8ff48b8e926dc270d31871
+lexscope/disp.rs	Elaborator::disp_frame_path_of	2cb2148a0cbeae4e511e11543e4e7d10265a8bcdc34a8a4a4e1b323310ecaa0f
+lexscope/disp.rs	Elaborator::disp_here	1ee2032b88277ba2e36f27d3099725baaa0b2188ddf13260932a8b93480cb236
+lexscope/disp.rs	Elaborator::disp_inst_top	e7fa5092b3a0e0395180a2b3d872be82faa428687963f53e427511901fb62d73
+lexscope/disp.rs	Elaborator::disp_inst_top_text	9f5f8b1387df57595b3ea2fbce99b84403df3fb0d07cfbf8e2f79ffd4ffc89ea
+lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	a484ed796cefe954cf761d5251637c9f1a86d3a40a5cd131ca8e2391a8b74f60
+lexscope/disp.rs	Elaborator::display_of	211c051c8cffded84dcc192a2d8c2ae1970ec9221b794203ce74e686f723f7d7
+lexscope/disp.rs	Elaborator::display_of_key_text	433111e369e73d8544a55faa18429c94dff41a87877114f4f063d88ce93fb22c
+lexscope/disp.rs	Elaborator::display_prefix	b8f0d3020e9b4c149da08ca57d00c95e420da3a7c67288a88a649ee241eb1393
+lexscope/disp.rs	Elaborator::enter_frame_scope_root	0c3429c08abc678bd1233a3c442c45dad19994c59d1cfe484b012f126542eeac
+lexscope/disp.rs	Elaborator::frame_path	25414c9f5824d6131f9c17289fe3ac971af0a304137135436be23b524e709632
+lexscope/disp.rs	Elaborator::frame_path_of	823ba84312a47cec1fe5a422c8df2b42892f809d0260fc0afa30738ac77e0fde
+lexscope/disp.rs	Elaborator::scope_chain_abs	08982b08354d4fb83357eabf54dbc92cddca5f06e42670a29e43f9780fc2ee90
+lexscope/disp.rs	Elaborator::stmt_loc_instance	f5718abbc8b5d0b5e42c9ea74827a1b2eb61a9a44cb49e060b86a1e0d1546614
 lexscope/elab.rs	Elaborator::cur_gen_rtn_key	cc813dcf7953b1c2c676e50838bb7ebce8dd2155031f96c85ff4afb1528a4e38
 lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
 lexscope/elab.rs	Elaborator::walk_rtn_scopes	1602cf1f290a6e68901fa001815e42dede6dc9563e41fc9c8b90493860c0a5ee
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
+lexscope/mod.rs	Clone for Shown::clone	6ab72e6f44542598375aadaf3d72fe227221b7278a9fcb72ce16822e765f1e41
+lexscope/mod.rs	Clone for ShownCtx::clone	33ba0a59afe2993fbac123d93a8fe342d9c092aeb9e5f1f100d06c0bca6c0b04
+lexscope/mod.rs	Debug for Shown::fmt	0151a2ac2f05b73155f22055ddea1c605f95d075ee3021cf7b31a0e751da5ede
+lexscope/mod.rs	Debug for ShownCtx::fmt	f6e4316443c0f2233f7aee0a1ad46810d5d4b79f64c065562bd7b2496d563df0
 lexscope/mod.rs	Drop for Saved::drop	6a394d1e16270dfc9e728c1016f56f251e855d210c1e0ae7d18975bf5b89113a
+lexscope/mod.rs	Outgoing for Shown::plain	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
+lexscope/mod.rs	Outgoing for ShownCtx::plain	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
 lexscope/mod.rs	Scopes::c_path	690613c0dbbe24a2f5be83640a12468db1af2e077b6ab42575b6fe6996f0b7c4
+lexscope/mod.rs	Scopes::class_method_is_none	34f193b7f753d897a3404f88609b7811d19a3ffa03cd65c86826c9776272c008
 lexscope/mod.rs	Scopes::cur_prefix_text	880389ff624cd8b3c0dc19c579c104ffc4c7b13e29b5f56f6a2728be46cd4575
+lexscope/mod.rs	Scopes::disp_chain_is_empty	926c0636bda1ac8c49609703bf4575fad5bd9be3412116f94fd61e30b9830c5b
+lexscope/mod.rs	Scopes::disp_chain_pop	2f2a3a4a41d7e784f1574a6e3368eb71d5f1389da219d82378c84d2d1f0331c7
+lexscope/mod.rs	Scopes::disp_chain_push	9b16853c803eb5b2a82859952c0e1494d2b615ef7bbc7455e4a90228e441fb03
+lexscope/mod.rs	Scopes::disp_chain_swap_single	af94a8766f78baf10a388a957d6984d2061dc03aa183254172ad1fa4565f526a
+lexscope/mod.rs	Scopes::disp_chain_take	b8763b1cee9a2a0acb553207d4afa6bc113891eef0eabc4d614aee0a044545ad
+lexscope/mod.rs	Scopes::disp_class_method_swap	c065010fe6fda6c9ae5fee081fb7d2835307a361581fb354623845f4418866aa
+lexscope/mod.rs	Scopes::disp_restore_chain	babf12ea807f46c94beb2d10d30dd1b7af35b5fd988049b4bcdfe48486c3eefa
+lexscope/mod.rs	Scopes::disp_restore_method	94a47a39e3c75bb15aaface99e8a60cbfd83e1e0a921f587e40ddb06c9ca6c7e
+lexscope/mod.rs	Scopes::disp_restore_root	9576ac55f8c3ee3c799b75e32e7306a0553dc1f2a361a88199a8fed610dc6699
+lexscope/mod.rs	Scopes::disp_root_swap_empty	01551ae34e4a43b8840e7b8f315b30a95d247084c7a7856db9c0858c49dbc29f
 lexscope/mod.rs	Scopes::intern	fecd02a5146d6bad133240e6847fce451c0b09fc6919a710bde50afc5a688fe3
-lexscope/mod.rs	Scopes::new	03b6b3c96a0413b8ef7864d32d43f66e224bad76b0769f5e545d1f9107994be3
+lexscope/mod.rs	Scopes::new	193a6024e4a46302081aaa5677add1f6eca45d60db7b19443a09d61b90f29207
 lexscope/mod.rs	Scopes::scope_enter	4711a72fd88fe19f2aafc9f270bc104d1bf87988459b9bcb1255d7f641df7e35
 lexscope/mod.rs	Scopes::scope_hold	d2827bbf6bddcbf033565328e4d61e72c2c8f2e0347af0618249e3d5bf5cc859
 lexscope/mod.rs	Scopes::scope_repoint	e3825193fa9d978b472c8fc17779ce879f4e1bd6a4674ab5262f3ca47ea23a73
@@ -221,9 +394,18 @@ lexscope/mod.rs	Scopes::scope_swap_pkg	a4f3f3c1e3b1977c2cf1dbcbcce5e6b7d56e85d0e
 lexscope/mod.rs	Scopes::scope_swap_text	1d914669c406cecbc352b566240bebd0e26ab457fe56a8f5b0af8c464cc1df3d
 lexscope/mod.rs	Scopes::scope_witness	1b6764c6195f85e0fcc1355ede6916d2ee8cdb2712abcd4a763f571a0453aea8
 lexscope/mod.rs	Scopes::scope_witness_check	38bf5e20d1466566c6a256b981410763393bed3f4b42c9e8c79da6b740e2da97
+lexscope/mod.rs	scope_out	7d3c2d0a93015dd44fd496aaa5e5a00a1daffecd45c017666592ce5f6db29886
+lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/mod.rs	wrap_ctx	12c3d43da0a4fe4699c4ec3a25824e28c4c665d4b1a01260f32b759f17d6627d
+lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500a67372696c
+lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
+lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2dc91cdcc2c946c5eb768296c3a60e80c2b98107
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
 lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
+lexscope/tests.rs	fb_shown_ctx_debug_writes_no_text	1a63fa8319d5be06cf3207ebc60c43395b9a7c3a100411f640545ebe6aaa729d
+lexscope/tests.rs	fb_shown_leaves_only_through_scope_out	c70ffab01d5a21bc7ec916142f888b922f19fb178814502e6e2471a7d43fb679
 lexscope/tests.rs	fb_swap_take_pkg_repoint_hold	5cbe70d15539c54c9488e5b095c2b049889559157ed79396d24e8baffa9efd3b
 == SURF_INTERIOR
 # INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
@@ -255,13 +437,13 @@ DK1	walk_scopes_key_from	scope.rs	pub(crate)	E	(&self, prefix: &str, name: &str,
 DK1	walk_scopes_key_inner	scope.rs	-	E	(&self, name: &str, hit: impl Fn(&str) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
 DK1	walk_scopes_key_shadowed	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
 DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
-LS2-d	cur_context	driver.rs	pub(crate)	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
-LS2-d	display_of	generate.rs	pub(crate)	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
-LS2-d	display_prefix	generate.rs	pub(crate)	E	(&self) -> String	FAIL	RET=TEXT(String)	-
-LS2-d	enter_frame_scope_root	frames_body.rs	-	E	(&mut self, name: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-LS2-d	frame_path	frames_reserve.rs	pub(crate)	E	(&self, name: &str) -> String	FAIL	RET=TEXT(String)	name
-LS2-d	frame_path_of	frames_reserve.rs	pub(crate)	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
-LS2-d	scope_chain_abs	generate.rs	pub(crate)	E	(&self) -> String	FAIL	RET=TEXT(String)	-
+LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
+LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
+LS2-d	display_prefix	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
+LS2-d	enter_frame_scope_root	lexscope/disp.rs	-	E	(&mut self, name: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+LS2-d	frame_path	lexscope/disp.rs	-	E	(&self, name: &str) -> String	FAIL	RET=TEXT(String)	name
+LS2-d	frame_path_of	lexscope/disp.rs	-	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
+LS2-d	scope_chain_abs	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
 LS2a	child_prefix	hier.rs	pub(crate)	E	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
 LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
 LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare

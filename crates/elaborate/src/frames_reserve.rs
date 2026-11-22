@@ -32,7 +32,7 @@ impl Elaborator<'_> {
         &mut self,
         def: ir::FuncDef,
         meta: FuncMeta,
-        m_path: String,
+        m_path: Shown,
         key: Option<String>,
         decl: Option<ast::Span>,
     ) -> u32 {
@@ -1024,7 +1024,7 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.frame_idx.insert(name.to_string(), fid);
-        let fp = self.frame_path_of(name, &func.name.name); // %m
+        let fp = self.disp_frame_path_of(name, &func.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {
                 entry: 0, // filled by lower_frame_func_body
@@ -1050,52 +1050,6 @@ impl Elaborator<'_> {
             Some(func.name.span),   // R2 ⓒ declaration site
         );
         debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
-    }
-
-    /// §4.5.435: the `%m` of a frame subroutine — its DECLARING instance (display
-    /// spelling) and its name, spelled absolute (leading `.`) for the engine's
-    /// render. IEEE §21.2.1: `%m` names the scope the subroutine was declared in,
-    /// not the process that called it (`top.t` from a generate-block process, not
-    /// `top.gi.t`; `top.f` for every level of a recursion, not `top.f.f.f`; `top.a`
-    /// for a task called from another task). A class method keeps its bare name
-    /// (relative): its declaring instance is not known to a global class table.
-    pub(crate) fn frame_path(&self, name: &str) -> String {
-        // §27.3: a GENERATE-scoped routine is declared in the generate BLOCK, so
-        // that block is what `%m` names — `t.u.g.show`, not `t.u.g[0]$show` (the
-        // storage key) and not `t.u.show` (the enclosing module). Measured against
-        // both oracles: iverilog 13 prints `t.u.g.show`; verilator 5.052 prints
-        // `t.u.g.g.show` (it repeats the block label). The oracles SPLIT, and
-        // iverilog's spelling is the one pinned — it is the scope path IEEE
-        // §21.2.1 describes, with `display_of` doing the singleton `[0]` strip a
-        // generate-if block already gets everywhere else.
-        if let Some(scope) = self.rtn_decl_scope.get(name) {
-            let d = self.display_of(scope);
-            let bare = Self::rtn_key_bare(name);
-            return if d.is_empty() {
-                bare.to_string()
-            } else {
-                format!(".{d}.{bare}")
-            };
-        }
-        let inst = self.display_of(&self.inst_prefix);
-        if inst.is_empty() {
-            name.to_string()
-        } else {
-            format!(".{inst}.{name}")
-        }
-    }
-
-    /// `%m` of a frame subroutine, given BOTH its table key and its own declared
-    /// name. The two differ for a package-scoped key (`p::f`, whose `%m` is the bare
-    /// `f`) and for a §27.3 generate-scoped key (`g[0]$f`, whose `%m` is the scope the
-    /// key names). Only the key can answer the second, and only the bare name can
-    /// answer the first, so both are passed.
-    pub(crate) fn frame_path_of(&self, key: &str, bare: &str) -> String {
-        if self.rtn_decl_scope.contains_key(key) {
-            self.frame_path(key)
-        } else {
-            self.frame_path(bare)
-        }
     }
 
     /// Run `f` with `cur_prefix` moved to the DECLARING scope of routine key `name`.
@@ -1382,7 +1336,7 @@ impl Elaborator<'_> {
             // ENG-2: a framed void function's body is walked like a function's (R2.1).
             self.rs.void_fids.insert(fid);
         }
-        let fp = self.frame_path_of(name, &task.name.name); // %m
+        let fp = self.disp_frame_path_of(name, &task.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {
                 entry: 0, // filled by lower_frame_task_body

@@ -191,7 +191,7 @@ pub(crate) struct StarSite {
     /// R4: where and in which instance the site was lowered — W3056 is decided in the
     /// settle, from the settled set, and reported here.
     pub(crate) loc: Option<diag::SourceLoc>,
-    pub(crate) ctx: Vec<diag::Frame>,
+    pub(crate) ctx: ShownCtx,
 }
 
 /// R-SITE: when an arena append is legal. Lowering stamps `cur`; after lowering ends an
@@ -1381,7 +1381,7 @@ impl Elaborator<'_> {
                     code: MsgCode::ElabFeatureLimit,
                     message: "in-body @(*) reads no nets; it can never wake".to_string(),
                     location: s.loc.clone(),
-                    context: s.ctx.clone(),
+                    context: scope_out(s.ctx.clone()),
                     sim_time: None,
                     rtl_message: None,
                 }));

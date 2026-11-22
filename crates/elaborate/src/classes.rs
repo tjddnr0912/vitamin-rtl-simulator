@@ -745,7 +745,7 @@ impl Elaborator<'_> {
             // (`top.C.show`, both oracles) — the engine prefixes the calling
             // process's scope (the class table is global; its declaring instance
             // is not known).
-            format!("{cname}.{}", method.name),
+            shown_from_spelling(format!("{cname}.{}", method.name)),
             // No route-census key: a class method has no declaring MODULE, and
             // `SubroutineRoutes` is keyed `(module, routine)`. It still takes its
             // slot here — omitting the push is what shifted every module

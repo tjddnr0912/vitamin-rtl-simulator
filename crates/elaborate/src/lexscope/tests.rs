@@ -1,7 +1,7 @@
 //! FB: the funnel's own unit tests (§5.2 Q-LEXSCOPE LS2a): every entry keeps the legacy text
 //! rule and the id agrees with the text after each call.
 
-use super::Scopes;
+use super::{scope_out, shown_from_spelling, wrap_ctx, Scopes};
 
 #[test]
 fn fb_new_is_the_empty_path() {
@@ -54,4 +54,69 @@ fn fb_reentry_reuses_the_id() {
     let w = s.scope_witness();
     s.scope_witness_check(&w);
     s.scope_restore(b);
+}
+
+// LS2-d: the display chain's entries and the door's text exit.
+
+#[test]
+fn fb_disp_chain_take_push_pop_restore() {
+    let mut s = Scopes::new();
+    assert!(s.disp_chain_is_empty());
+    s.disp_chain_push("a".to_string());
+    s.disp_chain_push("b".to_string());
+    assert_eq!(s.disp_chain, ["a", "b"]);
+    let saved = s.disp_chain_take();
+    assert!(s.disp_chain_is_empty());
+    s.disp_chain_push("x".to_string());
+    s.disp_chain_pop();
+    s.disp_chain_pop();
+    assert!(s.disp_chain_is_empty());
+    s.disp_restore_chain(saved);
+    assert_eq!(s.disp_chain, ["a", "b"]);
+    let single = s.disp_chain_swap_single("t");
+    assert_eq!(s.disp_chain, ["t"]);
+    s.disp_restore_chain(single);
+    assert_eq!(s.disp_chain, ["a", "b"]);
+}
+
+#[test]
+fn fb_disp_root_and_method_swap_restore() {
+    let mut s = Scopes::new();
+    s.disp_root = Some("top.u".to_string());
+    let r = s.disp_root_swap_empty();
+    assert_eq!(s.disp_root.as_deref(), Some(""));
+    s.disp_restore_root(r);
+    assert_eq!(s.disp_root.as_deref(), Some("top.u"));
+    assert!(s.class_method_is_none());
+    let m = s.disp_class_method_swap("C.f".to_string());
+    assert!(!s.class_method_is_none());
+    assert_eq!(s.disp_method.as_deref(), Some("C.f"));
+    s.disp_restore_method(m);
+    assert!(s.class_method_is_none());
+}
+
+#[test]
+fn fb_shown_leaves_only_through_scope_out() {
+    let a = shown_from_spelling("C.f".to_string());
+    let b = shown_from_spelling("D.g".to_string());
+    // Debug writes no text: two different spellings print the same
+    assert_eq!(format!("{a:?}"), format!("{b:?}"));
+    assert_eq!(format!("{a:?}"), "Shown(..)");
+    assert_eq!(scope_out(a.clone()), "C.f");
+    assert_eq!(scope_out(a), "C.f");
+}
+
+#[test]
+fn fb_shown_ctx_debug_writes_no_text() {
+    let frame = |l: &str| diag::Frame {
+        label: l.to_string(),
+        location: None,
+    };
+    let a = wrap_ctx(vec![frame("top.u")]);
+    let b = wrap_ctx(Vec::new());
+    assert_eq!(format!("{a:?}"), format!("{b:?}"));
+    assert_eq!(format!("{a:?}"), "ShownCtx(..)");
+    let out = scope_out(a);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].label, "top.u");
 }

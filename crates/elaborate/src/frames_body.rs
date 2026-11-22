@@ -306,29 +306,21 @@ impl Elaborator<'_> {
         self.resolve_frame_task_rejects();
     }
 
-    /// §4.5.435: a frame body's `%m` chain is rooted at the frame's own declaring
-    /// path `<inst>.<name>` (`frame_path`) — the same string `func_names` carries.
-    fn enter_frame_scope_root(&mut self, name: &str) -> Option<String> {
-        let fp = self.frame_path(name);
-        let root = fp.strip_prefix('.').unwrap_or(&fp).to_string();
-        self.block_scope_root.replace(root)
-    }
-
     /// Lower a frame function's body into the GLOBAL `func_blocks` arena: build a
     /// process-local CFG (reusing `lower_stmt`), append it with every `Goto`/
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
     pub(crate) fn lower_frame_func_body(&mut self, name: &str, func: &ast::FunctionDef, fid: u32) {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
-        let saved_block_scope = std::mem::take(&mut self.block_scope);
-        let saved_root = self.enter_frame_scope_root(name);
+        let saved_block_scope = self.lex.disp_chain_take();
+        let saved_root = self.disp_enter_frame_root(name);
         // ENG-2: a body lowered on demand mid-statement does not inherit its caller's
         // provenance mark (`read_set.rs`); its own assertion actions mark themselves.
         let saved_mark = self.enter_unmarked_body();
         self.lower_frame_body_inner_lower_frame_func_body(name, func, fid);
         self.rs.cur = saved_mark;
-        self.block_scope = saved_block_scope;
-        self.block_scope_root = saved_root;
+        self.lex.disp_restore_chain(saved_block_scope);
+        self.lex.disp_restore_root(saved_root);
     }
 
     fn lower_frame_body_inner_lower_frame_func_body(
@@ -510,13 +502,13 @@ impl Elaborator<'_> {
     pub(crate) fn lower_frame_task_body(&mut self, name: &str, task: &ast::TaskDef, fid: u32) {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
-        let saved_block_scope = std::mem::take(&mut self.block_scope);
-        let saved_root = self.enter_frame_scope_root(name);
+        let saved_block_scope = self.lex.disp_chain_take();
+        let saved_root = self.disp_enter_frame_root(name);
         let saved_mark = self.enter_unmarked_body(); // ENG-2, as the function twin
         self.lower_frame_body_inner_lower_frame_task_body(name, task, fid);
         self.rs.cur = saved_mark;
-        self.block_scope = saved_block_scope;
-        self.block_scope_root = saved_root;
+        self.lex.disp_restore_chain(saved_block_scope);
+        self.lex.disp_restore_root(saved_root);
     }
 
     fn lower_frame_body_inner_lower_frame_task_body(

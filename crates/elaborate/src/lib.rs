@@ -133,6 +133,7 @@ mod inline_task_locals;
 mod instance;
 mod instance_array;
 mod lexscope;
+use lexscope::{scope_out, shown_from_spelling, Shown, ShownCtx};
 mod limits;
 mod lvalue;
 mod multidriver;
@@ -600,7 +601,7 @@ struct Elaborator<'s> {
     func_metas: Vec<FuncMeta>,
     /// N1: subroutine name per FuncId, parallel to `func_metas` (pushed together).
     /// Drained into `Sidecars.func_names` for `%m` inside a frame body.
-    frame_func_names: Vec<String>,
+    frame_func_names: Vec<lexscope::Shown>,
     /// R2 intermediate: per-subroutine frame/inline route + call-site count,
     /// drained into `Sidecars.subroutines`. Written by `note_frame_call` (every
     /// frame emitter) and `note_subroutine_route` (the inline fall-throughs), and
@@ -1722,23 +1723,11 @@ struct Elaborator<'s> {
     // StmtId → resolved source location + instance path, for severity statements
     // AND for the statements a runtime diagnostic points at (see `StmtLocTable`).
     // Entry ⟺ a SpanResolver was installed. Threaded via `SimOpts.stmt_locs`.
-    stmt_locs: StmtLocTable,
-    // §4.5.426: the named-block label chain in effect while lowering statements
-    // (pushed by the `Stmt::Block`/`Stmt::Fork` arms for a user label; replaced by
-    // `[task]` while an inline task body lowers; empty in a frame body), and the two
-    // sidecars it records into (`push_stmt` for a SysTask, the `$sformatf` lowering).
-    block_scope: Vec<String>,
-    /// §4.5.435: the DECLARING scope the chain is rooted at while a subroutine body
-    /// lowers — the module instance (display spelling) for an inlined task, the
-    /// frame's own `<inst>.<name>` for a frame body; `None` = the process's own
-    /// scope (`display_prefix`). A recorded chain is absolute (`scope_chain_abs`).
-    block_scope_root: Option<String>,
-    /// §4.5.437: `<class>.<method>` while a class method body lowers — the
-    /// diagnostic context (`record_stmt_loc`) of a statement inside it, stored with
-    /// a leading `.` so the engine prefixes the calling process's scope.
-    cur_class_method: Option<String>,
-    stmt_scopes: std::collections::BTreeMap<u32, String>,
-    expr_scopes: std::collections::BTreeMap<u32, String>,
+    stmt_locs: std::collections::BTreeMap<u32, driver::StmtLocRow>,
+    // §4.5.426: the two sidecars the named-block label chain (`lexscope`'s display chain)
+    // records into (`push_stmt` for a SysTask, the `$sformatf` lowering).
+    stmt_scopes: std::collections::BTreeMap<u32, lexscope::Shown>,
+    expr_scopes: std::collections::BTreeMap<u32, lexscope::Shown>,
     // V33-8 latch: "an expression lowered since the last `push_stmt` can make the
     // engine emit a located runtime diagnostic" — an array-word index (`W4029`) or
     // a `$fread` (`W4023`). `push_stmt` CONSUMES it and records the statement's
@@ -1790,10 +1779,10 @@ struct Elaborator<'s> {
     // The set guards the VALUE surface — an event cannot be read or written.
     event_nets: std::collections::BTreeSet<u32>,
     // Per-ProcId instance path for `%m` (P2-11); lockstep with `processes`.
-    proc_scopes: Vec<String>,
+    proc_scopes: Vec<lexscope::Shown>,
     /// §4.5.440 (§2 🆕 N): per-ProcId INSTANCE path (`display_of(inst_prefix)`, no
     /// generate scope) — the `%m` prefix of a class method. Parallel to `proc_scopes`.
-    proc_inst_scopes: Vec<String>,
+    proc_inst_scopes: Vec<lexscope::Shown>,
     // R14 (ROADMAP §3 ⑭): per-ProcId construct kind + source location, lockstep
     // with `processes`; and the same for `cont_assigns`. Reporting only — the
     // engine never reads them, they exist so an obs profile row can name a line

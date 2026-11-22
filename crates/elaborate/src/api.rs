@@ -169,16 +169,51 @@ pub fn elaborate_located_params(
         proc_multipliers: std::mem::take(&mut el.proc_multipliers),
         proc_prec_mults: std::mem::take(&mut el.proc_prec_mults),
         severities: std::mem::take(&mut el.severities),
-        stmt_locs: std::mem::take(&mut el.stmt_locs),
-        stmt_scopes: std::mem::take(&mut el.stmt_scopes),
-        expr_scopes: std::mem::take(&mut el.expr_scopes),
+        stmt_locs: std::mem::take(&mut el.stmt_locs)
+            .into_iter()
+            .map(|(sid, r)| {
+                let driver::StmtLocRow {
+                    file,
+                    line,
+                    col,
+                    byte_start,
+                    byte_end,
+                    instance,
+                } = r;
+                (
+                    sid,
+                    StmtLoc {
+                        file,
+                        line,
+                        col,
+                        byte_start,
+                        byte_end,
+                        instance: scope_out(instance),
+                    },
+                )
+            })
+            .collect(),
+        stmt_scopes: std::mem::take(&mut el.stmt_scopes)
+            .into_iter()
+            .map(|(id, s)| (id, scope_out(s)))
+            .collect(),
+        expr_scopes: std::mem::take(&mut el.expr_scopes)
+            .into_iter()
+            .map(|(id, s)| (id, scope_out(s)))
+            .collect(),
         timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
         stage_stmts: std::mem::take(&mut el.stage_stmts),
         handle_copy_stmts: std::mem::take(&mut el.handle_copy_stmts),
         queue_slice_stmts: std::mem::take(&mut el.queue_slice_stmts),
         radixes: std::mem::take(&mut el.radixes),
-        proc_scopes: std::mem::take(&mut el.proc_scopes),
-        proc_inst_scopes: std::mem::take(&mut el.proc_inst_scopes),
+        proc_scopes: std::mem::take(&mut el.proc_scopes)
+            .into_iter()
+            .map(scope_out)
+            .collect(),
+        proc_inst_scopes: std::mem::take(&mut el.proc_inst_scopes)
+            .into_iter()
+            .map(scope_out)
+            .collect(),
         proc_idents: std::mem::take(&mut el.proc_idents),
         ca_idents: std::mem::take(&mut el.ca_idents),
         write_view: std::mem::take(&mut el.wext),
@@ -192,9 +227,13 @@ pub fn elaborate_located_params(
         defer_marks: std::mem::take(&mut el.defer_marks),
         defer_acts: std::mem::take(&mut el.defer_acts),
         func_table: std::mem::take(&mut el.func_metas), // B1 (empty until frame funcs lower)
-        func_names: std::mem::take(&mut el.frame_func_names), // N1 %m
+        // N1 %m
+        func_names: std::mem::take(&mut el.frame_func_names)
+            .into_iter()
+            .map(scope_out)
+            .collect(),
         func_decl_locs: std::mem::take(&mut el.frame_decl_locs), // R2 ⓒ
-        subroutines: std::mem::take(&mut el.subroutine_routes), // R2 intermediate
+        subroutines: std::mem::take(&mut el.subroutine_routes),  // R2 intermediate
         task_calls_proc: std::mem::take(&mut el.task_calls_proc), // B2
         task_calls_func: std::mem::take(&mut el.task_calls_func), // B2
         // SVPART: 2-state net ids, derived from the decl-time kind map (reuses the

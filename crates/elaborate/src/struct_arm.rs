@@ -121,7 +121,7 @@ impl Elaborator<'_> {
     fn struct_arm_context(&self) -> bool {
         !self.in_frame_body
             && self.inline_stack.is_empty()
-            && self.cur_class_method.is_none()
+            && self.lex.class_method_is_none()
             && self.subst.is_empty()
             && self.out_subst.is_empty()
             && !self

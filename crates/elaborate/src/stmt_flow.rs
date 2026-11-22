@@ -47,11 +47,10 @@ impl Elaborator<'_> {
         // `%m` scope: the instance path of the module being lowered ("tb.u1");
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
-        self.proc_scopes.push(self.display_prefix());
+        self.proc_scopes.push(self.disp_here());
         // §4.5.440: the instance alone (a generate scope is not an instance) — what a
         // class method's `%m` is prefixed with, in the same lockstep.
-        self.proc_inst_scopes
-            .push(self.display_of(&self.inst_prefix));
+        self.proc_inst_scopes.push(self.disp_inst_top());
         // R14: the profile identity, in the SAME lockstep. Every producer today
         // parks one — `lower_proc_block` for a user block, `lower_synth_proc`
         // for a body vita synthesized — so the `synth` default is a FAIL-SAFE,
@@ -146,8 +145,8 @@ impl Elaborator<'_> {
         }
         let id = self.stmts.len() as u32;
         // §4.5.426: a system task inside named blocks renders `%m` with the label chain.
-        if !self.block_scope.is_empty() && matches!(s, ir::Stmt::SysTask { .. }) {
-            self.stmt_scopes.insert(id, self.scope_chain_abs());
+        if !self.lex.disp_chain_is_empty() && matches!(s, ir::Stmt::SysTask { .. }) {
+            self.stmt_scopes.insert(id, self.disp_chain_abs());
         }
         // V33-8: does a runtime diagnostic want to point AT this statement?
         // Three producers, one recorder (`record_stmt_loc`):

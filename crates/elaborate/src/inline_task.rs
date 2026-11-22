@@ -758,10 +758,9 @@ impl Elaborator<'_> {
         let (saved_labels, saved_meta) = self.push_body_enum_labels(&task.body_enums, &task.body);
         // §4.5.426: `%m` inside a task body is `module.task` (IEEE §21.2.1), not the
         // caller's block chain — the inlined body lowers under `[task]`.
-        let saved_scope = std::mem::replace(&mut self.block_scope, vec![tname.to_string()]);
+        let saved_scope = self.lex.disp_chain_swap_single(&tname);
         // §4.5.435: rooted at the DECLARING instance, not the caller's generate scope.
-        let decl_root = self.display_of(&self.inst_prefix);
-        let saved_root = self.block_scope_root.replace(decl_root);
+        let saved_root = self.disp_root_swap_decl_inst();
         // A package task's body resolves in its own package (`pkg_body_scope.rs`) —
         // the fourth lane to push this scope; without it `import pk::ts;` left a
         // STATIC task's read of its package's constant `C` as `undeclared
@@ -803,8 +802,8 @@ impl Elaborator<'_> {
         if pushed_pkg.is_some() {
             self.pop_rtn_pkg_scope();
         }
-        self.block_scope = saved_scope;
-        self.block_scope_root = saved_root;
+        self.lex.disp_restore_chain(saved_scope);
+        self.lex.disp_restore_root(saved_root);
         self.restore_params(saved_labels);
         self.restore_param_meta(saved_meta);
         self.inline_stack.pop();

@@ -293,11 +293,11 @@ impl Elaborator<'_> {
                                                      // `$class$C$m` storage segment must not leak into it) and the diagnostic
                                                      // context of a `$error` inside the body is the `.<class>.<method>` marker
                                                      // the engine completes with the process scope (`stmt_diag_meta`).
-        let saved_block_scope = std::mem::take(&mut self.block_scope);
-        let saved_root = self.block_scope_root.replace(String::new());
+        let saved_block_scope = self.lex.disp_chain_take();
+        let saved_root = self.lex.disp_root_swap_empty();
         let saved_cm = self
-            .cur_class_method
-            .replace(format!("{cname}.{}", method.name));
+            .lex
+            .disp_class_method_swap(format!("{cname}.{}", method.name));
         // A class method body reserves no span nets, so it must not inherit an
         // enclosing frame's owner and answer from that frame's window.
         let saved_cfo = self.cur_frame_owner.take();
@@ -348,9 +348,9 @@ impl Elaborator<'_> {
         self.cur_discard = saved_discard;
         self.in_frame_body = saved_frame;
         self.rs.cur = saved_mark;
-        self.block_scope = saved_block_scope;
-        self.block_scope_root = saved_root;
-        self.cur_class_method = saved_cm;
+        self.lex.disp_restore_chain(saved_block_scope);
+        self.lex.disp_restore_root(saved_root);
+        self.lex.disp_restore_method(saved_cm);
         // A class method body sets `in_frame_body` but reserves no span nets, so
         // it must not inherit an enclosing frame's owner and hit that frame's net.
         self.cur_frame_owner = saved_cfo;

@@ -2,6 +2,18 @@
 
 use super::*;
 
+/// A statement's location record while elaborating (the row of `Elaborator.stmt_locs`):
+/// [`StmtLoc`]'s fields with the instance held as display text (`Shown`) ; it becomes a
+/// `StmtLoc` at the hand-off (`api.rs`, through `scope_out`).
+pub(crate) struct StmtLocRow {
+    pub(crate) file: String,
+    pub(crate) line: u32,
+    pub(crate) col: u32,
+    pub(crate) byte_start: u32,
+    pub(crate) byte_end: u32,
+    pub(crate) instance: Shown,
+}
+
 impl<'s> Elaborator<'s> {
     pub(crate) fn new(sink: &'s dyn LogSink) -> Self {
         Self {
@@ -265,10 +277,7 @@ impl<'s> Elaborator<'s> {
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
-            stmt_locs: StmtLocTable::new(),
-            block_scope: Vec::new(),
-            block_scope_root: None,
-            cur_class_method: None,
+            stmt_locs: std::collections::BTreeMap::new(),
             stmt_scopes: std::collections::BTreeMap::new(),
             expr_scopes: std::collections::BTreeMap::new(),
             stmt_wants_loc: false,
@@ -368,7 +377,7 @@ impl<'s> Elaborator<'s> {
             return;
         }
         let location = self.cur_location();
-        let context = self.cur_context();
+        let context = scope_out(self.ctx_here());
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Error,
             code,
@@ -438,7 +447,7 @@ impl<'s> Elaborator<'s> {
             return;
         }
         let location = self.span_resolver.map(|r| r.resolve(span.lo, span.hi));
-        let context = self.cur_context();
+        let context = scope_out(self.ctx_here());
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Note,
             code,
@@ -448,42 +457,6 @@ impl<'s> Elaborator<'s> {
             sim_time: None,
             rtl_message: None,
         }));
-    }
-
-    /// The INSTANCE path this diagnostic is being elaborated under, as a
-    /// single `Frame`. Empty at the top level (and during any pre-pass that runs
-    /// before instantiation), which renders as nothing at all.
-    ///
-    /// ⚠️ `file:line:col` is NOT a key on its own here. A module instantiated N
-    /// times elaborates N times, so one unconnected port in a leaf becomes N
-    /// identical warnings; an external report received four of them from three
-    /// different instances and could only count them. `cur_prefix` is the
-    /// scope-resolution prefix — the same string `fq()` builds symbol keys from
-    /// — so it is the instance path by construction rather than a second
-    /// spelling of one.
-    pub(crate) fn cur_context(&self) -> Vec<diag::Frame> {
-        if self.lex.cur_prefix_text().is_empty() {
-            return Vec::new();
-        }
-        // §4.5.429: the spelling `%m` prints — a singleton generate scope without
-        // its storage `[0]`.
-        vec![diag::Frame {
-            // `$pkg$<pkg>` is the RESERVED storage prefix for something the design
-            // writes as `package pk;`, so a diagnostic inside it says `[in pk]`.
-            // Stripped HERE and not in `display_of`, which also names VCD scopes and
-            // OBS paths: the package net scope is `$pkg$p` in the waveform and must
-            // stay that way (`pkg_var.rs` pins that a package var is excluded by that
-            // very prefix). Every other `$` segment names a construct the reader can
-            // point at in the source, so only this one is translated.
-            label: {
-                let p = self.display_prefix();
-                match p.strip_prefix("$pkg$") {
-                    Some(rest) => rest.to_string(),
-                    None => p,
-                }
-            },
-            location: None,
-        }]
     }
 
     /// The `SourceLoc` for `cur_span`, when both a span and a resolver are present.
@@ -515,7 +488,7 @@ impl<'s> Elaborator<'s> {
         if let Some(loc) = self.cur_location() {
             self.stmt_locs.insert(
                 sid,
-                StmtLoc {
+                StmtLocRow {
                     file: loc.file,
                     line: loc.line,
                     col: loc.col,
@@ -541,13 +514,7 @@ impl<'s> Elaborator<'s> {
                     // ⚠️ The class-method arm must stay FIRST: `class_lower` sets
                     // `block_scope_root = Some("")` alongside `cur_class_method`, so
                     // keying on the root instead would undo §4.5.441.
-                    instance: match &self.cur_class_method {
-                        Some(m) => format!(".{m}"),
-                        None => {
-                            let s = self.scope_chain_abs();
-                            s.strip_prefix('.').unwrap_or(&s).to_string()
-                        }
-                    },
+                    instance: self.stmt_loc_instance(),
                 },
             );
         }
@@ -639,7 +606,7 @@ impl<'s> Elaborator<'s> {
             .span_resolver
             .map(|r| r.resolve(span.lo, span.hi))
             .or_else(|| self.cur_location());
-        let context = self.cur_context();
+        let context = scope_out(self.ctx_here());
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,
             code,
@@ -655,7 +622,7 @@ impl<'s> Elaborator<'s> {
     /// `W-ELAB-FEATURE-LIMIT`).
     pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
         let location = self.cur_location();
-        let context = self.cur_context();
+        let context = scope_out(self.ctx_here());
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity: Severity::Warning,
             code,

@@ -344,7 +344,6 @@ frames_static_init.rs	emit_frame_static_prologue	3	cands,formals,admitted_keys
 gen_enum.rs	gen_carried_typedefs	UNTYPED	names=scope_names
 gen_enum.rs	scope_names	1	names
 gen_scope_name.rs	key_spells_indexed_singleton	1	segs
-generate.rs	display_of	1	out
 held.rs	clk_refused_path	1	names
 held.rs	deny_refused_clocking_input_arg	1	joined
 hier.rs	hier_resolve	1	segs
@@ -375,6 +374,7 @@ instance.rs	elaborate_instance	7	conflict_names,local_const_funcs,wc_const_fn,ex
 instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
 instance_array.rs	elaborate_instance_array	1	port_widths
 instance_array.rs	elaborate_instance_array	UNTYPED	saved=bind_params
+lexscope/disp.rs	display_of	1	out
 multidriver.rs	check_multidriver_processes	2	rule_a_fires,via_call_writers
 multidriver.rs	multidriver_vars	2	body_decls,declared
 net_util.rs	declare_implicit_nets	2	iface_insts,want
@@ -507,7 +507,6 @@ dead_arm.rs	dead_reversed_select	curp	cur_prefix_text().to_string()	1	scope
 decl_collide.rs	modport_call_refused	call	walk_scopes_key	1	key
 decl_scope.rs	decl_keep_snapshot	fmt	format	1	scope
 decl_scope.rs	decl_probe_key	fmt	write	1	key
-driver.rs	record_stmt_loc	fmt	format	1	display
 dynarr.rs	dyn_blocking_special	fmt-tempname	format	1	spelling
 dynarr.rs	dyn_handle	call	walk_scopes_key_shadowed	1	key
 dynarr.rs	fresh_dyn_temp_named	fmt-tempname	format	1	spelling
@@ -536,9 +535,6 @@ frames_call/emit.rs	emit_frame_task_call	fmt-tempname	format	1	spelling
 frames_call/mod.rs	fresh_ret_temp	fmt-tempname	format	1	spelling
 frames_call/mod.rs	is_net_or_const_arg	call	fq	1	key
 frames_concat.rs	reserve_frame_concat_tmps	fmt-tempname	format	1	spelling
-frames_reserve.rs	frame_path	derived-fn	frame_path	1	display
-frames_reserve.rs	frame_path	fmt	format	2	display
-frames_reserve.rs	frame_path_of	derived-fn	frame_path_of	1	display
 frames_reserve.rs	reserve_frame_case_tmps	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_func	fmt	format	2	key=1+segment=1
 frames_reserve.rs	reserve_frame_repeat_counters	fmt-tempname	format	1	spelling
@@ -560,11 +556,6 @@ gen_scope_name.rs	key_spells_indexed_singleton	call	indexed_gen_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	derived-fn	key_spells_indexed_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	join	join	1	key
 gen_scope_name.rs	singleton_scope_key	fmt	format	1	key
-generate.rs	display_of	derived-fn	display_of	1	display
-generate.rs	display_of	fmt	format	1	display
-generate.rs	display_of	join	join	1	display
-generate.rs	display_of	push	push	1	display
-generate.rs	display_of	push	push_str	1	display
 generate.rs	elaborate_gen_item	call	fq	2	key
 generate.rs	elaborate_gen_item	curp	cur_prefix_text().to_string()	1	scope
 generate.rs	elaborate_gen_scoped	call	fq	1	key
@@ -572,9 +563,6 @@ generate.rs	elaborate_gen_scoped	curp	cur_prefix_text().to_string()	1	scope
 generate.rs	lower_gen_module_item	call	fq	3	key
 generate.rs	register_gen_func	curp	cur_prefix_text().to_string()	1	scope
 generate.rs	register_gen_task	curp	cur_prefix_text().to_string()	1	scope
-generate.rs	scope_chain_abs	derived-fn	scope_chain_abs	1	display
-generate.rs	scope_chain_abs	fmt	format	2	display
-generate.rs	scope_chain_abs	join	join	2	display
 held.rs	clk_refused_at	call	walk_scopes_key_from	1	key
 held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
@@ -644,6 +632,18 @@ instance.rs	elaborate_instance	curp	cur_prefix_text().to_string()	3	scope
 instance.rs	elaborate_instance	fmt	format	1	key
 instance_array.rs	elaborate_instance_array	call	child_prefix	1	scope
 instance_array.rs	elaborate_instance_array	call	fq	1	key
+lexscope/disp.rs	display_of	derived-fn	display_of	1	display
+lexscope/disp.rs	display_of	fmt	format	1	display
+lexscope/disp.rs	display_of	join	join	1	display
+lexscope/disp.rs	display_of	push	push	1	display
+lexscope/disp.rs	display_of	push	push_str	1	display
+lexscope/disp.rs	frame_path	derived-fn	frame_path	1	display
+lexscope/disp.rs	frame_path	fmt	format	2	display
+lexscope/disp.rs	frame_path_of	derived-fn	frame_path_of	1	display
+lexscope/disp.rs	scope_chain_abs	derived-fn	scope_chain_abs	1	display
+lexscope/disp.rs	scope_chain_abs	fmt	format	2	display
+lexscope/disp.rs	scope_chain_abs	join	join	2	display
+lexscope/disp.rs	stmt_loc_instance	fmt	format	1	display
 lexscope/elab.rs	cur_gen_rtn_key	call	gen_rtn_key	1	key
 lexscope/elab.rs	cur_gen_rtn_key	derived-fn	cur_gen_rtn_key	1	key
 lexscope/elab.rs	gen_rtn_key	push	push	1	key
@@ -850,8 +850,6 @@ decl_collide.rs	carrier_stems	strip_suffix	"$s"	1	spelling	-
 decl_collide.rs	carrier_stems	strip_suffix	"$w"	1	spelling	-
 decl_collide.rs	internal_name	starts_with	'$'	1	spelling	-
 decl_scope.rs	decl_keep_snapshot	starts_with	<mine>	2	key	DK3
-driver.rs	cur_context	strip_prefix	"$pkg$"	1	display	DK4
-driver.rs	record_stmt_loc	strip_prefix	'.'	1	display	DK4
 dynarr.rs	dyn_blocking_special	rsplit	'.'	1	key	DK3
 edge_gate.rs	binding_encloses	strip_suffix	'.'	1	key	DK3
 edge_gate.rs	binding_encloses	strip_suffix	<name>	1	key	DK3
@@ -863,7 +861,6 @@ expr_size_hier.rs	hier_leaf_scope	split	'.'	1	scope	LS4
 expr_size_hier.rs	hier_leaf_scope	starts_with	'$'	1	scope	LS4
 expr_size_hier.rs	hier_leaf_scope	strip_prefix	'.'	1	scope	LS4
 expr_size_hier.rs	hier_leaf_scope	strip_prefix	<inst_prefix>	1	scope	LS4
-frames_body.rs	enter_frame_scope_root	strip_prefix	'.'	1	display	DK4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	rsplit	'.'	1	scope	LS4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$func$"	1	scope	LS4
 frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$itask$"	1	scope	LS4
@@ -879,19 +876,22 @@ frames_static_init.rs	frame_init_name_is_local_or_const	starts_with	"$func$"	1	k
 gen_scope_name.rs	gen_seg_label	rsplit_once	'['	1	scope	DK1
 gen_scope_name.rs	gen_seg_label	starts_with	'$'	1	scope	DK1
 gen_scope_name.rs	key_spells_indexed_singleton	split	'.'	1	key	DK3
-generate.rs	display_of	contains	'['	1	display	DK4
-generate.rs	display_of	split	'.'	1	display	DK4
-generate.rs	display_of	strip_suffix	"[0]"	1	display	DK4
 generate.rs	is_gen_scope_segment	contains	'['	1	scope	walk
-generate.rs	scope_chain_abs	contains	"$blk$"	1	display	LS2
-generate.rs	scope_chain_abs	split	'.'	1	display	LS2
-generate.rs	scope_chain_abs	starts_with	"$blk$"	1	display	LS2
 hier.rs	hier_resolve	split	'.'	1	scope	walk
 hier.rs	hier_resolve	starts_with	"$pkg$"	1	scope	LS4
 hier.rs	is_hier_scope	starts_with	<probe>	1	key	DK3
 hoist/general_query.rs	hier_path_is_self	split	'.'	1	scope	LS4
 hoist/general_query.rs	hier_path_is_self	split	'['	1	scope	LS4
 iface_rtn_scope.rs	static_scoped_keys	contains	"::"	2	key	RS1
+lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	DK4
+lexscope/disp.rs	display_of	contains	'['	1	display	DK4
+lexscope/disp.rs	display_of	split	'.'	1	display	DK4
+lexscope/disp.rs	display_of	strip_suffix	"[0]"	1	display	DK4
+lexscope/disp.rs	enter_frame_scope_root	strip_prefix	'.'	1	display	DK4
+lexscope/disp.rs	scope_chain_abs	contains	"$blk$"	1	display	LS2
+lexscope/disp.rs	scope_chain_abs	split	'.'	1	display	LS2
+lexscope/disp.rs	scope_chain_abs	starts_with	"$blk$"	1	display	LS2
+lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	DK4
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	RS1
 lexscope/elab.rs	gen_rtn_key	is_gen_scope_segment	-	1	scope	RS1
@@ -960,7 +960,6 @@ Elaborator	lib.rs	pkg_own_funcs	BTreeMap<String, BTreeSet<String>>	BINDING	R	-
 Elaborator	lib.rs	pkg_own_tasks	BTreeMap<String, BTreeSet<String>>	BINDING	R	-
 Elaborator	lib.rs	const_call_fn	std::cell::RefCell<Option<String>>	BINDING	R	-
 Elaborator	lib.rs	pkg_tasks	BTreeMap<String, BTreeMap<String, ast::TaskDef>>	BINDING	R	-
-Elaborator	lib.rs	frame_func_names	Vec<String>	NOT	I	DISPLAY
 Elaborator	lib.rs	subroutine_routes	SubroutineRoutes	NOT	I	-
 Elaborator	lib.rs	frame_keys	Vec<Option<String>>	NOT	I	-
 Elaborator	lib.rs	frame_idx	BTreeMap<String, u32>	BINDING	R	ROUTINE
@@ -1056,13 +1055,10 @@ Elaborator	lib.rs	root_override	Option<Vec<String>>	NOT	X	-
 Elaborator	lib.rs	top_param_overrides	Vec<(String, String)>	NOT	X	-
 Elaborator	lib.rs	escape_warned	std::collections::BTreeSet<(u32, u32, String)>	NOT	D	-
 Elaborator	lib.rs	implicit_nets	std::collections::BTreeSet<String>	NOT	D	KEYED-JUDGE5
-Elaborator	lib.rs	block_scope	Vec<String>	NOT	D	DISPLAY
-Elaborator	lib.rs	block_scope_root	Option<String>	NOT	D	DISPLAY
-Elaborator	lib.rs	cur_class_method	Option<String>	NOT	D	DISPLAY
-Elaborator	lib.rs	stmt_scopes	std::collections::BTreeMap<u32, String>	NOT	D	DISPLAY
-Elaborator	lib.rs	expr_scopes	std::collections::BTreeMap<u32, String>	NOT	D	DISPLAY
-Elaborator	lib.rs	proc_scopes	Vec<String>	NOT	D	-
-Elaborator	lib.rs	proc_inst_scopes	Vec<String>	NOT	D	-
+Scopes	lexscope/mod.rs	disp_chain	Vec<String>	NOT	D	DISPLAY
+Scopes	lexscope/mod.rs	disp_root	Option<String>	NOT	D	DISPLAY
+Scopes	lexscope/mod.rs	disp_method	Option<String>	NOT	D	DISPLAY
+Shown	lexscope/mod.rs	0	String	NOT	D	DISPLAY
 Elaborator	lib.rs	pending_scoped_presize	BTreeMap<String, Vec<PresizeEntry>>	NOT	I	SCOPE
 Elaborator	lib.rs	pending_block_local_inits	BTreeMap<String, Vec<BlockLocalInit>>	NOT	I	SCOPE
 Elaborator	lib.rs	hier_write_args	BTreeMap<u32, &str>	NOT	D	-
@@ -1101,8 +1097,7 @@ ProcIdent	tables.rs	file	String	NOT	D	-
 ProcIdent	tables.rs	scope	String	NOT	CTX	OUTPUT
 ReadmemAssocSite	readmem_assoc.rs	prefix	String	NOT	CTX	SCOPE
 ReadmemAssocSite	readmem_assoc.rs	name	String	NOT	D	-
-StmtLoc	tables.rs	file	String	NOT	D	-
-StmtLoc	tables.rs	instance	String	NOT	CTX	-
+StmtLocRow	driver.rs	file	String	NOT	D	-
 DeadSelect	dead_arm.rs	prefix	String	NOT	CTX	SCOPE
 DeadSelect	dead_arm.rs	msg	&str	NOT	D	-
 UseRec	edge_gate.rs	prefix	String	NOT	CTX	SCOPE
@@ -1157,36 +1152,37 @@ WholeArrayCa	cont_array.rs	prefix	String	NOT	CTX	SCOPE
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 217 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 63, "NOT:CHK": 2, "NOT:COPY": 8, "NOT:CTX": 32, "NOT:D": 38, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 13, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 133, "DISPLAY": 6, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "OUTPUT": 1, "ROUTINE": 14, "SCOPE": 25}
+fields 212 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 63, "NOT:CHK": 2, "NOT:COPY": 8, "NOT:CTX": 31, "NOT:D": 35, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 12, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 130, "DISPLAY": 4, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "OUTPUT": 1, "ROUTINE": 14, "SCOPE": 25}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
 # the receiver of a mutating method (census_fields.rs's rule), init = a struct-literal field, read = the rest.
 # Equal to G4 OWED-a's lists: block_scope 13 lines, block_scope_root's sets / restores / init, the readers
 # scope_chain_abs + the 2 emptiness tests, cur_class_method's 2 readers.
+# LS2-d: the three fields are lexscope::Scopes's disp_chain / disp_root / disp_method, every access inside
+# lexscope (mod.rs's entries, disp.rs's moved fns and shims) ; 0 accesses outside it.
 file	fn	field	access	count
-class_lower.rs	lower_class_method_body	block_scope	write	2
-class_lower.rs	lower_class_method_body	block_scope_root	write	2
-class_lower.rs	lower_class_method_body	cur_class_method	write	2
-driver.rs	new	block_scope	init	1
-driver.rs	new	block_scope_root	init	1
-driver.rs	new	cur_class_method	init	1
-driver.rs	record_stmt_loc	cur_class_method	read	1
-expr_ctx.rs	push_expr	block_scope	read	1
-frames_body.rs	enter_frame_scope_root	block_scope_root	write	1
-frames_body.rs	lower_frame_func_body	block_scope	write	2
-frames_body.rs	lower_frame_func_body	block_scope_root	write	1
-frames_body.rs	lower_frame_task_body	block_scope	write	2
-frames_body.rs	lower_frame_task_body	block_scope_root	write	1
-generate.rs	scope_chain_abs	block_scope	read	1
-generate.rs	scope_chain_abs	block_scope_root	read	1
-inline_task.rs	inline_static_task	block_scope	write	2
-inline_task.rs	inline_static_task	block_scope_root	write	2
-stmt_flow.rs	push_stmt	block_scope	read	1
-stmt_main.rs	lower_stmt_inner	block_scope	write	4
-struct_arm.rs	struct_arm_context	cur_class_method	read	1
+lexscope/disp.rs	disp_root_swap_decl_inst	disp_root	write	1
+lexscope/disp.rs	enter_frame_scope_root	disp_root	write	1
+lexscope/disp.rs	scope_chain_abs	disp_chain	read	1
+lexscope/disp.rs	scope_chain_abs	disp_root	read	1
+lexscope/disp.rs	stmt_loc_instance	disp_method	read	1
+lexscope/mod.rs	class_method_is_none	disp_method	read	1
+lexscope/mod.rs	disp_chain_is_empty	disp_chain	read	1
+lexscope/mod.rs	disp_chain_pop	disp_chain	write	1
+lexscope/mod.rs	disp_chain_push	disp_chain	write	1
+lexscope/mod.rs	disp_restore_chain	disp_chain	write	1
+lexscope/mod.rs	disp_chain_swap_single	disp_chain	write	1
+lexscope/mod.rs	disp_chain_take	disp_chain	write	1
+lexscope/mod.rs	disp_class_method_swap	disp_method	write	1
+lexscope/mod.rs	disp_restore_method	disp_method	write	1
+lexscope/mod.rs	disp_restore_root	disp_root	write	1
+lexscope/mod.rs	disp_root_swap_empty	disp_root	write	1
+lexscope/mod.rs	new	disp_chain	init	1
+lexscope/mod.rs	new	disp_method	init	1
+lexscope/mod.rs	new	disp_root	init	1
 == HD_COUNTS
-{"block_scope:init": 1, "block_scope:read": 3, "block_scope:write": 12, "block_scope_root:init": 1, "block_scope_root:read": 1, "block_scope_root:write": 7, "cur_class_method:init": 1, "cur_class_method:read": 2, "cur_class_method:write": 2}
+{"disp_chain:init": 1, "disp_chain:read": 2, "disp_chain:write": 5, "disp_method:init": 1, "disp_method:read": 2, "disp_method:write": 2, "disp_root:init": 1, "disp_root:read": 1, "disp_root:write": 4}
 == HK
 # HK: the scope kind each producer knows (G4 OWED-k ; DELTA6 F2) — per fn, the writes of cur_prefix (H3's
 # sites), the with_scope calls (21 lines) and the elaborate_instance calls (3). KIND (hand): for a write,
@@ -1324,70 +1320,105 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 # ARG:<callee> (a method's receiver tokens + name), RECV:.<method>, ASSIGN:<lhs>, RET, MAC:<macro>><outer>,
 # CLOSURE><outer>, BIN / COND / STMT / OTHER. Equal on T to copies.tsv's H01-H13, H28, H30 destinations, the
 # 9 saves and 9 restores of DELTA10 L2, push_func's 3 producers, the set's 3 lines (LS1 part 4 REPORT).
+# LS2-d: the callees add the typed shims, LEAVE L4 display_of_key_text, stmt_loc_instance, shown_from_spelling,
+# scope_out (a call, or `scope_out` handed on as a value: arg `fn-value`) and `.plain()` ; a SAVE is also a call of
+# a Saved* entry (disp_chain_take / disp_chain_swap_single / disp_root_swap_empty / disp_enter_frame_root /
+# disp_root_swap_decl_inst / disp_class_method_swap) and a RESTORE a disp_*_restore(<local>) ; the display fields
+# are read as `<recv>.lex.F` too (disp_chain / disp_root / disp_method).
 file	fn	what	arg	sink	count
-class_lower.rs	lower_class_method_body	RESTORE:block_scope	= saved_block_scope	-	1
-class_lower.rs	lower_class_method_body	RESTORE:block_scope_root	= saved_root	-	1
-class_lower.rs	lower_class_method_body	RESTORE:cur_class_method	= saved_cm	-	1
-class_lower.rs	lower_class_method_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
-class_lower.rs	lower_class_method_body	SAVE:block_scope_root	.replace(String::new())	LOCAL:saved_root#2	1
-class_lower.rs	lower_class_method_body	SAVE:cur_class_method	.replace(format!("{cname}.{}", method.name))	LOCAL:saved_cm#2	1
-classes.rs	reserve_class_method	push_func.m_path	format!("{cname}.{}", method.name)	LOCAL:pushed#2	1
+api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.frame_func_names).into_iter().map	1
+api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_inst_scopes).into_iter().map	1
+api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_scopes).into_iter().map	1
+api.rs	elaborate_located_params	scope_out	instance	FIELD:StmtLoc.instance	1
+api.rs	elaborate_located_params	scope_out	s	OTHER:tuple	2
+class_lower.rs	lower_class_method_body	RESTORE:disp_chain	= saved_block_scope	-	1
+class_lower.rs	lower_class_method_body	RESTORE:disp_method	= saved_cm	-	1
+class_lower.rs	lower_class_method_body	RESTORE:disp_root	= saved_root	-	1
+class_lower.rs	lower_class_method_body	SAVE:disp_chain	.disp_chain_take(-)	LOCAL:saved_block_scope#2	1
+class_lower.rs	lower_class_method_body	SAVE:disp_method	.disp_class_method_swap(format!("{cname}.{}", method.name))	LOCAL:saved_cm#2	1
+class_lower.rs	lower_class_method_body	SAVE:disp_root	.disp_root_swap_empty(-)	LOCAL:saved_root#2	1
+classes.rs	reserve_class_method	push_func.m_path	shown_from_spelling(format!("{cname}.{}", method.name))	LOCAL:pushed#2	1
+classes.rs	reserve_class_method	shown_from_spelling	format!("{cname}.{}", method.name)	ARG:self.push_func	1
 cover.rs	register_cover_instance	LIT:CovgInstMeta	inst=key	ARG:self.coverage_manifest.push	1
-driver.rs	cur_context	display_prefix	-	LOCAL:p#3	1
-driver.rs	error	cur_context	-	LOCAL:context#2	1
-driver.rs	note_at	cur_context	-	LOCAL:context#2	1
-driver.rs	record_stmt_loc	scope_chain_abs	-	LOCAL:s#3	1
-driver.rs	warn_code	cur_context	-	LOCAL:context#2	1
-driver.rs	warn_code_at	cur_context	-	LOCAL:context#2	1
+driver.rs	error	ctx_here	-	ARG:scope_out	1
+driver.rs	error	scope_out	self.ctx_here()	LOCAL:context#2	1
+driver.rs	note_at	ctx_here	-	ARG:scope_out	1
+driver.rs	note_at	scope_out	self.ctx_here()	LOCAL:context#2	1
+driver.rs	record_stmt_loc	stmt_loc_instance	-	FIELD:StmtLocRow.instance	1
+driver.rs	warn_code	ctx_here	-	ARG:scope_out	1
+driver.rs	warn_code	scope_out	self.ctx_here()	LOCAL:context#2	1
+driver.rs	warn_code_at	ctx_here	-	ARG:scope_out	1
+driver.rs	warn_code_at	scope_out	self.ctx_here()	LOCAL:context#2	1
 edge_gate.rs	decide_late_edges	SET	let reported	-	1
 edge_gate.rs	report_at	SET	param reported	-	1
 edge_gate.rs	verify_use_recs	SET	param reported	-	1
-elab_task.rs	elab_task_message	display_prefix	-	LOCAL:scope#2	1
-elab_task.rs	rtl_diag	cur_context	-	LOCAL:context#2	1
-expr_ctx.rs	push_expr	scope_chain_abs	-	ARG:self.expr_scopes.insert	1
-frames_body.rs	enter_frame_scope_root	SAVE:block_scope_root	.replace(root)	RET	1
-frames_body.rs	enter_frame_scope_root	frame_path	name	LOCAL:fp#3	1
-frames_body.rs	lower_frame_func_body	RESTORE:block_scope	= saved_block_scope	-	1
-frames_body.rs	lower_frame_func_body	RESTORE:block_scope_root	= saved_root	-	1
-frames_body.rs	lower_frame_func_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
-frames_body.rs	lower_frame_func_body	SAVE:block_scope_root	via enter_frame_scope_root(name)	LOCAL:saved_root#2	1
-frames_body.rs	lower_frame_func_body	enter_frame_scope_root	name	LOCAL:saved_root#2	1
-frames_body.rs	lower_frame_task_body	RESTORE:block_scope	= saved_block_scope	-	1
-frames_body.rs	lower_frame_task_body	RESTORE:block_scope_root	= saved_root	-	1
-frames_body.rs	lower_frame_task_body	SAVE:block_scope	mem::take(&mut self.block_scope)	LOCAL:saved_block_scope#2	1
-frames_body.rs	lower_frame_task_body	SAVE:block_scope_root	via enter_frame_scope_root(name)	LOCAL:saved_root#2	1
-frames_body.rs	lower_frame_task_body	enter_frame_scope_root	name	LOCAL:saved_root#2	1
-frames_reserve.rs	frame_path	display_of	&self.inst_prefix	LOCAL:inst#2	1
-frames_reserve.rs	frame_path	display_of	scope	LOCAL:d#2	1
-frames_reserve.rs	frame_path_of	frame_path	bare	RET	1
-frames_reserve.rs	frame_path_of	frame_path	key	RET	1
-frames_reserve.rs	reserve_frame_func	frame_path_of	name, &func.name.name	LOCAL:fp#2	1
-frames_reserve.rs	reserve_frame_func	push_func.m_path	fp <- self.frame_path_of(name, &func.name.name)	LOCAL:pushed#2	1
-frames_reserve.rs	reserve_frame_task	frame_path_of	name, &task.name.name	LOCAL:fp#2	1
-frames_reserve.rs	reserve_frame_task	push_func.m_path	fp <- self.frame_path_of(name, &task.name.name)	LOCAL:pushed#2	1
-generate.rs	display_prefix	display_of	self.lex.cur_prefix_text()	RET	1
-generate.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
+elab_task.rs	elab_task_message	disp_here	-	ARG:scope_out	1
+elab_task.rs	elab_task_message	scope_out	self.disp_here()	RECV:.as_bytes	1
+elab_task.rs	rtl_diag	ctx_here	-	ARG:scope_out	1
+elab_task.rs	rtl_diag	scope_out	self.ctx_here()	LOCAL:context#2	1
+expr_ctx.rs	push_expr	disp_chain_abs	-	ARG:self.expr_scopes.insert	1
+frames_body.rs	lower_frame_func_body	RESTORE:disp_chain	= saved_block_scope	-	1
+frames_body.rs	lower_frame_func_body	RESTORE:disp_root	= saved_root	-	1
+frames_body.rs	lower_frame_func_body	SAVE:disp_chain	.disp_chain_take(-)	LOCAL:saved_block_scope#2	1
+frames_body.rs	lower_frame_func_body	SAVE:disp_root	.disp_enter_frame_root(name)	LOCAL:saved_root#2	1
+frames_body.rs	lower_frame_task_body	RESTORE:disp_chain	= saved_block_scope	-	1
+frames_body.rs	lower_frame_task_body	RESTORE:disp_root	= saved_root	-	1
+frames_body.rs	lower_frame_task_body	SAVE:disp_chain	.disp_chain_take(-)	LOCAL:saved_block_scope#2	1
+frames_body.rs	lower_frame_task_body	SAVE:disp_root	.disp_enter_frame_root(name)	LOCAL:saved_root#2	1
+frames_reserve.rs	reserve_frame_func	disp_frame_path_of	name, &func.name.name	LOCAL:fp#2	1
+frames_reserve.rs	reserve_frame_func	push_func.m_path	fp <- self.disp_frame_path_of(name, &func.name.name)	LOCAL:pushed#2	1
+frames_reserve.rs	reserve_frame_task	disp_frame_path_of	name, &task.name.name	LOCAL:fp#2	1
+frames_reserve.rs	reserve_frame_task	push_func.m_path	fp <- self.disp_frame_path_of(name, &task.name.name)	LOCAL:pushed#2	1
 iface_inst.rs	elaborate_iface_instances	child_prefix	&item.name.name	LOCAL:path#7	1
-inline_task.rs	inline_static_task	RESTORE:block_scope	= saved_scope	-	1
-inline_task.rs	inline_static_task	RESTORE:block_scope_root	= saved_root	-	1
-inline_task.rs	inline_static_task	SAVE:block_scope	mem::replace(&mut self.block_scope, vec!(tname.to_string()))	LOCAL:saved_scope#2	1
-inline_task.rs	inline_static_task	SAVE:block_scope_root	.replace(decl_root)	LOCAL:saved_root#2	1
-inline_task.rs	inline_static_task	display_of	&self.inst_prefix	LOCAL:decl_root#2	1
+inline_task.rs	inline_static_task	RESTORE:disp_chain	= saved_scope	-	1
+inline_task.rs	inline_static_task	RESTORE:disp_root	= saved_root	-	1
+inline_task.rs	inline_static_task	SAVE:disp_chain	.disp_chain_swap_single(&tname)	LOCAL:saved_scope#2	1
+inline_task.rs	inline_static_task	SAVE:disp_root	.disp_root_swap_decl_inst(-)	LOCAL:saved_root#2	1
 instance.rs	elaborate_child_instances_inner	child_prefix	&item.name.name	LOCAL:child_path#2	1
 instance.rs	elaborate_instance	LIT:InstanceInfo	path=inst_path.to_string()	ARG:self.instances_info.push	1
 instance_array.rs	elaborate_instance_array	child_prefix	&format!("{iname}[{idx}]")	LOCAL:child_path#2	1
-net_util.rs	net_name_table	display_of	fq	ASSIGN:*slot	1
+lexscope/disp.rs	ctx_here	cur_context	-	ARG:wrap_ctx	1
+lexscope/disp.rs	cur_context	display_prefix	-	LOCAL:p#3	1
+lexscope/disp.rs	disp_chain_abs	scope_chain_abs	-	ARG:wrap_shown	1
+lexscope/disp.rs	disp_enter_frame_root	SAVE:disp_root	via enter_frame_scope_root(name)	ARG:wrap_root	1
+lexscope/disp.rs	disp_enter_frame_root	enter_frame_scope_root	name	ARG:wrap_root	1
+lexscope/disp.rs	disp_frame_path_of	frame_path_of	key, bare	ARG:wrap_shown	1
+lexscope/disp.rs	disp_here	display_prefix	-	ARG:wrap_shown	1
+lexscope/disp.rs	disp_inst_top	disp_inst_top_text	-	ARG:wrap_shown	1
+lexscope/disp.rs	disp_inst_top_text	display_of	&self.inst_prefix	RET	1
+lexscope/disp.rs	disp_root_swap_decl_inst	SAVE:disp_root	.replace(decl_root)	ARG:SavedRoot	1
+lexscope/disp.rs	disp_root_swap_decl_inst	display_of	&self.inst_prefix	LOCAL:decl_root#2	1
+lexscope/disp.rs	display_of_key_text	display_of	key	RET	1
+lexscope/disp.rs	display_prefix	display_of	self.lex.cur_prefix_text()	RET	1
+lexscope/disp.rs	enter_frame_scope_root	SAVE:disp_root	.replace(root)	RET	1
+lexscope/disp.rs	enter_frame_scope_root	frame_path	name	LOCAL:fp#3	1
+lexscope/disp.rs	frame_path	display_of	&self.inst_prefix	LOCAL:inst#2	1
+lexscope/disp.rs	frame_path	display_of	scope	LOCAL:d#2	1
+lexscope/disp.rs	frame_path_of	frame_path	bare	RET	1
+lexscope/disp.rs	frame_path_of	frame_path	key	RET	1
+lexscope/disp.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
+lexscope/disp.rs	stmt_loc_instance	scope_chain_abs	-	LOCAL:s#3	1
+lexscope/mod.rs	disp_chain_swap_single	SAVE:disp_chain	mem::replace(&mut self.disp_chain, vec!(seg.to_string()))	ARG:SavedChain	1
+lexscope/mod.rs	disp_chain_take	SAVE:disp_chain	mem::take(&mut self.disp_chain)	ARG:SavedChain	1
+lexscope/mod.rs	disp_class_method_swap	SAVE:disp_method	.replace(method)	ARG:SavedMethod	1
+lexscope/mod.rs	disp_root_swap_empty	SAVE:disp_root	.replace(String::new())	ARG:SavedRoot	1
+lexscope/mod.rs	scope_out	plain	-	RET	1
+net_util.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
 ports.rs	elaborate_virtual_iface	child_prefix	&inst	LOCAL:inst_path#2	1
 proc_ident.rs	push_cont_assign	LIT:ProcIdent	scope=self.lex.cur_prefix_text().to_string()	ARG:self.ca_idents.push	1
+read_set.rs	recompute_in_body_star_sites	scope_out	s.ctx.clone()	FIELD:Diagnostic.context	1
 stmt_flow.rs	lower_proc_block	LIT:ProcIdent	scope=self.lex.cur_prefix_text().to_string()	ASSIGN:self.pending_proc_ident	1
 stmt_flow.rs	push_process	LIT:ProcIdent	scope=self.lex.cur_prefix_text().to_string()	CLOSURE>ARG:self.pending_proc_ident.take().unwrap_or_else	1
-stmt_flow.rs	push_process	display_of	&self.inst_prefix	ARG:self.proc_inst_scopes.push	1
-stmt_flow.rs	push_process	display_prefix	-	ARG:self.proc_scopes.push	1
-stmt_flow.rs	push_stmt	scope_chain_abs	-	ARG:self.stmt_scopes.insert	1
-stmt_main.rs	lower_stmt_inner	cur_context	-	FIELD:StarSite.ctx	1
+stmt_flow.rs	push_process	disp_here	-	ARG:self.proc_scopes.push	1
+stmt_flow.rs	push_process	disp_inst_top	-	ARG:self.proc_inst_scopes.push	1
+stmt_flow.rs	push_stmt	disp_chain_abs	-	ARG:self.stmt_scopes.insert	1
+stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
 == HOUT_COUNTS
-# SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET)
-{"LIT": 5, "RESTORE": 9, "SAVE": 10, "SET": 3, "child_prefix": 4, "cur_context": 6, "display_of": 6, "display_prefix": 4, "enter_frame_scope_root": 2, "frame_path": 3, "frame_path_of": 2, "push_func.m_path": 3, "scope_chain_abs": 3}
+# SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
+# call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
+# enter_frame_scope_root, disp_root_swap_decl_inst, and disp_enter_frame_root's `via`) ; scope_out 13 = 5 LOCAL
+# (HC_LOCAL) + 3 fn-value + 2 tuple + 1 FIELD StmtLoc.instance + 1 FIELD Diagnostic.context + 1 RECV .as_bytes
+{"LIT": 5, "RESTORE": 9, "SAVE": 16, "SET": 3, "child_prefix": 4, "ctx_here": 6, "cur_context": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 13, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1413,7 +1444,6 @@ block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	RECV:.is_empty	1
 cont_array.rs	cont_assign_whole_array	cur_prefix_text	FIELD:WholeArrayCa.prefix	1
 cont_var.rs	record_var_cont_assign	cur_prefix_text	FIELD:VarContAssign.prefix	1
 dead_arm.rs	dead_reversed_select	cur_prefix_text	FIELD:DeadSelect.prefix	1
-driver.rs	cur_context	cur_prefix_text	RECV:.is_empty	1
 edge_gate.rs	push_edge	cur_prefix_text	FIELD:EdgeRec.prefix	1
 edge_gate.rs	push_use	cur_prefix_text	FIELD:UseRec.prefix	1
 events.rs	sens_event_net	cur_prefix_text	LOCAL:scope_text#2	1
@@ -1427,7 +1457,6 @@ frames_reserve.rs	reserve_frame_func	cur_prefix_text	MAC:format>LOCAL:key#2	1
 frames_reserve.rs	reserve_frame_func	cur_prefix_text	RECV:.is_empty	1
 frames_reserve.rs	reserve_frame_task	cur_prefix_text	MAC:format>LOCAL:key#2	1
 frames_reserve.rs	reserve_frame_task	cur_prefix_text	RECV:.is_empty	1
-generate.rs	display_prefix	cur_prefix_text	ARG:self.display_of	1
 generate.rs	elaborate_gen_item	cur_prefix_text	OTHER:tuple	1
 generate.rs	elaborate_gen_scoped	cur_prefix_text	OTHER:tuple	1
 generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
@@ -1470,8 +1499,11 @@ var_init.rs	in_block_local_scope	cur_prefix_text	RECV:.rsplit	1
 var_init.rs	scoped_init_key	cur_prefix_text	MAC:format>RET	1
 var_init.rs	scoped_init_key	cur_prefix_text	RECV:.is_empty	1
 var_init.rs	scoped_init_key	cur_prefix_text	RET	1
+net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 == HBR_COUNTS
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 68, "walk_rtn_scopes": 1}
+# LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
+# + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
+{"cur_gen_rtn_key": 2, "cur_prefix_text": 66, "display_of_key_text": 1, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1519,3 +1551,52 @@ sva_check.rs	materialize_sva_checkers	scope_swap_text	sva.scope.clone()	1
 var_init.rs	flush_block_local_inits	scope_swap_text	key	1
 == HC_ARGS_COUNTS
 {"scope_repoint": 4, "scope_swap_pkg": 2, "scope_swap_text": 21, "with_scope": 21}
+== HC_LOCAL
+# HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
+# scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called
+# nowhere outside lexscope. A sixth LOCAL row or a changed use count is a HOUT row too.
+scope_out_local=5 plain_outside=0
+== HOLDERS
+# HOLDERS (LS2-d ; DELTA9 J1 (3), J4): every struct field, enum variant field and fn signature
+# position (IN:<param>, RET) in crates/elaborate/src whose type names a lexscope type (Scopes,
+# Saved, ScopeWitness, Shown, ShownCtx, SavedChain, SavedRoot, SavedMethod, ScopeRef, ScopeKeyed,
+# ReportedAt), by (file, item, position, type) with a count. A new copy of a scope or of display
+# text is a new HOLDERS row or a new HOUT / HC row — there is no third place for it.
+file	item	position	type	count
+driver.rs	StmtLocRow.instance	FIELD	Shown	1
+frames_reserve.rs	Elaborator::push_func	IN:m_path	Shown	1
+lexscope/disp.rs	Elaborator::ctx_here	RET	ShownCtx	1
+lexscope/disp.rs	Elaborator::disp_chain_abs	RET	Shown	1
+lexscope/disp.rs	Elaborator::disp_enter_frame_root	RET	SavedRoot	1
+lexscope/disp.rs	Elaborator::disp_frame_path_of	RET	Shown	1
+lexscope/disp.rs	Elaborator::disp_here	RET	Shown	1
+lexscope/disp.rs	Elaborator::disp_inst_top	RET	Shown	1
+lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	1
+lexscope/disp.rs	Elaborator::stmt_loc_instance	RET	Shown	1
+lexscope/mod.rs	Scopes::disp_restore_chain	IN:saved	SavedChain	1
+lexscope/mod.rs	Scopes::disp_chain_swap_single	RET	SavedChain	1
+lexscope/mod.rs	Scopes::disp_chain_take	RET	SavedChain	1
+lexscope/mod.rs	Scopes::disp_class_method_swap	RET	SavedMethod	1
+lexscope/mod.rs	Scopes::disp_restore_method	IN:saved	SavedMethod	1
+lexscope/mod.rs	Scopes::disp_restore_root	IN:saved	SavedRoot	1
+lexscope/mod.rs	Scopes::disp_root_swap_empty	RET	SavedRoot	1
+lexscope/mod.rs	Scopes::new	RET	Scopes	1
+lexscope/mod.rs	Scopes::scope_enter	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_hold	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_restore	IN:saved	Saved	1
+lexscope/mod.rs	Scopes::scope_swap_empty	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_swap_pkg	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_swap_text	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_witness	RET	ScopeWitness	1
+lexscope/mod.rs	Scopes::scope_witness_check	IN:w	&ScopeWitness	1
+lexscope/mod.rs	shown_from_spelling	RET	Shown	1
+lexscope/mod.rs	wrap_ctx	RET	ShownCtx	1
+lexscope/mod.rs	wrap_root	RET	SavedRoot	1
+lexscope/mod.rs	wrap_shown	RET	Shown	1
+lib.rs	Elaborator.expr_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
+lib.rs	Elaborator.frame_func_names	FIELD	Vec<lexscope::Shown>	1
+lib.rs	Elaborator.lex	FIELD	lexscope::Scopes	1
+lib.rs	Elaborator.proc_inst_scopes	FIELD	Vec<lexscope::Shown>	1
+lib.rs	Elaborator.proc_scopes	FIELD	Vec<lexscope::Shown>	1
+lib.rs	Elaborator.stmt_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
+read_set.rs	StarSite.ctx	FIELD	ShownCtx	1

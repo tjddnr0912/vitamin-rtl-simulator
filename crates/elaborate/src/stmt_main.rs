@@ -668,7 +668,7 @@ impl Elaborator<'_> {
                 let pushed_scope = label
                     .as_ref()
                     .filter(|l| !l.name.starts_with('$'))
-                    .map(|l| self.block_scope.push(l.name.clone()))
+                    .map(|l| self.lex.disp_chain_push(l.name.clone()))
                     .is_some();
                 // DUP (round-5): if this block has `$blk$`-scoped locals, lower its
                 // body under the SAME segment the Nets-phase hoist used so a scoped
@@ -701,7 +701,7 @@ impl Elaborator<'_> {
                     }
                 }
                 if pushed_scope {
-                    self.block_scope.pop();
+                    self.lex.disp_chain_pop();
                 }
                 if let Some(exit) = exit {
                     self.disable_stack.pop();
@@ -927,7 +927,7 @@ impl Elaborator<'_> {
                                 .map(|c| (c.raw(), b.body[c.raw() as usize].stmts.clone())),
                             root,
                             loc: self.cur_location(),
-                            ctx: self.cur_context(),
+                            ctx: self.ctx_here(),
                         });
                         self.comb_read_set_in(
                             read_set::CallKeys::Process(self.cur_proc),
@@ -1062,7 +1062,7 @@ impl Elaborator<'_> {
                 let pushed_fork_scope = label
                     .as_ref()
                     .filter(|l| !l.name.starts_with('$'))
-                    .map(|l| self.block_scope.push(l.name.clone()))
+                    .map(|l| self.lex.disp_chain_push(l.name.clone()))
                     .is_some();
 
                 // fork-local decls share the enclosing scope in v1 (like begin-block
@@ -1125,7 +1125,7 @@ impl Elaborator<'_> {
                 // caller: exactly one open block, at the parent's continuation point.
                 b.start_block(resume_bb);
                 if pushed_fork_scope {
-                    self.block_scope.pop();
+                    self.lex.disp_chain_pop();
                 }
             }
             ast::Stmt::RandomizeWith {

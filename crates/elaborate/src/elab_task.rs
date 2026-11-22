@@ -85,8 +85,12 @@ impl Elaborator<'_> {
             match spec {
                 '%' => out.push(b'%'),
                 'm' | 'M' => {
-                    let scope = self.display_prefix();
-                    diag::fmt::push_justified(&mut out, scope.as_bytes(), field_width, left_just);
+                    diag::fmt::push_justified(
+                        &mut out,
+                        scope_out(self.disp_here()).as_bytes(),
+                        field_width,
+                        left_just,
+                    );
                 }
                 's' | 'S' => {
                     let a = args.get(ai)?;
@@ -214,7 +218,7 @@ impl Elaborator<'_> {
         if severity == Severity::Error && self.count_error_capped() {
             return;
         }
-        let (location, context) = (self.cur_location(), self.cur_context());
+        let (location, context) = (self.cur_location(), scope_out(self.ctx_here()));
         let d = Diagnostic::rtl(severity, code, text, location, context, None);
         self.sink.emit(LogEvent::Diagnostic(d));
     }

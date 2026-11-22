@@ -9,10 +9,17 @@
 //! (one probe per scope entry), and `Saved` / [`ScopeWitness`] carry the id. Debug builds
 //! check two things with `debug_assert*!` and nothing else: C-INTERN (the interner is a
 //! bijection) and C-PATH (after every entry the id's text is `cur_prefix`).
+//!
+//! The display chain (unit LS2-d) lives here too: the named-block label chain, the root it is
+//! spelled under and the class method being lowered are private fields of [`Scopes`], saved
+//! only as the move-only [`SavedChain`] / [`SavedRoot`] / [`SavedMethod`] ; display text made
+//! from a scope is a [`Shown`] / [`ShownCtx`], opaque, and leaves as plain data only through
+//! [`scope_out`] (the door's one text exit, its sinks counted by the home tests).
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, DefaultHasher};
 
+mod disp;
 mod elab;
 #[cfg(test)]
 mod tests;
@@ -30,6 +37,20 @@ pub(crate) struct Scopes {
     /// once per scope entry and never iterated, so no order of it can reach output ; the
     /// hasher has fixed keys, so a probe does the same work on every run.
     ids: HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>,
+    // §4.5.426: the named-block label chain in effect while lowering statements
+    // (pushed by the `Stmt::Block`/`Stmt::Fork` arms for a user label; replaced by
+    // `[task]` while an inline task body lowers; empty in a frame body), and the two
+    // sidecars it records into (`push_stmt` for a SysTask, the `$sformatf` lowering).
+    disp_chain: Vec<String>,
+    /// §4.5.435: the DECLARING scope the chain is rooted at while a subroutine body
+    /// lowers — the module instance (display spelling) for an inlined task, the
+    /// frame's own `<inst>.<name>` for a frame body; `None` = the process's own
+    /// scope (`display_prefix`). A recorded chain is absolute (`scope_chain_abs`).
+    disp_root: Option<String>,
+    /// §4.5.437: `<class>.<method>` while a class method body lowers — the
+    /// diagnostic context (`record_stmt_loc`) of a statement inside it, stored with
+    /// a leading `.` so the engine prefixes the calling process's scope.
+    disp_method: Option<String>,
 }
 
 /// A re-entry token: the scope that was current before an opener. Move-only ; consumed by
@@ -44,6 +65,97 @@ pub(crate) struct Saved {
 #[must_use]
 pub(crate) struct ScopeWitness {
     id: ScopeId,
+}
+
+/// Display / output text made from a scope (a `%m` path, an `[in …]` label, a frame's
+/// path): opaque. It leaves as plain text only through [`scope_out`].
+pub(crate) struct Shown(String);
+
+/// The diagnostic context of "here" (the `[in …]` frames): opaque. It leaves only through
+/// [`scope_out`].
+pub(crate) struct ShownCtx(Vec<diag::Frame>);
+
+/// A saved display label chain: move-only, restored by [`Scopes::disp_restore_chain`].
+#[must_use]
+pub(crate) struct SavedChain(Vec<String>);
+
+/// A saved display root: move-only, restored by [`Scopes::disp_restore_root`].
+#[must_use]
+pub(crate) struct SavedRoot(Option<String>);
+
+/// A saved class-method display text: move-only, restored by
+/// [`Scopes::disp_restore_method`].
+#[must_use]
+pub(crate) struct SavedMethod(Option<String>);
+
+/// The boundary: a value whose plain form leaves the module through [`scope_out`] (two
+/// impls: `Shown` -> `String`, `ShownCtx` -> `Vec<diag::Frame>`).
+pub(crate) trait Outgoing {
+    type Plain;
+    fn plain(self) -> Self::Plain;
+}
+
+impl Outgoing for Shown {
+    type Plain = String;
+    fn plain(self) -> String {
+        self.0
+    }
+}
+
+impl Outgoing for ShownCtx {
+    type Plain = Vec<diag::Frame>;
+    fn plain(self) -> Vec<diag::Frame> {
+        self.0
+    }
+}
+
+/// THE one way text made from a scope leaves as plain data (a sidecar, a diagnostic's
+/// context, a `%m` byte string): it consumes the opaque value.
+pub(crate) fn scope_out<T: Outgoing>(t: T) -> T::Plain {
+    t.plain()
+}
+
+/// The one text -> `Shown` entry: a display text the caller spells itself (a class
+/// method's `<class>.<method>`), made from no scope.
+pub(crate) fn shown_from_spelling(s: String) -> Shown {
+    Shown(s)
+}
+
+/// The shims' wrappers (private): a display text, a context, a saved root.
+fn wrap_shown(s: String) -> Shown {
+    Shown(s)
+}
+
+fn wrap_ctx(v: Vec<diag::Frame>) -> ShownCtx {
+    ShownCtx(v)
+}
+
+fn wrap_root(r: Option<String>) -> SavedRoot {
+    SavedRoot(r)
+}
+
+impl Clone for Shown {
+    fn clone(&self) -> Self {
+        Shown(self.0.clone())
+    }
+}
+
+impl Clone for ShownCtx {
+    fn clone(&self) -> Self {
+        ShownCtx(self.0.clone())
+    }
+}
+
+impl std::fmt::Debug for Shown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Shown(..)")
+    }
+}
+
+impl std::fmt::Debug for ShownCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ShownCtx(..)")
+    }
 }
 
 impl Drop for Saved {
@@ -78,6 +190,13 @@ macro_rules! zn {
 zn!(Scopes: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
 zn!(Saved: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
 zn!(ScopeWitness: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
+zn!(SavedChain: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
+zn!(SavedRoot: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
+zn!(SavedMethod: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default);
+zn!(Shown: PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, Copy,
+    AsRef<str>, core::borrow::Borrow<str>, core::ops::Deref<Target = str>, Into<String>);
+zn!(ShownCtx: PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, Copy, Default,
+    IntoIterator);
 
 impl Scopes {
     /// The empty current scope (the Elaborator's initial value).
@@ -87,6 +206,9 @@ impl Scopes {
             cur: ScopeId(0),
             names: Vec::new(),
             ids: HashMap::default(),
+            disp_chain: Vec::new(),
+            disp_root: None,
+            disp_method: None,
         };
         s.cur = s.intern("");
         s.c_path();
@@ -171,6 +293,65 @@ impl Scopes {
             self.cur.0, w.id.0,
             "the current scope moved since its witness was taken"
         );
+    }
+
+    /// The display chain is saved and emptied (a frame / class-method body is its own `%m`
+    /// scope).
+    pub(crate) fn disp_chain_take(&mut self) -> SavedChain {
+        SavedChain(std::mem::take(&mut self.disp_chain))
+    }
+
+    /// The display chain is saved and becomes the one label `seg` (an inlined task body).
+    pub(crate) fn disp_chain_swap_single(&mut self, seg: &str) -> SavedChain {
+        SavedChain(std::mem::replace(
+            &mut self.disp_chain,
+            vec![seg.to_string()],
+        ))
+    }
+
+    /// A user block label joins the display chain.
+    pub(crate) fn disp_chain_push(&mut self, label: String) {
+        self.disp_chain.push(label);
+    }
+
+    /// The innermost label leaves the display chain.
+    pub(crate) fn disp_chain_pop(&mut self) {
+        self.disp_chain.pop();
+    }
+
+    /// Whether no block label is in the display chain.
+    pub(crate) fn disp_chain_is_empty(&self) -> bool {
+        self.disp_chain.is_empty()
+    }
+
+    /// Closer: the display chain `saved` was taken from is in effect again.
+    pub(crate) fn disp_restore_chain(&mut self, saved: SavedChain) {
+        self.disp_chain = saved.0;
+    }
+
+    /// The display root is saved and becomes the empty root (a class method body).
+    pub(crate) fn disp_root_swap_empty(&mut self) -> SavedRoot {
+        SavedRoot(self.disp_root.replace(String::new()))
+    }
+
+    /// Closer: the display root `saved` was taken from is in effect again.
+    pub(crate) fn disp_restore_root(&mut self, saved: SavedRoot) {
+        self.disp_root = saved.0;
+    }
+
+    /// The class-method display text is saved and becomes `method` (`<class>.<method>`).
+    pub(crate) fn disp_class_method_swap(&mut self, method: String) -> SavedMethod {
+        SavedMethod(self.disp_method.replace(method))
+    }
+
+    /// Whether no class method body is being lowered.
+    pub(crate) fn class_method_is_none(&self) -> bool {
+        self.disp_method.is_none()
+    }
+
+    /// Closer: the class-method display text `saved` was taken from is in effect again.
+    pub(crate) fn disp_restore_method(&mut self, saved: SavedMethod) {
+        self.disp_method = saved.0;
     }
 
     /// The id of `text`, interned on first sight (ids are never freed).

@@ -2466,8 +2466,16 @@ const SEG_METHODS: &[&str] = &[
 ];
 /// HSEG: the methods whose non-literal argument is a text-ancestry test or cut.
 const SEG_DYN: &[&str] = &["starts_with", "strip_prefix", "ends_with", "strip_suffix"];
-/// HD: the display-chain fields (DELTA6 F1).
-const DISPLAY_FIELDS: &[&str] = &["block_scope", "block_scope_root", "cur_class_method"];
+/// HD: the display-chain fields (DELTA6 F1) — the Elaborator's three until LS2-d, and their
+/// names inside `lexscope::Scopes` from LS2-d on (`disp_chain`, `disp_root`, `disp_method`).
+const DISPLAY_FIELDS: &[&str] = &[
+    "block_scope",
+    "block_scope_root",
+    "cur_class_method",
+    "disp_chain",
+    "disp_root",
+    "disp_method",
+];
 /// HD: a method that mutates its receiver (census_fields.rs MUT).
 const HD_MUT: &[&str] = &[
     "push",
@@ -5426,6 +5434,14 @@ fn hf_the_write_sites_shapes_are_pinned() {
 
 /// The fns whose result is display / child-prefix text (DELTA9 J4 + DELTA10 L5's
 /// `enter_frame_scope_root`).
+///
+/// LS2-d (DELTA10 L2, DELTA11 N-1 N-2): the six display fns and `enter_frame_scope_root` are
+/// private to `lexscope` ; the outside calls the typed shims (`disp_here`, `disp_inst_top`,
+/// `disp_chain_abs`, `ctx_here`, `disp_frame_path_of`, `disp_enter_frame_root`), LEAVE L4
+/// `display_of_key_text`, the two fragment entries, the one text -> Shown entry
+/// `shown_from_spelling` and the door's one text exit `scope_out` (a call or the fn as a value
+/// handed to `map`) ; a `.plain()` call (no argument) is the exit's trait method, counted
+/// beside them (0 outside the module: HC).
 const HOUT_CALLEES: &[&str] = &[
     "display_prefix",
     "display_of",
@@ -5435,6 +5451,31 @@ const HOUT_CALLEES: &[&str] = &[
     "cur_context",
     "child_prefix",
     "enter_frame_scope_root",
+    "disp_here",
+    "disp_inst_top",
+    "disp_inst_top_text",
+    "disp_chain_abs",
+    "ctx_here",
+    "disp_frame_path_of",
+    "display_of_key_text",
+    "stmt_loc_instance",
+    "shown_from_spelling",
+    "scope_out",
+];
+/// LS2-d: the entries whose return is a SAVE of a display field (`SavedChain` / `SavedRoot`
+/// / `SavedMethod`), with the field, and the restore entries, with theirs.
+const HOUT_SAVE_ENTRIES: &[(&str, &str)] = &[
+    ("disp_chain_take", "disp_chain"),
+    ("disp_chain_swap_single", "disp_chain"),
+    ("disp_root_swap_empty", "disp_root"),
+    ("disp_enter_frame_root", "disp_root"),
+    ("disp_root_swap_decl_inst", "disp_root"),
+    ("disp_class_method_swap", "disp_method"),
+];
+const HOUT_RESTORE_ENTRIES: &[(&str, &str)] = &[
+    ("disp_restore_chain", "disp_chain"),
+    ("disp_restore_root", "disp_root"),
+    ("disp_restore_method", "disp_method"),
 ];
 /// The struct literals whose scope field is pinned, with that field.
 const HOUT_LITS: &[(&str, &str)] = &[
@@ -5532,8 +5573,13 @@ struct HoutW {
 }
 
 fn display_field_of(e: &Expr) -> Option<String> {
+    // `<recv>.F`, or (LS2-d, the fields inside `lexscope::Scopes`) `<recv>.lex.F`
+    let lex_base = |b: &Expr| {
+        matches!(b, Expr::Field(l) if is_recv(&l.base)
+            && matches!(&l.member, syn::Member::Named(n) if n == "lex"))
+    };
     match e {
-        Expr::Field(f) if is_recv(&f.base) => match &f.member {
+        Expr::Field(f) if is_recv(&f.base) || lex_base(&f.base) => match &f.member {
             syn::Member::Named(n) if DISPLAY_FIELDS.contains(&n.to_string().as_str()) => {
                 Some(n.to_string())
             }
@@ -5622,6 +5668,20 @@ impl HoutW {
                 }
                 if HOUT_CALLEES.contains(&name.as_str()) {
                     self.rows.push((name.clone(), args.clone(), ctx.clone()));
+                }
+                if name == "plain" && m.args.is_empty() {
+                    self.rows.push(("plain".into(), "-".into(), ctx.clone()));
+                }
+                if let Some((_, f)) = HOUT_SAVE_ENTRIES.iter().find(|(n, _)| *n == name) {
+                    self.rows
+                        .push((format!("SAVE:{f}"), format!(".{name}({args})"), ctx.clone()));
+                }
+                if let Some((_, f)) = HOUT_RESTORE_ENTRIES.iter().find(|(n, _)| *n == name) {
+                    if let [Expr::Path(p)] = m.args.iter().collect::<Vec<_>>().as_slice() {
+                        if let Some(i) = p.path.get_ident() {
+                            self.assigns.push((f.to_string(), i.to_string()));
+                        }
+                    }
                 }
                 if let Some(f) = display_field_of(&m.receiver) {
                     if name == "replace" || name == "take" {
@@ -5801,6 +5861,19 @@ impl HoutW {
             Expr::Tuple(t) => {
                 for x in &t.elems {
                     self.expr(x, &Sk::Other("tuple"));
+                }
+            }
+            // LS2-d: a watched fn handed on as a value (`.map(scope_out)`), not in a callee
+            // position (a call's callee is walked with `Other("callee")`)
+            Expr::Path(p) if !matches!(ctx, Sk::Other("callee")) => {
+                let last = p
+                    .path
+                    .segments
+                    .last()
+                    .map(|x| x.ident.to_string())
+                    .unwrap_or_default();
+                if p.path.segments.len() == 1 && last == "scope_out" {
+                    self.rows.push((last, "fn-value".into(), ctx.clone()));
                 }
             }
             other => {
@@ -6049,6 +6122,30 @@ fn hout_the_display_outputs_are_pinned() {
             tables::get("HOUT_COUNTS")
         ));
     }
+    // HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the door's text exit by its sink. The LOCAL
+    // rows of `scope_out` are pinned 5 — the four `let context` of driver.rs's error / note_at /
+    // warn_code / warn_code_at and rtl_diag's tuple `let` — each local used once more, as a
+    // Diagnostic's `context` ; `plain`, the exit's trait method, has no call outside lexscope.
+    let mut hc_local = 0usize;
+    let mut plain_out = 0usize;
+    for (k, n) in &rows {
+        let c: Vec<&str> = k.split('\t').collect();
+        if c.len() == 5 && c[2] == "scope_out" && c[4].starts_with("LOCAL:") {
+            hc_local += n;
+        }
+        if c.len() == 5 && c[2] == "plain" && !c[0].starts_with("lexscope/") {
+            plain_out += n;
+        }
+    }
+    let hc = format!("scope_out_local={hc_local} plain_outside={plain_out}");
+    if hc != tables::get("HC_LOCAL") {
+        msgs.push(format!(
+            "HC LOCAL table [{}] now [{hc}] — a LOCAL sink of `scope_out` other than the five pinned \
+             `context` locals, or a call of `plain` outside lexscope, is text leaving the door \
+             unpinned: put the call in its sink's argument, or name the unit and re-pin",
+            tables::get("HC_LOCAL")
+        ));
+    }
     finish("HOUT", &msgs);
 }
 
@@ -6222,9 +6319,12 @@ fn hdbg_the_debug_only_code_is_pinned() {
 
 #[test]
 fn hbr_the_bridge_reads_are_pinned() {
-    // the bridge entries = LEAVE's items (L1 the text bridge, L2 / L3 residue R)
+    // the bridge entries = LEAVE's items (L1 the text bridge, L2 / L3 residue R, L4 the key
+    // text window w6 from LS2-d) ; not L0, the BOUNDARY `scope_out` / `Outgoing::plain`, whose
+    // call sites are HC's (HOUT's rows with their SINK and HC_LOCAL ; DELTA10 L1)
     let mut entries: Vec<String> = surf_rows("SURF_LEAVE")
         .iter()
+        .filter(|r| r[0] != "L0")
         .map(|r| item_simple(&r[1]))
         .collect();
     entries.sort();
@@ -6408,6 +6508,161 @@ fn hc_args_the_to_scope_arguments_are_pinned() {
         ));
     }
     finish("HC_ARGS", &msgs);
+}
+
+// =====================================================================================
+// HOLDERS — who holds a lexscope type (§5.2 Q-LEXSCOPE LS2-d: DELTA9 J1 (3), J4)
+// =====================================================================================
+
+/// The lexscope types a holder is pinned for (SURF_VOCAB's struct names).
+const HOLDER_TYPES: &[&str] = &[
+    "Scopes",
+    "Saved",
+    "ScopeWitness",
+    "Shown",
+    "ShownCtx",
+    "SavedChain",
+    "SavedRoot",
+    "SavedMethod",
+    "ScopeRef",
+    "ScopeKeyed",
+    "ReportedAt",
+];
+
+/// Every struct field, enum variant field and fn signature position (a typed parameter, the
+/// return) of crates/elaborate/src whose type names a lexscope type, by (file, item,
+/// position, type) with a count ; a `#[cfg(test)]` item is not read.
+fn holders_census() -> BTreeMap<String, usize> {
+    struct W<'o> {
+        file: &'o str,
+        owner: Vec<String>,
+        out: &'o mut BTreeMap<String, usize>,
+    }
+    impl W<'_> {
+        fn ty(&mut self, item: &str, pos: &str, t: &syn::Type) {
+            let ids = type_idents(t);
+            if ids.iter().any(|i| HOLDER_TYPES.contains(&i.as_str())) {
+                *self
+                    .out
+                    .entry(format!("{}\t{item}\t{pos}\t{}", self.file, type_str(t)))
+                    .or_default() += 1;
+            }
+        }
+        fn sig(&mut self, sig: &syn::Signature) {
+            let item = match self.owner.last() {
+                Some(o) => format!("{o}::{}", sig.ident),
+                None => sig.ident.to_string(),
+            };
+            for a in &sig.inputs {
+                if let syn::FnArg::Typed(pt) = a {
+                    let mut n = Vec::new();
+                    pat_names(&pt.pat, &mut n);
+                    self.ty(&item, &format!("IN:{}", n.join(",")), &pt.ty);
+                }
+            }
+            if let syn::ReturnType::Type(_, t) = &sig.output {
+                self.ty(&item, "RET", t);
+            }
+        }
+        fn fields(&mut self, item: &str, f: &syn::Fields) {
+            for (i, fd) in f.iter().enumerate() {
+                let n = fd
+                    .ident
+                    .as_ref()
+                    .map(|x| x.to_string())
+                    .unwrap_or_else(|| i.to_string());
+                self.ty(&format!("{item}.{n}"), "FIELD", &fd.ty);
+            }
+        }
+    }
+    impl<'a> Visit<'a> for W<'_> {
+        fn visit_item(&mut self, it: &'a syn::Item) {
+            let attrs: &[syn::Attribute] = match it {
+                syn::Item::Mod(m) => &m.attrs,
+                syn::Item::Fn(f) => &f.attrs,
+                syn::Item::Impl(i) => &i.attrs,
+                syn::Item::Struct(s) => &s.attrs,
+                syn::Item::Enum(e) => &e.attrs,
+                _ => &[],
+            };
+            if has_cfg_test(attrs) {
+                return;
+            }
+            visit::visit_item(self, it);
+        }
+        fn visit_item_struct(&mut self, s: &'a syn::ItemStruct) {
+            self.fields(&s.ident.to_string(), &s.fields);
+        }
+        fn visit_item_enum(&mut self, e: &'a syn::ItemEnum) {
+            for v in &e.variants {
+                self.fields(&format!("{}::{}", e.ident, v.ident), &v.fields);
+            }
+        }
+        fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+            let o = match &*i.self_ty {
+                syn::Type::Path(p) => p
+                    .path
+                    .segments
+                    .last()
+                    .map(|x| x.ident.to_string())
+                    .unwrap_or_default(),
+                t => type_str(t),
+            };
+            self.owner.push(o);
+            visit::visit_item_impl(self, i);
+            self.owner.pop();
+        }
+        fn visit_item_trait(&mut self, t: &'a syn::ItemTrait) {
+            self.owner.push(t.ident.to_string());
+            visit::visit_item_trait(self, t);
+            self.owner.pop();
+        }
+        fn visit_signature(&mut self, sig: &'a syn::Signature) {
+            self.sig(sig);
+        }
+    }
+    let srcs = load_src();
+    let mut out = BTreeMap::new();
+    for s in &srcs {
+        W {
+            file: &s.rel,
+            owner: Vec::new(),
+            out: &mut out,
+        }
+        .visit_file(&s.file);
+    }
+    out
+}
+
+#[test]
+fn holders_the_lexscope_types_holders_are_pinned() {
+    let rows = holders_census();
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HOLDERS", "file\titem\tposition\ttype\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HOLDERS")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HOLDERS table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    let msgs = diff_rows(
+        "HOLDERS",
+        &got,
+        &want,
+        "a new holder of a lexscope type (a field, a variant field, a parameter or a return): a new copy \
+         of a scope or of display text has its row here or in HOUT / HC, no third place — name the unit, \
+         add the row",
+        "a holder is gone: name the unit, remove the row",
+    );
+    finish("HOLDERS", &msgs);
 }
 
 mod tables {

@@ -283,7 +283,7 @@ impl Elaborator<'_> {
         for (fq, &id) in &self.symbols {
             if let Some(slot) = names.get_mut(id as usize) {
                 if slot.is_empty() {
-                    *slot = self.display_of(fq);
+                    *slot = self.display_of_key_text(fq);
                 }
             }
         }
