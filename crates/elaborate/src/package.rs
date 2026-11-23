@@ -362,11 +362,11 @@ fn imports_adjacent(first: Option<usize>, second: Option<usize>) -> bool {
 /// [`Elaborator::apply_import_consts`].
 fn wildcard_prior(
     wc_origin: &WildcardOrigins,
-    key: &str,
+    key: &NewKey,
     pkg: &str,
     site: ImportSite,
 ) -> WildcardPrior {
-    let Some((prev, prev_seg)) = wc_origin.get(key) else {
+    let Some((prev, prev_seg)) = wc_origin.get_new(key) else {
         return WildcardPrior::Fresh;
     };
     let adjacent = imports_adjacent(*prev_seg, site.seg());
@@ -650,19 +650,19 @@ impl Elaborator<'_> {
         // fold under a synthetic scope so the package's own params resolve
         // while folding later ones (`localparam L2 = W * 2`).
         let saved_prefix = self.lex.scope_swap_pkg(&pkg);
-        let mut saved: Vec<(String, Option<i64>)> = Vec::new();
+        let mut saved: Vec<(NewKey, Option<i64>)> = Vec::new();
         // Parallel to `saved`: param_meta entries for THIS package's params, made
         // live during the fold so an intra-package alias/expression resolves a
         // sibling param's (width, signed), then restored (no cross-scope pollution).
-        let mut saved_meta: Vec<(String, Option<(u32, bool)>)> = Vec::new();
+        let mut saved_meta: Vec<(NewKey, Option<(u32, bool)>)> = Vec::new();
         // §3 ⑨: the string / real twins of `saved`+`consts`. Same two jobs — made LIVE
         // during this package's fold so an intra-package sibling reference resolves
         // (`parameter real R2 = R*2.0;`, `parameter SI = (S=="AUTO") ? "RED" : S;`), then
         // restored so a module-scope name of the same spelling is untouched; and
         // collected for the flush into the per-package maps the readers consult.
-        let mut saved_real: Vec<(String, Option<f64>)> = Vec::new();
-        let mut saved_str: Vec<(String, Option<String>)> = Vec::new();
-        let mut saved_wide: Vec<(String, Option<ir::ConstVal>)> = Vec::new();
+        let mut saved_real: Vec<(NewKey, Option<f64>)> = Vec::new();
+        let mut saved_str: Vec<(NewKey, Option<String>)> = Vec::new();
+        let mut saved_wide: Vec<(NewKey, Option<ir::ConstVal>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
         let mut real_vals: BTreeMap<String, f64> = BTreeMap::new();
         let mut str_vals: BTreeMap<String, String> = BTreeMap::new();
@@ -688,7 +688,7 @@ impl Elaborator<'_> {
         // above, so an intra-package sibling (`parameter Q = W[7:0];`) folds. Same
         // save/restore discipline: a module-scope name of the same spelling must not
         // inherit this package's declared range.
-        let mut saved_range: Vec<(String, Option<DeclRange>)> = Vec::new();
+        let mut saved_range: Vec<(NewKey, Option<DeclRange>)> = Vec::new();
         let mut vars: BTreeMap<String, u32> = BTreeMap::new();
         // GAP-G: const array-parameter element values for this package (name →
         // elements), the package-scope twin of `array_const_vals`. Flushed into
@@ -776,7 +776,7 @@ impl Elaborator<'_> {
                             ),
                         );
                     }
-                    let key = self.fq(&p.name.name);
+                    let key = self.lex.new_key(&p.name.name);
                     param_names.insert(p.name.name.clone());
                     // §3 ⑨: this was the FOURTH copy of the parameter-declaration fold
                     // and the only one that never learned the string / real domains, so
@@ -968,12 +968,12 @@ impl Elaborator<'_> {
                             // auto-increment (twin of the module-scope and body-local
                             // enum loops).
                             next = v.wrapping_add(1);
-                            let key = self.fq(&l.name.name);
+                            let key = self.lex.new_key(&l.name.name);
                             // Capture the prior range BEFORE binding — `bind_param_value`
                             // clears it, so this is the only moment it can be saved, and
                             // the restore list must hold the prior state and not a blanket
                             // "remove" (the same discipline as the parameter arm above).
-                            let prev_range = self.param_range.get(&key).copied();
+                            let prev_range = self.param_range.get_new(&key).copied();
                             let prev = self.bind_param_value(key.clone(), v);
                             // The declared range travels with the label the way it
                             // travels with a package parameter, so `pk::EA[7:0]` and the
@@ -1116,12 +1116,12 @@ impl Elaborator<'_> {
             self.lex.cur_prefix_text(),
             saved
                 .iter()
-                .map(|(k, _)| k)
-                .chain(saved_meta.iter().map(|(k, _)| k))
-                .chain(saved_real.iter().map(|(k, _)| k))
-                .chain(saved_str.iter().map(|(k, _)| k))
-                .chain(saved_wide.iter().map(|(k, _)| k))
-                .chain(saved_range.iter().map(|(k, _)| k)),
+                .map(|(k, _)| key_text(k))
+                .chain(saved_meta.iter().map(|(k, _)| key_text(k)))
+                .chain(saved_real.iter().map(|(k, _)| key_text(k)))
+                .chain(saved_str.iter().map(|(k, _)| key_text(k)))
+                .chain(saved_wide.iter().map(|(k, _)| key_text(k)))
+                .chain(saved_range.iter().map(|(k, _)| key_text(k))),
         );
         for (k, prev) in saved.into_iter().rev() {
             match prev {
@@ -1345,7 +1345,7 @@ impl Elaborator<'_> {
     pub(crate) fn apply_import_consts(
         &mut self,
         imp: &ast::ImportDecl,
-        saved_params: &mut Vec<(String, Option<i64>)>,
+        saved_params: &mut Vec<(NewKey, Option<i64>)>,
         wc_origin: &mut WildcardOrigins,
         explicit_imports: &mut ExplicitImports,
         local_names: &std::collections::BTreeSet<String>,
@@ -1393,9 +1393,9 @@ impl Elaborator<'_> {
                     if local_names.contains(&name) {
                         continue;
                     }
-                    let key = self.fq(&name);
+                    let key = self.lex.new_key(&name);
                     // An explicit import of this name always wins — skip the wildcard.
-                    if explicit_imports.contains_key(&key) {
+                    if explicit_imports.contains_new(&key) {
                         continue;
                     }
                     match wildcard_prior(wc_origin, &key, pkg, site) {
@@ -1420,13 +1420,13 @@ impl Elaborator<'_> {
                         WildcardPrior::Other { adjacent } => {
                             let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
-                            if self.pkg_var_aliases.remove(&key).is_some() {
-                                self.symbols.remove(&key);
+                            if self.pkg_var_aliases.remove_new(&key).is_some() {
+                                self.symbols.remove_new(&key);
                             }
                             if adjacent {
                                 self.clear_wide_raw(&key);
                             }
-                            wc_origin.insert(key, (String::new(), scope_seg));
+                            wc_origin.insert_new(key, (String::new(), scope_seg));
                         }
                         // Same package re-import: idempotent, keep the binding.
                         WildcardPrior::SamePackage => {}
@@ -1443,9 +1443,9 @@ impl Elaborator<'_> {
                             // same key.
                             self.bind_param_range(&key, rng);
                             if let Some(ty) = pkg_labels.get(&name) {
-                                self.enum_label_types.insert(key.clone(), ty.clone());
+                                self.enum_label_types.insert_new(key.clone(), ty.clone());
                             }
-                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
+                            wc_origin.insert_new(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1462,8 +1462,8 @@ impl Elaborator<'_> {
                     if local_names.contains(&name) {
                         continue;
                     }
-                    let key = self.fq(&name);
-                    if explicit_imports.contains_key(&key) {
+                    let key = self.lex.new_key(&name);
+                    if explicit_imports.contains_new(&key) {
                         continue;
                     }
                     match wildcard_prior(wc_origin, &key, pkg, site) {
@@ -1480,11 +1480,11 @@ impl Elaborator<'_> {
                             if adjacent {
                                 let prev_val = self.unbind_param(&key);
                                 saved_params.push((key.clone(), prev_val));
-                                if self.pkg_var_aliases.remove(&key).is_some() {
-                                    self.symbols.remove(&key);
+                                if self.pkg_var_aliases.remove_new(&key).is_some() {
+                                    self.symbols.remove_new(&key);
                                 }
                             }
-                            wc_origin.insert(key, (String::new(), scope_seg));
+                            wc_origin.insert_new(key, (String::new(), scope_seg));
                         }
                         WildcardPrior::SamePackage => {}
                         WildcardPrior::Fresh => {
@@ -1497,7 +1497,7 @@ impl Elaborator<'_> {
                             {
                                 self.set_meta(key.clone(), m);
                             }
-                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
+                            wc_origin.insert_new(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1514,8 +1514,8 @@ impl Elaborator<'_> {
                     if local_names.contains(&name) {
                         continue;
                     }
-                    let key = self.fq(&name);
-                    if explicit_imports.contains_key(&key) {
+                    let key = self.lex.new_key(&name);
+                    if explicit_imports.contains_new(&key) {
                         continue;
                     }
                     match wildcard_prior(wc_origin, &key, pkg, site) {
@@ -1525,13 +1525,13 @@ impl Elaborator<'_> {
                         WildcardPrior::Other { adjacent } => {
                             let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
-                            if self.pkg_var_aliases.remove(&key).is_some() {
-                                self.symbols.remove(&key);
+                            if self.pkg_var_aliases.remove_new(&key).is_some() {
+                                self.symbols.remove_new(&key);
                             }
                             if adjacent {
                                 self.clear_wide_raw(&key);
                             }
-                            wc_origin.insert(key, (String::new(), scope_seg));
+                            wc_origin.insert_new(key, (String::new(), scope_seg));
                         }
                         WildcardPrior::SamePackage => {}
                         WildcardPrior::Fresh => {
@@ -1542,16 +1542,16 @@ impl Elaborator<'_> {
                             // is bound between the two import passes since
                             // §4.5.415, so it may not be in `params` yet): local
                             // constant wins the wildcard (iverilog local-wins pin).
-                            if self.params.contains_key(&key)
-                                || (self.symbols.contains_key(&key)
-                                    && !self.pkg_var_aliases.contains_key(&key))
+                            if self.params.contains_new(&key)
+                                || (self.symbols.contains_new(&key)
+                                    && !self.pkg_var_aliases.contains_new(&key))
                             {
                                 continue;
                             }
-                            self.symbols.insert(key.clone(), net);
+                            self.symbols.insert_new(key.clone(), net);
                             self.pkg_var_aliases
-                                .insert(key.clone(), (pkg.to_string(), false));
-                            wc_origin.insert(key, (pkg.to_string(), scope_seg));
+                                .insert_new(key.clone(), (pkg.to_string(), false));
+                            wc_origin.insert_new(key, (pkg.to_string(), scope_seg));
                         }
                     }
                 }
@@ -1602,7 +1602,7 @@ impl Elaborator<'_> {
                 // package twice stays idempotent (all three tools run it), and a
                 // `$unit` import is an outer scope this one's import replaces, never a
                 // collision (the recorded `same_scope` flag).
-                let key = self.fq(&sym.name);
+                let key = self.lex.new_key(&sym.name);
                 let offers_value = self
                     .pkg_wide_bits
                     .get(pkg)
@@ -1613,7 +1613,7 @@ impl Elaborator<'_> {
                         .get(pkg)
                         .is_some_and(|m| m.contains_key(&sym.name));
                 if same_scope && offers_value {
-                    if let Some((prev, true)) = explicit_imports.get(&key) {
+                    if let Some((prev, true)) = explicit_imports.get_new(&key) {
                         if prev != pkg {
                             let prev = prev.clone();
                             self.error(
@@ -1653,13 +1653,15 @@ impl Elaborator<'_> {
                     // local declaration of the name never reaches here (the
                     // `local_names` conflict above). Read before this import records
                     // itself.
-                    let import_bound = wc_origin.contains_key(&key)
-                        || explicit_imports.get(&key).is_some_and(|(_, same)| !*same);
-                    explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
-                    if self.pkg_var_aliases.remove(&key).is_some() {
-                        self.symbols.remove(&key);
+                    let import_bound = wc_origin.contains_new(&key)
+                        || explicit_imports
+                            .get_new(&key)
+                            .is_some_and(|(_, same)| !*same);
+                    explicit_imports.insert_new(key.clone(), (pkg.to_string(), same_scope));
+                    if self.pkg_var_aliases.remove_new(&key).is_some() {
+                        self.symbols.remove_new(&key);
                     }
-                    if import_bound && self.params.contains_key(&key) {
+                    if import_bound && self.params.contains_new(&key) {
                         let prev = self.unbind_param(&key);
                         saved_params.push((key.clone(), prev));
                     }
@@ -1673,12 +1675,12 @@ impl Elaborator<'_> {
                     }
                     self.set_wide_raw(key, cv);
                 } else if let Some(&v) = consts.get(&sym.name) {
-                    explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
+                    explicit_imports.insert_new(key.clone(), (pkg.to_string(), same_scope));
                     // A2b-prereq S4 (symmetric): an explicit CONST import wins
                     // over a prior wildcard VARIABLE binding (§26.8) — drop the
                     // now-dead alias so no write path can still reach it.
-                    if self.pkg_var_aliases.remove(&key).is_some() {
-                        self.symbols.remove(&key);
+                    if self.pkg_var_aliases.remove_new(&key).is_some() {
+                        self.symbols.remove_new(&key);
                     }
                     // Bare-imported read materializes at the declared width (the
                     // pkg twin of a local param's `param_meta` entry).
@@ -1700,7 +1702,7 @@ impl Elaborator<'_> {
                     let prev = self.bind_param_value(key.clone(), v);
                     self.bind_param_range(&key, rng);
                     if let Some(ty) = pkg_labels.get(&sym.name) {
-                        self.enum_label_types.insert(key.clone(), ty.clone());
+                        self.enum_label_types.insert_new(key.clone(), ty.clone());
                     }
                     saved_params.push((key, prev));
                 } else if let Some(&net) = self.pkg_vars.get(pkg).and_then(|m| m.get(&sym.name)) {
@@ -1711,10 +1713,11 @@ impl Elaborator<'_> {
                     // same conflict, just discovered in the other order — but a
                     // prior WILDCARD binding (const or var, S4) is not a local
                     // declaration: the explicit import wins (§26.8).
-                    let wildcard_bound = wc_origin.get(&key).is_some_and(|(p, _)| !p.is_empty());
-                    if (self.params.contains_key(&key) && !wildcard_bound)
-                        || (self.symbols.contains_key(&key)
-                            && !self.pkg_var_aliases.contains_key(&key))
+                    let wildcard_bound =
+                        wc_origin.get_new(&key).is_some_and(|(p, _)| !p.is_empty());
+                    if (self.params.contains_new(&key) && !wildcard_bound)
+                        || (self.symbols.contains_new(&key)
+                            && !self.pkg_var_aliases.contains_new(&key))
                     {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -1734,12 +1737,13 @@ impl Elaborator<'_> {
                             // and sv2v print the variable's `W=5 b=8`).
                             let prev = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev));
-                            self.pkg_var_aliases.remove(&key);
+                            self.pkg_var_aliases.remove_new(&key);
                             self.clear_wide_raw(&key);
                         }
-                        explicit_imports.insert(key.clone(), (pkg.to_string(), same_scope));
-                        self.symbols.insert(key.clone(), net);
-                        self.pkg_var_aliases.insert(key, (pkg.to_string(), true));
+                        explicit_imports.insert_new(key.clone(), (pkg.to_string(), same_scope));
+                        self.symbols.insert_new(key.clone(), net);
+                        self.pkg_var_aliases
+                            .insert_new(key, (pkg.to_string(), true));
                     }
                 } else if !self
                     .pkg_funcs

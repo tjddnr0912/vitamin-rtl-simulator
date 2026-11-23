@@ -297,6 +297,9 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # (2 -> 1 there ; H7_READERS keeps `seen`, still the fn's local collection, as g2b's reader list names it).
 # §5.2 Q-DECLKEY DK1-2b: push_body_enum_labels returns its two saved Vecs keyed by NewKey (net_util.rs:529 :530): the four
 # `saved_labels=push_body_enum_labels` UNTYPED bindings (frames_body.rs 2, inline_task.rs, inline_fn.rs) left H7.
+# §5.2 Q-DECLKEY DK1-2c: the saved-key Vecs hold NewKeys (instance.rs:560, iface_inst.rs:225, package.rs:653 :657 :663 :665 :691 ;
+# bind_params' return, params.rs:1572): saved_params left two rows, elaborate_package 22 -> 17 (saved_str stays: its value is
+# `Option<String>`), and the two `bind_params` UNTYPED bindings (iface_inst.rs `sp=`, instance_array.rs `saved=`) left H7.
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	1	pushed
@@ -357,8 +360,8 @@ hier_leaf_shape.rs	record_hier_net_shape	1	names
 hier_leaf_shape.rs	record_hier_sel_shape	1	names
 hoist/general.rs	hoist_inout_general_seq	1	snaps
 hoist/general.rs	hoist_inout_general_seq	UNTYPED	roots=order_plan
-iface_inst.rs	elaborate_iface_instances	6	saved_params,local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
-iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,sp=bind_params,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
+iface_inst.rs	elaborate_iface_instances	5	local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
+iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
 iface_rtn_scope.rs	move_static_scoped	UNTYPED	keys=static_scoped_keys
 inline_fn.rs	body_needs_context_width	2	widths,unknown_bv
 inline_fn.rs	inline_pkg_function	1	pkg_rtn_names
@@ -371,10 +374,9 @@ inline_ret_select.rs	expr_bound	1	names
 inline_task.rs	inline_static_task	1	dyn_binds
 inline_task.rs	inline_static_task	UNTYPED	declared=rtn_declared_names
 inline_task_locals.rs	hoist_inline_task_locals	1	hoisted_here
-instance.rs	elaborate_instance	7	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,saved_params,wc_rtn,explicit_rtn
+instance.rs	elaborate_instance	6	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
 instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
 instance_array.rs	elaborate_instance_array	1	port_widths
-instance_array.rs	elaborate_instance_array	UNTYPED	saved=bind_params
 lexscope/disp.rs	display_of	1	out
 lexscope/elab.rs	assert_block_local_inits_drained	1	keys
 lexscope/elab.rs	flush_block_local_inits	3	keys,all,runs
@@ -385,7 +387,7 @@ net_util.rs	push_body_enum_labels	1	block_local_names
 package.rs	apply_import_consts	3	pkg_labels,wides,vars
 package.rs	apply_import_routines	1	wildcard_roots
 package.rs	apply_import_routines	UNTYPED	<pat>=inject_pkg_callees,<pat>=inject_pkg_callees
-package.rs	elaborate_package	22	saved,saved_meta,saved_real,saved_str,saved_wide,consts,real_vals,str_vals,wide_vals,param_names,enum_labels,const_meta,const_range,saved_range,vars,array_vals,array_meta,funcs,tasks,types,pkg_local_names,pkg_conflict_names
+package.rs	elaborate_package	17	saved_str,consts,real_vals,str_vals,wide_vals,param_names,enum_labels,const_meta,const_range,vars,array_vals,array_meta,funcs,tasks,types,pkg_local_names,pkg_conflict_names
 package.rs	inject_pkg_callees	4	rtn_names,refused,want,seen
 package.rs	inject_pkg_callees	UNTYPED	const_names=pkg_scope_names
 package.rs	pkg_func_self_contained	2	names,read_names
@@ -447,7 +449,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 165 fns 86 untyped 31 readers 26
+lets 158 fns 86 untyped 30 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -463,6 +465,9 @@ lets 165 fns 86 untyped 31 readers 26
 # new_key's one) ; MINT_CALLS does not list new_key: the mint lives inside lexscope (HX at DK1-6 reads the entry)
 # §5.2 Q-DECLKEY DK1-2b: the 8 body-scope saved-key mints (generate.rs:167 :262 :699 :711 :736, net_util.rs:604, package.rs:530
 # :549) are `self.lex.new_key(..)`: call fq 73 -> 65
+# §5.2 Q-DECLKEY DK1-2c: the 17 Bound mints (package.rs:779 :971 :1396 :1465 :1517 :1605, instance.rs:170 :718 :727 :764 :807,
+# iface_inst.rs:152 :566, params.rs:1876 :1922 :1929 :2387) are `self.lex.new_key(..)`: call fq 65 -> 48 ; instance.rs's 4 left
+# (:986 :1031 :1061 :1067) are read-side probes (DK1-3)
 file	fn	kind	name	count	TAG
 array_geom.rs	record_declared_bounds	call	fq	1	key
 array_geom.rs	shape_bits	call	walk_scopes_key	1	key
@@ -600,12 +605,10 @@ hoist/general.rs	fresh_bool_temp	fmt-tempname	format	1	spelling
 hoist/special.rs	fresh_rhs_only_tmp	fmt-tempname	format	1	spelling
 ident_route.rs	ast_reads_guessed_param	call	walk_scopes_key	1	key
 ident_route.rs	bare_ident_route	call	walk_scopes_key	2	key
-iface_inst.rs	elaborate_iface_instances	call	fq	2	key
 inline_task.rs	inline_static_task	fmt	format	1	segment
 inline_task_locals.rs	hoist_inline_task_locals	call	fq	1	key
 inline_task_locals.rs	hoist_one_inline_local	call	fq	1	key
-instance.rs	bind_enum_labels_of	call	fq	1	key
-instance.rs	elaborate_instance	call	fq	8	key
+instance.rs	elaborate_instance	call	fq	4	key
 instance_array.rs	elaborate_instance_array	call	fq	1	key
 lexscope/disp.rs	display_of	derived-fn	display_of	1	display
 lexscope/disp.rs	display_of	fmt	format	1	display
@@ -646,10 +649,8 @@ lvalue.rs	collect_lval_chunks	join	join	2	spelling
 net_util.rs	warn_implicit_net_truncation	call	fq	2	key
 netdecl.rs	elaborate_netvar_decl_inner	call	fq	9	key
 netdecl.rs	elaborate_netvar_decl_inner	fmt-tempname	format	1	spelling
-package.rs	apply_import_consts	call	fq	4	key
 package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_scopes_key	2	key
 package.rs	dotted_hit_is_pkg_alias	call	walk_scopes_key	1	key
-package.rs	elaborate_package	call	fq	2	key
 package.rs	elaborate_pkg_netvar	call	fq	1	key
 package.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
 package.rs	resolve_rtn_key	derived-fn	resolve_rtn_key	1	key
@@ -658,7 +659,6 @@ packed_lval.rs	lval_packed_chain	join	join	1	spelling
 packed_pattern.rs	record_packed_default_target	call	fq	1	key
 param_query.rs	real_param_is_non_integral	call	walk_scopes_key	1	key
 param_query.rs	real_param_lowers_real	call	walk_scopes_key	1	key
-params.rs	bind_one_param	call	fq	4	key
 params.rs	param_decl_width_opt	call	fq	1	key
 params.rs	param_sel_range	call	walk_scopes_key	1	key
 ports.rs	bind_iface_port	call	fq	1	key
@@ -705,7 +705,7 @@ systask.rs	lower_systask	call	fq	1	key
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 == HM_COUNTS
-mints 325 kinds {"call": 144, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 165, "scope": 18, "segment": 17, "spelling": 105}
+mints 308 kinds {"call": 127, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 148, "scope": 18, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -754,6 +754,8 @@ stores 81 scans 28 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS":
 # `whole` (k4.py's rule). A PIN of today's sites: it does not close the door (premise2 B3).
 # §5.2 Q-DECLKEY DK1-2a: add_net's two probes and record_pattern_target's one take the NewKey (contains_new / get_new): 61 -> 58
 # §5.2 Q-DECLKEY DK1-2b: elaborate_gen_item's two probes of the genvar key take its NewKey (get_new, generate.rs:183 :253): 58 -> 56
+# §5.2 Q-DECLKEY DK1-2c: the probes of the 17 Bound mints' keys take their NewKey (contains_new / get_new ; iface_inst.rs 2 rows,
+# package.rs apply_import_consts 6 rows and elaborate_package's param_range): 56 -> 39 reads
 file	fn	store	role	ops
 array_geom.rs	record_declared_bounds	symbols	whole	get=1
 block_local/hoist.rs	hoist_one_block_local	symbols	composite	contains_key=1,get=2
@@ -763,19 +765,10 @@ cover.rs	cover_inst	cover_insts	whole	get=1
 cover.rs	cross_inst	cross_insts	whole	get=1
 frames_blocal.rs	reserve_block_local_decl	symbols	whole	get=1
 frames_call/mod.rs	is_net_or_const_arg	symbols	whole	contains_key=1
-iface_inst.rs	elaborate_iface_instances	iface_insts	whole	contains_key=1
-iface_inst.rs	elaborate_iface_instances	params	whole	get=1
 inline_task_locals.rs	hoist_one_inline_local	symbols	whole	contains_key=1,get=1
 instance.rs	elaborate_instance	symbols	whole	contains_key=1,get=3
 net_util.rs	warn_implicit_net_truncation	implicit_nets	whole	contains=1
 netdecl.rs	elaborate_netvar_decl_inner	symbols	whole	get=9
-package.rs	apply_import_consts	explicit_imports	composite	contains_key=1,get=2
-package.rs	apply_import_consts	explicit_imports	whole	contains_key=2
-package.rs	apply_import_consts	params	composite	contains_key=3
-package.rs	apply_import_consts	pkg_var_aliases	composite	contains_key=2
-package.rs	apply_import_consts	symbols	composite	contains_key=2
-package.rs	apply_import_consts	wc_origin	composite	contains_key=1,get=1
-package.rs	elaborate_package	param_range	whole	get=1
 package.rs	elaborate_pkg_netvar	symbols	whole	get=1
 packed_pattern.rs	record_packed_default_target	symbols	whole	get=1
 params.rs	param_decl_width_opt	param_meta	whole	get=1
@@ -785,7 +778,7 @@ ports.rs	wire_ports	symbols	composite	get=1
 stmt_main.rs	lower_stmt_inner	vif_handles	whole	contains=1
 string_array_route.rs	has_fixed_string_array_storage	string_array_elems	whole	contains_key=1
 == HH_COUNTS
-reads 56 roles {"composite": 16, "whole": 40} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "explicit_imports": 5, "iface_insts": 2, "implicit_nets": 1, "param_meta": 1, "param_range": 1, "params": 4, "pkg_var_aliases": 2, "string_array_elems": 1, "symbols": 33, "vif_handles": 1, "wc_origin": 2}
+reads 39 roles {"composite": 4, "whole": 35} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "iface_insts": 1, "implicit_nets": 1, "param_meta": 1, "string_array_elems": 1, "symbols": 31, "vif_handles": 1}
 == HSEG
 # HSEG: the segment-text tests — a text method (SEG_METHODS) whose literal argument holds `.` `$` `[` or `::`,
 # every `strip_prefix` (g4 OWED-d's domain), a `starts_with` / `strip_prefix` / `ends_with` / `strip_suffix`
@@ -1410,6 +1403,12 @@ generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved.iter().map	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_meta.iter().map	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_range.iter().map	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_real.iter().map	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_str.iter().map	1
+package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_wide.iter().map	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
 scope.rs	fq	cur_prefix_text	MAC:format>RET	1
 scope.rs	fq	cur_prefix_text	RECV:.is_empty	1
@@ -1426,7 +1425,9 @@ struct_arm.rs	struct_arm_rhs	key_text	BIN:!=	1
 # DK1-0 (§5.2 Q-DECLKEY): 12 -> 10, instance.rs / iface_inst.rs carry the parent scope (scope_carry, HC_CARRY_LOCAL)
 # DK1-2a: cur_prefix_text 10 -> 6, frames_reserve.rs's two written-out `fq` forms are `new_key` ; + LEAVE L7 key_text's one
 # row (struct_arm.rs struct_arm_rhs, `walked != key_text(key)`: deleted by DK1-4b, an is_formed_as row there, N11-6)
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 6, "display_of_key_text": 1, "key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
+# DK1-2c: + LEAVE L7 key_text's six rows of decl_keep_snapshot's key iterators (package.rs elaborate_package, one per saved Vec:
+# the NewKey handed to the `&str` parameter ; deleted by DK1-5, which moves decl_keep_snapshot into lexscope): key_text 1 -> 7
+{"cur_gen_rtn_key": 2, "cur_prefix_text": 6, "display_of_key_text": 1, "key_text": 7, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,

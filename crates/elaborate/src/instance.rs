@@ -68,7 +68,7 @@ impl Elaborator<'_> {
     pub(crate) fn bind_enum_labels_of(
         &mut self,
         td: &ast::TypedefDecl,
-        saved_params: &mut Vec<(String, Option<i64>)>,
+        saved_params: &mut Vec<(NewKey, Option<i64>)>,
         pass: LabelPass,
     ) {
         #[allow(irrefutable_let_patterns)]
@@ -167,13 +167,13 @@ impl Elaborator<'_> {
                     Some(w) => Self::const_mask(v, w, *signed),
                     None => v,
                 };
-                let key = self.fq(&lab.name.name);
+                let key = self.lex.new_key(&lab.name.name);
                 // V33-3: remember that this constant is a LABEL and which enum
                 // declared it, so `LA.name()` can be told from `u1.f(x)` when
                 // the deferred hierarchical-call resolver writes its message —
                 // and so that message can name the type to declare.
                 self.enum_label_types
-                    .insert(key.clone(), td.name.name.clone());
+                    .insert_new(key.clone(), td.name.name.clone());
                 if let Some(w) = base_w {
                     self.set_meta(key.clone(), (w, *signed));
                 }
@@ -183,10 +183,10 @@ impl Elaborator<'_> {
                 match pass {
                     LabelPass::Prepass => {
                         self.enum_label_prepass
-                            .insert(key.clone(), (v, base_w, base_range));
+                            .insert_new(key.clone(), (v, base_w, base_range));
                     }
                     LabelPass::Final => {
-                        if let Some(pre) = self.enum_label_prepass.remove(&key) {
+                        if let Some(pre) = self.enum_label_prepass.remove_new(&key) {
                             if pre != (v, base_w, base_range) {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -557,7 +557,7 @@ impl Elaborator<'_> {
         let mut wc_const_fn: BTreeMap<String, String> = BTreeMap::new();
         let mut explicit_const_fn: std::collections::BTreeSet<String> =
             std::collections::BTreeSet::new();
-        let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+        let mut saved_params: Vec<(NewKey, Option<i64>)> = Vec::new();
         for (i, imp) in import_list.iter().enumerate() {
             if is_header_import(i, imp) {
                 self.apply_import_consts(
@@ -715,7 +715,7 @@ impl Elaborator<'_> {
                     // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
                     // only matches from the declaring prefix) and skip the numeric fold.
                     if let Some(raw) = self.param_str_or_folded(p, false) {
-                        let key = self.fq(&p.name.name);
+                        let key = self.lex.new_key(&p.name.name);
                         self.set_str(key, raw);
                     } else if let Some((v, exact)) = self.param_real_value(p) {
                         // r19: a REAL-valued parameter has no i64 value — same shape as
@@ -724,7 +724,7 @@ impl Elaborator<'_> {
                         // initializer DID fold to an exact i64, register both: the two
                         // representations agree, so `R/2` divides in the real domain and
                         // `logic [R-1:0]` keeps working in the integer domain.
-                        let key = self.fq(&p.name.name);
+                        let key = self.lex.new_key(&p.name.name);
                         self.set_real(key.clone(), v);
                         if let Some(i) = exact {
                             // The LOCAL integer view only — an exact-integer real stays
@@ -761,7 +761,7 @@ impl Elaborator<'_> {
                         // Same as the generate-scope twin: `meta` already encodes
                         // that no override reached this body parameter.
                         let v = self.coerce_param_value_with(v, meta);
-                        let key = self.fq(&p.name.name);
+                        let key = self.lex.new_key(&p.name.name);
                         // DECL-ORDER (`bound/write.rs`): a persistent copy for a
                         // hierarchical read (`dut.LP`) of a body parameter/localparam
                         // (mirrors the header path in bind_params), the meta, the range,
@@ -804,8 +804,8 @@ impl Elaborator<'_> {
                 // constant-shadow guard must see them at any lowering point.
                 ast::ModuleItem::Genvar { names, .. } => {
                     for n in names {
-                        let key = self.fq(&n.name);
-                        self.genvar_decls.insert(key);
+                        let key = self.lex.new_key(&n.name);
+                        self.genvar_decls.insert_new(key);
                     }
                 }
                 _ => {}

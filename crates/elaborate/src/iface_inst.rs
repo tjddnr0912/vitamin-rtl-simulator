@@ -149,8 +149,8 @@ impl Elaborator<'_> {
                 continue;
             }
             let path = self.lex.scope_child(&item.name.name);
-            let path_key = self.fq(&item.name.name);
-            if !self.iface_insts.contains_key(&path_key) {
+            let path_key = self.lex.new_key(&item.name.name);
+            if !self.iface_insts.contains_new(&path_key) {
                 let saved_prefix = self.lex.scope_swap(&path);
                 let saved_module_span = self.cur_module_span.replace(decl.span);
                 // params (header `#(...)` then body localparams) BEFORE nets
@@ -222,7 +222,7 @@ impl Elaborator<'_> {
                     }
                 };
                 let mut explicit_imports: crate::package::ExplicitImports = Keyed::default();
-                let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+                let mut saved_params: Vec<(NewKey, Option<i64>)> = Vec::new();
                 // §3.b: the constant-interpreter half of the routine import, mirroring
                 // `instance.rs`'s (3a.5). Without it a `localparam W = g(40)` in an
                 // interface body was `E3009 … has no constant-fold arm` where both
@@ -563,8 +563,8 @@ impl Elaborator<'_> {
                         // `ifc #(.R(7)) i();` over `parameter real R = 4` read `i.R` as
                         // 4 where both oracles read 7.
                         if self.param_real_value(pp).is_some() {
-                            let key = self.fq(&pp.name.name);
-                            if let Some(&i) = self.params.get(&key) {
+                            let key = self.lex.new_key(&pp.name.name);
+                            if let Some(&i) = self.params.get_new(&key) {
                                 self.publish_hier(key, i);
                             }
                         }
@@ -772,7 +772,7 @@ impl Elaborator<'_> {
                     }
                 }
                 self.iface_insts
-                    .insert(path_key.clone(), iface_name.clone());
+                    .insert_new(path_key.clone(), iface_name.clone());
                 // Below the Logic loop, not between the two passes: the maps have to
                 // answer the same way in both, which is the half of the prerequisite
                 // that is about POSITION rather than about the maps themselves.

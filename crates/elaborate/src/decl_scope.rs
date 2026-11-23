@@ -369,10 +369,10 @@ impl Elaborator<'_> {
     pub(crate) fn decl_keep_snapshot<'k>(
         &self,
         prefix: &str,
-        keys: impl Iterator<Item = &'k String>,
+        keys: impl Iterator<Item = &'k str>,
     ) -> Vec<DeclKept> {
         let mine = format!("{prefix}.");
-        let keys: BTreeSet<&String> = keys.collect();
+        let keys: BTreeSet<&str> = keys.collect();
         debug_assert!(
             keys.iter().all(|k| k.starts_with(&mine)),
             "a package fold saved a key outside its own prefix {prefix}"
@@ -380,7 +380,7 @@ impl Elaborator<'_> {
         keys.into_iter()
             .filter(|k| k.starts_with(&mine))
             .map(|k| DeclKept {
-                key: k.clone(),
+                key: k.to_string(),
                 value: self.params.get(k).copied(),
                 meta: self.param_meta.get(k).copied(),
                 real: self.real_param_val.get(k).copied(),

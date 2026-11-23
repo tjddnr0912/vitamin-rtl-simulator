@@ -1569,7 +1569,7 @@ impl Elaborator<'_> {
         &mut self,
         module: &ast::ModuleDecl,
         overrides: &[ResolvedOverride],
-    ) -> (Vec<(String, Option<i64>)>, ParamOverrides) {
+    ) -> (Vec<(NewKey, Option<i64>)>, ParamOverrides) {
         // §2 🆕 L ⓢ: the duplicate-declaration refusal for this scope is NOT here
         // any more. It ran per INSTANCE, which made it blind to exactly the scopes
         // the P25(a) census found — a module named only under `generate if (0)`,
@@ -1692,10 +1692,10 @@ impl Elaborator<'_> {
     /// there is none (the value the integer route published).
     fn bind_real_override(
         &mut self,
-        key: String,
+        key: NewKey,
         rv: f64,
         ov: i64,
-        saved: &mut Vec<(String, Option<i64>)>,
+        saved: &mut Vec<(NewKey, Option<i64>)>,
     ) -> i64 {
         self.set_real(key.clone(), rv);
         let view = if rv == crate::const_real::i64_to_real(ov) {
@@ -1715,7 +1715,7 @@ impl Elaborator<'_> {
         &mut self,
         p: &ast::ParamDecl,
         ovr: &ParamOverrides,
-        saved: &mut Vec<(String, Option<i64>)>,
+        saved: &mut Vec<(NewKey, Option<i64>)>,
     ) {
         // A `localparam` is IN `param_ports` on purpose — naming one must give the
         // precise "cannot override localparam" and not a misleading "unknown
@@ -1873,7 +1873,7 @@ impl Elaborator<'_> {
                 }
             };
             if let Some(raw) = str_val {
-                let key = self.fq(&p.name.name);
+                let key = self.lex.new_key(&p.name.name);
                 self.set_str(key, raw);
                 return;
             }
@@ -1919,14 +1919,14 @@ impl Elaborator<'_> {
                 if let (Some(rv), Some(Some(ov))) =
                     (ovr_real, ovr_by_name.get(p.name.name.as_str()).copied())
                 {
-                    let key = self.fq(&p.name.name);
+                    let key = self.lex.new_key(&p.name.name);
                     let hier = self.bind_real_override(key.clone(), rv, ov, saved);
                     self.publish_hier(key, hier);
                     return;
                 }
             }
             if let Some((v, exact)) = real_default {
-                let key = self.fq(&p.name.name);
+                let key = self.lex.new_key(&p.name.name);
                 // A string override of a DECLARED real (an untyped target took the
                 // string route above): the string's integral value (§5.9) converted to
                 // real — both oracles bind `#(.R("a"))` onto `real R` as 97.0.
@@ -2384,7 +2384,7 @@ impl Elaborator<'_> {
                 0
             });
             let v = self.coerce_param_value_with(v, meta);
-            let key = self.fq(&p.name.name);
+            let key = self.lex.new_key(&p.name.name);
             // Persistent copy for hierarchical reads (`dut.WIDTH`) — `self.params`
             // is restored after the instance, so the read side needs this.
             // DECL-ORDER (`bound/write.rs`): the hier copy, the meta, the range, the
