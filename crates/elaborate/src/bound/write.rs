@@ -24,17 +24,17 @@ impl Elaborator<'_> {
     /// said 190, and the genvar spelling answered 8 where all three had said 0.
     /// Clearing at 3 of ~13 binders was the wrong shape: the fix is that there is only
     /// one binder.
-    pub(crate) fn bind_param_value(&mut self, key: String, v: i64) -> Option<i64> {
-        self.param_range.w().remove(&key);
-        self.hier_param_range.w().remove(&key);
-        self.param_type_guessed.w().remove(&key);
-        self.params.w().insert(key, v)
+    pub(crate) fn bind_param_value(&mut self, key: impl SlotKey, v: i64) -> Option<i64> {
+        self.param_range.w().remove_new(&key);
+        self.hier_param_range.w().remove_new(&key);
+        self.param_type_guessed.w().remove_new(&key);
+        self.params.w().insert_new(key, v)
     }
 
     /// Unbind `key` — the value and the range together, for the same reason.
-    pub(crate) fn unbind_param(&mut self, key: &str) -> Option<i64> {
-        self.param_range.w().remove(key);
-        self.params.w().remove(key)
+    pub(crate) fn unbind_param(&mut self, key: &impl SlotKey) -> Option<i64> {
+        self.param_range.w().remove_new(key);
+        self.params.w().remove_new(key)
     }
 
     /// Bind (or CLEAR) the declared range of the param now bound at `key`.
@@ -48,22 +48,23 @@ impl Elaborator<'_> {
     /// (3a.5 imports, 3b body params). Leaving the package's range behind would let
     /// `W[15:8]` extract bits of a 32-bit declaration out of an 8-bit value — the
     /// §4.5.363 "263-bit net" regression, arriving through the import door.
-    pub(crate) fn bind_param_range(&mut self, key: &str, r: Option<DeclRange>) {
+    pub(crate) fn bind_param_range(&mut self, key: &impl SlotKey, r: Option<DeclRange>) {
         // The range describes the binding that is THERE. Writing it before the value
         // would be silently undone by `bind_param_value`'s clear, so the order is part
         // of the contract and this is what enforces it across every call site.
         debug_assert!(
-            self.params.contains_key(key),
-            "bind_param_range({key}) before the value was bound"
+            self.params.contains_new(key),
+            "bind_param_range({}) before the value was bound",
+            scope_out(key_show(key))
         );
         match r {
             Some(r) => {
-                self.param_range.w().insert(key.to_string(), r);
-                self.hier_param_range.w().insert(key.to_string(), r);
+                self.param_range.w().insert_new(key.clone(), r);
+                self.hier_param_range.w().insert_new(key.clone(), r);
             }
             None => {
-                self.param_range.w().remove(key);
-                self.hier_param_range.w().remove(key);
+                self.param_range.w().remove_new(key);
+                self.hier_param_range.w().remove_new(key);
             }
         }
     }
@@ -88,65 +89,69 @@ impl Elaborator<'_> {
     // ---- primitives: one map verb each, returning what the map returned ----
 
     /// `param_meta` set.
-    pub(crate) fn set_meta(&mut self, key: String, m: (u32, bool)) -> Option<(u32, bool)> {
-        self.param_meta.w().insert(key, m)
+    pub(crate) fn set_meta(&mut self, key: impl SlotKey, m: (u32, bool)) -> Option<(u32, bool)> {
+        self.param_meta.w().insert_new(key, m)
     }
 
     /// `param_meta` remove.
-    pub(crate) fn clear_meta(&mut self, key: &str) -> Option<(u32, bool)> {
-        self.param_meta.w().remove(key)
+    pub(crate) fn clear_meta(&mut self, key: &impl SlotKey) -> Option<(u32, bool)> {
+        self.param_meta.w().remove_new(key)
     }
 
     /// `param_range` set WITHOUT the hierarchical twin (the package lane, PKG-ORDER).
-    pub(crate) fn set_range_raw(&mut self, key: String, r: DeclRange) -> Option<DeclRange> {
-        self.param_range.w().insert(key, r)
+    pub(crate) fn set_range_raw(&mut self, key: impl SlotKey, r: DeclRange) -> Option<DeclRange> {
+        self.param_range.w().insert_new(key, r)
     }
 
     /// `param_range` remove WITHOUT the hierarchical twin (the package lane, PKG-ORDER).
-    pub(crate) fn clear_range_raw(&mut self, key: &str) -> Option<DeclRange> {
-        self.param_range.w().remove(key)
+    pub(crate) fn clear_range_raw(&mut self, key: &impl SlotKey) -> Option<DeclRange> {
+        self.param_range.w().remove_new(key)
     }
 
     /// `hier_params` set: the persistent copy a hierarchical read (`dut.P`) folds.
-    pub(crate) fn publish_hier(&mut self, key: String, v: i64) -> Option<i64> {
-        self.hier_params.w().insert(key, v)
+    pub(crate) fn publish_hier(&mut self, key: impl SlotKey, v: i64) -> Option<i64> {
+        self.hier_params.w().insert_new(key, v)
     }
 
     /// `real_param_val` set.
-    pub(crate) fn set_real(&mut self, key: String, v: f64) -> Option<f64> {
-        self.real_param_val.w().insert(key, v)
+    pub(crate) fn set_real(&mut self, key: impl SlotKey, v: f64) -> Option<f64> {
+        self.real_param_val.w().insert_new(key, v)
     }
 
     /// `real_param_val` remove.
-    pub(crate) fn clear_real(&mut self, key: &str) -> Option<f64> {
-        self.real_param_val.w().remove(key)
+    pub(crate) fn clear_real(&mut self, key: &impl SlotKey) -> Option<f64> {
+        self.real_param_val.w().remove_new(key)
     }
 
     /// `str_param_raw` set.
-    pub(crate) fn set_str(&mut self, key: String, raw: String) -> Option<String> {
-        self.str_param_raw.w().insert(key, raw)
+    pub(crate) fn set_str(&mut self, key: impl SlotKey, raw: String) -> Option<String> {
+        self.str_param_raw.w().insert_new(key, raw)
     }
 
     /// `wide_param_bits` set WITHOUT the hierarchical range ([`Self::bind_wide_param`]
     /// is the declaration's binder).
-    pub(crate) fn set_wide_raw(&mut self, key: String, cv: ir::ConstVal) -> Option<ir::ConstVal> {
-        self.wide_param_bits.w().insert(key, cv)
+    pub(crate) fn set_wide_raw(
+        &mut self,
+        key: impl SlotKey,
+        cv: ir::ConstVal,
+    ) -> Option<ir::ConstVal> {
+        self.wide_param_bits.w().insert_new(key, cv)
     }
 
     /// `wide_param_bits` remove.
-    pub(crate) fn clear_wide_raw(&mut self, key: &str) -> Option<ir::ConstVal> {
-        self.wide_param_bits.w().remove(key)
+    pub(crate) fn clear_wide_raw(&mut self, key: &impl SlotKey) -> Option<ir::ConstVal> {
+        self.wide_param_bits.w().remove_new(key)
     }
 
     /// `param_type_guessed` insert: the recorded meta is a guess.
-    pub(crate) fn mark_guessed(&mut self, key: String) -> bool {
-        self.param_type_guessed.w().insert(key)
+    pub(crate) fn mark_guessed(&mut self, key: impl SlotKey) -> bool {
+        self.param_type_guessed.w().insert_new(key)
     }
 
     /// `params` remove WITHOUT the range (U6's replay unwind, lane RTN-RAW-REMOVE:
     /// [`Self::unbind_param`] would also drop the range).
-    pub(crate) fn drop_value_raw(&mut self, key: &str) -> Option<i64> {
-        self.params.w().remove(key)
+    pub(crate) fn drop_value_raw(&mut self, key: &impl SlotKey) -> Option<i64> {
+        self.params.w().remove_new(key)
     }
 
     // ---- DECL-ORDER ----
@@ -163,21 +168,21 @@ impl Elaborator<'_> {
     /// entry (META-STALE). Returns what the value funnel returned.
     pub(crate) fn bind_decl(
         &mut self,
-        key: &str,
+        key: &impl SlotKey,
         v: i64,
         meta: Option<(u32, bool)>,
         range: impl FnOnce(&Self) -> Option<DeclRange>,
         guessed: impl FnOnce(&Self) -> bool,
     ) -> Option<i64> {
-        self.publish_hier(key.to_string(), v);
+        self.publish_hier(key.clone(), v);
         if let Some(m) = meta {
-            self.set_meta(key.to_string(), m);
+            self.set_meta(key.clone(), m);
         }
         let r = range(self);
-        let prev = self.bind_param_value(key.to_string(), v);
+        let prev = self.bind_param_value(key.clone(), v);
         self.bind_param_range(key, r);
         if guessed(self) {
-            self.mark_guessed(key.to_string());
+            self.mark_guessed(key.clone());
         }
         prev
     }

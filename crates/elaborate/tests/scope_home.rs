@@ -111,6 +111,11 @@
 //!   PLAN8 H2 (4)), the argument at that parameter, the same way.
 //! - HC CARRY (LS3, PLAN8 H2 (c)) every call of `scope_carry` outside lexscope by (file, fn,
 //!   SINK) with a count, SINK as HBR's ; a LOCAL sink (a carry bound by `let`) is pinned 0.
+//! - HW11 (§5.2 Q-DECLKEY DK1-2b, R-G8 (e)) the identifier tokens of bridge w11's text doors —
+//!   the SURF_LEAVE items that are methods of a SURF_BRIDGE trait (`slot_text`, `slot_owned`) —
+//!   in every `.rs` file of the crate's `src` but `lexscope/key.rs` (cfg(test) files and macro
+//!   arguments included), by name with a count, pinned 0: a sealed trait stops outside impls, not
+//!   calls through a `K: SlotKey` bound (U2 R4, NP11-1), so this count is what sees one.
 //!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
@@ -6956,6 +6961,84 @@ fn holders_the_lexscope_types_holders_are_pinned() {
         "a holder is gone: name the unit, remove the row",
     );
     finish("HOLDERS", &msgs);
+}
+
+// =====================================================================================
+// HW11 — bridge w11's text doors stay in lexscope/key.rs (§5.2 Q-DECLKEY DK1-2b, R-G8 (e))
+// =====================================================================================
+
+#[test]
+fn hw11_the_bridge_text_doors_stay_in_key_rs() {
+    // the watched names: SURF_LEAVE's items that are methods of a SURF_BRIDGE trait
+    let traits: BTreeSet<String> = surf_rows("SURF_BRIDGE")
+        .iter()
+        .map(|r| r[1].clone())
+        .collect();
+    let mut names: Vec<String> = surf_rows("SURF_LEAVE")
+        .iter()
+        .filter(|r| {
+            r[1].split_once("::")
+                .is_some_and(|(t, _)| traits.contains(t))
+        })
+        .map(|r| item_simple(&r[1]))
+        .collect();
+    names.sort();
+    names.dedup();
+    assert!(
+        !names.is_empty(),
+        "HW11: no SURF_LEAVE item is a method of a SURF_BRIDGE trait (w11's text doors left: name the unit, retire HW11)"
+    );
+    let dir = src_dir();
+    let mut paths = Vec::new();
+    rs_files(&dir, &mut paths);
+    let mut total: BTreeMap<String, usize> = names.iter().map(|n| (n.clone(), 0)).collect();
+    let mut sites: Vec<String> = Vec::new();
+    for p in &paths {
+        let rel = p.strip_prefix(&dir).unwrap_or(p).display().to_string();
+        if rel == "lexscope/key.rs" {
+            continue;
+        }
+        let text = std::fs::read_to_string(p).expect("read src file");
+        let ts: proc_macro2::TokenStream = text
+            .parse()
+            .unwrap_or_else(|e| panic!("HW11: {rel} does not lex: {e}"));
+        for n in &names {
+            let c = count_ident(ts.clone(), n);
+            if c > 0 {
+                *total.get_mut(n).expect("a watched name") += c;
+                sites.push(format!("{rel}\t{n}\t{c}"));
+            }
+        }
+    }
+    dump("HW11", "file\tname\tcount", &sites);
+    let got: BTreeMap<String, String> = total
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HW11")) {
+        assert_eq!(
+            row.len(),
+            2,
+            "HW11 table row has {} columns, not 2: {row:?}",
+            row.len()
+        );
+        want.insert(row[0].clone(), row[1].clone());
+    }
+    let mut msgs = diff_rows(
+        "HW11",
+        &got,
+        &want,
+        "a new text door of w11 (a SURF_LEAVE method of a SURF_BRIDGE trait): pin its count outside key.rs (0)",
+        "a text door of w11 is gone (DK1-2d deletes them): name the unit, remove the row",
+    );
+    if !sites.is_empty() {
+        msgs.push(format!(
+            "HW11 a w11 text method named outside lexscope/key.rs (R-G8 (e) ; NP11-1 is a deliberate call, not this): {}",
+            sites.join(" ; ").replace('\t', " · ")
+        ));
+    }
+    finish("HW11", &msgs);
 }
 
 mod tables {

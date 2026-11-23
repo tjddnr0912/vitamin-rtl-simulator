@@ -164,7 +164,7 @@ impl Elaborator<'_> {
                 body,
                 span: for_span,
             } => {
-                let gv_key = self.fq(&init.lvalue.name);
+                let gv_key = self.lex.new_key(&init.lvalue.name);
                 let gen_no = self.next_gen_construct();
 
                 // INIT value, const-eval'd in the current scope.
@@ -180,7 +180,7 @@ impl Elaborator<'_> {
                 // same identifier) and seed the genvar. The RANGE has to be read
                 // before the value binder runs, because that binder is the one that
                 // clears it (`bind_param_value`).
-                let saved_range = self.param_range.get(&gv_key).copied();
+                let saved_range = self.param_range.get_new(&gv_key).copied();
                 let saved = self.bind_param_value(gv_key.clone(), start);
                 // ⭐ …and the DECLARED-RANGE half of that same shape. `param_meta`
                 // alone answers the sign model; `param_range` is the map that answers
@@ -250,7 +250,7 @@ impl Elaborator<'_> {
 
                     // The genvar VALUE (not a 0-based counter) indexes the block
                     // name, so `for(i=2;i<5;…)` yields `[2],[3],[4]` per Verilog.
-                    let iter_val = *self.params.get(&gv_key).unwrap_or(&0);
+                    let iter_val = *self.params.get_new(&gv_key).unwrap_or(&0);
                     // §27.6: an unnamed loop is `genblk<N>[i]` (both oracles), N the
                     // construct's number in this scope.
                     let unnamed = format!("genblk{gen_no}");
@@ -259,8 +259,8 @@ impl Elaborator<'_> {
                     // §27.4: these blocks are an ARRAY — record the label so a bare
                     // (unindexed) hierarchical reference to it stays loud even when
                     // the loop happens to run exactly once. See `gen_loop_labels`.
-                    let loop_label_key = self.fq(lbl);
-                    self.gen_loop_labels.insert(loop_label_key);
+                    let loop_label_key = self.lex.new_key(lbl);
+                    self.gen_loop_labels.insert_new(loop_label_key);
 
                     // Each iteration's block is a scope of its own: §27.6 numbering
                     // inside it restarts at 1 (`top.L[1].genblk1`, both oracles).
@@ -696,7 +696,7 @@ impl Elaborator<'_> {
                 // `localparam real R = 4;` usable in integral contexts here too.
                 // Idempotent across generate phases, like the integer arm.
                 if let Some((rv, exact)) = self.param_real_value(p) {
-                    let key = self.fq(&p.name.name);
+                    let key = self.lex.new_key(&p.name.name);
                     self.set_real(key.clone(), rv);
                     if let Some(i) = exact {
                         self.publish_hier(key.clone(), i);
@@ -708,7 +708,7 @@ impl Elaborator<'_> {
                 // the real case above, and without this a `localparam string S = "x";`
                 // inside a generate block is loud on its own declared default.
                 if let Some(raw) = self.param_str_or_folded(p, false) {
-                    let key = self.fq(&p.name.name);
+                    let key = self.lex.new_key(&p.name.name);
                     self.set_str(key, raw);
                     return;
                 }
@@ -733,7 +733,7 @@ impl Elaborator<'_> {
                         // The width the caller just resolved, not a re-derivation:
                         // this scope has no override channel, so `meta` is authoritative.
                         let v = self.coerce_param_value_with(v, meta);
-                        let key = self.fq(&p.name.name);
+                        let key = self.lex.new_key(&p.name.name);
                         // DECL-ORDER (`bound/write.rs`), as the module-body and header
                         // paths. ⚠️ The declared width/sign and range were once NOT
                         // recorded here, while both those paths record them. So a

@@ -526,8 +526,8 @@ impl Elaborator<'_> {
         body_enums: &[ast::TypedefDecl],
         body: &ast::Stmt,
     ) -> (
-        Vec<(String, Option<i64>)>,
-        Vec<(String, Option<(u32, bool)>)>,
+        Vec<(NewKey, Option<i64>)>,
+        Vec<(NewKey, Option<(u32, bool)>)>,
     ) {
         let mut saved = Vec::new();
         let mut saved_meta = Vec::new();
@@ -601,12 +601,12 @@ impl Elaborator<'_> {
                         Some(w) => Self::const_mask(v, w, *signed),
                         None => v,
                     };
-                    let key = self.fq(&lab.name.name);
+                    let key = self.lex.new_key(&lab.name.name);
                     // V33-3: a body-local label is a label too (diagnostic-only map —
                     // see `enum_label_types`; deliberately NOT in the save-list, since
                     // the message that reads it is written long after the unwind).
                     self.enum_label_types
-                        .insert(key.clone(), td.name.name.clone());
+                        .insert_new(key.clone(), td.name.name.clone());
                     if let Some(w) = base_w {
                         saved_meta.push((key.clone(), self.set_meta(key.clone(), (w, *signed))));
                     }

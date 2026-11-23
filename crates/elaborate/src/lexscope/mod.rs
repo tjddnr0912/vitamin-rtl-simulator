@@ -32,7 +32,7 @@ mod key;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use key::{key_show, key_text, Keyed, KeyedSet, NewKey};
+pub(crate) use key::{key_show, key_text, Keyed, KeyedSet, NewKey, SlotKey};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]
@@ -79,7 +79,7 @@ pub(crate) struct Scopes {
     /// scope's key, shadowing a same-named constant there. Read only by the §11.5.1
     /// zero-width claim ([`Self::gen_binding_encloses`]), to tell whether a name binds
     /// where the select's own text does.
-    gen_text: Vec<(ScopeId, hdl_ast::Span, Option<String>)>,
+    gen_text: Vec<(ScopeId, hdl_ast::Span, Option<NewKey>)>,
 }
 
 /// One of the three scalar marks of [`Scopes`] (LS3b): a scope remembered beside the current
@@ -650,7 +650,7 @@ impl Scopes {
 
     /// A generate scope opens: the current scope, the source range `text` of the construct
     /// that opened it, and the genvar key a generate-for iteration binds.
-    pub(crate) fn gen_text_push(&mut self, text: hdl_ast::Span, gv_key: Option<String>) {
+    pub(crate) fn gen_text_push(&mut self, text: hdl_ast::Span, gv_key: Option<NewKey>) {
         self.gen_text.push((self.cur.clone(), text, gv_key));
     }
 
@@ -665,7 +665,11 @@ impl Scopes {
     /// whose construct holds `at`?
     pub(crate) fn gen_binding_encloses(&self, key: &str, name: &str, at: hdl_ast::Span) -> bool {
         let scopes = &self.gen_text;
-        if let Some((_, text, _)) = scopes.iter().rev().find(|s| s.2.as_deref() == Some(key)) {
+        if let Some((_, text, _)) = scopes
+            .iter()
+            .rev()
+            .find(|s| s.2.as_ref().map(key_text) == Some(key))
+        {
             return span_holds(*text, at);
         }
         let scope = key

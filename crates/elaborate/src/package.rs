@@ -460,8 +460,8 @@ pub(crate) fn import_segment(starts: &[u32], imp: &ast::ImportDecl) -> usize {
 /// What `push_pkg_consts_*` hands back for the unwind: the previous `params` and
 /// `param_meta` entries of every constant it injected, newest last.
 type SavedPkgConsts = (
-    Vec<(String, Option<i64>)>,
-    Vec<(String, Option<(u32, bool)>)>,
+    Vec<(NewKey, Option<i64>)>,
+    Vec<(NewKey, Option<(u32, bool)>)>,
 );
 
 impl Elaborator<'_> {
@@ -527,7 +527,7 @@ impl Elaborator<'_> {
             if skip.contains(cname) {
                 continue;
             }
-            let key = self.fq(cname);
+            let key = self.lex.new_key(cname);
             saved_p.push((key.clone(), self.bind_param_value(key.clone(), v)));
             if let Some(&m) = metas.get(cname) {
                 saved_m.push((key.clone(), self.set_meta(key, m)));
@@ -546,7 +546,7 @@ impl Elaborator<'_> {
             if skip.contains(&cname) {
                 continue;
             }
-            let key = self.fq(&cname);
+            let key = self.lex.new_key(&cname);
             self.set_wide_raw(key, cv);
         }
         (saved_p, saved_m)

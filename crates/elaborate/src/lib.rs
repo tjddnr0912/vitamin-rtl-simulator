@@ -135,7 +135,7 @@ mod instance_array;
 mod lexscope;
 use lexscope::{
     key_show, key_text, scope_out, shown_from_spelling, Keyed, KeyedSet, Mark, NewKey, ReportedAt,
-    ScopeKeyed, ScopeRef, Shown, ShownCtx,
+    ScopeKeyed, ScopeRef, Shown, ShownCtx, SlotKey,
 };
 mod limits;
 mod lvalue;
@@ -1122,11 +1122,11 @@ struct Elaborator<'s> {
     // resolved `i` against nothing and reported an undeclared net. Replayed by
     // `with_rtn_decl_scope` around that body's reserve+lower, which is what gives
     // each iteration's copy its own value. Saved/restored with `func_table`.
-    rtn_decl_genvars: BTreeMap<String, Vec<(String, i64)>>,
+    rtn_decl_genvars: BTreeMap<String, Vec<(NewKey, i64)>>,
     // The genvar bindings the generate walk currently has in force, innermost last.
     // Pushed per ITERATION by the generate-for arm, so it is what a registration
     // inside that iteration's body copies out.
-    gen_genvars: Vec<(String, i64)>,
+    gen_genvars: Vec<(NewKey, i64)>,
     // The declaring package of the routine whose BODY is being lowered right now
     // (a stack — a package routine may call another). `resolve_rtn_key` consults it
     // so a bare callee inside that body finds its own package's sibling (injected as

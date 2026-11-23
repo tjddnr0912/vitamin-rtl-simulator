@@ -1070,11 +1070,11 @@ impl Elaborator<'_> {
         // lowered here, afterwards.
         let gvs = self.rtn_decl_genvars.get(name).cloned().unwrap_or_default();
         // (genvar key, prior value, prior `param_meta`) — restored in reverse below.
-        type SavedGenvar = (String, Option<i64>, Option<(u32, bool)>);
+        type SavedGenvar = (NewKey, Option<i64>, Option<(u32, bool)>);
         let saved_gv: Vec<SavedGenvar> = gvs
             .iter()
             .map(|(k, v)| {
-                let old = self.params.get(k).copied();
+                let old = self.params.get_new(k).copied();
                 let old_meta = self.set_meta(k.clone(), (32, true));
                 self.bind_param_value(k.clone(), *v);
                 (k.clone(), old, old_meta)

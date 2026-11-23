@@ -21,7 +21,7 @@ pub(crate) type SideSnap = (
 impl Elaborator<'_> {
     /// Restore the param map to the snapshot taken before this instance bound its
     /// params (so sibling instances of the same module re-bind cleanly).
-    pub(crate) fn restore_params(&mut self, saved: Vec<(String, Option<i64>)>) {
+    pub(crate) fn restore_params(&mut self, saved: Vec<(impl SlotKey, Option<i64>)>) {
         for (k, prev) in saved.into_iter().rev() {
             // Through the funnel in both directions: the scope being unwound is dead,
             // and a range left behind for one of its keys would outlive the value it
@@ -40,14 +40,14 @@ impl Elaborator<'_> {
     /// §4.5.158: twin of `restore_params` for the `param_meta` side-map — unwinds a
     /// scoped body-local enum-label width/sign registration so it does not pollute
     /// later scopes (`param_meta` is otherwise persistent).
-    pub(crate) fn restore_param_meta(&mut self, saved: Vec<(String, Option<(u32, bool)>)>) {
+    pub(crate) fn restore_param_meta(&mut self, saved: Vec<(impl SlotKey, Option<(u32, bool)>)>) {
         for (k, prev) in saved.into_iter().rev() {
             match prev {
                 Some(v) => {
-                    self.param_meta.w().insert(k, v);
+                    self.param_meta.w().insert_new(k, v);
                 }
                 None => {
-                    self.param_meta.w().remove(&k);
+                    self.param_meta.w().remove_new(&k);
                 }
             }
         }
@@ -109,61 +109,61 @@ impl Elaborator<'_> {
     }
 
     /// `param_meta` put back: `Some` re-inserts, `None` removes (U5-U8).
-    pub(crate) fn put_back_meta(&mut self, k: String, prev: Option<(u32, bool)>) {
+    pub(crate) fn put_back_meta(&mut self, k: impl SlotKey, prev: Option<(u32, bool)>) {
         match prev {
             Some(m) => {
-                self.param_meta.w().insert(k, m);
+                self.param_meta.w().insert_new(k, m);
             }
             None => {
-                self.param_meta.w().remove(&k);
+                self.param_meta.w().remove_new(&k);
             }
         }
     }
 
     /// `param_range` put back without the hierarchical twin (U7).
-    pub(crate) fn put_back_range_raw(&mut self, k: String, prev: Option<DeclRange>) {
+    pub(crate) fn put_back_range_raw(&mut self, k: impl SlotKey, prev: Option<DeclRange>) {
         match prev {
             Some(r) => {
-                self.param_range.w().insert(k, r);
+                self.param_range.w().insert_new(k, r);
             }
             None => {
-                self.param_range.w().remove(&k);
+                self.param_range.w().remove_new(&k);
             }
         }
     }
 
     /// `real_param_val` put back (U7).
-    pub(crate) fn put_back_real(&mut self, k: String, prev: Option<f64>) {
+    pub(crate) fn put_back_real(&mut self, k: impl SlotKey, prev: Option<f64>) {
         match prev {
             Some(v) => {
-                self.real_param_val.w().insert(k, v);
+                self.real_param_val.w().insert_new(k, v);
             }
             None => {
-                self.real_param_val.w().remove(&k);
+                self.real_param_val.w().remove_new(&k);
             }
         }
     }
 
     /// `str_param_raw` put back (U7).
-    pub(crate) fn put_back_str(&mut self, k: String, prev: Option<String>) {
+    pub(crate) fn put_back_str(&mut self, k: impl SlotKey, prev: Option<String>) {
         match prev {
             Some(v) => {
-                self.str_param_raw.w().insert(k, v);
+                self.str_param_raw.w().insert_new(k, v);
             }
             None => {
-                self.str_param_raw.w().remove(&k);
+                self.str_param_raw.w().remove_new(&k);
             }
         }
     }
 
     /// `wide_param_bits` put back (U7).
-    pub(crate) fn put_back_wide(&mut self, k: String, prev: Option<ir::ConstVal>) {
+    pub(crate) fn put_back_wide(&mut self, k: impl SlotKey, prev: Option<ir::ConstVal>) {
         match prev {
             Some(cv) => {
-                self.wide_param_bits.w().insert(k, cv);
+                self.wide_param_bits.w().insert_new(k, cv);
             }
             None => {
-                self.wide_param_bits.w().remove(&k);
+                self.wide_param_bits.w().remove_new(&k);
             }
         }
     }

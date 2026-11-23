@@ -76,7 +76,7 @@ pub(crate) struct RoutineScope {
     task_table: BTreeMap<String, ast::TaskDef>,
     rtn_pkg: BTreeMap<String, String>,
     rtn_decl_scope: BTreeMap<String, ScopeRef>,
-    rtn_decl_genvars: BTreeMap<String, Vec<(String, i64)>>,
+    rtn_decl_genvars: BTreeMap<String, Vec<(NewKey, i64)>>,
     tf_decl_scope: ScopeRef,
     /// The instance whose routines the tables describe (`%m`, the OBS
     /// `subroutine_calls[].name`, the relative-scope walks). Round 1 of the review

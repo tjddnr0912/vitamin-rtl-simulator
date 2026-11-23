@@ -108,6 +108,19 @@
 //! STALE. Its rows are the stores' text door w9 (`Keyed`, `KeyedSet`, deleted at DK3-b) ; the
 //! list does not widen ALLOWED_IMPLS (a `Deref` on any other type still fails IMPL-TRAIT, NP10-1).
 //!
+//! The rule §5.2 Q-DECLKEY DK1-2b adds (R-G6 (e), R-G8 (a)): BRIDGE — a trait impl in the file set
+//! whose trait is one of the file set's OWN listed traits (defined there and on SURF_TRAITS) passes
+//! only as a row of BRIDGE naming its Self type as written (`NewKey`, `String`, `&T`) and its trait,
+//! with its CLASS, the unit that deletes it and the date it came ; the class is computed and must
+//! match: TEXT (a Self type of TEXT_TYPES), REF (a reference to a type parameter: the blanket
+//! impl), KEY (a type the file set defines) — so a text impl for another type fails IMPL-TRAIT (no
+//! row) or BRIDGE-CLASS (a row that calls it KEY). Only a BRIDGE row admits a Self type the file
+//! set does not define (IMPL-FOREIGN-SELF otherwise). A row with no unit fails BRIDGE-UNIT, one
+//! whose trait is off SURF_TRAITS or not defined in the file set BRIDGE-TRAIT, one no impl matches
+//! is STALE. Its rows are the Bound write funnel's bridge w11 (`SlotKey` / `slot_seal::SlotText`,
+//! lexscope/key.rs, deleted at DK1-2d). A supertrait passes BOUND as a bound does in IN-TOTAL: a
+//! pass bound, or a trait the file set defines and SURF_TRAITS lists (SlotKey's sealed half).
+//!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
 //! blocks, `#[cfg(..)]` twins alike (a cfg'd item counts: fail-closed), and the items
@@ -223,6 +236,8 @@ const ALLOWED_IMPLS: &[&str] = &["Clone", "Default", "Debug", "Drop", BOUNDARY_T
 /// WINDOW (§5.2 Q-DECLKEY DK1-1, R-F10 / premise10 N10-9): the traits off ALLOWED_IMPLS a row of
 /// WINDOW may admit, for the ONE type that row names ; not a wider allow list (NP10-1).
 const WINDOW_TRAITS: &[&str] = &["Deref", "DerefMut"];
+/// BRIDGE's classes (§5.2 Q-DECLKEY DK1-2b): a key type of the file set, the blanket `&T`, a text type.
+const BRIDGE_CLASSES: &[&str] = &["KEY", "REF", "TEXT"];
 const STD_ROOTS: &[&str] = &["std", "core", "alloc"];
 const FLOWS: &[&str] = &["in", "payload"];
 /// CARD's named constructors (a slice, an array and two or more `bool` are the others).
@@ -717,6 +732,8 @@ struct Cfg {
     e: Vec<Vec<String>>,
     /// WINDOW: type, trait, deleting unit, since (a dated, named admission of one trait impl)
     window: Vec<Vec<String>>,
+    /// BRIDGE: type (as written), trait, class (KEY | REF | TEXT), deleting unit, since (DK1-2b)
+    bridge: Vec<Vec<String>>,
 }
 
 fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
@@ -788,6 +805,7 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
             .collect(),
         e: rows_of(&get(&format!("{prefix}_E")), 5, "E"),
         window: rows_of(&get(&format!("{prefix}_WINDOW")), 4, "WINDOW"),
+        bridge: rows_of(&get(&format!("{prefix}_BRIDGE")), 5, "BRIDGE"),
     }
 }
 
@@ -3357,6 +3375,7 @@ struct Eng<'a> {
     interior_used: BTreeSet<usize>,
     enums_seen: BTreeSet<String>,
     window_used: BTreeSet<usize>,
+    bridge_used: BTreeSet<usize>,
     plan: bool,
 }
 
@@ -3374,6 +3393,7 @@ impl Eng<'_> {
             interior_used: BTreeSet::new(),
             enums_seen: BTreeSet::new(),
             window_used: BTreeSet::new(),
+            bridge_used: BTreeSet::new(),
             plan,
         }
     }
@@ -3945,6 +3965,30 @@ impl Eng<'_> {
 
 fn impl_self_name(t: &Type) -> String {
     type_last(t).unwrap_or_else(|| nt(t))
+}
+
+/// BRIDGE's computed class of an impl's Self type: REF (a reference to one of the impl's type
+/// parameters), TEXT (a path whose last name is a TEXT_TYPES name, or a reference to one), KEY (a
+/// type the file set defines), else OTHER (no row may name it).
+fn bridge_class(t: &Type, gen: &Gen, defs: &Defs) -> String {
+    if let Type::Reference(r) = t {
+        if let Type::Path(p) = &*r.elem {
+            if p.qself.is_none()
+                && p.path.segments.len() == 1
+                && gen.contains_key(&last_name(&p.path))
+            {
+                return "REF".into();
+            }
+        }
+    }
+    let n = type_last(t).unwrap_or_default();
+    if is_text_name(&n) {
+        "TEXT".into()
+    } else if defs.defined_type(&n) {
+        "KEY".into()
+    } else {
+        "OTHER".into()
+    }
 }
 
 fn item_ident(it: &Item) -> Option<String> {
@@ -4743,6 +4787,9 @@ fn impl_item<'a>(
         if neg.is_some() {
             why.push(("IMPL-TRAIT".into(), "a negative impl".into()));
         }
+        // BRIDGE (DK1-2b): an impl of one of the file set's own listed traits, admitted for the
+        // (Self as written, trait) a row names, its class computed and compared
+        let mut bridged = false;
         if !ALLOWED_IMPLS.contains(&tr.as_str()) {
             // WINDOW: a row naming this type and this trait (a trait of WINDOW_TRAITS) admits it
             let row = eng
@@ -4750,9 +4797,30 @@ fn impl_item<'a>(
                 .window
                 .iter()
                 .position(|r| r[0] == ty && r[1] == tr && WINDOW_TRAITS.contains(&tr.as_str()));
-            match row {
-                Some(i) if neg.is_none() => {
+            let own = eng.defs.traits.contains(&tr) && eng.cfg.traits.contains(&tr);
+            let written = nt(&im.self_ty);
+            let brow = eng
+                .cfg
+                .bridge
+                .iter()
+                .position(|r| own && r[0] == written && r[1] == tr);
+            match (row, brow) {
+                (Some(i), _) if neg.is_none() => {
                     eng.window_used.insert(i);
+                }
+                (None, Some(i)) if neg.is_none() => {
+                    eng.bridge_used.insert(i);
+                    bridged = true;
+                    let class = bridge_class(&im.self_ty, &gen, &eng.defs);
+                    if eng.cfg.bridge[i][2] != class {
+                        why.push((
+                            "BRIDGE-CLASS".into(),
+                            format!(
+                                "a BRIDGE row calls impl {tr} for {written} {} ; it is {class}",
+                                eng.cfg.bridge[i][2]
+                            ),
+                        ));
+                    }
                 }
                 _ => why.push((
                     "IMPL-TRAIT".into(),
@@ -4760,7 +4828,7 @@ fn impl_item<'a>(
                 )),
             }
         }
-        if !eng.defs.defined_type(&ty) {
+        if !bridged && !eng.defs.defined_type(&ty) {
             why.push((
                 "IMPL-FOREIGN-SELF".into(),
                 format!("a trait impl for {}", nt(&im.self_ty)),
@@ -4988,7 +5056,16 @@ fn trait_item(eng: &mut Eng<'_>, at: &At<'_>, t: &syn::ItemTrait) {
         eng.fail(file, &name, "GENERIC", "BOUND", "a generic trait");
     }
     for b in &t.supertraits {
-        if !J::pass_bound(b) {
+        // DK1-2b: a supertrait the file set defines and SURF_TRAITS lists passes, as in IN-TOTAL's
+        // in_bounds (SlotKey's sealed half `slot_seal::SlotText`)
+        let own = match b {
+            TypeParamBound::Trait(tb) => {
+                let n = last_name(&tb.path);
+                eng.defs.traits.contains(&n) && eng.cfg.traits.contains(&n)
+            }
+            _ => false,
+        };
+        if !(J::pass_bound(b) || own) {
             eng.fail(
                 file,
                 &name,
@@ -5561,6 +5638,46 @@ fn stale_checks(eng: &mut Eng<'_>) {
                 "IMPL",
                 "STALE",
                 "a WINDOW row matches no impl of the file set",
+            );
+        }
+    }
+    let bridge = eng.cfg.bridge.clone();
+    for (i, b) in bridge.iter().enumerate() {
+        let item = format!("{} for {}", b[1], b[0]);
+        if !(eng.defs.traits.contains(&b[1]) && eng.cfg.traits.contains(&b[1])) {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "BRIDGE-TRAIT",
+                "a BRIDGE row's trait is not a trait the file set defines and SURF_TRAITS lists",
+            );
+        }
+        if !BRIDGE_CLASSES.contains(&b[2].as_str()) {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "BRIDGE-CLASS",
+                format!("a BRIDGE row's class off {BRIDGE_CLASSES:?}"),
+            );
+        }
+        if b[3].is_empty() || b[3] == "-" {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "BRIDGE-UNIT",
+                "a BRIDGE row names no deleting unit",
+            );
+        }
+        if !eng.bridge_used.contains(&i) {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "STALE",
+                "a BRIDGE row matches no impl of the file set",
             );
         }
     }

@@ -275,12 +275,13 @@ fn fb_gen_binding_encloses() {
     let mut s = Scopes::new();
     let a = s.scope_swap_text("top".to_string());
     let old = s.mark_swap_here(Mark::Inst);
+    let gv = s.new_key("i");
     assert!(
         s.gen_binding_encloses("top.P", "P", sp(5, 6)),
         "the instance's own scope"
     );
     let b = s.scope_swap_text("top.g[0]".to_string());
-    s.gen_text_push(sp(10, 20), Some("top.i".to_string()));
+    s.gen_text_push(sp(10, 20), Some(gv));
     assert!(
         s.gen_binding_encloses("top.i", "i", sp(12, 13)),
         "the genvar, inside"

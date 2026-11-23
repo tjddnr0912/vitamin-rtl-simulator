@@ -295,6 +295,8 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # `pos` row and the two `dpos=gather_decl_positions` bindings left H7 (a store value now, HS / H5 hold the store).
 # §5.2 Q-DECLKEY DK1-2a: hoist_block_local_nets' `seen` is a KeyedSet of NewKeys (premise11 Q4): it left the typed-let count
 # (2 -> 1 there ; H7_READERS keeps `seen`, still the fn's local collection, as g2b's reader list names it).
+# §5.2 Q-DECLKEY DK1-2b: push_body_enum_labels returns its two saved Vecs keyed by NewKey (net_util.rs:529 :530): the four
+# `saved_labels=push_body_enum_labels` UNTYPED bindings (frames_body.rs 2, inline_task.rs, inline_fn.rs) left H7.
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	1	pushed
@@ -328,8 +330,8 @@ expr_size_hier.rs	child_env	1	bound
 expr_size_hier.rs	module_facts	1	seen
 expr_size_hier_exact.rs	env_exact	1	bound
 expr_size_hier_exact.rs	hier_leaf_width_exact	1	exact
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	UNTYPED	declared=rtn_declared_names,saved_labels=push_body_enum_labels
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	UNTYPED	declared=rtn_declared_names,saved_labels=push_body_enum_labels
+frames_body.rs	lower_frame_body_inner_lower_frame_func_body	UNTYPED	declared=rtn_declared_names
+frames_body.rs	lower_frame_body_inner_lower_frame_task_body	UNTYPED	declared=rtn_declared_names
 frames_body.rs	lower_frame_funcs	UNTYPED	frame_set=build_frame_set,task_set=build_task_frame_set
 frames_body.rs	seed_subroutine_routes	2	fnames,tnames
 frames_call/emit.rs	emit_frame_task_call	1	out_array_unpacks
@@ -364,11 +366,10 @@ inline_fn.rs	inline_pkg_function	UNTYPED	pkg_const_names=pkg_scope_names,refused
 inline_fn.rs	inline_resolved_func_in_pkg	1	dyn_binds
 inline_fn.rs	inline_resolved_func_in_pkg	UNTYPED	declared=rtn_declared_names
 inline_fn.rs	reduce_function_body	6	decl_consts,seen,local_dims,two_state,writable,non_bv
-inline_fn.rs	reduce_function_body	UNTYPED	saved_labels=push_body_enum_labels
 inline_ret_select.rs	body_binding_hazard	2	owner,formals
 inline_ret_select.rs	expr_bound	1	names
 inline_task.rs	inline_static_task	1	dyn_binds
-inline_task.rs	inline_static_task	UNTYPED	saved_labels=push_body_enum_labels,declared=rtn_declared_names
+inline_task.rs	inline_static_task	UNTYPED	declared=rtn_declared_names
 inline_task_locals.rs	hoist_inline_task_locals	1	hoisted_here
 instance.rs	elaborate_instance	7	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,saved_params,wc_rtn,explicit_rtn
 instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
@@ -446,7 +447,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 165 fns 86 untyped 32 readers 26
+lets 165 fns 86 untyped 31 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -460,6 +461,8 @@ lets 165 fns 86 untyped 32 readers 26
 # §5.2 Q-DECLKEY DK1-2a: the 15 declaration-side `fq` calls of DELTA15 C1.3 (+ net_util.rs:656, N11-4) and frames_reserve.rs's two
 # written-out forms are `self.lex.new_key(..)` (call fq 88 -> 73 by MINT_CALLS ; fmt: the two `{}.{}` key formats -> lexscope/key.rs
 # new_key's one) ; MINT_CALLS does not list new_key: the mint lives inside lexscope (HX at DK1-6 reads the entry)
+# §5.2 Q-DECLKEY DK1-2b: the 8 body-scope saved-key mints (generate.rs:167 :262 :699 :711 :736, net_util.rs:604, package.rs:530
+# :549) are `self.lex.new_key(..)`: call fq 73 -> 65
 file	fn	kind	name	count	TAG
 array_geom.rs	record_declared_bounds	call	fq	1	key
 array_geom.rs	shape_bits	call	walk_scopes_key	1	key
@@ -548,8 +551,6 @@ gen_scope_name.rs	key_spells_indexed_singleton	call	indexed_gen_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	derived-fn	key_spells_indexed_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	join	join	1	key
 gen_scope_name.rs	singleton_scope_key	fmt	format	1	key
-generate.rs	elaborate_gen_item	call	fq	2	key
-generate.rs	lower_gen_module_item	call	fq	3	key
 held.rs	clk_refused_at	call	walk_scopes_key_from	1	key
 held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
@@ -642,7 +643,6 @@ lexscope/mod.rs	scope_enter	push	push	1	scope
 lexscope/mod.rs	scope_swap_pkg	fmt	format	1	scope
 lvalue.rs	collect_lval_chunks	call	walk_scopes_key_shadowed	1	key
 lvalue.rs	collect_lval_chunks	join	join	2	spelling
-net_util.rs	push_body_enum_labels	call	fq	1	key
 net_util.rs	warn_implicit_net_truncation	call	fq	2	key
 netdecl.rs	elaborate_netvar_decl_inner	call	fq	9	key
 netdecl.rs	elaborate_netvar_decl_inner	fmt-tempname	format	1	spelling
@@ -651,7 +651,6 @@ package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_scopes_key	2	key
 package.rs	dotted_hit_is_pkg_alias	call	walk_scopes_key	1	key
 package.rs	elaborate_package	call	fq	2	key
 package.rs	elaborate_pkg_netvar	call	fq	1	key
-package.rs	push_pkg_consts_skipping	call	fq	2	key
 package.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
 package.rs	resolve_rtn_key	derived-fn	resolve_rtn_key	1	key
 packed.rs	expr_packed_chain	join	join	1	spelling
@@ -706,7 +705,7 @@ systask.rs	lower_systask	call	fq	1	key
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 == HM_COUNTS
-mints 333 kinds {"call": 152, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 173, "scope": 18, "segment": 17, "spelling": 105}
+mints 325 kinds {"call": 144, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 165, "scope": 18, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -754,6 +753,7 @@ stores 81 scans 28 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS":
 # one ; role `composite` when the fn calls a walk (HH_WALK) or probes another store with the same mint, else
 # `whole` (k4.py's rule). A PIN of today's sites: it does not close the door (premise2 B3).
 # §5.2 Q-DECLKEY DK1-2a: add_net's two probes and record_pattern_target's one take the NewKey (contains_new / get_new): 61 -> 58
+# §5.2 Q-DECLKEY DK1-2b: elaborate_gen_item's two probes of the genvar key take its NewKey (get_new, generate.rs:183 :253): 58 -> 56
 file	fn	store	role	ops
 array_geom.rs	record_declared_bounds	symbols	whole	get=1
 block_local/hoist.rs	hoist_one_block_local	symbols	composite	contains_key=1,get=2
@@ -763,8 +763,6 @@ cover.rs	cover_inst	cover_insts	whole	get=1
 cover.rs	cross_inst	cross_insts	whole	get=1
 frames_blocal.rs	reserve_block_local_decl	symbols	whole	get=1
 frames_call/mod.rs	is_net_or_const_arg	symbols	whole	contains_key=1
-generate.rs	elaborate_gen_item	param_range	composite	get=1
-generate.rs	elaborate_gen_item	params	composite	get=1
 iface_inst.rs	elaborate_iface_instances	iface_insts	whole	contains_key=1
 iface_inst.rs	elaborate_iface_instances	params	whole	get=1
 inline_task_locals.rs	hoist_one_inline_local	symbols	whole	contains_key=1,get=1
@@ -787,7 +785,7 @@ ports.rs	wire_ports	symbols	composite	get=1
 stmt_main.rs	lower_stmt_inner	vif_handles	whole	contains=1
 string_array_route.rs	has_fixed_string_array_storage	string_array_elems	whole	contains_key=1
 == HH_COUNTS
-reads 58 roles {"composite": 18, "whole": 40} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "explicit_imports": 5, "iface_insts": 2, "implicit_nets": 1, "param_meta": 1, "param_range": 2, "params": 5, "pkg_var_aliases": 2, "string_array_elems": 1, "symbols": 33, "vif_handles": 1, "wc_origin": 2}
+reads 56 roles {"composite": 16, "whole": 40} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "explicit_imports": 5, "iface_insts": 2, "implicit_nets": 1, "param_meta": 1, "param_range": 1, "params": 4, "pkg_var_aliases": 2, "string_array_elems": 1, "symbols": 33, "vif_handles": 1, "wc_origin": 2}
 == HSEG
 # HSEG: the segment-text tests — a text method (SEG_METHODS) whose literal argument holds `.` `$` `[` or `::`,
 # every `strip_prefix` (g4 OWED-d's domain), a `starts_with` / `strip_prefix` / `ends_with` / `strip_suffix`
@@ -912,6 +910,9 @@ tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-":
 # window types' own inner map / set, which hold every binding of those 32 stores (CODE V for the holder ; the field rows keep theirs).
 # §5.2 Q-DECLKEY DK1-2a: NewKey's own field (lexscope/key.rs) is a declaration key's text (KEY ; CODE I, pattern_targets' row's) ;
 # pattern_targets' value holds a NewKey (lib.rs:336), so its row left (a retype to a key type) — KEYED-OTHER 6 -> 5, KEY 1 -> 2.
+# §5.2 Q-DECLKEY DK1-2b: gen_genvars' element (lib.rs:1129) and lexscope's gen_text genvar key (mod.rs:82) are NewKeys (a retype
+# to a key type: both rows left — KEYED-OTHER 5 -> 4, SCOPE 5 -> 4) ; rtn_decl_genvars keeps its ROUTINE key (RS1), its value's
+# element is a NewKey (R-G3: the type column moved, the row stays).
 struct	file	field	type	CLASS	CODE	STORE
 Elaborator	lib.rs	symbols	Keyed<u32>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	bind_targets	BTreeMap<String, Vec<ast::ModuleInstance>>	NOT	DEF	-
@@ -952,7 +953,6 @@ ProcIdentRow	proc_ident.rs	file	String	NOT	D	-
 ProcIdentRow	proc_ident.rs	kind	&str	NOT	D	-
 ScopeKeyed	lexscope/mod.rs	0	BTreeMap<String, V>	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	cur_prefix	String	NOT	CTX	SCOPE
-Scopes	lexscope/mod.rs	gen_text	Vec<(ScopeId, hdl_ast::Span, Option<String>)>	BINDING	S	SCOPE
 Scopes	lexscope/mod.rs	names	Vec<String>	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	ids	HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>	NOT	CTX	SCOPE
 Elaborator	lib.rs	cur_module	String	NOT	CTX	-
@@ -986,8 +986,7 @@ Elaborator	lib.rs	decl_wins	std::cell::RefCell<BTreeMap<(String, String, decl_sc
 Elaborator	lib.rs	task_table	BTreeMap<String, ast::TaskDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_pkg	BTreeMap<String, String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, ScopeRef>	BINDING	R	ROUTINE
-Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(String, i64)>>	BINDING	R	ROUTINE
-Elaborator	lib.rs	gen_genvars	Vec<(String, i64)>	NOT	CTX	KEYED-OTHER
+Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(NewKey, i64)>>	BINDING	R	ROUTINE
 Elaborator	lib.rs	decl_pos	Keyed<u32>	BINDING	V	KEYED-OTHER
 Elaborator	lib.rs	decl_block_locals	std::collections::BTreeSet<String>	BINDING	V	-
 Elaborator	lib.rs	wide_param_bits	Bound<Keyed<ir::ConstVal>>	BINDING	V	KEYED-PLAN26
@@ -1105,7 +1104,7 @@ SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BIND
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 191 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 12, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 10, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 2, "KEYED-JUDGE5": 5, "KEYED-OTHER": 5, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 5}
+fields 189 classes {"BINDING:R": 27, "BINDING:S": 6, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 10, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 2, "KEYED-JUDGE5": 5, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 4}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
@@ -1292,6 +1291,7 @@ api.rs	elaborate_located_params	scope_out	s	OTHER:tuple	2
 block_local/hoist.rs	hoist_one_block_local	cur_shown_quoted_or	"the enclosing scope"	ARG:scope_out	1
 block_local/hoist.rs	hoist_one_block_local	scope_out	key_show(&key)	MAC:format>LOCAL:m#2	1
 block_local/hoist.rs	hoist_one_block_local	scope_out	self.lex.cur_shown_quoted_or("the enclosing scope")	MAC:format>ARG:self.error	1
+bound/write.rs	bind_param_range	scope_out	key_show(key)	MAC:debug_assert>STMT	1
 class_lower.rs	lower_class_method_body	RESTORE:disp_chain	= saved_block_scope	-	1
 class_lower.rs	lower_class_method_body	RESTORE:disp_method	= saved_cm	-	1
 class_lower.rs	lower_class_method_body	RESTORE:disp_root	= saved_root	-	1
@@ -1384,7 +1384,7 @@ stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
 # cur_shown_quoted_or 1 (the two entries join HOUT_CALLEES)
 # §5.2 Q-DECLKEY DK1-2a: scope_out 18 -> 22, a NewKey printed or output leaves as `scope_out(key_show(&k))` (hoist.rs:349,
 # net_util.rs:661 :725, cover.rs:250 CovgInstMeta.inst: DELTA15 q5) ; LIT 7 stays (CovgInstMeta's `inst=key` -> `inst=scope_out(..)`)
-{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 22, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 23, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1696,3 +1696,9 @@ readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1
 scope.rs	Elaborator::scoped_key_at_or_above	IN:prefix	&crate::ScopeRef	1
 scope.rs	Elaborator::walk_scopes_key_from	IN:prefix	&crate::ScopeRef	1
 sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
+== HW11
+# HW11 (§5.2 Q-DECLKEY DK1-2b, R-G8 (e)): bridge w11's text doors (SURF_LEAVE L8: the methods of SURF_BRIDGE's traits) by name,
+# with the count of their identifier tokens in the crate's src outside lexscope/key.rs ; 0 each until DK1-2d deletes them
+name	count
+slot_owned	0
+slot_text	0
