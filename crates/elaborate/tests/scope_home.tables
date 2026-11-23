@@ -1697,9 +1697,3 @@ readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1
 scope.rs	Elaborator::scoped_key_at_or_above	IN:prefix	&crate::ScopeRef	1
 scope.rs	Elaborator::walk_scopes_key_from	IN:prefix	&crate::ScopeRef	1
 sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
-== HW11
-# HW11 (§5.2 Q-DECLKEY DK1-2b, R-G8 (e)): bridge w11's text doors (SURF_LEAVE L8: the methods of SURF_BRIDGE's traits) by name,
-# with the count of their identifier tokens in the crate's src outside lexscope/key.rs ; 0 each until DK1-2d deletes them
-name	count
-slot_owned	0
-slot_text	0

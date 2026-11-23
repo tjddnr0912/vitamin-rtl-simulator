@@ -89,10 +89,7 @@ KeyedSet	struct
 # the crate-visible traits allowed (plan10/g/surface.tsv: 1, the boundary trait)
 name
 Outgoing
-# §5.2 Q-DECLKEY DK1-2b: bridge w11 (lexscope/key.rs ; deleting unit DK1-2d) — SlotKey, the funnel's key bound, and its
-# sealed half SlotText (`pub` in the module `slot_seal`, private to key.rs: crate-visible by its marker, path privacy not applied)
-SlotKey
-SlotText
+# §5.2 Q-DECLKEY DK1-2d (2026-11-24): bridge w11 closed: SlotKey and its sealed half SlotText (DK1-2b's two names) left with it
 == SURF_MACROS
 # MACRO-BODY (DELTA11 R2): every `macro_rules!` the file set defines, or the rest of the crate
 # defines and the file set calls, with the sha256 of its token tree ; also the item-position
@@ -103,7 +100,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=5 rows=167 out_types=24 e_fns=29 text_flows=42
+present=present files=5 rows=156 out_types=24 e_fns=29 text_flows=42
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -150,14 +147,6 @@ lexscope/key.rs	-	IMPL	Deref for Keyed	-	-	PASS	-
 lexscope/key.rs	-	IMPL	Deref for KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for Keyed	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for KeyedSet	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotKey for NewKey	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotKey for String	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotKey for T	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotText for NewKey	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotText for String	-	-	PASS	-
-lexscope/key.rs	-	IMPL	SlotText for T	-	-	PASS	-
-lexscope/key.rs	-	TRAIT	SlotKey	-	-	PASS	-
-lexscope/key.rs	-	TRAIT	SlotText	-	-	PASS	-
 lexscope/key.rs	-	TYPE	Keyed	-	-	PASS	-
 lexscope/key.rs	-	TYPE	KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	TYPE	NewKey	-	-	PASS	-
@@ -170,8 +159,6 @@ lexscope/key.rs	K	FN	KeyedSet::insert_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	KeyedSet::remove_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Scopes::new_key	IN:local	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	Scopes::new_key	RET	NewKey	PASS	-
-lexscope/key.rs	K	FN	SlotText::slot_owned	RET	String	LEAVE:L8	-
-lexscope/key.rs	K	FN	SlotText::slot_text	RET	&str	LEAVE:L8	REF
 lexscope/key.rs	K	FN	key_show	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	key_text	RET	&str	LEAVE:L7	REF
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
@@ -200,7 +187,6 @@ lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::Keyed	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::KeyedSet	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::NewKey	-	-	PASS	-
-lexscope/mod.rs	-	USE	key::SlotKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_text	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
@@ -306,9 +292,7 @@ bool
 # until the module exists ; a row matching no failing position fails STALE
 # §5.2 Q-DECLKEY DK1-2a (DELTA14 F2, DELTA15 C1.3): L7 `key_text`, a NewKey's text where it meets a text operation outside the
 # module (one site at DK1-2a: struct_arm.rs:113, deleted by DK1-4b) ; the bridge closes at DK3-b
-# §5.2 Q-DECLKEY DK1-2b (bridge w11, R-G8 (a) (e)): L8, the two TEXT doors of SlotKey's sealed half — `slot_text` (the key's text
-# handed to a store's verb) and `slot_owned` (the key's String moved into a store) ; called in lexscope/key.rs only (HW11 pins
-# their call tokens elsewhere at 0) ; both close at DK1-2d, where w11's text impls are deleted
+# §5.2 Q-DECLKEY DK1-2d (2026-11-24): bridge w11 closed: L8 (DK1-2b's two TEXT doors of SlotKey's sealed half, `slot_text` / `slot_owned`) closed with it, its two rows deleted
 id	item	position	type	closes
 L1	Scopes::cur_prefix_text	RET	&str	DK1
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
@@ -320,8 +304,6 @@ L4	Elaborator::display_of_key_text	RET	String	DK4
 L5	Scopes::key_under	RET	String	DK1
 L6	Scopes::scope_text	RET	&str	DK1
 L7	key_text	RET	&str	DK3-b
-L8	SlotText::slot_text	RET	&str	DK1-2d
-L8	SlotText::slot_owned	RET	String	DK1-2d
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
@@ -368,19 +350,6 @@ Keyed	Deref	DK3-b	2026-11-23
 Keyed	DerefMut	DK3-b	2026-11-23
 KeyedSet	Deref	DK3-b	2026-11-23
 KeyedSet	DerefMut	DK3-b	2026-11-23
-== SURF_BRIDGE
-# BRIDGE (§5.2 Q-DECLKEY DK1-2b ; DELTA15 C1.3 w11, R-G6 (e), R-G8 (a), premise11 N11-1): a trait impl of the file set's own listed
-# traits, admitted for the ONE Self type a row names as written, with its CLASS (computed: KEY a type of the file set, REF the
-# blanket `&T` over a type parameter, TEXT a TEXT_TYPES name), its deleting unit and the date it was admitted ; a row no impl
-# matches is STALE. The Bound write funnel's bridge w11 (lexscope/key.rs): SlotKey and its sealed half SlotText, each for NewKey,
-# for `&T: SlotKey`, and for String — the ONE TEXT type (2 rows, the dated text door) ; `str` is no SlotKey. All six go at DK1-2d.
-type	trait	class	unit	since
-NewKey	SlotText	KEY	DK1-2d	2026-11-23
-NewKey	SlotKey	KEY	DK1-2d	2026-11-23
-&T	SlotText	REF	DK1-2d	2026-11-23
-&T	SlotKey	REF	DK1-2d	2026-11-23
-String	SlotText	TEXT	DK1-2d	2026-11-23
-String	SlotKey	TEXT	DK1-2d	2026-11-23
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -639,21 +608,15 @@ lexscope/key.rs	Deref for Keyed::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3
 lexscope/key.rs	Deref for KeyedSet::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
 lexscope/key.rs	DerefMut for Keyed::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
 lexscope/key.rs	DerefMut for KeyedSet::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
-lexscope/key.rs	Keyed::contains_new	75a968fcddb3806b75548b17c909d3da41e6ebc94718311082c6d4511b529cd8
+lexscope/key.rs	Keyed::contains_new	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
 lexscope/key.rs	Keyed::entry_new	80652741cac3d7548d895db5b80a8ecaedbed657595e3e7a758320a62871a00a
-lexscope/key.rs	Keyed::get_new	49a6cb6e2aa3ccaeaca2a77b73a671aadc62b237ba1907a2b908f584216ee03b
-lexscope/key.rs	Keyed::insert_new	6d76a67e4bb456a0f4fd0feaa88a641ee9c0a57cbfae5dda7ccb3d5606283cfe
-lexscope/key.rs	Keyed::remove_new	699034a1b1fb7c61779d6a50f4b5e47712d494d1d4cc4350a185bbd98599e221
-lexscope/key.rs	KeyedSet::insert_new	766e912301e7e215ff4c941415725fd4b4f9acff5e2c474ab7f447871019ce0a
-lexscope/key.rs	KeyedSet::remove_new	699034a1b1fb7c61779d6a50f4b5e47712d494d1d4cc4350a185bbd98599e221
+lexscope/key.rs	Keyed::get_new	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
+lexscope/key.rs	Keyed::insert_new	622cc054b687aec85f26f9012a0cc6b81c5f3099a0b6b2947762a74114d5cd2b
+lexscope/key.rs	Keyed::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
+lexscope/key.rs	KeyedSet::insert_new	8f93e5ae359bbfad81efda0f917b09d14711e3ee21d021717e909a5b69b2ff84
+lexscope/key.rs	KeyedSet::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
 lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c5d2ae75061e42bd3
-lexscope/key.rs	SlotText for NewKey::slot_owned	1e7c1e733228338213e5eb2c03ee8ada83462d7a0979e7a3ccef257bcf898634
-lexscope/key.rs	SlotText for NewKey::slot_text	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
-lexscope/key.rs	SlotText for String::slot_owned	06c604b332b386b6cce8355ccf27fffd3a98b7a7a5b9b3a550c039c6ebae38e4
-lexscope/key.rs	SlotText for String::slot_text	06c604b332b386b6cce8355ccf27fffd3a98b7a7a5b9b3a550c039c6ebae38e4
-lexscope/key.rs	SlotText for T::slot_owned	ba4a371658a4d882bc452f96c99a00a4932f5bf46d065ef9ec93db124ca39e3d
-lexscope/key.rs	SlotText for T::slot_text	4fb1e785df6e02da946de4577cdb74514d207a2b99a8c8098e5adad2c1367b79
-lexscope/key.rs	key_show	8a0a912a46ee41b46ebb2e2daf4e4840a9e31bdd251e695a05f022819fd7998b
+lexscope/key.rs	key_show	61fc9b8c8d9973948d81fa52bb6f470bf2e10c355df265e6c167d4bacea82e66
 lexscope/key.rs	key_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/mod.rs	Clone for ScopeRef::clone	7fd1561b40a3600a688648719080f1f686e9201a41061e730a9f1708a7b4277f
 lexscope/mod.rs	Clone for Shown::clone	6ab72e6f44542598375aadaf3d72fe227221b7278a9fcb72ce16822e765f1e41
@@ -819,8 +782,6 @@ same_actual	1
 file	fn	name	count
 == FIX_WINDOW
 type	trait	unit	since
-== FIX_BRIDGE
-type	trait	class	unit	since
 == FIX_ENUMS
 name
 Mark

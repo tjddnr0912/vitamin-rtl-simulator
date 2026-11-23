@@ -32,7 +32,7 @@ mod key;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use key::{key_show, key_text, Keyed, KeyedSet, NewKey, SlotKey};
+pub(crate) use key::{key_show, key_text, Keyed, KeyedSet, NewKey};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]

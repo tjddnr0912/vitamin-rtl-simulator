@@ -81,10 +81,10 @@ impl super::Scopes {
 }
 
 /// A NewKey in a message: the key's bytes, as display text (it leaves through `scope_out`).
-/// DK1-2b: any [`SlotKey`] (the funnel's debug message on its generic key) ; `&NewKey` again at
-/// DK1-2d.
-pub(crate) fn key_show(k: &impl SlotKey) -> Shown {
-    Shown(k.slot_text().to_string())
+/// (DK1-2b widened it to bridge w11's keys ; DK1-2d closed the bridge.)
+#[inline]
+pub(crate) fn key_show(k: &NewKey) -> Shown {
+    Shown(k.0.clone())
 }
 
 /// L7 (LEAVE): a NewKey's text where it meets a text operation outside the module ; a counted
@@ -95,20 +95,23 @@ pub(crate) fn key_text(k: &NewKey) -> &str {
 
 /// The NewKey entries of a map store: the std verb on the key's own String (`entry_new` is
 /// `entry(..).or_default()`, the one form a caller writes: no std `Entry` leaves the module).
-/// DK1-2b: `insert_new` / `remove_new` / `contains_new` / `get_new` take any [`SlotKey`] (bridge
-/// w11: a NewKey, or the text a funnel caller still holds) ; NewKey again at DK1-2d.
+/// (DK1-2b widened the first four to bridge w11's keys ; DK1-2d closed the bridge: a NewKey only.)
 impl<V> Keyed<V> {
-    pub(crate) fn insert_new(&mut self, k: impl SlotKey, v: V) -> Option<V> {
-        self.0.insert(k.slot_owned(), v)
+    #[inline]
+    pub(crate) fn insert_new(&mut self, k: NewKey, v: V) -> Option<V> {
+        self.0.insert(k.0, v)
     }
-    pub(crate) fn remove_new(&mut self, k: &impl SlotKey) -> Option<V> {
-        self.0.remove(k.slot_text())
+    #[inline]
+    pub(crate) fn remove_new(&mut self, k: &NewKey) -> Option<V> {
+        self.0.remove(&k.0)
     }
-    pub(crate) fn contains_new(&self, k: &impl SlotKey) -> bool {
-        self.0.contains_key(k.slot_text())
+    #[inline]
+    pub(crate) fn contains_new(&self, k: &NewKey) -> bool {
+        self.0.contains_key(&k.0)
     }
-    pub(crate) fn get_new(&self, k: &impl SlotKey) -> Option<&V> {
-        self.0.get(k.slot_text())
+    #[inline]
+    pub(crate) fn get_new(&self, k: &NewKey) -> Option<&V> {
+        self.0.get(&k.0)
     }
     pub(crate) fn entry_new(&mut self, k: NewKey) -> &mut V
     where
@@ -118,63 +121,14 @@ impl<V> Keyed<V> {
     }
 }
 
-/// The NewKey entries of a set store (DK1-2b: any [`SlotKey`], as the map's ; `remove_new` is the
-/// funnel's clear of `param_type_guessed`).
+/// The NewKey entries of a set store (`remove_new` is the funnel's clear of `param_type_guessed`).
 impl KeyedSet {
-    pub(crate) fn insert_new(&mut self, k: impl SlotKey) -> bool {
-        self.0.insert(k.slot_owned())
+    #[inline]
+    pub(crate) fn insert_new(&mut self, k: NewKey) -> bool {
+        self.0.insert(k.0)
     }
-    pub(crate) fn remove_new(&mut self, k: &impl SlotKey) -> bool {
-        self.0.remove(k.slot_text())
-    }
-}
-
-/// BRIDGE w11 (§5.2 Q-DECLKEY DK1-2b, DELTA15 C1.3, R-G8 (a) ; deleting unit DK1-2d): the key the
-/// Bound write funnel (`bound/write.rs`, `bound/undo.rs`) and the `_new` entries above take for
-/// these commits — a [`NewKey`], or the TEXT a funnel caller still holds (DK1-2c's mints), handed
-/// to the store as the window w9 hands it today: no NewKey is made from text (P23). Sealed: its
-/// half `slot_seal::SlotText` lives in a module private to this file, so no impl outside it
-/// compiles ; its two text methods are called in this file only (a home row counts their call
-/// tokens elsewhere at 0: R-G8 (e), NP11-1). `Clone` (the funnel's `bind_decl` /
-/// `bind_param_range` clone a key where `to_string` stood), so `str` is no SlotKey ; the blanket
-/// `&T` takes `&NewKey` and `&String` with no call-site edit (premise11 N11-1).
-pub(crate) trait SlotKey: slot_seal::SlotText + Clone {}
-
-mod slot_seal {
-    /// The sealed half of [`super::SlotKey`]: the key's text, handed to a store.
-    pub trait SlotText {
-        fn slot_text(&self) -> &str;
-        fn slot_owned(self) -> String;
+    #[inline]
+    pub(crate) fn remove_new(&mut self, k: &NewKey) -> bool {
+        self.0.remove(&k.0)
     }
 }
-
-impl slot_seal::SlotText for NewKey {
-    fn slot_text(&self) -> &str {
-        &self.0
-    }
-    fn slot_owned(self) -> String {
-        self.0
-    }
-}
-impl SlotKey for NewKey {}
-
-impl<T: SlotKey> slot_seal::SlotText for &T {
-    fn slot_text(&self) -> &str {
-        (**self).slot_text()
-    }
-    fn slot_owned(self) -> String {
-        self.slot_text().to_string()
-    }
-}
-impl<T: SlotKey> SlotKey for &T {}
-
-// TEXT (dated, deleting unit DK1-2d): the key a funnel caller still holds as a String.
-impl slot_seal::SlotText for String {
-    fn slot_text(&self) -> &str {
-        self
-    }
-    fn slot_owned(self) -> String {
-        self
-    }
-}
-impl SlotKey for String {}
