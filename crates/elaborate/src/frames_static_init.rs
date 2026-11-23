@@ -111,7 +111,7 @@ impl Elaborator<'_> {
                 break;
             }
         }
-        self.frame_nonhoistable = nonh;
+        *self.frame_nonhoistable = nonh;
         // PER-DECLARATOR, with ONE frame-wide escape hatch.
         //
         // A declined sibling does not by itself cost an admitted declarator its once-only

@@ -280,7 +280,7 @@ impl Elaborator<'_> {
     /// keep their index; storage keys (`symbols`) are untouched.
     pub(crate) fn net_name_table(&self) -> Vec<String> {
         let mut names = vec![String::new(); self.nets.len()];
-        for (fq, &id) in &self.symbols {
+        for (fq, &id) in self.symbols.iter() {
             if let Some(slot) = names.get_mut(id as usize) {
                 if slot.is_empty() {
                     *slot = self.display_of_key_text(fq);

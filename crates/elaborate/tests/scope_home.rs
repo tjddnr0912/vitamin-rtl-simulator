@@ -2442,6 +2442,10 @@ const RECV2: &[&str] = &["self", "s", "me", "this"];
 const KEYED_COLL: &[&str] = &[
     "BTreeMap", "HashMap", "BTreeSet", "HashSet", "IndexMap", "IndexSet",
 ];
+/// HS / H5 (§5.2 Q-DECLKEY DK1-1): the stores' two types of window w9 (`lexscope/key.rs`), by their
+/// exact names: a `BTreeMap<String, V>` / `BTreeSet<String>` held behind `Deref` / `DerefMut`, so a
+/// field of one is still keyed by `String` text (HS's store set, H5's name-typed fields) until DK3-b.
+const WINDOW_TYPES: &[&str] = &["Keyed", "KeyedSet"];
 /// HH: a probe of a store (k4.py READ less the compiler-only ops).
 const HH_READ: &[&str] = &["get", "contains_key", "contains", "range", "get_mut"];
 /// HH: the walks that make a read a composite step (k4.py WALK).
@@ -3274,12 +3278,15 @@ impl Census2 {
 }
 
 /// A map / set type (through `Option`, `RefCell`, `Rc`, `Box`, `Bound`) whose first type
-/// argument is `String`.
+/// argument is `String`, or a type of WINDOW_TYPES.
 fn string_keyed(ty: &syn::Type) -> bool {
     let syn::Type::Path(p) = ty else { return false };
     let Some(last) = p.path.segments.last() else {
         return false;
     };
+    if WINDOW_TYPES.contains(&last.ident.to_string().as_str()) {
+        return true;
+    }
     let syn::PathArguments::AngleBracketed(a) = &last.arguments else {
         return false;
     };
@@ -3758,7 +3765,10 @@ fn h5_the_name_typed_fields_are_classified() {
         for si in c.structs.get(&sn).map(Vec::as_slice).unwrap_or(&[]) {
             for (f, ty) in &si.fields {
                 let ids = c.expand(ty);
-                if ids.iter().any(|i| NAME_TYPES.contains(&i.as_str())) {
+                if ids
+                    .iter()
+                    .any(|i| NAME_TYPES.contains(&i.as_str()) || WINDOW_TYPES.contains(&i.as_str()))
+                {
                     let k = format!("{sn}\t{}\t{f}", si.file);
                     let t = type_str(ty);
                     dumped.push(format!("{k}\t{t}"));

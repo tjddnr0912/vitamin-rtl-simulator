@@ -17,7 +17,7 @@
 //! (LS1 part 7 replaces it by IN-TOTAL, below).
 //! I-OUT. Every lexscope fn that takes the Elaborator (a receiver in `impl Elaborator`, or
 //! `Self` in a callback) is on the list E, its body pinned by OUT-F (`self.<field>` whose
-//! field type is not a lexscope type), OUT-C (calls of fns not defined in lexscope), OUT-M
+//! field type is not a lexscope type ; a WINDOW type's store counts as not one), OUT-C (calls of fns not defined in lexscope), OUT-M
 //! (macro calls) by (fn, name, count) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column.
 //!
 //! The rules DELTA11 R2 adds (LS1 part 5), each a counted list whose missing row FAILS:
@@ -100,6 +100,13 @@
 //! spec assembled by `concat!` ; a foreign type's text reached through a method (an interned
 //! symbol: NP-17) ; a field behind a macro type or an associated type (IN-UNKNOWN, loud) ; a
 //! `carried` parameter read through an alias (`let x = &p; x.f`: WHOLE reads the identifier).
+//!
+//! The rule §5.2 Q-DECLKEY DK1-1 adds (R-F10, premise10 N10-9): WINDOW — a trait impl in the file
+//! set off ALLOWED_IMPLS passes only as a row of WINDOW naming its type and its trait, the trait one
+//! of WINDOW_TRAITS (`Deref`, `DerefMut`), with the unit that deletes it and the date it came ; a
+//! row off WINDOW_TRAITS fails WINDOW-TRAIT, one with no unit WINDOW-UNIT, one no impl matches is
+//! STALE. Its rows are the stores' text door w9 (`Keyed`, `KeyedSet`, deleted at DK3-b) ; the
+//! list does not widen ALLOWED_IMPLS (a `Deref` on any other type still fails IMPL-TRAIT, NP10-1).
 //!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
@@ -213,6 +220,9 @@ const ALLOWED_ATTRS: &[&str] = &[
 ];
 const ALLOWED_DERIVES: &[&str] = &["Clone", "Default"];
 const ALLOWED_IMPLS: &[&str] = &["Clone", "Default", "Debug", "Drop", BOUNDARY_TRAIT];
+/// WINDOW (§5.2 Q-DECLKEY DK1-1, R-F10 / premise10 N10-9): the traits off ALLOWED_IMPLS a row of
+/// WINDOW may admit, for the ONE type that row names ; not a wider allow list (NP10-1).
+const WINDOW_TRAITS: &[&str] = &["Deref", "DerefMut"];
 const STD_ROOTS: &[&str] = &["std", "core", "alloc"];
 const FLOWS: &[&str] = &["in", "payload"];
 /// CARD's named constructors (a slice, an array and two or more `bool` are the others).
@@ -705,6 +715,8 @@ struct Cfg {
     outgoing: BTreeMap<String, String>,
     /// item, kind, name, count, flow
     e: Vec<Vec<String>>,
+    /// WINDOW: type, trait, deleting unit, since (a dated, named admission of one trait impl)
+    window: Vec<Vec<String>>,
 }
 
 fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
@@ -775,6 +787,7 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
             .map(|r| (r[0].clone(), r[1].clone()))
             .collect(),
         e: rows_of(&get(&format!("{prefix}_E")), 5, "E"),
+        window: rows_of(&get(&format!("{prefix}_WINDOW")), 4, "WINDOW"),
     }
 }
 
@@ -2963,6 +2976,8 @@ fn addr_fn_check(eng: &mut Eng<'_>, c: &AddrCensus) {
 struct EVis<'a> {
     defs: &'a Defs,
     cfg_vocab: &'a BTreeMap<String, String>,
+    /// WINDOW's rows: a field whose type names one of their types is read through the window
+    cfg_window: &'a [Vec<String>],
     f: BTreeMap<String, usize>,
     c: BTreeMap<String, usize>,
     m: BTreeMap<String, usize>,
@@ -2979,6 +2994,13 @@ impl EVis<'_> {
         };
         let mut names = BTreeSet::new();
         type_names(t, &mut names);
+        // a store of the window (WINDOW) is no lexscope field: its map is read through Deref
+        if names
+            .iter()
+            .any(|x| self.cfg_window.iter().any(|w| &w[0] == x))
+        {
+            return false;
+        }
         names.iter().all(|x| {
             x == MODULE
                 || x == "crate"
@@ -3334,6 +3356,7 @@ struct Eng<'a> {
     cb_used: BTreeSet<usize>,
     interior_used: BTreeSet<usize>,
     enums_seen: BTreeSet<String>,
+    window_used: BTreeSet<usize>,
     plan: bool,
 }
 
@@ -3350,6 +3373,7 @@ impl Eng<'_> {
             cb_used: BTreeSet::new(),
             interior_used: BTreeSet::new(),
             enums_seen: BTreeSet::new(),
+            window_used: BTreeSet::new(),
             plan,
         }
     }
@@ -4720,10 +4744,21 @@ fn impl_item<'a>(
             why.push(("IMPL-TRAIT".into(), "a negative impl".into()));
         }
         if !ALLOWED_IMPLS.contains(&tr.as_str()) {
-            why.push((
-                "IMPL-TRAIT".into(),
-                format!("impl {} for {}", npath(path), nt(&im.self_ty)),
-            ));
+            // WINDOW: a row naming this type and this trait (a trait of WINDOW_TRAITS) admits it
+            let row = eng
+                .cfg
+                .window
+                .iter()
+                .position(|r| r[0] == ty && r[1] == tr && WINDOW_TRAITS.contains(&tr.as_str()));
+            match row {
+                Some(i) if neg.is_none() => {
+                    eng.window_used.insert(i);
+                }
+                _ => why.push((
+                    "IMPL-TRAIT".into(),
+                    format!("impl {} for {}", npath(path), nt(&im.self_ty)),
+                )),
+            }
         }
         if !eng.defs.defined_type(&ty) {
             why.push((
@@ -5186,6 +5221,7 @@ fn e_fn(eng: &mut Eng<'_>, file: &str, item: &str, block: &syn::Block) {
     let mut v = EVis {
         defs: &eng.defs,
         cfg_vocab: &eng.cfg.vocab,
+        cfg_window: &eng.cfg.window,
         f: BTreeMap::new(),
         c: BTreeMap::new(),
         m: BTreeMap::new(),
@@ -5495,6 +5531,37 @@ fn stale_checks(eng: &mut Eng<'_>) {
     for e in enums {
         if !eng.enums_seen.contains(&e) {
             eng.fail("-", &e, "-", "STALE", "an ENUMS row names no visible enum");
+        }
+    }
+    let window = eng.cfg.window.clone();
+    for (i, w) in window.iter().enumerate() {
+        let item = format!("{} for {}", w[1], w[0]);
+        if !WINDOW_TRAITS.contains(&w[1].as_str()) {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "WINDOW-TRAIT",
+                format!("a WINDOW row's trait off {WINDOW_TRAITS:?}"),
+            );
+        }
+        if w[2].is_empty() || w[2] == "-" {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "WINDOW-UNIT",
+                "a WINDOW row names no deleting unit",
+            );
+        }
+        if !eng.window_used.contains(&i) {
+            eng.fail(
+                "-",
+                &item,
+                "IMPL",
+                "STALE",
+                "a WINDOW row matches no impl of the file set",
+            );
         }
     }
     let card = eng.cfg.card.clone();

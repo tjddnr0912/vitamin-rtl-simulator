@@ -28,8 +28,11 @@ use crate::edge_gate::span_holds;
 
 mod disp;
 mod elab;
+mod key;
 #[cfg(test)]
 mod tests;
+
+pub(crate) use key::{Keyed, KeyedSet};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]
@@ -270,6 +273,8 @@ zn!(ScopeRef: Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt:
 zn!(ReportedAt: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug);
 zn!(ScopeKeyed<()>: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, Default,
     IntoIterator);
+zn!(Keyed<()>: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, IntoIterator);
+zn!(KeyedSet: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, IntoIterator);
 
 impl Scopes {
     /// The empty current scope (the Elaborator's initial value).

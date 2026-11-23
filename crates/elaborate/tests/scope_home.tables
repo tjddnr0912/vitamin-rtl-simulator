@@ -291,10 +291,11 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # census.locals.tsv's rows with a `String` / `str` type token) ; (b) UNTYPED:
 # `binding=callee` for a `let` with no type whose initializer calls a crate fn
 # returning such a collection.
+# §5.2 Q-DECLKEY DK1-1: gather_decl_positions returns `Keyed<u32>` (decl_pos's producer, retyped with the store): its
+# `pos` row and the two `dpos=gather_decl_positions` bindings left H7 (a store value now, HS / H5 hold the store).
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	2	seen,pushed
-block_local/mod.rs	gather_decl_positions	1	pos
 block_local/mod.rs	gather_nested_block_locals	1	names
 block_local/timed_task.rs	refuse_timing_block_local_hazard	1	names
 block_local_class.rs	block_local_scope_prefix	1	segs
@@ -353,7 +354,7 @@ hier_leaf_shape.rs	record_hier_sel_shape	1	names
 hoist/general.rs	hoist_inout_general_seq	1	snaps
 hoist/general.rs	hoist_inout_general_seq	UNTYPED	roots=order_plan
 iface_inst.rs	elaborate_iface_instances	6	saved_params,local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
-iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,sp=bind_params,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
+iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,sp=bind_params,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
 iface_rtn_scope.rs	move_static_scoped	UNTYPED	keys=static_scoped_keys
 inline_fn.rs	body_needs_context_width	2	widths,unknown_bv
 inline_fn.rs	inline_pkg_function	1	pkg_rtn_names
@@ -368,7 +369,7 @@ inline_task.rs	inline_static_task	1	dyn_binds
 inline_task.rs	inline_static_task	UNTYPED	saved_labels=push_body_enum_labels,declared=rtn_declared_names
 inline_task_locals.rs	hoist_inline_task_locals	1	hoisted_here
 instance.rs	elaborate_instance	7	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,saved_params,wc_rtn,explicit_rtn
-instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
+instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
 instance_array.rs	elaborate_instance_array	1	port_widths
 instance_array.rs	elaborate_instance_array	UNTYPED	saved=bind_params
 lexscope/disp.rs	display_of	1	out
@@ -443,7 +444,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 167 fns 87 untyped 32 readers 26
+lets 166 fns 86 untyped 32 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -713,6 +714,7 @@ mints 349 kinds {"call": 167, "curp": 5, "derived-fn": 11, "fmt": 47, "fmt-tempn
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
 # `std` (a tool artifact) and two u32-keyed maps of name sets, plus two `pkg_array_const_*`.
+# §5.2 Q-DECLKEY DK1-1: a field typed `Keyed<V>` / `KeyedSet` (WINDOW_TYPES, window w9) is keyed by String: the set is unchanged.
 all_clocking_names array_const_meta array_const_vals  array_param_overrides bind_targets bits_prescan body_write_func_names class_table  clocking_events coalesced_block_locals cond_census const_fn_pkg const_func_table  cover_insts cover_types cross_insts decl_block_locals decl_pos  dyn_formal_func_names enum_label_prepass enum_label_types fixed_string_dyn_key  frame_idx frame_nonhoistable func_table gen_enum_carried gen_loop_labels  gen_singleton_labels genvar_decls hier_called_task_names hier_funcs hier_param_range  hier_params hier_tasks hoisted_block_local iface_insts ifaces  implicit_nets inout_func_names let_table local_decl_names md_return_fns mod_prec_exp  mod_unit_exp modport_readonly module_facts param_meta param_range param_type_guessed  params per_entry_in_scope  pkg_array_const_meta pkg_array_const_vals pkg_const_meta pkg_const_range pkg_consts  pkg_enum_labels pkg_funcs pkg_own_funcs pkg_own_tasks pkg_real_val pkg_str_raw  pkg_tasks pkg_types pkg_var_aliases pkg_vars pkg_wide_bits prop_table real_param_val  rtn_decl_genvars rtn_decl_scope rtn_pkg seq_table str_param_raw string_array_elems  symbols task_arg_locals task_frame_idx task_table vif_handles wide_param_bits
 == HS
 # HS: the key scans — an iteration (SCAN_METHODS, or `for _ in &<recv>.<f>`) over `<recv>.<store>`, the
@@ -740,7 +742,7 @@ hier.rs	is_hier_scope	hier_params	range	1	TEXT-SCAN-ANSWERS	X16
 hier.rs	is_hier_scope	symbols	range	1	TEXT-SCAN-ANSWERS	X16
 hier.rs	is_hier_scope	wide_param_bits	range	1	TEXT-SCAN-ANSWERS	X16
 lvalue.rs	check_lvalue_kind	symbols	iter	1	PRINT/DUMP	DK4-show
-net_util.rs	net_name_table	symbols	for	1	PRINT/DUMP	DK4-show
+net_util.rs	net_name_table	symbols	iter	1	PRINT/DUMP	DK4-show
 netdecl.rs	check_whole_net_multidriver	symbols	iter	1	PRINT/DUMP	DK4-show
 pkg_body_scope.rs	frame_key_of	frame_idx	iter	1	KEY-BLIND	Z2-values
 pkg_body_scope.rs	imported_routine_bodies	func_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
@@ -910,9 +912,12 @@ tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-":
 # first pass), SCOPE (cur_prefix, LS3's 6 Elaborator fields, G4 OWED-b's 16 record fields), DISPLAY
 # (frame_func_names G4 g4-5, expr_scopes, stmt_scopes, the 3 display-chain fields), OUTPUT (ProcIdent.scope),
 # KEY (CovgInstMeta.inst, a covergroup declaration key), `-` (holds no minted key or scope text).
+# §5.2 Q-DECLKEY DK1-1: the 32 String-keyed KEYED fields are `Keyed<V>` / `KeyedSet` (window w9, lexscope/key.rs) — their rows
+# keep CLASS / CODE / STORE, the type column is the window's (H5 reads WINDOW_TYPES as name-typed) ; KEYED-W9 = the two
+# window types' own inner map / set, which hold every binding of those 32 stores (CODE V for the holder ; the field rows keep theirs).
 struct	file	field	type	CLASS	CODE	STORE
 Elaborator	lib.rs	pattern_targets	BTreeMap<u32, (String, Vec<ast::PatternMember>)>	NOT	I	KEYED-OTHER
-Elaborator	lib.rs	symbols	BTreeMap<String, u32>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	symbols	Keyed<u32>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	bind_targets	BTreeMap<String, Vec<ast::ModuleInstance>>	NOT	DEF	-
 Elaborator	lib.rs	bits_prescan	BTreeMap<String, (u64, Vec<u64>, bool, bool)>	BINDING	V	-
 Elaborator	lib.rs	local_decl_names	std::collections::BTreeSet<String>	BINDING	V	-
@@ -940,10 +945,12 @@ Elaborator	lib.rs	frame_task_pending	Vec<(u32, String, u32, u32, bool)>	NOT	I	-
 Elaborator	lib.rs	task_arg_locals	std::collections::HashMap<String, Vec<u32>>	BINDING	V	ROUTINE
 Elaborator	lib.rs	array_iter	Option<String>	BINDING	V	-
 Elaborator	lib.rs	ifaces	BTreeMap<String, ast::ModuleDecl>	NOT	DEF	-
-Elaborator	lib.rs	iface_insts	BTreeMap<String, String>	BINDING	S	KEYED-PLAN26
-Elaborator	lib.rs	vif_handles	std::collections::BTreeSet<String>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	modport_readonly	BTreeSet<String>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	iface_insts	Keyed<String>	BINDING	S	KEYED-PLAN26
+Elaborator	lib.rs	vif_handles	KeyedSet	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	modport_readonly	KeyedSet	BINDING	V	KEYED-PLAN26
 InstanceRow	driver.rs	module	String	NOT	D	-
+Keyed	lexscope/key.rs	0	BTreeMap<String, V>	BINDING	V	KEYED-W9
+KeyedSet	lexscope/key.rs	0	BTreeSet<String>	BINDING	V	KEYED-W9
 ProcIdentRow	proc_ident.rs	file	String	NOT	D	-
 ProcIdentRow	proc_ident.rs	kind	&str	NOT	D	-
 ScopeKeyed	lexscope/mod.rs	0	BTreeMap<String, V>	NOT	CTX	SCOPE
@@ -953,21 +960,21 @@ Scopes	lexscope/mod.rs	names	Vec<String>	NOT	CTX	SCOPE
 Scopes	lexscope/mod.rs	ids	HashMap<String, ScopeId, BuildHasherDefault<DefaultHasher>>	NOT	CTX	SCOPE
 Elaborator	lib.rs	cur_module	String	NOT	CTX	-
 Elaborator	lib.rs	module_facts	BTreeMap<String, ModuleFacts>	BINDING	V	-
-Elaborator	lib.rs	params	Bound<BTreeMap<String, i64>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	enum_label_types	BTreeMap<String, String>	NOT	D	KEYED-JUDGE5
-Elaborator	lib.rs	enum_label_prepass	BTreeMap<String, (i64, Option<u32>, Option<DeclRange>)>	NOT	CHK	KEYED-OTHER
-Elaborator	lib.rs	param_meta	Bound<BTreeMap<String, (u32, bool)>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	param_range	Bound<BTreeMap<String, DeclRange>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	hier_param_range	Bound<BTreeMap<String, DeclRange>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	str_param_raw	Bound<BTreeMap<String, String>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	real_param_val	Bound<BTreeMap<String, f64>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	hoisted_block_local	BTreeMap<String, Vec<(u32, u32)>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	params	Bound<Keyed<i64>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	enum_label_types	Keyed<String>	NOT	D	KEYED-JUDGE5
+Elaborator	lib.rs	enum_label_prepass	Keyed<(i64, Option<u32>, Option<DeclRange>)>	NOT	CHK	KEYED-OTHER
+Elaborator	lib.rs	param_meta	Bound<Keyed<(u32, bool)>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	param_range	Bound<Keyed<DeclRange>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	hier_param_range	Bound<Keyed<DeclRange>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	str_param_raw	Bound<Keyed<String>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	real_param_val	Bound<Keyed<f64>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	hoisted_block_local	Keyed<Vec<(u32, u32)>>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	per_entry_in_scope	BTreeSet<String>	BINDING	V	-
-Elaborator	lib.rs	string_array_elems	BTreeMap<String, (i64, i64, Vec<u32>)>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	fixed_string_dyn_key	BTreeMap<String, u32>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	hier_params	Bound<BTreeMap<String, i64>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	hier_funcs	BTreeMap<String, u32>	BINDING	R	KEYED-PLAN26
-Elaborator	lib.rs	hier_tasks	BTreeMap<String, u32>	BINDING	R	KEYED-PLAN26
+Elaborator	lib.rs	string_array_elems	Keyed<(i64, i64, Vec<u32>)>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	fixed_string_dyn_key	Keyed<u32>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	hier_params	Bound<Keyed<i64>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	hier_funcs	Keyed<u32>	BINDING	R	KEYED-PLAN26
+Elaborator	lib.rs	hier_tasks	Keyed<u32>	BINDING	R	KEYED-PLAN26
 Elaborator	lib.rs	hier_called_task_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	md_return_fns	std::collections::BTreeSet<String>	BINDING	R	-
 Elaborator	lib.rs	gen_enum_carried	BTreeMap<String, std::collections::BTreeSet<(u32, u32)>>	NOT	DEF	-
@@ -984,9 +991,9 @@ Elaborator	lib.rs	rtn_pkg	BTreeMap<String, String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, ScopeRef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(String, i64)>>	BINDING	R	ROUTINE
 Elaborator	lib.rs	gen_genvars	Vec<(String, i64)>	NOT	CTX	KEYED-OTHER
-Elaborator	lib.rs	decl_pos	BTreeMap<String, u32>	BINDING	V	KEYED-OTHER
+Elaborator	lib.rs	decl_pos	Keyed<u32>	BINDING	V	KEYED-OTHER
 Elaborator	lib.rs	decl_block_locals	std::collections::BTreeSet<String>	BINDING	V	-
-Elaborator	lib.rs	wide_param_bits	Bound<BTreeMap<String, ir::ConstVal>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	wide_param_bits	Bound<Keyed<ir::ConstVal>>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	inout_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	body_write_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	dyn_formal_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
@@ -998,24 +1005,24 @@ Elaborator	lib.rs	class_table	BTreeMap<String, ClassInfo>	BINDING	T	-
 Elaborator	lib.rs	class_order	Vec<String>	NOT	I	-
 Elaborator	lib.rs	net_class	BTreeMap<u32, String>	NOT	I	-
 Elaborator	lib.rs	cur_this	Option<(u32, String)>	NOT	CTX	-
-Elaborator	lib.rs	frame_nonhoistable	BTreeSet<String>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	frame_nonhoistable	KeyedSet	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	assert_control_calls	Vec<(String, ast::Span)>	NOT	D	-
 Elaborator	lib.rs	clocking_events	std::collections::BTreeMap<String, ast::Sensitivity>	BINDING	S	-
 Elaborator	lib.rs	clocking_hold_names	std::collections::BTreeMap<u32, String>	NOT	D	KEYED-OTHER
 Elaborator	lib.rs	const_param_nets	std::collections::BTreeMap<u32, String>	NOT	I	-
-Elaborator	lib.rs	array_const_vals	std::collections::BTreeMap<String, Vec<i64>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	array_const_meta	std::collections::BTreeMap<String, ArrayConstMeta>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	array_const_vals	Keyed<Vec<i64>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	array_const_meta	Keyed<ArrayConstMeta>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	pkg_array_const_vals	std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<i64>>>	BINDING	V	-
 Elaborator	lib.rs	pkg_array_const_meta	std::collections::BTreeMap<String, std::collections::BTreeMap<String, ArrayConstMeta>>	BINDING	V	-
-Elaborator	lib.rs	array_param_overrides	std::collections::BTreeMap<String, Vec<i64>>	NOT	INPUT	KEYED-JUDGE5
+Elaborator	lib.rs	array_param_overrides	Keyed<Vec<i64>>	NOT	INPUT	KEYED-JUDGE5
 Elaborator	lib.rs	pkg_vars	std::collections::BTreeMap<String, std::collections::BTreeMap<String, u32>>	BINDING	V	-
-Elaborator	lib.rs	pkg_var_aliases	std::collections::BTreeMap<String, (String, bool)>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	gen_loop_labels	std::collections::BTreeSet<String>	BINDING	S	KEYED-PLAN26
-Elaborator	lib.rs	gen_singleton_labels	std::collections::BTreeSet<String>	NOT	D	KEYED-JUDGE5
-Elaborator	lib.rs	genvar_decls	std::collections::BTreeSet<String>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	pkg_var_aliases	Keyed<(String, bool)>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	gen_loop_labels	KeyedSet	BINDING	S	KEYED-PLAN26
+Elaborator	lib.rs	gen_singleton_labels	KeyedSet	NOT	D	KEYED-JUDGE5
+Elaborator	lib.rs	genvar_decls	KeyedSet	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	all_clocking_names	std::collections::BTreeSet<String>	NOT	D	-
 Elaborator	lib.rs	subst	Vec<(String, u32)>	BINDING	V	-
-Elaborator	lib.rs	param_type_guessed	Bound<BTreeSet<String>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	param_type_guessed	Bound<KeyedSet>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	out_subst	Vec<(String, u32)>	BINDING	V	-
 Elaborator	lib.rs	dyn_subst	Vec<(String, u32)>	BINDING	V	-
 Elaborator	lib.rs	formal_str	Vec<(String, bool)>	BINDING	V	-
@@ -1026,15 +1033,15 @@ Elaborator	lib.rs	mod_prec_exp	std::collections::BTreeMap<String, i8>	NOT	DEF	-
 Elaborator	lib.rs	root_override	Option<Vec<String>>	NOT	X	-
 Elaborator	lib.rs	top_param_overrides	Vec<(String, String)>	NOT	X	-
 Elaborator	lib.rs	escape_warned	std::collections::BTreeSet<(u32, u32, String)>	NOT	D	-
-Elaborator	lib.rs	implicit_nets	std::collections::BTreeSet<String>	NOT	D	KEYED-JUDGE5
+Elaborator	lib.rs	implicit_nets	KeyedSet	NOT	D	KEYED-JUDGE5
 Scopes	lexscope/mod.rs	disp_chain	Vec<String>	NOT	D	DISPLAY
 Scopes	lexscope/mod.rs	disp_root	Option<String>	NOT	D	DISPLAY
 Scopes	lexscope/mod.rs	disp_method	Option<String>	NOT	D	DISPLAY
 Shown	lexscope/mod.rs	0	String	NOT	D	DISPLAY
 Elaborator	lib.rs	hier_write_args	BTreeMap<u32, &str>	NOT	D	-
 Elaborator	lib.rs	cover_types	std::collections::BTreeMap<String, ast::CovergroupDecl>	BINDING	T	-
-Elaborator	lib.rs	cover_insts	std::collections::BTreeMap<String, Vec<CoverpointTracker>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	cross_insts	std::collections::BTreeMap<String, Vec<CrossTracker>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	cover_insts	Keyed<Vec<CoverpointTracker>>	BINDING	V	KEYED-PLAN26
+Elaborator	lib.rs	cross_insts	Keyed<Vec<CrossTracker>>	BINDING	V	KEYED-PLAN26
 CovgInstMeta	tables.rs	inst	String	NOT	D	KEY
 CovItem	tables.rs	name	String	NOT	D	-
 CrossTracker	cover.rs	bitmap	String	NOT	I	-
@@ -1101,7 +1108,7 @@ SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BIND
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 189 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 63, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 12, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 10, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "ROUTINE": 14, "SCOPE": 5}
+fields 191 classes {"BINDING:R": 27, "BINDING:S": 7, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 12, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 10, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 1, "KEYED-JUDGE5": 5, "KEYED-OTHER": 6, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 5}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or

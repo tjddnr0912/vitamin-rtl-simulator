@@ -134,7 +134,8 @@ mod instance;
 mod instance_array;
 mod lexscope;
 use lexscope::{
-    scope_out, shown_from_spelling, Mark, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
+    scope_out, shown_from_spelling, Keyed, KeyedSet, Mark, ReportedAt, ScopeKeyed, ScopeRef, Shown,
+    ShownCtx,
 };
 mod limits;
 mod lvalue;
@@ -363,7 +364,7 @@ struct Elaborator<'s> {
     stmts: Vec<ir::Stmt>,
 
     // ── lookup-only maps (NEVER feed arena order) ──
-    symbols: BTreeMap<String, u32>, // fully-qualified net/var NAME → NetId
+    symbols: Keyed<u32>, // fully-qualified net/var NAME → NetId
     /// Round-9: top-level `bind` decls indexed by TARGET module name → the
     /// checker instances to attach inside every instantiation of that target.
     /// Populated once in `run` (target/checker existence-validated); consumed at
@@ -761,7 +762,7 @@ struct Elaborator<'s> {
     // unit lifetime) + the registry of elaborated interface INSTANCES
     // (FQ path → interface name) consulted by interface-port binding.
     ifaces: BTreeMap<String, ast::ModuleDecl>,
-    iface_insts: BTreeMap<String, String>,
+    iface_insts: Keyed<String>,
     /// §3.b: the STATIC package routines framed inside an interface instance's
     /// window, carried from one instance to the next sibling of the SAME parent
     /// (key = the parent's instance path). See `iface_rtn_scope::StaticScopedCarry`.
@@ -769,11 +770,11 @@ struct Elaborator<'s> {
     /// ⓑ-breadth (§25.9): fully-qualified names of `virtual interface` handles, so
     /// the static binding assignment `vif = inst;` is skipped at statement lowering
     /// (the binding is resolved to a member alias at net-elaboration time).
-    vif_handles: std::collections::BTreeSet<String>,
+    vif_handles: KeyedSet,
     /// v6 ②: symbol keys aliased through a modport whose direction is INPUT —
     /// writes through these names are loud (§25.5). Keyed at alias-copy time;
     /// empty unless a modport binding is live (zero steady cost).
-    modport_readonly: BTreeSet<String>,
+    modport_readonly: KeyedSet,
 
     // ── v3 hierarchy state ──
     // `cur_prefix` is the dotted instance path of the instance currently being
@@ -804,7 +805,7 @@ struct Elaborator<'s> {
     repl_zero_ok: bool,
     // FQ param-name → const value, visible while lowering an instance scope.
     // Re-points the v1 free `const_eval_u32` SLOT so `[W-1:0]` folds to a width.
-    params: Bound<BTreeMap<String, i64>>,
+    params: Bound<Keyed<i64>>,
     /// V33-3 (DIAGNOSTIC ONLY): scoped key of every name bound as an enum LABEL →
     /// the NAME of the enum type that declared it. The subset of `params` that came
     /// from a `typedef enum {…}` rather than a `parameter`/`localparam`, plus the one
@@ -825,7 +826,7 @@ struct Elaborator<'s> {
     /// would be empty exactly where the message is written. Keys are instance-scoped
     /// (`fq`), so an accumulating set cannot answer for a different scope's name, and
     /// it feeds a message only — never a value, a width, or a fold decision.
-    enum_label_types: BTreeMap<String, String>,
+    enum_label_types: Keyed<String>,
     /// What the DECL-ORDER pre-pass bound for an enum label, so the pass that runs
     /// after the walk can check it bound the same thing.
     ///
@@ -839,14 +840,14 @@ struct Elaborator<'s> {
     /// label value, an enum base whose width is not yet a fact); this map is what
     /// catches the ones we do not know of, by making the second pass VERIFY rather
     /// than silently overwrite. Keyed by the label's fully-qualified name.
-    enum_label_prepass: BTreeMap<String, (i64, Option<u32>, Option<DeclRange>)>,
+    enum_label_prepass: Keyed<(i64, Option<u32>, Option<DeclRange>)>,
     // FQ param-name → (DECLARED width, signed), for params with a determinate
     // declared width (an explicit range or `integer`/`int`). A typed-param READ
     // materializes at THIS width — not the value-inferred 32 bits — so
     // `localparam logic [63:0] P = '1` is a 64-bit all-ones const, not `ffffffff`
     // (IEEE §6.20.2). Parallel-keyed to `params`; absent ⇒ value-inference.
     // elaborate-LOCAL (golden-neutral — only changes a typed param's const width).
-    param_meta: Bound<BTreeMap<String, (u32, bool)>>,
+    param_meta: Bound<Keyed<(u32, bool)>>,
     // FQ param-name → its DECLARED packed range `(lo, width, ascending)` — for a
     // NON-zero-LSB param (`localparam [15:8] P`), so a bit/part-select `P[15:12]`
     // normalizes its offset against the declared LSB like a net (the param twin of
@@ -856,26 +857,26 @@ struct Elaborator<'s> {
     // fact (RANGE-ABSENT, two meanings: `bound/mod.rs`). Written only in `bound/`.
     // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
     // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
-    param_range: Bound<BTreeMap<String, DeclRange>>,
+    param_range: Bound<Keyed<DeclRange>>,
     // §2 🆕 M ⓒ: the PERSISTENT twin of `param_range` for a HIERARCHICAL select
     // (`u.N[7:4]` on `parameter [11:4] N`), written and cleared exactly where
     // `param_range` is (`bind_param_range` / `bind_param_value`) but never restored
     // out at an instance boundary — the same reason `param_meta` persists. Keyed
     // like `hier_params`; resolved by `hier_resolve`. elaborate-LOCAL.
-    hier_param_range: Bound<BTreeMap<String, DeclRange>>,
+    hier_param_range: Bound<Keyed<DeclRange>>,
     // N5: FQ param-name → RAW string literal for a `string`-typed / string-valued
     // parameter (`localparam string S = "abc"` and the untyped `localparam S = "abc"`).
     // A string param has NO i64 value, so it is kept out of `self.params` and stored
     // here; an Ident that resolves to such a param re-emits the SAME `StrUtf8` const
     // `parse_str_literal(raw)` would (so `S == "abc"` is byte-identical). elaborate-LOCAL.
-    str_param_raw: Bound<BTreeMap<String, String>>,
+    str_param_raw: Bound<Keyed<String>>,
     /// r19: a REAL-valued parameter/localparam, keyed FQ, holding the FOLDED f64.
     /// Mirrors `str_param_raw`'s side-map design: a real has no i64 value, so it is
     /// kept out of `params` and resolved before the numeric param path. Stores the
     /// VALUE, not the raw text — building raw text by concatenation manufactured
     /// non-grammar strings (`-(-1.25)` became `"--1.25"`), which `parse_real_literal`
     /// silently turns into 0.0.
-    real_param_val: Bound<BTreeMap<String, f64>>,
+    real_param_val: Bound<Keyed<f64>>,
     /// FQ keys of nets created by the v1 procedural block-local FLATTEN
     /// (`hoist_block_local_nets`) → the SOURCE SPAN of each declaring block.
     ///
@@ -895,7 +896,7 @@ struct Elaborator<'s> {
     ///
     /// A `Vec` per key because same-named locals in DISJOINT blocks coalesce onto one
     /// flattened net (v1 flatten model): each range is one block that declares it.
-    hoisted_block_local: BTreeMap<String, Vec<(u32, u32)>>,
+    hoisted_block_local: Keyed<Vec<(u32, u32)>>,
     /// `repeat` SOURCE SPAN → the frame-local counter net reserved for it. See
     /// `reserve_frame_repeat_counters`; `lower_repeat` consumes it so a runtime count
     /// inside a suspendable task gets a per-activation counter instead of a shared
@@ -952,7 +953,7 @@ struct Elaborator<'s> {
     // array desugars to N scalar `NetKind::String` element nets; `files[K]` (CONST K)
     // resolves to the K-th net (read + write + `.method()`). A RUNTIME index / dynamic
     // (`string s[]`) / init-pattern is loud (correct-or-loud). elaborate-LOCAL.
-    string_array_elems: BTreeMap<String, (i64, i64, Vec<u32>)>,
+    string_array_elems: Keyed<(i64, i64, Vec<u32>)>,
     // T1: DynArray net id → declared GEOMETRY, for a FIXED string array that was
     // ROUTED to the dynamic representation (`string s[n]`, `string s[1:3]`,
     // `string s[3:1]`, `string s[2][2]` … at a scope that runs the t0 var-init flush).
@@ -975,24 +976,24 @@ struct Elaborator<'s> {
     // sa` collide with a module `string sa[2]` and hit the dynamic-storage collision
     // reject — two designs iverilog runs, and vita ran correctly before the routing,
     // went loud. Keeping the name free restores that namespace exactly.
-    fixed_string_dyn_key: BTreeMap<String, u32>,
+    fixed_string_dyn_key: Keyed<u32>,
     // PERSISTENT FQ param-name → value, NEVER restored (unlike `params`). Lets a
     // post-elaboration hierarchical READ (`dut.WIDTH`) fold to the sibling
     // instance's param value. Out-of-band (golden-free).
-    hier_params: Bound<BTreeMap<String, i64>>,
+    hier_params: Bound<Keyed<i64>>,
     // Family D (r17): PERSISTENT FULLY-QUALIFIED `<instance-path>.<fname>` → per-instance
     // FuncId, NEVER restored. Only HIER-CALLABLE framed functions (input-only scalar
     // formals, non-string return) are registered — a call resolving to anything else
     // finds no entry → loud (correct-or-loud). Lets a hierarchical call `u1.f(x)` bind to
     // the callee instance's FuncId (which already baked in that instance's nets/params).
     // Reused by `hier_resolve` (the §23.6 commit-to-scope walk) exactly like `symbols`.
-    hier_funcs: BTreeMap<String, u32>,
+    hier_funcs: Keyed<u32>,
     // Family D (r18): the TASK twin of `hier_funcs` — PERSISTENT `<inst-path>.<tname>` →
     // per-instance frame-TASK FuncId. Only HIER-CALLABLE framed tasks (input-only scalar
     // formals) are registered; a hier task enable `u1.tk(x)` resolves through this via
     // `hier_resolve`. An out/inout/array/string formal or a non-framed (static) task gets
     // no entry → loud (correct-or-loud).
-    hier_tasks: BTreeMap<String, u32>,
+    hier_tasks: Keyed<u32>,
     // §4.5.200: task NAMES that appear as the target of a hierarchical enable (`u1.tk(...)`
     // — the last segment of a 2+-segment `UserTaskCall`) ANYWHERE in the design. Such a task
     // must be FORCE-FRAMED (`build_task_frame_set`): a STATIC (non-automatic) task is
@@ -1145,7 +1146,7 @@ struct Elaborator<'s> {
     // is the only ordering information elaboration keeps; `resolve_net` is where it
     // is spent. Saved/restored per module, and swapped with the routine tables around
     // `wire_ports` (a port connection is a PARENT expression).
-    decl_pos: BTreeMap<String, u32>,
+    decl_pos: Keyed<u32>,
     // Source range of the module `decl_pos` was gathered from. A use position is only
     // comparable against it if it came from the SAME text: `.*` expands to paths that
     // reuse the CHILD module's port identifiers, whose spans sit wherever that module
@@ -1165,7 +1166,7 @@ struct Elaborator<'s> {
     // folded. Deliberately NOT registered in `params`: a >64-bit name used as a width,
     // a bound or a generate condition must stay LOUD rather than silently truncate to
     // its low 64 bits, so only the expression reader consults this.
-    wide_param_bits: Bound<BTreeMap<String, ir::ConstVal>>,
+    wide_param_bits: Bound<Keyed<ir::ConstVal>>,
     // R5-B: names of FRAME functions that have an output/inout formal. A call to
     // one carries copy-out (like a task) plus a return value, so it is lowered as a
     // `Terminator::Call` (statement context) via `emit_frame_func_out_call` rather
@@ -1291,7 +1292,7 @@ struct Elaborator<'s> {
     /// initializer was declined. A formal has no value until a CALL binds it, so an
     /// initializer reading one is not a once-only value at all. Empty outside a frame
     /// body and for a frame with no hoisted initializer.
-    frame_nonhoistable: BTreeSet<String>,
+    frame_nonhoistable: KeyedSet,
     // §4.5.177: set ONLY while lowering the rhs of a blessed direct-rhs call
     // `x = f(dynarr)` at module-process level — where `lower_stmt` has already emitted the
     // `handle_copy` snapshot marker that fills the callee's dyn-array formal heap slot.
@@ -1433,12 +1434,12 @@ struct Elaborator<'s> {
     /// fold an element read `ROT[i]` in a constant context — e.g. a generate-scope
     /// `localparam R = ROT[g]`. A multi-dim / non-foldable array is simply absent
     /// (its element reads stay loud — correct-or-loud). Elaborate-local only.
-    array_const_vals: std::collections::BTreeMap<String, Vec<i64>>,
+    array_const_vals: Keyed<Vec<i64>>,
     /// §3 ⑤ ⓔ: the geometry twin of `array_const_vals` (element declared range,
     /// count, packed-dimension count), recorded at the SAME capture site for the
     /// SAME keys — what a select of an element, its bits in a concatenation and
     /// `$size(A)` need beyond the values. Elaborate-local only.
-    array_const_meta: std::collections::BTreeMap<String, ArrayConstMeta>,
+    array_const_meta: Keyed<ArrayConstMeta>,
     /// GAP-G (round-4): package name → (const array parameter name → element
     /// values), the package-scope twin of `array_const_vals`. A package array
     /// param (`package p; localparam int ROT[0:3]='{…}`) lowers to a `$pkg$p`
@@ -1462,7 +1463,7 @@ struct Elaborator<'s> {
     /// port-width pre-pass writes under the PARENT's prefix (`instance_array.rs`
     /// calls `bind_params` in the parent scope) is never read by the parent, whose
     /// own passes 3/6 are already over (review B note 4). Elaborate-local only.
-    array_param_overrides: std::collections::BTreeMap<String, Vec<i64>>,
+    array_param_overrides: Keyed<Vec<i64>>,
     /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
     /// a const param's own initializer is legitimate, so the deny is off.
     lowering_decl_init: bool,
@@ -1480,7 +1481,7 @@ struct Elaborator<'s> {
     /// precedent). Consulted by `add_net`: a LOCAL declaration shadows a
     /// WILDCARD import (iverilog-pinned), colliding with an EXPLICIT import
     /// is an error (iverilog-pinned).
-    pkg_var_aliases: std::collections::BTreeMap<String, (String, bool)>,
+    pkg_var_aliases: Keyed<(String, bool)>,
     /// Fully-qualified label prefixes of scopes minted by a generate-FOR
     /// (`top.u.g` for `for (…) begin : g`), WITHOUT the `[idx]` suffix.
     ///
@@ -1494,12 +1495,12 @@ struct Elaborator<'s> {
     /// inconsistency, and it would silently start failing when a parameter moved
     /// from 1 to 2. Elaborate-side only — never serialized, so `format_version` is
     /// untouched.
-    gen_loop_labels: std::collections::BTreeSet<String>,
+    gen_loop_labels: KeyedSet,
     // §4.5.429 (review B B1): the FQ keys of SINGLETON generate scopes (`generate if` /
     // `case` / a bare labelled block), stored as `label[0]` but rendered `label` by
     // `display_prefix`. Keyed positively — an INSTANCE-array element `w[0]` is also a
     // `[0]` segment and must keep its index (both oracles `top.w[0]`).
-    gen_singleton_labels: std::collections::BTreeSet<String>,
+    gen_singleton_labels: KeyedSet,
     /// IEEE 1800 §27.6: the number of the NEXT generate construct (`if` / `case` /
     /// `for`) in the scope being walked — every construct in a scope is numbered
     /// from 1 in source order, named or not, and an UNNAMED block is `genblk<N>`.
@@ -1513,7 +1514,7 @@ struct Elaborator<'s> {
     /// the constant-shadow guard needs this persistent record — otherwise a
     /// procedural reference to a genvar-named import alias would silently
     /// resolve to the package variable outside the unroll.
-    genvar_decls: std::collections::BTreeSet<String>,
+    genvar_decls: KeyedSet,
     /// Spans of range bounds already reported by `check_const_range_bound`. A
     /// declaration's range is folded by more than one pass, so without this the same
     /// bound is reported once per pass.
@@ -1597,7 +1598,7 @@ struct Elaborator<'s> {
     // parameter / localparam whose initializer reads one. The size-cast classifier
     // answers `None` for these (the pre-slice route); everything else that reads
     // `param_meta` is unchanged. Cleared by `bind_param_value` like `param_range`.
-    param_type_guessed: Bound<BTreeSet<String>>,
+    param_type_guessed: Bound<KeyedSet>,
     // Output/inout task formal NAME → caller NetId. Consulted in BOTH `lower_expr`
     // (read) and `collect_lval_chunks` (write) so a formal resolves to the caller's
     // net in either position. Symmetric Vec stack with `subst`.
@@ -1682,7 +1683,7 @@ struct Elaborator<'s> {
     /// FQ names of nets created by [`Elaborator::declare_implicit_net`]. Only these get
     /// the width-truncation warning — an explicitly declared 1-bit net driven by a wider
     /// expression is the author's choice, not a §3.5 surprise.
-    pub(crate) implicit_nets: std::collections::BTreeSet<String>,
+    pub(crate) implicit_nets: KeyedSet,
     // Delay multiplier `M = 10^(unit_exp − global_prec_exp)` of the module CURRENTLY
     // being lowered (saved/restored around each `elaborate_instance`, like cur_prefix).
     // `#delay` literals scale by this; `$time`/`$realtime` divide by it (per process).
@@ -1924,10 +1925,10 @@ struct Elaborator<'s> {
     /// N5: FQ instance name → its per-coverpoint trackers (hit-bitmap reg + sampled
     /// expr + auto-bin count). `sample()`/`get_coverage()` synthesize against these —
     /// pure IR-0 (the bitmap regs are ordinary nets; no sim-ir change).
-    cover_insts: std::collections::BTreeMap<String, Vec<CoverpointTracker>>,
+    cover_insts: Keyed<Vec<CoverpointTracker>>,
     /// N5 slice C: FQ instance name → its cross trackers (product hit-bitmap + the
     /// constituent coverpoints' match data). Sampled/averaged alongside `cover_insts`.
-    cross_insts: std::collections::BTreeMap<String, Vec<CrossTracker>>,
+    cross_insts: Keyed<Vec<CrossTracker>>,
     /// OBS-1b: per covergroup-instance coverage manifest, built at each `new` site
     /// (resolved bitmap net ids in the correct scope). Threaded to `SimOpts` for the
     /// end-of-run `coverage.json` export. Out-of-band, golden-free.

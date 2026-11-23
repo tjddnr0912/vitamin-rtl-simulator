@@ -64,7 +64,8 @@ file	fn	name	count
 # list: ScopeRef, Saved, the witness = ScopeWitness (DELTA9's name, not yet checked by names.py),
 # Shown, ShownCtx, ScopeKeyed<V>, SavedChain, SavedRoot, SavedMethod, ReportedAt ; Scopes (the
 # tier-K receiver) ; Mark, the mark selector, an enum: also on ENUMS when it exists) + DK1's
-# NewKey, AtKey, DeclKey, Keyed<V>. A name here passes only where the file set DEFINES it as
+# NewKey, AtKey, DeclKey, Keyed<V> ; DK1-1 (§5.2 Q-DECLKEY) adds Keyed's set twin KeyedSet (lexscope/key.rs).
+# A name here passes only where the file set DEFINES it as
 # the kind written.
 name	kind
 Scopes	struct
@@ -83,6 +84,7 @@ NewKey	struct
 AtKey	struct
 DeclKey	struct
 Keyed	struct
+KeyedSet	struct
 == SURF_TRAITS
 # the crate-visible traits allowed (plan10/g/surface.tsv: 1, the boundary trait)
 name
@@ -97,7 +99,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=4 rows=133 out_types=22 e_fns=29 text_flows=42
+present=present files=5 rows=142 out_types=22 e_fns=29 text_flows=42
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -139,6 +141,13 @@ lexscope/elab.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	RET	R	PASS	-
+lexscope/key.rs	-	IMPL	Default for Keyed	-	-	PASS	-
+lexscope/key.rs	-	IMPL	Deref for Keyed	-	-	PASS	-
+lexscope/key.rs	-	IMPL	Deref for KeyedSet	-	-	PASS	-
+lexscope/key.rs	-	IMPL	DerefMut for Keyed	-	-	PASS	-
+lexscope/key.rs	-	IMPL	DerefMut for KeyedSet	-	-	PASS	-
+lexscope/key.rs	-	TYPE	Keyed	-	-	PASS	-
+lexscope/key.rs	-	TYPE	KeyedSet	-	-	PASS	-
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
 lexscope/mod.rs	-	ENUM	Mark	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Clone for ScopeRef	-	-	PASS	-
@@ -162,6 +171,8 @@ lexscope/mod.rs	-	TYPE	ScopeWitness	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::Keyed	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::KeyedSet	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the scopes still holding a value	-
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
@@ -308,6 +319,16 @@ Elaborator::push_block_local_init	lo	carried	NUMBER u32
 Elaborator::push_block_local_init	lhs	carried	TEXT hdl_ast::Lvalue::Ident.0 -> hdl_ast::HierPath.segments -> hdl_ast::Ident.name -> String
 Elaborator::push_block_local_init	rhs	carried	TEXT hdl_ast::Expr.kind -> hdl_ast::ExprKind::IntLit.raw -> String
 Scopes::cur_shown_quoted_or	none	to-display	TEXT str
+== SURF_WINDOW
+# WINDOW (§5.2 Q-DECLKEY DK1-1 ; DELTA14 F1 / D2 w9, R-F1, R-F10, premise10 N10-9 / NP10-1): a trait impl off
+# ALLOWED_IMPLS admitted for the ONE type a row names, the trait one of WINDOW_TRAITS (Deref, DerefMut) ; each row
+# names its deleting unit and the date it was admitted ; a row no impl matches is STALE. The stores' text door w9:
+# `Keyed<V>` / `KeyedSet` (lexscope/key.rs) reach the std map / set they hold until DK3-b deletes the four impls.
+type	trait	unit	since
+Keyed	Deref	DK3-b	2026-11-23
+Keyed	DerefMut	DK3-b	2026-11-23
+KeyedSet	Deref	DK3-b	2026-11-23
+KeyedSet	DerefMut	DK3-b	2026-11-23
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -558,6 +579,11 @@ lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd
 lexscope/elab.rs	Elaborator::walk_hits_decl_pos	36e74b0024550514d01207a2f8ca0946ca109825b976aa6efbb236e9ea13867b
 lexscope/elab.rs	Elaborator::walk_rtn_scopes	44fd92b502bfa8291ad8e714834d29e3c82538eb6c192aeea87dc975e16fb5fe
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
+lexscope/key.rs	Default for Keyed::default	c2a6d55951abe9934cd994dc0035a95c53dc09356510d22622d9c9fa11d400e1
+lexscope/key.rs	Deref for Keyed::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
+lexscope/key.rs	Deref for KeyedSet::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
+lexscope/key.rs	DerefMut for Keyed::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
+lexscope/key.rs	DerefMut for KeyedSet::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
 lexscope/mod.rs	Clone for ScopeRef::clone	7fd1561b40a3600a688648719080f1f686e9201a41061e730a9f1708a7b4277f
 lexscope/mod.rs	Clone for Shown::clone	6ab72e6f44542598375aadaf3d72fe227221b7278a9fcb72ce16822e765f1e41
 lexscope/mod.rs	Clone for ShownCtx::clone	33ba0a59afe2993fbac123d93a8fe342d9c092aeb9e5f1f100d06c0bca6c0b04
@@ -720,6 +746,8 @@ fn	calls
 same_actual	1
 == FIX_UNWIND
 file	fn	name	count
+== FIX_WINDOW
+type	trait	unit	since
 == FIX_ENUMS
 name
 Mark

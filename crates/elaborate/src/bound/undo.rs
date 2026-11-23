@@ -97,14 +97,14 @@ impl Elaborator<'_> {
     /// U3: whole-map put-back of [`Self::side_snapshot`] (assigned in the same order).
     pub(crate) fn side_restore(&mut self, side: SideSnap) {
         (
-            *self.wide_param_bits.w(),
-            *self.param_range.w(),
-            *self.hier_param_range.w(),
-            *self.str_param_raw.w(),
-            *self.real_param_val.w(),
-            *self.param_meta.w(),
-            *self.hier_params.w(),
-            *self.param_type_guessed.w(),
+            **self.wide_param_bits.w(),
+            **self.param_range.w(),
+            **self.hier_param_range.w(),
+            **self.str_param_raw.w(),
+            **self.real_param_val.w(),
+            **self.param_meta.w(),
+            **self.hier_params.w(),
+            **self.param_type_guessed.w(),
         ) = side;
     }
 
