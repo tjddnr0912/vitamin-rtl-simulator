@@ -825,9 +825,6 @@ edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
 events.rs	lower_delay	contains	'.'	1	spelling	-
 expr_main.rs	lower_expr_ungated	starts_with	"$__vita_stream_"	1	spelling	-
-frames_call/emit.rs	emit_dyn_formal_markers_nested	rsplit	'.'	1	scope	LS4
-frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$func$"	1	scope	LS4
-frames_call/emit.rs	emit_dyn_formal_markers_nested	strip_prefix	"$itask$"	1	scope	LS4
 frames_classify.rs	net_is_compiler_internal	rsplit	'.'	1	key	DK3
 frames_classify.rs	net_is_compiler_internal	starts_with	'$'	1	key	DK3
 frames_classify_write.rs	refuse_body_write_call	contains	"::"	1	key	RS1
@@ -842,10 +839,7 @@ gen_scope_name.rs	gen_seg_label	starts_with	'$'	1	scope	DK1
 gen_scope_name.rs	key_spells_indexed_singleton	split	'.'	1	key	DK3
 generate.rs	is_gen_scope_segment	contains	'['	1	scope	walk
 hier.rs	hier_resolve	split	'.'	1	scope	walk
-hier.rs	hier_resolve	starts_with	"$pkg$"	1	scope	LS4
 hier.rs	is_hier_scope	starts_with	<probe>	1	key	DK3
-hoist/general_query.rs	hier_path_is_self	split	'.'	1	scope	LS4
-hoist/general_query.rs	hier_path_is_self	split	'['	1	scope	LS4
 iface_rtn_scope.rs	static_scoped_keys	contains	"::"	2	key	RS1
 lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	DK4
 lexscope/disp.rs	display_of	contains	'['	1	display	DK4
@@ -858,21 +852,32 @@ lexscope/disp.rs	scope_chain_abs	starts_with	"$blk$"	1	display	LS2
 lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	DK4
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	RS1
-lexscope/elab.rs	flush_block_local_inits	split	'.'	1	scope	LS4
-lexscope/elab.rs	flush_block_local_inits	starts_with	"$blk$"	1	scope	LS4
-lexscope/elab.rs	flush_block_local_inits	strip_prefix	<dot>	1	scope	LS4
+lexscope/elab.rs	flush_block_local_inits	split	'.'	1	scope	B3k
+lexscope/elab.rs	flush_block_local_inits	starts_with	"$blk$"	1	scope	B3k
+lexscope/elab.rs	flush_block_local_inits	strip_prefix	<dot>	1	scope	B3k
 lexscope/elab.rs	gen_rtn_key	is_gen_scope_segment	-	1	scope	RS1
 lexscope/elab.rs	gen_rtn_key	split	'.'	1	scope	RS1
 lexscope/elab.rs	gen_rtn_key	starts_with	'$'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	rfind	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	RS1
+lexscope/mod.rs	cur_frame_routine_is_any	rsplit	'.'	1	scope	B3k
+lexscope/mod.rs	cur_frame_routine_is_any	strip_prefix	"$func$"	1	scope	B3k
+lexscope/mod.rs	cur_frame_routine_is_any	strip_prefix	"$itask$"	1	scope	B3k
 lexscope/mod.rs	cur_is_inst_top_or_synth_below	split	'.'	1	scope	B3k
 lexscope/mod.rs	cur_is_inst_top_or_synth_below	starts_with	'$'	1	scope	B3k
 lexscope/mod.rs	cur_is_inst_top_or_synth_below	strip_prefix	'.'	1	scope	B3k
 lexscope/mod.rs	cur_is_inst_top_or_synth_below	strip_prefix	<self.mark_text()>	1	scope	B3k
+lexscope/mod.rs	cur_under_func_or_itask	split	'.'	1	scope	B3k
+lexscope/mod.rs	cur_under_func_or_itask	starts_with	"$func$"	1	scope	B3k
+lexscope/mod.rs	cur_under_func_or_itask	starts_with	"$itask$"	1	scope	B3k
 lexscope/mod.rs	gen_binding_encloses	strip_suffix	'.'	1	key	DK3
 lexscope/mod.rs	gen_binding_encloses	strip_suffix	<name>	1	key	DK3
+lexscope/mod.rs	hier_path_is_self	split	'.'	1	scope	B3k
+lexscope/mod.rs	hier_path_is_self	split	'['	1	scope	B3k
+lexscope/mod.rs	in_block_local_scope	rsplit	'.'	1	scope	B3k
+lexscope/mod.rs	in_block_local_scope	starts_with	"$blk$"	1	scope	B3k
+lexscope/mod.rs	scope_is_pkg	starts_with	"$pkg$"	1	scope	B3k
 literal.rs	unescape_str_literal_reporting	strip_prefix	'"'	1	spelling	-
 package.rs	rtn_key_pkg	split_once	"::"	1	key	RS1
 params.rs	resolve_param_overrides	split_once	"$d"	1	spelling	-
@@ -892,13 +897,8 @@ scope.rs	walk_out_from	starts_with	"$func$"	1	scope	walk
 scope.rs	walk_out_from	starts_with	"$itask$"	1	scope	walk
 stmt_main.rs	lower_stmt_inner	starts_with	"$f"	1	spelling	-
 stmt_main.rs	lower_stmt_inner	starts_with	'$'	2	spelling	-
-struct_arm.rs	struct_arm_context	split	'.'	1	scope	LS4
-struct_arm.rs	struct_arm_context	starts_with	"$func$"	1	scope	LS4
-struct_arm.rs	struct_arm_context	starts_with	"$itask$"	1	scope	LS4
-var_init.rs	in_block_local_scope	rsplit	'.'	1	scope	LS4
-var_init.rs	in_block_local_scope	starts_with	"$blk$"	1	scope	LS4
 == HSEG_COUNTS
-tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 27, "B3k": 4, "DK1": 2, "DK3": 15, "DK4": 6, "LS2": 3, "LS4": 14, "RS1": 19, "walk": 9}
+tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 27, "B3k": 18, "DK1": 2, "DK3": 15, "DK4": 6, "LS2": 3, "RS1": 19, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -1393,7 +1393,6 @@ ident=0 asserts=5
 file	fn	entry	sink	count
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	BIN:==	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	RECV:.is_empty	1
-frames_call/emit.rs	emit_dyn_formal_markers_nested	cur_prefix_text	RECV:.rsplit	1
 frames_reserve.rs	reserve_frame_func	cur_prefix_text	MAC:format>LOCAL:key#2	1
 frames_reserve.rs	reserve_frame_func	cur_prefix_text	RECV:.is_empty	1
 frames_reserve.rs	reserve_frame_task	cur_prefix_text	MAC:format>LOCAL:key#2	1
@@ -1402,7 +1401,6 @@ generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
-hoist/general_query.rs	hier_path_is_self	cur_prefix_text	RECV:.split	1
 iface_inst.rs	elaborate_iface_instances	cur_prefix_text	LOCAL:parent#2	1
 instance.rs	elaborate_instance	cur_prefix_text	LOCAL:parent_prefix#2	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
@@ -1412,13 +1410,13 @@ scope.rs	fq	cur_prefix_text	RECV:.is_empty	1
 scope.rs	scoped_key_at_or_above	scope_text	LOCAL:prefix#3	1
 scope.rs	walk_scopes_key_from	scope_text	ARG:self.walk_out_from	1
 scope.rs	walk_scopes_key_inner	cur_prefix_text	ARG:self.walk_out_from	1
-struct_arm.rs	struct_arm_context	cur_prefix_text	RECV:.split	1
-var_init.rs	in_block_local_scope	cur_prefix_text	RECV:.rsplit	1
 net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
 # + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 16, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
+# LS4: 16 -> 12, the reads of four scope questions (struct_arm.rs, var_init.rs, frames_call/emit.rs,
+# hoist/general_query.rs) are bool entries of lexscope now (W12_SCOPEQ) ; the 12 left close at DK1
+{"cur_gen_rtn_key": 2, "cur_prefix_text": 12, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1449,6 +1447,7 @@ frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
 generate.rs	elaborate_gen_item	with_scope	&block_prefix	1
 generate.rs	elaborate_gen_scoped	with_scope	&seg	1
 held.rs	report_clk_refused	scope_swap	prefix	1
+hier.rs	hier_resolve	scope_is_pkg	prefix	1
 hier.rs	hier_resolve	scope_text	prefix	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	&d.prefix	1
 hier_defer/write.rs	resolve_pending_fill_widths	scope_swap	&p.prefix	1
@@ -1496,7 +1495,7 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 string_array_route.rs	route_fixed_string_array	push_block_local_init	None	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
 == HC_ARGS_COUNTS
-{"entry_under_cur": 1, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 11, "scope_swap_pkg": 2, "scope_swap_text": 10, "scope_text": 5, "take_at": 3, "with_scope": 21}
+{"entry_under_cur": 1, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 11, "scope_swap_pkg": 2, "scope_swap_text": 10, "scope_text": 5, "take_at": 3, "with_scope": 21}
 == HC_LOCAL
 # HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
 # scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called
@@ -1531,6 +1530,31 @@ stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingCover.scope	1
 stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingSva.scope	4
 == HC_CARRY_COUNTS
 sites=28 local=0
+== W12_SCOPEQ
+# W12_SCOPEQ (LS4 ; PLAN7 LS4, DELTA6 W12, DELTA13 D3:199): the scope-question entries of lexscope — each a bool over the
+# text its site tested before, no entry returning text — with the site it took and its deleting unit (B3k replaces the entry
+# with the record's answer). The seventh of W12's seven, var_init.rs:419-423 (X7 is_here), is no entry: it is a test inside
+# flush_block_local_inits' body, inside lexscope since LS3b-2 (its HSEG rows carry UNIT B3k). W12: this list may only fall.
+entry	item	site	deleting
+cur_frame_routine_is_any	Scopes::cur_frame_routine_is_any	frames_call/emit.rs emit_dyn_formal_markers_nested (d1, PLAN7 G5 b2)	B3k
+cur_is_inst_top_or_synth_below	Scopes::cur_is_inst_top_or_synth_below	expr_size_hier.rs hier_leaf_scope (LS3b-1, DELTA13 D3)	B3k
+cur_under_func_or_itask	Scopes::cur_under_func_or_itask	struct_arm.rs struct_arm_context	B3k
+hier_path_is_self	Scopes::hier_path_is_self	hoist/general_query.rs (d2 ; the fn itself, moved)	B3k
+in_block_local_scope	Scopes::in_block_local_scope	var_init.rs (the fn itself, moved)	B3k
+scope_is_pkg	Scopes::scope_is_pkg	hier.rs hier_resolve (`$pkg$`)	B3k
+== HC_SCOPEQ
+# HC SCOPEQ (LS4 ; PLAN7 LS4 "HC is extended to these entries (file, fn, entry, count)"): every call of a W12_SCOPEQ entry
+# outside `crate::lexscope`, by (file, fn, entry) with a count.
+file	fn	entry	count
+expr_size_hier.rs	hier_leaf_scope	cur_is_inst_top_or_synth_below	1
+frames_call/emit.rs	emit_dyn_formal_markers_nested	cur_frame_routine_is_any	1
+hier.rs	hier_resolve	scope_is_pkg	1
+hoist/general.rs	order_walk	hier_path_is_self	1
+hoist/special.rs	read_roots	hier_path_is_self	1
+string_array_route.rs	route_fixed_string_array	in_block_local_scope	1
+struct_arm.rs	struct_arm_context	cur_under_func_or_itask	1
+== HC_SCOPEQ_COUNTS
+entries=6 sites=7
 == HOLDERS
 # HOLDERS (LS2-d ; DELTA9 J1 (3), J4): every struct field, enum variant field and fn signature
 # position (IN:<param>, RET) in crates/elaborate/src whose type names a lexscope type (Scopes,
@@ -1611,6 +1635,7 @@ lexscope/mod.rs	Scopes::scope_carry	RET	ScopeRef	1
 lexscope/mod.rs	Scopes::scope_child	RET	ScopeRef	1
 lexscope/mod.rs	Scopes::scope_enter	RET	Saved	1
 lexscope/mod.rs	Scopes::scope_hold	RET	Saved	1
+lexscope/mod.rs	Scopes::scope_is_pkg	IN:at	&ScopeRef	1
 lexscope/mod.rs	Scopes::scope_repoint	IN:at	&ScopeRef	1
 lexscope/mod.rs	Scopes::scope_restore	IN:saved	Saved	1
 lexscope/mod.rs	Scopes::scope_shown	IN:at	&ScopeRef	1

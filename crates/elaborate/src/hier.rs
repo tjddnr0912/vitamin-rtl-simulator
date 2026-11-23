@@ -567,16 +567,16 @@ impl Elaborator<'_> {
         path: &[String],
         table: &std::collections::BTreeMap<String, V>,
     ) -> Option<V> {
-        let prefix = self.lex.scope_text(prefix);
         // A2b (adversarial sound #2): a hierarchical reference FROM package
         // scope (a `$pkg$…` prefix = the package pre-sweep, the only proc
         // context there) is LRM-illegal (§26.3 — packages see only their own
         // scope) and has no legit resolution target (no interface/class state
         // can exist in a package). Committed-unresolved → every deferred
         // resolver stays loud, never an oracle-divergent silent value.
-        if prefix.starts_with("$pkg$") {
+        if self.lex.scope_is_pkg(prefix) {
             return None;
         }
+        let prefix = self.lex.scope_text(prefix);
         let first = &path[0];
         let rest = path[1..].join(".");
         let mut segs: Vec<&str> = if prefix.is_empty() {

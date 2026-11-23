@@ -285,17 +285,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Is the active prefix a block-local `$blk$<lo>` scope? That is exactly the shape
-    /// `flush_block_local_inits` claims, so it is also the test for "this scope's t0 writes
-    /// are replayed by that flush, not by the enclosing scope's".
-    pub(crate) fn in_block_local_scope(&self) -> bool {
-        self.lex
-            .cur_prefix_text()
-            .rsplit('.')
-            .next()
-            .is_some_and(|seg| seg.starts_with("$blk$"))
-    }
-
     /// [`Self::flush_pending_var_inits`], recording the emitted process's initialization
     /// rank in `slot`. A no-op flush consumes no `seq`, so the ranks stay dense and a
     /// design that emits nothing is unaffected.

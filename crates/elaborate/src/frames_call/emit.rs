@@ -371,14 +371,8 @@ impl Elaborator<'_> {
         // array and a silently wrong one the moment a level passes a different one, so
         // this is refused outright rather than left to chance. The enclosing frame is
         // the trailing `$func$<name>` / `$itask$<name>` segment of the active prefix.
-        let enclosing = self.lex.cur_prefix_text().rsplit('.').next().and_then(|s| {
-            s.strip_prefix("$func$")
-                .or_else(|| s.strip_prefix("$itask$"))
-        });
-        if let Some(encl) = enclosing {
-            if fids.iter().any(|(_, n)| n == encl) {
-                return false;
-            }
+        if self.lex.cur_frame_routine_is_any(&fids) {
+            return false;
         }
         let mut sorted: Vec<u32> = fids.iter().map(|(f, _)| *f).collect();
         sorted.sort_unstable();

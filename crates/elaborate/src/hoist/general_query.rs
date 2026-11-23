@@ -112,23 +112,6 @@ impl Elaborator<'_> {
         }
         out
     }
-
-    /// Does the hierarchical path `segs` name something in the CURRENT scope (a self-path
-    /// like `t.o` / `t.blk.o`), rather than reaching into a child instance?
-    ///
-    /// Only a self-path can alias a bare block-local: v1 flattens block-locals to module
-    /// nets by bare name, so `t.o` and `o` are one net, while `sub.o` is a different module's
-    /// net and cannot be.
-    pub(crate) fn hier_path_is_self(&self, segs: &[ast::Ident]) -> bool {
-        let Some(head) = segs.first() else {
-            return false;
-        };
-        self.lex
-            .cur_prefix_text()
-            .split('.')
-            .map(|c| c.split('[').next().unwrap_or(c))
-            .any(|c| c == head.name)
-    }
 }
 
 impl Elaborator<'_> {

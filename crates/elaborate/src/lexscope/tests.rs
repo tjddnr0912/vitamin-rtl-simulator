@@ -365,3 +365,83 @@ fn fb_scope_keyed_push_here() {
     assert_eq!(m.take_at(&s, &top), Some(vec![1]));
     assert!(m.drain_keys_shown().is_empty());
 }
+
+/// LS4: the scope questions, each a bool over the text the site tested before (PLAN7 LS4) —
+/// a truth table per entry, the current scope (or the carried one) entered by its text.
+#[test]
+fn fb_scope_questions_truth_tables() {
+    let ask = |cur: &str, q: &dyn Fn(&Scopes) -> bool| {
+        let mut s = Scopes::new();
+        let a = s.scope_swap_text(cur.to_string());
+        let got = q(&s);
+        s.scope_restore(a);
+        got
+    };
+    // scope_is_pkg (hier.rs hier_resolve): the carried scope's text starts with `$pkg$`
+    for (cur, want) in [
+        ("$pkg$p", true),
+        ("$pkg$p.$func$f", true),
+        ("top", false),
+        ("", false),
+        ("top.$pkg$p", false),
+    ] {
+        let got = ask(cur, &|s: &Scopes| s.scope_is_pkg(&s.scope_carry()));
+        assert_eq!(got, want, "scope_is_pkg `{cur}`");
+    }
+    // cur_under_func_or_itask (struct_arm.rs): any segment starts with `$func$` / `$itask$`
+    for (cur, want) in [
+        ("top.$func$f", true),
+        ("top.$itask$t.$blk$1", true),
+        ("$func$f", true),
+        ("top.g[0]", false),
+        ("top.x$func$f", false),
+        ("", false),
+    ] {
+        let got = ask(cur, &|s: &Scopes| s.cur_under_func_or_itask());
+        assert_eq!(got, want, "cur_under_func_or_itask `{cur}`");
+    }
+    // in_block_local_scope (string_array_route.rs): the LAST segment starts with `$blk$`
+    for (cur, want) in [
+        ("top.$blk$12", true),
+        ("$blk$3", true),
+        ("top.$blk$1.g[0]", false),
+        ("top.x$blk$1", false),
+        ("", false),
+    ] {
+        let got = ask(cur, &|s: &Scopes| s.in_block_local_scope());
+        assert_eq!(got, want, "in_block_local_scope `{cur}`");
+    }
+    // cur_frame_routine_is_any (frames_call/emit.rs): the trailing `$func$<n>` / `$itask$<n>`
+    // name is one of the targets' names
+    let f = vec![(7, "f".to_string())];
+    let t = vec![(1, "g".to_string()), (2, "t".to_string())];
+    for (cur, fids, want) in [
+        ("top.$func$f", &f, true),
+        ("top.$itask$t", &t, true),
+        ("top.$func$g", &f, false),
+        ("top.$func$f.$blk$1", &f, false),
+        ("top.f", &f, false),
+        ("", &f, false),
+    ] {
+        let got = ask(cur, &|s: &Scopes| s.cur_frame_routine_is_any(fids));
+        assert_eq!(got, want, "cur_frame_routine_is_any `{cur}` {fids:?}");
+    }
+    assert!(!ask("top.$func$f", &|s: &Scopes| s.cur_frame_routine_is_any(&[])));
+    // hier_path_is_self (hoist): some segment of the path, its `[..]` cut, is the head's name
+    let id = |n: &str| hdl_ast::Ident {
+        name: n.to_string(),
+        span: hdl_ast::Span::new(0, 0),
+    };
+    for (cur, segs, want) in [
+        ("top.u1.blk", vec![id("u1"), id("o")], true),
+        ("top.u1.blk", vec![id("top"), id("o")], true),
+        ("top.u1.blk", vec![id("sub"), id("o")], false),
+        ("top.g[0]", vec![id("g"), id("o")], true),
+        ("top.g[0]", vec![id("g[0]"), id("o")], false),
+        ("top", vec![], false),
+        ("", vec![id("o")], false),
+    ] {
+        let got = ask(cur, &|s: &Scopes| s.hier_path_is_self(&segs));
+        assert_eq!(got, want, "hier_path_is_self `{cur}` {segs:?}");
+    }
+}

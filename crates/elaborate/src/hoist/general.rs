@@ -357,7 +357,7 @@ impl Elaborator<'_> {
                 // keying on the segment SPELLING made an unrelated child-scope variable
                 // (`sub.o`) poison the module's own `o` and false-louded a working design.
                 segs => {
-                    if !self.hier_path_is_self(segs) {
+                    if !self.lex.hier_path_is_self(segs) {
                         // A path THROUGH A CHILD INSTANCE reaches another scope's nets and can
                         // never be the current scope's `o`. Poisoning on the segment SPELLING
                         // false-louded `q = sub.o + nxt(5, o)`, which is correct code.

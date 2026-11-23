@@ -96,7 +96,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=4 rows=126 out_types=22 e_fns=29 text_flows=42
+present=present files=4 rows=133 out_types=22 e_fns=29 text_flows=42
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -170,6 +170,8 @@ lexscope/mod.rs	K	FN	ScopeKeyed::push_here	RET	()	PASS	-
 lexscope/mod.rs	K	FN	ScopeKeyed::put_at	RET	()	PASS	-
 lexscope/mod.rs	K	FN	ScopeKeyed::take_at	RET	Option<V>	CARD:hit:a value stored at the carried scope	-
 lexscope/mod.rs	K	FN	Scopes::class_method_is_none	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_frame_routine_is_any	IN:fids	&[(u32, String)]	ENTER:lookup	-
+lexscope/mod.rs	K	FN	Scopes::cur_frame_routine_is_any	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top_or_synth_below	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_tf_decl	RET	bool	PASS	-
@@ -177,6 +179,7 @@ lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
 lexscope/mod.rs	K	FN	Scopes::cur_shown	RET	Shown	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	IN:none	&str	ENTER:to-display	-
 lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	RET	Shown	PASS	-
+lexscope/mod.rs	K	FN	Scopes::cur_under_func_or_itask	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_is_empty	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_pop	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_chain_push	IN:label	String	ENTER:to-display	-
@@ -198,6 +201,9 @@ lexscope/mod.rs	K	FN	Scopes::gen_text_pop	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::gen_text_push	IN:gv_key	Option<String>	ENTER:carried	-
 lexscope/mod.rs	K	FN	Scopes::gen_text_push	IN:text	hdl_ast::Span	ENTER:carried	-
 lexscope/mod.rs	K	FN	Scopes::gen_text_push	RET	()	PASS	-
+lexscope/mod.rs	K	FN	Scopes::hier_path_is_self	IN:segs	&[hdl_ast::Ident]	ENTER:lookup	-
+lexscope/mod.rs	K	FN	Scopes::hier_path_is_self	RET	bool	PASS	-
+lexscope/mod.rs	K	FN	Scopes::in_block_local_scope	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::key_under	IN:name	&str	ENTER:lookup	-
 lexscope/mod.rs	K	FN	Scopes::key_under	RET	String	LEAVE:L5	-
 lexscope/mod.rs	K	FN	Scopes::mark_exchange	ARG:at	ScopeRef	PASS	-
@@ -210,6 +216,7 @@ lexscope/mod.rs	K	FN	Scopes::scope_carry	RET	ScopeRef	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_child	IN:inst_name	&str	ENTER:to-scope	-
 lexscope/mod.rs	K	FN	Scopes::scope_child	RET	ScopeRef	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_hold	RET	Saved	PASS	-
+lexscope/mod.rs	K	FN	Scopes::scope_is_pkg	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_repoint	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_restore	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::scope_shown	RET	Shown	PASS	-
@@ -271,6 +278,8 @@ item	param	role	holds
 Elaborator::with_scope	seg	to-scope	TEXT str
 Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
 Elaborator::cur_gen_rtn_key	bare	lookup	TEXT str
+Scopes::cur_frame_routine_is_any	fids	lookup	TEXT String
+Scopes::hier_path_is_self	segs	lookup	TEXT hdl_ast::Ident.name -> String
 Scopes::scope_swap_text	text	to-scope	TEXT String
 Scopes::scope_swap_pkg	pkg	to-scope	TEXT str
 Elaborator::disp_frame_path_of	key	lookup	TEXT str
@@ -566,12 +575,14 @@ lexscope/mod.rs	ScopeKeyed::take_at	52542cac8ebff1a8bb6bf0d22c480e91c417ac37cb3f
 lexscope/mod.rs	Scopes::c_path	690613c0dbbe24a2f5be83640a12468db1af2e077b6ab42575b6fe6996f0b7c4
 lexscope/mod.rs	Scopes::child_prefix	3f7671b7c7f0efbd45a382d7fa9f51f4e5b655f00da2510a5ba0422ab2f7c739
 lexscope/mod.rs	Scopes::class_method_is_none	34f193b7f753d897a3404f88609b7811d19a3ffa03cd65c86826c9776272c008
+lexscope/mod.rs	Scopes::cur_frame_routine_is_any	ff61490d61a24060002e9bddf3f992e97cbe17317c80fefe505c41a9ef8d796b
 lexscope/mod.rs	Scopes::cur_is_inst_top	aed9b197ccf907dbd57bbc32c044c5528941c4813f70897e4f19f04972870e9b
 lexscope/mod.rs	Scopes::cur_is_inst_top_or_synth_below	778d24f792090c5e951b336441f4610089f5c323351e5d805d9e2223ea38f06e
 lexscope/mod.rs	Scopes::cur_is_tf_decl	53bccf374494aa6edbd29d9882ef10efb77f9186552a89edbf3fc62b0176ac09
 lexscope/mod.rs	Scopes::cur_prefix_text	880389ff624cd8b3c0dc19c579c104ffc4c7b13e29b5f56f6a2728be46cd4575
 lexscope/mod.rs	Scopes::cur_shown	2224140711fb6c469d88b5634d80ee4722f8cf32aef9e438e58c16456fef4a75
 lexscope/mod.rs	Scopes::cur_shown_quoted_or	c1b32131759d978de054a79663600be2bcc4d56278b4527462f38f3a727eb394
+lexscope/mod.rs	Scopes::cur_under_func_or_itask	688147c846a9a4468052361ad951d6d52af2a6c3560a881f77f3e339e74e55b0
 lexscope/mod.rs	Scopes::disp_chain_is_empty	926c0636bda1ac8c49609703bf4575fad5bd9be3412116f94fd61e30b9830c5b
 lexscope/mod.rs	Scopes::disp_chain_pop	2f2a3a4a41d7e784f1574a6e3368eb71d5f1389da219d82378c84d2d1f0331c7
 lexscope/mod.rs	Scopes::disp_chain_push	9b16853c803eb5b2a82859952c0e1494d2b615ef7bbc7455e4a90228e441fb03
@@ -585,6 +596,8 @@ lexscope/mod.rs	Scopes::disp_root_swap_empty	01551ae34e4a43b8840e7b8f315b30a95d2
 lexscope/mod.rs	Scopes::gen_binding_encloses	11db9d3360b1e2455fe4a28b7ffe1f9f39a3e97dc5de077e9721d11b6d93d7d2
 lexscope/mod.rs	Scopes::gen_text_pop	c21babe48fc175ba3e9e912ebc24eaf0ea9c09f5300178e9ac81df50643db3c6
 lexscope/mod.rs	Scopes::gen_text_push	bcce813d63962bb5c66e4ab3b9c79bee56e739a0e14fbec2e16a8d303ba1e416
+lexscope/mod.rs	Scopes::hier_path_is_self	d9512ef686e99da3c33aa573189bfc6a82ffb3453e69bdf7aaa76887cb9e7129
+lexscope/mod.rs	Scopes::in_block_local_scope	22e47f4616ff027d5b97b92cfd24cd7345fbe586bdeab37bfb458d04e65f3c00
 lexscope/mod.rs	Scopes::intern	fecd02a5146d6bad133240e6847fce451c0b09fc6919a710bde50afc5a688fe3
 lexscope/mod.rs	Scopes::key_under	2ba1117f22b8e0b9ffd2143cd6cb5465b17131b68c690c3da55a5497e870ebd3
 lexscope/mod.rs	Scopes::mark_exchange	75c5330808e2ae2ccdfaad4f2eea9fc105f9724b7d037e6624e03c81ba514dbb
@@ -598,6 +611,7 @@ lexscope/mod.rs	Scopes::scope_carry	10b714212bc5e8580fc057ae919c10539d9e71fc7394
 lexscope/mod.rs	Scopes::scope_child	738a082979d1fc9eed3d4ca1f2cdbc871332c23549360f65b9db13543dbe4f3e
 lexscope/mod.rs	Scopes::scope_enter	4711a72fd88fe19f2aafc9f270bc104d1bf87988459b9bcb1255d7f641df7e35
 lexscope/mod.rs	Scopes::scope_hold	d2827bbf6bddcbf033565328e4d61e72c2c8f2e0347af0618249e3d5bf5cc859
+lexscope/mod.rs	Scopes::scope_is_pkg	c9d998ef8a1836add6a9d33fc846e779fc6215c5856af9b630ff0c8fe8b012a0
 lexscope/mod.rs	Scopes::scope_repoint	34c343702aafd49f42070d5252c9f320af3b5be58457d4c1c786243ccb4e602e
 lexscope/mod.rs	Scopes::scope_restore	6c033eeb05cf872b581755513143cd39c267f1f27e666eaf5e4a60d0082ff55c
 lexscope/mod.rs	Scopes::scope_shown	67756b69828af1cdbe288b2ee12d610fb520a4193eac788b13255257200f079b
@@ -627,6 +641,7 @@ lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f
 lexscope/tests.rs	fb_scope_child_text_and_reentry	c46e0ebdbeb76c7adaa70b7b28559f1dfb503d1ef00519e5495834733ce2e777
 lexscope/tests.rs	fb_scope_keyed_push_here	c9f10efeef1201cd95ec9eb5a141bc86d58da0e6142f2d73c3bd7932d4f88b83
 lexscope/tests.rs	fb_scope_keyed_take_put_entry_drain	cde9d37047a61a4db1bda00aafd5137939a5d10beb88547b0d079d90255369e9
+lexscope/tests.rs	fb_scope_questions_truth_tables	9298e36f3104fe055b85c28c89664ddc88a4734a931d321af9fc7cd55c15db50
 lexscope/tests.rs	fb_scope_swap_reenters_the_carried_scope_without_interning	e020af4bc7413eefaa1be64efe714cf1aaeb080245d2df82ec6227f5476c9ec4
 lexscope/tests.rs	fb_scope_text_of_carry_is_the_current_text_after_each_opener	2d7a4a802ecaea60fbba28f17f97dc45c58d2815897bc8833b8084fdf1920d7c
 lexscope/tests.rs	fb_shown_ctx_debug_writes_no_text	1a63fa8319d5be06cf3207ebc60c43395b9a7c3a100411f640545ebe6aaa729d

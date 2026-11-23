@@ -124,11 +124,7 @@ impl Elaborator<'_> {
             && self.lex.class_method_is_none()
             && self.subst.is_empty()
             && self.out_subst.is_empty()
-            && !self
-                .lex
-                .cur_prefix_text()
-                .split('.')
-                .any(|s| s.starts_with("$func$") || s.starts_with("$itask$"))
+            && !self.lex.cur_under_func_or_itask()
     }
 }
 

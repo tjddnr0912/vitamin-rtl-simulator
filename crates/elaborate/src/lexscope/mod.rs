@@ -15,6 +15,11 @@
 //! only as the move-only [`SavedChain`] / [`SavedRoot`] / [`SavedMethod`] ; display text made
 //! from a scope is a [`Shown`] / [`ShownCtx`], opaque, and leaves as plain data only through
 //! [`scope_out`] (the door's one text exit, its sinks counted by the home tests).
+//!
+//! The questions code outside asks about a scope's kind or place (unit LS4: is it a package's,
+//! a block-local one, under a function or inlined task, the frame of one of these routines,
+//! named by a self-path) are named entries returning `bool` over the same text ; none returns
+//! text, and their call sites are counted by the home tests (HC_SCOPEQ).
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, DefaultHasher};
@@ -577,6 +582,62 @@ impl Scopes {
             return false;
         };
         rest.split('.').all(|s| s.starts_with('$'))
+    }
+
+    /// Is the carried scope `at` a package's (a `$pkg$…` path: the package pre-sweep)?
+    /// (`hier_resolve`'s guard, `hier.rs`.)
+    pub(crate) fn scope_is_pkg(&self, at: &ScopeRef) -> bool {
+        self.names[at.0 .0 as usize].starts_with("$pkg$")
+    }
+
+    /// Is the current scope inside a function's or an inlined task's body (a `$func$…` or
+    /// `$itask$…` segment anywhere in its path)? (`struct_arm_context`, `struct_arm.rs`.)
+    pub(crate) fn cur_under_func_or_itask(&self) -> bool {
+        self.cur_prefix
+            .split('.')
+            .any(|s| s.starts_with("$func$") || s.starts_with("$itask$"))
+    }
+
+    /// Is the active prefix a block-local `$blk$<lo>` scope? That is exactly the shape
+    /// `flush_block_local_inits` claims, so it is also the test for "this scope's t0 writes
+    /// are replayed by that flush, not by the enclosing scope's".
+    pub(crate) fn in_block_local_scope(&self) -> bool {
+        self.cur_prefix
+            .rsplit('.')
+            .next()
+            .is_some_and(|seg| seg.starts_with("$blk$"))
+    }
+
+    /// Is the routine whose frame encloses the current scope (the trailing `$func$<name>` /
+    /// `$itask$<name>` segment of its path) one of the call targets `fids` names?
+    /// (`emit_dyn_formal_markers_nested`'s recursion refusal, `frames_call/emit.rs`.)
+    pub(crate) fn cur_frame_routine_is_any(&self, fids: &[(u32, String)]) -> bool {
+        let enclosing = self.cur_prefix.rsplit('.').next().and_then(|s| {
+            s.strip_prefix("$func$")
+                .or_else(|| s.strip_prefix("$itask$"))
+        });
+        if let Some(encl) = enclosing {
+            if fids.iter().any(|(_, n)| n == encl) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Does the hierarchical path `segs` name something in the CURRENT scope (a self-path
+    /// like `t.o` / `t.blk.o`), rather than reaching into a child instance?
+    ///
+    /// Only a self-path can alias a bare block-local: v1 flattens block-locals to module
+    /// nets by bare name, so `t.o` and `o` are one net, while `sub.o` is a different module's
+    /// net and cannot be. (`hoist/special.rs` read_roots, `hoist/general.rs` order_walk.)
+    pub(crate) fn hier_path_is_self(&self, segs: &[hdl_ast::Ident]) -> bool {
+        let Some(head) = segs.first() else {
+            return false;
+        };
+        self.cur_prefix
+            .split('.')
+            .map(|c| c.split('[').next().unwrap_or(c))
+            .any(|c| c == head.name)
     }
 
     /// A generate scope opens: the current scope, the source range `text` of the construct

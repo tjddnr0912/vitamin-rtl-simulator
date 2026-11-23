@@ -292,7 +292,7 @@ impl Elaborator<'_> {
         // writes, which share that offset — so the stable sort keeps `new[n]` ahead of
         // them. The pre-size map has no flush point of its own for such a scope, and a
         // pre-size left in it is an array that silently stays length 0.
-        if self.in_block_local_scope() {
+        if self.lex.in_block_local_scope() {
             let lo = decl.name.span.lo;
             self.push_block_local_init(None, lo, lhs, rhs);
         } else {

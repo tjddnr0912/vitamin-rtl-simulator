@@ -6454,6 +6454,87 @@ fn hc_carry_the_carried_scope_sinks_are_pinned() {
     finish("HC_CARRY", &msgs);
 }
 
+#[test]
+fn hc_scopeq_the_scope_question_askers_are_pinned() {
+    // LS4 (PLAN7 LS4 "HC is extended to these entries (file, fn, entry, count)" ; W12 gains the
+    // scope-question entries with deleting unit B3k): W12_SCOPEQ lists the entries, each a
+    // surface fn of lexscope returning bool (SURF_ROWS, itself pinned to the code by HT-SURF) ;
+    // HC_SCOPEQ pins every call of one outside lexscope by (file, fn, entry) with a count
+    let w12 = table(&tables::get("W12_SCOPEQ"));
+    let surf = surf_rows("SURF_ROWS");
+    let mut msgs = Vec::new();
+    let mut entries = Vec::new();
+    for row in &w12 {
+        assert_eq!(
+            row.len(),
+            4,
+            "W12_SCOPEQ table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        let rets: Vec<&Vec<String>> = surf
+            .iter()
+            .filter(|r| r.len() > 5 && r[3] == row[1] && r[4] == "RET")
+            .collect();
+        if rets.len() != 1 || rets[0][5] != "bool" {
+            msgs.push(format!(
+                "W12_SCOPEQ entry `{}` is not ONE surface fn returning bool in SURF_ROWS (RET rows: {rets:?}) — a \
+                 scope question answers with a bool, no text (PLAN7 LS4)",
+                row[1]
+            ));
+        }
+        if row[3] != "B3k" {
+            msgs.push(format!(
+                "W12_SCOPEQ entry `{}` has deleting unit `{}`, not B3k (DELTA6 W12, PLAN7 LS4)",
+                row[1], row[3]
+            ));
+        }
+        entries.push(row[0].clone());
+    }
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, _) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows.entry(format!("{file}\t{qual}\t{callee}")).or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HC_SCOPEQ", "file\tfn\tentry\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HC_SCOPEQ")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HC_SCOPEQ table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    msgs.extend(diff_rows(
+        "HC_SCOPEQ",
+        &got,
+        &want,
+        "a new asker of a scope question (W12_SCOPEQ): name the unit, read what the bool decides, add the row \
+         (the deleting unit B3k replaces the entry, every asker then takes the record's answer)",
+        "an asker of a scope question is gone: name the unit, remove the row",
+    ));
+    let counts = format!(
+        "entries={} sites={}",
+        entries.len(),
+        rows.values().sum::<usize>()
+    );
+    if counts != tables::get("HC_SCOPEQ_COUNTS") {
+        msgs.push(format!(
+            "HC_SCOPEQ COUNTS table [{}] now [{counts}] — W12: the scope-question entries may only fall",
+            tables::get("HC_SCOPEQ_COUNTS")
+        ));
+    }
+    finish("HC_SCOPEQ", &msgs);
+}
+
 /// The position of `param` among the typed parameters of the lexscope fn `item`.
 fn enter_param_index(item: &str, param: &str) -> usize {
     let (ty, name) = match item.rsplit_once("::") {

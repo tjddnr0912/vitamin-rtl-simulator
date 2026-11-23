@@ -50,7 +50,7 @@ fn lvalue_index_seq(lv: &ast::Lvalue) -> Vec<&ast::Expr> {
 ///
 /// * a **self-hierarchical** path — v1 flattens block-locals to module nets by bare
 ///   name, so `m.a` and `a` are ONE net while their first segments (`m`, `a`) look
-///   disjoint. `hoist/general_query.rs` keeps `hier_path_is_self` for exactly this.
+///   disjoint. `crate::lexscope` keeps `Scopes::hier_path_is_self` for exactly this.
 /// * a **package-scoped** name — `p::v` is `ExprKind::PkgScoped`, a `shape()` leaf that
 ///   the `Ident` arm never sees, yet `import p::*` makes bare `v` the same net.
 ///
@@ -180,7 +180,7 @@ impl Elaborator<'_> {
                 if p.segments.len() > 1 {
                     // Only a SELF-path can alias a bare name; a path into a child instance
                     // names a different module's net and cannot collide.
-                    if self.hier_path_is_self(&p.segments) {
+                    if self.lex.hier_path_is_self(&p.segments) {
                         out.opaque = true;
                     }
                     return;
