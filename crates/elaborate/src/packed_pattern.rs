@@ -22,7 +22,7 @@ impl Elaborator<'_> {
     /// Record the net just declared as `name` as a `'{default: v}` target whose first
     /// packed dimension has `n` elements and is written in its declaration.
     pub(crate) fn record_packed_default_target(&mut self, name: &str, n: u32) {
-        if let Some(&id) = self.symbols.get(&self.fq(name)) {
+        if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(name)) {
             self.packed_default_nets.insert(id, n);
         }
     }

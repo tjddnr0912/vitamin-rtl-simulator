@@ -983,7 +983,7 @@ impl Elaborator<'_> {
                 let dir = map_port_dir(pd.dir);
                 let init = default_init(kind, width);
                 for (ni, name) in pd.names.iter().enumerate() {
-                    if self.symbols.contains_key(&self.fq(&name.name)) {
+                    if self.symbols.contains_at(&self.lex.at_cur(&name.name)) {
                         continue; // already created by a NetVarDecl
                     }
                     // UNPACKED dims, per name — the non-ANSI twin of the ANSI port
@@ -1028,7 +1028,7 @@ impl Elaborator<'_> {
                         pd.shape_param.is_some(),
                     );
                     if !dims.is_empty() {
-                        if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                        if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&name.name)) {
                             // Declared per-dim DIRECTION, as a body declaration and an
                             // ANSI port record it. Missing here, a non-ANSI
                             // `output logic [7:0] o [3:0];` took the ascending order:
@@ -1058,13 +1058,13 @@ impl Elaborator<'_> {
                         // so without it an x written to a non-ANSI `output bit y;` or
                         // `output int y;` stayed x (iverilog 13.0 reads 0; IEEE 1800
                         // §6.11.2). The 4-state kinds keep the derived descriptor.
-                        if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                        if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&name.name)) {
                             self.intro_kind.insert(id, kind);
                         }
                     }
                     // WAND/WOR: non-ANSI port net also needs its resolution sidecar.
                     if matches!(kind, ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
-                        if let Some(&id) = self.symbols.get(&self.fq(&name.name)) {
+                        if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&name.name)) {
                             if matches!(kind, ast::NetVarKind::Wand) {
                                 self.wired_and_nets.insert(id);
                             } else {

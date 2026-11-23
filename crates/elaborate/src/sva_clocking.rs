@@ -663,7 +663,7 @@ impl Elaborator<'_> {
                                 MsgCode::ElabUnresolvedName,
                                 &format!(
                                     "undeclared clocking output signal `{}`",
-                                    self.fq(&src_name)
+                                    scope_out(self.lex.show_miss(&src_name))
                                 ),
                             );
                             continue;
@@ -744,7 +744,10 @@ impl Elaborator<'_> {
                 let Some(src_id) = self.lookup_net_scoped(&src_name) else {
                     self.error(
                         MsgCode::ElabUnresolvedName,
-                        &format!("undeclared clocking input signal `{}`", self.fq(&src_name)),
+                        &format!(
+                            "undeclared clocking input signal `{}`",
+                            scope_out(self.lex.show_miss(&src_name))
+                        ),
                     );
                     continue;
                 };

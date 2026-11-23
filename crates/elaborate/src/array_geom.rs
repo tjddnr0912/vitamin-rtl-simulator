@@ -407,8 +407,8 @@ impl Elaborator<'_> {
     ///
     /// A no-op when the range is ordinary, so a caller may always call it.
     pub(crate) fn record_declared_bounds(&mut self, name: &str, range: Option<&ast::Range>) {
-        let key = self.fq(name);
-        let Some(&id) = self.symbols.get(&key) else {
+        let key = self.lex.at_cur(name);
+        let Some(&id) = self.symbols.get_at(&key) else {
             return;
         };
         self.record_declared_bounds_for(id, range);

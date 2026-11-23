@@ -11,6 +11,12 @@
 //! leaves as message text only through [`key_show`], and meets a text operation only through
 //! [`key_text`] (L7, a counted bridge deleted at DK3-b). No key is made from text.
 //!
+//! THE READ KEY (sub-unit DK1-3): an [`AtKey`] is the key a READ of a name in the current scope probes,
+//! formed by [`Scopes::at_cur`] (the same bytes as [`Scopes::new_key`]'s) and by nothing else ; it reaches a
+//! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves only through
+//! [`at_text`] (L9, a counted bridge). A message that names what such a read would have probed takes
+//! [`Scopes::show_miss`]'s display text: no key is formed for it.
+//!
 //! THE WINDOW (w9, DELTA14 F1): `Deref` / `DerefMut` to the map / set each store holds, so every
 //! existing use compiles as it was written (one counted door, text in and text out). It is
 //! deleted at DK3-b, where the compiler proves no text use is left. `Keyed`'s `Default` is written
@@ -78,6 +84,25 @@ impl super::Scopes {
             NewKey(format!("{}.{}", self.cur_prefix, local))
         }
     }
+
+    /// The key a read of `local` in the current scope probes: `fq`'s text, typed (DK1-3).
+    pub(crate) fn at_cur(&self, local: &str) -> AtKey {
+        if self.cur_prefix.is_empty() {
+            AtKey(local.to_string())
+        } else {
+            AtKey(format!("{}.{}", self.cur_prefix, local))
+        }
+    }
+
+    /// `local` as a message names it in the current scope (the key a read of it probes, or would
+    /// have probed): `fq`'s text as display text ; no key is formed (DK1-3).
+    pub(crate) fn show_miss(&self, local: &str) -> Shown {
+        if self.cur_prefix.is_empty() {
+            Shown(local.to_string())
+        } else {
+            Shown(format!("{}.{}", self.cur_prefix, local))
+        }
+    }
 }
 
 /// A NewKey in a message: the key's bytes, as display text (it leaves through `scope_out`).
@@ -90,6 +115,18 @@ pub(crate) fn key_show(k: &NewKey) -> Shown {
 /// L7 (LEAVE): a NewKey's text where it meets a text operation outside the module ; a counted
 /// bridge, deleted at DK3-b.
 pub(crate) fn key_text(k: &NewKey) -> &str {
+    &k.0
+}
+
+/// The key a current-scope READ probes (DK1-3): the current scope's text, `.`, the local name — or the
+/// local name alone under the empty scope. Made only by [`Scopes::at_cur`] ; no `Clone`, `Display`,
+/// `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`), so it cannot take the window's text
+/// path into a store, and no `_new` entry takes it.
+pub(crate) struct AtKey(String);
+
+/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module (a compare with a
+/// walk's text key: held.rs, DK1-4b ; a key glued from it: ports.rs, DK1-5 / DK3-a) ; a counted bridge.
+pub(crate) fn at_text(k: &AtKey) -> &str {
     &k.0
 }
 
@@ -121,6 +158,16 @@ impl<V> Keyed<V> {
     }
 }
 
+/// The AtKey entries of a map store (DK1-3): the std read on the key's own String.
+impl<V> Keyed<V> {
+    pub(crate) fn get_at(&self, k: &AtKey) -> Option<&V> {
+        self.0.get(&k.0)
+    }
+    pub(crate) fn contains_at(&self, k: &AtKey) -> bool {
+        self.0.contains_key(&k.0)
+    }
+}
+
 /// The NewKey entries of a set store (`remove_new` is the funnel's clear of `param_type_guessed`).
 impl KeyedSet {
     #[inline]
@@ -130,5 +177,12 @@ impl KeyedSet {
     #[inline]
     pub(crate) fn remove_new(&mut self, k: &NewKey) -> bool {
         self.0.remove(&k.0)
+    }
+}
+
+/// The AtKey entry of a set store (DK1-3: `implicit_nets`, `vif_handles`).
+impl KeyedSet {
+    pub(crate) fn contains_at(&self, k: &AtKey) -> bool {
+        self.0.contains(&k.0)
     }
 }

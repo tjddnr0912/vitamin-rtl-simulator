@@ -52,8 +52,8 @@ impl Elaborator<'_> {
     fn reserve_block_local_decl(&mut self, d: &ast::NetVarDecl, base_net: u32) -> u64 {
         let mut auto_override = 0u64;
         for decl in &d.names {
-            let fq = self.fq(&decl.name.name);
-            if let Some(&existing) = self.symbols.get(&fq) {
+            let fq = self.lex.at_cur(&decl.name.name);
+            if let Some(&existing) = self.symbols.get_at(&fq) {
                 // EXT2-H guard: a block-local UNPACKED ARRAY that shadows a
                 // same-named outer scalar coalesces onto that (shape-blind) net —
                 // mark the coalesced net so an element write `y[k]=v` stays loud,

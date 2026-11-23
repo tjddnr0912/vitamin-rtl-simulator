@@ -288,12 +288,12 @@ impl Elaborator<'_> {
 
     /// Trackers for a covergroup instance named at a call site (current scope).
     pub(crate) fn cover_inst(&self, name: &str) -> Option<Vec<CoverpointTracker>> {
-        self.cover_insts.get(&self.fq(name)).cloned()
+        self.cover_insts.get_at(&self.lex.at_cur(name)).cloned()
     }
 
     /// Cross trackers for a covergroup instance named at a call site.
     pub(crate) fn cross_inst(&self, name: &str) -> Option<Vec<CrossTracker>> {
-        self.cross_insts.get(&self.fq(name)).cloned()
+        self.cross_insts.get_at(&self.lex.at_cur(name)).cloned()
     }
 
     /// Sample a cross: for each product index (mixed-radix over the constituents'

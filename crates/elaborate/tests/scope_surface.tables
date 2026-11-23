@@ -100,7 +100,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=5 rows=156 out_types=24 e_fns=29 text_flows=42
+present=present files=5 rows=167 out_types=25 e_fns=29 text_flows=42
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 file	tier	kind	item	position	type	verdict	refs
@@ -147,18 +147,27 @@ lexscope/key.rs	-	IMPL	Deref for Keyed	-	-	PASS	-
 lexscope/key.rs	-	IMPL	Deref for KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for Keyed	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for KeyedSet	-	-	PASS	-
+lexscope/key.rs	-	TYPE	AtKey	-	-	PASS	-
 lexscope/key.rs	-	TYPE	Keyed	-	-	PASS	-
 lexscope/key.rs	-	TYPE	KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	TYPE	NewKey	-	-	PASS	-
+lexscope/key.rs	K	FN	Keyed::contains_at	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Keyed::contains_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Keyed::entry_new	RET	&mut V	PASS	REF
+lexscope/key.rs	K	FN	Keyed::get_at	RET	Option<&V>	CARD:hit:a value stored under the key	REF
 lexscope/key.rs	K	FN	Keyed::get_new	RET	Option<&V>	CARD:hit:a value stored under the key	REF
 lexscope/key.rs	K	FN	Keyed::insert_new	RET	Option<V>	CARD:hit:the value the key held before the insert	-
 lexscope/key.rs	K	FN	Keyed::remove_new	RET	Option<V>	CARD:hit:the value the key held	-
+lexscope/key.rs	K	FN	KeyedSet::contains_at	RET	bool	PASS	-
 lexscope/key.rs	K	FN	KeyedSet::insert_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	KeyedSet::remove_new	RET	bool	PASS	-
+lexscope/key.rs	K	FN	Scopes::at_cur	IN:local	&str	ENTER:lookup	-
+lexscope/key.rs	K	FN	Scopes::at_cur	RET	AtKey	PASS	-
 lexscope/key.rs	K	FN	Scopes::new_key	IN:local	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	Scopes::new_key	RET	NewKey	PASS	-
+lexscope/key.rs	K	FN	Scopes::show_miss	IN:local	&str	ENTER:to-display	-
+lexscope/key.rs	K	FN	Scopes::show_miss	RET	Shown	PASS	-
+lexscope/key.rs	K	FN	at_text	RET	&str	LEAVE:L9	REF
 lexscope/key.rs	K	FN	key_show	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	key_text	RET	&str	LEAVE:L7	REF
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
@@ -184,9 +193,11 @@ lexscope/mod.rs	-	TYPE	ScopeWitness	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::AtKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::Keyed	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::KeyedSet	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::NewKey	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::at_text	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_text	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
@@ -266,6 +277,7 @@ type
 &mut V
 &str
 ()
+AtKey
 NewKey
 Option<&V>
 Option<String>
@@ -293,6 +305,9 @@ bool
 # §5.2 Q-DECLKEY DK1-2a (DELTA14 F2, DELTA15 C1.3): L7 `key_text`, a NewKey's text where it meets a text operation outside the
 # module (one site at DK1-2a: struct_arm.rs:113, deleted by DK1-4b) ; the bridge closes at DK3-b
 # §5.2 Q-DECLKEY DK1-2d (2026-11-24): bridge w11 closed: L8 (DK1-2b's two TEXT doors of SlotKey's sealed half, `slot_text` / `slot_owned`) closed with it, its two rows deleted
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24): the read side: L9 `at_text`, an AtKey's text where it meets a text operation outside the module — held.rs clk_refused_at's
+# compare with the walk's text key (DK1-4b types the walk), ports.rs elaborate_virtual_iface's two member-key glues (DK1-5, key_in)
+# and bind_iface_port's X15 prefix (DK3-a): the bridge closes with its last row, DK3-a
 id	item	position	type	closes
 L1	Scopes::cur_prefix_text	RET	&str	DK1
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
@@ -304,6 +319,7 @@ L4	Elaborator::display_of_key_text	RET	String	DK4
 L5	Scopes::key_under	RET	String	DK1
 L6	Scopes::scope_text	RET	&str	DK1
 L7	key_text	RET	&str	DK3-b
+L9	at_text	RET	&str	DK3-a
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
@@ -340,6 +356,8 @@ Elaborator::push_block_local_init	lhs	carried	TEXT hdl_ast::Lvalue::Ident.0 -> h
 Elaborator::push_block_local_init	rhs	carried	TEXT hdl_ast::Expr.kind -> hdl_ast::ExprKind::IntLit.raw -> String
 Scopes::cur_shown_quoted_or	none	to-display	TEXT str
 Scopes::new_key	local	lookup	TEXT str
+Scopes::at_cur	local	lookup	TEXT str
+Scopes::show_miss	local	to-display	TEXT str
 == SURF_WINDOW
 # WINDOW (§5.2 Q-DECLKEY DK1-1 ; DELTA14 F1 / D2 w9, R-F1, R-F10, premise10 N10-9 / NP10-1): a trait impl off
 # ALLOWED_IMPLS admitted for the ONE type a row names, the trait one of WINDOW_TRAITS (Deref, DerefMut) ; each row
@@ -561,6 +579,7 @@ item	position	type	means
 ScopeKeyed::take_at	RET	Option<V>	hit:a value stored at the carried scope
 ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	list:the scopes still holding a value
 Keyed::get_new	RET	Option<&V>	hit:a value stored under the key
+Keyed::get_at	RET	Option<&V>	hit:a value stored under the key
 Keyed::insert_new	RET	Option<V>	hit:the value the key held before the insert
 Keyed::remove_new	RET	Option<V>	hit:the value the key held
 == SURF_CB
@@ -608,14 +627,20 @@ lexscope/key.rs	Deref for Keyed::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3
 lexscope/key.rs	Deref for KeyedSet::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
 lexscope/key.rs	DerefMut for Keyed::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
 lexscope/key.rs	DerefMut for KeyedSet::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
+lexscope/key.rs	Keyed::contains_at	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
 lexscope/key.rs	Keyed::contains_new	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
 lexscope/key.rs	Keyed::entry_new	80652741cac3d7548d895db5b80a8ecaedbed657595e3e7a758320a62871a00a
+lexscope/key.rs	Keyed::get_at	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
 lexscope/key.rs	Keyed::get_new	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
 lexscope/key.rs	Keyed::insert_new	622cc054b687aec85f26f9012a0cc6b81c5f3099a0b6b2947762a74114d5cd2b
 lexscope/key.rs	Keyed::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
+lexscope/key.rs	KeyedSet::contains_at	1fa79f1ada10a838b424419054b21178f543e6dac51d61403cc9733404ae6f04
 lexscope/key.rs	KeyedSet::insert_new	8f93e5ae359bbfad81efda0f917b09d14711e3ee21d021717e909a5b69b2ff84
 lexscope/key.rs	KeyedSet::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
+lexscope/key.rs	Scopes::at_cur	3d582b863ab0e29f57edea8a089557b3963d49bec59c7917f377289a2af5c7bb
 lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c5d2ae75061e42bd3
+lexscope/key.rs	Scopes::show_miss	b1f4dc8341919651502a4bffd2103726163292a19a886fb2f728b18b733a7ef8
+lexscope/key.rs	at_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/key.rs	key_show	61fc9b8c8d9973948d81fa52bb6f470bf2e10c355df265e6c167d4bacea82e66
 lexscope/key.rs	key_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/mod.rs	Clone for ScopeRef::clone	7fd1561b40a3600a688648719080f1f686e9201a41061e730a9f1708a7b4277f
@@ -698,6 +723,7 @@ lexscope/tests.rs	fb_gen_binding_encloses	db2eb7104cf1a03f72385ea86d5b84489e01cf
 lexscope/tests.rs	fb_key_under_and_scope_debug	00900245fa2304ac8583b74cfeeffff4a468794f14d180fa117cb4798f4be78b
 lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356ba0678954ee25d43285534e0f0ab39e7f0a34
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
+lexscope/tests.rs	fb_read_key_meets_the_declared_key	7a2491e4fc3a4d8900f79c87b9e063efdd82e7f10ad84db06084d481d5f912f2
 lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
 lexscope/tests.rs	fb_scope_child_text_and_reentry	c46e0ebdbeb76c7adaa70b7b28559f1dfb503d1ef00519e5495834733ce2e777
 lexscope/tests.rs	fb_scope_keyed_push_here	c9f10efeef1201cd95ec9eb5a141bc86d58da0e6142f2d73c3bd7932d4f88b83
@@ -724,9 +750,10 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # (DELTA12 S2): the last column lists every IN parameter IN-TOTAL makes TEXT or NUMBER, by name
 # or by content (ENTER-NEEDED) — push_block_local_init + lo, lhs, rhs ; report_at + span ; and
 # the COUNTS line gains enter (those parameters), enter_number and in_unknown (fns with one).
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24): the read side: `fq` (scope.rs) is deleted — its row left: 31 -> 30 fns (fail 27 -> 26, ret_fail 24 -> 23,
+# ret_text 21 -> 20, enter 39 -> 38) ; its two roles are lexscope's Scopes::at_cur (AtKey) and Scopes::show_miss (Shown)
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
-DK1	fq	scope.rs	pub(crate)	E	(&self, local: &str) -> String	FAIL	RET=TEXT(String)	local
 DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
 DK1	hier_resolve	hier.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	FAIL	RET=CARD(Option in Option<V>)	prefix,path,table
 DK1	indexed_gen_singleton	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
@@ -757,7 +784,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=4 fail=27 ret_fail=24 ret_text=21 callback_text=7 mut_text=1 card=16 cb=8 interior=1 enter=39 enter_number=6 in_unknown=0
+fns=30 pass=4 fail=26 ret_fail=23 ret_text=20 callback_text=7 mut_text=1 card=16 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent

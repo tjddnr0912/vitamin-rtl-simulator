@@ -113,7 +113,9 @@ impl Elaborator<'_> {
                 // skip it here (the handle is not a real net to assign).
                 if let ast::Lvalue::Ident(p) = lhs {
                     if p.segments.len() == 1
-                        && self.vif_handles.contains(&self.fq(&p.segments[0].name))
+                        && self
+                            .vif_handles
+                            .contains_at(&self.lex.at_cur(&p.segments[0].name))
                     {
                         return;
                     }

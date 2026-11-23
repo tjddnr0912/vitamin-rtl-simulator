@@ -503,6 +503,9 @@ const COMP_WALK: &[&str] = &[
     "block_local_covers",
     "walk_rtn_scopes",
     "fq",
+    // §5.2 Q-DECLKEY DK1-3: fq's two forms (the read key, the message text), read as fq is
+    "at_cur",
+    "show_miss",
     "lval_write_net",
     "lookup_dotted_net",
 ];
@@ -2179,13 +2182,18 @@ fn h6c_rows(c: &Census) -> Vec<(String, String, usize)> {
         let ws: BTreeSet<&str> = r
             .asks
             .iter()
-            .filter(|a| a.0 == "W" && a.1 != "fq")
+            .filter(|a| a.0 == "W" && !matches!(a.1.as_str(), "fq" | "at_cur" | "show_miss"))
             .map(|a| a.1.as_str())
             .collect();
         let crit_a = fs.len() >= 2 || (!fs.is_empty() && !ws.is_empty());
         let mut by_arg: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for a in r.asks.iter().filter(|a| a.0 == "W") {
-            by_arg.entry(a.2.as_str()).or_default().insert(a.1.as_str());
+            // fq's two forms count as the one entry fq was (criterion (c): two entries, one argument)
+            let e = match a.1.as_str() {
+                "at_cur" | "show_miss" => "fq",
+                e => e,
+            };
+            by_arg.entry(a.2.as_str()).or_default().insert(e);
         }
         let crit_c = by_arg
             .iter()
@@ -2196,7 +2204,10 @@ fn h6c_rows(c: &Census) -> Vec<(String, String, usize)> {
         // tier D (g2b tierD.py): two sources consulted with one reduced argument, writes and fq excluded
         let mut by: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
         for a in &r.asks {
-            if a.0 == "Fw" || a.1 == "fq" || matches!(a.2.as_str(), "" | "?" | "lit" | "call()") {
+            if a.0 == "Fw"
+                || matches!(a.1.as_str(), "fq" | "at_cur" | "show_miss")
+                || matches!(a.2.as_str(), "" | "?" | "lit" | "call()")
+            {
                 continue;
             }
             let src = match a.0.as_str() {
@@ -2447,7 +2458,16 @@ const KEYED_COLL: &[&str] = &[
 /// field of one is still keyed by `String` text (HS's store set, H5's name-typed fields) until DK3-b.
 const WINDOW_TYPES: &[&str] = &["Keyed", "KeyedSet"];
 /// HH: a probe of a store (k4.py READ less the compiler-only ops).
-const HH_READ: &[&str] = &["get", "contains_key", "contains", "range", "get_mut"];
+const HH_READ: &[&str] = &[
+    "get",
+    "contains_key",
+    "contains",
+    "range",
+    "get_mut",
+    // §5.2 Q-DECLKEY DK1-3: the AtKey entries of a store
+    "get_at",
+    "contains_at",
+];
 /// HH: the walks that make a read a composite step (k4.py WALK).
 const HH_WALK: &[&str] = &[
     "walk_scopes_key",
@@ -2613,10 +2633,10 @@ fn strip_key(e: &Expr) -> &Expr {
     }
 }
 
-/// `<x>.fq(..)` or `fq(..)`.
+/// `<x>.fq(..)` or `fq(..)`, or (§5.2 Q-DECLKEY DK1-3) `<x>.at_cur(..)`: the current-prefix read key.
 fn is_fq_call(e: &Expr) -> bool {
     match strip_key(e) {
-        Expr::MethodCall(m) => m.method == "fq",
+        Expr::MethodCall(m) => m.method == "fq" || m.method == "at_cur",
         Expr::Call(c) => {
             matches!(&*c.func, Expr::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "fq"))
         }
@@ -2891,7 +2911,7 @@ impl<'ast> Visit<'ast> for Pass2<'_> {
         }
         self.visit_expr(&m.receiver);
         self.called(&meth);
-        if meth == "fq" {
+        if meth == "fq" || meth == "at_cur" {
             if let Some(c) = self.cur() {
                 c.fq_calls += 1;
             }
@@ -3578,7 +3598,8 @@ fn hh_the_current_prefix_reads_are_pinned() {
     let probe = syn::parse_file(
         "impl E { fn r(&self, n: &str) { let key = self.fq(n); let _ = self.symbols.get(&key); \
          let _ = self.params.contains_key(&self.fq(n).clone()); let _ = &self.wide[&key]; \
-         let _ = self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); } }",
+         let _ = self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); \
+         let _ = self.symbols.get_at(&self.lex.at_cur(n)); } }",
     )
     .expect("probe parses");
     let mut recs = Vec::new();
@@ -3599,8 +3620,9 @@ fn hh_the_current_prefix_reads_are_pinned() {
             ),
             ("params".into(), "contains_key".into(), "call2".into()),
             ("wide".into(), "index".into(), "let:key@1".into()),
+            ("symbols".into(), "get_at".into(), "call3".into()),
         ],
-        "HH's reader no longer links an fq key through a `let`, a direct argument or an index"
+        "HH's reader no longer links an fq / at_cur key through a `let`, a direct argument or an index"
     );
 
     let c = run_census2();

@@ -681,8 +681,8 @@ impl Elaborator<'_> {
                             .map(|s| s.name.as_str())
                             .collect::<Vec<_>>()
                             .join(".");
-                        let fq = self.fq(&joined);
-                        let enc = format!("{fq}\u{0001}{joined}");
+                        let enc =
+                            format!("{}\u{0001}{joined}", scope_out(self.lex.show_miss(&joined)));
                         let cid =
                             self.intern_const(crate::literal::str_const_from_bytes(enc.as_bytes()));
                         Some(self.push_expr(ir::Expr::Const { val: cid }))

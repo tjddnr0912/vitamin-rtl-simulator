@@ -1004,21 +1004,21 @@ impl Elaborator<'_> {
                 let Some(n) = bare_lvalue_name(lv) else {
                     continue;
                 };
-                if !self.implicit_nets.contains(&self.fq(n)) {
+                if !self.implicit_nets.contains_at(&self.lex.at_cur(n)) {
                     continue;
                 }
                 let Some(w) = self.rhs_decl_width(rhs) else {
                     continue;
                 };
                 if w > 1 {
-                    let fq = self.fq(n);
                     self.warn_code(
                         MsgCode::ElabFeatureLimit,
                         &format!(
-                            "`{fq}` is an IMPLICIT net, so it is 1 bit wide (IEEE \
+                            "`{}` is an IMPLICIT net, so it is 1 bit wide (IEEE \
                              1364-2005 §3.5) — this assignment drives it with {w} bits \
                              and the top {} are discarded. Declare it with the width you \
                              meant.",
+                            scope_out(self.lex.show_miss(n)),
                             w - 1
                         ),
                     );

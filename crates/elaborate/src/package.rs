@@ -1278,7 +1278,7 @@ impl Elaborator<'_> {
         );
         self.collect_var_init_drivers(d);
         for decl in &d.names {
-            if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
+            if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&decl.name.name)) {
                 vars.insert(decl.name.name.clone(), id);
             }
         }

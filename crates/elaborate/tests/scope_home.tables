@@ -108,6 +108,7 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # H6: SITE = plan3/walk_sites.txt's 51 (= g2a m_hits_calls.tsv less scope.rs:35 :77
 # :145) ; HIER / RTN / PROBE = the three the 51 lack (g3 REPORT K5 N1) ; INTERNAL =
 # the walk's own body.
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): held.rs clk_refused_at's `refused` closure compares at_text(&r.alias) (LEAVE L9, DK1-4b): its hit set names the call.
 file	fn	entry	hit_text	class	hit_set	calls
 array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
 block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
@@ -138,7 +139,7 @@ frames_static_init.rs	expr_reads_admitted	walk_scopes_key	symbols	SITE	symbols	1
 frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	symbols	SITE	symbols	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_loop_labels	SITE	gen_loop_labels	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_singleton_labels	SITE	gen_singleton_labels	1
-held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused()	SITE	clk_refused+symbols	1
+held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused()	SITE	at_text()+clk_refused+symbols	1
 hier.rs	hier_lookup	hier_resolve	symbols	HIER	symbols	1
 hier.rs	hier_lookup_param	hier_resolve	hier_params	HIER	hier_params	1
 hier.rs	hier_lookup_param_meta	hier_resolve	param_meta	HIER	param_meta	1
@@ -468,8 +469,10 @@ lets 158 fns 86 untyped 30 readers 26
 # §5.2 Q-DECLKEY DK1-2c: the 17 Bound mints (package.rs:779 :971 :1396 :1465 :1517 :1605, instance.rs:170 :718 :727 :764 :807,
 # iface_inst.rs:152 :566, params.rs:1876 :1922 :1929 :2387) are `self.lex.new_key(..)`: call fq 65 -> 48 ; instance.rs's 4 left
 # (:986 :1031 :1061 :1067) are read-side probes (DK1-3)
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): the 48 read-side `fq` calls are `self.lex.at_cur(..)` (an AtKey, 38 reads + held.rs's alias + ports.rs's two glues) or
+# `scope_out(self.lex.show_miss(..))` (7 message / IR-constant texts) and `fq` is deleted: call fq 48 -> 0 (MINT_CALLS keeps `fq`:
+# a planted call is a NEW ROW) ; fmt: scope.rs fq's `{}.{}` -> lexscope/key.rs at_cur's (key) and show_miss's (display)
 file	fn	kind	name	count	TAG
-array_geom.rs	record_declared_bounds	call	fq	1	key
 array_geom.rs	shape_bits	call	walk_scopes_key	1	key
 arrays.rs	expr_array_chain	join	join	1	spelling
 arrays.rs	lval_array_chain	join	join	1	spelling
@@ -478,10 +481,8 @@ arrays.rs	whole_name_net	join	join	1	spelling
 ast_query.rs	count_reads_runtime_net	join	join	1	spelling
 ast_query.rs	expr_reads_net	join	join	1	spelling
 block_local/hoist.rs	hoist_block_local_nets	fmt	format	1	segment
-block_local/hoist.rs	hoist_one_block_local	call	fq	3	key
 block_local/hoist.rs	hoist_one_block_local	call	walk_scopes_key	1	key
 block_local/hoist.rs	hoist_one_block_local	fmt	format	1	segment
-block_local/hoist.rs	mark_automatic_local_nets	call	fq	1	key
 block_local/proofs.rs	callee_side_member_name	fmt-tempname	format	1	spelling
 block_local_class.rs	block_local_scope_prefix	derived-fn	block_local_scope_prefix	1	segment
 block_local_class.rs	block_local_scope_prefix	fmt	format	1	segment
@@ -497,7 +498,6 @@ const_bound.rs	plain	join	join	1	spelling
 const_bound.rs	unfoldable_reason_in	call	walk_scopes_key	1	key
 const_decl_width.rs	narrow_param_decl_width	call	walk_scopes_key	1	key
 const_eval.rs	array_param_init_pattern	call	walk_scopes_key	1	key
-const_eval.rs	array_param_vals_src	call	fq	1	key
 const_eval.rs	deny_clocking_input_arg	join	join	1	spelling
 const_eval.rs	nonconst_bound_reason	join	join	1	spelling
 const_eval.rs	wide_param_name_in	call	walk_scopes_key	1	key
@@ -508,8 +508,6 @@ const_level_header.rs	task_enable_blocker	join	join	1	spelling
 const_str.rs	const_str_at	call	walk_scopes_key	1	key
 const_wide.rs	narrow_param_bits	call	walk_scopes_key	1	key
 const_wide.rs	wide_name_bits	call	walk_scopes_key	1	key
-cover.rs	cover_inst	call	fq	1	key
-cover.rs	cross_inst	call	fq	1	key
 decl_collide.rs	modport_call_refused	call	walk_scopes_key	1	key
 decl_scope.rs	decl_keep_snapshot	fmt	format	1	scope
 decl_scope.rs	decl_probe_key	fmt	write	1	key
@@ -528,12 +526,10 @@ events.rs	sens_event_net	join	join	2	spelling
 expr_main.rs	lower_expr_ungated	join	join	1	spelling
 expr_special.rs	bits_of_view	call	walk_scopes_key	1	key
 expr_special.rs	lower_bits_fold	join	join	1	spelling
-frames_blocal.rs	reserve_block_local_decl	call	fq	1	key
 frames_body.rs	lower_frame_body_inner_lower_frame_func_body	fmt	format	1	segment
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	fmt	format	1	segment
 frames_call/emit.rs	emit_frame_task_call	fmt-tempname	format	1	spelling
 frames_call/mod.rs	fresh_ret_temp	fmt-tempname	format	1	spelling
-frames_call/mod.rs	is_net_or_const_arg	call	fq	1	key
 frames_concat.rs	reserve_frame_concat_tmps	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_case_tmps	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_func	fmt	format	1	segment
@@ -561,7 +557,6 @@ held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
 held.rs	fresh_capture_for	fmt-tempname	format	1	spelling
 held.rs	record_deferred_capture	join	join	2	spelling
-held.rs	refuse_clocking_item	call	fq	1	key
 held.rs	refuse_clocking_item	fmt	format	1	spelling
 hier.rs	hier_chain	join	join	1	spelling
 hier.rs	hier_key_within	call	indexed_gen_singleton	1	key
@@ -606,10 +601,6 @@ hoist/special.rs	fresh_rhs_only_tmp	fmt-tempname	format	1	spelling
 ident_route.rs	ast_reads_guessed_param	call	walk_scopes_key	1	key
 ident_route.rs	bare_ident_route	call	walk_scopes_key	2	key
 inline_task.rs	inline_static_task	fmt	format	1	segment
-inline_task_locals.rs	hoist_inline_task_locals	call	fq	1	key
-inline_task_locals.rs	hoist_one_inline_local	call	fq	1	key
-instance.rs	elaborate_instance	call	fq	4	key
-instance_array.rs	elaborate_instance_array	call	fq	1	key
 lexscope/disp.rs	display_of	derived-fn	display_of	1	display
 lexscope/disp.rs	display_of	fmt	format	1	display
 lexscope/disp.rs	display_of	join	join	1	display
@@ -635,7 +626,9 @@ lexscope/elab.rs	scoped_init_key	derived-fn	scoped_init_key	1	scope
 lexscope/elab.rs	scoped_init_key	fmt	format	1	scope
 lexscope/elab.rs	walk_hits_decl_pos	call	walk_scopes_key	1	key
 lexscope/elab.rs	walk_rtn_scopes	call	gen_rtn_key	1	key
+lexscope/key.rs	at_cur	fmt	format	1	key
 lexscope/key.rs	new_key	fmt	format	1	key
+lexscope/key.rs	show_miss	fmt	format	1	display
 lexscope/mod.rs	child_prefix	fmt	format	1	scope
 lexscope/mod.rs	cur_shown	curp	cur_prefix.clone()	1	scope
 lexscope/mod.rs	entry_under_cur	fmt	format	1	key
@@ -646,38 +639,27 @@ lexscope/mod.rs	scope_enter	push	push	1	scope
 lexscope/mod.rs	scope_swap_pkg	fmt	format	1	scope
 lvalue.rs	collect_lval_chunks	call	walk_scopes_key_shadowed	1	key
 lvalue.rs	collect_lval_chunks	join	join	2	spelling
-net_util.rs	warn_implicit_net_truncation	call	fq	2	key
-netdecl.rs	elaborate_netvar_decl_inner	call	fq	9	key
 netdecl.rs	elaborate_netvar_decl_inner	fmt-tempname	format	1	spelling
 package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_scopes_key	2	key
 package.rs	dotted_hit_is_pkg_alias	call	walk_scopes_key	1	key
-package.rs	elaborate_pkg_netvar	call	fq	1	key
 package.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
 package.rs	resolve_rtn_key	derived-fn	resolve_rtn_key	1	key
 packed.rs	expr_packed_chain	join	join	1	spelling
 packed_lval.rs	lval_packed_chain	join	join	1	spelling
-packed_pattern.rs	record_packed_default_target	call	fq	1	key
 param_query.rs	real_param_is_non_integral	call	walk_scopes_key	1	key
 param_query.rs	real_param_lowers_real	call	walk_scopes_key	1	key
-params.rs	param_decl_width_opt	call	fq	1	key
 params.rs	param_sel_range	call	walk_scopes_key	1	key
-ports.rs	bind_iface_port	call	fq	1	key
 ports.rs	bind_iface_port	call	walk_scopes_key	1	key
 ports.rs	bind_iface_port	fmt	format	2	scope
 ports.rs	check_modport_write	call	walk_scopes_key	1	key
 ports.rs	check_modport_write	join	join	1	spelling
-ports.rs	elaborate_ports	call	fq	6	key
-ports.rs	elaborate_virtual_iface	call	fq	2	key
 ports.rs	elaborate_virtual_iface	fmt	format	2	key
 ports.rs	iface_member_net	join	join	1	spelling
-ports.rs	wire_ports	call	fq	1	key
 ports.rs	wire_ports	call	walk_scopes_key	1	key
 readmem_assoc.rs	readmem_assoc_target	join	join	1	spelling
-scope.rs	fq	fmt	format	1	key
 scope.rs	lookup_dotted_net	join	join	1	spelling
 scope.rs	lookup_net_scoped	call	walk_scopes_key	1	key
 scope.rs	lookup_scoped	call	walk_scopes	1	key
-scope.rs	resolve_net	call	fq	1	key
 scope.rs	scoped_key_at_or_above	fmt	format	1	key
 scope.rs	walk_out_from	fmt	write	1	key
 scope.rs	walk_out_from	push	push_str	1	key
@@ -690,22 +672,18 @@ scope.rs	walk_scopes_key_shadowed	call	walk_scopes_key_inner	1	key
 stmt_flow.rs	fresh_case_tmp	fmt-tempname	format	1	spelling
 stmt_flow.rs	fresh_ia_tmp	fmt-tempname	format	1	spelling
 stmt_flow.rs	lower_repeat	fmt-tempname	format	1	spelling
-stmt_main.rs	lower_stmt_inner	call	fq	1	key
 stmt_main.rs	lower_stmt_inner	join	join	2	spelling
-string_array_route.rs	has_fixed_string_array_storage	call	fq	1	key
 string_array_route.rs	route_fixed_string_array	fmt-tempname	format	1	spelling
 strings.rs	fresh_string_temp	fmt-tempname	format	1	spelling
 strings.rs	is_string_array_base	call	walk_scopes_key_shadowed	1	key
 strings.rs	string_array_elem_net	call	walk_scopes_key_shadowed	1	key
 struct_arm.rs	struct_arm_rhs	call	walk_scopes_key	1	key
-sva_clocking.rs	lower_clocking_blocks	call	fq	2	key
 sva_clocking.rs	lower_clocking_blocks	fmt	format	3	spelling
 sva_clocking.rs	lower_clocking_blocks	join	join	2	spelling
-systask.rs	lower_systask	call	fq	1	key
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 == HM_COUNTS
-mints 308 kinds {"call": 127, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 148, "scope": 18, "segment": 17, "spelling": 105}
+mints 261 kinds {"call": 79, "curp": 5, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 100, "scope": 18, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -756,27 +734,29 @@ stores 81 scans 28 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS":
 # §5.2 Q-DECLKEY DK1-2b: elaborate_gen_item's two probes of the genvar key take its NewKey (get_new, generate.rs:183 :253): 58 -> 56
 # §5.2 Q-DECLKEY DK1-2c: the probes of the 17 Bound mints' keys take their NewKey (contains_new / get_new ; iface_inst.rs 2 rows,
 # package.rs apply_import_consts 6 rows and elaborate_package's param_range): 56 -> 39 reads
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): the 39 reads' key is `self.lex.at_cur(..)` (an AtKey) and their verb the store's AtKey entry (get_at / contains_at):
+# the 20 rows stay, their ops renamed (HH's key test reads `fq` or `at_cur`, HH_READ the two `_at` entries) ; 39 reads
 file	fn	store	role	ops
-array_geom.rs	record_declared_bounds	symbols	whole	get=1
-block_local/hoist.rs	hoist_one_block_local	symbols	composite	contains_key=1,get=2
-block_local/hoist.rs	mark_automatic_local_nets	symbols	whole	get=1
-const_eval.rs	array_param_vals_src	array_param_overrides	whole	get=1
-cover.rs	cover_inst	cover_insts	whole	get=1
-cover.rs	cross_inst	cross_insts	whole	get=1
-frames_blocal.rs	reserve_block_local_decl	symbols	whole	get=1
-frames_call/mod.rs	is_net_or_const_arg	symbols	whole	contains_key=1
-inline_task_locals.rs	hoist_one_inline_local	symbols	whole	contains_key=1,get=1
-instance.rs	elaborate_instance	symbols	whole	contains_key=1,get=3
-net_util.rs	warn_implicit_net_truncation	implicit_nets	whole	contains=1
-netdecl.rs	elaborate_netvar_decl_inner	symbols	whole	get=9
-package.rs	elaborate_pkg_netvar	symbols	whole	get=1
-packed_pattern.rs	record_packed_default_target	symbols	whole	get=1
-params.rs	param_decl_width_opt	param_meta	whole	get=1
-ports.rs	elaborate_ports	symbols	whole	get=6
-ports.rs	elaborate_virtual_iface	iface_insts	whole	get=1
-ports.rs	wire_ports	symbols	composite	get=1
-stmt_main.rs	lower_stmt_inner	vif_handles	whole	contains=1
-string_array_route.rs	has_fixed_string_array_storage	string_array_elems	whole	contains_key=1
+array_geom.rs	record_declared_bounds	symbols	whole	get_at=1
+block_local/hoist.rs	hoist_one_block_local	symbols	composite	contains_at=1,get_at=2
+block_local/hoist.rs	mark_automatic_local_nets	symbols	whole	get_at=1
+const_eval.rs	array_param_vals_src	array_param_overrides	whole	get_at=1
+cover.rs	cover_inst	cover_insts	whole	get_at=1
+cover.rs	cross_inst	cross_insts	whole	get_at=1
+frames_blocal.rs	reserve_block_local_decl	symbols	whole	get_at=1
+frames_call/mod.rs	is_net_or_const_arg	symbols	whole	contains_at=1
+inline_task_locals.rs	hoist_one_inline_local	symbols	whole	contains_at=1,get_at=1
+instance.rs	elaborate_instance	symbols	whole	contains_at=1,get_at=3
+net_util.rs	warn_implicit_net_truncation	implicit_nets	whole	contains_at=1
+netdecl.rs	elaborate_netvar_decl_inner	symbols	whole	get_at=9
+package.rs	elaborate_pkg_netvar	symbols	whole	get_at=1
+packed_pattern.rs	record_packed_default_target	symbols	whole	get_at=1
+params.rs	param_decl_width_opt	param_meta	whole	get_at=1
+ports.rs	elaborate_ports	symbols	whole	get_at=6
+ports.rs	elaborate_virtual_iface	iface_insts	whole	get_at=1
+ports.rs	wire_ports	symbols	composite	get_at=1
+stmt_main.rs	lower_stmt_inner	vif_handles	whole	contains_at=1
+string_array_route.rs	has_fixed_string_array_storage	string_array_elems	whole	contains_at=1
 == HH_COUNTS
 reads 39 roles {"composite": 4, "whole": 35} stores {"array_param_overrides": 1, "cover_insts": 1, "cross_insts": 1, "iface_insts": 1, "implicit_nets": 1, "param_meta": 1, "string_array_elems": 1, "symbols": 31, "vif_handles": 1}
 == HSEG
@@ -906,6 +886,8 @@ tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-":
 # §5.2 Q-DECLKEY DK1-2b: gen_genvars' element (lib.rs:1129) and lexscope's gen_text genvar key (mod.rs:82) are NewKeys (a retype
 # to a key type: both rows left — KEYED-OTHER 5 -> 4, SCOPE 5 -> 4) ; rtn_decl_genvars keeps its ROUTINE key (RS1), its value's
 # element is a NewKey (R-G3: the type column moved, the row stays).
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): AtKey's own field (lexscope/key.rs) is a read key's text (KEY ; CODE I, NewKey's) ; ClkRefused.alias holds an AtKey
+# (held.rs:356, its one producer, was an `fq` read key: N11-3), so its row left (a retype to a key type) — KEYED-JUDGE5 5 -> 4, KEY 2 -> 3.
 struct	file	field	type	CLASS	CODE	STORE
 Elaborator	lib.rs	symbols	Keyed<u32>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	bind_targets	BTreeMap<String, Vec<ast::ModuleInstance>>	NOT	DEF	-
@@ -942,6 +924,7 @@ InstanceRow	driver.rs	module	String	NOT	D	-
 Keyed	lexscope/key.rs	0	BTreeMap<String, V>	BINDING	V	KEYED-W9
 KeyedSet	lexscope/key.rs	0	BTreeSet<String>	BINDING	V	KEYED-W9
 NewKey	lexscope/key.rs	0	String	NOT	I	KEY
+AtKey	lexscope/key.rs	0	String	NOT	I	KEY
 ProcIdentRow	proc_ident.rs	file	String	NOT	D	-
 ProcIdentRow	proc_ident.rs	kind	&str	NOT	D	-
 ScopeKeyed	lexscope/mod.rs	0	BTreeMap<String, V>	NOT	CTX	SCOPE
@@ -1055,7 +1038,6 @@ EdgeRec	edge_gate.rs	msg	String	NOT	D	-
 EdgeRec	edge_gate.rs	hier	Option<String>	NOT	D	-
 Refusal	case_inside.rs	reason	&str	NOT	D	-
 DeferredCapture	held.rs	dest	String	NOT	D	-
-ClkRefused	held.rs	alias	String	NOT	D	KEYED-JUDGE5
 ClkRefused	held.rs	msg	String	NOT	D	-
 ClassInfo	classes.rs	base	Option<String>	BINDING	T	-
 ClassInfo	classes.rs	rand_fields	Vec<String>	BINDING	V	-
@@ -1097,7 +1079,7 @@ SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BIND
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 189 classes {"BINDING:R": 27, "BINDING:S": 6, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 34, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 10, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 2, "KEYED-JUDGE5": 5, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 4}
+fields 189 classes {"BINDING:R": 27, "BINDING:S": 6, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 33, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 11, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 3, "KEYED-JUDGE5": 4, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 4}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
@@ -1326,6 +1308,8 @@ inline_task.rs	inline_static_task	RESTORE:disp_chain	= saved_scope	-	1
 inline_task.rs	inline_static_task	RESTORE:disp_root	= saved_root	-	1
 inline_task.rs	inline_static_task	SAVE:disp_chain	.disp_chain_swap_single(&tname)	LOCAL:saved_scope#2	1
 inline_task.rs	inline_static_task	SAVE:disp_root	.disp_root_swap_decl_inst(-)	LOCAL:saved_root#2	1
+inline_task_locals.rs	hoist_inline_task_locals	scope_out	s.lex.show_miss(&nm)	MAC:format>LOCAL:m#2	1
+instance_array.rs	elaborate_instance_array	scope_out	self.lex.show_miss(&hp.segments[0].name)	MAC:format>ARG:self.error	1
 lexscope/disp.rs	ctx_here	cur_context	-	ARG:wrap_ctx	1
 lexscope/disp.rs	cur_context	display_prefix	-	LOCAL:p#3	1
 lexscope/disp.rs	disp_chain_abs	scope_chain_abs	-	ARG:wrap_shown	1
@@ -1356,9 +1340,11 @@ lexscope/mod.rs	scope_out	plain	-	RET	1
 net_util.rs	add_net	scope_out	key_show(&key)	MAC:format>ARG:self.error	1
 net_util.rs	declare_implicit_net	scope_out	key_show(&fq)	MAC:format>ARG:self.warn_code	1
 net_util.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
+net_util.rs	warn_implicit_net_truncation	scope_out	self.lex.show_miss(n)	MAC:format>ARG:self.warn_code	1
 proc_ident.rs	push_cont_assign	LIT:ProcIdentRow	scope=self.lex.cur_shown()	ARG:self.ca_idents.push	1
 proc_ident.rs	push_cont_assign	cur_shown	-	FIELD:ProcIdentRow.scope	1
 read_set.rs	recompute_in_body_star_sites	scope_out	s.ctx.clone()	FIELD:Diagnostic.context	1
+scope.rs	resolve_net	scope_out	self.lex.show_miss(name)	MAC:format>ARG:self.error	1
 stmt_flow.rs	lower_proc_block	LIT:ProcIdentRow	scope=self.lex.cur_shown()	ASSIGN:self.pending_proc_ident	1
 stmt_flow.rs	lower_proc_block	cur_shown	-	FIELD:ProcIdentRow.scope	1
 stmt_flow.rs	push_process	LIT:ProcIdentRow	scope=self.lex.cur_shown()	CLOSURE>ARG:self.pending_proc_ident.take().unwrap_or_else	1
@@ -1367,6 +1353,8 @@ stmt_flow.rs	push_process	disp_here	-	ARG:self.proc_scopes.push	1
 stmt_flow.rs	push_process	disp_inst_top	-	ARG:self.proc_inst_scopes.push	1
 stmt_flow.rs	push_stmt	disp_chain_abs	-	ARG:self.stmt_scopes.insert	1
 stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
+sva_clocking.rs	lower_clocking_blocks	scope_out	self.lex.show_miss(&src_name)	MAC:format>ARG:self.error	2
+systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:enc#2	1
 == HOUT_COUNTS
 # SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
@@ -1377,7 +1365,10 @@ stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
 # cur_shown_quoted_or 1 (the two entries join HOUT_CALLEES)
 # §5.2 Q-DECLKEY DK1-2a: scope_out 18 -> 22, a NewKey printed or output leaves as `scope_out(key_show(&k))` (hoist.rs:349,
 # net_util.rs:661 :725, cover.rs:250 CovgInstMeta.inst: DELTA15 q5) ; LIT 7 stays (CovgInstMeta's `inst=key` -> `inst=scope_out(..)`)
-{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 23, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): scope_out 23 -> 30, the 7 message / IR-constant texts `fq` gave are `scope_out(<recv>.lex.show_miss(..))` handed to their
+# format's argument (scope.rs resolve_net, instance_array.rs, sva_clocking.rs x2, net_util.rs warn_implicit_net_truncation,
+# systask.rs lower_systask, inline_task_locals.rs ; the last three bound it to a `let` before: no LOCAL sink, HC LOCAL stays 5)
+{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 30, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1400,6 +1391,7 @@ block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	BIN:==	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	RECV:.is_empty	1
 generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
+held.rs	clk_refused_at	at_text	BIN:==	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
@@ -1410,8 +1402,9 @@ package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_real.iter().map	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_str.iter().map	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_wide.iter().map	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
-scope.rs	fq	cur_prefix_text	MAC:format>RET	1
-scope.rs	fq	cur_prefix_text	RECV:.is_empty	1
+ports.rs	bind_iface_port	at_text	MAC:format>LOCAL:dst_prefix#1	1
+ports.rs	elaborate_virtual_iface	at_text	LOCAL:inst_path#4	1
+ports.rs	elaborate_virtual_iface	at_text	LOCAL:vif_fq#3	1
 scope.rs	scoped_key_at_or_above	scope_text	LOCAL:prefix#3	1
 scope.rs	walk_scopes_key_from	scope_text	ARG:self.walk_out_from	1
 scope.rs	walk_scopes_key_inner	cur_prefix_text	ARG:self.walk_out_from	1
@@ -1427,7 +1420,10 @@ struct_arm.rs	struct_arm_rhs	key_text	BIN:!=	1
 # row (struct_arm.rs struct_arm_rhs, `walked != key_text(key)`: deleted by DK1-4b, an is_formed_as row there, N11-6)
 # DK1-2c: + LEAVE L7 key_text's six rows of decl_keep_snapshot's key iterators (package.rs elaborate_package, one per saved Vec:
 # the NewKey handed to the `&str` parameter ; deleted by DK1-5, which moves decl_keep_snapshot into lexscope): key_text 1 -> 7
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 6, "display_of_key_text": 1, "key_text": 7, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
+# §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): cur_prefix_text 6 -> 4, `fq` (scope.rs) is deleted: its two L1 reads left (at_cur / show_miss read the field inside
+# lexscope) ; + LEAVE L9 at_text's four rows: held.rs clk_refused_at's compare (BIN:==, DK1-4b), ports.rs elaborate_virtual_iface's
+# two member-key glues (inst_path, vif_fq: DK1-5's key_in), ports.rs bind_iface_port's X15 prefix (DK3-a)
+{"at_text": 4, "cur_gen_rtn_key": 2, "cur_prefix_text": 4, "display_of_key_text": 1, "key_text": 7, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1630,6 +1626,7 @@ lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	1
 lexscope/disp.rs	Elaborator::stmt_loc_instance	RET	Shown	1
 lexscope/elab.rs	Elaborator::report_at	IN:prefix	&ScopeRef	1
 lexscope/elab.rs	Elaborator::report_at	IN:reported	&mut ReportedAt	1
+lexscope/key.rs	Scopes::show_miss	RET	Shown	1
 lexscope/key.rs	key_show	RET	Shown	1
 lexscope/mod.rs	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	1
 lexscope/mod.rs	ScopeKeyed::entry_under_cur	IN:s	&Scopes	1

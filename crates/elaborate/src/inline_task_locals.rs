@@ -61,8 +61,10 @@ impl Elaborator<'_> {
                     // the `[in …]` frame both name where the net lives.
                     let nm = n.name.name.clone();
                     let report = |s: &mut Self| {
-                        let key = s.fq(&nm);
-                        let m = format!("net/variable `{key}` redeclared (duplicate declaration)");
+                        let m = format!(
+                            "net/variable `{}` redeclared (duplicate declaration)",
+                            scope_out(s.lex.show_miss(&nm))
+                        );
                         s.error_at(MsgCode::ElabUnsupported, sp, &m);
                     };
                     match &seg {
@@ -104,8 +106,8 @@ impl Elaborator<'_> {
     fn hoist_one_inline_local(&mut self, d: &ast::NetVarDecl) -> bool {
         let mut allocated = false;
         for decl in &d.names {
-            let key = self.fq(&decl.name.name);
-            if self.symbols.contains_key(&key) {
+            let key = self.lex.at_cur(&decl.name.name);
+            if self.symbols.contains_at(&key) {
                 continue;
             }
             // An UNPACKED-ARRAY body-local (`int arr [0:1];`) gets real element
@@ -176,7 +178,7 @@ impl Elaborator<'_> {
                     init: default_init(self.shape_kind(d.dtype.net(), &d.shape_param), w),
                 },
             );
-            let Some(&id) = self.symbols.get(&key) else {
+            let Some(&id) = self.symbols.get_at(&key) else {
                 continue;
             };
             if let Some((_, _, ext)) = pinfo {

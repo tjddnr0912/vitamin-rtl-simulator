@@ -32,7 +32,7 @@ mod key;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use key::{key_show, key_text, Keyed, KeyedSet, NewKey};
+pub(crate) use key::{at_text, key_show, key_text, AtKey, Keyed, KeyedSet, NewKey};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]
@@ -276,6 +276,9 @@ zn!(ScopeKeyed<()>: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::
 zn!(Keyed<()>: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, IntoIterator);
 zn!(KeyedSet: Clone, Copy, PartialEq, PartialOrd, core::hash::Hash, core::fmt::Debug, IntoIterator);
 zn!(NewKey: Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, core::fmt::Debug,
+    Default, AsRef<str>, core::borrow::Borrow<str>, core::borrow::Borrow<String>, core::ops::Deref<Target = str>,
+    Into<String>, From<String>);
+zn!(AtKey: Clone, Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, core::fmt::Debug,
     Default, AsRef<str>, core::borrow::Borrow<str>, core::borrow::Borrow<String>, core::ops::Deref<Target = str>,
     Into<String>, From<String>);
 

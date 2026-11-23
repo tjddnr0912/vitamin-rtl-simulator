@@ -155,7 +155,9 @@ impl Elaborator<'_> {
         match &a.kind {
             ast::ExprKind::Ident(path) => {
                 path.segments.len() == 1
-                    && self.symbols.contains_key(&self.fq(&path.segments[0].name))
+                    && self
+                        .symbols
+                        .contains_at(&self.lex.at_cur(&path.segments[0].name))
             }
             ast::ExprKind::IntLit { .. } | ast::ExprKind::StrLit { .. } => true,
             _ => false,

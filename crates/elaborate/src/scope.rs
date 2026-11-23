@@ -4,14 +4,6 @@ use super::*;
 
 impl Elaborator<'_> {
     // ── scope helpers (FQ-name keying) ─────────────────────────────
-    /// Fully-qualified key of a LOCAL name within the current instance scope.
-    pub(crate) fn fq(&self, local: &str) -> String {
-        if self.lex.cur_prefix_text().is_empty() {
-            local.to_string()
-        } else {
-            format!("{}.{}", self.lex.cur_prefix_text(), local)
-        }
-    }
     /// Resolve a bare param/genvar `name` to its value, searching the current
     /// scope then each enclosing GENERATE-block scope (strip one trailing
     /// `.segment` at a time). A genvar bound at the generate-for's scope (`top.i`)
@@ -607,7 +599,10 @@ impl Elaborator<'_> {
             None => {
                 self.error(
                     MsgCode::ElabUnresolvedName,
-                    &format!("undeclared net/variable `{}`", self.fq(name)),
+                    &format!(
+                        "undeclared net/variable `{}`",
+                        scope_out(self.lex.show_miss(name))
+                    ),
                 );
                 POISON_NET
             }

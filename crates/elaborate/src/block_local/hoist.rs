@@ -194,7 +194,7 @@ impl Elaborator<'_> {
         // only from the mixed case, which is broken in every instance.
         if d.names.len() > 1 {
             let collides =
-                |s: &Self, n: &ast::DeclName| s.symbols.contains_key(&s.fq(&n.name.name));
+                |s: &Self, n: &ast::DeclName| s.symbols.contains_at(&s.lex.at_cur(&n.name.name));
             let first = collides(self, &d.names[0]);
             if d.names.iter().any(|n| collides(self, n) != first) {
                 for n in &d.names {
@@ -425,7 +425,7 @@ impl Elaborator<'_> {
         let existing = d
             .names
             .first()
-            .and_then(|n| self.symbols.get(&self.fq(&n.name.name)).copied());
+            .and_then(|n| self.symbols.get_at(&self.lex.at_cur(&n.name.name)).copied());
         if let Some(net) = existing {
             // Two declarations now share this net, and the first one's packed shape is what
             // `'{default: v}` would read (`packed_pattern.rs`); the second may differ, so
@@ -555,7 +555,7 @@ impl Elaborator<'_> {
                     if self.local_decl_names.contains(nm) {
                         return;
                     }
-                    let Some(ex) = self.symbols.get(&self.fq(nm)).copied() else {
+                    let Some(ex) = self.symbols.get_at(&self.lex.at_cur(nm)).copied() else {
                         return;
                     };
                     if self.is_dyn_handle_net(ex)
@@ -922,7 +922,7 @@ impl Elaborator<'_> {
             return;
         }
         for n in &d.names {
-            if let Some(&id) = self.symbols.get(&self.fq(&n.name.name)) {
+            if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&n.name.name)) {
                 self.automatic_local_nets.insert(id);
             }
         }

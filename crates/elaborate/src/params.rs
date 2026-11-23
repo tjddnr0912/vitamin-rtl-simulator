@@ -459,7 +459,7 @@ impl Elaborator<'_> {
                         }
                         return self
                             .param_meta
-                            .get(&self.fq(&pth.segments[0].name))
+                            .get_at(&self.lex.at_cur(&pth.segments[0].name))
                             .copied();
                     }
                 }

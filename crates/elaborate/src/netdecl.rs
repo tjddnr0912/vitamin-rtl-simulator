@@ -721,8 +721,8 @@ impl Elaborator<'_> {
                 d.shape_param.is_some(),
             );
             if matches!(d.dtype.net(), ast::NetVarKind::Event) {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.event_nets.insert(id);
                 }
             }
@@ -731,8 +731,8 @@ impl Elaborator<'_> {
             // net itself is a plain Wire in the IR; the sidecar drives multi-driver
             // resolution only.
             if matches!(d.dtype.net(), ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     if matches!(d.dtype.net(), ast::NetVarKind::Wand) {
                         self.wired_and_nets.insert(id);
                     } else {
@@ -754,8 +754,8 @@ impl Elaborator<'_> {
                         &format!("an array parameter `{}` cannot be a port", decl.name.name),
                     );
                 }
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.const_param_nets.insert(id, decl.name.name.clone());
                 }
             }
@@ -770,8 +770,8 @@ impl Elaborator<'_> {
             // lets a bit/part select address the declared numbering. Recorded post-add for
             // the same reason (a duplicate-decl skip must not mis-key).
             if let Some(l) = neg_lsb.or(asc_lsb) {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     // Direction picks the map: the two normalizations are mirror
                     // images (`i - l` vs `l - i`), so one map cannot serve both.
                     if neg_lsb.is_some() {
@@ -793,8 +793,8 @@ impl Elaborator<'_> {
                 }
             }
             if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.array_dims.insert(id, dim_extents);
                 }
             }
@@ -809,13 +809,13 @@ impl Elaborator<'_> {
                 })
                 .collect();
             if desc.iter().any(|&d| d) {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.array_dim_desc.insert(id, desc);
                 }
             }
             // SYS-INTRO dimension descriptor for $size/$left/.../$dimensions.
-            if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
+            if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&decl.name.name)) {
                 self.record_dim_desc(
                     id,
                     self.shape_kind(d.dtype.net(), &d.shape_param),
@@ -827,8 +827,8 @@ impl Elaborator<'_> {
             // Declared array-ness — covers `[0:0]` (1-element) arrays that
             // `array_len > 1` cannot distinguish from scalars.
             if !decl.unpacked.is_empty() {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.unpacked_array_nets.insert(id);
                     // A net declaration delay (`wire #2 w [2];`) reaches only a
                     // net-declaration assignment here, so a whole-array `assign` to
@@ -856,8 +856,8 @@ impl Elaborator<'_> {
             // Record packed-dim extents for a multi-dim packed net so a select can be
             // lowered to the right bit-slice.
             if !d.dtype.packed_dims().is_empty() {
-                let key = self.fq(&decl.name.name);
-                if let Some(&id) = self.symbols.get(&key) {
+                let key = self.lex.at_cur(&decl.name.name);
+                if let Some(&id) = self.symbols.get_at(&key) {
                     self.packed_dims.insert(id, packed_ext.clone());
                 }
             }

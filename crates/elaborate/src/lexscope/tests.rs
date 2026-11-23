@@ -446,3 +446,35 @@ fn fb_scope_questions_truth_tables() {
         assert_eq!(got, want, "hier_path_is_self `{cur}` {segs:?}");
     }
 }
+
+/// §5.2 Q-DECLKEY DK1-3: the read key a current-scope read forms (`at_cur`) probes the bytes the
+/// declaration key (`new_key`) stored in the same scope — the current scope's, not an outer one's ;
+/// a miss names the same text through `show_miss` (display), and `at_text` (L9) is that text.
+#[test]
+fn fb_read_key_meets_the_declared_key() {
+    use super::{at_text, Keyed, KeyedSet};
+    let mut s = Scopes::new();
+    let mut m: Keyed<u32> = Keyed::default();
+    let mut set = KeyedSet::default();
+    m.insert_new(s.new_key("a"), 1);
+    assert_eq!(m.get_at(&s.at_cur("a")), Some(&1));
+    assert_eq!(at_text(&s.at_cur("a")), "a");
+    assert_eq!(scope_out(s.show_miss("a")), "a");
+    let r = s.scope_swap_text("top.u".to_string());
+    assert_eq!(
+        m.get_at(&s.at_cur("a")),
+        None,
+        "the outer scope's key is not the current one's"
+    );
+    m.insert_new(s.new_key("a"), 2);
+    set.insert_new(s.new_key("w"));
+    assert_eq!(m.get_at(&s.at_cur("a")), Some(&2));
+    assert!(m.contains_at(&s.at_cur("a")));
+    assert!(set.contains_at(&s.at_cur("w")));
+    assert!(!m.contains_at(&s.at_cur("b")));
+    assert_eq!(at_text(&s.at_cur("a")), "top.u.a");
+    assert_eq!(scope_out(s.show_miss("b")), "top.u.b");
+    s.scope_restore(r);
+    assert_eq!(m.get_at(&s.at_cur("a")), Some(&1));
+    assert!(!set.contains_at(&s.at_cur("w")));
+}

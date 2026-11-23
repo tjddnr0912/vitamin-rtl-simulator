@@ -199,8 +199,8 @@ impl Elaborator<'_> {
                 }
             };
             // resolve the bound instance + verify its interface type.
-            let inst_path = self.fq(&inst);
-            let Some(actual_iface) = self.iface_insts.get(&inst_path).cloned() else {
+            let inst_path = self.lex.at_cur(&inst);
+            let Some(actual_iface) = self.iface_insts.get_at(&inst_path).cloned() else {
                 self.error(
                     MsgCode::ElabUnsupported,
                     &format!("virtual interface `{vif}` is bound to `{inst}`, which is not an interface instance"),
@@ -216,7 +216,9 @@ impl Elaborator<'_> {
             }
             // alias each interface member: `<mod>.vif.member` → the bound net.
             let members = self.iface_member_names(&actual_iface);
-            let vif_fq = self.fq(vif);
+            let inst_path = at_text(&inst_path);
+            let vif_fq = self.lex.at_cur(vif);
+            let vif_fq = at_text(&vif_fq);
             for m in members {
                 let src = format!("{inst_path}.{m}");
                 let dst = format!("{vif_fq}.{m}");
@@ -325,7 +327,7 @@ impl Elaborator<'_> {
         };
         // Alias the visible symbols under the instance into the child port scope.
         let src_prefix = format!("{parent_fq}.");
-        let dst_prefix = format!("{}.", self.fq(pname));
+        let dst_prefix = format!("{}.", at_text(&self.lex.at_cur(pname)));
         let aliases: Vec<(String, u32, Option<ast::PortDir>)> = self
             .symbols
             .range(src_prefix.clone()..)
@@ -744,8 +746,8 @@ impl Elaborator<'_> {
 
             // child port net id (current scope is the child).
             let child_id = {
-                let key = self.fq(pname);
-                *self.symbols.get(&key).unwrap_or(&POISON_NET)
+                let key = self.lex.at_cur(pname);
+                *self.symbols.get_at(&key).unwrap_or(&POISON_NET)
             };
             let child_witness = self.lex.scope_witness();
 
@@ -965,12 +967,12 @@ impl Elaborator<'_> {
                     }
                 }
                 if !p.dtype.packed_dims().is_empty() {
-                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                    if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                         self.packed_dims.insert(id, packed_ext);
                     }
                 }
                 if !p.unpacked.is_empty() {
-                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                    if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                         if cont_array::inline_elem_type(
                             p.span.lo,
                             p.name.span.lo,
@@ -993,7 +995,7 @@ impl Elaborator<'_> {
                 // `o[i][0]` cannot compute its flat element and the port read all-X
                 // while the same array declared as an ordinary net worked.
                 if dim_extents.len() >= 2 || dim_extents.iter().any(|&(lo, _)| lo != 0) {
-                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                    if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                         self.array_dims.insert(id, dim_extents.clone());
                     }
                 }
@@ -1010,7 +1012,7 @@ impl Elaborator<'_> {
                     })
                     .collect();
                 if pdesc.iter().any(|&d| d) {
-                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                    if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                         self.array_dim_desc.insert(id, pdesc);
                     }
                 }
@@ -1018,7 +1020,7 @@ impl Elaborator<'_> {
                 // port would fall back to a single derived dim (silent-wrong
                 // $size/$dimensions) — and the UNPACKED half was `&[]` because ports
                 // could not carry unpacked dims at all until they parsed.
-                if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                     self.record_dim_desc(
                         id,
                         kind,
@@ -1031,7 +1033,7 @@ impl Elaborator<'_> {
                 // needs its resolution-kind sidecar — multi-driven INSIDE the
                 // module (≥2 internal `assign`s) resolves wired-AND/OR, not wire.
                 if matches!(kind, ast::NetVarKind::Wand | ast::NetVarKind::Wor) {
-                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                    if let Some(&id) = self.symbols.get_at(&self.lex.at_cur(&p.name.name)) {
                         if matches!(kind, ast::NetVarKind::Wand) {
                             self.wired_and_nets.insert(id);
                         } else {

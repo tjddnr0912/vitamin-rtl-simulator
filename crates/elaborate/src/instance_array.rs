@@ -224,7 +224,7 @@ impl Elaborator<'_> {
                                 MsgCode::ElabUnresolvedName,
                                 &format!(
                                     "undeclared net/variable `{}`",
-                                    self.fq(&hp.segments[0].name)
+                                    scope_out(self.lex.show_miss(&hp.segments[0].name))
                                 ),
                             );
                             return;

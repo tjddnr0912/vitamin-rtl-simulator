@@ -40,7 +40,7 @@ pub(crate) enum Held {
 /// the name is refused with `msg`.
 pub(crate) struct ClkRefused {
     /// The alias's fully-qualified name (`top.cb.q`).
-    pub(crate) alias: String,
+    pub(crate) alias: AtKey,
     pub(crate) msg: String,
     /// A clocking INPUT (read-only, §14.3), not an output.
     pub(crate) input: bool,
@@ -263,7 +263,7 @@ impl Elaborator<'_> {
         if self.clk_refused.is_empty() {
             return None;
         }
-        let refused = |k: &str| self.clk_refused.iter().position(|r| r.alias == k);
+        let refused = |k: &str| self.clk_refused.iter().position(|r| at_text(&r.alias) == k);
         (2..=path.len()).find_map(|k| {
             let head = path[..k].join(".");
             let key = self.walk_scopes_key_from(prefix, &head, |k| {
@@ -353,7 +353,7 @@ impl Elaborator<'_> {
                  drive holds one integral or `real` value, not this type (follow-on)"
             )
         };
-        let alias = self.fq(&format!("{cb}.{item}"));
+        let alias = self.lex.at_cur(&format!("{cb}.{item}"));
         self.clk_refused.push(ClkRefused {
             alias,
             msg,

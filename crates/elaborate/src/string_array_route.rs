@@ -160,7 +160,7 @@ impl Elaborator<'_> {
     /// from drifting apart, which is exactly how a block-local `string s[] = '{…}`
     /// once ended up silently EMPTY while the identical module-scope decl worked.
     pub(crate) fn has_fixed_string_array_storage(&self, name: &str, at: ast::Span) -> bool {
-        self.string_array_elems.contains_key(&self.fq(name))
+        self.string_array_elems.contains_at(&self.lex.at_cur(name))
             || self
                 .dyn_handle(name, at)
                 .is_some_and(|(n, _)| self.fixed_string_dyn.contains_key(&n))

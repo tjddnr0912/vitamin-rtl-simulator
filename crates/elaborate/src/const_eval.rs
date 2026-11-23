@@ -768,8 +768,8 @@ impl Elaborator<'_> {
         if !d.const_param {
             return None;
         }
-        let key = self.fq(&decl.name.name);
-        if let Some(v) = self.array_param_overrides.get(&key) {
+        let key = self.lex.at_cur(&decl.name.name);
+        if let Some(v) = self.array_param_overrides.get_at(&key) {
             return Some(v.clone());
         }
         let init = decl.init.as_ref()?;
