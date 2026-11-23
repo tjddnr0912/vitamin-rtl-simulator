@@ -58,7 +58,8 @@
 //!   a key the syntax does not see as minted from `cur_prefix` is not counted.
 //! - HSEG the segment-text tests (99): a text test whose literal holds `.` `$` `[` `::`, any
 //!   `strip_prefix`, a non-literal prefix / suffix test, `is_gen_scope_segment` ; TAG and
-//!   UNIT (walk, LS2, LS4, DK1, DK3, DK4, RS1, `-`) are hand columns.
+//!   UNIT (walk, DK1, DK3, B3a, B3k, RS1, `-` ; LS2 / LS4 / DK4 re-tagged by §5.2 Q-DECLKEY
+//!   DK1-0, DELTA14 D1, R-F3) are hand columns.
 //! - H5 the name-typed fields (215) with g1's CLASS / CODE and a STORE column (hand).
 //! - HD the display-chain fields' accesses (`block_scope`, `block_scope_root`,
 //!   `cur_class_method`): read / write / init.
@@ -6393,7 +6394,10 @@ fn hbr_the_bridge_reads_are_pinned() {
 #[test]
 fn hc_carry_the_carried_scope_sinks_are_pinned() {
     // LS3 (PLAN8 H2 (c)): every call of `scope_carry` outside lexscope by (file, fn, SINK) with a
-    // count ; a carry bound by `let` (SINK LOCAL:..) is pinned 0 whatever the table says (W12)
+    // count ; a carry bound by `let` (SINK LOCAL:..) must be a row of HC_CARRY_LOCAL, and the
+    // LOCAL count equals that table's (W12: it may only fall). Until §5.2 Q-DECLKEY DK1-0 the pin
+    // was 0 in code ; DK1-0 names two (the parent scope taken before a child instance is entered,
+    // re-entered by `scope_swap` in wire_ports: DELTA14 D8 q2, R-F2, R-F10, premise10 N10-3)
     let entries = vec!["scope_carry".to_string()];
     let mut rows: BTreeMap<String, usize> = BTreeMap::new();
     for (file, qual, callee, _, sink) in watched_calls(&entries) {
@@ -6438,10 +6442,57 @@ fn hc_carry_the_carried_scope_sinks_are_pinned() {
         })
         .map(|(_, n)| n)
         .sum();
-    if local != 0 {
+    // the admitted LOCAL carries (HC_CARRY_LOCAL): a LOCAL row off it fails whatever HC_CARRY says
+    let mut local_want: BTreeMap<String, String> = BTreeMap::new();
+    for row in table(&tables::get("HC_CARRY_LOCAL")) {
+        assert_eq!(
+            row.len(),
+            5,
+            "HC_CARRY_LOCAL table row has {} columns, not 5: {row:?}",
+            row.len()
+        );
+        assert!(
+            row[3].starts_with("LOCAL:"),
+            "HC_CARRY_LOCAL row's SINK is not LOCAL:..: {row:?}"
+        );
+        local_want.insert(row[..4].join("\t"), row[4].clone());
+    }
+    let local_got: BTreeMap<String, String> = got
+        .iter()
+        .filter(|(k, _)| {
+            k.split('\t')
+                .nth(3)
+                .is_some_and(|s| s.starts_with("LOCAL:"))
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    for (k, v) in &local_got {
+        if local_want.get(k) != Some(v) {
+            msgs.push(format!(
+                "HC_CARRY a `scope_carry` bound by `let` off HC_CARRY_LOCAL: {} [{v}] — LOCAL carry rows are \
+                 pinned to the {} rows of HC_CARRY_LOCAL (PLAN8 H2 (c), W12, DK1-0) — pass the carry as the argument \
+                 or the field it is for",
+                k.replace('\t', " · "),
+                local_want.len()
+            ));
+        }
+    }
+    for k in local_want.keys() {
+        if !local_got.contains_key(k) {
+            msgs.push(format!(
+                "HC_CARRY_LOCAL STALE {} — the admitted LOCAL carry is gone: remove the row (W12: the list may only fall)",
+                k.replace('\t', " · ")
+            ));
+        }
+    }
+    let local_listed: usize = local_want
+        .values()
+        .map(|n| n.parse::<usize>().expect("HC_CARRY_LOCAL count"))
+        .sum();
+    if local != local_listed {
         msgs.push(format!(
-            "HC_CARRY a `scope_carry` bound by `let` ({local}): LOCAL carry rows are pinned 0 (PLAN8 H2 (c), W12) — \
-             pass the carry as the argument or the field it is for"
+            "HC_CARRY a `scope_carry` bound by `let` ({local}): LOCAL carry rows are pinned to HC_CARRY_LOCAL's \
+             {local_listed} (PLAN8 H2 (c), W12, DK1-0)"
         ));
     }
     let counts = format!("sites={sites} local={local}");

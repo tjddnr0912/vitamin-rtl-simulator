@@ -46,14 +46,15 @@ gen_enum.rs	gen_carried_typedefs	n1:ptr	1	(* f , it)
 hoist/general.rs	enclosing_call_cannot_read	n1:ptr	1	(d , * a)
 hoist/general_query.rs	arg_is_input_at	n1:ptr	1	(* a as * const ast :: Expr , target)
 hoist/general_query.rs	arg_is_input_at	s1:*const	2	& args [i] | * a
-ports.rs	wire_ports	s1:*const	1	conn . expr
+wext.rs	conn_expr_addr	s1:*const	1	e
 == SURF_ADDR_CALLS
 # CALLS: the identifier tokens of each address fn's name crate-wide, the `fn <name>` excluded
+# DK1-0 (§5.2 Q-DECLKEY, DELTA14 D3 A1): ports.rs:740's address left wire_ports for the leaf wext.rs conn_expr_addr (one caller)
 fn	calls
 arg_is_input_at	2
+conn_expr_addr	1
 enclosing_call_cannot_read	1
 gen_carried_typedefs	1
-wire_ports	2
 == SURF_UNWIND
 # UNWIND (DELTA12 N-6): catch_unwind / set_hook / take_hook / resume_unwind / panic_any tokens
 # in crates/elaborate/src ; pinned empty

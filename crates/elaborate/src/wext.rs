@@ -905,6 +905,14 @@ pub(crate) fn conn_span_violations(
     v
 }
 
+/// H15v's address of a connection's expression (a debug run only: `wire_ports` calls it under
+/// `cfg!(debug_assertions)` and pushes the value into the rows [`check_conn_spans`] reads). A leaf
+/// beside its one consumer, so `wire_ports` holds no address site (§5.2 Q-DECLKEY DK1-0, DELTA14
+/// D3 A1: ADDR-FN reads every fn that makes an address).
+pub(crate) fn conn_expr_addr(e: &ast::Expr) -> usize {
+    e as *const ast::Expr as usize
+}
+
 /// H15v's assertion site (a debug run only): `wire_ports` calls it once per instance, after
 /// the instance's port rows are pushed.
 pub(crate) fn check_conn_spans(conns: &[(usize, usize, ast::Span)], item: Option<ast::Span>) {

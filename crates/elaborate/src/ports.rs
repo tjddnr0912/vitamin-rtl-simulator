@@ -254,7 +254,7 @@ impl Elaborator<'_> {
         iref: &ast::IfaceRef,
         pname: &str,
         conn_expr: &ast::Expr,
-        parent_prefix: &str,
+        parent_prefix: &crate::ScopeRef,
     ) {
         let inst_name = match &conn_expr.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => p.segments[0].name.clone(),
@@ -272,7 +272,7 @@ impl Elaborator<'_> {
         // walk nets use, so a child inside a generate block binds an iface
         // declared in the enclosing module body. The walk runs in the PARENT
         // scope (cur_prefix is the child's during port binding).
-        let saved_for_lookup = self.lex.scope_swap_text(parent_prefix.to_string());
+        let saved_for_lookup = self.lex.scope_swap(parent_prefix);
         let found = self.walk_scopes_key(&inst_name, |k| self.iface_insts.contains_key(k));
         self.lex.scope_restore(saved_for_lookup);
         let Some(parent_fq) = found else {
@@ -404,9 +404,9 @@ impl Elaborator<'_> {
         dir: ir::PortDir,
         pname: &str,
         conn: ConnSite<'_>,
-        parent_prefix: &str,
+        parent_prefix: &crate::ScopeRef,
     ) {
-        let saved = self.lex.scope_swap_text(parent_prefix.to_string());
+        let saved = self.lex.scope_swap(parent_prefix);
         // §2 🆕 O: `lookup_net_unshadowed` — a bare actual whose name binds a CONSTANT
         // is not the outer array, whatever `lookup_net_scoped` sails out to. Without
         // this `ch u (.p(V))` under `generate begin : g localparam int V = 99;` wired
@@ -577,7 +577,7 @@ impl Elaborator<'_> {
         &mut self,
         module: &ast::ModuleDecl,
         binding: PortBinding<'_>,
-        parent_prefix: &str,
+        parent_prefix: &crate::ScopeRef,
         is_root: bool,
         inst_span: Option<ast::Span>,
     ) {
@@ -599,7 +599,7 @@ impl Elaborator<'_> {
                 // Decide each port in the PARENT scope (where a connection actual
                 // resolves). `self.symbols` holds nets/variables only, so a hit
                 // means a real signal — a parameter/enum-label is absent here.
-                let saved = self.lex.scope_swap_text(parent_prefix.to_string());
+                let saved = self.lex.scope_swap(parent_prefix);
                 let mut synth = Vec::new();
                 let mut missing = Vec::new();
                 for (pname, _) in ports.iter() {
@@ -737,7 +737,7 @@ impl Elaborator<'_> {
             };
             if cfg!(debug_assertions) {
                 if let Some(sp) = conn.span {
-                    wext_conns.push((i, conn.expr as *const ast::Expr as usize, sp));
+                    wext_conns.push((i, crate::wext::conn_expr_addr(conn.expr), sp));
                 }
             }
 
@@ -772,7 +772,7 @@ impl Elaborator<'_> {
                         ));
                     }
                     self.lex.scope_witness_check(&child_witness);
-                    let saved = self.lex.scope_swap_text(parent_prefix.to_string());
+                    let saved = self.lex.scope_swap(parent_prefix);
                     // §11.6: the actual is in the child port's width context, so a
                     // fill grows to it (non-fill ⇒ byte-identical via lower_expr).
                     let pw = self
@@ -800,7 +800,7 @@ impl Elaborator<'_> {
                 // OUTPUT: parent_lval = child_port  (lval lowered in PARENT scope).
                 ir::PortDir::Output => {
                     self.lex.scope_witness_check(&child_witness);
-                    let saved = self.lex.scope_swap_text(parent_prefix.to_string());
+                    let saved = self.lex.scope_swap(parent_prefix);
                     let lhs = match expr_to_lvalue(conn.expr) {
                         Some(lv) => self.lower_lvalue(&lv),
                         None => {

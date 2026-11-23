@@ -96,9 +96,9 @@ hier_defer/write.rs	resolve_pending_fill_widths	scope_restore=1,scope_swap=1	1	R
 iface_inst.rs	elaborate_iface_instances	scope_restore=2,scope_swap=2	2	SCOPE-ENTRY+SCOPE-ENTRY
 instance.rs	elaborate_instance	scope_restore=1,scope_swap=1	1	SCOPE-ENTRY
 package.rs	elaborate_package	scope_restore=1,scope_swap_pkg=1	1	SCOPE-ENTRY
-ports.rs	bind_iface_port	scope_restore=1,scope_swap_text=1	1	LOOKUP
-ports.rs	wire_array_port	scope_restore=3,scope_swap_text=1	1	PARENT-SIDE
-ports.rs	wire_ports	scope_restore=3,scope_swap_text=3	3	PARENT-SIDE+PARENT-SIDE+PARENT-SIDE
+ports.rs	bind_iface_port	scope_restore=1,scope_swap=1	1	LOOKUP
+ports.rs	wire_array_port	scope_restore=3,scope_swap=1	1	PARENT-SIDE
+ports.rs	wire_ports	scope_restore=3,scope_swap=3	3	PARENT-SIDE+PARENT-SIDE+PARENT-SIDE
 readmem_assoc.rs	check_readmem_assoc_waits	scope_hold=1,scope_repoint=1,scope_restore=1	1	DIAGNOSTIC
 scope.rs	default_binding_matches_decl_scope	scope_restore=1,swap_to_mark=1	1	LOOKUP
 sva_check.rs	materialize_sva_checkers	scope_restore=1,scope_swap=1	1	RE-ENTRY
@@ -597,13 +597,11 @@ hoist/special.rs	fresh_rhs_only_tmp	fmt-tempname	format	1	spelling
 ident_route.rs	ast_reads_guessed_param	call	walk_scopes_key	1	key
 ident_route.rs	bare_ident_route	call	walk_scopes_key	2	key
 iface_inst.rs	elaborate_iface_instances	call	fq	2	key
-iface_inst.rs	elaborate_iface_instances	curp	cur_prefix_text().to_string()	1	scope
 inline_task.rs	inline_static_task	fmt	format	1	segment
 inline_task_locals.rs	hoist_inline_task_locals	call	fq	1	key
 inline_task_locals.rs	hoist_one_inline_local	call	fq	1	key
 instance.rs	bind_enum_labels_of	call	fq	1	key
 instance.rs	elaborate_instance	call	fq	8	key
-instance.rs	elaborate_instance	curp	cur_prefix_text().to_string()	1	scope
 instance_array.rs	elaborate_instance_array	call	fq	1	key
 lexscope/disp.rs	display_of	derived-fn	display_of	1	display
 lexscope/disp.rs	display_of	fmt	format	1	display
@@ -710,7 +708,7 @@ systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 wide_param_range.rs	bind_wide_param_decl	call	fq	1	key
 == HM_COUNTS
-mints 351 kinds {"call": 167, "curp": 7, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 189, "scope": 20, "segment": 17, "spelling": 105}
+mints 349 kinds {"call": 167, "curp": 5, "derived-fn": 11, "fmt": 47, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 20, "key": 189, "scope": 18, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -800,12 +798,16 @@ reads 61 roles {"composite": 20, "whole": 41} stores {"array_param_overrides": 1
 # method, argument) with a count. The plan's 22 + 6 + 3 lines and G4's 28 sites were predictions ; this is
 # the number (W15). TAG (hand): scope (a scope path's text), key, spelling (a source / compiler name, a
 # literal), display ; UNIT (hand, the unit that takes the test): walk (the walk family's text, DK1 / DK2), LS2
-# (scope_chain_abs, LS2-d), LS4 (a named text entry), DK1 (a mint body), DK3, DK4, RS1, `-` (not a scope test).
+# (scope_chain_abs, LS2-d), LS4 (a named text entry), DK1 (a mint body), DK3, DK4, RS1, `-` (not a scope test) ; since LS3b-1 /
+# LS4 also the unit that DELETES a test already inside lexscope: B3k (kind / parent tests), B3a (a key cut to its scope).
+# DK1-0 (§5.2 Q-DECLKEY, DELTA14 D1, R-F3, premise10 J7 / N10-7): scope_chain_abs LS2 -> B3k ; gen_binding_encloses DK3 -> B3a ;
+# names_with_pkg_var_aliases, decl_keep_snapshot DK3 -> DK1 (DK1-5 moves them in) ; disp.rs cur_context, display_of DK4 -> B3k ;
+# enter_frame_scope_root, stmt_loc_instance DK4 -> `-` (they drop the `%m` absolute marker: no scope kind or parent read).
 file	fn	method	arg	count	TAG	UNIT
 block_local/gate.rs	actual_is_record_of	starts_with	'$'	1	spelling	-
 block_local/gate.rs	actual_is_record_of	strip_prefix	"$unp$"	1	spelling	-
 block_local/gate.rs	actual_is_record_of	strip_prefix	<p.segments[..].name>	1	spelling	-
-block_local/mod.rs	names_with_pkg_var_aliases	rsplit_once	'.'	1	key	DK3
+block_local/mod.rs	names_with_pkg_var_aliases	rsplit_once	'.'	1	key	DK1
 block_local/proofs.rs	callee_side_member_name	strip_prefix	"$unp$"	1	spelling	-
 block_local/proofs.rs	callee_side_member_name	strip_prefix	'$'	1	spelling	-
 block_local/proofs.rs	callee_side_member_name	strip_prefix	<seg.name>	1	spelling	-
@@ -819,7 +821,7 @@ decl_collide.rs	carrier_stem	rsplit_once	'$'	1	spelling	-
 decl_collide.rs	carrier_stems	strip_suffix	"$s"	1	spelling	-
 decl_collide.rs	carrier_stems	strip_suffix	"$w"	1	spelling	-
 decl_collide.rs	internal_name	starts_with	'$'	1	spelling	-
-decl_scope.rs	decl_keep_snapshot	starts_with	<mine>	2	key	DK3
+decl_scope.rs	decl_keep_snapshot	starts_with	<mine>	2	key	DK1
 dynarr.rs	dyn_blocking_special	rsplit	'.'	1	key	DK3
 edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
@@ -841,15 +843,15 @@ generate.rs	is_gen_scope_segment	contains	'['	1	scope	walk
 hier.rs	hier_resolve	split	'.'	1	scope	walk
 hier.rs	is_hier_scope	starts_with	<probe>	1	key	DK3
 iface_rtn_scope.rs	static_scoped_keys	contains	"::"	2	key	RS1
-lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	DK4
-lexscope/disp.rs	display_of	contains	'['	1	display	DK4
-lexscope/disp.rs	display_of	split	'.'	1	display	DK4
-lexscope/disp.rs	display_of	strip_suffix	"[0]"	1	display	DK4
-lexscope/disp.rs	enter_frame_scope_root	strip_prefix	'.'	1	display	DK4
-lexscope/disp.rs	scope_chain_abs	contains	"$blk$"	1	display	LS2
-lexscope/disp.rs	scope_chain_abs	split	'.'	1	display	LS2
-lexscope/disp.rs	scope_chain_abs	starts_with	"$blk$"	1	display	LS2
-lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	DK4
+lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	B3k
+lexscope/disp.rs	display_of	contains	'['	1	display	B3k
+lexscope/disp.rs	display_of	split	'.'	1	display	B3k
+lexscope/disp.rs	display_of	strip_suffix	"[0]"	1	display	B3k
+lexscope/disp.rs	enter_frame_scope_root	strip_prefix	'.'	1	display	-
+lexscope/disp.rs	scope_chain_abs	contains	"$blk$"	1	display	B3k
+lexscope/disp.rs	scope_chain_abs	split	'.'	1	display	B3k
+lexscope/disp.rs	scope_chain_abs	starts_with	"$blk$"	1	display	B3k
+lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	-
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	RS1
 lexscope/elab.rs	flush_block_local_inits	split	'.'	1	scope	B3k
@@ -871,8 +873,8 @@ lexscope/mod.rs	cur_is_inst_top_or_synth_below	strip_prefix	<self.mark_text()>	1
 lexscope/mod.rs	cur_under_func_or_itask	split	'.'	1	scope	B3k
 lexscope/mod.rs	cur_under_func_or_itask	starts_with	"$func$"	1	scope	B3k
 lexscope/mod.rs	cur_under_func_or_itask	starts_with	"$itask$"	1	scope	B3k
-lexscope/mod.rs	gen_binding_encloses	strip_suffix	'.'	1	key	DK3
-lexscope/mod.rs	gen_binding_encloses	strip_suffix	<name>	1	key	DK3
+lexscope/mod.rs	gen_binding_encloses	strip_suffix	'.'	1	key	B3a
+lexscope/mod.rs	gen_binding_encloses	strip_suffix	<name>	1	key	B3a
 lexscope/mod.rs	hier_path_is_self	split	'.'	1	scope	B3k
 lexscope/mod.rs	hier_path_is_self	split	'['	1	scope	B3k
 lexscope/mod.rs	in_block_local_scope	rsplit	'.'	1	scope	B3k
@@ -898,7 +900,7 @@ scope.rs	walk_out_from	starts_with	"$itask$"	1	scope	walk
 stmt_main.rs	lower_stmt_inner	starts_with	"$f"	1	spelling	-
 stmt_main.rs	lower_stmt_inner	starts_with	'$'	2	spelling	-
 == HSEG_COUNTS
-tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 27, "B3k": 18, "DK1": 2, "DK3": 15, "DK4": 6, "LS2": 3, "RS1": 19, "walk": 9}
+tests 99 tags {"display": 9, "key": 25, "scope": 37, "spelling": 28} units {"-": 29, "B3a": 2, "B3k": 25, "DK1": 5, "DK3": 10, "RS1": 19, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -1218,11 +1220,11 @@ iface_inst.rs	elaborate_iface_instances	1	scope_swap	saved_prefix	&path	s6/for/s
 iface_inst.rs	elaborate_iface_instances	2	scope_swap	saved_prefix	&path	s6/for/s4/then/s3/then	s2	e0	-	yes	-	end=r1	wire_ports	FIT	-
 instance.rs	elaborate_instance	1	scope_swap	saved_prefix	inst_path	body	s8	e13	-	yes	continue(local)x7	end=r1	dyn:is_header_importx2,dyn:site_ofx2,elaborate_iface_instances,flush_block_local_inits,materialize_cover,materialize_sva_checkers,wire_ports	FIT	dyn:is_header_import and dyn:site_of are this fn's local closures, neither captures self (the first calls `Self::import_precedes_header` with no receiver): they cannot write cur
 package.rs	elaborate_package	1	scope_swap_pkg	saved_prefix	&pkg	body	s1	e13	-	yes	continue(local)x3	end=r1	-	FIT	-
-ports.rs	bind_iface_port	1	scope_swap_text	saved_for_lookup	parent_prefix.to_string()	body	s1	e8	-	yes	-	end=r1;return=r1	-	FIT	-
-ports.rs	wire_array_port	1	scope_swap_text	saved	parent_prefix.to_string()	body	s0	e16/then/s0/then/s1,e14/letelse/s0,e6	-	no	return@e16/then/s0/then/s3,return@e14/letelse/s2	end=r1;return=r1	-	NOT-FIT	one opener, three restores on exclusive paths: two inside the early-out branches, each followed by its `return` (paths: return=r1), one at the end ; PLAN8's NOT-FIT reason
-ports.rs	wire_ports	1	scope_swap_text	saved	parent_prefix.to_string()	s2/arm0	s0	e2	-	yes	continue(local)x1	end=r1	-	FIT	-
-ports.rs	wire_ports	2	scope_swap_text	saved	parent_prefix.to_string()	s3/for/s8/arm0	s2	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
-ports.rs	wire_ports	3	scope_swap_text	saved	parent_prefix.to_string()	s3/for/s8/arm1	s1	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
+ports.rs	bind_iface_port	1	scope_swap	saved_for_lookup	parent_prefix	body	s1	e8	-	yes	-	end=r1;return=r1	-	FIT	-
+ports.rs	wire_array_port	1	scope_swap	saved	parent_prefix	body	s0	e16/then/s0/then/s1,e14/letelse/s0,e6	-	no	return@e16/then/s0/then/s3,return@e14/letelse/s2	end=r1;return=r1	-	NOT-FIT	one opener, three restores on exclusive paths: two inside the early-out branches, each followed by its `return` (paths: return=r1), one at the end ; PLAN8's NOT-FIT reason
+ports.rs	wire_ports	1	scope_swap	saved	parent_prefix	s2/arm0	s0	e2	-	yes	continue(local)x1	end=r1	-	FIT	-
+ports.rs	wire_ports	2	scope_swap	saved	parent_prefix	s3/for/s8/arm0	s2	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
+ports.rs	wire_ports	3	scope_swap	saved	parent_prefix	s3/for/s8/arm1	s1	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
 readmem_assoc.rs	check_readmem_assoc_waits	1	scope_hold	prefix	-	body	s3	e0	&s.prefix@e2/for/s3	yes	continue(local)x1	end=r1	-	NOT-FIT	the save is a clone (beside cur_span) ; the loop re-points per site, one restore after the loop ; the `continue` stays in the loop ; PLAN8's NOT-FIT reason (a re-point per iteration)
 scope.rs	default_binding_matches_decl_scope	1	swap_to_mark	saved	Mark::TfDecl	body	s5	e1	-	yes	-	end=r1	-	FIT	-
 sva_check.rs	materialize_sva_checkers	1	scope_swap	saved_prefix	&sva.scope	s3/for	s0	e0	-	yes	-	end=r1	-	FIT	-
@@ -1401,8 +1403,6 @@ generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
-iface_inst.rs	elaborate_iface_instances	cur_prefix_text	LOCAL:parent#2	1
-instance.rs	elaborate_instance	cur_prefix_text	LOCAL:parent_prefix#2	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
 scope.rs	fq	cur_prefix_text	MAC:format>RET	1
@@ -1416,7 +1416,8 @@ net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 # + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
 # LS4: 16 -> 12, the reads of four scope questions (struct_arm.rs, var_init.rs, frames_call/emit.rs,
 # hoist/general_query.rs) are bool entries of lexscope now (W12_SCOPEQ) ; the 12 left close at DK1
-{"cur_gen_rtn_key": 2, "cur_prefix_text": 12, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
+# DK1-0 (§5.2 Q-DECLKEY): 12 -> 10, instance.rs / iface_inst.rs carry the parent scope (scope_carry, HC_CARRY_LOCAL)
+{"cur_gen_rtn_key": 2, "cur_prefix_text": 10, "display_of_key_text": 1, "key_under": 1, "scope_text": 3, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1485,9 +1486,9 @@ lexscope/mod.rs	scope_swap_empty	scope_swap_text	String::new()	1
 lexscope/mod.rs	scope_swap_pkg	scope_swap_text	format!("$pkg${pkg}")	1
 lexscope/mod.rs	swap_to_mark	scope_swap	&at	1
 package.rs	elaborate_package	scope_swap_pkg	&pkg	1
-ports.rs	bind_iface_port	scope_swap_text	parent_prefix.to_string()	1
-ports.rs	wire_array_port	scope_swap_text	parent_prefix.to_string()	1
-ports.rs	wire_ports	scope_swap_text	parent_prefix.to_string()	3
+ports.rs	bind_iface_port	scope_swap	parent_prefix	1
+ports.rs	wire_array_port	scope_swap	parent_prefix	1
+ports.rs	wire_ports	scope_swap	parent_prefix	3
 readmem_assoc.rs	check_readmem_assoc_waits	scope_repoint	&s.prefix	1
 scope.rs	scoped_key_at_or_above	scope_text	prefix	1
 scope.rs	walk_scopes_key_from	scope_text	prefix	1
@@ -1495,7 +1496,7 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 string_array_route.rs	route_fixed_string_array	push_block_local_init	None	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
 == HC_ARGS_COUNTS
-{"entry_under_cur": 1, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 11, "scope_swap_pkg": 2, "scope_swap_text": 10, "scope_text": 5, "take_at": 3, "with_scope": 21}
+{"entry_under_cur": 1, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 5, "take_at": 3, "with_scope": 21}
 == HC_LOCAL
 # HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
 # scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called
@@ -1504,7 +1505,7 @@ scope_out_local=5 plain_outside=0
 == HC_CARRY
 # HC CARRY (LS3, PLAN8 H2 (c)): every call of `scope_carry` outside `crate::lexscope` by (file, fn,
 # entry, SINK) with a count ; SINK as HBR's (FIELD:<Type.field> a record literal, ARG:<callee>) ;
-# a LOCAL sink is pinned 0 by the test itself.
+# a LOCAL sink must be a row of HC_CARRY_LOCAL (the test checks it ; 0 rows until DK1-0, 2 since).
 file	fn	entry	sink	count
 cont_array.rs	cont_assign_whole_array	scope_carry	FIELD:WholeArrayCa.prefix	1
 cont_var.rs	record_var_cont_assign	scope_carry	FIELD:VarContAssign.prefix	1
@@ -1522,14 +1523,26 @@ held.rs	clk_refused_path	scope_carry	ARG:self.clk_refused_at	1
 hier_defer/func_call.rs	emit_deferred_hier_func_call	scope_carry	FIELD:DeferredHierTaskCall.prefix	1
 hier_defer/write.rs	defer_hier_sel_write	scope_carry	FIELD:DeferredHierSelWrite.prefix	1
 hier_defer/write.rs	defer_hier_write	scope_carry	FIELD:DeferredHierWrite.prefix	1
+iface_inst.rs	elaborate_iface_instances	scope_carry	LOCAL:parent#2	1
 inline_fn.rs	inline_function	scope_carry	FIELD:DeferredHierCall.prefix	1
 inline_task.rs	inline_task	scope_carry	FIELD:DeferredHierTaskCall.prefix	1
+instance.rs	elaborate_instance	scope_carry	LOCAL:parent_prefix#2	1
 readmem_assoc.rs	readmem_assoc_marker	scope_carry	FIELD:ReadmemAssocSite.prefix	1
 stmt_main.rs	lower_stmt_inner	scope_carry	ARG:self.report_clk_refused	2
 stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingCover.scope	1
 stmt_main.rs	lower_stmt_inner	scope_carry	FIELD:PendingSva.scope	4
 == HC_CARRY_COUNTS
-sites=28 local=0
+sites=30 local=2
+== HC_CARRY_LOCAL
+# HC CARRY LOCAL (§5.2 Q-DECLKEY DK1-0 ; DELTA14 D8 q2, R-F2, R-F10, premise10 J4 / N10-3): the carries bound by `let` (SINK
+# LOCAL:<name>#<uses>) the HC_CARRY test admits, by (file, fn, entry, SINK) with a count. Each is the PARENT scope taken before the
+# child instance is entered (scope_swap to the child), handed to wire_ports and re-entered there by `scope_swap` only (P34: never
+# asked a question, never turned to text) ; until DK1-0 the same value was the bridge's text (HBR rows LOCAL:parent#2 /
+# LOCAL:parent_prefix#2). A LOCAL carry off this list fails, a listed row with no carry fails (STALE), and HC_CARRY_COUNTS'
+# `local` must equal the listed count. W12: this list may only fall.
+file	fn	entry	sink	count
+iface_inst.rs	elaborate_iface_instances	scope_carry	LOCAL:parent#2	1
+instance.rs	elaborate_instance	scope_carry	LOCAL:parent_prefix#2	1
 == W12_SCOPEQ
 # W12_SCOPEQ (LS4 ; PLAN7 LS4, DELTA6 W12, DELTA13 D3:199): the scope-question entries of lexscope — each a bool over the
 # text its site tested before, no entry returning text — with the site it took and its deleting unit (B3k replaces the entry
@@ -1664,6 +1677,9 @@ lib.rs	Elaborator.proc_inst_scopes	FIELD	Vec<lexscope::Shown>	1
 lib.rs	Elaborator.proc_scopes	FIELD	Vec<lexscope::Shown>	1
 lib.rs	Elaborator.rtn_decl_scope	FIELD	BTreeMap<String, ScopeRef>	1
 lib.rs	Elaborator.stmt_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
+ports.rs	Elaborator::bind_iface_port	IN:parent_prefix	&crate::ScopeRef	1
+ports.rs	Elaborator::wire_array_port	IN:parent_prefix	&crate::ScopeRef	1
+ports.rs	Elaborator::wire_ports	IN:parent_prefix	&crate::ScopeRef	1
 proc_ident.rs	ProcIdentRow.scope	FIELD	Shown	1
 read_set.rs	StarSite.ctx	FIELD	ShownCtx	1
 readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1

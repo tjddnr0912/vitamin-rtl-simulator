@@ -824,7 +824,7 @@ impl Elaborator<'_> {
                         ast::PortConnList::Named(v, wc) => PortBinding::Named(v, *wc),
                         ast::PortConnList::Positional(v) => PortBinding::Positional(v),
                     };
-                    let parent = self.lex.cur_prefix_text().to_string();
+                    let parent = self.lex.scope_carry();
                     let saved_prefix = self.lex.scope_swap(&path);
                     self.wire_ports(&decl, binding, &parent, false, Some(item.span));
                     self.lex.scope_restore(saved_prefix);

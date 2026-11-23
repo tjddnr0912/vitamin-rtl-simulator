@@ -346,7 +346,7 @@ impl Elaborator<'_> {
         });
 
         // Enter this instance's scope (restored before returning).
-        let parent_prefix = self.lex.cur_prefix_text().to_string();
+        let parent_prefix = self.lex.scope_carry();
         let saved_prefix = self.lex.scope_swap(inst_path);
         let saved_inst_prefix = self.lex.mark_swap(Mark::Inst, inst_path);
         // The key into `module_facts` for this body's hierarchical leaves
