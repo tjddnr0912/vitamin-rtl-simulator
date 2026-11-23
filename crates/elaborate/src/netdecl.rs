@@ -299,8 +299,9 @@ impl Elaborator<'_> {
                             );
                             elem_ids.push(net);
                         }
-                        let key = self.fq(&decl.name.name);
-                        self.string_array_elems.insert(key, (min, max, elem_ids));
+                        let key = self.lex.new_key(&decl.name.name);
+                        self.string_array_elems
+                            .insert_new(key, (min, max, elem_ids));
                         continue;
                     }
                 }

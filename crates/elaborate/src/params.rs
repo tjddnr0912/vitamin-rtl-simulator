@@ -1634,8 +1634,8 @@ impl Elaborator<'_> {
             return;
         }
         if let Some(vals) = ovr.arrays.get(name) {
-            let key = self.fq(name);
-            self.array_param_overrides.insert(key, vals.clone());
+            let key = self.lex.new_key(name);
+            self.array_param_overrides.insert_new(key, vals.clone());
         } else if ovr.targets(name) {
             self.error(
                 MsgCode::ElabPortMismatch,

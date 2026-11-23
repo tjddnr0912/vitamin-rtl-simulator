@@ -457,8 +457,8 @@ impl Elaborator<'_> {
                 // nets THROUGH it (a plain `label` would be read as an instance
                 // boundary, stopping the outward walk → `t.g.y` undeclared).
                 let seg = format!("{}[0]", l.name);
-                let key = self.fq(&l.name);
-                self.gen_singleton_labels.insert(key);
+                let key = self.lex.new_key(&l.name);
+                self.gen_singleton_labels.insert_new(key);
                 // A generate block is a scope of its own for §27.6 numbering too:
                 // its constructs count from 1.
                 let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);

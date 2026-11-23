@@ -208,7 +208,7 @@ impl Elaborator<'_> {
                 // net, and it reads `self.local_decl_names`; installing four of the five
                 // would admit more bodies to the hoist while still resolving the
                 // collision against the parent's names.
-                let mut wc_origin: crate::package::WildcardOrigins = BTreeMap::new();
+                let mut wc_origin: crate::package::WildcardOrigins = Keyed::default();
                 // §26.3 position (`instance.rs`' twin).
                 let item_starts = crate::package::scope_item_starts(&decl);
                 let site_of = |i: usize, imp: &ast::ImportDecl| {
@@ -221,7 +221,7 @@ impl Elaborator<'_> {
                         ))
                     }
                 };
-                let mut explicit_imports: crate::package::ExplicitImports = BTreeMap::new();
+                let mut explicit_imports: crate::package::ExplicitImports = Keyed::default();
                 let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
                 // §3.b: the constant-interpreter half of the routine import, mirroring
                 // `instance.rs`'s (3a.5). Without it a `localparam W = g(40)` in an

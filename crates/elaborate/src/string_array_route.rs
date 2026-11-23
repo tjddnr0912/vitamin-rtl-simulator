@@ -251,8 +251,8 @@ impl Elaborator<'_> {
         // element would degrade to a bit-vector 0/X.
         self.string_elem_dyn_nets.insert(next_id);
         self.fixed_string_dyn.insert(next_id, geom.clone());
-        let key = self.fq(&decl.name.name);
-        self.fixed_string_dyn_key.insert(key, next_id);
+        let key = self.lex.new_key(&decl.name.name);
+        self.fixed_string_dyn_key.insert_new(key, next_id);
 
         // Pre-size to the declared length. This rides the t0 var-init pre-sweep rather
         // than being synthesized at the net, because a `DynArray` net carries no length.

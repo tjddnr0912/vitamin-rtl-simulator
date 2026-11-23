@@ -134,8 +134,8 @@ mod instance;
 mod instance_array;
 mod lexscope;
 use lexscope::{
-    scope_out, shown_from_spelling, Keyed, KeyedSet, Mark, ReportedAt, ScopeKeyed, ScopeRef, Shown,
-    ShownCtx,
+    key_show, key_text, scope_out, shown_from_spelling, Keyed, KeyedSet, Mark, NewKey, ReportedAt,
+    ScopeKeyed, ScopeRef, Shown, ShownCtx,
 };
 mod limits;
 mod lvalue;
@@ -333,7 +333,7 @@ struct Elaborator<'s> {
     packed_default_nets: BTreeMap<u32, u32>,
     /// §3.a ⑤ⓚ (`struct_arm.rs`): each module-body scalar packed-struct variable and ANSI
     /// port whose members the parser recorded at its declaration — its key and members.
-    pattern_targets: BTreeMap<u32, (String, Vec<ast::PatternMember>)>,
+    pattern_targets: BTreeMap<u32, (NewKey, Vec<ast::PatternMember>)>,
     /// §3.a ⑤ⓚ: a net recorded twice, which keeps no record.
     pattern_target_twice: BTreeSet<u32>,
     /// §3.a ⑤ⓚ: the design declares an `inout` port somewhere; no arm is rewritten.

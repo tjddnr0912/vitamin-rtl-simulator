@@ -708,8 +708,8 @@ impl Elaborator<'_> {
                         }
                         let hid = self.lookup_net_scoped(&clean).unwrap_or(hid_before);
                         // Alias `cb.sig` → holding net (writable — NOT added to clocking_hold_nets).
-                        let alias = self.fq(&format!("{}.{}", cb_name, it.name.name));
-                        self.symbols.insert(alias, hid);
+                        let alias = self.lex.new_key(&format!("{}.{}", cb_name, it.name.name));
+                        self.symbols.insert_new(alias, hid);
                         // Store output pair for this block's commit proc.
                         out_pairs.push((src_id, hid)); // (source_net, holding_net)
                         continue;
@@ -783,8 +783,8 @@ impl Elaborator<'_> {
                 let hid = self.lookup_net_scoped(&clean).unwrap_or(hid_before);
                 // Alias `cb.sig` → the holding net (resolution only; the net keeps its
                 // clean VCD name). Manual insert mirrors interface-member aliasing.
-                let alias = self.fq(&format!("{}.{}", cb_name, it.name.name));
-                self.symbols.insert(alias, hid);
+                let alias = self.lex.new_key(&format!("{}.{}", cb_name, it.name.name));
+                self.symbols.insert_new(alias, hid);
                 pairs.push((hid, src_id));
                 self.clocking_inputs.insert(src_id);
                 self.clocking_hold_nets.insert(hid); // read-only: a write is loud

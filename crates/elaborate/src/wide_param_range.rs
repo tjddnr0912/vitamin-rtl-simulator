@@ -48,7 +48,7 @@ impl Elaborator<'_> {
         cv: ir::ConstVal,
     ) {
         let r = self.wide_param_decl_range(p, default_binds, cv.width);
-        let key = self.fq(&p.name.name);
+        let key = self.lex.new_key(&p.name.name);
         self.bind_wide_param(key, cv, r);
     }
 }

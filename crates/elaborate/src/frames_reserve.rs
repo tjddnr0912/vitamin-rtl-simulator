@@ -718,12 +718,8 @@ impl Elaborator<'_> {
                     )
             })
         {
-            let key = if self.lex.cur_prefix_text().is_empty() {
-                name.to_string()
-            } else {
-                format!("{}.{}", self.lex.cur_prefix_text(), name)
-            };
-            self.hier_funcs.insert(key, fid);
+            let key = self.lex.new_key(name);
+            self.hier_funcs.insert_new(key, fid);
         }
         // v7: per-formal `string` bitmask — a `string` formal lowers to a 1-bit
         // Wire slot, so the engine needs this to bind a string LITERAL actual as a
@@ -1143,12 +1139,8 @@ impl Elaborator<'_> {
                 scalar_ok || fixed_array_ok
             })
         {
-            let key = if self.lex.cur_prefix_text().is_empty() {
-                name.to_string()
-            } else {
-                format!("{}.{}", self.lex.cur_prefix_text(), name)
-            };
-            self.hier_tasks.insert(key, fid);
+            let key = self.lex.new_key(name);
+            self.hier_tasks.insert_new(key, fid);
             self.hier_task_port_dirs
                 .insert(fid, task.ports.iter().map(|p| p.dir).collect());
         }

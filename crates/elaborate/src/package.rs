@@ -297,13 +297,13 @@ pub(crate) fn pkg_lvalue_pure(
 
 /// An import scope's explicitly imported names: key → (package, written in this
 /// scope rather than `$unit`). See [`Elaborator::apply_import_consts`].
-pub(crate) type ExplicitImports = BTreeMap<String, (String, bool)>;
+pub(crate) type ExplicitImports = Keyed<(String, bool)>;
 
 /// An import scope's wildcard-bound names: key → (origin package, the binding
 /// import's position segment). The package is `""` once two wildcards of different
 /// packages offered the name (ambiguous). The segment is [`ImportSite::seg`] (`None`
 /// for a `$unit` import). See [`Elaborator::apply_import_consts`].
-pub(crate) type WildcardOrigins = BTreeMap<String, (String, Option<usize>)>;
+pub(crate) type WildcardOrigins = Keyed<(String, Option<usize>)>;
 
 /// Where an import is written, for [`Elaborator::apply_import_consts`].
 #[derive(Clone, Copy)]
@@ -739,8 +739,8 @@ impl Elaborator<'_> {
         // `B=3`), where a module keeps the first package's binding. The module's arm
         // is not used here because it unbinds two narrow constants, which turned the
         // same shape with equal values (`n03 A=3 B=3`, PRE and all three oracles) loud.
-        let mut wc_origin: WildcardOrigins = BTreeMap::new();
-        let mut explicit: ExplicitImports = BTreeMap::new();
+        let mut wc_origin: WildcardOrigins = Keyed::default();
+        let mut explicit: ExplicitImports = Keyed::default();
         let mut pkg_seg: usize = 0;
         // ROADMAP §2 🆕 L ⓢ, package half: the package body is ONE declarative
         // region, so a parameter name is declared in it once — the same walk the

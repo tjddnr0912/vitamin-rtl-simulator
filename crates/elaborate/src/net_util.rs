@@ -653,17 +653,18 @@ impl Elaborator<'_> {
         if self.cur_nettype_none {
             return false;
         }
-        let fq = self.fq(name);
+        let fq = self.lex.new_key(name);
         let fq2 = fq.clone();
         self.warn_code(
             MsgCode::ParseImplicitNet,
             &format!(
-                "implicit net `{fq}` inferred as a 1-bit wire (IEEE 1364-2005 §3.5); \
+                "implicit net `{}` inferred as a 1-bit wire (IEEE 1364-2005 §3.5); \
                  declare it explicitly, or use ``default_nettype none`` to make this \
-                 an error"
+                 an error",
+                scope_out(key_show(&fq))
             ),
         );
-        self.implicit_nets.insert(fq2);
+        self.implicit_nets.insert_new(fq2);
         self.add_net(
             name,
             ir::NetVar {
@@ -687,19 +688,19 @@ impl Elaborator<'_> {
     }
 
     pub(crate) fn add_net(&mut self, name: &str, net: ir::NetVar) {
-        let key = self.fq(name);
+        let key = self.lex.new_key(name);
         // A2b-prereq S3: when a local decl shadows a wildcard alias, the alias
         // entry is removed only AFTER the budget check below passes — an early
         // return must leave the maps consistent.
         let mut shadow_wildcard_alias = false;
-        if self.symbols.contains_key(&key) {
+        if self.symbols.contains_new(&key) {
             // A2b-prereq: a name bound by a package-variable IMPORT is not a
             // declaration. A LOCAL declaration shadows a WILDCARD import
             // (iverilog-pinned: `import p::*` + `int cnt` ⇒ local wins) — drop
             // the alias and fall through to create the real net (the insert
             // below replaces the symbols entry). Colliding with an EXPLICIT
             // import stays loud (iverilog-pinned: "already been imported").
-            match self.pkg_var_aliases.get(&key) {
+            match self.pkg_var_aliases.get_new(&key) {
                 // Documented leniency (diff F3): IEEE §26.3 makes a local
                 // declaration AFTER a use of the wildcard binding an error;
                 // vita lowers by pass (nets before process bodies), so textual
@@ -722,7 +723,10 @@ impl Elaborator<'_> {
                 None => {
                     self.error(
                         MsgCode::ElabUnsupported,
-                        &format!("net/variable `{key}` redeclared (duplicate declaration)"),
+                        &format!(
+                            "net/variable `{}` redeclared (duplicate declaration)",
+                            scope_out(key_show(&key))
+                        ),
                     );
                     return;
                 }
@@ -744,11 +748,11 @@ impl Elaborator<'_> {
             return;
         }
         if shadow_wildcard_alias {
-            self.pkg_var_aliases.remove(&key);
+            self.pkg_var_aliases.remove_new(&key);
         }
         let id = self.nets.len() as u32;
         self.nets.push(net);
-        self.symbols.insert(key, id);
+        self.symbols.insert_new(key, id);
     }
 
     /// v7 `$bits` prescan (see `bits_prescan`): record one body decl's widths.

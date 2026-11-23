@@ -168,8 +168,8 @@ impl Elaborator<'_> {
         };
         for n in &d.names {
             let vif = &n.name.name;
-            let k = self.fq(vif);
-            self.vif_handles.insert(k);
+            let k = self.lex.new_key(vif);
+            self.vif_handles.insert_new(k);
             // collect the distinct instances `vif` is bound to.
             let mut bound: Vec<String> = Vec::new();
             for it in body {

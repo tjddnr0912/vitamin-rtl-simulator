@@ -73,16 +73,16 @@ impl Elaborator<'_> {
     /// refuses an ascending declaration (`build_hier_param_select`), so recording one
     /// would turn `u.A[12]` on `logic [12:83] A` from its pre-existing positional
     /// reading into an error (ROADMAP §2).
-    pub(crate) fn bind_wide_param(&mut self, key: String, cv: ir::ConstVal, r: Option<DeclRange>) {
+    pub(crate) fn bind_wide_param(&mut self, key: NewKey, cv: ir::ConstVal, r: Option<DeclRange>) {
         match r {
             Some(r) if !r.2 => {
-                self.hier_param_range.w().insert(key.clone(), r);
+                self.hier_param_range.w().insert_new(key.clone(), r);
             }
             _ => {
-                self.hier_param_range.w().remove(&key);
+                self.hier_param_range.w().remove_new(&key);
             }
         }
-        self.wide_param_bits.w().insert(key, cv);
+        self.wide_param_bits.w().insert_new(key, cv);
     }
 
     // ---- primitives: one map verb each, returning what the map returned ----

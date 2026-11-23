@@ -500,8 +500,8 @@ impl Elaborator<'_> {
         // site (never a silent last-wins value), while an UNUSED ambiguous name is
         // no error — exactly IEEE's "ambiguous only when referenced".
         let saved_scope_imports = std::mem::replace(&mut self.scope_imports, import_list.clone());
-        let mut wc_origin: crate::package::WildcardOrigins = BTreeMap::new();
-        let mut explicit_imports: crate::package::ExplicitImports = BTreeMap::new();
+        let mut wc_origin: crate::package::WildcardOrigins = Keyed::default();
+        let mut explicit_imports: crate::package::ExplicitImports = Keyed::default();
         // The module's own declared names shadow a wildcard import (§26.3) — the
         // same set the GAP-G array guard below reads, gathered once, here, because
         // the imports bind BEFORE the nets are declared.

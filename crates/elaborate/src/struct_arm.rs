@@ -35,8 +35,8 @@ impl Elaborator<'_> {
         if members.is_empty() {
             return;
         }
-        let key = self.fq(name);
-        let Some(&id) = self.symbols.get(&key) else {
+        let key = self.lex.new_key(name);
+        let Some(&id) = self.symbols.get_new(&key) else {
             return;
         };
         let Some(net) = self.nets.get(id as usize) else {
@@ -110,7 +110,7 @@ impl Elaborator<'_> {
             return None;
         }
         let walked = self.walk_scopes_key(&seg.name, |k| self.symbols.contains_key(k))?;
-        if walked != *key || self.symbols.get(&walked) != Some(&c.net) {
+        if walked != key_text(key) || self.symbols.get(&walked) != Some(&c.net) {
             return None;
         }
         rewrite_arms(rhs, members)

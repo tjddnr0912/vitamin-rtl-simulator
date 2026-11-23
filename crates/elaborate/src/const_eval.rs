@@ -880,13 +880,13 @@ impl Elaborator<'_> {
         }
         for decl in &d.names {
             if let Some(vals) = self.const_array_elem_vals(d, decl) {
-                let key = self.fq(&decl.name.name);
+                let key = self.lex.new_key(&decl.name.name);
                 // §3 ⑤ ⓔ: the geometry rides with the values — same key, same
                 // shape rule, recorded by the same `if`, so neither map has an
                 // entry the other lacks.
                 let meta = self.const_array_elem_meta(d, decl);
-                self.array_const_meta.insert(key.clone(), meta);
-                self.array_const_vals.insert(key, vals);
+                self.array_const_meta.insert_new(key.clone(), meta);
+                self.array_const_vals.insert_new(key, vals);
             }
         }
     }

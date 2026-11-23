@@ -146,7 +146,7 @@ impl Elaborator<'_> {
         span: ast::Span,
         ports: &ast::PortList,
         body: &[ast::ModuleItem],
-        seen: &mut BTreeSet<String>,
+        seen: &mut KeyedSet,
     ) {
         // DUP (round-5): a colliding `automatic` block-local that the
         // pure pre-scan marked (disjoint blocks, no module-net collision,
@@ -332,11 +332,11 @@ impl Elaborator<'_> {
         // so nothing downstream is undeclared.
         let deduped;
         let d = {
-            let mut dup: Option<(String, ast::Span)> = None;
+            let mut dup: Option<(NewKey, ast::Span)> = None;
             let mut kept: Vec<ast::DeclName> = Vec::new();
             for n in &d.names {
-                let key = self.fq(&n.name.name);
-                if seen.insert(key.clone()) {
+                let key = self.lex.new_key(&n.name.name);
+                if seen.insert_new(key.clone()) {
                     kept.push(n.clone());
                 } else if dup.is_none() {
                     dup = Some((key, n.name.span));
@@ -346,7 +346,10 @@ impl Elaborator<'_> {
                 None => d,
                 Some((key, sp)) => {
                     if self.reported_decl_collisions.insert((sp.lo, sp.hi)) {
-                        let m = format!("net/variable `{key}` redeclared (duplicate declaration)");
+                        let m = format!(
+                            "net/variable `{}` redeclared (duplicate declaration)",
+                            scope_out(key_show(&key))
+                        );
                         self.error_at(MsgCode::ElabUnsupported, sp, &m);
                     }
                     if kept.is_empty() {
@@ -718,13 +721,12 @@ impl Elaborator<'_> {
         // sibling `initial`, a continuous assign, an inner generate) picks
         // up one process's private variable instead of the constant.
         for n in &d.names {
-            let k = self.fq(&n.name.name);
+            let k = self.lex.new_key(&n.name.name);
             // `span` is the DECLARING BLOCK's, not the declaration's: a reader inside
             // that range sees this local, one outside sees whatever the enclosing scope
             // binds. Recorded here because this is the only place that knows both.
             self.hoisted_block_local
-                .entry(k)
-                .or_default()
+                .entry_new(k)
                 .push((span.lo, span.hi));
         }
         // Review S2: if THIS BLOCK has a `$blk$` scope, every one of its declaration
@@ -772,7 +774,7 @@ impl Elaborator<'_> {
                 // `fork…join`, so it separates "a second declarator of this block"
                 // (illegal) from "the same name in another block" (the flatten's
                 // deliberate coalesce) — see the guard in `hoist_one_block_local`.
-                let mut seen: BTreeSet<String> = BTreeSet::new();
+                let mut seen: KeyedSet = KeyedSet::default();
                 for d in decls {
                     self.refuse_captured_by_callee(d, *span);
                     // §4.5.249: the Nets-phase hoist never passes through `lower_stmt`,

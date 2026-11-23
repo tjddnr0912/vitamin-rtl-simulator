@@ -214,7 +214,7 @@ impl Elaborator<'_> {
         }
         // Slice C: resolve crosses (cartesian product of constituents' counting bins).
         let crosses = self.resolve_crosses(&cg.crosses, &trackers);
-        let key = self.fq(&ci.name.name);
+        let key = self.lex.new_key(&ci.name.name);
         // OBS-1b: record this instance's coverage manifest for the end-of-run
         // coverage.json. Resolve each hit-bitmap net id HERE (the fresh `__sva_cov_*`
         // names are visible in this scope) and mirror `synth_cover_get`'s item set:
@@ -241,13 +241,13 @@ impl Elaborator<'_> {
                 })
             }))
             .collect();
-        self.cover_insts.insert(key.clone(), trackers);
+        self.cover_insts.insert_new(key.clone(), trackers);
         if !crosses.is_empty() {
-            self.cross_insts.insert(key.clone(), crosses);
+            self.cross_insts.insert_new(key.clone(), crosses);
         }
         if !cov_items.is_empty() {
             self.coverage_manifest.push(CovgInstMeta {
-                inst: key,
+                inst: scope_out(key_show(&key)),
                 items: cov_items,
             });
         }
