@@ -85,7 +85,7 @@
 //! what the entry means: VALUE-ABSENT, META-ABSENT, RANGE-ABSENT, STR-KEEPS-VALUE and
 //! the rest stay as `bound/mod.rs` tables them.
 
-use crate::Elaborator;
+use crate::{AtKey, Elaborator};
 
 impl Elaborator<'_> {
     /// META-WALK: the declared `(width, signed)` of `n` by the outward walk over
@@ -103,54 +103,54 @@ impl Elaborator<'_> {
 
     /// `params`.
     #[inline]
-    pub(crate) fn hit_value(&self, k: &str) -> bool {
-        self.params.contains_key(k)
+    pub(crate) fn hit_value(&self, k: &AtKey) -> bool {
+        self.params.contains_at(k)
     }
 
     /// `params || symbols`.
     #[inline]
-    pub(crate) fn hit_value_or_net(&self, k: &str) -> bool {
-        self.params.contains_key(k) || self.symbols.contains_key(k)
+    pub(crate) fn hit_value_or_net(&self, k: &AtKey) -> bool {
+        self.params.contains_at(k) || self.symbols.contains_at(k)
     }
 
     /// `wide_param_bits`.
     #[inline]
-    pub(crate) fn hit_wide(&self, k: &str) -> bool {
-        self.wide_param_bits.contains_key(k)
+    pub(crate) fn hit_wide(&self, k: &AtKey) -> bool {
+        self.wide_param_bits.contains_at(k)
     }
 
     /// `wide_param_bits || params || symbols`.
     #[inline]
-    pub(crate) fn hit_wide_value_or_net(&self, k: &str) -> bool {
-        self.wide_param_bits.contains_key(k)
-            || self.params.contains_key(k)
-            || self.symbols.contains_key(k)
+    pub(crate) fn hit_wide_value_or_net(&self, k: &AtKey) -> bool {
+        self.wide_param_bits.contains_at(k)
+            || self.params.contains_at(k)
+            || self.symbols.contains_at(k)
     }
 
     /// `real_param_val || params || symbols`.
     #[inline]
-    pub(crate) fn hit_real_value_or_net(&self, k: &str) -> bool {
-        self.real_param_val.contains_key(k)
-            || self.params.contains_key(k)
-            || self.symbols.contains_key(k)
+    pub(crate) fn hit_real_value_or_net(&self, k: &AtKey) -> bool {
+        self.real_param_val.contains_at(k)
+            || self.params.contains_at(k)
+            || self.symbols.contains_at(k)
     }
 
     /// `str_param_raw || real_param_val || params || wide_param_bits`.
     #[inline]
-    pub(crate) fn hit_any_const(&self, k: &str) -> bool {
-        self.str_param_raw.contains_key(k)
-            || self.real_param_val.contains_key(k)
-            || self.params.contains_key(k)
-            || self.wide_param_bits.contains_key(k)
+    pub(crate) fn hit_any_const(&self, k: &AtKey) -> bool {
+        self.str_param_raw.contains_at(k)
+            || self.real_param_val.contains_at(k)
+            || self.params.contains_at(k)
+            || self.wide_param_bits.contains_at(k)
     }
 
     /// `str_param_raw || wide_param_bits || real_param_val || params || symbols`.
     #[inline]
-    pub(crate) fn hit_any_const_or_net(&self, k: &str) -> bool {
-        self.str_param_raw.contains_key(k)
-            || self.wide_param_bits.contains_key(k)
-            || self.real_param_val.contains_key(k)
-            || self.params.contains_key(k)
-            || self.symbols.contains_key(k)
+    pub(crate) fn hit_any_const_or_net(&self, k: &AtKey) -> bool {
+        self.str_param_raw.contains_at(k)
+            || self.wide_param_bits.contains_at(k)
+            || self.real_param_val.contains_at(k)
+            || self.params.contains_at(k)
+            || self.symbols.contains_at(k)
     }
 }

@@ -264,10 +264,11 @@ impl Elaborator<'_> {
             return None;
         }
         let refused = |k: &str| self.clk_refused.iter().position(|r| at_text(&r.alias) == k);
+        let refused_at = |k: &AtKey| self.clk_refused.iter().position(|r| at_same(&r.alias, k));
         (2..=path.len()).find_map(|k| {
             let head = path[..k].join(".");
             let key = self.walk_scopes_key_from(prefix, &head, |k| {
-                self.symbols.contains_key(k) || refused(k).is_some()
+                self.symbols.contains_at(k) || refused_at(k).is_some()
             })?;
             refused(&key)
         })

@@ -110,6 +110,7 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # the walk's own body.
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): held.rs clk_refused_at's `refused` closure compares at_text(&r.alias) (LEAVE L9, DK1-4b): its hit set names the call.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — its 5 INTERNAL / PROBE rows re-homed, hand columns kept
+# §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk hands its candidate as an AtKey (DELTA16 E1.3, E1.4) — the two closure pairs: edge_gate.rs binding_encloses' second walk probes through `other_kind_at` (the typed twin ; `other_kind` stays for the found text key), held.rs clk_refused_at through `refused_at` (at_same: the candidate against a refused alias ; `refused` / at_text stays for the found key) ; both pairs' candidate halves leave at DK2. walk_scopes' INTERNAL `table` row holds by PROBE_METHODS + `contains_at` (R-H8 (b)).
 file	fn	entry	hit_text	class	hit_set	calls
 array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
 block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
@@ -128,7 +129,7 @@ const_wide.rs	wide_name_bits	walk_scopes_key	hit_wide_value_or_net	SITE	params+s
 decl_collide.rs	modport_call_refused	walk_scopes_key	iface_insts	SITE	iface_insts	1
 dynarr.rs	dyn_handle	walk_scopes_key_shadowed	fixed_string_dyn_key	SITE	fixed_string_dyn_key	1
 edge_gate.rs	binding_encloses	walk_scopes_key	hit_value	SITE	params	1
-edge_gate.rs	binding_encloses	walk_scopes_key	params|other_kind()	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+edge_gate.rs	binding_encloses	walk_scopes_key	params|other_kind_at()	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
 edge_gate.rs	variable_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
 edge_gate.rs	wide_lsb_range_of	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
 edge_gate.rs	wide_param_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
@@ -140,7 +141,7 @@ frames_static_init.rs	expr_reads_admitted	walk_scopes_key	symbols	SITE	symbols	1
 frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	symbols	SITE	symbols	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_loop_labels	SITE	gen_loop_labels	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_singleton_labels	SITE	gen_singleton_labels	1
-held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused()	SITE	at_text()+clk_refused+symbols	1
+held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused_at()	SITE	at_same()+clk_refused+symbols	1
 hier.rs	hier_lookup	hier_resolve	symbols	HIER	symbols	1
 hier.rs	hier_lookup_param	hier_resolve	hier_params	HIER	hier_params	1
 hier.rs	hier_lookup_param_meta	hier_resolve	param_meta	HIER	param_meta	1
@@ -1746,3 +1747,14 @@ proc_ident.rs	ProcIdentRow.scope	FIELD	Shown	1
 read_set.rs	StarSite.ctx	FIELD	ShownCtx	1
 readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1
 sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
+== HKC
+# HKC (§5.2 Q-DECLKEY DK1-4b-1 (2026-11-24), DELTA16 R-H8 (d)): how many times each lexscope file names a key type's constructor (a call, a struct literal,
+# a pattern, a macro argument) — AtKey's field is `pub(super)` since DK1-4b-1 (the walk forms its candidates: walk.rs), so its
+# constructor door is the whole module ; NewKey's stays private to key.rs. A new row or a moved count is a key formed in a new
+# place: P23 reads where its text comes from.
+file	type	count
+lexscope/key.rs	AtKey	2
+lexscope/key.rs	NewKey	2
+lexscope/walk.rs	AtKey	3
+== HKC_COUNTS
+AtKey=5 DeclKey=0 NewKey=2

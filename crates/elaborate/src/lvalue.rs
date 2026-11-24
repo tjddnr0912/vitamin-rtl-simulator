@@ -276,7 +276,7 @@ impl Elaborator<'_> {
                 if let ast::Lvalue::Ident(p) = &**base {
                     if p.segments.len() == 1 {
                         if let Some(key) = self.walk_scopes_key_shadowed(&p.segments[0].name, |k| {
-                            self.string_array_elems.contains_key(k)
+                            self.string_array_elems.contains_at(k)
                         }) {
                             let (min, max, elems) =
                                 self.string_array_elems.get(&key).unwrap().clone();

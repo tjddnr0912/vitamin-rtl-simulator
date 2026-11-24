@@ -517,7 +517,7 @@ impl Elaborator<'_> {
             Ident(p) => match p.segments.as_slice() {
                 [seg] => self
                     .walk_scopes_key(&seg.name, |k| {
-                        self.symbols.contains_key(k) || self.params.contains_key(k)
+                        self.symbols.contains_at(k) || self.params.contains_at(k)
                     })
                     .is_some(),
                 _ => false,

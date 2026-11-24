@@ -11,8 +11,11 @@
 //! leaves as message text only through [`key_show`], and meets a text operation only through
 //! [`key_text`] (L7, a counted bridge deleted at DK3-b). No key is made from text.
 //!
-//! THE READ KEY (sub-unit DK1-3): an [`AtKey`] is the key a READ of a name in the current scope probes,
-//! formed by [`Scopes::at_cur`] (the same bytes as [`Scopes::new_key`]'s) and by nothing else ; it reaches a
+//! THE READ KEY (sub-unit DK1-3): an [`AtKey`] is the key a READ of a name probes, formed by
+//! [`Scopes::at_cur`] (the current scope: the same bytes as [`Scopes::new_key`]'s) and, since DK1-4b-1, by
+//! the scope walk (`walk.rs`: the candidate each scope level hands `hit`) ; its constructor is lexscope-wide
+//! (the `pub(super)` field), not this file's: the count of AtKey constructions per lexscope file is pinned
+//! (scope_home HKC). No AtKey is formed outside the module. It reaches a
 //! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves only through
 //! [`at_text`] (L9, a counted bridge). A message that names what such a read would have probed takes
 //! [`Scopes::show_miss`]'s display text: no key is formed for it.
@@ -118,16 +121,26 @@ pub(crate) fn key_text(k: &NewKey) -> &str {
     &k.0
 }
 
-/// The key a current-scope READ probes (DK1-3): the current scope's text, `.`, the local name — or the
-/// local name alone under the empty scope. Made only by [`Scopes::at_cur`] ; no `Clone`, `Display`,
-/// `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`), so it cannot take the window's text
-/// path into a store, and no `_new` entry takes it.
-pub(crate) struct AtKey(String);
+/// The key a READ probes (DK1-3): the current scope's text, `.`, the local name — or the local name
+/// alone under the empty scope. Made by [`Scopes::at_cur`] and by the walk (`walk.rs`, DK1-4b-1: each
+/// candidate it hands `hit`, one scratch re-written per scope level) ; the field is `pub(super)`, so the
+/// constructor door is the whole of `lexscope`, not this file (scope_home HKC pins the constructions per
+/// lexscope file). No `Clone`, `Display`, `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`),
+/// so it cannot take the window's text path into a store, and no `_new` entry takes it.
+pub(crate) struct AtKey(pub(super) String);
 
 /// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module (a compare with a
-/// walk's text key: held.rs, DK1-4b ; a key glued from it: ports.rs, DK1-5 / DK3-a) ; a counted bridge.
+/// walk's found text key: held.rs, DK1-4b-2 ; a key glued from it: ports.rs, DK1-5 / DK3-a) ; a counted
+/// bridge.
 pub(crate) fn at_text(k: &AtKey) -> &str {
     &k.0
+}
+
+/// A read's key against a read's key (DK1-4b-1, P27: held.rs clk_refused_at's walk candidate against a refused
+/// clocking item's alias): the same text.
+#[inline]
+pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
+    a.0 == b.0
 }
 
 /// The NewKey entries of a map store: the std verb on the key's own String (`entry_new` is
@@ -160,9 +173,11 @@ impl<V> Keyed<V> {
 
 /// The AtKey entries of a map store (DK1-3): the std read on the key's own String.
 impl<V> Keyed<V> {
+    #[inline]
     pub(crate) fn get_at(&self, k: &AtKey) -> Option<&V> {
         self.0.get(&k.0)
     }
+    #[inline]
     pub(crate) fn contains_at(&self, k: &AtKey) -> bool {
         self.0.contains_key(&k.0)
     }
@@ -182,6 +197,7 @@ impl KeyedSet {
 
 /// The AtKey entry of a set store (DK1-3: `implicit_nets`, `vif_handles`).
 impl KeyedSet {
+    #[inline]
     pub(crate) fn contains_at(&self, k: &AtKey) -> bool {
         self.0.contains(&k.0)
     }

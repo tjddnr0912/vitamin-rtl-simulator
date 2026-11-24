@@ -234,7 +234,7 @@ impl Elaborator<'_> {
         let shadows_module = d.names.iter().any(|n| {
             self.local_decl_names.contains(&n.name.name)
                 || self
-                    .walk_scopes_key(&n.name.name, |k| self.pkg_var_aliases.contains_key(k))
+                    .walk_scopes_key(&n.name.name, |k| self.pkg_var_aliases.contains_at(k))
                     .is_some()
         });
         // Decl-ANY, matching `gather_auto_block_locals` and `block_local_scope_seg`.

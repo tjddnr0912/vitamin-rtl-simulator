@@ -5,15 +5,21 @@
 //! form over a store, `walk_scopes`, stays in `scope.rs`: a caller of the walk, typed at DK1-4b). They
 //! are Elaborator methods (tier E), so every caller's tokens are unchanged ; inside, they read the
 //! current scope's text and a carried scope's text as this module's own fields, not through the
-//! bridges. Their text signatures stay until DK1-4b (the found key's type): the walk's return
-//! (`Option<String>`) and the text its `hit` callback is handed are LEAVE rows closing there.
+//! bridges. Since DK1-4b-1 `hit` is handed each candidate as an [`AtKey`] (the walk's one scratch
+//! text, re-written per scope level) ; the walk's return (`Option<String>`, the accepted candidate's
+//! text moved out) stays a LEAVE row until DK1-4b-2 (the found key's type).
 
+use super::AtKey;
 use crate::decl_scope::{DeclArm, DeclPhase};
 use crate::Elaborator;
 
 impl Elaborator<'_> {
     #[inline]
-    pub(crate) fn walk_scopes_key(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
+    pub(crate) fn walk_scopes_key(
+        &self,
+        name: &str,
+        hit: impl Fn(&AtKey) -> bool,
+    ) -> Option<String> {
         self.walk_scopes_key_inner(name, hit, false)
     }
 
@@ -29,18 +35,18 @@ impl Elaborator<'_> {
         &self,
         prefix: &crate::ScopeRef,
         name: &str,
-        hit: impl Fn(&str) -> bool,
+        hit: impl Fn(&AtKey) -> bool,
     ) -> Option<String> {
         let prefix = self.lex.names[prefix.0 .0 as usize].as_str();
         let mut scope = prefix;
         loop {
-            let key = if scope.is_empty() {
+            let key = AtKey(if scope.is_empty() {
                 name.to_string()
             } else {
                 format!("{scope}.{name}")
-            };
+            });
             if hit(&key) {
-                return Some(key);
+                return Some(key.0);
             }
             match scope.rfind('.') {
                 Some(i) => scope = &scope[..i],
@@ -83,7 +89,7 @@ impl Elaborator<'_> {
     pub(crate) fn walk_scopes_key_shadowed(
         &self,
         name: &str,
-        hit: impl Fn(&str) -> bool,
+        hit: impl Fn(&AtKey) -> bool,
     ) -> Option<String> {
         self.walk_scopes_key_inner(name, hit, true)
     }
@@ -91,18 +97,18 @@ impl Elaborator<'_> {
     fn walk_scopes_key_inner(
         &self,
         name: &str,
-        hit: impl Fn(&str) -> bool,
+        hit: impl Fn(&AtKey) -> bool,
         stop_at_net_binding: bool,
     ) -> Option<String> {
         // GEN-3X-STR (part b): reuse ONE scratch String across the outward walk
         // instead of a fresh `format!` allocation per scope level (byte-identical
         // keys; on a hit the scratch is moved out as the owned return).
-        let mut key = String::new();
+        let mut key = AtKey(String::new());
         // §4.5.589: an owned package routine's text, in a split's window half, binds
         // its declaring package's constant first; a miss walks exactly as before
         // (`decl_scope.rs`).
         if self.decl_probe_key(name, &mut key, &hit) {
-            return Some(key);
+            return Some(key.0);
         }
         self.walk_out_from(
             self.lex.cur_prefix.as_str(),
@@ -122,14 +128,14 @@ impl Elaborator<'_> {
         &self,
         prefix: &crate::ScopeRef,
         name: &str,
-        hit: impl Fn(&str) -> bool,
+        hit: impl Fn(&AtKey) -> bool,
     ) -> Option<String> {
         self.walk_out_from(
             self.lex.names[prefix.0 .0 as usize].as_str(),
             name,
             &hit,
             false,
-            String::new(),
+            AtKey(String::new()),
         )
     }
 
@@ -137,22 +143,22 @@ impl Elaborator<'_> {
         &self,
         mut prefix: &str,
         name: &str,
-        hit: &impl Fn(&str) -> bool,
+        hit: &impl Fn(&AtKey) -> bool,
         stop_at_net_binding: bool,
-        mut key: String,
+        mut key: AtKey,
     ) -> Option<String> {
         use std::fmt::Write;
         loop {
-            key.clear();
+            key.0.clear();
             if prefix.is_empty() {
-                key.push_str(name);
+                key.0.push_str(name);
             } else {
-                let _ = write!(key, "{prefix}.{name}");
+                let _ = write!(key.0, "{prefix}.{name}");
             }
             if hit(&key) {
-                return Some(key);
+                return Some(key.0);
             }
-            if stop_at_net_binding && self.symbols.contains_key(&key) {
+            if stop_at_net_binding && self.symbols.contains_at(&key) {
                 return None;
             }
             if prefix.is_empty() {
@@ -195,7 +201,7 @@ impl Elaborator<'_> {
     /// The declaring package's key for bare constant `name`, written into `key`,
     /// while the window half runs and the routine does not declare `name` itself.
     /// `walk_scopes_key_inner` asks it before its outward walk.
-    fn decl_probe_key(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool {
+    fn decl_probe_key(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool {
         use std::fmt::Write;
         if self.decl_phase.get() != DeclPhase::Win {
             return false;
@@ -204,15 +210,15 @@ impl Elaborator<'_> {
         let DeclArm::On(w) = &*arm else {
             return false;
         };
-        key.clear();
-        let _ = write!(key, "$pkg${}.{name}", w.pkg);
+        key.0.clear();
+        let _ = write!(key.0, "$pkg${}.{name}", w.pkg);
         hit(key) && !w.declares(self, name)
     }
 
     /// True iff `seg` is a GENERATE-block scope segment (`label[idx]`), as opposed
     /// to an instance-boundary segment (a plain identifier). Generate prefixes
     /// always carry the `[idx]` suffix, so a `[` unambiguously marks them.
-    pub(crate) fn is_gen_scope_segment(seg: &str) -> bool {
+    pub(super) fn is_gen_scope_segment(seg: &str) -> bool {
         seg.contains('[')
     }
 }

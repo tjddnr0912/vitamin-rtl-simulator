@@ -37,7 +37,7 @@ mod key;
 mod tests;
 mod walk;
 
-pub(crate) use key::{at_text, key_show, key_text, AtKey, Keyed, KeyedSet, NewKey};
+pub(crate) use key::{at_same, at_text, key_show, key_text, AtKey, Keyed, KeyedSet, NewKey};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]
@@ -383,9 +383,9 @@ impl Scopes {
         saved
     }
 
-    /// LEAVE L6 (closes DK1): a carried scope's text, read by the three key-forming bodies that
-    /// stay outside the module until DK1 (hier_resolve, scoped_key_at_or_above,
-    /// walk_scopes_key_from). The interner's id -> text read: no allocation, no probe.
+    /// LEAVE L6 (closes DK1): a carried scope's text, read by the one key-forming body that stays
+    /// outside the module until DK1-5 (hier_resolve ; the walk reads the interner inside the module
+    /// since DK1-4a). The interner's id -> text read: no allocation, no probe.
     pub(crate) fn scope_text(&self, at: &ScopeRef) -> &str {
         &self.names[at.0 .0 as usize]
     }

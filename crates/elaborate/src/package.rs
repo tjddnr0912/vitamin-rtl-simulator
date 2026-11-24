@@ -562,7 +562,7 @@ impl Elaborator<'_> {
     pub(crate) fn dotted_hit_is_pkg_alias(&self, joined: &str) -> bool {
         !self.pkg_var_aliases.is_empty()
             && self
-                .walk_scopes_key(joined, |k| self.symbols.contains_key(k))
+                .walk_scopes_key(joined, |k| self.symbols.contains_at(k))
                 .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
     }
 
@@ -576,11 +576,11 @@ impl Elaborator<'_> {
     pub(crate) fn bare_hit_is_shadowed_pkg_alias(&self, name: &str) -> bool {
         !self.pkg_var_aliases.is_empty()
             && self
-                .walk_scopes_key(name, |k| self.symbols.contains_key(k))
+                .walk_scopes_key(name, |k| self.symbols.contains_at(k))
                 .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
             && (self.lookup_scoped(name).is_some()
                 || self
-                    .walk_scopes_key(name, |k| self.genvar_decls.contains(k))
+                    .walk_scopes_key(name, |k| self.genvar_decls.contains_at(k))
                     .is_some())
     }
 

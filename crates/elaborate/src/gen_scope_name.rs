@@ -114,7 +114,7 @@ impl Elaborator<'_> {
         let head = path.first()?;
         if let Some(label) = Self::gen_seg_label(head) {
             if self
-                .scoped_key_at_or_above(prefix, label, |k| self.gen_singleton_labels.contains(k))
+                .scoped_key_at_or_above(prefix, label, |k| self.gen_singleton_labels.contains_at(k))
                 .is_some()
             {
                 let mut fixed = path.to_vec();
@@ -128,7 +128,7 @@ impl Elaborator<'_> {
             }
             return None;
         }
-        self.scoped_key_at_or_above(prefix, head, |k| self.gen_loop_labels.contains(k))
+        self.scoped_key_at_or_above(prefix, head, |k| self.gen_loop_labels.contains_at(k))
             .map(|_| {
                 format!(
                     "hierarchical name `{full}`: `{head}` is a generate-for block — IEEE 1800 \

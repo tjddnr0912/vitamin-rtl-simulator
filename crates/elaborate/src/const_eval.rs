@@ -806,7 +806,7 @@ impl Elaborator<'_> {
                         if path.segments.len() == 1 {
                             let n = path.segments[0].name.as_str();
                             let local = self
-                                .walk_scopes_key(n, |k| self.symbols.contains_key(k))
+                                .walk_scopes_key(n, |k| self.symbols.contains_at(k))
                                 .and_then(|k| self.symbols.get(&k).copied());
                             if let Some(id) = local {
                                 if !self.const_param_nets.contains_key(&id) {

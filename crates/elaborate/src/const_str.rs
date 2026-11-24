@@ -54,11 +54,11 @@ impl Elaborator<'_> {
                 // land in `symbols`, i.e. the invariant held by an accident of a
                 // different map. Spell it out instead of relying on that.
                 let key = self.walk_scopes_key(seg, |k| {
-                    self.str_param_raw.contains_key(k)
-                        || self.real_param_val.contains_key(k)
-                        || self.params.contains_key(k)
-                        || self.wide_param_bits.contains_key(k)
-                        || self.symbols.contains_key(k)
+                    self.str_param_raw.contains_at(k)
+                        || self.real_param_val.contains_at(k)
+                        || self.params.contains_at(k)
+                        || self.wide_param_bits.contains_at(k)
+                        || self.symbols.contains_at(k)
                 })?;
                 self.str_param_raw.get(&key).cloned()
             }

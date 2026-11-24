@@ -276,7 +276,7 @@ impl Elaborator<'_> {
         // declared in the enclosing module body. The walk runs in the PARENT
         // scope (cur_prefix is the child's during port binding).
         let saved_for_lookup = self.lex.scope_swap(parent_prefix);
-        let found = self.walk_scopes_key(&inst_name, |k| self.iface_insts.contains_key(k));
+        let found = self.walk_scopes_key(&inst_name, |k| self.iface_insts.contains_at(k));
         self.lex.scope_restore(saved_for_lookup);
         let Some(parent_fq) = found else {
             self.error(
@@ -367,7 +367,7 @@ impl Elaborator<'_> {
             .map(|s| s.name.as_str())
             .collect::<Vec<_>>()
             .join(".");
-        let key = self.walk_scopes_key(&joined, |k| self.symbols.contains_key(k));
+        let key = self.walk_scopes_key(&joined, |k| self.symbols.contains_at(k));
         if let Some(k) = key {
             if self.modport_readonly.contains(&k) {
                 self.error(
@@ -610,7 +610,7 @@ impl Elaborator<'_> {
                         continue; // explicitly named (incl. an open `.p()`)
                     }
                     if self
-                        .walk_scopes_key(pname, |k| self.symbols.contains_key(k))
+                        .walk_scopes_key(pname, |k| self.symbols.contains_at(k))
                         .is_some()
                     {
                         synth.push(pname.clone());

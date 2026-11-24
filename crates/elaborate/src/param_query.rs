@@ -81,9 +81,9 @@ impl Elaborator<'_> {
     /// and emit 2^24 bits at exit 0. Same predicate, two resolvers: pick by consumer.
     pub(crate) fn real_param_lowers_real(&self, name: &str) -> bool {
         self.walk_scopes_key(name, |k| {
-            self.real_param_val.contains_key(k)
-                || self.params.contains_key(k)
-                || self.symbols.contains_key(k)
+            self.real_param_val.contains_at(k)
+                || self.params.contains_at(k)
+                || self.symbols.contains_at(k)
         })
         .is_some_and(|k| self.real_param_val.contains_key(&k))
     }

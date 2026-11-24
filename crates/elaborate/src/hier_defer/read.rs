@@ -421,7 +421,7 @@ impl Elaborator<'_> {
                 // way `walk_scopes_key` walks over `cur_prefix`.
                 let label_ty = if enum_method && !recv_is_net {
                     self.scoped_key_at_or_above(&d.prefix, &d.path[0], |k| {
-                        self.enum_label_types.contains_key(k)
+                        self.enum_label_types.contains_at(k)
                     })
                     .and_then(|k| self.enum_label_types.get(&k).cloned())
                 } else {

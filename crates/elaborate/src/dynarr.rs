@@ -285,7 +285,7 @@ impl Elaborator<'_> {
         // Zero cost for a design that routes none: the map is empty, so the closure can
         // never hit and the walk is one `BTreeMap` miss.
         let n = match self
-            .walk_scopes_key_shadowed(name, |k| self.fixed_string_dyn_key.contains_key(k))
+            .walk_scopes_key_shadowed(name, |k| self.fixed_string_dyn_key.contains_at(k))
             .and_then(|k| self.fixed_string_dyn_key.get(&k))
         {
             Some(&n) => n,

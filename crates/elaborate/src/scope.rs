@@ -19,12 +19,8 @@ impl Elaborator<'_> {
     /// the current scope, then each enclosing generate-block scope, stopping at
     /// the first instance boundary. Used for both params/genvars and the symbol
     /// (net) table so the visibility rule is identical for each.
-    pub(crate) fn walk_scopes<T: Copy>(
-        &self,
-        name: &str,
-        table: &BTreeMap<String, T>,
-    ) -> Option<T> {
-        self.walk_scopes_key(name, |k| table.contains_key(k))
+    pub(crate) fn walk_scopes<T: Copy>(&self, name: &str, table: &Keyed<T>) -> Option<T> {
+        self.walk_scopes_key(name, |k| table.contains_at(k))
             .and_then(|k| table.get(&k).copied())
     }
 
@@ -445,7 +441,7 @@ impl Elaborator<'_> {
         if let Some(net) = self.pkg_body_var(name) {
             return Some(net);
         }
-        let key = self.walk_scopes_key(name, |k| self.symbols.contains_key(k))?;
+        let key = self.walk_scopes_key(name, |k| self.symbols.contains_at(k))?;
         // IEEE 1800 §27.5 (`indexed_gen_singleton`), in the one walk every net reader
         // shares: a net inside a conditional / `case` / bare labelled generate block is
         // STORED under `label[0].…`, and this flat walk reached it from source text

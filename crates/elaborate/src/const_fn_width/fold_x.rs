@@ -49,9 +49,9 @@ impl Elaborator<'_> {
                     && (self.names_imported_real(e)
                         || self
                             .walk_scopes_key(n, |k| {
-                                self.real_param_val.contains_key(k)
-                                    || self.params.contains_key(k)
-                                    || self.symbols.contains_key(k)
+                                self.real_param_val.contains_at(k)
+                                    || self.params.contains_at(k)
+                                    || self.symbols.contains_at(k)
                             })
                             .is_some_and(|k| self.real_param_val.contains_key(&k)))
             }

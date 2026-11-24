@@ -470,9 +470,11 @@ const WALK_FAMILY: &[&str] = &[
 ];
 /// H6: a receiver that is the `Elaborator`.
 const RECV: &[&str] = &["self", "me", "this"];
-/// H6: a probe of a local table.
+/// H6: a probe of a local table (`contains_at`: a Keyed / KeyedSet probed by an AtKey, the walk's
+/// candidate since §5.2 Q-DECLKEY DK1-4b-1 — walk_scopes' `table.contains_at(k)`).
 const PROBE_METHODS: &[&str] = &[
     "contains_key",
+    "contains_at",
     "contains",
     "get",
     "position",
@@ -2089,6 +2091,11 @@ fn h6_the_walk_call_sites_are_pinned() {
     assert_eq!(
         probes_of(&e),
         ["symbols", "hit_wide", "other()", "table", "refused()"]
+    );
+    // a local Keyed probed by the walk's AtKey candidate (DK1-4b-1)
+    assert_eq!(
+        probes_of(&syn::parse_str::<Expr>("|k| table.contains_at(k)").expect("probe at")),
+        ["table"]
     );
     assert_eq!(
         probes_of(&syn::parse_str::<Expr>("&self.params").expect("ref")),
@@ -6978,6 +6985,138 @@ fn holders_the_lexscope_types_holders_are_pinned() {
         "a holder is gone: name the unit, remove the row",
     );
     finish("HOLDERS", &msgs);
+}
+
+// =====================================================================================
+// HKC the key constructions (§5.2 Q-DECLKEY DK1-4b-1, DELTA16 R-H8 (d))
+// =====================================================================================
+
+/// HKC: the key types whose tuple constructor is a lexscope door — NewKey's field is private
+/// to `key.rs` ; AtKey's is `pub(super)` since DK1-4b-1 (the walk forms its candidates), so
+/// its door is the whole module ; DeclKey is DK1-4b-2's (no row until it exists).
+const HKC_TYPES: &[&str] = &["AtKey", "NewKey", "DeclKey"];
+
+/// HKC: (file, type) -> how many times a lexscope file names a key type's constructor — a call
+/// `T(..)`, a struct literal `T { .. }`, a tuple-struct or struct pattern `T(..)` / `T { .. }`
+/// (a pattern takes the key's text out through the same field) — every lexscope file read,
+/// its `#[cfg(test)]` file too, and the arguments of a macro read as a comma list of
+/// expressions. REVIEW-ONLY: `Self(..)` inside the type's own `impl` (key.rs has none) and a
+/// macro argument that is no expression. Outside lexscope the field is private: no row can
+/// exist there (C_AT_FROM_TEXT / C_AT_BUILT_OUTSIDE fail to compile).
+fn hkc_census() -> BTreeMap<String, usize> {
+    let mut rows = BTreeMap::new();
+    for (rel, text) in lexscope_texts() {
+        let file = syn::parse_file(&text).unwrap_or_else(|e| panic!("HKC cannot parse {rel}: {e}"));
+        for (ty, n) in hkc_count(&file) {
+            rows.insert(format!("{rel}\t{ty}"), n);
+        }
+    }
+    rows
+}
+
+/// HKC's count of one file: type -> constructor names (calls, struct literals, patterns,
+/// macro arguments read as expressions).
+fn hkc_count(file: &syn::File) -> BTreeMap<String, usize> {
+    struct C(BTreeMap<String, usize>);
+    impl C {
+        fn path(&mut self, p: &syn::Path) {
+            if let Some(l) = p.segments.last() {
+                let n = l.ident.to_string();
+                if HKC_TYPES.contains(&n.as_str()) {
+                    *self.0.entry(n).or_default() += 1;
+                }
+            }
+        }
+    }
+    impl<'a> Visit<'a> for C {
+        fn visit_expr_call(&mut self, c: &'a syn::ExprCall) {
+            if let Expr::Path(p) = &*c.func {
+                self.path(&p.path);
+            }
+            visit::visit_expr_call(self, c);
+        }
+        fn visit_expr_struct(&mut self, s: &'a syn::ExprStruct) {
+            self.path(&s.path);
+            visit::visit_expr_struct(self, s);
+        }
+        fn visit_pat_tuple_struct(&mut self, p: &'a syn::PatTupleStruct) {
+            self.path(&p.path);
+            visit::visit_pat_tuple_struct(self, p);
+        }
+        fn visit_pat_struct(&mut self, p: &'a syn::PatStruct) {
+            self.path(&p.path);
+            visit::visit_pat_struct(self, p);
+        }
+        fn visit_macro(&mut self, m: &'a syn::Macro) {
+            if let Ok(args) = m.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
+                for a in &args {
+                    self.visit_expr(a);
+                }
+            }
+        }
+    }
+    let mut c = C(BTreeMap::new());
+    c.visit_file(file);
+    c.0
+}
+
+#[test]
+fn hkc_the_key_constructions_are_pinned() {
+    // the census on a fixture: a call, a struct literal, a tuple-struct pattern, a macro
+    // argument ; not the definition, not a type position, not `AtKey::new()`, not a path that
+    // only ends in a longer name
+    let fx = syn::parse_file(
+        "struct AtKey(pub(super) String); fn f(k: &AtKey) -> AtKey { let a = AtKey(String::new()); \
+         let b = NewKey { 0: s }; let AtKey(t) = a; g(vec![AtKey(x)]); m::AtKeyish(1); AtKey::new(); b }",
+    )
+    .expect("HKC fixture");
+    let n = hkc_count(&fx);
+    assert_eq!(
+        n.iter()
+            .map(|(t, c)| format!("{t}={c}"))
+            .collect::<Vec<_>>(),
+        ["AtKey=3", "NewKey=1"]
+    );
+    let rows = hkc_census();
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HKC", "file\ttype\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HKC")) {
+        assert_eq!(
+            row.len(),
+            3,
+            "HKC table row has {} columns, not 3: {row:?}",
+            row.len()
+        );
+        want.insert(row[..2].join("\t"), row[2].clone());
+    }
+    let mut msgs = diff_rows(
+        "HKC",
+        &got,
+        &want,
+        "a new construction of a key type in lexscope (the constructor door is the module, not one \
+         file): a key formed from text is P23's — name the unit, read where the text comes from, add \
+         the row",
+        "a key construction is gone: name the unit, remove the row",
+    );
+    let mut per_ty: BTreeMap<&str, usize> = HKC_TYPES.iter().map(|t| (*t, 0)).collect();
+    for (k, n) in &rows {
+        let ty = k.rsplit('\t').next().expect("type");
+        *per_ty.get_mut(ty).expect("a listed type") += n;
+    }
+    let counts: Vec<String> = per_ty.iter().map(|(t, n)| format!("{t}={n}")).collect();
+    let counts = counts.join(" ");
+    if counts != tables::get("HKC_COUNTS") {
+        msgs.push(format!(
+            "HKC COUNTS table [{}] now [{counts}]",
+            tables::get("HKC_COUNTS")
+        ));
+    }
+    finish("HKC", &msgs);
 }
 
 mod tables {

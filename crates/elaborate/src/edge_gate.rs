@@ -654,8 +654,14 @@ impl Elaborator<'_> {
                 || self.str_param_raw.contains_key(k)
                 || self.symbols.contains_key(k)
         };
+        let other_kind_at = |k: &AtKey| {
+            self.wide_param_bits.contains_at(k)
+                || self.real_param_val.contains_at(k)
+                || self.str_param_raw.contains_at(k)
+                || self.symbols.contains_at(k)
+        };
         let innermost =
-            self.walk_scopes_key(name, |k| self.params.contains_key(k) || other_kind(k));
+            self.walk_scopes_key(name, |k| self.params.contains_at(k) || other_kind_at(k));
         if other_kind(&key) || innermost.as_deref() != Some(key.as_str()) {
             return false;
         }

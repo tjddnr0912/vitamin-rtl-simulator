@@ -109,7 +109,7 @@ impl Elaborator<'_> {
     /// describes (mark [`Mark::DeclPos`])?
     pub(crate) fn walk_hits_decl_pos(&self, name: &str) -> bool {
         let own_key = self.decl_pos_key(name);
-        self.walk_scopes_key(name, |k| self.symbols.contains_key(k))
+        self.walk_scopes_key(name, |k| self.symbols.contains_at(k))
             .as_deref()
             == Some(own_key.as_str())
     }

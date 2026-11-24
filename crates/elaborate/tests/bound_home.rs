@@ -24,8 +24,10 @@
 //!   `walk_scopes(.., &<recv>.<map>)` over a guarded map but the value walk
 //!   `lookup_scoped` (the meta and real walks are `name_meta` / `name_real`) ; W5b no
 //!   closure whose body names two or more of the nine maps ; W5c no `walk_scopes_key(..)`
-//!   whose arguments spell a `<recv>.<map>.contains_key(` arm (the hit is a `hit_*`
-//!   rule). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
+//!   whose arguments spell a `<recv>.<map>.contains_at(` / `.contains_key(` arm (the hit
+//!   is a `hit_*` rule ; `contains_at` since §5.2 Q-DECLKEY DK1-4b-1, where the walk's
+//!   candidate became an `AtKey`, `contains_key` while the window w9 lets a text probe a
+//!   store: it leaves W5c with the window, DK3-b). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
 //!   `W5C_EXCEPT`). What the token shapes do not see is REVIEW-ONLY: a closure bound
 //!   to a name and passed later is seen where it is written, not where it is walked ;
 //!   a closure opened after another token than `( , = { ; => :`, `move`, `return` ;
@@ -182,19 +184,19 @@ const W5A_EXCEPT: &[(&str, &str, &str, usize, &str)] = &[
 #[rustfmt::skip]
 const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/decl_scope.rs", "decl_keep_snapshot", 1, "U4's `DeclKept` builder: six `get`s, not a membership test"),
-    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key"),
+    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 2, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key ; 2 since §5.2 Q-DECLKEY DK1-4b-1: the same four maps as `other_kind_at`, its typed twin for the walk's AtKey candidate, `other_kind` kept for the found text key (DELTA16 E1.4: the pair the key types force ; the candidate half leaves at DK2)"),
     ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols), not the rule's"),
     ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
     ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
 ];
 /// W5c: a `walk_scopes_key(..)` call outside the home whose arguments spell a
-/// `<recv>.<guarded map>.contains_key(` arm instead of a `hit_*` rule, (file, fn,
-/// count, reason).
+/// `<recv>.<guarded map>.contains_at(` (or `.contains_key(`) arm instead of a `hit_*` rule,
+/// (file, fn, count, reason).
 #[rustfmt::skip]
 const W5C_EXCEPT: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/const_array.rs", "const_array_ref_of_base", 1, "array_const_vals || params || symbols: not a rule's set"),
     ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols)"),
-    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "left by R7: params || other_kind(k), any_const_or_net in another order"),
+    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "left by R7: params || other_kind_at(k) (`other_kind`'s typed twin since §5.2 Q-DECLKEY DK1-4b-1), any_const_or_net in another order"),
     ("crates/elaborate/src/hier_defer/write.rs", "every_name_resolves", 1, "left by R7: symbols || params, value_or_net in the other order"),
     ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
     ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
@@ -565,7 +567,7 @@ fn closure_body(t: &[Tok], i: usize) -> Option<(usize, usize)> {
 
 /// W5 (rule, key) hits of one source: `W5a:<map>` a `walk_scopes(.., &<recv>.<map>)` ;
 /// `W5b` a closure naming two or more of the nine maps ; `W5c` a `walk_scopes_key(..)`
-/// whose arguments spell `<recv>.<map>.contains_key(`.
+/// whose arguments spell `<recv>.<map>.contains_at(` or `<recv>.<map>.contains_key(`.
 fn hits_w5(src: &str) -> Vec<(String, String)> {
     let t = tokens(src);
     let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
@@ -595,9 +597,11 @@ fn hits_w5(src: &str) -> Vec<(String, String)> {
                         _ => {}
                     }
                 }
-            } else if (i + 3..close)
-                .any(|j| field_at(&t, j, &NINE) && tx(j + 1) == "." && tx(j + 2) == "contains_key")
-            {
+            } else if (i + 3..close).any(|j| {
+                field_at(&t, j, &NINE)
+                    && tx(j + 1) == "."
+                    && matches!(tx(j + 2), "contains_at" | "contains_key")
+            }) {
                 out.push(("W5c".into(), key.clone()));
             }
         }
@@ -1079,7 +1083,15 @@ fn walker_controls_w5() {
         0
     );
     // W5c: an arm spelled in the walk's argument (one map is enough) ; not a rule, not
-    // `symbols` alone, not a `contains_key` outside the call.
+    // `symbols` alone, not a `contains_key` outside the call ; the typed verb `contains_at`
+    // (DK1-4b-1: the walk's candidate is an AtKey) as well as `contains_key`.
+    assert_eq!(
+        count_w5(
+            "W5c",
+            "fn f() { self.walk_scopes_key(n, |k| self.params.contains_at(k)); self\n .walk_scopes_key(&seg.name, |k| { self.symbols.contains_at(k) || self.params.contains_key(at_text(k)) }); }"
+        ),
+        2
+    );
     assert_eq!(
         count_w5(
             "W5c",

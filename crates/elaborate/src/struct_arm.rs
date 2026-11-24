@@ -109,7 +109,7 @@ impl Elaborator<'_> {
         {
             return None;
         }
-        let walked = self.walk_scopes_key(&seg.name, |k| self.symbols.contains_key(k))?;
+        let walked = self.walk_scopes_key(&seg.name, |k| self.symbols.contains_at(k))?;
         if walked != key_text(key) || self.symbols.get(&walked) != Some(&c.net) {
             return None;
         }
