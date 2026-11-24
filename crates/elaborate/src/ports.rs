@@ -216,14 +216,11 @@ impl Elaborator<'_> {
             }
             // alias each interface member: `<mod>.vif.member` → the bound net.
             let members = self.iface_member_names(&actual_iface);
-            let inst_path = at_text(&inst_path);
-            let vif_fq = self.lex.at_cur(vif);
-            let vif_fq = at_text(&vif_fq);
             for m in members {
-                let src = format!("{inst_path}.{m}");
-                let dst = format!("{vif_fq}.{m}");
-                if let Some(&net) = self.symbols.get(&src) {
-                    self.symbols.insert(dst, net);
+                let src = key_in(&inst_path, &m);
+                let dst = self.lex.new_key(&format!("{vif}.{m}"));
+                if let Some(&net) = self.symbols.get_at(&src) {
+                    self.symbols.insert_new(dst, net);
                     if let Some(c) = self.net_class.get(&net).cloned() {
                         self.net_class.insert(net, c);
                     }

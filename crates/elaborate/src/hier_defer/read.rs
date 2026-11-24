@@ -414,7 +414,7 @@ impl Elaborator<'_> {
                 // rebuilt from the saved prefix rather than looked up ambiently.
                 // Without that a genuine `u1.next(x)` could take these messages.
                 let recv_key = self.lex.key_under(&d.prefix, &d.path[0]);
-                let recv_is_net = enum_method && self.symbols.contains_key(&recv_key);
+                let recv_is_net = enum_method && self.symbols.contains_at(&recv_key);
                 // A label binds under the scope that DECLARED it, which may enclose the
                 // one the call was lowered in (a label declared in the module body, a
                 // call inside a generate block). Walk outward over the saved prefix the

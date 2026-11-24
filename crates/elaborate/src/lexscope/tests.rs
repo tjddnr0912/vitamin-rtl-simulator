@@ -97,11 +97,11 @@ fn fb_scope_swap_reenters_the_carried_scope_without_interning() {
 fn fb_key_under_and_scope_debug() {
     let mut s = Scopes::new();
     let root = s.scope_carry();
-    assert_eq!(s.key_under(&root, "n"), "n");
+    assert_eq!(super::at_text(&s.key_under(&root, "n")), "n");
     let a = s.scope_swap_text("top.u".to_string());
     let u = s.scope_carry();
     s.scope_restore(a);
-    assert_eq!(s.key_under(&u, "n"), "top.u.n");
+    assert_eq!(super::at_text(&s.key_under(&u, "n")), "top.u.n");
     assert_eq!(s.scope_text(&u), "top.u");
     // Debug writes no text: two different scopes print the same
     assert_eq!(format!("{root:?}"), format!("{u:?}"));
@@ -380,7 +380,7 @@ fn fb_scope_questions_truth_tables() {
         s.scope_restore(a);
         got
     };
-    // scope_is_pkg (hier.rs hier_resolve): the carried scope's text starts with `$pkg$`
+    // scope_is_pkg (lexscope/hier.rs hier_resolve): the carried scope's text starts with `$pkg$`
     for (cur, want) in [
         ("$pkg$p", true),
         ("$pkg$p.$func$f", true),

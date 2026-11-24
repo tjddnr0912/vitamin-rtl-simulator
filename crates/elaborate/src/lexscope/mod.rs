@@ -23,7 +23,9 @@
 //!
 //! The outward walk of a name (DK1-4a) is here too, in `walk.rs`: the Elaborator methods every
 //! scoped lookup calls (`walk_scopes_key` and its forms), reading the scope texts as this module's
-//! fields ; their text return and callback argument are LEAVE rows until DK1-4b.
+//! fields ; since DK1-4b they hand `hit` an [`AtKey`] and return a [`DeclKey`]. The hierarchical
+//! resolver is here too (DK1-5a), in `hier.rs`: `hier_resolve`, two of the generate-spelling
+//! helpers it asks and its scope question `is_hier_scope`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, DefaultHasher};
@@ -32,14 +34,15 @@ use crate::edge_gate::span_holds;
 
 mod disp;
 mod elab;
+mod hier;
 mod key;
 #[cfg(test)]
 mod tests;
 mod walk;
 
 pub(crate) use key::{
-    at_same, at_text, found_text, key_same, key_show, key_text, AtKey, DeclKey, Keyed, KeyedSet,
-    NewKey,
+    at_same, at_text, found_text, key_in, key_same, key_show, key_text, AtKey, DeclKey, Keyed,
+    KeyedSet, NewKey,
 };
 
 /// An interned scope text. Private to the module: no id leaves it.
@@ -116,8 +119,8 @@ pub(crate) struct Saved {
 
 /// A carried scope (unit LS3): a scope held outside the module — a deferred record's lowering
 /// scope, a parameter that names one. Clone and an opaque Debug, nothing else: it is re-entered
-/// with [`Scopes::scope_swap`] / [`Scopes::scope_repoint`], and its text leaves only through
-/// [`Scopes::scope_text`] (LEAVE L6, closing at DK1) and [`Scopes::key_under`] (LEAVE L5).
+/// with [`Scopes::scope_swap`] / [`Scopes::scope_repoint`] ; its text does not leave the module
+/// (DK1-5a: [`Scopes::scope_text`] is private, [`Scopes::key_under`] returns an [`AtKey`]).
 pub(crate) struct ScopeRef(ScopeId);
 
 /// The set of `(span, scope)` pairs [`crate::Elaborator::report_at`] has reported: opaque,
@@ -389,21 +392,21 @@ impl Scopes {
         saved
     }
 
-    /// LEAVE L6 (closes DK1): a carried scope's text, read by the one key-forming body that stays
-    /// outside the module until DK1-5 (hier_resolve ; the walk reads the interner inside the module
-    /// since DK1-4a). The interner's id -> text read: no allocation, no probe.
-    pub(crate) fn scope_text(&self, at: &ScopeRef) -> &str {
+    /// A carried scope's text, read inside this module only (LEAVE L6 closed at DK1-5a: its last reader
+    /// outside, hier_resolve, moved into this module's `hier.rs`). The interner's id -> text read: no
+    /// allocation, no probe.
+    fn scope_text(&self, at: &ScopeRef) -> &str {
         &self.names[at.0 .0 as usize]
     }
 
-    /// LEAVE L5 (closes DK1): the key `name` forms under the carried scope `at` (the empty
-    /// scope's key is the name itself).
-    pub(crate) fn key_under(&self, at: &ScopeRef, name: &str) -> String {
+    /// The key a read of `name` probes under the carried scope `at` (the empty scope's key is the
+    /// name itself), typed (DK1-5a: LEAVE L5 closed).
+    pub(crate) fn key_under(&self, at: &ScopeRef, name: &str) -> AtKey {
         let prefix = &self.names[at.0 .0 as usize];
         if prefix.is_empty() {
-            name.to_string()
+            AtKey(name.to_string())
         } else {
-            format!("{}.{}", prefix, name)
+            AtKey(format!("{}.{}", prefix, name))
         }
     }
 
@@ -607,7 +610,7 @@ impl Scopes {
     }
 
     /// Is the carried scope `at` a package's (a `$pkg$…` path: the package pre-sweep)?
-    /// (`hier_resolve`'s guard, `hier.rs`.)
+    /// (`hier_resolve`'s guard, this module's `hier.rs` since DK1-5a.)
     pub(crate) fn scope_is_pkg(&self, at: &ScopeRef) -> bool {
         self.names[at.0 .0 as usize].starts_with("$pkg$")
     }

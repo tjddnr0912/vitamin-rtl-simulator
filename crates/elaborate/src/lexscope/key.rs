@@ -12,8 +12,9 @@
 //! [`key_text`] (L7, a counted bridge deleted at DK3-b). No key is made from text.
 //!
 //! THE READ KEY (sub-unit DK1-3): an [`AtKey`] is the key a READ of a name probes, formed by
-//! [`Scopes::at_cur`] (the current scope: the same bytes as [`Scopes::new_key`]'s) and, since DK1-4b-1, by
-//! the scope walk (`walk.rs`: the candidate each scope level hands `hit`) ; its constructor is lexscope-wide
+//! [`Scopes::at_cur`] (the current scope: the same bytes as [`Scopes::new_key`]'s), since DK1-4b-1 by
+//! the scope walk (`walk.rs`: the candidate each scope level hands `hit`) and since DK1-5a by
+//! [`Scopes::key_under`] (a carried scope) and [`key_in`] (a member under a read key) ; its constructor is lexscope-wide
 //! (the `pub(super)` field), not this file's: the count of AtKey constructions per lexscope file is pinned
 //! (scope_home HKC). No AtKey is formed outside the module. It reaches a
 //! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves the module
@@ -27,8 +28,8 @@
 //! (`walk.rs`) and, under `#[cfg(test)]`, by `tests.rs`'s helper ; the field is `pub(super)`, so its
 //! constructor door is lexscope-wide (scope_home HKC pins each file's constructions). It reaches a store
 //! only through the `_found` entries, its text leaves the module only through [`found_text`] (L11, a
-//! counted bridge), and it meets another key only through [`key_same`], [`DeclKey::is_formed_as`] and
-//! [`DeclKey::is_formed_at`].
+//! counted bridge), and outside lexscope it meets another key only through [`key_same`],
+//! [`DeclKey::is_formed_as`] and [`DeclKey::is_formed_at`].
 //!
 //! THE WINDOW (w9, DELTA14 F1): `Deref` / `DerefMut` to the map / set each store holds, so every
 //! existing use compiles as it was written (one counted door, text in and text out). It is
@@ -132,18 +133,27 @@ pub(crate) fn key_text(k: &NewKey) -> &str {
 }
 
 /// The key a READ probes (DK1-3): the current scope's text, `.`, the local name — or the local name
-/// alone under the empty scope. Made by [`Scopes::at_cur`] and by the walk (`walk.rs`, DK1-4b-1: each
-/// candidate it hands `hit`, one scratch re-written per scope level) ; the field is `pub(super)`, so the
+/// alone under the empty scope. Made by [`Scopes::at_cur`], by the walk (`walk.rs`, DK1-4b-1: each
+/// candidate it hands `hit`, one scratch re-written per scope level) and, since DK1-5a, by
+/// [`Scopes::key_under`] (under a carried scope, `mod.rs`) and [`key_in`] (a member under a read key) ;
+/// the field is `pub(super)`, so the
 /// constructor door is the whole of `lexscope`, not this file (scope_home HKC pins the constructions per
 /// lexscope file). No `Clone`, `Display`, `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`),
 /// so it cannot take the window's text path into a store, and no `_new` entry takes it.
 pub(crate) struct AtKey(pub(super) String);
 
-/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module (a key glued from it:
-/// ports.rs, DK1-5 / DK3-a ; held.rs's compare with a walk's found key left at DK1-4b-2 for
-/// [`DeclKey::is_formed_at`]) ; a counted bridge.
+/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module — one reader left,
+/// ports.rs bind_iface_port's X15 prefix glue (DK3-a) ; elaborate_virtual_iface's two member glues left
+/// at DK1-5a for [`key_in`] / `new_key`, held.rs's compare with a walk's found key at DK1-4b-2 for
+/// [`DeclKey::is_formed_at`] ; a counted bridge.
 pub(crate) fn at_text(k: &AtKey) -> &str {
     &k.0
+}
+
+/// The key of `member` inside the read key `k` (`<k>.<member>`), typed (DK1-5a: ports.rs
+/// elaborate_virtual_iface's member glue of a bound instance ; L9's two rows there closed).
+pub(crate) fn key_in(k: &AtKey, member: &str) -> AtKey {
+    AtKey(format!("{}.{}", k.0, member))
 }
 
 /// A read's key against a read's key (DK1-4b-1, P27: held.rs clk_refused_at's walk candidate against a refused

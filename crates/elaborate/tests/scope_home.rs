@@ -1152,7 +1152,10 @@ fn single_path(e: &Expr) -> Option<String> {
 /// hands it to a `_found` entry, to `key_same`, or asks it `is_formed_at` / `is_formed_as` (a
 /// closure typed anything else, e.g. `|me: &Self|` around its own walk, is not one). REVIEW-ONLY:
 /// a found key read by a fn (not a closure), a closure whose parameter is a pattern, or one that
-/// only hands its key on to another closure.
+/// only hands its key on to another closure ; and (§5.2 Q-DECLKEY DK1-5a, DELTA16 R-H12 note 3)
+/// two found-key closures bound to ONE name in one fn (a shadowing `let`) are one FOUND row:
+/// `found_closures` is keyed by the binding name, so the later closure's probes replace the
+/// earlier's and the earlier's stores are pinned by nothing.
 fn found_key_closure(e: &Expr) -> bool {
     struct F<'n>(&'n str, bool);
     fn names(e: &Expr, n: &str) -> bool {
@@ -6757,6 +6760,60 @@ fn hc_scopeq_the_scope_question_askers_are_pinned() {
     finish("HC_SCOPEQ", &msgs);
 }
 
+#[test]
+fn hxf_the_found_set_fills_are_pinned() {
+    // §5.2 Q-DECLKEY DK1-5a (DELTA16 R-H12 note 2): `KeyedSet::extend_found` moves a found
+    // key's String into a KeyedSet, and window w9 (key.rs Deref / DerefMut) still opens that set
+    // to text until DK3-b — covered by w9's NOT-PROMISED line, so its callers outside lexscope
+    // are pinned by (file, fn, entry) with a count: a new caller is a new found-key text in a
+    // text-open set. Calls through a fn value or a macro body are not seen (watched_calls'
+    // walker, as HC_SCOPEQ's).
+    let entries = vec!["extend_found".to_string()];
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, _) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows.entry(format!("{file}\t{qual}\t{callee}")).or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HXF", "file\tfn\tentry\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HXF")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HXF table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    let mut msgs = diff_rows(
+        "HXF",
+        &got,
+        &want,
+        "a new caller of KeyedSet::extend_found: a found key's text into a set window w9 still opens — name \
+         the unit, read what the set answers, add the row (DK3-b deletes the window)",
+        "a caller of KeyedSet::extend_found is gone: name the unit, remove the row",
+    );
+    let counts = format!(
+        "entries={} sites={}",
+        entries.len(),
+        rows.values().sum::<usize>()
+    );
+    if counts != tables::get("HXF_COUNTS") {
+        msgs.push(format!(
+            "HXF COUNTS table [{}] now [{counts}]",
+            tables::get("HXF_COUNTS")
+        ));
+    }
+    finish("HXF", &msgs);
+}
+
 /// The position of `param` among the typed parameters of the lexscope fn `item`.
 fn enter_param_index(item: &str, param: &str) -> usize {
     let (ty, name) = match item.rsplit_once("::") {
@@ -7158,8 +7215,10 @@ const HKC_MUT: &[&str] = &[
 /// (HKC_FORMS) — every lexscope file read, its `#[cfg(test)]` file too, and the arguments of a
 /// macro read as a comma list of expressions. A `write` is attributed to a type through the
 /// binding's own spelled type: a fn / closure parameter `k: T` / `&T` / `&mut T`, a `let k: T`,
-/// a `let k = T(..)`, or `self` inside `impl T`. REVIEW-ONLY: `Self(..)` inside the type's own
-/// `impl` (key.rs has none) ; a macro argument that is no expression ; a `.0` write through a
+/// a `let k = T(..)`, or `self` inside `impl T`. REVIEW-ONLY (restated at §5.2 Q-DECLKEY DK1-5a,
+/// DELTA16 R-H12 note 3): `Self(..)` inside the type's own `impl` — a construction HKC does not
+/// count (key.rs has none) ; the body of a `macro_rules!` definition and a macro argument that is
+/// no expression — neither is read ; a `.0` write through a
 /// binding whose type is not spelled where HKC reads it (an untyped `let` of a returned key, a
 /// struct field holding a key, a `&mut String` taken by a method HKC_MUT does not list) ; a
 /// whole-key move (`mem::swap` of two keys moves a key, not its text). Outside lexscope the
