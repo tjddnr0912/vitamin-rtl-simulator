@@ -42,13 +42,6 @@ pub(crate) enum GenPhase {
 }
 
 impl Elaborator<'_> {
-    /// True iff `seg` is a GENERATE-block scope segment (`label[idx]`), as opposed
-    /// to an instance-boundary segment (a plain identifier). Generate prefixes
-    /// always carry the `[idx]` suffix, so a `[` unambiguously marks them.
-    pub(crate) fn is_gen_scope_segment(seg: &str) -> bool {
-        seg.contains('[')
-    }
-
     /// Unroll/select a list of GenItems at elaboration time, in deterministic
     /// order. `phase` selects which lowering work to do (see [`GenPhase`]).
     /// `depth` is the nesting guard. Genvars bind into `self.params` (like a

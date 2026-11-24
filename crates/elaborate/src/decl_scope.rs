@@ -68,7 +68,7 @@ pub(crate) struct DeclWin {
 }
 
 impl DeclWin {
-    fn declares(&self, el: &Elaborator<'_>, name: &str) -> bool {
+    pub(crate) fn declares(&self, el: &Elaborator<'_>, name: &str) -> bool {
         self.declared
             .get_or_init(|| {
                 el.decl_names_of(&self.pkg, &self.rtn, self.kind)
@@ -294,28 +294,6 @@ impl Elaborator<'_> {
             Some(v) if !reentered => Some(v),
             _ => Some(pre),
         }
-    }
-
-    /// The declaring package's key for bare constant `name`, written into `key`,
-    /// while the window half runs and the routine does not declare `name` itself.
-    /// `walk_scopes_key_inner` asks it before its outward walk.
-    pub(crate) fn decl_probe_key(
-        &self,
-        name: &str,
-        key: &mut String,
-        hit: &impl Fn(&str) -> bool,
-    ) -> bool {
-        use std::fmt::Write;
-        if self.decl_phase.get() != DeclPhase::Win {
-            return false;
-        }
-        let arm = self.decl_arm.borrow();
-        let DeclArm::On(w) = &*arm else {
-            return false;
-        };
-        key.clear();
-        let _ = write!(key, "$pkg${}.{name}", w.pkg);
-        hit(key) && !w.declares(self, name)
     }
 
     /// The window package's OWN function for bare callee `f`, tagged with that package,

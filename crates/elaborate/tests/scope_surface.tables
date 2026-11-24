@@ -100,9 +100,10 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=5 rows=167 out_types=25 e_fns=29 text_flows=42
+present=present files=6 rows=185 out_types=25 e_fns=36 text_flows=53
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
 file	tier	kind	item	position	type	verdict	refs
 lexscope/disp.rs	E	FN	Elaborator::ctx_here	RET	ShownCtx	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_chain_abs	RET	Shown	PASS	-
@@ -271,6 +272,24 @@ lexscope/mod.rs	K	FN	Scopes::swap_to_mark	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
 lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
+lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit	impl Fn(&str) -> bool	CB:probe:the caller's tables for one composed key	-
+lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit.0	&str	LEAVE:L10	REF
+lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit	impl Fn(&str) -> bool	CB:probe:the caller's tables for one composed key	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit.0	&str	LEAVE:L10	REF
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit	impl Fn(&str) -> bool	CB:probe:the caller's tables for one composed key	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit.0	&str	LEAVE:L10	REF
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit	impl Fn(&str) -> bool	CB:probe:the caller's tables for one composed key	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit.0	&str	LEAVE:L10	REF
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	K	FN	Elaborator::is_gen_scope_segment	IN:seg	&str	ENTER:lookup	-
+lexscope/walk.rs	K	FN	Elaborator::is_gen_scope_segment	RET	bool	PASS	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
@@ -308,6 +327,7 @@ bool
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24): the read side: L9 `at_text`, an AtKey's text where it meets a text operation outside the module — held.rs clk_refused_at's
 # compare with the walk's text key (DK1-4b types the walk), ports.rs elaborate_virtual_iface's two member-key glues (DK1-5, key_in)
 # and bind_iface_port's X15 prefix (DK3-a): the bridge closes with its last row, DK3-a
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves in with its text signatures kept (R-G15): L10, the walk's text — the found key (RET Option<String>) and the text its `hit` callback is handed (CB:hit.0 &str), one row per entry (4 + 4) ; each closes at DK1-4b (the walk returns DeclKey, `hit: impl Fn(&AtKey)`)
 id	item	position	type	closes
 L1	Scopes::cur_prefix_text	RET	&str	DK1
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
@@ -320,9 +340,18 @@ L5	Scopes::key_under	RET	String	DK1
 L6	Scopes::scope_text	RET	&str	DK1
 L7	key_text	RET	&str	DK3-b
 L9	at_text	RET	&str	DK3-a
+L10	Elaborator::scoped_key_at_or_above	RET	Option<String>	DK1-4b
+L10	Elaborator::scoped_key_at_or_above	CB:hit.0	&str	DK1-4b
+L10	Elaborator::walk_scopes_key	RET	Option<String>	DK1-4b
+L10	Elaborator::walk_scopes_key	CB:hit.0	&str	DK1-4b
+L10	Elaborator::walk_scopes_key_from	RET	Option<String>	DK1-4b
+L10	Elaborator::walk_scopes_key_from	CB:hit.0	&str	DK1-4b
+L10	Elaborator::walk_scopes_key_shadowed	RET	Option<String>	DK1-4b
+L10	Elaborator::walk_scopes_key_shadowed	CB:hit.0	&str	DK1-4b
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk entries' `name` (the bare name the walk composes each key from) and is_gen_scope_segment's `seg` (a segment of a scope text it asks one question of) — lookup
 item	param	role	holds
 Elaborator::with_scope	seg	to-scope	TEXT str
 Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
@@ -358,6 +387,11 @@ Scopes::cur_shown_quoted_or	none	to-display	TEXT str
 Scopes::new_key	local	lookup	TEXT str
 Scopes::at_cur	local	lookup	TEXT str
 Scopes::show_miss	local	to-display	TEXT str
+Elaborator::scoped_key_at_or_above	name	lookup	TEXT str
+Elaborator::walk_scopes_key	name	lookup	TEXT str
+Elaborator::walk_scopes_key_from	name	lookup	TEXT str
+Elaborator::walk_scopes_key_shadowed	name	lookup	TEXT str
+Elaborator::is_gen_scope_segment	seg	lookup	TEXT str
 == SURF_WINDOW
 # WINDOW (§5.2 Q-DECLKEY DK1-1 ; DELTA14 F1 / D2 w9, R-F1, R-F10, premise10 N10-9 / NP10-1): a trait impl off
 # ALLOWED_IMPLS admitted for the ONE type a row names, the trait one of WINDOW_TRAITS (Deref, DerefMut) ; each row
@@ -389,6 +423,7 @@ ShownCtx	Vec<diag::Frame>
 == SURF_E
 # E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the 7 moved Elaborator fns' rows (is_gen_scope_segment takes no Elaborator) ; flow text:LEAVE-L10 = an op that forms or hands the key text leaving through L10 ; walk_hits_decl_pos' `.walk_scopes_key` is a module call now (row gone)
 item	kind	name	count	flow
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
 Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
@@ -419,6 +454,15 @@ Elaborator::decl_pos_key	OUT-C	.is_empty	1	in
 Elaborator::decl_pos_key	OUT-C	.mark_text	1	in
 Elaborator::decl_pos_key	OUT-C	.to_string	1	in
 Elaborator::decl_pos_key	OUT-M	format	1	in
+Elaborator::decl_probe_key	FN	-	-	-
+Elaborator::decl_probe_key	OUT-C	.borrow	1	in
+Elaborator::decl_probe_key	OUT-C	.clear	1	in
+Elaborator::decl_probe_key	OUT-C	.declares	1	in
+Elaborator::decl_probe_key	OUT-C	.get	1	in
+Elaborator::decl_probe_key	OUT-C	hit	1	text:LEAVE-L10
+Elaborator::decl_probe_key	OUT-F	decl_arm	1	in
+Elaborator::decl_probe_key	OUT-F	decl_phase	1	in
+Elaborator::decl_probe_key	OUT-M	write	1	text:LEAVE-L10
 Elaborator::disp_chain_abs	FN	-	-	-
 Elaborator::disp_enter_frame_root	FN	-	-	-
 Elaborator::disp_frame_path_of	FN	-	-	-
@@ -545,6 +589,14 @@ Elaborator::scoped_init_key	OUT-C	.cur_prefix_text	3	in
 Elaborator::scoped_init_key	OUT-C	.is_empty	1	in
 Elaborator::scoped_init_key	OUT-C	.to_string	2	in
 Elaborator::scoped_init_key	OUT-M	format	1	in
+Elaborator::scoped_key_at_or_above	FN	-	-	-
+Elaborator::scoped_key_at_or_above	OUT-C	.as_str	1	in
+Elaborator::scoped_key_at_or_above	OUT-C	.is_empty	2	in
+Elaborator::scoped_key_at_or_above	OUT-C	.rfind	1	in
+Elaborator::scoped_key_at_or_above	OUT-C	.to_string	1	text:LEAVE-L10
+Elaborator::scoped_key_at_or_above	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::scoped_key_at_or_above	OUT-C	hit	1	text:LEAVE-L10
+Elaborator::scoped_key_at_or_above	OUT-M	format	1	text:LEAVE-L10
 Elaborator::stmt_loc_instance	FN	-	-	-
 Elaborator::stmt_loc_instance	OUT-C	.strip_prefix	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
@@ -555,9 +607,19 @@ Elaborator::walk_hits_decl_pos	FN	-	-	-
 Elaborator::walk_hits_decl_pos	OUT-C	.as_deref	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.as_str	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.contains_key	1	in
-Elaborator::walk_hits_decl_pos	OUT-C	.walk_scopes_key	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	Some	1	in
 Elaborator::walk_hits_decl_pos	OUT-F	symbols	1	in
+Elaborator::walk_out_from	FN	-	-	-
+Elaborator::walk_out_from	OUT-C	.clear	1	in
+Elaborator::walk_out_from	OUT-C	.contains_key	1	in
+Elaborator::walk_out_from	OUT-C	.is_empty	2	in
+Elaborator::walk_out_from	OUT-C	.push_str	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-C	.rfind	2	in
+Elaborator::walk_out_from	OUT-C	.starts_with	3	in
+Elaborator::walk_out_from	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-C	hit	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-F	symbols	1	in
+Elaborator::walk_out_from	OUT-M	write	1	text:LEAVE-L10
 Elaborator::walk_rtn_scopes	FN	-	-	-
 Elaborator::walk_rtn_scopes	OUT-C	.and_then	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.cur_prefix_text	1	in
@@ -567,6 +629,15 @@ Elaborator::walk_rtn_scopes	OUT-C	.rfind	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.strip_prefix	2	text:LEAVE-L2
 Elaborator::walk_rtn_scopes	OUT-C	Some	1	text:LEAVE-L2
 Elaborator::walk_rtn_scopes	OUT-C	hit	1	text:LEAVE-L2
+Elaborator::walk_scopes_key	FN	-	-	-
+Elaborator::walk_scopes_key_from	FN	-	-	-
+Elaborator::walk_scopes_key_from	OUT-C	.as_str	1	in
+Elaborator::walk_scopes_key_from	OUT-C	String::new	1	in
+Elaborator::walk_scopes_key_inner	FN	-	-	-
+Elaborator::walk_scopes_key_inner	OUT-C	.as_str	1	in
+Elaborator::walk_scopes_key_inner	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::walk_scopes_key_inner	OUT-C	String::new	1	in
+Elaborator::walk_scopes_key_shadowed	FN	-	-	-
 Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.scope_enter	1	in
 Elaborator::with_scope	OUT-C	.scope_restore	1	in
@@ -585,12 +656,18 @@ Keyed::remove_new	RET	Option<V>	hit:the value the key held
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the four walk entries' `hit`, called once per scope level the walk visits
 item	param	kind	args	calls
 Elaborator::with_scope	f	FnOnce	&mut Self	once
 Elaborator::walk_rtn_scopes	hit	Fn	&str	probe:the routine tables for one composed key
+Elaborator::scoped_key_at_or_above	hit	Fn	&str	probe:the caller's tables for one composed key
+Elaborator::walk_scopes_key	hit	Fn	&str	probe:the caller's tables for one composed key
+Elaborator::walk_scopes_key_from	hit	Fn	&str	probe:the caller's tables for one composed key
+Elaborator::walk_scopes_key_shadowed	hit	Fn	&str	probe:the caller's tables for one composed key
 == SURF_BODY
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): the 8 moved bodies (walk.rs)
 file	fn	sha256
 lexscope/disp.rs	Elaborator::ctx_here	69e9d6c0bf32d6a9ce1037ddff1a4ca8c9de14874b6204b5e55e34f914f6cb9d
 lexscope/disp.rs	Elaborator::cur_context	5c5a9d16421bd37235f37aed01f89d7e4e82e43fa2f0dd65cde5a39e24f627f8
@@ -734,6 +811,14 @@ lexscope/tests.rs	fb_scope_text_of_carry_is_the_current_text_after_each_opener	2
 lexscope/tests.rs	fb_shown_ctx_debug_writes_no_text	1a63fa8319d5be06cf3207ebc60c43395b9a7c3a100411f640545ebe6aaa729d
 lexscope/tests.rs	fb_shown_leaves_only_through_scope_out	c70ffab01d5a21bc7ec916142f888b922f19fb178814502e6e2471a7d43fb679
 lexscope/tests.rs	fb_swap_take_pkg_repoint_hold	2977248e3fddf12f4fa245701b49f07c0ff781ef3d57f412919d4c99a7e4a52c
+lexscope/walk.rs	Elaborator::decl_probe_key	921c3b8a849d2b91a185c7135dfc5e33cfd6428ed162c83805084c2f5e1eea71
+lexscope/walk.rs	Elaborator::is_gen_scope_segment	f2090092f044115ebc9aa27a032234eed2fdd4e31434d23fafb6c6eb51531fda
+lexscope/walk.rs	Elaborator::scoped_key_at_or_above	7493532f1c3c6b9d008ad47a37d6fc85265d2df2ff25becc97d393a25d567ce7
+lexscope/walk.rs	Elaborator::walk_out_from	1167a8a41cca8249526d0d011de3db494587e2d2d3adad252517b0b80b54d184
+lexscope/walk.rs	Elaborator::walk_scopes_key	1a07594158e568fc20bccbdc57f2274e40bd43030b8b46b433eb7188b2c1174c
+lexscope/walk.rs	Elaborator::walk_scopes_key_from	c3c290ef641c46198a48d703ed8ec5063b2a9b023978dc695694b73ef265d978
+lexscope/walk.rs	Elaborator::walk_scopes_key_inner	2574c500812b0e14f891b05177966028ace54deb73b8b69e6e1bee76b99ecc02
+lexscope/walk.rs	Elaborator::walk_scopes_key_shadowed	129d6d3259a98a5ea739de7d649e6a60c0b338be69d0a2ce73eaff9f6651a199
 == SURF_INTERIOR
 # INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
 # item, position, the path of names INTERIOR follows to the carrier, why (hand). A row whose
@@ -752,18 +837,19 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # the COUNTS line gains enter (those parameters), enter_number and in_unknown (fns with one).
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24): the read side: `fq` (scope.rs) is deleted — its row left: 31 -> 30 fns (fail 27 -> 26, ret_fail 24 -> 23,
 # ret_text 21 -> 20, enter 39 -> 38) ; its two roles are lexscope's Scopes::at_cur (AtKey) and Scopes::show_miss (Shown)
+# §5.2 Q-DECLKEY DK1-4a (2026-11-24): 6 fns moved to lexscope/walk.rs (scoped_key_at_or_above, walk_scopes_key, _from, _inner, _shadowed, decl_probe_key — private now) ; walk_scopes stays in scope.rs (R-G15)
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
-DK1	decl_probe_key	decl_scope.rs	pub(crate)	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
+DK1	decl_probe_key	lexscope/walk.rs	-	E	(&self, name: &str, key: &mut String, hit: &impl Fn(&str) -> bool) -> bool	FAIL	ARG:key=TEXT(String); CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str)	name
 DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
 DK1	hier_resolve	hier.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	FAIL	RET=CARD(Option in Option<V>)	prefix,path,table
 DK1	indexed_gen_singleton	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
-DK1	scoped_key_at_or_above	scope.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
+DK1	scoped_key_at_or_above	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
 DK1	singleton_scope_key	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
 DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &BTreeMap<String, T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy); RET=CARD(Option in Option<T>)	name,table
-DK1	walk_scopes_key	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-DK1	walk_scopes_key_from	scope.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
-DK1	walk_scopes_key_inner	scope.rs	-	E	(&self, name: &str, hit: impl Fn(&str) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-DK1	walk_scopes_key_shadowed	scope.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key_from	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
+DK1	walk_scopes_key_inner	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&str) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key_shadowed	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
 DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
 LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix

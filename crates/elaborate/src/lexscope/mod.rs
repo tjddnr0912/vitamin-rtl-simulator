@@ -20,6 +20,10 @@
 //! a block-local one, under a function or inlined task, the frame of one of these routines,
 //! named by a self-path) are named entries returning `bool` over the same text ; none returns
 //! text, and their call sites are counted by the home tests (HC_SCOPEQ).
+//!
+//! The outward walk of a name (DK1-4a) is here too, in `walk.rs`: the Elaborator methods every
+//! scoped lookup calls (`walk_scopes_key` and its forms), reading the scope texts as this module's
+//! fields ; their text return and callback argument are LEAVE rows until DK1-4b.
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, DefaultHasher};
@@ -31,6 +35,7 @@ mod elab;
 mod key;
 #[cfg(test)]
 mod tests;
+mod walk;
 
 pub(crate) use key::{at_text, key_show, key_text, AtKey, Keyed, KeyedSet, NewKey};
 
