@@ -106,7 +106,7 @@ pub(crate) enum DeclPhase {
 /// the six tables a bare constant walk reads, at one `$pkg$<pkg>.<name>` key, as the
 /// package's own fold left them.
 pub(crate) struct DeclKept {
-    pub(crate) key: String,
+    pub(crate) key: NewKey,
     pub(crate) value: Option<i64>,
     pub(crate) meta: Option<(u32, bool)>,
     pub(crate) real: Option<f64>,
@@ -343,28 +343,19 @@ impl Elaborator<'_> {
     }
 
     /// Snapshot, before `elaborate_package` unwinds them, the bindings its fold made
-    /// under `prefix` (`$pkg$<pkg>`): every key the fold saved for restore.
-    pub(crate) fn decl_keep_snapshot<'k>(
-        &self,
-        prefix: &str,
-        keys: impl Iterator<Item = &'k str>,
-    ) -> Vec<DeclKept> {
-        let mine = format!("{prefix}.");
-        let keys: BTreeSet<&str> = keys.collect();
-        debug_assert!(
-            keys.iter().all(|k| k.starts_with(&mine)),
-            "a package fold saved a key outside its own prefix {prefix}"
-        );
-        keys.into_iter()
-            .filter(|k| k.starts_with(&mine))
+    /// under the current scope (`$pkg$<pkg>`): every key the fold saved for restore.
+    pub(crate) fn decl_keep_snapshot(&self, keys: Vec<&NewKey>) -> Vec<DeclKept> {
+        self.lex
+            .keys_under_cur(keys)
+            .into_iter()
             .map(|k| DeclKept {
-                key: k.to_string(),
-                value: self.params.get(k).copied(),
-                meta: self.param_meta.get(k).copied(),
-                real: self.real_param_val.get(k).copied(),
-                string: self.str_param_raw.get(k).cloned(),
-                wide: self.wide_param_bits.get(k).cloned(),
-                range: self.param_range.get(k).copied(),
+                key: k.clone(),
+                value: self.params.get_new(k).copied(),
+                meta: self.param_meta.get_new(k).copied(),
+                real: self.real_param_val.get_new(k).copied(),
+                string: self.str_param_raw.get_new(k).cloned(),
+                wide: self.wide_param_bits.get_new(k).cloned(),
+                range: self.param_range.get_new(k).copied(),
             })
             .collect()
     }

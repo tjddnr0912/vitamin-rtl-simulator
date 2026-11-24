@@ -60,22 +60,22 @@ impl Elaborator<'_> {
     pub(crate) fn decl_keep_restore(&mut self, kept: Vec<DeclKept>) {
         for k in kept {
             if let Some(v) = k.value {
-                self.params.w().insert(k.key.clone(), v);
+                self.params.w().insert_new(k.key.clone(), v);
             }
             if let Some(m) = k.meta {
-                self.param_meta.w().insert(k.key.clone(), m);
+                self.param_meta.w().insert_new(k.key.clone(), m);
             }
             if let Some(r) = k.real {
-                self.real_param_val.w().insert(k.key.clone(), r);
+                self.real_param_val.w().insert_new(k.key.clone(), r);
             }
             if let Some(s) = k.string {
-                self.str_param_raw.w().insert(k.key.clone(), s);
+                self.str_param_raw.w().insert_new(k.key.clone(), s);
             }
             if let Some(w) = k.wide {
-                self.wide_param_bits.w().insert(k.key.clone(), w);
+                self.wide_param_bits.w().insert_new(k.key.clone(), w);
             }
             if let Some(r) = k.range {
-                self.param_range.w().insert(k.key, r);
+                self.param_range.w().insert_new(k.key, r);
             }
         }
     }

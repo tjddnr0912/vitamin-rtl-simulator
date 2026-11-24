@@ -185,7 +185,7 @@ const W5A_EXCEPT: &[(&str, &str, &str, usize, &str)] = &[
 /// (file, fn, count, reason).
 #[rustfmt::skip]
 const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
-    ("crates/elaborate/src/decl_scope.rs", "decl_keep_snapshot", 1, "U4's `DeclKept` builder: six `get`s, not a membership test"),
+    ("crates/elaborate/src/decl_scope.rs", "decl_keep_snapshot", 1, "U4's `DeclKept` builder: six `get_new`s (DK1-5b), not a membership test"),
     ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 2, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key ; 2 since §5.2 Q-DECLKEY DK1-4b-1: the same four maps as `other_kind_at`, its typed twin for the walk's AtKey candidate, `other_kind` kept for the found text key (DELTA16 E1.4: the pair the key types force ; the candidate half leaves at DK2)"),
     ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols), not the rule's"),
     ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),

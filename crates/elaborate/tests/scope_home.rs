@@ -6814,6 +6814,137 @@ fn hxf_the_found_set_fills_are_pinned() {
     finish("HXF", &msgs);
 }
 
+/// HSTAY's census of one body: every call by its callee's name — `.m` a method call, `f(` a path
+/// call (its last segment), `m!` a macro (its expressions visited too) ; a nested item is not entered.
+struct CallNames(BTreeMap<String, usize>);
+impl<'a> Visit<'a> for CallNames {
+    fn visit_expr_method_call(&mut self, m: &'a syn::ExprMethodCall) {
+        *self.0.entry(format!(".{}", m.method)).or_default() += 1;
+        visit::visit_expr_method_call(self, m);
+    }
+    fn visit_expr_call(&mut self, c: &'a syn::ExprCall) {
+        if let Expr::Path(p) = &*c.func {
+            if let Some(s) = p.path.segments.last() {
+                *self.0.entry(format!("{}(", s.ident)).or_default() += 1;
+            }
+        }
+        visit::visit_expr_call(self, c);
+    }
+    fn visit_macro(&mut self, m: &'a syn::Macro) {
+        if let Some(s) = m.path.segments.last() {
+            *self.0.entry(format!("{}!", s.ident)).or_default() += 1;
+        }
+        for e in mac_exprs(m) {
+            let mut inner = CallNames(BTreeMap::new());
+            inner.visit_expr(&e);
+            for (k, n) in inner.0 {
+                *self.0.entry(k).or_default() += n;
+            }
+        }
+    }
+    fn visit_item(&mut self, _: &'a syn::Item) {}
+}
+
+/// The fns HSTAY reads whole: a fn that stays outside lexscope and asks it one question
+/// (DELTA18 G1, R-J1 STAYOUT).
+const HSTAY_FNS: &[(&str, &str)] = &[("decl_scope.rs", "decl_keep_snapshot")];
+
+#[test]
+fn hstay_the_stayout_snapshot_is_pinned() {
+    // §5.2 Q-DECLKEY DK1-5b (DELTA18 G1, R-J1): `decl_keep_snapshot` STAYS in decl_scope.rs (a
+    // record-builder of bound's values) and asks lexscope one scope question, `keys_under_cur` ;
+    // it holds no text operation (the key list's order, dedup and prefix test are the module's).
+    // HSTAY pins every call in its body by callee name (a text probe `.get` / `.contains_key`, a
+    // `format!`, a `starts_with`, a `key_text` written back is a new row or a moved count) ;
+    // HSTAY_CALLERS pins every call of `keys_under_cur` outside lexscope by (file, fn, entry)
+    // with a count (a second asker is a new row). Not seen: a call through a fn value or a
+    // helper the body delegates to (the helper's own calls are not read) ; watched_calls'
+    // walker for the callers, as HXF's.
+    let srcs = load_src();
+    let fns = hf_fns(&srcs);
+    let mut got: BTreeMap<String, String> = BTreeMap::new();
+    let mut dumped = Vec::new();
+    let mut calls = 0usize;
+    for (file, name) in HSTAY_FNS {
+        for f in fns.iter().filter(|f| f.file == *file && f.simple == *name) {
+            let Some(body) = f.body else { continue };
+            let mut c = CallNames(BTreeMap::new());
+            c.visit_block(body);
+            for (callee, n) in c.0 {
+                calls += n;
+                let k = format!("{file}\t{}\t{callee}", f.simple);
+                dumped.push(format!("{k}\t{n}"));
+                got.insert(k, n.to_string());
+            }
+        }
+    }
+    dump("HSTAY", "file\tfn\tcall\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HSTAY")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HSTAY table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    let mut msgs = diff_rows(
+        "HSTAY",
+        &got,
+        &want,
+        "a new call in a STAYOUT fn: a text operation there is lexscope's (keys_under_cur) — name the \
+         unit, read what it does with the key, add the row only if it is no text op",
+        "a call of a STAYOUT fn is gone: name the unit, remove the row",
+    );
+    let entries = vec!["keys_under_cur".to_string()];
+    let mut callers: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, _) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *callers
+            .entry(format!("{file}\t{qual}\t{callee}"))
+            .or_default() += 1;
+    }
+    let got_c: BTreeMap<String, String> = callers
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped_c: Vec<String> = callers.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HSTAY_CALLERS", "file\tfn\tentry\tcount", &dumped_c);
+    let mut want_c = BTreeMap::new();
+    for row in table(&tables::get("HSTAY_CALLERS")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HSTAY_CALLERS table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want_c.insert(row[..3].join("\t"), row[3].clone());
+    }
+    msgs.extend(diff_rows(
+        "HSTAY_CALLERS",
+        &got_c,
+        &want_c,
+        "a new asker of keys_under_cur outside lexscope: name the unit, read what it does with the \
+         keys, add the row",
+        "an asker of keys_under_cur is gone: name the unit, remove the row",
+    ));
+    let counts = format!(
+        "fns={} calls={calls} callers={}",
+        HSTAY_FNS.len(),
+        callers.values().sum::<usize>()
+    );
+    if counts != tables::get("HSTAY_COUNTS") {
+        msgs.push(format!(
+            "HSTAY COUNTS table [{}] now [{counts}]",
+            tables::get("HSTAY_COUNTS")
+        ));
+    }
+    finish("HSTAY", &msgs);
+}
+
 /// The position of `param` among the typed parameters of the lexscope fn `item`.
 fn enter_param_index(item: &str, param: &str) -> usize {
     let (ty, name) = match item.rsplit_once("::") {

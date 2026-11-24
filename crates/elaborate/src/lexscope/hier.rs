@@ -12,8 +12,11 @@
 //!   LEAVE L12, read by `key_spells_indexed_singleton` (`gen_scope_name.rs`) ; closes at DK3-b, where that
 //!   reader becomes an entry of this module and this fn goes private.
 //! - `hier_resolve`'s `table` is the caller's text-keyed map (`&BTreeMap<String, V>`, reached through
-//!   window w9), and `hier_key_within` / `is_hier_scope` probe and scan `symbols`, `hier_params` and
-//!   `wide_param_bits` by text: window uses inside the module, until DK3-b deletes the window.
+//!   window w9), and eleven store reads here go through the window by text, inside the module, until
+//!   DK3-b deletes it: `gen_singleton_labels.contains` in `indexed_gen_singleton` and in
+//!   `singleton_scope_key` (2) ; `pkg_var_aliases.contains_key` x2 and `symbols.contains_key` in
+//!   `hier_resolve` (3) ; `symbols` / `hier_params` / `wide_param_bits` `.contains_key` in
+//!   `hier_key_within` (3) ; and the same three stores' `.range` scans in `is_hier_scope` (3).
 //! - ONE call hands text to a fn outside the module: `Self::gen_seg_label(seg)` in
 //!   `indexed_gen_singleton` passes its own entered `seg` through (no key or scope text is formed before
 //!   it). It is NOT pinned by class until DK1-6 (the outward-call table SURF_OUTCALL): until then a

@@ -1113,15 +1113,15 @@ impl Elaborator<'_> {
         // prefix for the declaring-scope window (`decl_scope.rs`) — snapshot here,
         // re-installed after the unwind below.
         let kept = self.decl_keep_snapshot(
-            self.lex.cur_prefix_text(),
             saved
                 .iter()
-                .map(|(k, _)| key_text(k))
-                .chain(saved_meta.iter().map(|(k, _)| key_text(k)))
-                .chain(saved_real.iter().map(|(k, _)| key_text(k)))
-                .chain(saved_str.iter().map(|(k, _)| key_text(k)))
-                .chain(saved_wide.iter().map(|(k, _)| key_text(k)))
-                .chain(saved_range.iter().map(|(k, _)| key_text(k))),
+                .map(|(k, _)| k)
+                .chain(saved_meta.iter().map(|(k, _)| k))
+                .chain(saved_real.iter().map(|(k, _)| k))
+                .chain(saved_str.iter().map(|(k, _)| k))
+                .chain(saved_wide.iter().map(|(k, _)| k))
+                .chain(saved_range.iter().map(|(k, _)| k))
+                .collect::<Vec<_>>(),
         );
         for (k, prev) in saved.into_iter().rev() {
             match prev {

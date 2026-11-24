@@ -480,3 +480,34 @@ fn fb_read_key_meets_the_declared_key() {
     assert_eq!(m.get_at(&s.at_cur("a")), Some(&1));
     assert!(!set.contains_at(&s.at_cur("w")));
 }
+
+/// §5.2 Q-DECLKEY DK1-5b (DELTA18 G1, S7-J5): `keys_under_cur` hands a package fold's saved keys
+/// back in KEY-TEXT order, each text once, whatever order and repetition the caller's chained
+/// lists hold — the order `decl_keep_snapshot` builds its records in and `decl_keep_restore`
+/// replays them in. Two saved tables (as `elaborate_package` chains its six), one name in both,
+/// neither list in text order ; and the empty list.
+#[test]
+fn fb_keys_under_cur_orders_and_dedups() {
+    use super::key_text;
+    let mut s = Scopes::new();
+    let p = s.scope_swap_pkg("pk");
+    // the value table saved W, B, N ; the meta table saved B (again) and A
+    let saved = [s.new_key("W"), s.new_key("B"), s.new_key("N")];
+    let saved_meta = [s.new_key("B"), s.new_key("A")];
+    let keys: Vec<_> = saved.iter().chain(saved_meta.iter()).collect();
+    let got: Vec<&str> = s.keys_under_cur(keys).into_iter().map(key_text).collect();
+    assert_eq!(
+        got,
+        ["$pkg$pk.A", "$pkg$pk.B", "$pkg$pk.N", "$pkg$pk.W"],
+        "text order, B once"
+    );
+    // the other chain order gives the same list
+    let keys: Vec<_> = saved_meta.iter().chain(saved.iter()).collect();
+    let again: Vec<&str> = s.keys_under_cur(keys).into_iter().map(key_text).collect();
+    assert_eq!(again, got);
+    assert!(
+        s.keys_under_cur(Vec::new()).is_empty(),
+        "no key saved: none back"
+    );
+    s.scope_restore(p);
+}

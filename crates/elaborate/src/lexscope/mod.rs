@@ -1,8 +1,8 @@
 //! The current scope (§5.2 Q-LEXSCOPE, unit LS2a): the dotted path of the scope being
 //! lowered, owned here and nowhere else. The Elaborator holds one [`Scopes`] ; code outside
 //! this module moves the current scope only through the named entries below (no entry takes a
-//! scope argument), and reads its text only through the bridge [`Scopes::cur_prefix_text`]
-//! (LEAVE L1, a counted bridge until LS3 / DK1).
+//! scope argument), and reads no text of it (the bridge [`Scopes::cur_prefix_text`], LEAVE L1, is
+//! private since DK1-5b).
 //!
 //! The representation is the same in every profile: the text `cur_prefix` (the legacy String,
 //! written by the legacy rules moved here), the id `cur` of that text in a private interner
@@ -40,9 +40,10 @@ mod key;
 mod tests;
 mod walk;
 
+use key::key_text;
 pub(crate) use key::{
-    at_same, at_text, found_text, key_in, key_same, key_show, key_text, AtKey, DeclKey, Keyed,
-    KeyedSet, NewKey,
+    at_same, at_text, found_text, key_in, key_same, key_show, AtKey, DeclKey, Keyed, KeyedSet,
+    NewKey,
 };
 
 /// An interned scope text. Private to the module: no id leaves it.
@@ -318,10 +319,29 @@ impl Scopes {
         s
     }
 
-    /// The bridge (LEAVE L1): the current scope's text, for the readers that still read text
-    /// (counted by HBR ; falls at LS3, 0 at DK1).
-    pub(crate) fn cur_prefix_text(&self) -> &str {
+    /// The current scope's text, read inside this module only (LEAVE L1 closed at DK1-5b: no
+    /// reader is left outside).
+    fn cur_prefix_text(&self) -> &str {
         &self.cur_prefix
+    }
+
+    /// The keys of `keys` formed under the current scope, each once, in text order: a package
+    /// fold's saved keys (DK1-5b: `decl_keep_snapshot`'s one scope question). Sorted, deduplicated
+    /// and filtered in the caller's Vec: no second collection and no `<prefix>.` text formed.
+    pub(crate) fn keys_under_cur<'k>(&self, mut keys: Vec<&'k NewKey>) -> Vec<&'k NewKey> {
+        let prefix = self.cur_prefix_text();
+        let mine = |k: &NewKey| {
+            let k = key_text(k);
+            k.len() > prefix.len() && k.starts_with(prefix) && k.as_bytes()[prefix.len()] == b'.'
+        };
+        keys.sort_unstable_by(|a, b| key_text(a).cmp(key_text(b)));
+        keys.dedup_by(|a, b| key_text(a) == key_text(b));
+        debug_assert!(
+            keys.iter().all(|k| mine(k)),
+            "a package fold saved a key outside its own prefix {prefix}"
+        );
+        keys.retain(|k| mine(k));
+        keys
     }
 
     /// Opener: make `text` the current scope ; the scope that was current is returned.

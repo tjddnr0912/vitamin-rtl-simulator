@@ -51,7 +51,7 @@
 //!   (`array_const_vals || params || symbols`, `array_const_vals` is not a guarded map) ;
 //!   edge_gate.rs `binding_encloses`'s `other_kind` (`wide || real || str || symbols`,
 //!   also asked alone of the value walk's key) ; decl_scope.rs `decl_keep_snapshot`
-//!   (six `get`s into `DeclKept`, not a membership test).
+//!   (six `get_new`s into `DeclKept`, not a membership test).
 //! - A closure whose map set is a rule's in another `||` order (re-pointing it would
 //!   change its host function's code ; measured on a build that did, BIND-1b B2:
 //!   W/bind1/build_b/asm/B2_SUMMARY.txt, `cmp_post_extra`):

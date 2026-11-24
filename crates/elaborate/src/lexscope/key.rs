@@ -8,8 +8,9 @@
 //! formed by [`Scopes::new_key`] from the current scope (`fq`'s text, the same bytes) and by
 //! nothing else ; its text is private. It reaches a store through the `_new` entries of
 //! [`Keyed`] / [`KeyedSet`] (each the std verb on the key's own String: the same map operation),
-//! leaves as message text only through [`key_show`], and meets a text operation only through
-//! [`key_text`] (L7, a counted bridge deleted at DK3-b). No key is made from text.
+//! leaves as message text only through [`key_show`], and meets a text operation only inside this
+//! module, through [`key_text`] (`pub(super)` since DK1-5b, which closed L7: no reader outside is
+//! left). No key is made from text.
 //!
 //! THE READ KEY (sub-unit DK1-3): an [`AtKey`] is the key a READ of a name probes, formed by
 //! [`Scopes::at_cur`] (the current scope: the same bytes as [`Scopes::new_key`]'s), since DK1-4b-1 by
@@ -126,9 +127,11 @@ pub(crate) fn key_show(k: &NewKey) -> Shown {
     Shown(k.0.clone())
 }
 
-/// L7 (LEAVE): a NewKey's text where it meets a text operation outside the module ; a counted
-/// bridge, deleted at DK3-b.
-pub(crate) fn key_text(k: &NewKey) -> &str {
+/// A NewKey's text where it meets a text operation inside this module (`Scopes::keys_under_cur`
+/// orders and filters a package fold's saved keys by it). It was L7, the counted bridge out of the
+/// module ; DK1-5b closed it (its last readers, `elaborate_package`'s six key lists, hand the
+/// `&NewKey`s in), so it is `pub(super)`: no file outside `lexscope` can name it.
+pub(super) fn key_text(k: &NewKey) -> &str {
     &k.0
 }
 
@@ -152,6 +155,10 @@ pub(crate) fn at_text(k: &AtKey) -> &str {
 
 /// The key of `member` inside the read key `k` (`<k>.<member>`), typed (DK1-5a: ports.rs
 /// elaborate_virtual_iface's member glue of a bound instance ; L9's two rows there closed).
+/// It always forms `<k>.<member>`: there is no empty-key guard (an empty `k` would give
+/// `.<member>`, not `<member>` as `at_cur` gives under the empty scope). Its one caller,
+/// `elaborate_virtual_iface`, hands the read key of a bound instance's path, never empty ;
+/// a second caller is not pinned by a call table yet (NOT-PROMISED until one names it).
 pub(crate) fn key_in(k: &AtKey, member: &str) -> AtKey {
     AtKey(format!("{}.{}", k.0, member))
 }

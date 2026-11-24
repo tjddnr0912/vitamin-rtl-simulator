@@ -100,13 +100,14 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=7 rows=205 out_types=28 e_fns=41 text_flows=57
+present=present files=7 rows=205 out_types=30 e_fns=42 text_flows=63
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk hands its candidate as an AtKey (DELTA16 E1.3): the four pub entries' CB:hit `impl Fn(&AtKey) -> bool` (CB) and CB:hit.0 `&AtKey` (PASS REF — the CB row DELTA14 P18 planned, open until DK2, where the walk takes a `Hit` value) replace the `&str` pair (L10's CB rows closed) ; at_same (key.rs, P27's candidate-side compare) + its USE ; is_gen_scope_segment is pub(super) (off the surface: 2 rows gone)
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns the key it found as a DeclKey (DELTA16 E1.3, R-H11): the four pub entries' RET `Option<DeclKey>` (CARD) replace L10's `Option<String>` ; DeclKey (TYPE, `pub(super)` field as AtKey's) ; the `_found` entries (Keyed::get_found CARD, contains_found, index_found REF ; KeyedSet::contains_found, extend_found) ; P27's found-side compares key_same, DeclKey::is_formed_as, DeclKey::is_formed_at ; found_text (LEAVE L11) ; three mod.rs USE ; gen_binding_encloses takes `&DeclKey` (its IN:key text row gone)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the hierarchical resolver moves into lexscope/hier.rs (MOVE 5, R-J2): hier_resolve (pub(crate): IN:path / IN:table ENTER lookup, RET Option<V> CARD), indexed_gen_singleton (pub(crate): IN:level / IN:seg ENTER lookup, RET LEAVE:L12) ; hier_key_within, singleton_scope_key, is_hier_scope private (no row) ; Scopes::key_under RET AtKey (PASS, L5 closed) ; Scopes::scope_text private (its L6 row gone) ; key_in (key.rs: IN:member ENTER lookup, RET AtKey PASS) and its mod.rs USE
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases moves into lexscope/elab.rs (MOVE 1 ; pub(crate): IN:names ENTER lookup, RET LEAVE:L13) ; Scopes::keys_under_cur NEW (decl_keep_snapshot's one scope question: RET Vec<&NewKey> CARD) ; key_text pub(super) (its L7 row and mod.rs's pub(crate) USE gone) ; Scopes::cur_prefix_text private (its L1 row gone)
 file	tier	kind	item	position	type	verdict	refs
 lexscope/disp.rs	E	FN	Elaborator::ctx_here	RET	ShownCtx	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_chain_abs	RET	Shown	PASS	-
@@ -127,6 +128,8 @@ lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
 lexscope/elab.rs	E	FN	Elaborator::flush_block_local_inits	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	IN:name	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	RET	bool	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::names_with_pkg_var_aliases	IN:names	&std::collections::BTreeSet<String>	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	LEAVE:L13	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lhs	ast::Lvalue	ENTER:carried	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lo	u32	ENTER:carried	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:rhs	ast::Expr	ENTER:carried	-
@@ -192,7 +195,6 @@ lexscope/key.rs	K	FN	key_in	IN:member	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	key_in	RET	AtKey	PASS	-
 lexscope/key.rs	K	FN	key_same	RET	bool	PASS	-
 lexscope/key.rs	K	FN	key_show	RET	Shown	PASS	-
-lexscope/key.rs	K	FN	key_text	RET	&str	LEAVE:L7	REF
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
 lexscope/mod.rs	-	ENUM	Mark	-	-	PASS	-
 lexscope/mod.rs	-	IMPL	Clone for ScopeRef	-	-	PASS	-
@@ -227,7 +229,6 @@ lexscope/mod.rs	-	USE	key::found_text	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_in	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
-lexscope/mod.rs	-	USE	key::key_text	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the scopes still holding a value	-
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
@@ -242,7 +243,6 @@ lexscope/mod.rs	K	FN	Scopes::cur_frame_routine_is_any	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_inst_top_or_synth_below	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_is_tf_decl	RET	bool	PASS	-
-lexscope/mod.rs	K	FN	Scopes::cur_prefix_text	RET	&str	LEAVE:L1	REF
 lexscope/mod.rs	K	FN	Scopes::cur_shown	RET	Shown	PASS	-
 lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	IN:none	&str	ENTER:to-display	-
 lexscope/mod.rs	K	FN	Scopes::cur_shown_quoted_or	RET	Shown	PASS	-
@@ -271,6 +271,7 @@ lexscope/mod.rs	K	FN	Scopes::hier_path_is_self	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::in_block_local_scope	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::key_under	IN:name	&str	ENTER:lookup	-
 lexscope/mod.rs	K	FN	Scopes::key_under	RET	AtKey	PASS	-
+lexscope/mod.rs	K	FN	Scopes::keys_under_cur	RET	Vec<&NewKey>	CARD:list:the saved keys formed under the current scope, each once, in key-text order	REF
 lexscope/mod.rs	K	FN	Scopes::mark_exchange	ARG:at	ScopeRef	PASS	-
 lexscope/mod.rs	K	FN	Scopes::mark_exchange	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::mark_put	RET	()	PASS	-
@@ -342,8 +343,10 @@ Shown
 ShownCtx
 String
 T::Plain
+Vec<&NewKey>
 Vec<Shown>
 bool
+std::collections::BTreeSet<String>
 == SURF_LEAVE
 # LEAVE: text out, counted, each with its closing unit (DELTA10 L1: L0 BOUNDARY, L1-L5 ; DELTA13 D2: L6) — empty
 # until the module exists ; a row matching no failing position fails STALE
@@ -357,16 +360,16 @@ bool
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): L10's four `CB:hit.0 &str` rows closed (`hit` is handed an `&AtKey`: SURF_ROWS PASS REF, open until DK2) ; its four `RET Option<String>` rows re-dated DK1-4b -> DK1-4b-2 (the found key's type, DELTA16 R-H1)
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10 CLOSED — its four `RET Option<String>` rows deleted (the walk returns a DeclKey: SURF_ROWS CARD) ; L11 `found_text`, a found key's text where it meets a text operation outside the module (R-H5: ports.rs bind_iface_port's prefix glue -> DK3-a ; gen_scope_name.rs key_spells_indexed_singleton, frames_static_init.rs frame_init_name_is_local_or_const -> DK3-b, HBR's three rows), deleting unit DK3-b
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): L5 and L6 CLOSED, rows deleted (Scopes::key_under returns an AtKey ; Scopes::scope_text is private, its last reader outside, hier_resolve, moved in) ; L9 at_text outside 3 -> 1 (ports.rs elaborate_virtual_iface's two member-key glues: src `key_in`, dst `new_key` ; bind_iface_port's X15 prefix left, DK3-a) ; L12 OPENED: Elaborator::indexed_gen_singleton RET Option<String>, the label key `level.label` of a singleton generate scope, read by key_spells_indexed_singleton (gen_scope_name.rs, HBR 1 row), deleting unit DK3-b (it becomes a lexscope entry there and indexed_gen_singleton goes private, DELTA17 F3.1)
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): L1 CLOSED (Scopes::cur_prefix_text private: its last readers outside, names_with_pkg_var_aliases and elaborate_package's snapshot argument, moved in or gone) and L7 CLOSED at DK1-5b, not DK3-b (key_text pub(super): elaborate_package hands its six key lists to decl_keep_snapshot as `&NewKey`s) — both rows deleted ; L13 OPENED: Elaborator::names_with_pkg_var_aliases RET std::collections::BTreeSet<String>, the bare names a package variable import binds in the current scope with the names handed in, read by its four callers outside (block_local_feed.rs, iface_inst.rs, instance.rs x2), deleting unit DK3-a (DELTA18 T7: L13's closing form is decided there, R-I3)
 id	item	position	type	closes
-L1	Scopes::cur_prefix_text	RET	&str	DK1
 L11	found_text	RET	&str	DK3-b
+L13	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	DK3-a
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
 L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
 L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
 L4	Elaborator::display_of_key_text	RET	String	DK4
-L7	key_text	RET	&str	DK3-b
 L9	at_text	RET	&str	DK3-a
 L12	Elaborator::indexed_gen_singleton	RET	Option<String>	DK3-b
 == SURF_ENTER
@@ -376,7 +379,9 @@ L12	Elaborator::indexed_gen_singleton	RET	Option<String>	DK3-b
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): is_gen_scope_segment is pub(super) (walk.rs's own question, off the surface): its `seg` row deleted
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): Scopes::gen_binding_encloses takes the walk's found key (`&DeclKey`): its `key` row deleted (no text in)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve `path` (the dotted path the resolver composes keys from) and `table` (the caller's text-keyed leaf map, window w9: retyped at DK3-b, DELTA18 T4) ; indexed_gen_singleton `level` / `seg` (the scope text and the source segment its label key is formed from) ; key_in `member` (an interface member's name) — lookup
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases `names` (the scope's own declared names, copied into the set it returns) — lookup (`carried` is refused: the body reads it, `.clone()`)
 item	param	role	holds
+Elaborator::names_with_pkg_var_aliases	names	lookup	TEXT String
 Elaborator::with_scope	seg	to-scope	TEXT str
 Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
 Elaborator::cur_gen_rtn_key	bare	lookup	TEXT str
@@ -454,6 +459,7 @@ ShownCtx	Vec<diag::Frame>
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk's candidate is an AtKey — `AtKey` OUT-C rows (scoped_key_at_or_above: formed from the text that leaves through L10 RET ; _from / _inner: the empty scratch, as String::new) ; the store probes `.contains_at` ; `hit` is handed an AtKey, no text: its three rows' flow text:LEAVE-L10 -> in
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — `DeclKey` OUT-C rows (scoped_key_at_or_above, walk_out_from, walk_scopes_key_inner: the scratch moved into the found key) ; walk_hits_decl_pos reads the found key through found_text (`.as_ref` + `.map` for `.as_deref`) ; L10 is deleted: the nine flows text:LEAVE-L10 -> text:DeclKey (the text these ops form leaves in the found key, whose text leaves the module only through L11)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved fns' rows (lexscope/hier.rs ; is_hier_scope private, its own rows, R-J7 d: a call to an in-module fn is no OUT-C row, so no `.is_hier_scope` row exists) ; flow `in` but hier_resolve's `.cloned` (payload: the table's value) and indexed_gen_singleton's label key (text:LEAVE-L12) ; `Self::gen_seg_label = 1` (indexed_gen_singleton) is the ONE call from these bodies to a fn outside the module with a text argument: its own IN `seg` passed through, flow `in` (R-J7 a) — NOT pinned by class until DK1-6 (SURF_OUTCALL, R-J7 c): this row is change detection only
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' rows (moved to lexscope/elab.rs): flow text:LEAVE-L13 where the op forms or hands the text of the set it returns (the two `.clone`s of `names`, the alias keys' `.keys`, the `.rsplit_once` / `.as_str` that cut the bare name, `.to_string`, `.insert`), `in` for the bool tests and the store read ; it calls no fn outside the module (move_census calls_outside=0)
 item	kind	name	count	flow
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
 Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
@@ -637,6 +643,16 @@ Elaborator::is_hier_scope	OUT-F	hier_params	1	in
 Elaborator::is_hier_scope	OUT-F	symbols	1	in
 Elaborator::is_hier_scope	OUT-F	wide_param_bits	1	in
 Elaborator::is_hier_scope	OUT-M	format	1	in
+Elaborator::names_with_pkg_var_aliases	FN	-	-	-
+Elaborator::names_with_pkg_var_aliases	OUT-C	.as_str	1	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-C	.clone	2	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-C	.cur_prefix_text	2	in
+Elaborator::names_with_pkg_var_aliases	OUT-C	.insert	1	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-C	.is_empty	2	in
+Elaborator::names_with_pkg_var_aliases	OUT-C	.keys	1	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-C	.rsplit_once	1	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-C	.to_string	1	text:LEAVE-L13
+Elaborator::names_with_pkg_var_aliases	OUT-F	pkg_var_aliases	2	in
 Elaborator::push_block_local_init	FN	-	-	-
 Elaborator::push_block_local_init	OUT-C	.clone	1	in
 Elaborator::push_block_local_init	OUT-C	.entry	1	in
@@ -741,6 +757,7 @@ Elaborator::with_scope	OUT-C	f	1	payload
 # a row matching no position is STALE. First rows at LS2a.
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the four walk entries' RET `Option<DeclKey>` (the key found, or none) ; Keyed::get_found (as get_at)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve RET Option<V> (the leaf table's value under the resolved key, or none)
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): keys_under_cur RET Vec<&NewKey> (the package fold's saved keys under the current scope, each once, in key-text order: the order decl_keep_snapshot records and decl_keep_restore replays)
 item	position	type	means
 Elaborator::scoped_key_at_or_above	RET	Option<DeclKey>	hit:the declaration key the walk found
 Elaborator::walk_scopes_key	RET	Option<DeclKey>	hit:the declaration key the walk found
@@ -754,6 +771,7 @@ Keyed::get_at	RET	Option<&V>	hit:a value stored under the key
 Keyed::insert_new	RET	Option<V>	hit:the value the key held before the insert
 Keyed::remove_new	RET	Option<V>	hit:the value the key held
 Elaborator::hier_resolve	RET	Option<V>	hit:the value the leaf table holds under the resolved key
+Scopes::keys_under_cur	RET	Vec<&NewKey>	list:the saved keys formed under the current scope, each once, in key-text order
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
@@ -773,6 +791,8 @@ Elaborator::walk_scopes_key_shadowed	hit	Fn	&AtKey	probe:the caller's tables for
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk's six bodies that form or probe the candidate (walk.rs, elab.rs walk_hits_decl_pos) ; at_same (key.rs)
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — scoped_key_at_or_above, walk_scopes_key_inner, walk_out_from (walk.rs), walk_hits_decl_pos (elab.rs), gen_binding_encloses (mod.rs), fb_gen_binding_encloses (tests.rs) ; new: the five `_found` entries, found_text, key_same, DeclKey::is_formed_as / is_formed_at (key.rs)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved bodies (lexscope/hier.rs), key_in (key.rs) new ; Scopes::key_under (mod.rs, AtKey) and fb_key_under_and_scope_debug (tests.rs, at_text) changed
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases (moved, lexscope/elab.rs) and Scopes::keys_under_cur (lexscope/mod.rs) new ; the order pin fb_keys_under_cur_orders_and_dedups (lexscope/tests.rs) new
+# §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): Scopes::keys_under_cur re-pinned (its key list by value, sorted / deduped / filtered in place, no format!) and the order pin re-pinned (its two calls hand the Vec by value)
 file	fn	sha256
 lexscope/disp.rs	Elaborator::ctx_here	69e9d6c0bf32d6a9ce1037ddff1a4ca8c9de14874b6204b5e55e34f914f6cb9d
 lexscope/disp.rs	Elaborator::cur_context	5c5a9d16421bd37235f37aed01f89d7e4e82e43fa2f0dd65cde5a39e24f627f8
@@ -798,6 +818,7 @@ lexscope/elab.rs	Elaborator::drain_scoped_presize	00f2579cfe53586a10ef357797c63a
 lexscope/elab.rs	Elaborator::flush_block_local_inits	96c4c9ddde4eecdfa18217565a61f91ac3321e519e413d1c12eb404fd203d0d9
 lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
 lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	407e99498c85a245fc330096f3b447ba861712defbf503ecf488a5a91602f058
+lexscope/elab.rs	Elaborator::names_with_pkg_var_aliases	3b2e58f26bc9994497723116ebf3948571452c57d8015df7df4b432a473123b3
 lexscope/elab.rs	Elaborator::push_block_local_init	1e7349e2e3b8b72df1ad90ee701abf9bb7dfa53afd8107b2839f67a2558d4601
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
 lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd780656be45d5940d1b66b359beddf
@@ -884,6 +905,7 @@ lexscope/mod.rs	Scopes::hier_path_is_self	d9512ef686e99da3c33aa573189bfc6a82ffb3
 lexscope/mod.rs	Scopes::in_block_local_scope	22e47f4616ff027d5b97b92cfd24cd7345fbe586bdeab37bfb458d04e65f3c00
 lexscope/mod.rs	Scopes::intern	fecd02a5146d6bad133240e6847fce451c0b09fc6919a710bde50afc5a688fe3
 lexscope/mod.rs	Scopes::key_under	f18cbf0221f823350974ab894d250c9d73d13054d992cc1a9d006ad337fb71e4
+lexscope/mod.rs	Scopes::keys_under_cur	19192ba3c2cb36bb54d4b9144f23a8dee44226093c7521f513e4f8e1c39a4049
 lexscope/mod.rs	Scopes::mark_exchange	75c5330808e2ae2ccdfaad4f2eea9fc105f9724b7d037e6624e03c81ba514dbb
 lexscope/mod.rs	Scopes::mark_put	f34db2a396fd8e107d5c147d80da9edc5310ca8c2cefa4eb1dcdcc36717dab03
 lexscope/mod.rs	Scopes::mark_slot	683627baa3317595c969b42a170698e5cdc5d27d87cc2ab276f759dbac21c8b3
@@ -919,6 +941,7 @@ lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
 lexscope/tests.rs	fb_gen_binding_encloses	206a8d8e9937fe5b523837689a49a6d7ea9b278ae5dd8311ede01bd9db3f6e8a
 lexscope/tests.rs	fb_key_under_and_scope_debug	9b2f2f49c75299232b4754788c50556d88eec84327fe8755dc1b9437b3cd8680
+lexscope/tests.rs	fb_keys_under_cur_orders_and_dedups	eb0c4858b1c9a8c6b34a1e83641fea1ee9ba194ec8546fa91e30037f0541ab85
 lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356ba0678954ee25d43285534e0f0ab39e7f0a34
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
 lexscope/tests.rs	fb_read_key_meets_the_declared_key	7a2491e4fc3a4d8900f79c87b9e063efdd82e7f10ad84db06084d481d5f912f2
@@ -962,12 +985,14 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk entries' `hit` (and decl_probe_key's scratch) take an AtKey — 7 rows re-judged: CB:hit.0 / ARG:key UNKNOWN(AtKey): plan mode judges with no file-set definitions (report_at's UNKNOWN(ReportedAt) since LS3) ; HT-SURF judges the same positions PASS REF ; walk_scopes' table `&Keyed<T>` (R-G15 (a)) ; callback_text 7 -> 1, mut_text 1 -> 0
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk entries return a DeclKey — 5 rows re-judged: RET=CARD(Option in Option<DeclKey>) ; RET=UNKNOWN(DeclKey) (plan mode judges with no file-set definitions, as UNKNOWN(AtKey) since DK1-4b-1 ; HT-SURF judges the position CARD) ; ret_text 20 -> 15
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve, hier_key_within, indexed_gen_singleton, singleton_scope_key moved to lexscope/hier.rs (file column ; singleton_scope_key private now) ; + is_hier_scope (R-J2: the resolver's scope question moves in with it, private ; absent from moved.tsv and from this table before) — 30 -> 31 fns
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): + names_with_pkg_var_aliases (X18, the unit's one mover, lexscope/elab.rs ; absent from moved.tsv and this table before: move_census SURF_PLAN absent=1) — 31 -> 32 fns ; decl_keep_snapshot stays outside (R-J1: no row) and keys_under_cur is a new entry, not a moved fn (no row)
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	lexscope/walk.rs	-	E	(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool	FAIL	ARG:key=UNKNOWN(AtKey); CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey)	name
 DK1	hier_key_within	lexscope/hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
 DK1	hier_resolve	lexscope/hier.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	FAIL	RET=CARD(Option in Option<V>)	prefix,path,table
 DK1	indexed_gen_singleton	lexscope/hier.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
 DK1	is_hier_scope	lexscope/hier.rs	-	E	(&self, base: &str) -> bool	PASS	-	base
+DK1	names_with_pkg_var_aliases	lexscope/elab.rs	pub(crate)	E	(&self, names: &std::collections::BTreeSet<String>) -> std::collections::BTreeSet<String>	FAIL	RET=TEXT(String); RET=UNKNOWN(std::collections::BTreeSet<String>)	names
 DK1	scoped_key_at_or_above	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
 DK1	singleton_scope_key	lexscope/hier.rs	-	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
 DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &Keyed<T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy); RET=CARD(Option in Option<T>)	name,table
@@ -995,7 +1020,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=5 fail=26 ret_fail=23 ret_text=15 callback_text=1 mut_text=0 card=16 cb=8 interior=1 enter=39 enter_number=6 in_unknown=0
+fns=32 pass=5 fail=27 ret_fail=24 ret_text=16 callback_text=1 mut_text=0 card=16 cb=8 interior=1 enter=40 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent

@@ -4,7 +4,9 @@
 //! carried scope it was lowered in, once per (span, scope) (LS3) ; and the block-local
 //! initializer store's five fns (`var_init.rs`'s, moved whole at LS3b-2), which key the two
 //! scope-keyed stores `pending_block_local_inits` / `pending_scoped_presize` by the scope's
-//! text inside this module.
+//! text inside this module ; and (DK1-5b) `names_with_pkg_var_aliases` (X18, `block_local/mod.rs`'s),
+//! moved with its body: it reads the current scope's text to sort names by it (`decl_keep_snapshot`
+//! stays in `decl_scope.rs` and asks [`super::Scopes::keys_under_cur`]).
 
 use super::{found_text, Mark, ReportedAt, ScopeRef};
 use crate::Elaborator;
@@ -361,5 +363,72 @@ impl Elaborator<'_> {
             self.flush_ranked(bl);
             self.lex.scope_restore(saved);
         }
+    }
+}
+
+impl Elaborator<'_> {
+    /// `names` ∪ the bare names bound into THIS scope by a package VARIABLE import
+    /// (`import pkg::*` / `import pkg::name`). For the block-local SCOPING
+    /// computations only — see the two traps below.
+    ///
+    /// Three-lifetime census (§2 Scoping row 3, measured against iverilog 13 and
+    /// verilator 5.052, which agree on every cell):
+    /// - DECLARATION: `package.rs:1288-1291` (wildcard) and `:1406-1408` (explicit)
+    ///   insert the `$pkg$<pkg>` net id VERBATIM into `symbols`, so an imported bare
+    ///   name is an ALIAS to the package's single shared net (`lib.rs:1180`), not a
+    ///   per-module copy.
+    /// - SHADOW: `gather_local_decl_names` above returns the module's OWN
+    ///   declarations only, so `shadows_module` (`block_local_class.rs:398`,
+    ///   `frames_reserve.rs:180`, `hoist.rs`'s twin) was false for such a name. On the
+    ///   module-PROCESS feed that term is the SOLE one a plain, initializer-free,
+    ///   non-`automatic` block-local can satisfy (`admit_static_plain` is false there,
+    ///   `block_local_class.rs:284-286`), so the declaration took the bare flatten —
+    ///   onto `symbols[<scope>.<name>]`, i.e. the package's own storage.
+    /// - EXPORT: measured, both spellings name ONE net, so the block-local's write was
+    ///   visible to `pkg::name` INSIDE the block, to a continuous assign, to a sibling
+    ///   instance, and to a DIFFERENT module importing the same package.
+    ///
+    /// An imported name occupies this scope's bare-name namespace exactly as a
+    /// declared net does — the precondition `shadows_module` exists to detect ("the net
+    /// it would flatten onto is the shadowed one", `frames_reserve.rs:171-177`).
+    /// Mechanism proof: adding a module-level declaration of the same name (which
+    /// touches no package storage) already makes the whole shape correct, and the only
+    /// thing it changes is this set.
+    ///
+    /// Two traps this signature is shaped around:
+    /// 1. It returns a SEPARATE set; callers must not augment `names` in place. That
+    ///    same set is `apply_import_consts`'s `local_names` (`package.rs:1258`), where
+    ///    membership SUPPRESSES the import binding, so feeding it back its own product
+    ///    would unbind every wildcard-imported variable. It is also read by
+    ///    `compute_coalesced_block_locals` and `const_array.rs:125`.
+    /// 2. It must NOT reach `compute_per_entry_block_locals`
+    ///    (`block_local_class.rs:532`), which reads `module_names` with the OPPOSITE
+    ///    polarity (`contains` -> `continue`): widening it there would remove per-entry
+    ///    re-initialisation from an `automatic`-with-init block-local shadowing an
+    ///    import.
+    ///
+    /// Keyed on `pkg_var_aliases` (`lib.rs:1187`), never on `symbols`: an
+    /// interface-port alias also lives in `symbols` and is not a package variable
+    /// (`package.rs:1284-1287` keeps the two apart for exactly this reason).
+    pub(crate) fn names_with_pkg_var_aliases(
+        &self,
+        names: &std::collections::BTreeSet<String>,
+    ) -> std::collections::BTreeSet<String> {
+        if self.pkg_var_aliases.is_empty() {
+            return names.clone();
+        }
+        let mut out = names.clone();
+        for key in self.pkg_var_aliases.keys() {
+            // Keys are `self.fq(name)`, so only the aliases bound at the CURRENT scope
+            // are this scope's bare names (a nested instance's alias is not visible
+            // here by bare name).
+            let bare = match key.rsplit_once('.') {
+                Some((scope, bare)) if scope == self.lex.cur_prefix_text() => bare,
+                None if self.lex.cur_prefix_text().is_empty() => key.as_str(),
+                _ => continue,
+            };
+            out.insert(bare.to_string());
+        }
+        out
     }
 }
