@@ -937,7 +937,7 @@ impl Elaborator<'_> {
         // at a couple of decl sites) and drift outward to an OUTER param, normalizing
         // the offset against the wrong LSB while the value came from the inner binding.
         let key = self.walk_scopes_key(seg, |k| self.hit_value_or_net(k))?;
-        self.param_range.get(&key).copied()
+        self.param_range.get_found(&key).copied()
     }
 
     /// Coerce a folded parameter value to its declared width, with that width

@@ -286,7 +286,7 @@ impl Elaborator<'_> {
         // never hit and the walk is one `BTreeMap` miss.
         let n = match self
             .walk_scopes_key_shadowed(name, |k| self.fixed_string_dyn_key.contains_at(k))
-            .and_then(|k| self.fixed_string_dyn_key.get(&k))
+            .and_then(|k| self.fixed_string_dyn_key.get_found(&k))
         {
             Some(&n) => n,
             None => self.lookup_net_unshadowed(name, at)?,

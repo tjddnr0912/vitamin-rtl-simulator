@@ -648,11 +648,11 @@ impl Elaborator<'_> {
         let Some(key) = self.walk_scopes_key(name, |k| self.hit_value(k)) else {
             return false;
         };
-        let other_kind = |k: &str| {
-            self.wide_param_bits.contains_key(k)
-                || self.real_param_val.contains_key(k)
-                || self.str_param_raw.contains_key(k)
-                || self.symbols.contains_key(k)
+        let other_kind = |k: &DeclKey| {
+            self.wide_param_bits.contains_found(k)
+                || self.real_param_val.contains_found(k)
+                || self.str_param_raw.contains_found(k)
+                || self.symbols.contains_found(k)
         };
         let other_kind_at = |k: &AtKey| {
             self.wide_param_bits.contains_at(k)
@@ -662,7 +662,7 @@ impl Elaborator<'_> {
         };
         let innermost =
             self.walk_scopes_key(name, |k| self.params.contains_at(k) || other_kind_at(k));
-        if other_kind(&key) || innermost.as_deref() != Some(key.as_str()) {
+        if other_kind(&key) || !innermost.as_ref().is_some_and(|i| key_same(i, &key)) {
             return false;
         }
         self.lex.gen_binding_encloses(&key, name, at)
@@ -1490,17 +1490,17 @@ impl Elaborator<'_> {
                 format!("[{hi}:{lo}]")
             }
         };
-        if self.wide_param_bits.contains_key(&key) {
-            return match self.hier_param_range.get(&key).copied() {
+        if self.wide_param_bits.contains_found(&key) {
+            return match self.hier_param_range.get_found(&key).copied() {
                 None => Some("with a range vita does not record".to_string()),
                 Some(r) if r.0 != 0 || r.2 => Some(text(r)),
                 Some(_) => None,
             };
         }
-        if !self.params.contains_key(&key) {
+        if !self.params.contains_found(&key) {
             return None;
         }
-        match self.param_range.get(&key).copied() {
+        match self.param_range.get_found(&key).copied() {
             Some(r) if r.1 > 64 && (r.0 != 0 || r.2) => Some(text(r)),
             _ => None,
         }

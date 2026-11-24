@@ -16,9 +16,19 @@
 //! the scope walk (`walk.rs`: the candidate each scope level hands `hit`) ; its constructor is lexscope-wide
 //! (the `pub(super)` field), not this file's: the count of AtKey constructions per lexscope file is pinned
 //! (scope_home HKC). No AtKey is formed outside the module. It reaches a
-//! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves only through
-//! [`at_text`] (L9, a counted bridge). A message that names what such a read would have probed takes
-//! [`Scopes::show_miss`]'s display text: no key is formed for it.
+//! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves the module
+//! only through [`at_text`] (L9, a counted bridge) ; inside the module the walk MOVES the candidate its `hit`
+//! accepted into the [`DeclKey`] it returns (DK1-4b-2: the text is moved, not read out). A message that
+//! names what such a read would have probed takes [`Scopes::show_miss`]'s display text: no key is formed
+//! for it.
+//!
+//! THE FOUND KEY (sub-unit DK1-4b-2): a [`DeclKey`] is what a walk returns — the candidate [`AtKey`] its
+//! `hit` accepted, the walk's scratch text moved into it (no copy) ; made at the walk's three returns
+//! (`walk.rs`) and, under `#[cfg(test)]`, by `tests.rs`'s helper ; the field is `pub(super)`, so its
+//! constructor door is lexscope-wide (scope_home HKC pins each file's constructions). It reaches a store
+//! only through the `_found` entries, its text leaves the module only through [`found_text`] (L11, a
+//! counted bridge), and it meets another key only through [`key_same`], [`DeclKey::is_formed_as`] and
+//! [`DeclKey::is_formed_at`].
 //!
 //! THE WINDOW (w9, DELTA14 F1): `Deref` / `DerefMut` to the map / set each store holds, so every
 //! existing use compiles as it was written (one counted door, text in and text out). It is
@@ -129,9 +139,9 @@ pub(crate) fn key_text(k: &NewKey) -> &str {
 /// so it cannot take the window's text path into a store, and no `_new` entry takes it.
 pub(crate) struct AtKey(pub(super) String);
 
-/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module (a compare with a
-/// walk's found text key: held.rs, DK1-4b-2 ; a key glued from it: ports.rs, DK1-5 / DK3-a) ; a counted
-/// bridge.
+/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module (a key glued from it:
+/// ports.rs, DK1-5 / DK3-a ; held.rs's compare with a walk's found key left at DK1-4b-2 for
+/// [`DeclKey::is_formed_at`]) ; a counted bridge.
 pub(crate) fn at_text(k: &AtKey) -> &str {
     &k.0
 }
@@ -141,6 +151,25 @@ pub(crate) fn at_text(k: &AtKey) -> &str {
 #[inline]
 pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
     a.0 == b.0
+}
+
+/// The key a walk FOUND (DK1-4b-2): the candidate [`AtKey`] its `hit` accepted, the text moved, not
+/// copied. Made at the walk's three returns (`walk.rs`: `scoped_key_at_or_above`,
+/// `walk_scopes_key_inner`, `walk_out_from`) and, under `#[cfg(test)]`, by `tests.rs`'s helper ; the
+/// field is `pub(super)`, so no file outside `lexscope` can make one (scope_home HKC pins the
+/// constructions per lexscope file). No `Clone`, `Display`, `Debug`, `Deref`, `Borrow`, `From` or
+/// `Into` (ZN in `mod.rs`), and no `PartialEq`: it is taken by the `_found` entries
+/// (`Keyed::get_found` / `contains_found` / `index_found`, `KeyedSet::contains_found` /
+/// `extend_found`), the compares ([`key_same`], [`DeclKey::is_formed_as`], [`DeclKey::is_formed_at`]),
+/// [`found_text`] (L11) and the fns handed only a found key ; no `_new` or `_at` entry takes it.
+pub(crate) struct DeclKey(pub(super) String);
+
+/// L11 (LEAVE): a found key's text where it meets a text operation outside the module (a key's
+/// segments read: frames_static_init.rs, gen_scope_name.rs, DK3-b ; a scope prefix glued from it:
+/// ports.rs, DK3-a) ; a counted bridge.
+#[inline]
+pub(crate) fn found_text(k: &DeclKey) -> &str {
+    &k.0
 }
 
 /// The NewKey entries of a map store: the std verb on the key's own String (`entry_new` is
@@ -183,6 +212,43 @@ impl<V> Keyed<V> {
     }
 }
 
+/// A found key against a found key (DK1-4b-2, P27: edge_gate.rs binding_encloses): the same text.
+#[inline]
+pub(crate) fn key_same(a: &DeclKey, b: &DeclKey) -> bool {
+    a.0 == b.0
+}
+
+/// The compares of a found key with a formed one (DK1-4b-2, P27): the same text.
+impl DeclKey {
+    /// with the key a name was declared under (struct_arm.rs struct_arm_rhs: `pattern_targets`' NewKey).
+    #[inline]
+    pub(crate) fn is_formed_as(&self, k: &NewKey) -> bool {
+        self.0 == k.0
+    }
+    /// with the key a read formed (held.rs clk_refused_at: a refused clocking item's alias).
+    #[inline]
+    pub(crate) fn is_formed_at(&self, k: &AtKey) -> bool {
+        self.0 == k.0
+    }
+}
+
+/// The found-key entries of a map store (DK1-4b-2): the std read on the key's own String
+/// (`index_found` is the std index, its panic included).
+impl<V> Keyed<V> {
+    #[inline]
+    pub(crate) fn get_found(&self, k: &DeclKey) -> Option<&V> {
+        self.0.get(&k.0)
+    }
+    #[inline]
+    pub(crate) fn contains_found(&self, k: &DeclKey) -> bool {
+        self.0.contains_key(&k.0)
+    }
+    #[inline]
+    pub(crate) fn index_found(&self, k: &DeclKey) -> &V {
+        &self.0[&k.0]
+    }
+}
+
 /// The NewKey entries of a set store (`remove_new` is the funnel's clear of `param_type_guessed`).
 impl KeyedSet {
     #[inline]
@@ -200,5 +266,18 @@ impl KeyedSet {
     #[inline]
     pub(crate) fn contains_at(&self, k: &AtKey) -> bool {
         self.0.contains(&k.0)
+    }
+}
+
+/// The found-key entries of a set store (DK1-4b-2: frames_static_init.rs's sets of a frame's
+/// resolved locals ; `extend_found` is the std `extend`, each key's String moved in).
+impl KeyedSet {
+    #[inline]
+    pub(crate) fn contains_found(&self, k: &DeclKey) -> bool {
+        self.0.contains(&k.0)
+    }
+    #[inline]
+    pub(crate) fn extend_found(&mut self, ks: Vec<DeclKey>) {
+        self.0.extend(ks.into_iter().map(|k| k.0));
     }
 }

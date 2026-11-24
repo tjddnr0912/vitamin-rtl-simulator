@@ -279,7 +279,7 @@ impl Elaborator<'_> {
                             self.string_array_elems.contains_at(k)
                         }) {
                             let (min, max, elems) =
-                                self.string_array_elems.get(&key).unwrap().clone();
+                                self.string_array_elems.get_found(&key).unwrap().clone();
                             match self.const_eval_in_scope(index) {
                                 Some(k) if k >= min && k <= max => {
                                     out.push(whole_net_chunk(elems[(k - min) as usize]));

@@ -5,11 +5,12 @@
 //! form over a store, `walk_scopes`, stays in `scope.rs`: a caller of the walk, typed at DK1-4b). They
 //! are Elaborator methods (tier E), so every caller's tokens are unchanged ; inside, they read the
 //! current scope's text and a carried scope's text as this module's own fields, not through the
-//! bridges. Since DK1-4b-1 `hit` is handed each candidate as an [`AtKey`] (the walk's one scratch
-//! text, re-written per scope level) ; the walk's return (`Option<String>`, the accepted candidate's
-//! text moved out) stays a LEAVE row until DK1-4b-2 (the found key's type).
+//! bridges. Since DK1-4b they are typed: `hit` is handed each candidate as an [`AtKey`] (the walk's
+//! one scratch text, re-written per scope level ; DK1-4b-1) and the walk returns the candidate it
+//! accepted as a [`DeclKey`], the scratch text moved into it, so a hit allocates nothing the text walk
+//! did not (DK1-4b-2).
 
-use super::AtKey;
+use super::{AtKey, DeclKey};
 use crate::decl_scope::{DeclArm, DeclPhase};
 use crate::Elaborator;
 
@@ -19,7 +20,7 @@ impl Elaborator<'_> {
         &self,
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         self.walk_scopes_key_inner(name, hit, false)
     }
 
@@ -36,7 +37,7 @@ impl Elaborator<'_> {
         prefix: &crate::ScopeRef,
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         let prefix = self.lex.names[prefix.0 .0 as usize].as_str();
         let mut scope = prefix;
         loop {
@@ -46,7 +47,7 @@ impl Elaborator<'_> {
                 format!("{scope}.{name}")
             });
             if hit(&key) {
-                return Some(key.0);
+                return Some(DeclKey(key.0));
             }
             match scope.rfind('.') {
                 Some(i) => scope = &scope[..i],
@@ -90,7 +91,7 @@ impl Elaborator<'_> {
         &self,
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         self.walk_scopes_key_inner(name, hit, true)
     }
 
@@ -99,7 +100,7 @@ impl Elaborator<'_> {
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
         stop_at_net_binding: bool,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         // GEN-3X-STR (part b): reuse ONE scratch String across the outward walk
         // instead of a fresh `format!` allocation per scope level (byte-identical
         // keys; on a hit the scratch is moved out as the owned return).
@@ -108,7 +109,7 @@ impl Elaborator<'_> {
         // its declaring package's constant first; a miss walks exactly as before
         // (`decl_scope.rs`).
         if self.decl_probe_key(name, &mut key, &hit) {
-            return Some(key.0);
+            return Some(DeclKey(key.0));
         }
         self.walk_out_from(
             self.lex.cur_prefix.as_str(),
@@ -129,7 +130,7 @@ impl Elaborator<'_> {
         prefix: &crate::ScopeRef,
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         self.walk_out_from(
             self.lex.names[prefix.0 .0 as usize].as_str(),
             name,
@@ -146,7 +147,7 @@ impl Elaborator<'_> {
         hit: &impl Fn(&AtKey) -> bool,
         stop_at_net_binding: bool,
         mut key: AtKey,
-    ) -> Option<String> {
+    ) -> Option<DeclKey> {
         use std::fmt::Write;
         loop {
             key.0.clear();
@@ -156,7 +157,7 @@ impl Elaborator<'_> {
                 let _ = write!(key.0, "{prefix}.{name}");
             }
             if hit(&key) {
-                return Some(key.0);
+                return Some(DeclKey(key.0));
             }
             if stop_at_net_binding && self.symbols.contains_at(&key) {
                 return None;

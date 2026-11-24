@@ -30,7 +30,10 @@
 //!   the hit argument probes in source order (a field of `self` / `me`, a `hit_*` method,
 //!   a local closure `name()`, a local table) and the hit SET expands each `hit_*` method
 //!   and local closure to the fields it probes. Pinned: 51 sites outside the family, 1
-//!   `walk_rtn_scopes`, 10 `hier_resolve`, 1 `decl_probe_key`.
+//!   `walk_rtn_scopes`, 10 `hier_resolve`, 1 `decl_probe_key`. Since §5.2 Q-DECLKEY DK1-4b-2 a
+//!   local closure that reads a walk's FOUND key (a `DeclKey`: `found_key_closure`) is a FOUND
+//!   row of its own (entry column `<name>()`), so the stores of each found-key copy of a
+//!   closure pair (E1.4: edge_gate.rs `other_kind`, held.rs `refused`) are pinned (R-H8 (g)).
 //! - H6c the composites (103): g2b's census_g2b rule — per fn, in source order, every
 //!   consult of a walk / binder entry, a stack accessor or a K1 class (ii) / (iii) field ;
 //!   a row when the fn names two field / stack sources, or one and a walk entry (A), or two
@@ -471,10 +474,14 @@ const WALK_FAMILY: &[&str] = &[
 /// H6: a receiver that is the `Elaborator`.
 const RECV: &[&str] = &["self", "me", "this"];
 /// H6: a probe of a local table (`contains_at`: a Keyed / KeyedSet probed by an AtKey, the walk's
-/// candidate since §5.2 Q-DECLKEY DK1-4b-1 — walk_scopes' `table.contains_at(k)`).
+/// candidate since §5.2 Q-DECLKEY DK1-4b-1 — walk_scopes' `table.contains_at(k)` ; the `_found`
+/// verbs: a store probed by the key a walk FOUND, a DeclKey since DK1-4b-2).
 const PROBE_METHODS: &[&str] = &[
     "contains_key",
     "contains_at",
+    "contains_found",
+    "get_found",
+    "index_found",
     "contains",
     "get",
     "position",
@@ -701,6 +708,9 @@ struct FnRec {
     walk_calls: Vec<(String, Vec<String>)>,
     /// H6: local closures `let name = |..| ..` -> their probes
     local_closures: BTreeMap<String, Vec<String>>,
+    /// H6 (§5.2 Q-DECLKEY DK1-4b-2): the local closures that read a walk's FOUND key (a
+    /// DeclKey) -> their probes ; each is its own FOUND row (`found_key_closure`)
+    found_closures: BTreeMap<String, Vec<String>>,
     /// H6: the probes of the fn's own body (read for `hit_*` fns)
     self_probes: Vec<String>,
     // H6c: (kind W / S / F / Fw, entry, reduced first argument)
@@ -1137,6 +1147,65 @@ fn single_path(e: &Expr) -> Option<String> {
     }
 }
 
+/// H6 (§5.2 Q-DECLKEY DK1-4b-2): a closure reads a walk's FOUND key through its first parameter
+/// when that parameter is typed `DeclKey` (by value or by reference) or, untyped, when the body
+/// hands it to a `_found` entry, to `key_same`, or asks it `is_formed_at` / `is_formed_as` (a
+/// closure typed anything else, e.g. `|me: &Self|` around its own walk, is not one). REVIEW-ONLY:
+/// a found key read by a fn (not a closure), a closure whose parameter is a pattern, or one that
+/// only hands its key on to another closure.
+fn found_key_closure(e: &Expr) -> bool {
+    struct F<'n>(&'n str, bool);
+    fn names(e: &Expr, n: &str) -> bool {
+        match e {
+            Expr::Reference(r) => names(&r.expr, n),
+            Expr::Paren(p) => names(&p.expr, n),
+            other => single_path(other).is_some_and(|p| p == n),
+        }
+    }
+    impl<'ast> Visit<'ast> for F<'_> {
+        fn visit_expr_method_call(&mut self, m: &'ast syn::ExprMethodCall) {
+            let meth = m.method.to_string();
+            if (meth.ends_with("_found") && m.args.iter().any(|a| names(a, self.0)))
+                || ((meth == "is_formed_at" || meth == "is_formed_as")
+                    && names(&m.receiver, self.0))
+            {
+                self.1 = true;
+            }
+            visit::visit_expr_method_call(self, m);
+        }
+        fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+            if single_path(&c.func).is_some_and(|n| n == "key_same")
+                && c.args.iter().any(|a| names(a, self.0))
+            {
+                self.1 = true;
+            }
+            visit::visit_expr_call(self, c);
+        }
+    }
+    let Expr::Closure(c) = e else {
+        return false;
+    };
+    let (pat, ty) = match c.inputs.first() {
+        Some(Pat::Type(pt)) => (&*pt.pat, Some(&*pt.ty)),
+        Some(p) => (p, None),
+        None => return false,
+    };
+    if let Some(mut ty) = ty {
+        while let syn::Type::Reference(r) = ty {
+            ty = &r.elem;
+        }
+        return matches!(ty, syn::Type::Path(tp)
+            if tp.path.segments.last().is_some_and(|l| l.ident == "DeclKey"));
+    }
+    let Pat::Ident(pi) = pat else {
+        return false;
+    };
+    let n = pi.ident.to_string();
+    let mut f = F(&n, false);
+    f.visit_expr(&c.body);
+    f.1
+}
+
 /// H6: what a hit argument probes, in source order (duplicates dropped): a field of the
 /// `Elaborator` receiver, a `hit_*` method of it, a local fn / closure called `name()`, a
 /// local table probed (`table.contains_key(k)`), or a bare name passed as the hit.
@@ -1298,7 +1367,11 @@ impl<'ast> Visit<'ast> for Pass<'_> {
         if let Some(init) = &l.init {
             if matches!(&*init.expr, Expr::Closure(_)) {
                 let probes = probes_of(&init.expr);
+                let found = found_key_closure(&init.expr);
                 if let Some(c) = self.cur() {
+                    if found {
+                        c.found_closures.insert(first.clone(), probes.clone());
+                    }
                     c.local_closures.insert(first.clone(), probes);
                 }
             }
@@ -2072,6 +2145,41 @@ fn h6_rows(c: &Census) -> Vec<(String, String, String, usize)> {
             let e = agg.entry(k).or_insert((class.to_string(), set, 0, r.line));
             e.2 += 1;
         }
+        // FOUND (§5.2 Q-DECLKEY DK1-4b-2, DELTA16 R-H8 (g)): a closure that reads a walk's found
+        // key is no walk hit, so no SITE row holds its stores — each gets its own row, entry
+        // column `<name>()`, its probes and their store set as a hit's
+        for (name, probes) in &r.found_closures {
+            let text = if probes.is_empty() {
+                "?".to_string()
+            } else {
+                probes.join("|")
+            };
+            let mut set: BTreeSet<String> = BTreeSet::new();
+            let mut todo: Vec<String> = probes.clone();
+            let mut seen: BTreeSet<String> = BTreeSet::new();
+            while let Some(p) = todo.pop() {
+                if !seen.insert(p.clone()) {
+                    continue;
+                }
+                if let Some(fs) = hit_fns.get(p.as_str()) {
+                    todo.extend(fs.iter().cloned());
+                } else if let Some(local) = p
+                    .strip_suffix("()")
+                    .filter(|n| n != name)
+                    .and_then(|n| r.local_closures.get(n))
+                {
+                    todo.extend(local.iter().cloned());
+                } else {
+                    set.insert(p);
+                }
+            }
+            let set = set.into_iter().collect::<Vec<_>>().join("+");
+            let k = format!("{}\t{}\t{name}()\t{text}", r.file, r.qual);
+            let e = agg
+                .entry(k)
+                .or_insert(("FOUND".to_string(), set, 0, r.line));
+            e.2 += 1;
+        }
     }
     agg.into_iter()
         .map(|(k, (class, set, n, line))| {
@@ -2097,6 +2205,30 @@ fn h6_the_walk_call_sites_are_pinned() {
         probes_of(&syn::parse_str::<Expr>("|k| table.contains_at(k)").expect("probe at")),
         ["table"]
     );
+    // a local Keyed probed by a walk's FOUND key, and the found-key closures (DK1-4b-2)
+    assert_eq!(
+        probes_of(&syn::parse_str::<Expr>("|k| table.contains_found(k)").expect("probe found")),
+        ["table"]
+    );
+    for (src, found) in [
+        ("|k: &DeclKey| self.symbols.contains_found(k)", true),
+        (
+            "|k: &DeclKey| self.clk_refused.iter().position(|r| k.is_formed_at(&r.alias))",
+            true,
+        ),
+        ("|k| self.wide_param_bits.contains_found(k)", true),
+        ("|i| key_same(i, &key)", true),
+        ("|k: &AtKey| self.symbols.contains_at(k)", false),
+        ("|k: &str| self.symbols.contains_key(k)", false),
+        ("|me: &Self| me.symbols.contains_found(&k)", false),
+        ("|k| self.symbols.contains_found(&other)", false),
+    ] {
+        assert_eq!(
+            found_key_closure(&syn::parse_str::<Expr>(src).expect("found closure")),
+            found,
+            "{src}"
+        );
+    }
     assert_eq!(
         probes_of(&syn::parse_str::<Expr>("&self.params").expect("ref")),
         ["params"]
@@ -6988,76 +7120,318 @@ fn holders_the_lexscope_types_holders_are_pinned() {
 }
 
 // =====================================================================================
-// HKC the key constructions (§5.2 Q-DECLKEY DK1-4b-1, DELTA16 R-H8 (d))
+// HKC the key constructions (§5.2 Q-DECLKEY DK1-4b-1, DELTA16 R-H8 (d) ; widened DK1-4b-2, R-H9 note 1)
 // =====================================================================================
 
 /// HKC: the key types whose tuple constructor is a lexscope door — NewKey's field is private
-/// to `key.rs` ; AtKey's is `pub(super)` since DK1-4b-1 (the walk forms its candidates), so
-/// its door is the whole module ; DeclKey is DK1-4b-2's (no row until it exists).
+/// to `key.rs` ; AtKey's (DK1-4b-1) and DeclKey's (DK1-4b-2) are `pub(super)`: the walk forms
+/// its candidates and returns its found key, so their door is the whole module.
 const HKC_TYPES: &[&str] = &["AtKey", "NewKey", "DeclKey"];
+/// HKC: the forms counted per (file, type) — `ctor` the constructor named (a call, a struct
+/// literal, a pattern, a macro argument) ; `value` the type's path used as a VALUE (not called,
+/// not a type, not a pattern: `.map(AtKey)`, `let mk = AtKey`) ; `alias` a `type` alias or a
+/// `use .. as` rename naming the type ; `write` the key's field `.0` written (an assignment, a
+/// compound assignment, `&mut k.0`, a String-mutating method on it, `write!` / `writeln!` into
+/// it) through a binding the fn types as the key (§5.2 Q-DECLKEY DK1-4b-2, DELTA16 R-H9 note 1).
+const HKC_FORMS: &[&str] = &["ctor", "value", "alias", "write"];
+/// HKC: the String methods that mutate the key's text in place.
+const HKC_MUT: &[&str] = &[
+    "clear",
+    "push",
+    "push_str",
+    "insert",
+    "insert_str",
+    "truncate",
+    "pop",
+    "remove",
+    "retain",
+    "drain",
+    "extend",
+    "replace_range",
+    "split_off",
+    "as_mut_str",
+    "make_ascii_lowercase",
+    "make_ascii_uppercase",
+];
 
-/// HKC: (file, type) -> how many times a lexscope file names a key type's constructor — a call
-/// `T(..)`, a struct literal `T { .. }`, a tuple-struct or struct pattern `T(..)` / `T { .. }`
-/// (a pattern takes the key's text out through the same field) — every lexscope file read,
-/// its `#[cfg(test)]` file too, and the arguments of a macro read as a comma list of
-/// expressions. REVIEW-ONLY: `Self(..)` inside the type's own `impl` (key.rs has none) and a
-/// macro argument that is no expression. Outside lexscope the field is private: no row can
-/// exist there (C_AT_FROM_TEXT / C_AT_BUILT_OUTSIDE fail to compile).
+/// HKC: (file, type, form) -> how many times a lexscope file names a key type in that form
+/// (HKC_FORMS) — every lexscope file read, its `#[cfg(test)]` file too, and the arguments of a
+/// macro read as a comma list of expressions. A `write` is attributed to a type through the
+/// binding's own spelled type: a fn / closure parameter `k: T` / `&T` / `&mut T`, a `let k: T`,
+/// a `let k = T(..)`, or `self` inside `impl T`. REVIEW-ONLY: `Self(..)` inside the type's own
+/// `impl` (key.rs has none) ; a macro argument that is no expression ; a `.0` write through a
+/// binding whose type is not spelled where HKC reads it (an untyped `let` of a returned key, a
+/// struct field holding a key, a `&mut String` taken by a method HKC_MUT does not list) ; a
+/// whole-key move (`mem::swap` of two keys moves a key, not its text). Outside lexscope the
+/// field is private: no row can exist there (C_AT_FROM_TEXT / C_AT_BUILT_OUTSIDE fail to
+/// compile).
 fn hkc_census() -> BTreeMap<String, usize> {
     let mut rows = BTreeMap::new();
     for (rel, text) in lexscope_texts() {
         let file = syn::parse_file(&text).unwrap_or_else(|e| panic!("HKC cannot parse {rel}: {e}"));
-        for (ty, n) in hkc_count(&file) {
-            rows.insert(format!("{rel}\t{ty}"), n);
+        for ((ty, form), n) in hkc_count(&file) {
+            rows.insert(format!("{rel}\t{ty}\t{form}"), n);
         }
     }
     rows
 }
 
-/// HKC's count of one file: type -> constructor names (calls, struct literals, patterns,
-/// macro arguments read as expressions).
-fn hkc_count(file: &syn::File) -> BTreeMap<String, usize> {
-    struct C(BTreeMap<String, usize>);
+/// HKC's count of one file: (type, form) -> uses (HKC_FORMS).
+fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
+    fn key_ty(t: &syn::Type) -> Option<String> {
+        match t {
+            syn::Type::Reference(r) => key_ty(&r.elem),
+            syn::Type::Paren(p) => key_ty(&p.elem),
+            syn::Type::Path(p) => p
+                .path
+                .segments
+                .last()
+                .map(|l| l.ident.to_string())
+                .filter(|n| HKC_TYPES.contains(&n.as_str())),
+            _ => None,
+        }
+    }
+    fn names_key(t: &syn::Type) -> Option<String> {
+        struct N(Option<String>);
+        impl<'a> Visit<'a> for N {
+            fn visit_path(&mut self, p: &'a syn::Path) {
+                if let Some(l) = p.segments.last() {
+                    let n = l.ident.to_string();
+                    if HKC_TYPES.contains(&n.as_str()) && self.0.is_none() {
+                        self.0 = Some(n);
+                    }
+                }
+                visit::visit_path(self, p);
+            }
+        }
+        let mut n = N(None);
+        n.visit_type(t);
+        n.0
+    }
+    struct C {
+        n: BTreeMap<(String, String), usize>,
+        /// the bindings each enclosing fn / closure types as a key: name -> type
+        typed: Vec<BTreeMap<String, String>>,
+        /// the key type of the enclosing `impl`, if any
+        impl_ty: Vec<Option<String>>,
+    }
     impl C {
-        fn path(&mut self, p: &syn::Path) {
+        fn add(&mut self, ty: &str, form: &str) {
+            *self
+                .n
+                .entry((ty.to_string(), form.to_string()))
+                .or_default() += 1;
+        }
+        fn path(&mut self, p: &syn::Path, form: &str) {
             if let Some(l) = p.segments.last() {
                 let n = l.ident.to_string();
                 if HKC_TYPES.contains(&n.as_str()) {
-                    *self.0.entry(n).or_default() += 1;
+                    self.add(&n, form);
                 }
+            }
+        }
+        fn bind_pat(&mut self, p: &Pat, ty: Option<String>) {
+            let (pat, ty) = match p {
+                Pat::Type(pt) => (&*pt.pat, key_ty(&pt.ty).or(ty)),
+                other => (other, ty),
+            };
+            if let (Pat::Ident(pi), Some(t)) = (pat, ty) {
+                if let Some(m) = self.typed.last_mut() {
+                    m.insert(pi.ident.to_string(), t);
+                }
+            }
+        }
+        /// the key type of `<base>.0` when `e` is that field of a typed binding
+        fn field0(&self, e: &Expr) -> Option<String> {
+            let Expr::Field(f) = e else {
+                return None;
+            };
+            if !matches!(&f.member, syn::Member::Unnamed(i) if i.index == 0) {
+                return None;
+            }
+            let base = single_path(&f.base)?;
+            if base == "self" {
+                return self.impl_ty.last().cloned().flatten();
+            }
+            self.typed.iter().rev().find_map(|m| m.get(&base).cloned())
+        }
+        fn write(&mut self, e: &Expr) {
+            if let Some(t) = self.field0(e) {
+                self.add(&t, "write");
             }
         }
     }
     impl<'a> Visit<'a> for C {
+        fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+            self.impl_ty.push(if i.trait_.is_none() {
+                key_ty(&i.self_ty)
+            } else {
+                None
+            });
+            visit::visit_item_impl(self, i);
+            self.impl_ty.pop();
+        }
+        fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
+            self.typed.push(BTreeMap::new());
+            for a in &f.sig.inputs {
+                if let syn::FnArg::Typed(pt) = a {
+                    self.bind_pat(&Pat::Type(pt.clone()), None);
+                }
+            }
+            visit::visit_item_fn(self, f);
+            self.typed.pop();
+        }
+        fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+            self.typed.push(BTreeMap::new());
+            for a in &f.sig.inputs {
+                if let syn::FnArg::Typed(pt) = a {
+                    self.bind_pat(&Pat::Type(pt.clone()), None);
+                }
+            }
+            visit::visit_impl_item_fn(self, f);
+            self.typed.pop();
+        }
+        fn visit_expr_closure(&mut self, c: &'a syn::ExprClosure) {
+            self.typed.push(BTreeMap::new());
+            for p in &c.inputs {
+                self.bind_pat(p, None);
+            }
+            visit::visit_expr_closure(self, c);
+            self.typed.pop();
+        }
+        fn visit_local(&mut self, l: &'a syn::Local) {
+            let from_init = l.init.as_ref().and_then(|i| match &*i.expr {
+                Expr::Call(c) => match &*c.func {
+                    Expr::Path(p) => p
+                        .path
+                        .segments
+                        .last()
+                        .map(|s| s.ident.to_string())
+                        .filter(|n| HKC_TYPES.contains(&n.as_str())),
+                    _ => None,
+                },
+                _ => None,
+            });
+            self.bind_pat(&l.pat, from_init);
+            visit::visit_local(self, l);
+        }
         fn visit_expr_call(&mut self, c: &'a syn::ExprCall) {
             if let Expr::Path(p) = &*c.func {
-                self.path(&p.path);
+                self.path(&p.path, "ctor");
+                // the constructor's own path is not a value use
+                for a in &c.args {
+                    self.visit_expr(a);
+                }
+                return;
             }
             visit::visit_expr_call(self, c);
         }
+        fn visit_expr_path(&mut self, p: &'a syn::ExprPath) {
+            self.path(&p.path, "value");
+            visit::visit_expr_path(self, p);
+        }
         fn visit_expr_struct(&mut self, s: &'a syn::ExprStruct) {
-            self.path(&s.path);
+            self.path(&s.path, "ctor");
             visit::visit_expr_struct(self, s);
         }
         fn visit_pat_tuple_struct(&mut self, p: &'a syn::PatTupleStruct) {
-            self.path(&p.path);
+            self.path(&p.path, "ctor");
             visit::visit_pat_tuple_struct(self, p);
         }
         fn visit_pat_struct(&mut self, p: &'a syn::PatStruct) {
-            self.path(&p.path);
+            self.path(&p.path, "ctor");
             visit::visit_pat_struct(self, p);
+        }
+        fn visit_item_type(&mut self, t: &'a syn::ItemType) {
+            if let Some(n) = names_key(&t.ty) {
+                self.add(&n, "alias");
+            }
+            visit::visit_item_type(self, t);
+        }
+        fn visit_use_rename(&mut self, r: &'a syn::UseRename) {
+            let n = r.ident.to_string();
+            if HKC_TYPES.contains(&n.as_str()) {
+                self.add(&n, "alias");
+            }
+            visit::visit_use_rename(self, r);
+        }
+        fn visit_expr_assign(&mut self, a: &'a syn::ExprAssign) {
+            self.write(&a.left);
+            visit::visit_expr_assign(self, a);
+        }
+        fn visit_expr_binary(&mut self, b: &'a syn::ExprBinary) {
+            if matches!(
+                b.op,
+                syn::BinOp::AddAssign(_)
+                    | syn::BinOp::SubAssign(_)
+                    | syn::BinOp::MulAssign(_)
+                    | syn::BinOp::DivAssign(_)
+                    | syn::BinOp::RemAssign(_)
+                    | syn::BinOp::BitXorAssign(_)
+                    | syn::BinOp::BitAndAssign(_)
+                    | syn::BinOp::BitOrAssign(_)
+                    | syn::BinOp::ShlAssign(_)
+                    | syn::BinOp::ShrAssign(_)
+            ) {
+                self.write(&b.left);
+            }
+            visit::visit_expr_binary(self, b);
+        }
+        fn visit_expr_reference(&mut self, r: &'a syn::ExprReference) {
+            if r.mutability.is_some() {
+                self.write(&r.expr);
+            }
+            visit::visit_expr_reference(self, r);
+        }
+        fn visit_expr_method_call(&mut self, m: &'a syn::ExprMethodCall) {
+            if HKC_MUT.contains(&m.method.to_string().as_str()) {
+                self.write(&m.receiver);
+            }
+            visit::visit_expr_method_call(self, m);
         }
         fn visit_macro(&mut self, m: &'a syn::Macro) {
             if let Ok(args) = m.parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
+                let wr = m
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|l| l.ident == "write" || l.ident == "writeln");
+                if wr {
+                    if let Some(first) = args.first() {
+                        self.write(first);
+                    }
+                }
                 for a in &args {
                     self.visit_expr(a);
                 }
             }
         }
     }
-    let mut c = C(BTreeMap::new());
+    let mut c = C {
+        n: BTreeMap::new(),
+        typed: vec![BTreeMap::new()],
+        impl_ty: Vec::new(),
+    };
     c.visit_file(file);
-    c.0
+    c.n
+}
+
+/// HKC_COUNTS: per form, per type (every listed type and form printed, zeros too).
+fn hkc_counts(rows: &BTreeMap<String, usize>) -> String {
+    let mut out = Vec::new();
+    for form in HKC_FORMS {
+        let mut per_ty: BTreeMap<&str, usize> = HKC_TYPES.iter().map(|t| (*t, 0)).collect();
+        for (k, n) in rows {
+            let mut cols = k.split('\t').skip(1);
+            let (ty, f) = (cols.next().expect("type"), cols.next().expect("form"));
+            if f == *form {
+                *per_ty.get_mut(ty).expect("a listed type") += n;
+            }
+        }
+        let tys: Vec<String> = per_ty.iter().map(|(t, n)| format!("{t}={n}")).collect();
+        out.push(format!("{form}[{}]", tys.join(" ")));
+    }
+    out.join(" ")
 }
 
 #[test]
@@ -7070,12 +7444,38 @@ fn hkc_the_key_constructions_are_pinned() {
          let b = NewKey { 0: s }; let AtKey(t) = a; g(vec![AtKey(x)]); m::AtKeyish(1); AtKey::new(); b }",
     )
     .expect("HKC fixture");
-    let n = hkc_count(&fx);
-    assert_eq!(
+    let shown = |n: BTreeMap<(String, String), usize>| {
         n.iter()
-            .map(|(t, c)| format!("{t}={c}"))
-            .collect::<Vec<_>>(),
-        ["AtKey=3", "NewKey=1"]
+            .map(|((t, f), c)| format!("{t}:{f}={c}"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(shown(hkc_count(&fx)), ["AtKey:ctor=3", "NewKey:ctor=1"]);
+    // DK1-4b-2 (R-H9 note 1): the six shapes the constructor count was blind to, and the walk's
+    // own scratch writes ; an untyped `.0` write and a non-key `.0` are not counted
+    let fx = syn::parse_file(
+        "fn a(v: Vec<String>) -> Vec<AtKey> { v.into_iter().map(AtKey).collect() } \
+         fn b(s: String) -> AtKey { let mk = AtKey; mk(s) } \
+         fn c(k: &mut AtKey, s: String) { k.0 = s; } \
+         type HkcK = AtKey; \
+         fn d(s: String) -> AtKey { use super::AtKey as Hk; Hk(s) } \
+         fn e(v: Option<String>) -> Option<DeclKey> { v.map(DeclKey) } \
+         fn w(mut key: AtKey, x: &mut Shown, u: &mut Other) { key.0.clear(); key.0.push_str(n); \
+         let _ = write!(key.0, \"{p}.{n}\"); x.0.clear(); u.0 = s; let mut j = AtKey(String::new()); \
+         j.0 += \"x\"; std::mem::swap(&mut j.0, &mut t); } \
+         impl DeclKey { fn z(&mut self) { self.0.clear(); } } \
+         impl Keyed { fn y(&mut self) { self.0.clear(); } }",
+    )
+    .expect("HKC fixture 2");
+    assert_eq!(
+        shown(hkc_count(&fx)),
+        [
+            "AtKey:alias=2",
+            "AtKey:ctor=1",
+            "AtKey:value=2",
+            "AtKey:write=6",
+            "DeclKey:value=1",
+            "DeclKey:write=1"
+        ]
     );
     let rows = hkc_census();
     let got: BTreeMap<String, String> = rows
@@ -7083,33 +7483,27 @@ fn hkc_the_key_constructions_are_pinned() {
         .map(|(k, n)| (k.clone(), n.to_string()))
         .collect();
     let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
-    dump("HKC", "file\ttype\tcount", &dumped);
+    dump("HKC", "file\ttype\tform\tcount", &dumped);
     let mut want = BTreeMap::new();
     for row in table(&tables::get("HKC")) {
         assert_eq!(
             row.len(),
-            3,
-            "HKC table row has {} columns, not 3: {row:?}",
+            4,
+            "HKC table row has {} columns, not 4: {row:?}",
             row.len()
         );
-        want.insert(row[..2].join("\t"), row[2].clone());
+        want.insert(row[..3].join("\t"), row[3].clone());
     }
     let mut msgs = diff_rows(
         "HKC",
         &got,
         &want,
-        "a new construction of a key type in lexscope (the constructor door is the module, not one \
-         file): a key formed from text is P23's — name the unit, read where the text comes from, add \
-         the row",
+        "a new construction, value use, alias or field write of a key type in lexscope (the \
+         constructor door is the module, not one file): a key formed from text is P23's — name the \
+         unit, read where the text comes from, add the row",
         "a key construction is gone: name the unit, remove the row",
     );
-    let mut per_ty: BTreeMap<&str, usize> = HKC_TYPES.iter().map(|t| (*t, 0)).collect();
-    for (k, n) in &rows {
-        let ty = k.rsplit('\t').next().expect("type");
-        *per_ty.get_mut(ty).expect("a listed type") += n;
-    }
-    let counts: Vec<String> = per_ty.iter().map(|(t, n)| format!("{t}={n}")).collect();
-    let counts = counts.join(" ");
+    let counts = hkc_counts(&rows);
     if counts != tables::get("HKC_COUNTS") {
         msgs.push(format!(
             "HKC COUNTS table [{}] now [{counts}]",

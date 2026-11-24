@@ -87,10 +87,10 @@ impl Elaborator<'_> {
     /// judged here.
     pub(crate) fn key_spells_indexed_singleton(
         &self,
-        key: &str,
+        key: &DeclKey,
         user_segs: usize,
     ) -> Option<String> {
-        let segs: Vec<&str> = key.split('.').collect();
+        let segs: Vec<&str> = found_text(key).split('.').collect();
         let start = segs.len().saturating_sub(user_segs);
         (start..segs.len()).find_map(|i| self.indexed_gen_singleton(&segs[..i].join("."), segs[i]))
     }

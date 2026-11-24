@@ -120,7 +120,7 @@ impl Elaborator<'_> {
         let key = self.walk_scopes_key_shadowed(&path.segments[0].name, |k| {
             self.string_array_elems.contains_at(k)
         })?;
-        let (min, max, elems) = self.string_array_elems.get(&key)?.clone();
+        let (min, max, elems) = self.string_array_elems.get_found(&key)?.clone();
         let k = self.const_eval_in_scope(index)?;
         if k < min || k > max {
             self.error(

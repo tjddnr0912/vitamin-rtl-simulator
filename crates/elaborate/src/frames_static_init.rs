@@ -91,11 +91,13 @@ impl Elaborator<'_> {
         // `int c = k; int d = c + 1;` declines BOTH — `d` reading `c` at first activation
         // would be a third answer just as `c` reading `k` is). Only ever grows, bounded by
         // the declaration count, so the loop terminates.
-        let formals: std::collections::BTreeSet<String> = ports
-            .iter()
-            .filter_map(|p| self.walk_scopes_key(&p.name.name, |k| self.symbols.contains_at(k)))
-            .collect();
-        let mut nonh = formals.clone();
+        let mut nonh = KeyedSet::default();
+        nonh.extend_found(
+            ports
+                .iter()
+                .filter_map(|p| self.walk_scopes_key(&p.name.name, |k| self.symbols.contains_at(k)))
+                .collect(),
+        );
         loop {
             let before = nonh.len();
             self.frame_nonhoistable.clone_from(&nonh);
@@ -105,13 +107,13 @@ impl Elaborator<'_> {
                     Some(seg) => self.with_scope(seg, |s| s.declined_local_keys(&d)),
                     None => self.declined_local_keys(&d),
                 };
-                nonh.extend(found);
+                nonh.extend_found(found);
             }
             if nonh.len() == before {
                 break;
             }
         }
-        *self.frame_nonhoistable = nonh;
+        self.frame_nonhoistable = nonh;
         // PER-DECLARATOR, with ONE frame-wide escape hatch.
         //
         // A declined sibling does not by itself cost an admitted declarator its once-only
@@ -141,14 +143,14 @@ impl Elaborator<'_> {
         // One rule covers both because the two cases differ only in WHY the sibling was
         // declined, and that reason is exactly the open oracle-split question. Narrowing the
         // hatch to the formal case is a separate decision that needs that split resolved.
-        let mut admitted_keys: std::collections::BTreeSet<String> = Default::default();
+        let mut admitted_keys = KeyedSet::default();
         for (seg, d) in &cands {
             let d = d.clone();
             let found = match seg {
                 Some(seg) => self.with_scope(seg, |s| s.admitted_local_keys(&d)),
                 None => self.admitted_local_keys(&d),
             };
-            admitted_keys.extend(found);
+            admitted_keys.extend_found(found);
         }
         let mut shadowed = false;
         for (seg, d) in &cands {
@@ -156,8 +158,7 @@ impl Elaborator<'_> {
             shadowed |= match seg {
                 Some(seg) => {
                     let seg = seg.clone();
-                    let keys = admitted_keys.clone();
-                    self.with_scope(&seg, |s| s.declined_init_reads_admitted(&d, &keys))
+                    self.with_scope(&seg, |s| s.declined_init_reads_admitted(&d, &admitted_keys))
                 }
                 None => self.declined_init_reads_admitted(&d, &admitted_keys),
             };
@@ -225,7 +226,7 @@ impl Elaborator<'_> {
     /// The resolved keys of this declaration's STATIC declarators whose initializer is
     /// DECLINED — they keep the per-activation emission, so anything reading them cannot
     /// be hoisted either. Resolved under the CURRENT prefix.
-    fn declined_local_keys(&self, d: &ast::NetVarDecl) -> Vec<String> {
+    fn declined_local_keys(&self, d: &ast::NetVarDecl) -> Vec<DeclKey> {
         if d.lifetime.unwrap_or(self.frame_body_auto) {
             return Vec::new();
         }
@@ -244,7 +245,7 @@ impl Elaborator<'_> {
 
     /// The resolved keys of this declaration's declarators that ARE hoisted, under the
     /// CURRENT prefix. The mirror of [`Self::declined_local_keys`].
-    fn admitted_local_keys(&self, d: &ast::NetVarDecl) -> Vec<String> {
+    fn admitted_local_keys(&self, d: &ast::NetVarDecl) -> Vec<DeclKey> {
         d.names
             .iter()
             .filter(|decl| {
@@ -262,11 +263,7 @@ impl Elaborator<'_> {
     ///
     /// FAIL-CLOSED: an expression shape this walk cannot decompose answers `true`, because
     /// a reference it cannot see is exactly the reference that produces the third answer.
-    fn declined_init_reads_admitted(
-        &self,
-        d: &ast::NetVarDecl,
-        admitted: &std::collections::BTreeSet<String>,
-    ) -> bool {
+    fn declined_init_reads_admitted(&self, d: &ast::NetVarDecl, admitted: &KeyedSet) -> bool {
         d.names
             .iter()
             .filter_map(|decl| decl.init.as_ref())
@@ -278,11 +275,7 @@ impl Elaborator<'_> {
     /// sub-expression recurses; a name is tested by RESOLVED key, so a block-local that
     /// merely shares a spelling with an admitted one elsewhere does not match. Any other
     /// shape returns `true` (fail closed).
-    fn expr_reads_admitted(
-        &self,
-        e: &ast::Expr,
-        admitted: &std::collections::BTreeSet<String>,
-    ) -> bool {
+    fn expr_reads_admitted(&self, e: &ast::Expr, admitted: &KeyedSet) -> bool {
         use ast::ExprKind as K;
         let any = |v: &[ast::Expr]| v.iter().any(|x| self.expr_reads_admitted(x, admitted));
         match &e.kind {
@@ -290,7 +283,7 @@ impl Elaborator<'_> {
             K::Ident(p) => {
                 p.segments.len() == 1 && {
                     self.walk_scopes_key(&p.segments[0].name, |k| self.symbols.contains_at(k))
-                        .is_some_and(|k| admitted.contains(&k))
+                        .is_some_and(|k| admitted.contains_found(&k))
                 }
             }
             K::Paren { inner } => self.expr_reads_admitted(inner, admitted),
@@ -444,8 +437,10 @@ impl Elaborator<'_> {
         }
         self.walk_scopes_key(name, |k| self.symbols.contains_at(k))
             .is_some_and(|k| {
-                k.split('.').any(|seg| seg.starts_with("$func$"))
-                    && !self.frame_nonhoistable.contains(&k)
+                found_text(&k)
+                    .split('.')
+                    .any(|seg| seg.starts_with("$func$"))
+                    && !self.frame_nonhoistable.contains_found(&k)
             })
     }
 }

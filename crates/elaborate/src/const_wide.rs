@@ -1270,15 +1270,15 @@ impl Elaborator<'_> {
         // Re-derive the innermost binding key over the SAME combined set the value
         // lookup walks, so a shadowing net wins here exactly as it does there.
         let key = self.walk_scopes_key(n, |k| self.hit_value_or_net(k))?;
-        let (lo, w, ascending) = self.param_range.get(&key).copied()?;
+        let (lo, w, ascending) = self.param_range.get_found(&key).copied()?;
         if lo != 0 || ascending {
             return None;
         }
-        let v = self.params.get(&key).copied()?;
+        let v = self.params.get_found(&key).copied()?;
         // The SIGN travels with the width and must be the SAME declaration's. Requiring
         // `param_meta`'s width to agree is what proves they are: a disagreement means
         // one of the two was inferred, and this resolver refuses to mix them.
-        let (mw, signed) = self.param_meta.get(&key).copied()?;
+        let (mw, signed) = self.param_meta.get_found(&key).copied()?;
         if mw != w {
             return None;
         }
@@ -1389,7 +1389,7 @@ impl Elaborator<'_> {
         };
         if let [seg] = path.segments.as_slice() {
             if let Some(key) = self.walk_scopes_key(&seg.name, |k| self.hit_wide_value_or_net(k)) {
-                if let Some(cv) = self.wide_param_bits.get(&key) {
+                if let Some(cv) = self.wide_param_bits.get_found(&key) {
                     return Some((cv.bits.clone(), cv.width, cv.signed));
                 }
             }

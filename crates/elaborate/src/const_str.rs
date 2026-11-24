@@ -60,7 +60,7 @@ impl Elaborator<'_> {
                         || self.wide_param_bits.contains_at(k)
                         || self.symbols.contains_at(k)
                 })?;
-                self.str_param_raw.get(&key).cloned()
+                self.str_param_raw.get_found(&key).cloned()
             }
             // §3 ⑨: read the PACKAGE's own map. ⚠️ This arm used to look `str_param_raw`
             // up under the key `"P::S"` — a spelling NO producer ever writes (the package

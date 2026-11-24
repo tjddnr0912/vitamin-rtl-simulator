@@ -111,6 +111,7 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): held.rs clk_refused_at's `refused` closure compares at_text(&r.alias) (LEAVE L9, DK1-4b): its hit set names the call.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — its 5 INTERNAL / PROBE rows re-homed, hand columns kept
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk hands its candidate as an AtKey (DELTA16 E1.3, E1.4) — the two closure pairs: edge_gate.rs binding_encloses' second walk probes through `other_kind_at` (the typed twin ; `other_kind` stays for the found text key), held.rs clk_refused_at through `refused_at` (at_same: the candidate against a refused alias ; `refused` / at_text stays for the found key) ; both pairs' candidate halves leave at DK2. walk_scopes' INTERNAL `table` row holds by PROBE_METHODS + `contains_at` (R-H8 (b)).
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): FOUND rows (R-H8 (g), engine edit: `found_key_closure`) — a closure that reads a walk's found key (a DeclKey) is no walk hit, so no SITE row held its stores: the found-key copy of each E1.4 pair gets its own row (edge_gate.rs binding_encloses `other_kind()`, held.rs clk_refused_at `refused()` ; their candidate copies stay the SITE rows' `other_kind_at()` / `refused_at()`)
 file	fn	entry	hit_text	class	hit_set	calls
 array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
 block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
@@ -128,6 +129,7 @@ const_wide.rs	narrow_param_bits	walk_scopes_key	hit_value_or_net	SITE	params+sym
 const_wide.rs	wide_name_bits	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
 decl_collide.rs	modport_call_refused	walk_scopes_key	iface_insts	SITE	iface_insts	1
 dynarr.rs	dyn_handle	walk_scopes_key_shadowed	fixed_string_dyn_key	SITE	fixed_string_dyn_key	1
+edge_gate.rs	binding_encloses	other_kind()	wide_param_bits|real_param_val|str_param_raw|symbols	FOUND	real_param_val+str_param_raw+symbols+wide_param_bits	1
 edge_gate.rs	binding_encloses	walk_scopes_key	hit_value	SITE	params	1
 edge_gate.rs	binding_encloses	walk_scopes_key	params|other_kind_at()	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
 edge_gate.rs	variable_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
@@ -141,6 +143,7 @@ frames_static_init.rs	expr_reads_admitted	walk_scopes_key	symbols	SITE	symbols	1
 frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	symbols	SITE	symbols	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_loop_labels	SITE	gen_loop_labels	1
 gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_singleton_labels	SITE	gen_singleton_labels	1
+held.rs	clk_refused_at	refused()	clk_refused	FOUND	clk_refused	1
 held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused_at()	SITE	at_same()+clk_refused+symbols	1
 hier.rs	hier_lookup	hier_resolve	symbols	HIER	symbols	1
 hier.rs	hier_lookup_param	hier_resolve	hier_params	HIER	hier_params	1
@@ -181,7 +184,7 @@ strings.rs	is_string_array_base	walk_scopes_key_shadowed	string_array_elems	SITE
 strings.rs	string_array_elem_net	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
 struct_arm.rs	struct_arm_rhs	walk_scopes_key	symbols	SITE	symbols	1
 == H6_COUNTS
-{"HIER": 10, "INTERNAL": 5, "PROBE": 1, "RTN": 1, "SITE": 51} site_texts 25 site_sets 20
+{"FOUND": 2, "HIER": 10, "INTERNAL": 5, "PROBE": 1, "RTN": 1, "SITE": 51} site_texts 25 site_sets 20
 == H6C
 # H6c: g2b composites.tsv (103 ; class codes in g2b/tools/mk_composites.py).
 file	fn	tier	class
@@ -303,6 +306,7 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # §5.2 Q-DECLKEY DK1-2c: the saved-key Vecs hold NewKeys (instance.rs:560, iface_inst.rs:225, package.rs:653 :657 :663 :665 :691 ;
 # bind_params' return, params.rs:1572): saved_params left two rows, elaborate_package 22 -> 17 (saved_str stays: its value is
 # `Option<String>`), and the two `bind_params` UNTYPED bindings (iface_inst.rs `sp=`, instance_array.rs `saved=`) left H7.
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): frames_static_init.rs emit_frame_static_prologue's `formals` (folded into `nonh`) and `admitted_keys` are KeyedSets of the walk's found keys (`extend_found`, N11-3 / C2) — no String collection: 3 -> 1 (cands)
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	1	pushed
@@ -348,7 +352,7 @@ frames_classify.rs	build_frame_set	3	set,func_widths,edges
 frames_classify.rs	build_task_frame_set	1	edges
 frames_classify_write.rs	ast_func_body_writes_outside	UNTYPED	own=rtn_declared_names
 frames_static_init.rs	block_wrap_prefix	1	segs
-frames_static_init.rs	emit_frame_static_prologue	3	cands,formals,admitted_keys
+frames_static_init.rs	emit_frame_static_prologue	1	cands
 gen_enum.rs	gen_carried_typedefs	UNTYPED	names=scope_names
 gen_enum.rs	scope_names	1	names
 gen_scope_name.rs	key_spells_indexed_singleton	1	segs
@@ -452,7 +456,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 158 fns 86 untyped 30 readers 26
+lets 156 fns 86 untyped 30 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -1392,51 +1396,16 @@ ident=0 asserts=5
 # L1 falls at LS3, 0 at DK1 ; L2 / L3 close at RS1 (HBR == R).
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — the 3 bridge reads in the moved bodies are the module's field reads (L1 4 -> 3, L6 3 -> 1)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — L10 (the walk's text, SURF_LEAVE) makes walk_scopes_key / _shadowed / _from / scoped_key_at_or_above bridge entries: their 47 reads outside lexscope (40 / 3 / 1 / 3), each closing at DK1-4b ; strings.rs:139 (in a `matches!` guard) is not seen here (H6 pins it)
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10 CLOSED (the walk returns a DeclKey ; SURF_LEAVE's four L10 rows deleted): the 47 walk-entry reads leave HBR (walk_scopes_key 40, walk_scopes_key_shadowed 3, scoped_key_at_or_above 3, walk_scopes_key_from 1 ; no HH / H6 / HM row takes them: those tables pass unchanged but H6's FOUND rows) ; held.rs clk_refused_at's L9 at_text (BIN:==, now DeclKey::is_formed_at) and struct_arm.rs struct_arm_rhs's L7 key_text (BIN:!=, now DeclKey::is_formed_as) gone ; + LEAVE L11 found_text's three rows: ports.rs bind_iface_port (the X15 prefix glue -> DK3-a), gen_scope_name.rs key_spells_indexed_singleton and frames_static_init.rs frame_init_name_is_local_or_const (a found key's segments read, HSEG DK3 rows -> DK3-b)
 file	fn	entry	sink	count
-array_geom.rs	shape_bits	walk_scopes_key	LOCAL:key#2	1
-block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	RECV:.is_some	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	BIN:==	1
 block_local/mod.rs	names_with_pkg_var_aliases	cur_prefix_text	RECV:.is_empty	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	COND	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	LOCAL:akey#2	1
-const_bound.rs	unfoldable_reason_in	walk_scopes_key	RECV:.is_some	1
-const_decl_width.rs	narrow_param_decl_width	walk_scopes_key	LOCAL:key#4	1
-const_eval.rs	array_param_init_pattern	walk_scopes_key	RECV:.and_then	1
-const_eval.rs	wide_param_name_in	walk_scopes_key	RECV:.is_some	1
-const_fn_width/fold_x.rs	names_real_binding	walk_scopes_key	RECV:.is_some_and	1
-const_str.rs	const_str_at	walk_scopes_key	LOCAL:key#2	1
-const_wide.rs	narrow_param_bits	walk_scopes_key	LOCAL:key#4	1
-const_wide.rs	wide_name_bits	walk_scopes_key	COND	1
-decl_collide.rs	modport_call_refused	walk_scopes_key	OTHER:let-pattern	1
-dynarr.rs	dyn_handle	walk_scopes_key_shadowed	RECV:.and_then	1
-edge_gate.rs	binding_encloses	walk_scopes_key	LOCAL:innermost#2	1
-edge_gate.rs	binding_encloses	walk_scopes_key	OTHER:let-pattern	1
-edge_gate.rs	variable_named_in	walk_scopes_key	RECV:.is_some	1
-edge_gate.rs	wide_lsb_range_of	walk_scopes_key	LOCAL:key#5	1
-edge_gate.rs	wide_param_named_in	walk_scopes_key	RECV:.is_some	1
-expr_special.rs	bits_of_view	walk_scopes_key	RECV:.is_some_and	1
-frames_static_init.rs	admitted_local_keys	walk_scopes_key	CLOSURE>ARG:d.names.iter().filter(|..| ..).filter_map	1
-frames_static_init.rs	declined_local_keys	walk_scopes_key	CLOSURE>ARG:d.names.iter().filter(|..| ..).filter_map	1
-frames_static_init.rs	emit_frame_static_prologue	walk_scopes_key	CLOSURE>ARG:ports.iter().filter_map	1
-frames_static_init.rs	expr_reads_admitted	walk_scopes_key	RECV:.is_some_and	1
-frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	RECV:.is_some_and	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	RECV:.is_some	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	RECV:.map	1
+frames_static_init.rs	frame_init_name_is_local_or_const	found_text	RECV:.split	1
+gen_scope_name.rs	key_spells_indexed_singleton	found_text	RECV:.split	1
 generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
-held.rs	clk_refused_at	at_text	BIN:==	1
-held.rs	clk_refused_at	walk_scopes_key_from	LOCAL:key#2	1
 hier.rs	hier_resolve	scope_text	LOCAL:prefix#5	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	LOCAL:recv_key#2	1
-hier_defer/read.rs	resolve_deferred_hier_call	scoped_key_at_or_above	RECV:.and_then	1
-hier_defer/write.rs	every_name_resolves	walk_scopes_key	RECV:.is_some	1
-ident_route.rs	ast_reads_guessed_param	walk_scopes_key	RECV:.is_some_and	1
-ident_route.rs	bare_ident_route	walk_scopes_key	COND	1
-ident_route.rs	bare_ident_route	walk_scopes_key	RECV:.is_some_and	1
-lvalue.rs	collect_lval_chunks	walk_scopes_key_shadowed	COND	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	RECV:.is_some	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	RECV:.is_some_and	1
-package.rs	dotted_hit_is_pkg_alias	walk_scopes_key	RECV:.is_some_and	1
 package.rs	elaborate_package	cur_prefix_text	ARG:self.decl_keep_snapshot	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved.iter().map	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_meta.iter().map	1
@@ -1445,21 +1414,11 @@ package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_real.iter().map	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_str.iter().map	1
 package.rs	elaborate_package	key_text	CLOSURE>ARG:saved_wide.iter().map	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
-param_query.rs	real_param_is_non_integral	walk_scopes_key	OTHER:let-pattern	1
-param_query.rs	real_param_lowers_real	walk_scopes_key	RECV:.is_some_and	1
-params.rs	param_sel_range	walk_scopes_key	LOCAL:key#2	1
 ports.rs	bind_iface_port	at_text	MAC:format>LOCAL:dst_prefix#1	1
-ports.rs	bind_iface_port	walk_scopes_key	LOCAL:found#2	1
-ports.rs	check_modport_write	walk_scopes_key	LOCAL:key#2	1
+ports.rs	bind_iface_port	found_text	MAC:format>LOCAL:src_prefix#4	1
 ports.rs	elaborate_virtual_iface	at_text	LOCAL:inst_path#4	1
 ports.rs	elaborate_virtual_iface	at_text	LOCAL:vif_fq#3	1
 net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
-ports.rs	wire_ports	walk_scopes_key	RECV:.is_some	1
-scope.rs	lookup_net_scoped	walk_scopes_key	LOCAL:key#3	1
-scope.rs	walk_scopes	walk_scopes_key	RECV:.and_then	1
-strings.rs	string_array_elem_net	walk_scopes_key_shadowed	LOCAL:key#2	1
-struct_arm.rs	struct_arm_rhs	key_text	BIN:!=	1
-struct_arm.rs	struct_arm_rhs	walk_scopes_key	LOCAL:walked#3	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
 # + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
@@ -1473,7 +1432,8 @@ struct_arm.rs	struct_arm_rhs	walk_scopes_key	LOCAL:walked#3	1
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): cur_prefix_text 6 -> 4, `fq` (scope.rs) is deleted: its two L1 reads left (at_cur / show_miss read the field inside
 # lexscope) ; + LEAVE L9 at_text's four rows: held.rs clk_refused_at's compare (BIN:==, DK1-4b), ports.rs elaborate_virtual_iface's
 # two member-key glues (inst_path, vif_fq: DK1-5's key_in), ports.rs bind_iface_port's X15 prefix (DK3-a)
-{"at_text": 4, "cur_gen_rtn_key": 2, "cur_prefix_text": 3, "display_of_key_text": 1, "key_text": 7, "key_under": 1, "scope_text": 1, "scoped_key_at_or_above": 3, "walk_rtn_scopes": 1, "walk_scopes_key": 40, "walk_scopes_key_from": 1, "walk_scopes_key_shadowed": 3}
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10's four entries 47 -> 0 (closed), at_text 4 -> 3, key_text 7 -> 6, + found_text 3 (L11)
+{"at_text": 3, "cur_gen_rtn_key": 2, "cur_prefix_text": 3, "display_of_key_text": 1, "found_text": 3, "key_text": 6, "key_under": 1, "scope_text": 1, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1752,9 +1712,16 @@ sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
 # a pattern, a macro argument) — AtKey's field is `pub(super)` since DK1-4b-1 (the walk forms its candidates: walk.rs), so its
 # constructor door is the whole module ; NewKey's stays private to key.rs. A new row or a moved count is a key formed in a new
 # place: P23 reads where its text comes from.
-file	type	count
-lexscope/key.rs	AtKey	2
-lexscope/key.rs	NewKey	2
-lexscope/walk.rs	AtKey	3
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24) (engine edit (b), R-H9 note 1): four columns — a form per row: `ctor` the constructor named (as before), `value` the type's path
+# used as a value (`.map(AtKey)`, `let mk = AtKey`), `alias` a `type` alias or a `use .. as` rename, `write` the key's field `.0` written
+# through a binding the fn types as the key ; the walk's scratch writes are pinned (walk.rs AtKey write 5: `key.0.clear()` x2,
+# `push_str` x1, `write!(key.0, ..)` x2) ; DeclKey's constructions: walk.rs 3 (the three returns), tests.rs 1 (the cfg(test) helper).
+file	type	form	count
+lexscope/key.rs	AtKey	ctor	2
+lexscope/key.rs	NewKey	ctor	2
+lexscope/tests.rs	DeclKey	ctor	1
+lexscope/walk.rs	AtKey	ctor	3
+lexscope/walk.rs	AtKey	write	5
+lexscope/walk.rs	DeclKey	ctor	3
 == HKC_COUNTS
-AtKey=5 DeclKey=0 NewKey=2
+ctor[AtKey=5 DeclKey=4 NewKey=2] value[AtKey=0 DeclKey=0 NewKey=0] alias[AtKey=0 DeclKey=0 NewKey=0] write[AtKey=5 DeclKey=0 NewKey=0]

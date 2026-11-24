@@ -1,7 +1,7 @@
 //! FB: the funnel's own unit tests (§5.2 Q-LEXSCOPE LS2a): every entry keeps the legacy text
 //! rule and the id agrees with the text after each call.
 
-use super::{scope_out, shown_from_spelling, wrap_ctx, Mark, ScopeKeyed, Scopes};
+use super::{scope_out, shown_from_spelling, wrap_ctx, DeclKey, Mark, ScopeKeyed, Scopes};
 
 #[test]
 fn fb_new_is_the_empty_path() {
@@ -272,36 +272,38 @@ fn fb_scope_child_text_and_reentry() {
 #[test]
 fn fb_gen_binding_encloses() {
     let sp = |lo, hi| hdl_ast::Span { lo, hi };
+    // a found key as the walk would return it (DK1-4b-2: the entry takes a DeclKey)
+    let k = |t: &str| DeclKey(t.to_string());
     let mut s = Scopes::new();
     let a = s.scope_swap_text("top".to_string());
     let old = s.mark_swap_here(Mark::Inst);
     let gv = s.new_key("i");
     assert!(
-        s.gen_binding_encloses("top.P", "P", sp(5, 6)),
+        s.gen_binding_encloses(&k("top.P"), "P", sp(5, 6)),
         "the instance's own scope"
     );
     let b = s.scope_swap_text("top.g[0]".to_string());
     s.gen_text_push(sp(10, 20), Some(gv));
     assert!(
-        s.gen_binding_encloses("top.i", "i", sp(12, 13)),
+        s.gen_binding_encloses(&k("top.i"), "i", sp(12, 13)),
         "the genvar, inside"
     );
     assert!(
-        !s.gen_binding_encloses("top.i", "i", sp(30, 31)),
+        !s.gen_binding_encloses(&k("top.i"), "i", sp(30, 31)),
         "the genvar, outside"
     );
     assert!(
-        s.gen_binding_encloses("top.g[0].K", "K", sp(11, 12)),
+        s.gen_binding_encloses(&k("top.g[0].K"), "K", sp(11, 12)),
         "the open scope"
     );
-    assert!(!s.gen_binding_encloses("top.g[0].K", "K", sp(25, 26)));
+    assert!(!s.gen_binding_encloses(&k("top.g[0].K"), "K", sp(25, 26)));
     assert!(
-        !s.gen_binding_encloses("top.h[0].K", "K", sp(11, 12)),
+        !s.gen_binding_encloses(&k("top.h[0].K"), "K", sp(11, 12)),
         "no such open scope"
     );
     s.gen_text_pop();
     assert!(
-        !s.gen_binding_encloses("top.g[0].K", "K", sp(11, 12)),
+        !s.gen_binding_encloses(&k("top.g[0].K"), "K", sp(11, 12)),
         "closed"
     );
     s.scope_restore(b);

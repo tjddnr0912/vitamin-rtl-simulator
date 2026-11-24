@@ -423,7 +423,7 @@ impl Elaborator<'_> {
                     self.scoped_key_at_or_above(&d.prefix, &d.path[0], |k| {
                         self.enum_label_types.contains_at(k)
                     })
-                    .and_then(|k| self.enum_label_types.get(&k).cloned())
+                    .and_then(|k| self.enum_label_types.get_found(&k).cloned())
                 } else {
                     None
                 };

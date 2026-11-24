@@ -64,7 +64,7 @@ impl Elaborator<'_> {
         let Some(key) = self.walk_scopes_key(name, |k| self.hit_real_value_or_net(k)) else {
             return false;
         };
-        self.real_param_val.contains_key(&key) && !self.params.contains_key(&key)
+        self.real_param_val.contains_found(&key) && !self.params.contains_found(&key)
     }
 
     /// r19: does `e` read a REAL-valued parameter? A real param is deliberately kept
@@ -85,7 +85,7 @@ impl Elaborator<'_> {
                 || self.params.contains_at(k)
                 || self.symbols.contains_at(k)
         })
-        .is_some_and(|k| self.real_param_val.contains_key(&k))
+        .is_some_and(|k| self.real_param_val.contains_found(&k))
     }
 
     /// Is `e` an EXPLICIT real→integral conversion whose integer value this constant

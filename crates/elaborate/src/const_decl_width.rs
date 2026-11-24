@@ -73,13 +73,13 @@ impl Elaborator<'_> {
             return None;
         }
         let key = self.walk_scopes_key(n, |k| self.hit_value_or_net(k))?;
-        let (_lo, w, _ascending) = self.param_range.get(&key).copied()?;
+        let (_lo, w, _ascending) = self.param_range.get_found(&key).copied()?;
         // The VALUE must be bound at the same key. `narrow_param_bits` reads it to
         // build the bits; this resolver does not return it, but a name with a declared
         // range and no bound value is not a constant at all, and answering its width
         // would certify a leaf the fold behind the caller cannot evaluate.
-        self.params.get(&key)?;
-        let (mw, signed) = self.param_meta.get(&key).copied()?;
+        self.params.get_found(&key)?;
+        let (mw, signed) = self.param_meta.get_found(&key).copied()?;
         if mw != w {
             return None;
         }

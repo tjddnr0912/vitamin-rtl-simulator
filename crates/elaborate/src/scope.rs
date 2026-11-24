@@ -21,7 +21,7 @@ impl Elaborator<'_> {
     /// (net) table so the visibility rule is identical for each.
     pub(crate) fn walk_scopes<T: Copy>(&self, name: &str, table: &Keyed<T>) -> Option<T> {
         self.walk_scopes_key(name, |k| table.contains_at(k))
-            .and_then(|k| table.get(&k).copied())
+            .and_then(|k| table.get_found(&k).copied())
     }
 
     /// The key-returning core of [`Self::walk_scopes`] — ONE source of truth
@@ -35,9 +35,9 @@ impl Elaborator<'_> {
     /// [`Self::block_local_covers`], which answers the wider "may this net shadow?"
     /// and says yes for an ordinary net; this one is the positive fact, and it is what
     /// lets a block-local win against a constant sitting on the SAME key.
-    pub(crate) fn block_local_declared_at(&self, key: &str, at: ast::Span) -> bool {
+    pub(crate) fn block_local_declared_at(&self, key: &DeclKey, at: ast::Span) -> bool {
         self.hoisted_block_local
-            .get(key)
+            .get_found(key)
             .is_some_and(|rs| rs.iter().any(|(lo, hi)| at.lo >= *lo && at.hi <= *hi))
     }
 
@@ -54,8 +54,8 @@ impl Elaborator<'_> {
     /// elaboration has progressed — the property ROADMAP §2 required of this fix, and
     /// the reason the alternative (probing `symbols`, populated DURING elaboration)
     /// once deleted a whole generate body silently.
-    pub(crate) fn block_local_covers(&self, key: &str, at: ast::Span) -> bool {
-        match self.hoisted_block_local.get(key) {
+    pub(crate) fn block_local_covers(&self, key: &DeclKey, at: ast::Span) -> bool {
+        match self.hoisted_block_local.get_found(key) {
             None => true,
             Some(ranges) => ranges.iter().any(|(lo, hi)| at.lo >= *lo && at.hi <= *hi),
         }
@@ -459,7 +459,7 @@ impl Elaborator<'_> {
         {
             return None;
         }
-        self.symbols.get(&key).copied()
+        self.symbols.get_found(&key).copied()
     }
 
     // ── user function/task inlining (SD2 inline path) ──────────────

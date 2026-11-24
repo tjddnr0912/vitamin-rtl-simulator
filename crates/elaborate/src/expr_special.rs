@@ -855,9 +855,9 @@ impl Elaborator<'_> {
                     let local_shadows = me
                         .walk_scopes_key(name, |k| me.hit_value_or_net(k))
                         .is_some_and(|key| {
-                            me.symbols.contains_key(&key)
+                            me.symbols.contains_found(&key)
                                 && (me.block_local_declared_at(&key, e.span)
-                                    || (!me.params.contains_key(&key)
+                                    || (!me.params.contains_found(&key)
                                         && me.block_local_covers(&key, e.span)))
                         });
                     if !local_shadows && me.lookup_scoped(name).is_some() {

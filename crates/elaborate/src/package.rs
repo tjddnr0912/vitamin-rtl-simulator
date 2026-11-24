@@ -563,7 +563,7 @@ impl Elaborator<'_> {
         !self.pkg_var_aliases.is_empty()
             && self
                 .walk_scopes_key(joined, |k| self.symbols.contains_at(k))
-                .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
+                .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))
     }
 
     /// A2b-prereq (adversarial sound S1/S2): true iff a BARE name's innermost
@@ -577,7 +577,7 @@ impl Elaborator<'_> {
         !self.pkg_var_aliases.is_empty()
             && self
                 .walk_scopes_key(name, |k| self.symbols.contains_at(k))
-                .is_some_and(|k| self.pkg_var_aliases.contains_key(&k))
+                .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))
             && (self.lookup_scoped(name).is_some()
                 || self
                     .walk_scopes_key(name, |k| self.genvar_decls.contains_at(k))

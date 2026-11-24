@@ -37,7 +37,10 @@ mod key;
 mod tests;
 mod walk;
 
-pub(crate) use key::{at_same, at_text, key_show, key_text, AtKey, Keyed, KeyedSet, NewKey};
+pub(crate) use key::{
+    at_same, at_text, found_text, key_same, key_show, key_text, AtKey, DeclKey, Keyed, KeyedSet,
+    NewKey,
+};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]
@@ -284,6 +287,9 @@ zn!(NewKey: Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::D
     Default, AsRef<str>, core::borrow::Borrow<str>, core::borrow::Borrow<String>, core::ops::Deref<Target = str>,
     Into<String>, From<String>);
 zn!(AtKey: Clone, Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, core::fmt::Debug,
+    Default, AsRef<str>, core::borrow::Borrow<str>, core::borrow::Borrow<String>, core::ops::Deref<Target = str>,
+    Into<String>, From<String>);
+zn!(DeclKey: Clone, Copy, PartialEq, Eq, PartialOrd, Ord, core::hash::Hash, core::fmt::Display, core::fmt::Debug,
     Default, AsRef<str>, core::borrow::Borrow<str>, core::borrow::Borrow<String>, core::ops::Deref<Target = str>,
     Into<String>, From<String>);
 
@@ -671,7 +677,13 @@ impl Scopes {
     /// lie where the source position `at` does — the genvar of an open generate-for whose
     /// construct holds `at`, the module instance's own scope, or an open generate scope
     /// whose construct holds `at`?
-    pub(crate) fn gen_binding_encloses(&self, key: &str, name: &str, at: hdl_ast::Span) -> bool {
+    pub(crate) fn gen_binding_encloses(
+        &self,
+        key: &DeclKey,
+        name: &str,
+        at: hdl_ast::Span,
+    ) -> bool {
+        let key = found_text(key);
         let scopes = &self.gen_text;
         if let Some((_, text, _)) = scopes
             .iter()

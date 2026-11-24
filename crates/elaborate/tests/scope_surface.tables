@@ -100,11 +100,12 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=6 rows=185 out_types=26 e_fns=36 text_flows=51
+present=present files=6 rows=197 out_types=28 e_fns=36 text_flows=54
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk hands its candidate as an AtKey (DELTA16 E1.3): the four pub entries' CB:hit `impl Fn(&AtKey) -> bool` (CB) and CB:hit.0 `&AtKey` (PASS REF — the CB row DELTA14 P18 planned, open until DK2, where the walk takes a `Hit` value) replace the `&str` pair (L10's CB rows closed) ; at_same (key.rs, P27's candidate-side compare) + its USE ; is_gen_scope_segment is pub(super) (off the surface: 2 rows gone)
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns the key it found as a DeclKey (DELTA16 E1.3, R-H11): the four pub entries' RET `Option<DeclKey>` (CARD) replace L10's `Option<String>` ; DeclKey (TYPE, `pub(super)` field as AtKey's) ; the `_found` entries (Keyed::get_found CARD, contains_found, index_found REF ; KeyedSet::contains_found, extend_found) ; P27's found-side compares key_same, DeclKey::is_formed_as, DeclKey::is_formed_at ; found_text (LEAVE L11) ; three mod.rs USE ; gen_binding_encloses takes `&DeclKey` (its IN:key text row gone)
 file	tier	kind	item	position	type	verdict	refs
 lexscope/disp.rs	E	FN	Elaborator::ctx_here	RET	ShownCtx	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_chain_abs	RET	Shown	PASS	-
@@ -150,17 +151,25 @@ lexscope/key.rs	-	IMPL	Deref for KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for Keyed	-	-	PASS	-
 lexscope/key.rs	-	IMPL	DerefMut for KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	TYPE	AtKey	-	-	PASS	-
+lexscope/key.rs	-	TYPE	DeclKey	-	-	PASS	-
 lexscope/key.rs	-	TYPE	Keyed	-	-	PASS	-
 lexscope/key.rs	-	TYPE	KeyedSet	-	-	PASS	-
 lexscope/key.rs	-	TYPE	NewKey	-	-	PASS	-
+lexscope/key.rs	K	FN	DeclKey::is_formed_as	RET	bool	PASS	-
+lexscope/key.rs	K	FN	DeclKey::is_formed_at	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Keyed::contains_at	RET	bool	PASS	-
+lexscope/key.rs	K	FN	Keyed::contains_found	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Keyed::contains_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Keyed::entry_new	RET	&mut V	PASS	REF
 lexscope/key.rs	K	FN	Keyed::get_at	RET	Option<&V>	CARD:hit:a value stored under the key	REF
+lexscope/key.rs	K	FN	Keyed::get_found	RET	Option<&V>	CARD:hit:a value stored under the key	REF
 lexscope/key.rs	K	FN	Keyed::get_new	RET	Option<&V>	CARD:hit:a value stored under the key	REF
+lexscope/key.rs	K	FN	Keyed::index_found	RET	&V	PASS	REF
 lexscope/key.rs	K	FN	Keyed::insert_new	RET	Option<V>	CARD:hit:the value the key held before the insert	-
 lexscope/key.rs	K	FN	Keyed::remove_new	RET	Option<V>	CARD:hit:the value the key held	-
 lexscope/key.rs	K	FN	KeyedSet::contains_at	RET	bool	PASS	-
+lexscope/key.rs	K	FN	KeyedSet::contains_found	RET	bool	PASS	-
+lexscope/key.rs	K	FN	KeyedSet::extend_found	RET	()	PASS	-
 lexscope/key.rs	K	FN	KeyedSet::insert_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	KeyedSet::remove_new	RET	bool	PASS	-
 lexscope/key.rs	K	FN	Scopes::at_cur	IN:local	&str	ENTER:lookup	-
@@ -171,6 +180,8 @@ lexscope/key.rs	K	FN	Scopes::show_miss	IN:local	&str	ENTER:to-display	-
 lexscope/key.rs	K	FN	Scopes::show_miss	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	at_same	RET	bool	PASS	-
 lexscope/key.rs	K	FN	at_text	RET	&str	LEAVE:L9	REF
+lexscope/key.rs	K	FN	found_text	RET	&str	LEAVE:L11	REF
+lexscope/key.rs	K	FN	key_same	RET	bool	PASS	-
 lexscope/key.rs	K	FN	key_show	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	key_text	RET	&str	LEAVE:L7	REF
 lexscope/mod.rs	-	ASSOC	Outgoing::Plain	ASSOC:Plain	-	PASS	-
@@ -197,11 +208,14 @@ lexscope/mod.rs	-	TYPE	Scopes	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	Shown	-	-	PASS	-
 lexscope/mod.rs	-	TYPE	ShownCtx	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::AtKey	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::DeclKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::Keyed	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::KeyedSet	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::NewKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::at_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::at_text	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::found_text	-	-	PASS	-
+lexscope/mod.rs	-	USE	key::key_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_text	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
@@ -237,7 +251,6 @@ lexscope/mod.rs	K	FN	Scopes::disp_restore_method	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_restore_root	RET	()	PASS	-
 lexscope/mod.rs	K	FN	Scopes::disp_root_swap_empty	RET	SavedRoot	PASS	-
 lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:at	hdl_ast::Span	ENTER:index	-
-lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:key	&str	ENTER:lookup	-
 lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	IN:name	&str	ENTER:lookup	-
 lexscope/mod.rs	K	FN	Scopes::gen_binding_encloses	RET	bool	PASS	-
 lexscope/mod.rs	K	FN	Scopes::gen_text_pop	RET	()	PASS	-
@@ -278,29 +291,31 @@ lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
 lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
 lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit.0	&AtKey	PASS	REF
 lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit.0	&AtKey	PASS	REF
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit.0	&AtKey	PASS	REF
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit.0	&AtKey	PASS	REF
 lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	RET	Option<String>	LEAVE:L10	-
+lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
 &AtKey
+&V
 &mut V
 &str
 ()
 AtKey
 NewKey
 Option<&V>
+Option<DeclKey>
 Option<String>
 Option<V>
 R
@@ -331,8 +346,10 @@ bool
 # and bind_iface_port's X15 prefix (DK3-a): the bridge closes with its last row, DK3-a
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves in with its text signatures kept (R-G15): L10, the walk's text — the found key (RET Option<String>) and the text its `hit` callback is handed (CB:hit.0 &str), one row per entry (4 + 4) ; each closes at DK1-4b (the walk returns DeclKey, `hit: impl Fn(&AtKey)`)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): L10's four `CB:hit.0 &str` rows closed (`hit` is handed an `&AtKey`: SURF_ROWS PASS REF, open until DK2) ; its four `RET Option<String>` rows re-dated DK1-4b -> DK1-4b-2 (the found key's type, DELTA16 R-H1)
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10 CLOSED — its four `RET Option<String>` rows deleted (the walk returns a DeclKey: SURF_ROWS CARD) ; L11 `found_text`, a found key's text where it meets a text operation outside the module (R-H5: ports.rs bind_iface_port's prefix glue -> DK3-a ; gen_scope_name.rs key_spells_indexed_singleton, frames_static_init.rs frame_init_name_is_local_or_const -> DK3-b, HBR's three rows), deleting unit DK3-b
 id	item	position	type	closes
 L1	Scopes::cur_prefix_text	RET	&str	DK1
+L11	found_text	RET	&str	DK3-b
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
 L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
 L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
@@ -343,15 +360,12 @@ L5	Scopes::key_under	RET	String	DK1
 L6	Scopes::scope_text	RET	&str	DK1
 L7	key_text	RET	&str	DK3-b
 L9	at_text	RET	&str	DK3-a
-L10	Elaborator::scoped_key_at_or_above	RET	Option<String>	DK1-4b-2
-L10	Elaborator::walk_scopes_key	RET	Option<String>	DK1-4b-2
-L10	Elaborator::walk_scopes_key_from	RET	Option<String>	DK1-4b-2
-L10	Elaborator::walk_scopes_key_shadowed	RET	Option<String>	DK1-4b-2
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
 # carried / index) and what the position holds (the kind and IN-TOTAL's path ; a moved path FAILS)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk entries' `name` (the bare name the walk composes each key from) and is_gen_scope_segment's `seg` (a segment of a scope text it asks one question of) — lookup
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): is_gen_scope_segment is pub(super) (walk.rs's own question, off the surface): its `seg` row deleted
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): Scopes::gen_binding_encloses takes the walk's found key (`&DeclKey`): its `key` row deleted (no text in)
 item	param	role	holds
 Elaborator::with_scope	seg	to-scope	TEXT str
 Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
@@ -374,7 +388,6 @@ Elaborator::report_at	msg	lookup	TEXT str
 Scopes::scope_child	inst_name	to-scope	TEXT str
 ScopeKeyed::entry_under_cur	name	to-scope	TEXT str
 Scopes::gen_text_push	text	carried	NUMBER hdl_ast::Span.lo -> u32
-Scopes::gen_binding_encloses	key	lookup	TEXT str
 Scopes::gen_binding_encloses	name	lookup	TEXT str
 Scopes::gen_binding_encloses	at	index	NUMBER hdl_ast::Span.lo -> u32
 Elaborator::walk_hits_decl_pos	name	lookup	TEXT str
@@ -424,6 +437,7 @@ ShownCtx	Vec<diag::Frame>
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the 7 moved Elaborator fns' rows (is_gen_scope_segment takes no Elaborator) ; flow text:LEAVE-L10 = an op that forms or hands the key text leaving through L10 ; walk_hits_decl_pos' `.walk_scopes_key` is a module call now (row gone)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk's candidate is an AtKey — `AtKey` OUT-C rows (scoped_key_at_or_above: formed from the text that leaves through L10 RET ; _from / _inner: the empty scratch, as String::new) ; the store probes `.contains_at` ; `hit` is handed an AtKey, no text: its three rows' flow text:LEAVE-L10 -> in
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — `DeclKey` OUT-C rows (scoped_key_at_or_above, walk_out_from, walk_scopes_key_inner: the scratch moved into the found key) ; walk_hits_decl_pos reads the found key through found_text (`.as_ref` + `.map` for `.as_deref`) ; L10 is deleted: the nine flows text:LEAVE-L10 -> text:DeclKey (the text these ops form leaves in the found key, whose text leaves the module only through L11)
 item	kind	name	count	flow
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
 Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
@@ -462,7 +476,7 @@ Elaborator::decl_probe_key	OUT-C	.get	1	in
 Elaborator::decl_probe_key	OUT-C	hit	1	in
 Elaborator::decl_probe_key	OUT-F	decl_arm	1	in
 Elaborator::decl_probe_key	OUT-F	decl_phase	1	in
-Elaborator::decl_probe_key	OUT-M	write	1	text:LEAVE-L10
+Elaborator::decl_probe_key	OUT-M	write	1	text:DeclKey
 Elaborator::disp_chain_abs	FN	-	-	-
 Elaborator::disp_enter_frame_root	FN	-	-	-
 Elaborator::disp_frame_path_of	FN	-	-	-
@@ -593,11 +607,12 @@ Elaborator::scoped_key_at_or_above	FN	-	-	-
 Elaborator::scoped_key_at_or_above	OUT-C	.as_str	1	in
 Elaborator::scoped_key_at_or_above	OUT-C	.is_empty	2	in
 Elaborator::scoped_key_at_or_above	OUT-C	.rfind	1	in
-Elaborator::scoped_key_at_or_above	OUT-C	.to_string	1	text:LEAVE-L10
-Elaborator::scoped_key_at_or_above	OUT-C	AtKey	1	text:LEAVE-L10
-Elaborator::scoped_key_at_or_above	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::scoped_key_at_or_above	OUT-C	.to_string	1	text:DeclKey
+Elaborator::scoped_key_at_or_above	OUT-C	AtKey	1	text:DeclKey
+Elaborator::scoped_key_at_or_above	OUT-C	DeclKey	1	text:DeclKey
+Elaborator::scoped_key_at_or_above	OUT-C	Some	1	text:DeclKey
 Elaborator::scoped_key_at_or_above	OUT-C	hit	1	in
-Elaborator::scoped_key_at_or_above	OUT-M	format	1	text:LEAVE-L10
+Elaborator::scoped_key_at_or_above	OUT-M	format	1	text:DeclKey
 Elaborator::stmt_loc_instance	FN	-	-	-
 Elaborator::stmt_loc_instance	OUT-C	.strip_prefix	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
@@ -605,22 +620,24 @@ Elaborator::stmt_loc_instance	OUT-C	.unwrap_or	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	Shown	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-M	format	1	text:Shown
 Elaborator::walk_hits_decl_pos	FN	-	-	-
-Elaborator::walk_hits_decl_pos	OUT-C	.as_deref	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	.as_ref	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.as_str	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.contains_at	1	in
+Elaborator::walk_hits_decl_pos	OUT-C	.map	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	Some	1	in
 Elaborator::walk_hits_decl_pos	OUT-F	symbols	1	in
 Elaborator::walk_out_from	FN	-	-	-
 Elaborator::walk_out_from	OUT-C	.clear	1	in
 Elaborator::walk_out_from	OUT-C	.contains_at	1	in
 Elaborator::walk_out_from	OUT-C	.is_empty	2	in
-Elaborator::walk_out_from	OUT-C	.push_str	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-C	.push_str	1	text:DeclKey
 Elaborator::walk_out_from	OUT-C	.rfind	2	in
 Elaborator::walk_out_from	OUT-C	.starts_with	3	in
-Elaborator::walk_out_from	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-C	DeclKey	1	text:DeclKey
+Elaborator::walk_out_from	OUT-C	Some	1	text:DeclKey
 Elaborator::walk_out_from	OUT-C	hit	1	in
 Elaborator::walk_out_from	OUT-F	symbols	1	in
-Elaborator::walk_out_from	OUT-M	write	1	text:LEAVE-L10
+Elaborator::walk_out_from	OUT-M	write	1	text:DeclKey
 Elaborator::walk_rtn_scopes	FN	-	-	-
 Elaborator::walk_rtn_scopes	OUT-C	.and_then	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.cur_prefix_text	1	in
@@ -638,7 +655,8 @@ Elaborator::walk_scopes_key_from	OUT-C	String::new	1	in
 Elaborator::walk_scopes_key_inner	FN	-	-	-
 Elaborator::walk_scopes_key_inner	OUT-C	.as_str	1	in
 Elaborator::walk_scopes_key_inner	OUT-C	AtKey	1	in
-Elaborator::walk_scopes_key_inner	OUT-C	Some	1	text:LEAVE-L10
+Elaborator::walk_scopes_key_inner	OUT-C	DeclKey	1	text:DeclKey
+Elaborator::walk_scopes_key_inner	OUT-C	Some	1	text:DeclKey
 Elaborator::walk_scopes_key_inner	OUT-C	String::new	1	in
 Elaborator::walk_scopes_key_shadowed	FN	-	-	-
 Elaborator::with_scope	FN	-	-	-
@@ -649,7 +667,13 @@ Elaborator::with_scope	OUT-C	f	1	payload
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
 # a row matching no position is STALE. First rows at LS2a.
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the four walk entries' RET `Option<DeclKey>` (the key found, or none) ; Keyed::get_found (as get_at)
 item	position	type	means
+Elaborator::scoped_key_at_or_above	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_scopes_key	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_scopes_key_from	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_scopes_key_shadowed	RET	Option<DeclKey>	hit:the declaration key the walk found
+Keyed::get_found	RET	Option<&V>	hit:a value stored under the key
 ScopeKeyed::take_at	RET	Option<V>	hit:a value stored at the carried scope
 ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	list:the scopes still holding a value
 Keyed::get_new	RET	Option<&V>	hit:a value stored under the key
@@ -673,6 +697,7 @@ Elaborator::walk_scopes_key_shadowed	hit	Fn	&AtKey	probe:the caller's tables for
 # First rows at LS2a ; each unit's verify prints the rows that changed.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the 8 moved bodies (walk.rs)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk's six bodies that form or probe the candidate (walk.rs, elab.rs walk_hits_decl_pos) ; at_same (key.rs)
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — scoped_key_at_or_above, walk_scopes_key_inner, walk_out_from (walk.rs), walk_hits_decl_pos (elab.rs), gen_binding_encloses (mod.rs), fb_gen_binding_encloses (tests.rs) ; new: the five `_found` entries, found_text, key_same, DeclKey::is_formed_as / is_formed_at (key.rs)
 file	fn	sha256
 lexscope/disp.rs	Elaborator::ctx_here	69e9d6c0bf32d6a9ce1037ddff1a4ca8c9de14874b6204b5e55e34f914f6cb9d
 lexscope/disp.rs	Elaborator::cur_context	5c5a9d16421bd37235f37aed01f89d7e4e82e43fa2f0dd65cde5a39e24f627f8
@@ -701,22 +726,29 @@ lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	407e99498c85a245fc330096f3b447b
 lexscope/elab.rs	Elaborator::push_block_local_init	1e7349e2e3b8b72df1ad90ee701abf9bb7dfa53afd8107b2839f67a2558d4601
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
 lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd780656be45d5940d1b66b359beddf
-lexscope/elab.rs	Elaborator::walk_hits_decl_pos	903f8986cfc127c1c727bbf1ae9cfbc975fb593ff59abd7e6dbdc1f8b268c6c7
+lexscope/elab.rs	Elaborator::walk_hits_decl_pos	a78bd35774a4c4d672db94dd47aa2d60478715dc598fffd0b8fbc8b7a2aa92d1
 lexscope/elab.rs	Elaborator::walk_rtn_scopes	44fd92b502bfa8291ad8e714834d29e3c82538eb6c192aeea87dc975e16fb5fe
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
+lexscope/key.rs	DeclKey::is_formed_as	b8fd2a78d1380e4aa44830dbfd44ac73190a8b543408be144f328b0d3f2d3165
+lexscope/key.rs	DeclKey::is_formed_at	b8fd2a78d1380e4aa44830dbfd44ac73190a8b543408be144f328b0d3f2d3165
 lexscope/key.rs	Default for Keyed::default	c2a6d55951abe9934cd994dc0035a95c53dc09356510d22622d9c9fa11d400e1
 lexscope/key.rs	Deref for Keyed::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
 lexscope/key.rs	Deref for KeyedSet::deref	67a37d5a07f02f49b89e03b15c8a0726551a5b9a3c2b0613d619976d731ec415
 lexscope/key.rs	DerefMut for Keyed::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
 lexscope/key.rs	DerefMut for KeyedSet::deref_mut	93d5fc10d2b77ef176249e161158ffa655eefe92dedad1b7c0eeaecd888412ba
 lexscope/key.rs	Keyed::contains_at	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
+lexscope/key.rs	Keyed::contains_found	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
 lexscope/key.rs	Keyed::contains_new	ee12f262dfbeeae4a798c35f8f07b75443d6bb201b4dc16735e16f72bb8bcc5d
 lexscope/key.rs	Keyed::entry_new	80652741cac3d7548d895db5b80a8ecaedbed657595e3e7a758320a62871a00a
 lexscope/key.rs	Keyed::get_at	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
+lexscope/key.rs	Keyed::get_found	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
 lexscope/key.rs	Keyed::get_new	96d8ea72873fa901511dfd5c81c0b8ab416585047fe8f5d154e0f1304e2da71d
+lexscope/key.rs	Keyed::index_found	bc7c0fd079e0df0d405266ff8646ff56a26b10e158d36470de0af0d631d53873
 lexscope/key.rs	Keyed::insert_new	622cc054b687aec85f26f9012a0cc6b81c5f3099a0b6b2947762a74114d5cd2b
 lexscope/key.rs	Keyed::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
 lexscope/key.rs	KeyedSet::contains_at	1fa79f1ada10a838b424419054b21178f543e6dac51d61403cc9733404ae6f04
+lexscope/key.rs	KeyedSet::contains_found	1fa79f1ada10a838b424419054b21178f543e6dac51d61403cc9733404ae6f04
+lexscope/key.rs	KeyedSet::extend_found	d3c1998d854293e27c91f83775b5127afbbe8477641209e43c210fd3aea8dfdb
 lexscope/key.rs	KeyedSet::insert_new	8f93e5ae359bbfad81efda0f917b09d14711e3ee21d021717e909a5b69b2ff84
 lexscope/key.rs	KeyedSet::remove_new	852accea60eba1849ae7e65c380f3eedfdb9383473152d704df39a5395e8d970
 lexscope/key.rs	Scopes::at_cur	3d582b863ab0e29f57edea8a089557b3963d49bec59c7917f377289a2af5c7bb
@@ -724,6 +756,8 @@ lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c
 lexscope/key.rs	Scopes::show_miss	b1f4dc8341919651502a4bffd2103726163292a19a886fb2f728b18b733a7ef8
 lexscope/key.rs	at_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
 lexscope/key.rs	at_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
+lexscope/key.rs	found_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
+lexscope/key.rs	key_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
 lexscope/key.rs	key_show	61fc9b8c8d9973948d81fa52bb6f470bf2e10c355df265e6c167d4bacea82e66
 lexscope/key.rs	key_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/mod.rs	Clone for ScopeRef::clone	7fd1561b40a3600a688648719080f1f686e9201a41061e730a9f1708a7b4277f
@@ -762,7 +796,7 @@ lexscope/mod.rs	Scopes::disp_restore_chain	babf12ea807f46c94beb2d10d30dd1b7af35b
 lexscope/mod.rs	Scopes::disp_restore_method	94a47a39e3c75bb15aaface99e8a60cbfd83e1e0a921f587e40ddb06c9ca6c7e
 lexscope/mod.rs	Scopes::disp_restore_root	9576ac55f8c3ee3c799b75e32e7306a0553dc1f2a361a88199a8fed610dc6699
 lexscope/mod.rs	Scopes::disp_root_swap_empty	01551ae34e4a43b8840e7b8f315b30a95d247084c7a7856db9c0858c49dbc29f
-lexscope/mod.rs	Scopes::gen_binding_encloses	b939a229d4620a0bb1a50062b922181afbc8ca9dcd081c0f09493d2252ceba68
+lexscope/mod.rs	Scopes::gen_binding_encloses	ede377098a1ec3afe0276913b8462ce71989ec2695e30a246ba9a560de77b7c9
 lexscope/mod.rs	Scopes::gen_text_pop	c21babe48fc175ba3e9e912ebc24eaf0ea9c09f5300178e9ac81df50643db3c6
 lexscope/mod.rs	Scopes::gen_text_push	bcce813d63962bb5c66e4ab3b9c79bee56e739a0e14fbec2e16a8d303ba1e416
 lexscope/mod.rs	Scopes::hier_path_is_self	d9512ef686e99da3c33aa573189bfc6a82ffb3453e69bdf7aaa76887cb9e7129
@@ -802,7 +836,7 @@ lexscope/tests.rs	fb_cur_shown_and_quoted_or	db87cbfc7b8a236be569f82de1df932c8e1
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
 lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2dc91cdcc2c946c5eb768296c3a60e80c2b98107
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
-lexscope/tests.rs	fb_gen_binding_encloses	db2eb7104cf1a03f72385ea86d5b84489e01cf0640f3c7ec72d145e8170f2916
+lexscope/tests.rs	fb_gen_binding_encloses	206a8d8e9937fe5b523837689a49a6d7ea9b278ae5dd8311ede01bd9db3f6e8a
 lexscope/tests.rs	fb_key_under_and_scope_debug	00900245fa2304ac8583b74cfeeffff4a468794f14d180fa117cb4798f4be78b
 lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356ba0678954ee25d43285534e0f0ab39e7f0a34
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
@@ -819,11 +853,11 @@ lexscope/tests.rs	fb_shown_leaves_only_through_scope_out	c70ffab01d5a21bc7ec9161
 lexscope/tests.rs	fb_swap_take_pkg_repoint_hold	2977248e3fddf12f4fa245701b49f07c0ff781ef3d57f412919d4c99a7e4a52c
 lexscope/walk.rs	Elaborator::decl_probe_key	4aef8df81a697497750ee2587e824f6ca768b7bae167c73b044effdb5f62977d
 lexscope/walk.rs	Elaborator::is_gen_scope_segment	f2090092f044115ebc9aa27a032234eed2fdd4e31434d23fafb6c6eb51531fda
-lexscope/walk.rs	Elaborator::scoped_key_at_or_above	803ba2ad6ec7c9a74c00d973869ed257e31de92f1a2f642d44dc155411f79a4f
-lexscope/walk.rs	Elaborator::walk_out_from	e27088fdfed33701dd500b31e056d3cf74a5cd5d224e7c9f8db625202126f78a
+lexscope/walk.rs	Elaborator::scoped_key_at_or_above	258ce7f9c28f1625154f7d0e9569cd8ae25ae9c3d925c65700820aed1fac7add
+lexscope/walk.rs	Elaborator::walk_out_from	0bba8ef521ffa19306597118e417dc2d4e949f31e06409369eeeb74e83529f04
 lexscope/walk.rs	Elaborator::walk_scopes_key	1a07594158e568fc20bccbdc57f2274e40bd43030b8b46b433eb7188b2c1174c
 lexscope/walk.rs	Elaborator::walk_scopes_key_from	112b5d07daca9a0cbe34608f97c12bc9a37c1e903fa0aec188c3199abe8774aa
-lexscope/walk.rs	Elaborator::walk_scopes_key_inner	1445a3ef808ddc9501b162834a4c104ef5c2db9f5e2daa5f3639efd2309a82f0
+lexscope/walk.rs	Elaborator::walk_scopes_key_inner	3346cdbeeb0bc35eeba05e4b7dd02747b778338e3a32f53628feaeb005e5498b
 lexscope/walk.rs	Elaborator::walk_scopes_key_shadowed	129d6d3259a98a5ea739de7d649e6a60c0b338be69d0a2ce73eaff9f6651a199
 == SURF_INTERIOR
 # INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
@@ -845,18 +879,19 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # ret_text 21 -> 20, enter 39 -> 38) ; its two roles are lexscope's Scopes::at_cur (AtKey) and Scopes::show_miss (Shown)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): 6 fns moved to lexscope/walk.rs (scoped_key_at_or_above, walk_scopes_key, _from, _inner, _shadowed, decl_probe_key — private now) ; walk_scopes stays in scope.rs (R-G15)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk entries' `hit` (and decl_probe_key's scratch) take an AtKey — 7 rows re-judged: CB:hit.0 / ARG:key UNKNOWN(AtKey): plan mode judges with no file-set definitions (report_at's UNKNOWN(ReportedAt) since LS3) ; HT-SURF judges the same positions PASS REF ; walk_scopes' table `&Keyed<T>` (R-G15 (a)) ; callback_text 7 -> 1, mut_text 1 -> 0
+# §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk entries return a DeclKey — 5 rows re-judged: RET=CARD(Option in Option<DeclKey>) ; RET=UNKNOWN(DeclKey) (plan mode judges with no file-set definitions, as UNKNOWN(AtKey) since DK1-4b-1 ; HT-SURF judges the position CARD) ; ret_text 20 -> 15
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	lexscope/walk.rs	-	E	(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool	FAIL	ARG:key=UNKNOWN(AtKey); CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey)	name
 DK1	hier_key_within	hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
 DK1	hier_resolve	hier.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, path: &[String], table: &std::collections::BTreeMap<String, V>) -> Option<V>	FAIL	RET=CARD(Option in Option<V>)	prefix,path,table
 DK1	indexed_gen_singleton	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
-DK1	scoped_key_at_or_above	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
+DK1	scoped_key_at_or_above	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
 DK1	singleton_scope_key	gen_scope_name.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
 DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &Keyed<T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy); RET=CARD(Option in Option<T>)	name,table
-DK1	walk_scopes_key	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-DK1	walk_scopes_key_from	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<String>); RET=TEXT(String)	prefix,name
-DK1	walk_scopes_key_inner	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool, stop_at_net_binding: bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-DK1	walk_scopes_key_shadowed	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+DK1	walk_scopes_key	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
+DK1	walk_scopes_key_from	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
+DK1	walk_scopes_key_inner	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool, stop_at_net_binding: bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
+DK1	walk_scopes_key_shadowed	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
 DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
 LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
@@ -877,7 +912,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=30 pass=4 fail=26 ret_fail=23 ret_text=20 callback_text=1 mut_text=0 card=16 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
+fns=30 pass=4 fail=26 ret_fail=23 ret_text=15 callback_text=1 mut_text=0 card=16 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent

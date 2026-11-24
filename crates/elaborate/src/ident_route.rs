@@ -97,18 +97,18 @@ impl Elaborator<'_> {
         }
         let mut local_shadows_param = false;
         if let Some(key) = self.walk_scopes_key(seg, |k| self.hit_any_const_or_net(k)) {
-            if let Some(raw) = self.str_param_raw.get(&key) {
+            if let Some(raw) = self.str_param_raw.get_found(&key) {
                 return BareIdentRoute::Str(raw.clone());
             }
-            if let Some(cv) = self.wide_param_bits.get(&key) {
+            if let Some(cv) = self.wide_param_bits.get_found(&key) {
                 return BareIdentRoute::Wide(cv.clone());
             }
-            if let Some(&v) = self.real_param_val.get(&key) {
+            if let Some(&v) = self.real_param_val.get_found(&key) {
                 return BareIdentRoute::Real(v);
             }
-            if self.symbols.contains_key(&key)
+            if self.symbols.contains_found(&key)
                 && (self.block_local_declared_at(&key, at)
-                    || (!self.params.contains_key(&key) && self.block_local_covers(&key, at)))
+                    || (!self.params.contains_found(&key) && self.block_local_covers(&key, at)))
             {
                 local_shadows_param = true;
             }
@@ -120,7 +120,7 @@ impl Elaborator<'_> {
                 let meta = self.name_meta(seg);
                 let guessed = self
                     .walk_scopes_key(seg, |k| self.hit_value(k))
-                    .is_some_and(|k| self.param_type_guessed.contains(&k));
+                    .is_some_and(|k| self.param_type_guessed.contains_found(&k));
                 return BareIdentRoute::Param { v, meta, guessed };
             }
         }
@@ -398,7 +398,7 @@ impl Elaborator<'_> {
             if let [seg] = p.segments.as_slice() {
                 return self
                     .walk_scopes_key(&seg.name, |k| self.hit_value(k))
-                    .is_some_and(|k| self.param_type_guessed.contains(&k));
+                    .is_some_and(|k| self.param_type_guessed.contains_found(&k));
             }
         }
         Self::const_fold_children(e)

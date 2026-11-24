@@ -24,10 +24,12 @@
 //!   `walk_scopes(.., &<recv>.<map>)` over a guarded map but the value walk
 //!   `lookup_scoped` (the meta and real walks are `name_meta` / `name_real`) ; W5b no
 //!   closure whose body names two or more of the nine maps ; W5c no `walk_scopes_key(..)`
-//!   whose arguments spell a `<recv>.<map>.contains_at(` / `.contains_key(` arm (the hit
-//!   is a `hit_*` rule ; `contains_at` since §5.2 Q-DECLKEY DK1-4b-1, where the walk's
-//!   candidate became an `AtKey`, `contains_key` while the window w9 lets a text probe a
-//!   store: it leaves W5c with the window, DK3-b). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
+//!   whose arguments spell a `<recv>.<map>.contains_at(` / `.contains_found(` /
+//!   `.contains_key(` arm (the hit is a `hit_*` rule ; `contains_at` since §5.2 Q-DECLKEY
+//!   DK1-4b-1, where the walk's candidate became an `AtKey`, `contains_found` since DK1-4b-2,
+//!   where its found key became a `DeclKey`, `contains_key` while the window w9 lets a text
+//!   probe a store: it leaves W5c with the window, DK3-b ; W5b names maps, not verbs, so it
+//!   reads a `_found` closure as it reads an `_at` one). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
 //!   `W5C_EXCEPT`). What the token shapes do not see is REVIEW-ONLY: a closure bound
 //!   to a name and passed later is seen where it is written, not where it is walked ;
 //!   a closure opened after another token than `( , = { ; => :`, `move`, `return` ;
@@ -190,7 +192,8 @@ const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
 ];
 /// W5c: a `walk_scopes_key(..)` call outside the home whose arguments spell a
-/// `<recv>.<guarded map>.contains_at(` (or `.contains_key(`) arm instead of a `hit_*` rule,
+/// `<recv>.<guarded map>.contains_at(` (or `.contains_found(`, `.contains_key(`) arm instead of a
+/// `hit_*` rule,
 /// (file, fn, count, reason).
 #[rustfmt::skip]
 const W5C_EXCEPT: &[(&str, &str, usize, &str)] = &[
@@ -567,7 +570,7 @@ fn closure_body(t: &[Tok], i: usize) -> Option<(usize, usize)> {
 
 /// W5 (rule, key) hits of one source: `W5a:<map>` a `walk_scopes(.., &<recv>.<map>)` ;
 /// `W5b` a closure naming two or more of the nine maps ; `W5c` a `walk_scopes_key(..)`
-/// whose arguments spell `<recv>.<map>.contains_at(` or `<recv>.<map>.contains_key(`.
+/// whose arguments spell `<recv>.<map>.contains_at(`, `.contains_found(` or `.contains_key(`.
 fn hits_w5(src: &str) -> Vec<(String, String)> {
     let t = tokens(src);
     let tx = |i: usize| t.get(i).map_or("", |x| x.text.as_str());
@@ -600,7 +603,7 @@ fn hits_w5(src: &str) -> Vec<(String, String)> {
             } else if (i + 3..close).any(|j| {
                 field_at(&t, j, &NINE)
                     && tx(j + 1) == "."
-                    && matches!(tx(j + 2), "contains_at" | "contains_key")
+                    && matches!(tx(j + 2), "contains_at" | "contains_found" | "contains_key")
             }) {
                 out.push(("W5c".into(), key.clone()));
             }
@@ -1105,6 +1108,23 @@ fn walker_controls_w5() {
             "fn f() { self.walk_scopes_key(n, |k| self.hit_value(k)).is_some_and(|k| self.params.contains_key(&k)); self.walk_scopes_key(n, |k| self.symbols.contains_key(k)); }"
         ),
         0
+    );
+    // DK1-4b-2: a found key's verb `contains_found` spelled in the walk's argument is an arm
+    // too ; the same verb on the walk's result (outside the call) is not
+    assert_eq!(
+        count_w5(
+            "W5c",
+            "fn f() { self.walk_scopes_key(n, |k| self.hit_value(k) && !self.params.contains_found(&key)); self.walk_scopes_key(n, |k| self.hit_value(k)).is_some_and(|k| self.params.contains_found(&k)); }"
+        ),
+        1
+    );
+    // W5b names maps, not verbs: a found-key closure (`_found`) is read as an `_at` one
+    assert_eq!(
+        count_w5(
+            "W5b",
+            "fn f() { let o = |k: &DeclKey| self.params.contains_found(k) || self.wide_param_bits.contains_found(k); let p = |k: &AtKey| self.params.contains_at(k) || self.wide_param_bits.contains_at(k); }"
+        ),
+        2
     );
 }
 

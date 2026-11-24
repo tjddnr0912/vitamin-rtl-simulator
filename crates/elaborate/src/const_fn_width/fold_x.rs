@@ -53,7 +53,7 @@ impl Elaborator<'_> {
                                     || self.params.contains_at(k)
                                     || self.symbols.contains_at(k)
                             })
-                            .is_some_and(|k| self.real_param_val.contains_key(&k)))
+                            .is_some_and(|k| self.real_param_val.contains_found(&k)))
             }
             ast::ExprKind::PkgScoped { pkg, name } => self
                 .pkg_real_val

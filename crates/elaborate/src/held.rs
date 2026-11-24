@@ -263,7 +263,11 @@ impl Elaborator<'_> {
         if self.clk_refused.is_empty() {
             return None;
         }
-        let refused = |k: &str| self.clk_refused.iter().position(|r| at_text(&r.alias) == k);
+        let refused = |k: &DeclKey| {
+            self.clk_refused
+                .iter()
+                .position(|r| k.is_formed_at(&r.alias))
+        };
         let refused_at = |k: &AtKey| self.clk_refused.iter().position(|r| at_same(&r.alias, k));
         (2..=path.len()).find_map(|k| {
             let head = path[..k].join(".");

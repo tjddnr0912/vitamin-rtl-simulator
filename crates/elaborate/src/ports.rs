@@ -287,7 +287,7 @@ impl Elaborator<'_> {
             );
             return;
         };
-        let actual = self.iface_insts[&parent_fq].clone();
+        let actual = self.iface_insts.index_found(&parent_fq).clone();
         if actual != iref.iface.name {
             self.error(
                 MsgCode::ElabPortMismatch,
@@ -326,7 +326,7 @@ impl Elaborator<'_> {
             None => None,
         };
         // Alias the visible symbols under the instance into the child port scope.
-        let src_prefix = format!("{parent_fq}.");
+        let src_prefix = format!("{}.", found_text(&parent_fq));
         let dst_prefix = format!("{}.", at_text(&self.lex.at_cur(pname)));
         let aliases: Vec<(String, u32, Option<ast::PortDir>)> = self
             .symbols
@@ -369,7 +369,7 @@ impl Elaborator<'_> {
             .join(".");
         let key = self.walk_scopes_key(&joined, |k| self.symbols.contains_at(k));
         if let Some(k) = key {
-            if self.modport_readonly.contains(&k) {
+            if self.modport_readonly.contains_found(&k) {
                 self.error(
                     MsgCode::ElabPortMismatch,
                     &format!("cannot write `{joined}` through a modport `input` (read-only)"),

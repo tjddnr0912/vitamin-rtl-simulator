@@ -49,7 +49,7 @@ pub(crate) struct ArrayConstMeta {
 /// `const_array_vals_of_base` performs, made reusable so the meta twin cannot resolve
 /// a base to a DIFFERENT array than the value table did.
 pub(crate) enum ConstArrayRef {
-    Local(String),
+    Local(DeclKey),
     Pkg(String, String),
 }
 
@@ -113,12 +113,12 @@ impl Elaborator<'_> {
                         || self.params.contains_at(k)
                         || self.symbols.contains_at(k)
                 }) {
-                    if self.array_const_vals.contains_key(&key) {
+                    if self.array_const_vals.contains_found(&key) {
                         return Some(ConstArrayRef::Local(key));
                     }
                     // A wildcard / explicit import binds a var-ALIAS symbol for the
                     // name; that is the import route below, not a shadowing local.
-                    if !self.pkg_var_aliases.contains_key(&key) {
+                    if !self.pkg_var_aliases.contains_found(&key) {
                         return None;
                     }
                 }
@@ -126,7 +126,7 @@ impl Elaborator<'_> {
                     return None;
                 }
                 let akey = self.walk_scopes_key(n, |k| self.pkg_var_aliases.contains_at(k))?;
-                let (pkg, _) = self.pkg_var_aliases.get(&akey)?;
+                let (pkg, _) = self.pkg_var_aliases.get_found(&akey)?;
                 self.pkg_array_const_vals.get(pkg)?.get(n)?;
                 Some(ConstArrayRef::Pkg(pkg.clone(), n.to_string()))
             }
@@ -140,14 +140,14 @@ impl Elaborator<'_> {
 
     pub(crate) fn const_array_vals_of_ref(&self, r: &ConstArrayRef) -> Option<&Vec<i64>> {
         match r {
-            ConstArrayRef::Local(k) => self.array_const_vals.get(k),
+            ConstArrayRef::Local(k) => self.array_const_vals.get_found(k),
             ConstArrayRef::Pkg(p, n) => self.pkg_array_const_vals.get(p)?.get(n),
         }
     }
 
     fn const_array_meta_of_ref(&self, r: &ConstArrayRef) -> Option<ArrayConstMeta> {
         match r {
-            ConstArrayRef::Local(k) => self.array_const_meta.get(k).copied(),
+            ConstArrayRef::Local(k) => self.array_const_meta.get_found(k).copied(),
             ConstArrayRef::Pkg(p, n) => self.pkg_array_const_meta.get(p)?.get(n).copied(),
         }
     }

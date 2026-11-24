@@ -448,7 +448,7 @@ impl Elaborator<'_> {
     fn shape_bits(&self, shape_param: &Option<ast::Ident>) -> Option<i64> {
         let sp = shape_param.as_ref()?;
         let key = self.walk_scopes_key(&sp.name, |k| self.hit_value(k))?;
-        self.params.get(&key).copied()
+        self.params.get_found(&key).copied()
     }
 
     /// The declaration's EFFECTIVE signedness in this instance: the override's when

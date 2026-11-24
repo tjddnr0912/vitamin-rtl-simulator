@@ -751,7 +751,7 @@ impl Elaborator<'_> {
         let Some(fq) = self.walk_scopes_key(&recv, |k| self.iface_insts.contains_at(k)) else {
             return false;
         };
-        let iface = self.iface_insts[&fq].clone();
+        let iface = self.iface_insts.index_found(&fq).clone();
         let is_modport = self.ifaces.get(&iface).is_some_and(|d| {
             d.body
                 .iter()
